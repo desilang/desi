@@ -1,0 +1,127 @@
+(* Desi Stage-0 Grammar — EBNF-style.
+   Notes:
+   - Indentation-sensitive: the lexer must emit NEWLINE / INDENT / DEDENT tokens.
+   - This grammar is descriptive; precise lexing rules (strings, numbers) live in the lexer spec. *)
+
+file          := package_decl? import_decl* item* EOF ;
+
+package_decl  := "package" pkg_name NEWLINE ;
+pkg_name      := ident ( "." ident )* ;
+
+import_decl   := "import" import_body NEWLINE ;
+import_body   := import_path ( "as" ident )?
+               | import_path "." "{" ident ( "," ident )* "}" ;   (* e.g., import std.{io, fmt} *)
+import_path   := ident ( "." ident )* ;
+
+item          := func_decl | struct_decl | enum_decl ;
+
+(* ---------- Declarations ---------- *)
+
+func_decl     := "def" ident "(" params? ")" "->" type ":" NEWLINE INDENT stmt* DEDENT ;
+params        := param ( "," param )* ;
+param         := ident ":" type ;
+
+struct_decl   := "struct" type_ident ":" NEWLINE
+                 INDENT struct_field+ DEDENT ;
+struct_field  := ident ":" type NEWLINE ;
+
+enum_decl     := "enum" type_ident ":" NEWLINE
+                 INDENT enum_variant+ DEDENT ;
+enum_variant  := type_ident
+               | type_ident "(" enum_fields? ")" NEWLINE ;
+enum_fields   := enum_field ( "," enum_field )* ;
+enum_field    := ident ":" type
+               | type ;                       (* positional payloads allowed *)
+
+type_ident    := ident ;
+
+(* ---------- Types ---------- *)
+
+type          := func_type
+               | postfix_type ;
+
+func_type     := "(" type_list? ")" "->" type ;          (* function type: (A,B)->C *)
+type_list     := type ( "," type )* ;
+
+postfix_type  := primary_type type_suffix* ;
+type_suffix   := "[" type ( "," type )* "]"              (* generics: Vec[T], Result[T,E] *)
+               | "[]"                                    (* slice: []T (prefix form allowed via lexer->parser lowering) *) ;
+
+primary_type  := type_ident
+               | "(" type ")" ;
+
+(* ---------- Statements ---------- *)
+
+stmt          := let_stmt
+               | assign_stmt
+               | if_stmt
+               | while_stmt
+               | for_stmt
+               | match_stmt
+               | return_stmt
+               | expr_stmt ;
+
+let_stmt      := "let" ("mut")? ident ( ":" type )? "=" expr NEWLINE ;
+assign_stmt   := ident ":=" expr NEWLINE ;
+expr_stmt     := expr NEWLINE ;
+
+if_stmt       := "if" expr ":" NEWLINE INDENT stmt* DEDENT
+                 ( "elif" expr ":" NEWLINE INDENT stmt* DEDENT )*
+                 ( "else" ":" NEWLINE INDENT stmt* DEDENT )? ;
+
+while_stmt    := "while" expr ":" NEWLINE INDENT stmt* DEDENT ;
+
+for_stmt      := "for" ident "in" expr ":" NEWLINE INDENT stmt* DEDENT ;
+
+match_stmt    := "match" expr ":" NEWLINE
+                 INDENT match_arm+ DEDENT ;
+match_arm     := pattern "=>" expr NEWLINE ;             (* Stage-0 keeps arms expression-only *)
+
+return_stmt   := "return" expr? NEWLINE ;
+
+(* ---------- Patterns ---------- *)
+
+pattern       := "_"                                     (* wildcard *)
+               | type_ident                              (* bare variant or ident *)
+               | type_ident "(" pattern_list? ")" ;      (* Variant(x, y) *)
+pattern_list  := pattern ( "," pattern )* ;
+
+(* ---------- Expressions ---------- *)
+
+expr          := pipe_expr ;
+
+pipe_expr     := or_expr ( "|>" or_expr )* ;             (* optional sugar; can be feature-flagged *)
+
+or_expr       := and_expr ( "or" and_expr )* ;
+and_expr      := equality ( "and" equality )* ;
+
+equality      := compare ( ( "==" | "!=" ) compare )* ;
+compare       := additive ( ( "<" | "<=" | ">" | ">=" | "is" ) additive )* ;
+additive      := multiplicative ( ( "+" | "-" ) multiplicative )* ;
+multiplicative:= unary ( ( "*" | "/" | "%" ) unary )* ;
+
+unary         := ( "-" | "!" | "not" ) unary
+               | postfix ;
+
+postfix       := primary ( call_args | index | field )* ;
+call_args     := "(" arg_list? ")" ;
+arg_list      := expr ( "," expr )* ;
+index         := "[" expr "]" ;
+field         := "." ident ;
+
+primary       := literal
+               | ident
+               | "(" expr ")" ;
+
+literal       := INT | FLOAT | STR | "true" | "false" ;
+
+(* ---------- Lexical placeholders ---------- *)
+
+ident         := /* letter (letter | digit | "_")* ; enforced by lexer */ ;
+INT           := /* decimal | 0x... | 0b... */ ;
+FLOAT         := /* 1.23, 1e9, etc. */ ;
+STR           := /* "..." or multiline """...""" */ ;
+NEWLINE       := /* end-of-line marker from lexer */ ;
+INDENT        := /* lexer-produced on increased indentation */ ;
+DEDENT        := /* lexer-produced on decreased indentation */ ;
+EOF           := /* end-of-file sentinel */ ;
