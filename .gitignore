@@ -1,0 +1,19 @@
+# Go
+bin/
+dist/
+*.exe
+*.dll
+*.test
+*.out
+
+# Editors
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated C output (later)
+# keep emitted C out of the repo unless explicitly vendored
+/gen/
