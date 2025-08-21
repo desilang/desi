@@ -49,6 +49,74 @@ type Param struct {
 	Type string
 }
 
+/*** EXPRESSIONS ***/
+
+type Expr interface {
+	Node
+	expr()
+}
+
+type IdentExpr struct{ Name string }
+
+func (*IdentExpr) node() {}
+func (*IdentExpr) expr() {}
+
+type IntLit struct{ Value string }
+
+func (*IntLit) node() {}
+func (*IntLit) expr() {}
+
+type StrLit struct{ Value string }
+
+func (*StrLit) node() {}
+func (*StrLit) expr() {}
+
+type BoolLit struct{ Value bool }
+
+func (*BoolLit) node() {}
+func (*BoolLit) expr() {}
+
+type CallExpr struct {
+	Callee Expr
+	Args   []Expr
+}
+
+func (*CallExpr) node() {}
+func (*CallExpr) expr() {}
+
+type IndexExpr struct {
+	Seq   Expr
+	Index Expr
+}
+
+func (*IndexExpr) node() {}
+func (*IndexExpr) expr() {}
+
+type FieldExpr struct {
+	X    Expr
+	Name string
+}
+
+func (*FieldExpr) node() {}
+func (*FieldExpr) expr() {}
+
+type UnaryExpr struct {
+	Op string
+	X  Expr
+}
+
+func (*UnaryExpr) node() {}
+func (*UnaryExpr) expr() {}
+
+type BinaryExpr struct {
+	Op    string
+	Left  Expr
+	Right Expr
+}
+
+func (*BinaryExpr) node() {}
+func (*BinaryExpr) expr() {}
+
 /*** STATEMENTS ***/
 
 type Stmt interface {
@@ -59,7 +127,7 @@ type Stmt interface {
 type LetStmt struct {
 	Mutable bool
 	Name    string
-	Expr    string // textual expr for now
+	Expr    Expr
 }
 
 func (LetStmt) node() {}
@@ -67,21 +135,21 @@ func (LetStmt) stmt() {}
 
 type AssignStmt struct {
 	Name string
-	Expr string
+	Expr Expr
 }
 
 func (AssignStmt) node() {}
 func (AssignStmt) stmt() {}
 
 type ReturnStmt struct {
-	Expr string // may be empty
+	Expr Expr // may be nil
 }
 
 func (ReturnStmt) node() {}
 func (ReturnStmt) stmt() {}
 
 type ExprStmt struct {
-	Expr string
+	Expr Expr
 }
 
 func (ExprStmt) node() {}
@@ -112,20 +180,20 @@ func DumpFile(f *File) string {
 				switch st := s.(type) {
 				case *LetStmt:
 					if st.Mutable {
-						term.Bprintf(&b, "  let mut %s = %s\n", st.Name, st.Expr)
+						term.Bprintf(&b, "  let mut %s = %s\n", st.Name, exprString(st.Expr))
 					} else {
-						term.Bprintf(&b, "  let %s = %s\n", st.Name, st.Expr)
+						term.Bprintf(&b, "  let %s = %s\n", st.Name, exprString(st.Expr))
 					}
 				case *AssignStmt:
-					term.Bprintf(&b, "  %s := %s\n", st.Name, st.Expr)
+					term.Bprintf(&b, "  %s := %s\n", st.Name, exprString(st.Expr))
 				case *ReturnStmt:
-					if st.Expr == "" {
+					if st.Expr == nil {
 						term.Bprintf(&b, "  return\n")
 					} else {
-						term.Bprintf(&b, "  return %s\n", st.Expr)
+						term.Bprintf(&b, "  return %s\n", exprString(st.Expr))
 					}
 				case *ExprStmt:
-					term.Bprintf(&b, "  %s\n", st.Expr)
+					term.Bprintf(&b, "  %s\n", exprString(st.Expr))
 				}
 			}
 		}
@@ -138,4 +206,37 @@ func orDefault(s, d string) string {
 		return d
 	}
 	return s
+}
+
+func exprString(e Expr) string {
+	switch v := e.(type) {
+	case *IdentExpr:
+		return v.Name
+	case *IntLit:
+		return v.Value
+	case *StrLit:
+		return v.Value
+	case *BoolLit:
+		if v.Value {
+			return "true"
+		}
+		return "false"
+	case *CallExpr:
+		var parts []string
+		for _, a := range v.Args {
+			parts = append(parts, exprString(a))
+		}
+		return exprString(v.Callee) + "(" + strings.Join(parts, ", ") + ")"
+	case *IndexExpr:
+		return exprString(v.Seq) + "[" + exprString(v.Index) + "]"
+	case *FieldExpr:
+		return exprString(v.X) + "." + v.Name
+	case *UnaryExpr:
+		return v.Op + " " + exprString(v.X)
+	case *BinaryExpr:
+		// Parenthesize to make precedence obvious in the dump
+		return "(" + exprString(v.Left) + " " + v.Op + " " + exprString(v.Right) + ")"
+	default:
+		return "<expr>"
+	}
 }
