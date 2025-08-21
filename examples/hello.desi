@@ -1,5 +1,5 @@
 package main
-import std/io
+import std.io
 
 def main() -> i32:
   io.println("hello, world")
