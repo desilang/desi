@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/desilang/desi/compiler/internal/lexer"
 	"github.com/desilang/desi/compiler/internal/version"
 )
 
@@ -21,6 +22,38 @@ func usage() {
 	eprintln("Commands:")
 	eprintln("  version       Print version")
 	eprintln("  help          Show this help")
+	eprintln("  lex <file>    Lex a .desi file and print tokens")
+}
+
+func cmdLex(args []string) int {
+	if len(args) != 1 {
+		eprintln("usage: desic lex <file.desi>")
+		return 2
+	}
+	data, err := os.ReadFile(args[0])
+	if err != nil {
+		eprintf("read %s: %v\n", args[0], err)
+		return 1
+	}
+	lx := lexer.New(string(data))
+	for {
+		t := lx.Next()
+		if t.Kind == lexer.TokEOF {
+			printf("%d:%d  %s\n", t.Line, t.Col, t.Kind)
+			break
+		}
+		lex := t.Lex
+		// shorten long lexemes in output
+		if len(lex) > 40 {
+			lex = lex[:37] + "..."
+		}
+		if lex == "" {
+			printf("%d:%d  %-8s\n", t.Line, t.Col, t.Kind)
+		} else {
+			printf("%d:%d  %-8s  %q\n", t.Line, t.Col, t.Kind, lex)
+		}
+	}
+	return 0
 }
 
 func main() {
@@ -35,6 +68,8 @@ func main() {
 		printf("%s\n", version.String())
 	case "help", "--help", "-h":
 		usage()
+	case "lex":
+		os.Exit(cmdLex(os.Args[2:]))
 	default:
 		eprintf("unknown command: %s\n\n", os.Args[1])
 		usage()
