@@ -9,17 +9,17 @@ import (
 )
 
 type Parser struct {
-	lx  *lexer.Lexer
+	Lx  *lexer.Lexer
 	tok lexer.Token
 }
 
 func New(src string) *Parser {
-	p := &Parser{lx: lexer.New(src)}
+	p := &Parser{Lx: lexer.New(src)}
 	p.next()
 	return p
 }
 
-func (p *Parser) next()                   { p.tok = p.lx.Next() }
+func (p *Parser) next()                   { p.tok = p.Lx.Next() }
 func (p *Parser) at(k lexer.TokKind) bool { return p.tok.Kind == k }
 func (p *Parser) accept(k lexer.TokKind) bool {
 	if p.at(k) {
