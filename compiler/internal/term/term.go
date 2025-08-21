@@ -1,8 +1,8 @@
 package term
 
 import (
-  "fmt"
-  "os"
+	"fmt"
+	"os"
 )
 
 // Stdout/Stderr print helpers that ignore (n, err) to satisfy linters.
