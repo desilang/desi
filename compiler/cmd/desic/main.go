@@ -2,57 +2,76 @@ package main
 
 import (
 	"flag"
-	"fmt"
 	"os"
 
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
+	"github.com/desilang/desi/compiler/internal/parser"
+	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/version"
 )
 
-func eprintf(format string, a ...any) { _, _ = fmt.Fprintf(os.Stderr, format, a...) }
-func eprintln(a ...any)               { _, _ = fmt.Fprintln(os.Stderr, a...) }
-func printf(format string, a ...any)  { _, _ = fmt.Printf(format, a...) }
-
 func usage() {
-	eprintln("desic — Desi compiler (Stage-0)")
-	eprintln("")
-	eprintln("Usage:")
-	eprintln("  desic <command> [args]")
-	eprintln("")
-	eprintln("Commands:")
-	eprintln("  version       Print version")
-	eprintln("  help          Show this help")
-	eprintln("  lex <file>    Lex a .desi file and print tokens")
+	term.Eprintln("desic — Desi compiler (Stage-0)")
+	term.Eprintln("")
+	term.Eprintln("Usage:")
+	term.Eprintln("  desic <command> [args]")
+	term.Eprintln("")
+	term.Eprintln("Commands:")
+	term.Eprintln("  version          Print version")
+	term.Eprintln("  help             Show this help")
+	term.Eprintln("  lex <file>       Lex a .desi file and print tokens")
+	term.Eprintln("  parse <file>     Parse a .desi file and print AST outline")
 }
 
 func cmdLex(args []string) int {
 	if len(args) != 1 {
-		eprintln("usage: desic lex <file.desi>")
+		term.Eprintln("usage: desic lex <file.desi>")
 		return 2
 	}
 	data, err := os.ReadFile(args[0])
 	if err != nil {
-		eprintf("read %s: %v\n", args[0], err)
+		term.Eprintf("read %s: %v\n", args[0], err)
 		return 1
 	}
 	lx := lexer.New(string(data))
 	for {
 		t := lx.Next()
 		if t.Kind == lexer.TokEOF {
-			printf("%d:%d  %s\n", t.Line, t.Col, t.Kind)
+			term.Printf("%d:%d  %s\n", t.Line, t.Col, t.Kind)
 			break
 		}
 		lex := t.Lex
-		// shorten long lexemes in output
 		if len(lex) > 40 {
 			lex = lex[:37] + "..."
 		}
 		if lex == "" {
-			printf("%d:%d  %-8s\n", t.Line, t.Col, t.Kind)
+			term.Printf("%d:%d  %-8s\n", t.Line, t.Col, t.Kind)
 		} else {
-			printf("%d:%d  %-8s  %q\n", t.Line, t.Col, t.Kind, lex)
+			term.Printf("%d:%d  %-8s  %q\n", t.Line, t.Col, t.Kind, lex)
 		}
 	}
+	return 0
+}
+
+func cmdParse(args []string) int {
+	if len(args) != 1 {
+		term.Eprintln("usage: desic parse <file.desi>")
+		return 2
+	}
+	data, err := os.ReadFile(args[0])
+	if err != nil {
+		term.Eprintf("read %s: %v\n", args[0], err)
+		return 1
+	}
+	p := parser.New(string(data))
+	f, err := p.ParseFile()
+	if err != nil {
+		term.Eprintf("parse: %v\n", err)
+		return 1
+	}
+	out := ast.DumpFile(f)
+	term.Printf("%s", out)
 	return 0
 }
 
@@ -65,13 +84,15 @@ func main() {
 
 	switch os.Args[1] {
 	case "version", "--version", "-v":
-		printf("%s\n", version.String())
+		term.Printf("%s\n", version.String())
 	case "help", "--help", "-h":
 		usage()
 	case "lex":
 		os.Exit(cmdLex(os.Args[2:]))
+	case "parse":
+		os.Exit(cmdParse(os.Args[2:]))
 	default:
-		eprintf("unknown command: %s\n\n", os.Args[1])
+		term.Eprintf("unknown command: %s\n\n", os.Args[1])
 		usage()
 		os.Exit(2)
 	}
