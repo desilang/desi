@@ -1,0 +1,20 @@
+package main
+import std.io
+
+def add(a: i32, b: i32) -> i32:
+  # returning a string from a function declared to return i32
+  return "nope"
+
+def main() -> i32:
+  let s = 1
+  s := "hi"            # error: assign to immutable + kind mismatch (int vs str)
+
+  t := 2               # error: assign to undeclared variable
+
+  let mut x = 0
+  x := add(1)          # error: wrong arity (want 2, got 1)
+
+  if "not-bool":       # error: condition must be bool/int
+    io.println("never runs")
+
+  return "bad"         # error: function returns i32 but returning str
