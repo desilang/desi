@@ -38,7 +38,7 @@ func EmitFile(f *ast.File, info *check.Info) string {
 			term.Wprintf(&b, "\n")
 		}
 	}
-	// Main last (if present)
+	// Main last
 	if m := findMain(f); m != nil {
 		emitFunc(&b, m, sigs, info, true)
 	}
@@ -87,7 +87,6 @@ func typeToKind(t string) string {
 	case "str", "string":
 		return "str"
 	default:
-		// unknown user type: treat as int for stage-0 codegen
 		return "int"
 	}
 }
@@ -127,10 +126,8 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		vars:    map[string]string{},
 		retKind: typeToKind(fn.Ret),
 	}
-	// seed params
-	for i, p := range fn.Params {
+	for _, p := range fn.Params {
 		e.vars[p.Name] = typeToKind(p.Type)
-		_ = i
 	}
 
 	// signature
@@ -146,13 +143,19 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		emitStmt(b, 2, s, e)
 	}
 
-	// default return if needed
-	if e.retKind == "void" {
-		term.Wprintf(b, "}\n")
-	} else {
+	// only synthesize a default return if needed and last top-level stmt wasn't a return
+	if e.retKind != "void" && !hasTailReturn(fn.Body) {
 		term.Wprintf(b, "  return 0;\n")
-		term.Wprintf(b, "}\n")
 	}
+	term.Wprintf(b, "}\n")
+}
+
+func hasTailReturn(body []ast.Stmt) bool {
+	if len(body) == 0 {
+		return false
+	}
+	_, ok := body[len(body)-1].(*ast.ReturnStmt)
+	return ok
 }
 
 func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
@@ -204,21 +207,19 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 
 	case *ast.IfStmt:
 		cond, _ := cExprFor(st.Cond, e)
-		term.Wprintf(b, "%sif (%s) {\n", ind, cond)
+		term.Wprintf(b, "%sif (%s) {\n", ind, stripOuterParens(cond))
 		for _, s2 := range st.Then {
 			emitStmt(b, indent+2, s2, e)
 		}
 		term.Wprintf(b, "%s}", ind)
-		// elif chain
 		for _, el := range st.Elifs {
 			ec, _ := cExprFor(el.Cond, e)
-			term.Wprintf(b, " else if (%s) {\n", ec)
+			term.Wprintf(b, " else if (%s) {\n", stripOuterParens(ec))
 			for _, s2 := range el.Body {
 				emitStmt(b, indent+2, s2, e)
 			}
 			term.Wprintf(b, "%s}", ind)
 		}
-		// else
 		if st.Else != nil {
 			term.Wprintf(b, " else {\n")
 			for _, s2 := range st.Else {
@@ -243,24 +244,37 @@ func isIoPrintln(c *ast.CallExpr) bool {
 	return false
 }
 
-// For now println supports a single arg (string/int/ident); PR-3 will make it variadic.
+// Variadic println: io.println(a, b, c, ...)
+// strings -> %s, ints/bools/unknown -> %d
 func emitPrintln(b *bytes.Buffer, indent int, call *ast.CallExpr, e *env) {
 	ind := spaces(indent)
-	if len(call.Args) != 1 {
-		term.Wprintf(b, "%s/* println expects 1 arg */\n", ind)
-		return
+	term.Wprintf(b, "%sprintf(", ind)
+	term.Wprintf(b, "%s", buildPrintfArgs(call.Args, e))
+	term.Wprintf(b, ");\n")
+}
+
+func buildPrintfArgs(args []ast.Expr, e *env) string {
+	var fmt strings.Builder
+	var argv []string
+	fmt.WriteString("\"")
+	if len(args) == 0 {
+		fmt.WriteString("\\n\"")
+		return fmt.String()
 	}
-	arg := call.Args[0]
-	cExpr, kind := cExprFor(arg, e)
-	switch kind {
-	case "str":
-		term.Wprintf(b, "%sprintf(\"%%s\\n\", %s);\n", ind, cExpr)
-	case "int":
-		term.Wprintf(b, "%sprintf(\"%%d\\n\", %s);\n", ind, cExpr)
-	default:
-		term.Wprintf(b, "%s/* println unknown kind; treat as int */\n", ind)
-		term.Wprintf(b, "%sprintf(\"%%d\\n\", %s);\n", ind, cExpr)
+	for _, a := range args {
+		ce, kind := cExprFor(a, e)
+		if kind == "str" {
+			fmt.WriteString("%s")
+		} else {
+			fmt.WriteString("%d")
+		}
+		argv = append(argv, ce)
 	}
+	fmt.WriteString("\\n\"")
+	if len(argv) > 0 {
+		return fmt.String() + ", " + strings.Join(argv, ", ")
+	}
+	return fmt.String()
 }
 
 // ---- expressions ----
@@ -286,7 +300,6 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		if k, ok := env.vars[v.Name]; ok {
 			return v.Name, k
 		}
-		// might be a function name only in a call; as a bare ident treat as int var
 		return v.Name, "int"
 	case *ast.UnaryExpr:
 		x, k := cExprFor(v.X, env)
@@ -296,18 +309,16 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		r, rk := cExprFor(v.Right, env)
 		k := ""
 		if lk == "str" || rk == "str" {
-			k = "str" // (note: real concat later)
+			k = "str"
 		} else if lk == "int" && rk == "int" {
 			k = "int"
 		}
 		return "(" + l + " " + v.Op + " " + r + ")", k
 	case *ast.FieldExpr:
-		// could be io.println callee; as value unknown
 		return "0", ""
 	case *ast.IndexExpr:
 		return "0", ""
 	case *ast.CallExpr:
-		// user function?
 		if id, ok := v.Callee.(*ast.IdentExpr); ok {
 			if fs, ok := env.sigs[id.Name]; ok {
 				var args []string
@@ -318,7 +329,6 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 				return id.Name + "(" + strings.Join(args, ", ") + ")", fs.ret
 			}
 		}
-		// unknown call
 		return "0", ""
 	default:
 		return "0", ""
@@ -335,4 +345,26 @@ func spaces(n int) string {
 func hasPrefixAny(s string, p1, p2 string) bool {
 	return (len(s) >= len(p1) && s[:len(p1)] == p1) ||
 		(len(s) >= len(p2) && s[:len(p2)] == p2)
+}
+
+// strip one balanced pair of outer parentheses if present
+func stripOuterParens(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '(' && s[len(s)-1] == ')' {
+		// ensure they enclose the whole expr
+		depth := 0
+		for i, r := range s {
+			if r == '(' {
+				depth++
+			}
+			if r == ')' {
+				depth--
+			}
+			if depth == 0 && i != len(s)-1 {
+				return s // outer pair closes before end; don't strip
+			}
+		}
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
 }
