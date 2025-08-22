@@ -1,0 +1,11 @@
+package main
+import std.io
+
+def nothing() -> void:
+  return
+
+def main() -> i32:
+  io.println(add)        # function identifier as value → unknown
+  io.println(unknown())  # unknown function call → unknown
+  io.println(nothing())  # void expression
+  return 0
