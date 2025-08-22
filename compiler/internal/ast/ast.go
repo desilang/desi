@@ -1,9 +1,8 @@
 package ast
 
 import (
+	"fmt"
 	"strings"
-
-	"github.com/desilang/desi/compiler/internal/term"
 )
 
 /*** NODES ***/
@@ -170,62 +169,84 @@ type ElseIf struct {
 	Body []Stmt
 }
 
+type WhileStmt struct {
+	Cond Expr
+	Body []Stmt
+}
+
+func (WhileStmt) node() {}
+func (WhileStmt) stmt() {}
+
+type DeferStmt struct {
+	Call Expr // must be a call expression in Stage-0
+}
+
+func (DeferStmt) node() {}
+func (DeferStmt) stmt() {}
+
 /*** DUMP (pretty outline for CLI) ***/
 
 func DumpFile(f *File) string {
 	var b strings.Builder
 	if f.Pkg != nil {
-		term.Bprintf(&b, "package %s\n", f.Pkg.Name)
+		fmt.Fprintf(&b, "package %s\n", f.Pkg.Name)
 	}
 	for _, im := range f.Imports {
-		term.Bprintf(&b, "import %s\n", im.Path)
+		fmt.Fprintf(&b, "import %s\n", im.Path)
 	}
 	for _, d := range f.Decls {
 		switch fn := d.(type) {
 		case *FuncDecl:
-			term.Bprintf(&b, "\ndef %s(", fn.Name)
+			fmt.Fprintf(&b, "\ndef %s(", fn.Name)
 			for i, p := range fn.Params {
 				if i > 0 {
 					b.WriteString(", ")
 				}
-				term.Bprintf(&b, "%s: %s", p.Name, p.Type)
+				fmt.Fprintf(&b, "%s: %s", p.Name, p.Type)
 			}
-			term.Bprintf(&b, ") -> %s:\n", orDefault(fn.Ret, "void"))
+			fmt.Fprintf(&b, ") -> %s:\n", orDefault(fn.Ret, "void"))
 			for _, s := range fn.Body {
 				switch st := s.(type) {
 				case *LetStmt:
 					if st.Mutable {
-						term.Bprintf(&b, "  let mut %s = %s\n", st.Name, exprString(st.Expr))
+						fmt.Fprintf(&b, "  let mut %s = %s\n", st.Name, exprString(st.Expr))
 					} else {
-						term.Bprintf(&b, "  let %s = %s\n", st.Name, exprString(st.Expr))
+						fmt.Fprintf(&b, "  let %s = %s\n", st.Name, exprString(st.Expr))
 					}
 				case *AssignStmt:
-					term.Bprintf(&b, "  %s := %s\n", st.Name, exprString(st.Expr))
+					fmt.Fprintf(&b, "  %s := %s\n", st.Name, exprString(st.Expr))
 				case *ReturnStmt:
 					if st.Expr == nil {
-						term.Bprintf(&b, "  return\n")
+						fmt.Fprintf(&b, "  return\n")
 					} else {
-						term.Bprintf(&b, "  return %s\n", exprString(st.Expr))
+						fmt.Fprintf(&b, "  return %s\n", exprString(st.Expr))
 					}
 				case *ExprStmt:
-					term.Bprintf(&b, "  %s\n", exprString(st.Expr))
+					fmt.Fprintf(&b, "  %s\n", exprString(st.Expr))
 				case *IfStmt:
-					term.Bprintf(&b, "  if %s:\n", exprString(st.Cond))
+					fmt.Fprintf(&b, "  if %s:\n", exprString(st.Cond))
 					for _, s2 := range st.Then {
-						term.Bprintf(&b, "    %s\n", stmtString(s2))
+						fmt.Fprintf(&b, "    %s\n", stmtString(s2))
 					}
 					for _, e := range st.Elifs {
-						term.Bprintf(&b, "  elif %s:\n", exprString(e.Cond))
+						fmt.Fprintf(&b, "  elif %s:\n", exprString(e.Cond))
 						for _, s2 := range e.Body {
-							term.Bprintf(&b, "    %s\n", stmtString(s2))
+							fmt.Fprintf(&b, "    %s\n", stmtString(s2))
 						}
 					}
 					if st.Else != nil {
-						term.Bprintf(&b, "  else:\n")
+						fmt.Fprintf(&b, "  else:\n")
 						for _, s2 := range st.Else {
-							term.Bprintf(&b, "    %s\n", stmtString(s2))
+							fmt.Fprintf(&b, "    %s\n", stmtString(s2))
 						}
 					}
+				case *WhileStmt:
+					fmt.Fprintf(&b, "  while %s:\n", exprString(st.Cond))
+					for _, s2 := range st.Body {
+						fmt.Fprintf(&b, "    %s\n", stmtString(s2))
+					}
+				case *DeferStmt:
+					fmt.Fprintf(&b, "  defer %s\n", exprString(st.Call))
 				}
 			}
 		}
@@ -289,8 +310,11 @@ func stmtString(s Stmt) string {
 	case *ExprStmt:
 		return exprString(st.Expr)
 	case *IfStmt:
-		// compact single-line for nested printing
 		return "if …:"
+	case *WhileStmt:
+		return "while …:"
+	case *DeferStmt:
+		return "defer " + exprString(st.Call)
 	default:
 		return "<stmt>"
 	}
