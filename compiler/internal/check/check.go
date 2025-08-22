@@ -278,6 +278,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
     return KindStr
   case *ast.BoolLit:
     return KindBool
+
   case *ast.IdentExpr:
     if vi, ok := c.scope.lookup(v.Name); ok {
       return vi.kind
@@ -337,13 +338,20 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
     return KindUnknown
 
   case *ast.CallExpr:
-    // io.println(...)
+    // io.println(...) — STRICT: args must be int/str/bool (no void/unknown)
     if fe, ok := v.Callee.(*ast.FieldExpr); ok {
       if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "io" && fe.Name == "println" {
         for i, a := range v.Args {
           ak := c.kindOfExpr(a)
-          if ak != KindInt && ak != KindStr && ak != KindBool && ak != KindUnknown {
-            c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unsupported kind %s", i, ak))
+          switch ak {
+          case KindInt, KindStr, KindBool:
+            // ok
+          case KindVoid:
+            c.errors = append(c.errors, fmt.Errorf("io.println arg %d is void (no value)", i+1))
+          case KindUnknown:
+            c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unknown kind; only int/str/bool are allowed", i+1))
+          default:
+            c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unsupported kind %s", i+1, ak))
           }
         }
         return KindVoid
