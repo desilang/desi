@@ -155,6 +155,21 @@ type ExprStmt struct {
 func (ExprStmt) node() {}
 func (ExprStmt) stmt() {}
 
+type IfStmt struct {
+	Cond  Expr
+	Then  []Stmt
+	Elifs []ElseIf
+	Else  []Stmt // optional; nil if absent
+}
+
+func (IfStmt) node() {}
+func (IfStmt) stmt() {}
+
+type ElseIf struct {
+	Cond Expr
+	Body []Stmt
+}
+
 /*** DUMP (pretty outline for CLI) ***/
 
 func DumpFile(f *File) string {
@@ -194,6 +209,23 @@ func DumpFile(f *File) string {
 					}
 				case *ExprStmt:
 					term.Bprintf(&b, "  %s\n", exprString(st.Expr))
+				case *IfStmt:
+					term.Bprintf(&b, "  if %s:\n", exprString(st.Cond))
+					for _, s2 := range st.Then {
+						term.Bprintf(&b, "    %s\n", stmtString(s2))
+					}
+					for _, e := range st.Elifs {
+						term.Bprintf(&b, "  elif %s:\n", exprString(e.Cond))
+						for _, s2 := range e.Body {
+							term.Bprintf(&b, "    %s\n", stmtString(s2))
+						}
+					}
+					if st.Else != nil {
+						term.Bprintf(&b, "  else:\n")
+						for _, s2 := range st.Else {
+							term.Bprintf(&b, "    %s\n", stmtString(s2))
+						}
+					}
 				}
 			}
 		}
@@ -234,9 +266,32 @@ func exprString(e Expr) string {
 	case *UnaryExpr:
 		return v.Op + " " + exprString(v.X)
 	case *BinaryExpr:
-		// Parenthesize to make precedence obvious in the dump
 		return "(" + exprString(v.Left) + " " + v.Op + " " + exprString(v.Right) + ")"
 	default:
 		return "<expr>"
+	}
+}
+
+func stmtString(s Stmt) string {
+	switch st := s.(type) {
+	case *LetStmt:
+		if st.Mutable {
+			return "let mut " + st.Name + " = " + exprString(st.Expr)
+		}
+		return "let " + st.Name + " = " + exprString(st.Expr)
+	case *AssignStmt:
+		return st.Name + " := " + exprString(st.Expr)
+	case *ReturnStmt:
+		if st.Expr == nil {
+			return "return"
+		}
+		return "return " + exprString(st.Expr)
+	case *ExprStmt:
+		return exprString(st.Expr)
+	case *IfStmt:
+		// compact single-line for nested printing
+		return "if …:"
+	default:
+		return "<stmt>"
 	}
 }

@@ -1,0 +1,17 @@
+package main
+import std.io
+
+def add(a: i32, b: i32) -> i32:
+  let s = a + b
+  return s
+
+def main() -> i32:
+  let mut x = 40
+  x := add(x, 2)
+  if x > 41:
+    io.println("x is",)   # deliberate: will be improved in PR-3 (variadic); prints nothing sensible now
+  elif x == 42:
+    io.println("x=", x)
+  else:
+    io.println("oops")
+  return 0
