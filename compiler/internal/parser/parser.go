@@ -64,7 +64,6 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 		if err != nil {
 			return nil, err
 		}
-		// Optional: grouped form or alias left for later
 		if _, err := p.expect(lexer.TokNewline); err != nil {
 			return nil, err
 		}
@@ -82,7 +81,7 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			}
 			f.Decls = append(f.Decls, fn)
 		default:
-			// Skip unexpected tokens to next newline
+			// skip to next line
 			for !p.at(lexer.TokNewline) && !p.at(lexer.TokEOF) {
 				p.next()
 			}
@@ -117,12 +116,11 @@ func (p *Parser) parseTypeUntil(stoppers ...lexer.TokKind) (string, error) {
 	var b strings.Builder
 	depthParen, depthBrack := 0, 0
 	for {
-		// stop if current token is a stopper and we're not nested
 		if depthParen == 0 && depthBrack == 0 && stop[p.tok.Kind] {
 			break
 		}
 		switch p.tok.Kind {
-		case lexer.TokEOF, lexer.TokNewline, lexer.TokColon: // safety
+		case lexer.TokEOF, lexer.TokNewline, lexer.TokColon:
 			return strings.TrimSpace(b.String()), nil
 		case lexer.TokLParen:
 			depthParen++
@@ -189,7 +187,6 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		}
 	}
 
-	// return type
 	if _, err := p.expect(lexer.TokArrow); err != nil {
 		return nil, err
 	}
@@ -219,7 +216,6 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		}
 		body = append(body, s)
 	}
-
 	if _, err := p.expect(lexer.TokDedent); err != nil {
 		return nil, err
 	}
@@ -243,45 +239,61 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		if _, err := p.expect(lexer.TokEq); err != nil {
 			return nil, err
 		}
-		expr := p.readExprToEOL()
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
 		if _, err := p.expect(lexer.TokNewline); err != nil {
 			return nil, err
 		}
 		return &ast.LetStmt{Mutable: mut, Name: id.Lex, Expr: expr}, nil
+
 	case p.at(lexer.TokIdent):
-		// Could be assignment or expr stmt
+		// assignment or expr-stmt
 		save := p.tok
 		p.next()
 		if p.at(lexer.TokAssign) {
-			// name := expr
 			p.next()
-			expr := p.readExprToEOL()
+			expr, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
 			if _, err := p.expect(lexer.TokNewline); err != nil {
 				return nil, err
 			}
 			return &ast.AssignStmt{Name: save.Lex, Expr: expr}, nil
 		}
-		// fallback: expr starts with that ident
-		head := tokenText(save)
-		rest := p.readExprToEOL()
+		// start expression with the saved ident
+		lhs := &ast.IdentExpr{Name: save.Lex}
+		expr, err := p.parseExprWithLHS(lhs)
+		if err != nil {
+			return nil, err
+		}
 		if _, err := p.expect(lexer.TokNewline); err != nil {
 			return nil, err
 		}
-		return &ast.ExprStmt{Expr: strings.TrimSpace(head + " " + rest)}, nil
+		return &ast.ExprStmt{Expr: expr}, nil
+
 	case p.accept(lexer.TokReturn):
-		// return [expr]
 		if p.at(lexer.TokNewline) {
 			p.next()
-			return &ast.ReturnStmt{Expr: ""}, nil
+			return &ast.ReturnStmt{Expr: nil}, nil
 		}
-		expr := p.readExprToEOL()
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
 		if _, err := p.expect(lexer.TokNewline); err != nil {
 			return nil, err
 		}
 		return &ast.ReturnStmt{Expr: expr}, nil
+
 	default:
 		// generic expr stmt
-		expr := p.readExprToEOL()
+		expr, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
 		if _, err := p.expect(lexer.TokNewline); err != nil {
 			return nil, err
 		}
@@ -289,46 +301,192 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 	}
 }
 
-func (p *Parser) readExprToEOL() string {
-	var b strings.Builder
-	depthParen, depthBrack := 0, 0
-	for {
-		if p.at(lexer.TokEOF) || (p.at(lexer.TokNewline) && depthParen == 0 && depthBrack == 0) {
-			break
-		}
-		switch p.tok.Kind {
-		case lexer.TokLParen:
-			depthParen++
-		case lexer.TokRParen:
-			if depthParen > 0 {
-				depthParen--
-			}
-		case lexer.TokLBrack:
-			depthBrack++
-		case lexer.TokRBrack:
-			if depthBrack > 0 {
-				depthBrack--
-			}
-		}
-		if p.tok.Lex != "" {
-			if b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteString(p.tok.Lex)
-		} else {
-			if b.Len() > 0 {
-				b.WriteByte(' ')
-			}
-			b.WriteString(p.tok.Kind.String())
-		}
-		p.next()
+/*** Expressions (Pratt parser) ***/
+
+func (p *Parser) parseExpr() (ast.Expr, error) {
+	// parse prefix/unary then fold binary ops
+	left, err := p.parseUnary()
+	if err != nil {
+		return nil, err
 	}
-	return strings.TrimSpace(b.String())
+	return p.parseBinaryRHS(1, left)
 }
 
-func tokenText(t lexer.Token) string {
-	if t.Lex != "" {
-		return t.Lex
+func (p *Parser) parseExprWithLHS(lhs ast.Expr) (ast.Expr, error) {
+	// continue with postfix/binary given a starting LHS (used for lookahead cases)
+	post, err := p.parsePostfix(lhs)
+	if err != nil {
+		return nil, err
 	}
-	return t.Kind.String()
+	return p.parseBinaryRHS(1, post)
+}
+
+func (p *Parser) parseUnary() (ast.Expr, error) {
+	switch {
+	case p.accept(lexer.TokMinus):
+		x, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpr{Op: "-", X: x}, nil
+	case p.accept(lexer.TokBang):
+		x, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpr{Op: "!", X: x}, nil
+	case p.accept(lexer.TokNot):
+		x, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.UnaryExpr{Op: "not", X: x}, nil
+	default:
+		return p.parsePrimary()
+	}
+}
+
+func (p *Parser) parsePrimary() (ast.Expr, error) {
+	switch {
+	case p.accept(lexer.TokIdent):
+		return p.parsePostfix(&ast.IdentExpr{Name: p.tok.Lex}) // NOTE: p.tok is post-advance; use previous
+	case p.tok.Kind == lexer.TokIdent:
+		// shouldn't happen
+	}
+	// handle literals & grouped
+	if p.at(lexer.TokInt) {
+		t := p.tok
+		p.next()
+		return p.parsePostfix(&ast.IntLit{Value: t.Lex})
+	}
+	if p.at(lexer.TokStr) {
+		t := p.tok
+		p.next()
+		return p.parsePostfix(&ast.StrLit{Value: t.Lex})
+	}
+	if p.accept(lexer.TokTrue) {
+		return p.parsePostfix(&ast.BoolLit{Value: true})
+	}
+	if p.accept(lexer.TokFalse) {
+		return p.parsePostfix(&ast.BoolLit{Value: false})
+	}
+	if p.accept(lexer.TokLParen) {
+		e, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokRParen); err != nil {
+			return nil, err
+		}
+		return p.parsePostfix(e)
+	}
+	// identifier (normal path)
+	if p.at(lexer.TokIdent) {
+		t := p.tok
+		p.next()
+		return p.parsePostfix(&ast.IdentExpr{Name: t.Lex})
+	}
+	return nil, fmt.Errorf("unexpected token in expression: %v at %d:%d", p.tok.Kind, p.tok.Line, p.tok.Col)
+}
+
+func (p *Parser) parsePostfix(base ast.Expr) (ast.Expr, error) {
+	e := base
+	for {
+		switch {
+		case p.accept(lexer.TokLParen):
+			// call
+			var args []ast.Expr
+			if !p.accept(lexer.TokRParen) {
+				for {
+					a, err := p.parseExpr()
+					if err != nil {
+						return nil, err
+					}
+					args = append(args, a)
+					if p.accept(lexer.TokComma) {
+						continue
+					}
+					if _, err := p.expect(lexer.TokRParen); err != nil {
+						return nil, err
+					}
+					break
+				}
+			}
+			e = &ast.CallExpr{Callee: e, Args: args}
+		case p.accept(lexer.TokLBrack):
+			// index
+			idx, err := p.parseExpr()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(lexer.TokRBrack); err != nil {
+				return nil, err
+			}
+			e = &ast.IndexExpr{Seq: e, Index: idx}
+		case p.accept(lexer.TokDot):
+			id, err := p.expect(lexer.TokIdent)
+			if err != nil {
+				return nil, err
+			}
+			e = &ast.FieldExpr{X: e, Name: id.Lex}
+		default:
+			return e, nil
+		}
+	}
+}
+
+func (p *Parser) parseBinaryRHS(minPrec int, left ast.Expr) (ast.Expr, error) {
+	for {
+		prec, ok := binPrec(p.tok.Kind)
+		if !ok || prec < minPrec {
+			return left, nil
+		}
+		opTok := p.tok
+		p.next()
+
+		// parse the RHS (prefix)
+		right, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+
+		// handle right-binding operators of greater precedence
+		for {
+			nextPrec, ok := binPrec(p.tok.Kind)
+			if !ok || nextPrec <= prec {
+				break
+			}
+			right, err = p.parseBinaryRHS(prec+1, right)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		left = &ast.BinaryExpr{
+			Op:    opTok.Kind.String(),
+			Left:  left,
+			Right: right,
+		}
+	}
+}
+
+func binPrec(k lexer.TokKind) (int, bool) {
+	switch k {
+	case lexer.TokPipe:
+		return 1, true // |>
+	case lexer.TokOr:
+		return 2, true
+	case lexer.TokAnd:
+		return 3, true
+	case lexer.TokEqEq, lexer.TokNe:
+		return 4, true
+	case lexer.TokLt, lexer.TokLe, lexer.TokGt, lexer.TokGe:
+		return 5, true
+	case lexer.TokPlus, lexer.TokMinus:
+		return 6, true
+	case lexer.TokStar, lexer.TokSlash, lexer.TokPercent:
+		return 7, true
+	default:
+		return 0, false
+	}
 }
