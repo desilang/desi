@@ -280,7 +280,7 @@ func (lx *Lexer) Next() Token {
 		if lx.match('>') {
 			return lx.make(TokPipe, "|>", startLine, startCol)
 		}
-		// unknown '|' — Stage-0: return as Dot? Better: just treat as TokDot? No, return '.' would be wrong; fall-through
+		// Unknown bare '|': Stage-0—emit TokPipe anyway
 		return lx.make(TokPipe, "|", startLine, startCol)
 	}
 
@@ -452,6 +452,8 @@ func keywordKind(s string) (TokKind, bool) {
 		return TokOr, true
 	case "not":
 		return TokNot, true
+	case "defer":
+		return TokDefer, true
 	default:
 		return 0, false
 	}
