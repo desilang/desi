@@ -1,0 +1,12 @@
+package main
+import std.io
+import std.fs
+import std.os
+
+def main() -> i32:
+  let txt = fs.read_all("examples/hello.desi")
+  if txt == "":
+    io.println("read failed")
+    os.exit(1)
+  io.println(txt)
+  return 0
