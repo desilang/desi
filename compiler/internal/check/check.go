@@ -29,8 +29,6 @@ func (k Kind) String() string {
 		return "bool"
 	case KindVoid:
 		return "void"
-	case KindUnknown:
-		fallthrough
 	default:
 		return "unknown"
 	}
@@ -66,23 +64,15 @@ func CheckFile(f *ast.File) (*Info, []error) {
 		for _, p := range fn.Params {
 			ps = append(ps, mapTextType(p.Type))
 		}
-		info.Funcs[fn.Name] = FuncSig{
-			Name:   fn.Name,
-			Params: ps,
-			Ret:    mapTextType(fn.Ret),
-		}
+		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: mapTextType(fn.Ret)}
 	}
 
-	// type-check each function body
+	// check bodies
 	for _, d := range f.Decls {
-		fn, ok := d.(*ast.FuncDecl)
-		if !ok {
-			continue
+		if fn, ok := d.(*ast.FuncDecl); ok {
+			errs = append(errs, checkFunc(info, fn)...)
 		}
-		fnErrs := checkFunc(info, fn)
-		errs = append(errs, fnErrs...)
 	}
-
 	return info, errs
 }
 
@@ -93,7 +83,6 @@ type varInfo struct {
 	mutable  bool
 	declName string
 }
-
 type scope struct {
 	parent *scope
 	vars   map[string]varInfo
@@ -107,7 +96,6 @@ func (s *scope) lookup(name string) (varInfo, bool) {
 	}
 	return varInfo{}, false
 }
-
 func (s *scope) define(name string, v varInfo) error {
 	if _, exists := s.vars[name]; exists {
 		return fmt.Errorf("redeclaration of %q", name)
@@ -121,7 +109,7 @@ type checker struct {
 	fnSig      FuncSig
 	scope      *scope
 	errors     []error
-	blockDepth int // >0 when inside if/elif/else/while blocks
+	blockDepth int
 }
 
 func checkFunc(info *Info, fn *ast.FuncDecl) []error {
@@ -130,8 +118,6 @@ func checkFunc(info *Info, fn *ast.FuncDecl) []error {
 		fnSig: info.Funcs[fn.Name],
 		scope: &scope{vars: map[string]varInfo{}},
 	}
-
-	// params are immutable locals
 	for i, p := range fn.Params {
 		if err := c.scope.define(p.Name, varInfo{
 			kind:     mapTextType(p.Type),
@@ -141,12 +127,9 @@ func checkFunc(info *Info, fn *ast.FuncDecl) []error {
 			c.errors = append(c.errors, fmt.Errorf("parameter %d %q: %v", i, p.Name, err))
 		}
 	}
-
-	// body (with branch/loop scopes)
 	for _, s := range fn.Body {
 		c.checkStmt(s)
 	}
-
 	return c.errors
 }
 
@@ -156,14 +139,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	switch st := s.(type) {
 	case *ast.LetStmt:
 		k := c.kindOfExpr(st.Expr)
-		if err := c.scope.define(st.Name, varInfo{
-			kind:     k,
-			mutable:  st.Mutable,
-			declName: st.Name,
-		}); err != nil {
+		if err := c.scope.define(st.Name, varInfo{kind: k, mutable: st.Mutable, declName: st.Name}); err != nil {
 			c.errors = append(c.errors, err)
 		}
-
 	case *ast.AssignStmt:
 		v, ok := c.scope.lookup(st.Name)
 		if !ok {
@@ -177,35 +155,31 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if k, ok := unifyKinds(v.kind, rk); !ok {
 			c.errors = append(c.errors, fmt.Errorf("type mismatch: %q is %s but assigned %s", st.Name, v.kind, rk))
 		} else if v.kind == KindUnknown {
-			// refine unknown
 			v.kind = k
 			c.rebindCurrent(st.Name, v)
 		}
-
 	case *ast.ReturnStmt:
-		expect := c.fnSig.Ret
+		exp := c.fnSig.Ret
 		if st.Expr == nil {
-			if expect != KindVoid {
-				c.errors = append(c.errors, fmt.Errorf("missing return value; function returns %s", expect))
+			if exp != KindVoid {
+				c.errors = append(c.errors, fmt.Errorf("missing return value; function returns %s", exp))
 			}
 			return
 		}
 		got := c.kindOfExpr(st.Expr)
-		if expect == KindVoid {
+		if exp == KindVoid {
 			c.errors = append(c.errors, fmt.Errorf("return value in function returning void"))
 			return
 		}
-		if _, ok := unifyKinds(expect, got); !ok {
-			c.errors = append(c.errors, fmt.Errorf("return kind mismatch: have %s, got %s", expect, got))
+		if _, ok := unifyKinds(exp, got); !ok {
+			c.errors = append(c.errors, fmt.Errorf("return kind mismatch: have %s, got %s", exp, got))
 		}
-
 	case *ast.ExprStmt:
-		c.kindOfExpr(st.Expr) // validate calls, etc.
-
+		c.kindOfExpr(st.Expr)
 	case *ast.IfStmt:
-		ck := c.kindOfExpr(st.Cond)
-		if ck != KindBool && ck != KindInt && ck != KindUnknown {
-			c.errors = append(c.errors, fmt.Errorf("if-condition must be bool/int, got %s", ck))
+		k := c.kindOfExpr(st.Cond)
+		if k != KindBool && k != KindInt && k != KindUnknown {
+			c.errors = append(c.errors, fmt.Errorf("if-condition must be bool/int, got %s", k))
 		}
 		c.withBlock(func() {
 			for _, s2 := range st.Then {
@@ -213,9 +187,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		})
 		for _, el := range st.Elifs {
-			ck := c.kindOfExpr(el.Cond)
-			if ck != KindBool && ck != KindInt && ck != KindUnknown {
-				c.errors = append(c.errors, fmt.Errorf("elif-condition must be bool/int, got %s", ck))
+			k := c.kindOfExpr(el.Cond)
+			if k != KindBool && k != KindInt && k != KindUnknown {
+				c.errors = append(c.errors, fmt.Errorf("elif-condition must be bool/int, got %s", k))
 			}
 			c.withBlock(func() {
 				for _, s2 := range el.Body {
@@ -230,54 +204,39 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 			})
 		}
-
 	case *ast.WhileStmt:
-		ck := c.kindOfExpr(st.Cond)
-		if ck != KindBool && ck != KindInt && ck != KindUnknown {
-			c.errors = append(c.errors, fmt.Errorf("while-condition must be bool/int, got %s", ck))
+		k := c.kindOfExpr(st.Cond)
+		if k != KindBool && k != KindInt && k != KindUnknown {
+			c.errors = append(c.errors, fmt.Errorf("while-condition must be bool/int, got %s", k))
 		}
 		c.withBlock(func() {
 			for _, s2 := range st.Body {
 				c.checkStmt(s2)
 			}
 		})
-
 	case *ast.DeferStmt:
-		// Stage-0 restriction: only allowed at function top-level (not inside blocks)
 		if c.blockDepth > 0 {
 			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
 		}
-		// and must be a call expression
 		if _, ok := st.Call.(*ast.CallExpr); !ok {
 			c.errors = append(c.errors, fmt.Errorf("defer expects a call expression"))
-			// still traverse to catch other errors inside
 		}
 		c.kindOfExpr(st.Call)
-
-	default:
-		// future statements
 	}
 }
 
 func (c *checker) withChildScope(body func()) {
-	child := &scope{parent: c.scope, vars: map[string]varInfo{}}
 	prev := c.scope
-	c.scope = child
+	c.scope = &scope{parent: prev, vars: map[string]varInfo{}}
 	body()
 	c.scope = prev
 }
-
 func (c *checker) withBlock(body func()) {
 	c.blockDepth++
 	c.withChildScope(body)
 	c.blockDepth--
 }
-
 func (c *checker) rebindCurrent(name string, v varInfo) {
-	if _, exists := c.scope.vars[name]; exists {
-		c.scope.vars[name] = v
-		return
-	}
 	for s := c.scope; s != nil; s = s.parent {
 		if _, ok := s.vars[name]; ok {
 			s.vars[name] = v
@@ -296,7 +255,6 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindStr
 	case *ast.BoolLit:
 		return KindBool
-
 	case *ast.IdentExpr:
 		if vi, ok := c.scope.lookup(v.Name); ok {
 			return vi.kind
@@ -306,17 +264,14 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		}
 		c.errors = append(c.errors, fmt.Errorf("use of undeclared identifier %q", v.Name))
 		return KindUnknown
-
 	case *ast.UnaryExpr:
 		k := c.kindOfExpr(v.X)
 		if v.Op == "-" || v.Op == "!" || v.Op == "not" {
 			if k == KindInt || k == KindBool || k == KindUnknown {
 				return KindInt
 			}
-			return KindUnknown
 		}
 		return KindUnknown
-
 	case *ast.BinaryExpr:
 		lk := c.kindOfExpr(v.Left)
 		rk := c.kindOfExpr(v.Right)
@@ -327,9 +282,6 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			}
 			if lk == KindInt && rk == KindInt {
 				return KindInt
-			}
-			if lk == KindUnknown || rk == KindUnknown {
-				return KindUnknown
 			}
 			return KindUnknown
 		case "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!=":
@@ -342,15 +294,12 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		default:
 			return KindUnknown
 		}
-
 	case *ast.FieldExpr:
 		return KindUnknown
-
 	case *ast.IndexExpr:
 		return KindUnknown
-
 	case *ast.CallExpr:
-		// io.println(...) strict: args must be int/str/bool
+		// std.io.println
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "io" && fe.Name == "println" {
 				for i, a := range v.Args {
@@ -359,10 +308,30 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					case KindInt, KindStr, KindBool:
 					case KindVoid:
 						c.errors = append(c.errors, fmt.Errorf("io.println arg %d is void (no value)", i+1))
-					case KindUnknown:
-						c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unknown kind; only int/str/bool are allowed", i+1))
 					default:
 						c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unsupported kind %s", i+1, ak))
+					}
+				}
+				return KindVoid
+			}
+			// std.fs.read_all(path: str) -> str
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "fs" && fe.Name == "read_all" {
+				if len(v.Args) != 1 {
+					c.errors = append(c.errors, fmt.Errorf("fs.read_all: want 1 arg (path: str), got %d", len(v.Args)))
+				} else {
+					if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
+						c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
+					}
+				}
+				return KindStr
+			}
+			// std.os.exit(code: int) -> void
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "os" && fe.Name == "exit" {
+				if len(v.Args) != 1 {
+					c.errors = append(c.errors, fmt.Errorf("os.exit: want 1 arg (code: int), got %d", len(v.Args)))
+				} else {
+					if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
+						c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
 					}
 				}
 				return KindVoid
@@ -388,7 +357,6 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			return KindUnknown
 		}
 		return KindUnknown
-
 	default:
 		return KindUnknown
 	}
@@ -411,7 +379,6 @@ func mapTextType(t string) Kind {
 	}
 }
 
-// unifyKinds returns a resulting compatible kind and whether a,b are compatible.
 func unifyKinds(a, b Kind) (Kind, bool) {
 	if a == KindUnknown {
 		return b, true
@@ -422,7 +389,6 @@ func unifyKinds(a, b Kind) (Kind, bool) {
 	if a == b {
 		return a, true
 	}
-	// allow int<->bool in Stage-0
 	if (a == KindInt && b == KindBool) || (a == KindBool && b == KindInt) {
 		return KindInt, true
 	}

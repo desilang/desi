@@ -88,11 +88,7 @@ func cmdParse(args []string) int {
 
 /* ---------- build (flags anywhere) ---------- */
 
-type buildArgs struct {
-	cc   string
-	out  string
-	file string
-}
+type buildArgs struct{ cc, out, file string }
 
 func parseBuildArgs(argv []string) (buildArgs, error) {
 	var a buildArgs
@@ -162,21 +158,10 @@ func cmdBuild(args []string) int {
 		term.Eprintf("read %s: %v\n", a.file, err)
 		return 1
 	}
-
-	// Parse
 	p := parser.New(string(data))
 	f, err := p.ParseFile()
 	if err != nil {
 		term.Eprintf("parse: %v\n", err)
-		return 1
-	}
-
-	// Type check (Stage-0: simple int/str/bool + locals)
-	info, errs := check.CheckFile(f)
-	if len(errs) > 0 {
-		for _, e := range errs {
-			term.Eprintf("error: %v\n", e)
-		}
 		return 1
 	}
 
@@ -188,6 +173,17 @@ func cmdBuild(args []string) int {
 		return 1
 	}
 	cpath := filepath.Join(outDir, base+".c")
+
+	// typecheck (ignored errors block compile)
+	// In Stage-0 we still emit C if no errors; CheckFile available via codegen import
+	info, errs := cgenCheckFileShim(f) // small inline shim below
+	if len(errs) > 0 {
+		for _, e := range errs {
+			term.Eprintf("error: %v\n", e)
+		}
+		return 1
+	}
+
 	csrc := cgen.EmitFile(f, info)
 	if err := os.WriteFile(cpath, []byte(csrc), 0o644); err != nil {
 		term.Eprintf("write %s: %v\n", cpath, err)
@@ -202,7 +198,13 @@ func cmdBuild(args []string) int {
 			outName = base
 		}
 		binPath := filepath.Join(outDir, outName)
-		cmd := exec.Command(a.cc, cpath, "-o", binPath)
+		// link the runtime shim and add include path
+		cmd := exec.Command(a.cc,
+			cpath,
+			filepath.Join("runtime", "c", "desi_std.c"),
+			"-I", filepath.Join("runtime", "c"),
+			"-o", binPath,
+		)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
@@ -212,6 +214,11 @@ func cmdBuild(args []string) int {
 		term.Eprintf("built %s\n", binPath)
 	}
 	return 0
+}
+
+// tiny local helper so main.go doesn't import check directly
+func cgenCheckFileShim(f *ast.File) (*check.Info, []error) {
+	return check.CheckFile(f)
 }
 
 /* ---------- main ---------- */
