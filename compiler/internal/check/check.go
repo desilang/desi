@@ -46,9 +46,25 @@ type Info struct {
 	Funcs map[string]FuncSig // function table for arity/type checks
 }
 
-func CheckFile(f *ast.File) (*Info, []error) {
+// Warning is a lightweight compiler warning.
+type Warning struct {
+	Code string // e.g., W0001
+	Msg  string
+}
+
+func (w Warning) String() string {
+	if w.Code == "" {
+		return "warning: " + w.Msg
+	}
+	return fmt.Sprintf("%s: %s", w.Code, w.Msg)
+}
+
+// CheckFile performs semantic checks and returns info, errors, and warnings.
+// NOTE: Stage-0 does not attach spans; that arrives in a later stage.
+func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	info := &Info{Funcs: map[string]FuncSig{}}
 	var errs []error
+	var warns []Warning
 
 	// collect function signatures
 	for _, d := range f.Decls {
@@ -70,10 +86,12 @@ func CheckFile(f *ast.File) (*Info, []error) {
 	// check bodies
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok {
-			errs = append(errs, checkFunc(info, fn)...)
+			fnErrs, fnWarns := checkFunc(info, fn)
+			errs = append(errs, fnErrs...)
+			warns = append(warns, fnWarns...)
 		}
 	}
-	return info, errs
+	return info, errs, warns
 }
 
 /* ---------- function + scopes ---------- */
@@ -82,21 +100,26 @@ type varInfo struct {
 	kind     Kind
 	mutable  bool
 	declName string
-}
-type scope struct {
-	parent *scope
-	vars   map[string]varInfo
+
+	// dataflow for Stage-0 warnings
+	read    bool
+	written bool
 }
 
-func (s *scope) lookup(name string) (varInfo, bool) {
+type scope struct {
+	parent *scope
+	vars   map[string]*varInfo // store pointers so we can mutate flags
+}
+
+func (s *scope) lookup(name string) (*varInfo, bool) {
 	for cur := s; cur != nil; cur = cur.parent {
 		if v, ok := cur.vars[name]; ok {
 			return v, true
 		}
 	}
-	return varInfo{}, false
+	return nil, false
 }
-func (s *scope) define(name string, v varInfo) error {
+func (s *scope) define(name string, v *varInfo) error {
 	if _, exists := s.vars[name]; exists {
 		return fmt.Errorf("redeclaration of %q", name)
 	}
@@ -105,42 +128,113 @@ func (s *scope) define(name string, v varInfo) error {
 }
 
 type checker struct {
-	info       *Info
-	fnSig      FuncSig
-	scope      *scope
-	errors     []error
-	blockDepth int
+	info  *Info
+	fnSig FuncSig
+
+	scope *scope
+
+	errors   []error
+	warnings []Warning
+
+	// Track all locals/params for unused-variable warnings
+	locals []*varInfo
+
+	// Per-block "did we already return?" flags
+	blockReturned []bool
 }
 
-func checkFunc(info *Info, fn *ast.FuncDecl) []error {
-	c := &checker{
-		info:  info,
-		fnSig: info.Funcs[fn.Name],
-		scope: &scope{vars: map[string]varInfo{}},
+func push[T any](s []T, v T) []T { return append(s, v) }
+func pop[T any](s []T) []T {
+	if len(s) == 0 {
+		return s
 	}
+	return s[:len(s)-1]
+}
+func top[T any](s []T) *T {
+	if len(s) == 0 {
+		return nil
+	}
+	return &s[len(s)-1]
+}
+
+func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
+	c := &checker{
+		info:   info,
+		fnSig:  info.Funcs[fn.Name],
+		scope:  &scope{vars: map[string]*varInfo{}},
+		locals: nil,
+	}
+	// params are immutable by default
 	for i, p := range fn.Params {
-		if err := c.scope.define(p.Name, varInfo{
+		v := &varInfo{
 			kind:     mapTextType(p.Type),
 			mutable:  false,
 			declName: p.Name,
-		}); err != nil {
+			read:     false,
+			written:  true, // treat param as "written" (initialized by caller)
+		}
+		if err := c.scope.define(p.Name, v); err != nil {
 			c.errors = append(c.errors, fmt.Errorf("parameter %d %q: %v", i, p.Name, err))
 		}
+		c.locals = append(c.locals, v)
 	}
+
+	// top-level function block tracking
+	c.blockReturned = push(c.blockReturned, false)
+
 	for _, s := range fn.Body {
 		c.checkStmt(s)
 	}
-	return c.errors
+
+	// end of function block
+	hasReturn := *top(c.blockReturned)
+	c.blockReturned = pop(c.blockReturned)
+
+	// Stage-0: warn if function claims non-void but final return isn't guaranteed.
+	// (We keep this a warning because codegen synthesizes a default return.)
+	if fnRet := c.fnSig.Ret; fnRet != KindVoid && !hasReturn {
+		c.warnings = append(c.warnings, Warning{
+			Code: "W0006",
+			Msg:  fmt.Sprintf("function %q returns %s but may fall through without an explicit return", fn.Name, fnRet),
+		})
+	}
+
+	// Unused locals/params (names starting with "_" are ignored)
+	for _, v := range c.locals {
+		if strings.HasPrefix(v.declName, "_") {
+			continue
+		}
+		if !v.read {
+			c.warnings = append(c.warnings, Warning{
+				Code: "W0001",
+				Msg:  fmt.Sprintf("unused variable or parameter %q", v.declName),
+			})
+		}
+	}
+
+	return c.errors, c.warnings
 }
 
 /* ---------- statements ---------- */
 
 func (c *checker) checkStmt(s ast.Stmt) {
+	// Warn if we’re already past a return in this block
+	if br := top(c.blockReturned); br != nil && *br {
+		c.warnings = append(c.warnings, Warning{
+			Code: "W0004",
+			Msg:  "unreachable code: statement after return",
+		})
+		// continue checking inside for cascading errors, but we've warned
+	}
+
 	switch st := s.(type) {
 	case *ast.LetStmt:
 		k := c.kindOfExpr(st.Expr)
-		if err := c.scope.define(st.Name, varInfo{kind: k, mutable: st.Mutable, declName: st.Name}); err != nil {
+		v := &varInfo{kind: k, mutable: st.Mutable, declName: st.Name, written: true}
+		if err := c.scope.define(st.Name, v); err != nil {
 			c.errors = append(c.errors, err)
+		} else {
+			c.locals = append(c.locals, v)
 		}
 	case *ast.AssignStmt:
 		v, ok := c.scope.lookup(st.Name)
@@ -156,23 +250,33 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.errors = append(c.errors, fmt.Errorf("type mismatch: %q is %s but assigned %s", st.Name, v.kind, rk))
 		} else if v.kind == KindUnknown {
 			v.kind = k
-			c.rebindCurrent(st.Name, v)
 		}
+		v.written = true
 	case *ast.ReturnStmt:
 		exp := c.fnSig.Ret
 		if st.Expr == nil {
 			if exp != KindVoid {
 				c.errors = append(c.errors, fmt.Errorf("missing return value; function returns %s", exp))
 			}
+			// mark that this block has a return
+			if br := top(c.blockReturned); br != nil {
+				*br = true
+			}
 			return
 		}
 		got := c.kindOfExpr(st.Expr)
 		if exp == KindVoid {
 			c.errors = append(c.errors, fmt.Errorf("return value in function returning void"))
+			if br := top(c.blockReturned); br != nil {
+				*br = true
+			}
 			return
 		}
 		if _, ok := unifyKinds(exp, got); !ok {
 			c.errors = append(c.errors, fmt.Errorf("return kind mismatch: have %s, got %s", exp, got))
+		}
+		if br := top(c.blockReturned); br != nil {
+			*br = true
 		}
 	case *ast.ExprStmt:
 		c.kindOfExpr(st.Expr)
@@ -215,7 +319,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		})
 	case *ast.DeferStmt:
-		if c.blockDepth > 0 {
+		// Stage-0: only at function top-level
+		if len(c.blockReturned) > 1 {
 			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
 		}
 		if _, ok := st.Call.(*ast.CallExpr); !ok {
@@ -227,22 +332,14 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 func (c *checker) withChildScope(body func()) {
 	prev := c.scope
-	c.scope = &scope{parent: prev, vars: map[string]varInfo{}}
+	c.scope = &scope{parent: prev, vars: map[string]*varInfo{}}
 	body()
 	c.scope = prev
 }
 func (c *checker) withBlock(body func()) {
-	c.blockDepth++
+	c.blockReturned = push(c.blockReturned, false)
 	c.withChildScope(body)
-	c.blockDepth--
-}
-func (c *checker) rebindCurrent(name string, v varInfo) {
-	for s := c.scope; s != nil; s = s.parent {
-		if _, ok := s.vars[name]; ok {
-			s.vars[name] = v
-			return
-		}
-	}
+	c.blockReturned = pop(c.blockReturned)
 }
 
 /* ---------- expressions ---------- */
@@ -257,6 +354,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindBool
 	case *ast.IdentExpr:
 		if vi, ok := c.scope.lookup(v.Name); ok {
+			vi.read = true
 			return vi.kind
 		}
 		if _, isFn := c.info.Funcs[v.Name]; isFn {
