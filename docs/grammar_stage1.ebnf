@@ -1,0 +1,91 @@
+# Desi Grammar (Stage-1 snapshot)
+# Notes:
+# - Indentation is Python-style via NEWLINE/INDENT/DEDENT tokens (produced by the Go lexer).
+# - The self-hosted Desi lexer currently emits a simplified token stream (no INDENT/DEDENT yet).
+# - This EBNF describes the language surface; lexical rules are in tokens_stage1.md.
+
+File        ::= Newlines? PackageDecl? ImportDecl* Decl* EOF
+
+PackageDecl ::= "package" DottedIdent NEWLINE
+
+ImportDecl  ::= "import" DottedIdent NEWLINE
+
+Decl        ::= FuncDecl
+
+FuncDecl    ::= "def" Ident "(" ParamList? ")" "->" Type ":" NEWLINE INDENT Stmt* DEDENT
+
+ParamList   ::= Param ("," Param)*
+Param       ::= Ident ":" Type
+
+# Type is “textual” for now; checker maps to kinds: int, str, bool, void, unknown
+Type        ::= TypeToken+
+
+# Statements
+Stmt        ::= LetStmt
+              | AssignStmt
+              | ReturnStmt
+              | IfStmt
+              | WhileStmt
+              | DeferStmt
+              | ExprStmt
+
+LetStmt     ::= "let" "mut"? Ident "=" Expr NEWLINE
+AssignStmt  ::= Ident ":=" Expr NEWLINE
+ReturnStmt  ::= "return" Expr? NEWLINE
+
+IfStmt      ::= "if" Expr ":" NEWLINE INDENT Stmt* DEDENT
+                 ("elif" Expr ":" NEWLINE INDENT Stmt* DEDENT)*
+                 ("else" ":" NEWLINE INDENT Stmt* DEDENT)?
+
+WhileStmt   ::= "while" Expr ":" NEWLINE INDENT Stmt* DEDENT
+
+# Stage-0 rule: defer only at function top-level, and it must be a call
+DeferStmt   ::= "defer" CallExpr NEWLINE
+
+ExprStmt    ::= Expr NEWLINE
+
+# Expressions (Pratt; precedence from low → high)
+# 1) pipe (|>)      — currently parsed, lowered as left-associative binary op
+# 2) or
+# 3) and
+# 4) == !=
+# 5) < <= > >=
+# 6) + -
+# 7) * / %
+# 8) unary: "-" "!" "not" (right-assoc)
+# 9) postfix: call, index, field
+
+Expr        ::= Unary ( PipeRHS | OrRHS | AndRHS | EqRelRHS | AddRHS | MulRHS )*
+
+PipeRHS     ::= "|>" Unary
+OrRHS       ::= "or" Unary
+AndRHS      ::= "and" Unary
+EqRelRHS    ::= ("==" | "!=" | "<" | "<=" | ">" | ">=") Unary
+AddRHS      ::= ("+" | "-") Unary
+MulRHS      ::= ("*" | "/" | "%") Unary
+
+Unary       ::= ("-" | "!" | "not") Unary
+              | Primary
+
+Primary     ::= Literal
+              | Ident
+              | "(" Expr ")"
+              | Postfix
+
+Postfix     ::= (Ident | "(" Expr ")" | Literal)
+                ( CallSuffix | IndexSuffix | FieldSuffix )+
+
+CallSuffix  ::= "(" ArgList? ")"
+ArgList     ::= Expr ("," Expr)* ("," )?    # trailing comma allowed
+IndexSuffix ::= "[" Expr "]"
+FieldSuffix ::= "." Ident
+
+# Literals & identifiers
+Literal     ::= IntLit | StrLit | BoolLit
+
+DottedIdent ::= Ident ("." Ident)*
+Ident       ::= IdentToken
+
+# Tokens named here are specified lexically in tokens_stage1.md.
+Newlines    ::= NEWLINE+
+EOF         ::= <end of file>
