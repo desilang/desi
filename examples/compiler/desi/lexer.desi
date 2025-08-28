@@ -3,6 +3,7 @@
 # - strings "..." (no escapes)
 # - identifiers & a few keywords
 # - single-char ops/parens; a few 2-char tokens: '==', '!=', ':=', '->', '<=', '>='
+# - NEW: emits NEWLINE tokens, skips '#' comments, adds lex_file(path)
 # - prints tokens as: io.println(kind, text, line, col)
 
 def is_space(c: int) -> int:
@@ -79,6 +80,10 @@ def is_keyword(name: str) -> int:
 def emit(kind: str, text: str, line: int, col: int) -> void:
   io.println(kind, " ", text, " ", line, " ", col)
 
+def lex_file(path: str) -> int:
+  let src = fs.read_all(path)
+  return lex_string(src)
+
 def lex_string(src: str) -> int:
   let n = str.len(src)
   let mut i = 0
@@ -89,12 +94,29 @@ def lex_string(src: str) -> int:
     let mut handled = 0
     let c = ch_at(src, i)
 
+    # skip spaces
     if handled == 0 and is_space(c) == 1:
       i := i + 1
       col := col + 1
       handled := 1
 
+    # comments: '#' to end-of-line (no 'break'—use a done flag)
+    elif handled == 0 and (c == 35):
+      i := i + 1
+      col := col + 1
+      let mut done = 0
+      while (i < n) and (done == 0):
+        let d = ch_at(src, i)
+        if is_newline(d) == 1:
+          done := 1    # stop before newline; outer loop will emit NEWLINE
+        else:
+          i := i + 1
+          col := col + 1
+      handled := 1
+
+    # CR or CRLF → emit NEWLINE, advance line
     elif handled == 0 and (c == 13):
+      emit("NEWLINE", "", line, col)
       if (i + 1 < n) and (ch_at(src, i + 1) == 10):
         i := i + 2
       else:
@@ -103,12 +125,15 @@ def lex_string(src: str) -> int:
       col := 1
       handled := 1
 
+    # LF → emit NEWLINE, advance line
     elif handled == 0 and (c == 10):
+      emit("NEWLINE", "", line, col)
       i := i + 1
       line := line + 1
       col := 1
       handled := 1
 
+    # identifiers / keywords
     elif handled == 0 and is_alpha(c) == 1:
       let mut name = ""
       let start_col = col
@@ -122,6 +147,7 @@ def lex_string(src: str) -> int:
         emit("IDENT", name, line, start_col)
       handled := 1
 
+    # integers (decimal)
     elif handled == 0 and is_digit(c) == 1:
       let mut lit = ""
       let start_col2 = col
@@ -132,24 +158,25 @@ def lex_string(src: str) -> int:
       emit("INT", lit, line, start_col2)
       handled := 1
 
+    # strings "..." (no escapes)
     elif handled == 0 and (c == 34):
       let start_col3 = col
       i := i + 1
       col := col + 1
       let mut val = ""
       let mut closed = 0
-      let mut done = 0
-      while (i < n) and (done == 0):
-        let d = ch_at(src, i)
-        if d == 34:
+      let mut done2 = 0
+      while (i < n) and (done2 == 0):
+        let d2 = ch_at(src, i)
+        if d2 == 34:
           closed := 1
           i := i + 1
           col := col + 1
-          done := 1
-        elif is_newline(d) == 1:
-          done := 1
+          done2 := 1
+        elif is_newline(d2) == 1:
+          done2 := 1
         else:
-          val := val + ch_str(d)
+          val := val + ch_str(d2)
           i := i + 1
           col := col + 1
       if closed == 1:
@@ -158,6 +185,7 @@ def lex_string(src: str) -> int:
         emit("ERR", "unterminated string", line, start_col3)
       handled := 1
 
+    # two-char tokens
     elif handled == 0 and (starts_with(src, i, 61, 61) == 1):
       emit("EQEQ", "==", line, col)
       i := i + 2
@@ -200,6 +228,7 @@ def lex_string(src: str) -> int:
       col := col + 2
       handled := 1
 
+    # single-char tokens
     elif handled == 0 and (c == 40):
       emit("LPAREN", "(", line, col)
       i := i + 1
@@ -278,6 +307,7 @@ def lex_string(src: str) -> int:
       col := col + 1
       handled := 1
 
+    # unknown char
     if handled == 0:
       emit("ERR", "unknown char " + ch_str(c), line, col)
       i := i + 1

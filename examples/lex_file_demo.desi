@@ -1,0 +1,4 @@
+import compiler.desi.lexer
+def main() -> int:
+  lex_file("examples/lex_demo.desi")
+  return 0
