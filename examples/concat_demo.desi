@@ -1,0 +1,7 @@
+def greet(name: str) -> str:
+  return "Hello, " + name
+
+def main() -> int:
+  let msg = greet("Desi")
+  io.println(msg)
+  return 0
