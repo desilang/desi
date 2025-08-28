@@ -328,21 +328,30 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			return "0", "int"
 		}
 		return v.Value, "int"
+
 	case *ast.StrLit:
 		return v.Value, "str"
+
 	case *ast.BoolLit:
 		if v.Value {
 			return "1", "int"
 		}
 		return "0", "int"
+
 	case *ast.IdentExpr:
 		if k, ok := env.vars[v.Name]; ok {
 			return v.Name, k
 		}
 		return v.Name, "int"
+
 	case *ast.UnaryExpr:
 		x, k := cExprFor(v.X, env)
-		return "(" + v.Op + " " + x + ")", k
+		op := v.Op
+		if op == "not" {
+			op = "!"
+		}
+		return "(" + op + " " + x + ")", k
+
 	case *ast.BinaryExpr:
 		l, lk := cExprFor(v.Left, env)
 		r, rk := cExprFor(v.Right, env)
@@ -360,6 +369,15 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			return "desi_str_concat(" + l + ", " + r + ")", "str"
 		}
 
+		// logical ops: and/or
+		if v.Op == "and" {
+			return "(" + l + " && " + r + ")", "int"
+		}
+		if v.Op == "or" {
+			return "(" + l + " || " + r + ")", "int"
+		}
+
+		// default: emit as-is
 		k := ""
 		if lk == "str" || rk == "str" {
 			k = "str"
@@ -370,8 +388,10 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 
 	case *ast.FieldExpr:
 		return "0", ""
+
 	case *ast.IndexExpr:
 		return "0", ""
+
 	case *ast.CallExpr:
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
@@ -433,6 +453,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			}
 		}
 		return "0", ""
+
 	default:
 		return "0", ""
 	}

@@ -1,0 +1,6 @@
+import compiler.desi.lexer
+
+def main() -> int:
+  let src = "let mut x := 42\nio.println(x)\n\"hi\" == \"hi\"\n"
+  lex_string(src)
+  return 0

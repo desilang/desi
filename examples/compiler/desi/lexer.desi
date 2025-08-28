@@ -1,0 +1,287 @@
+# Minimal Desi lexer (Stage-1)
+# - decimal integers
+# - strings "..." (no escapes)
+# - identifiers & a few keywords
+# - single-char ops/parens; a few 2-char tokens: '==', '!=', ':=', '->', '<=', '>='
+# - prints tokens as: io.println(kind, text, line, col)
+
+def is_space(c: int) -> int:
+  return c == 32
+
+def is_newline(c: int) -> int:
+  return (c == 10) or (c == 13)
+
+def is_digit(c: int) -> int:
+  return (c >= 48) and (c <= 57)
+
+def is_alpha(c: int) -> int:
+  return ((c >= 65) and (c <= 90)) or ((c >= 97) and (c <= 122)) or (c == 95)
+
+def is_alnum(c: int) -> int:
+  let a = is_alpha(c)
+  let d = is_digit(c)
+  if (a == 1) or (d == 1):
+    return 1
+  return 0
+
+def ch_at(s: str, i: int) -> int:
+  return str.at(s, i)
+
+def ch_str(c: int) -> str:
+  return str.from_code(c)
+
+def starts_with(s: str, i: int, a: int, b: int) -> int:
+  let n = str.len(s)
+  if i + 1 >= n:
+    return 0
+  let c1 = str.at(s, i)
+  let c2 = str.at(s, i + 1)
+  if (c1 == a) and (c2 == b):
+    return 1
+  return 0
+
+def is_keyword(name: str) -> int:
+  if name == "def":
+    return 1
+  elif name == "if":
+    return 1
+  elif name == "else":
+    return 1
+  elif name == "elif":
+    return 1
+  elif name == "while":
+    return 1
+  elif name == "return":
+    return 1
+  elif name == "let":
+    return 1
+  elif name == "mut":
+    return 1
+  elif name == "true":
+    return 1
+  elif name == "false":
+    return 1
+  elif name == "and":
+    return 1
+  elif name == "or":
+    return 1
+  elif name == "not":
+    return 1
+  elif name == "package":
+    return 1
+  elif name == "import":
+    return 1
+  elif name == "defer":
+    return 1
+  return 0
+
+# print a token with spaces between fields
+def emit(kind: str, text: str, line: int, col: int) -> void:
+  io.println(kind, " ", text, " ", line, " ", col)
+
+def lex_string(src: str) -> int:
+  let n = str.len(src)
+  let mut i = 0
+  let mut line = 1
+  let mut col = 1
+
+  while i < n:
+    let mut handled = 0
+    let c = ch_at(src, i)
+
+    if handled == 0 and is_space(c) == 1:
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 13):
+      if (i + 1 < n) and (ch_at(src, i + 1) == 10):
+        i := i + 2
+      else:
+        i := i + 1
+      line := line + 1
+      col := 1
+      handled := 1
+
+    elif handled == 0 and (c == 10):
+      i := i + 1
+      line := line + 1
+      col := 1
+      handled := 1
+
+    elif handled == 0 and is_alpha(c) == 1:
+      let mut name = ""
+      let start_col = col
+      while (i < n) and (is_alnum(ch_at(src, i)) == 1):
+        name := name + ch_str(ch_at(src, i))
+        i := i + 1
+        col := col + 1
+      if is_keyword(name) == 1:
+        emit("KW", name, line, start_col)
+      else:
+        emit("IDENT", name, line, start_col)
+      handled := 1
+
+    elif handled == 0 and is_digit(c) == 1:
+      let mut lit = ""
+      let start_col2 = col
+      while (i < n) and (is_digit(ch_at(src, i)) == 1):
+        lit := lit + ch_str(ch_at(src, i))
+        i := i + 1
+        col := col + 1
+      emit("INT", lit, line, start_col2)
+      handled := 1
+
+    elif handled == 0 and (c == 34):
+      let start_col3 = col
+      i := i + 1
+      col := col + 1
+      let mut val = ""
+      let mut closed = 0
+      let mut done = 0
+      while (i < n) and (done == 0):
+        let d = ch_at(src, i)
+        if d == 34:
+          closed := 1
+          i := i + 1
+          col := col + 1
+          done := 1
+        elif is_newline(d) == 1:
+          done := 1
+        else:
+          val := val + ch_str(d)
+          i := i + 1
+          col := col + 1
+      if closed == 1:
+        emit("STR", val, line, start_col3)
+      else:
+        emit("ERR", "unterminated string", line, start_col3)
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 61, 61) == 1):
+      emit("EQEQ", "==", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 33, 61) == 1):
+      emit("NE", "!=", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 58, 61) == 1):
+      emit("ASSIGN", ":=", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 45, 62) == 1):
+      emit("ARROW", "->", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 60, 61) == 1):
+      emit("LE", "<=", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 62, 61) == 1):
+      emit("GE", ">=", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (starts_with(src, i, 124, 62) == 1):
+      emit("PIPE", "|>", line, col)
+      i := i + 2
+      col := col + 2
+      handled := 1
+
+    elif handled == 0 and (c == 40):
+      emit("LPAREN", "(", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 41):
+      emit("RPAREN", ")", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 44):
+      emit("COMMA", ",", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 58):
+      emit("COLON", ":", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 46):
+      emit("DOT", ".", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 43):
+      emit("PLUS", "+", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 45):
+      emit("MINUS", "-", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 42):
+      emit("STAR", "*", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 47):
+      emit("SLASH", "/", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 37):
+      emit("PERCENT", "%", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 61):
+      emit("EQ", "=", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 60):
+      emit("LT", "<", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    elif handled == 0 and (c == 62):
+      emit("GT", ">", line, col)
+      i := i + 1
+      col := col + 1
+      handled := 1
+
+    if handled == 0:
+      emit("ERR", "unknown char " + ch_str(c), line, col)
+      i := i + 1
+      col := col + 1
+
+  emit("EOF", "", line, col)
+  return 0
