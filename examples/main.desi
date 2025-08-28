@@ -1,0 +1,5 @@
+import util.math
+
+def main() -> int:
+  io.println(add(2, 3))
+  return 0
