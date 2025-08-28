@@ -30,6 +30,15 @@ const char* desi_str_concat(const char* a, const char* b);
 /* Free memory returned by runtime shims (concat/read_all). NULL is ok. */
 void desi_mem_free(const void* p);
 
+/* Return the byte length of s (strlen). NULL -> 0. */
+int desi_str_len(const char* s);
+
+/* Return the unsigned byte at index i (0..len-1), or -1 if OOB or s==NULL. */
+int desi_str_at(const char* s, int i);
+
+/* Allocate and return a 1-character string from byte code c (clamped 0..255). */
+const char* desi_str_from_code(int c);
+
 #ifdef __cplusplus
 }
 #endif

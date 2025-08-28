@@ -60,7 +60,6 @@ func (w Warning) String() string {
 }
 
 // CheckFile performs semantic checks and returns info, errors, and warnings.
-// NOTE: Stage-0 does not attach spans; that arrives in a later stage.
 func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	info := &Info{Funcs: map[string]FuncSig{}}
 	var errs []error
@@ -101,14 +100,13 @@ type varInfo struct {
 	mutable  bool
 	declName string
 
-	// dataflow for Stage-0 warnings
 	read    bool
 	written bool
 }
 
 type scope struct {
 	parent *scope
-	vars   map[string]*varInfo // store pointers so we can mutate flags
+	vars   map[string]*varInfo
 }
 
 func (s *scope) lookup(name string) (*varInfo, bool) {
@@ -136,20 +134,12 @@ type checker struct {
 	errors   []error
 	warnings []Warning
 
-	// Track all locals/params for unused-variable warnings
-	locals []*varInfo
-
-	// Per-block "did we already return?" flags
+	locals        []*varInfo
 	blockReturned []bool
 }
 
 func push[T any](s []T, v T) []T { return append(s, v) }
-func pop[T any](s []T) []T {
-	if len(s) == 0 {
-		return s
-	}
-	return s[:len(s)-1]
-}
+func pop[T any](s []T) []T       { return s[:len(s)-1] }
 func top[T any](s []T) *T {
 	if len(s) == 0 {
 		return nil
@@ -164,14 +154,14 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 		scope:  &scope{vars: map[string]*varInfo{}},
 		locals: nil,
 	}
-	// params are immutable by default
+	// params (immutable)
 	for i, p := range fn.Params {
 		v := &varInfo{
 			kind:     mapTextType(p.Type),
 			mutable:  false,
 			declName: p.Name,
 			read:     false,
-			written:  true, // treat param as "written" (initialized by caller)
+			written:  true,
 		}
 		if err := c.scope.define(p.Name, v); err != nil {
 			c.errors = append(c.errors, fmt.Errorf("parameter %d %q: %v", i, p.Name, err))
@@ -179,19 +169,14 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 		c.locals = append(c.locals, v)
 	}
 
-	// top-level function block tracking
 	c.blockReturned = push(c.blockReturned, false)
-
 	for _, s := range fn.Body {
 		c.checkStmt(s)
 	}
-
-	// end of function block
 	hasReturn := *top(c.blockReturned)
 	c.blockReturned = pop(c.blockReturned)
 
-	// Stage-0: warn if function claims non-void but final return isn't guaranteed.
-	// (We keep this a warning because codegen synthesizes a default return.)
+	// Non-void fallthrough warning (codegen synthesizes default)
 	if fnRet := c.fnSig.Ret; fnRet != KindVoid && !hasReturn {
 		c.warnings = append(c.warnings, Warning{
 			Code: "W0006",
@@ -199,7 +184,7 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 		})
 	}
 
-	// Unused locals/params (names starting with "_" are ignored)
+	// Unused vars/params (ignore names starting with "_")
 	for _, v := range c.locals {
 		if strings.HasPrefix(v.declName, "_") {
 			continue
@@ -218,13 +203,11 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 /* ---------- statements ---------- */
 
 func (c *checker) checkStmt(s ast.Stmt) {
-	// Warn if we’re already past a return in this block
 	if br := top(c.blockReturned); br != nil && *br {
 		c.warnings = append(c.warnings, Warning{
 			Code: "W0004",
 			Msg:  "unreachable code: statement after return",
 		})
-		// continue checking inside for cascading errors, but we've warned
 	}
 
 	switch st := s.(type) {
@@ -258,7 +241,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			if exp != KindVoid {
 				c.errors = append(c.errors, fmt.Errorf("missing return value; function returns %s", exp))
 			}
-			// mark that this block has a return
 			if br := top(c.blockReturned); br != nil {
 				*br = true
 			}
@@ -319,7 +301,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		})
 	case *ast.DeferStmt:
-		// Stage-0: only at function top-level
 		if len(c.blockReturned) > 1 {
 			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
 		}
@@ -416,10 +397,8 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "fs" && fe.Name == "read_all" {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("fs.read_all: want 1 arg (path: str), got %d", len(v.Args)))
-				} else {
-					if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-						c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
-					}
+				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
+					c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
 				}
 				return KindStr
 			}
@@ -427,12 +406,54 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "os" && fe.Name == "exit" {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("os.exit: want 1 arg (code: int), got %d", len(v.Args)))
+				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
+					c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
+				}
+				return KindVoid
+			}
+			// std.mem.free(x) -> void   (accepts str or unknown)
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "mem" && fe.Name == "free" {
+				if len(v.Args) != 1 {
+					c.errors = append(c.errors, fmt.Errorf("mem.free: want 1 arg, got %d", len(v.Args)))
 				} else {
-					if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-						c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
+					ak := c.kindOfExpr(v.Args[0])
+					if ak != KindStr && ak != KindUnknown && ak != KindVoid {
+						c.errors = append(c.errors, fmt.Errorf("mem.free: arg must be str, got %s", ak))
 					}
 				}
 				return KindVoid
+			}
+			// std.str.len(s: str) -> int
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "len" {
+				if len(v.Args) != 1 {
+					c.errors = append(c.errors, fmt.Errorf("str.len: want 1 arg (str), got %d", len(v.Args)))
+				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
+					c.errors = append(c.errors, fmt.Errorf("str.len: arg must be str, got %s", ak))
+				}
+				return KindInt
+			}
+			// std.str.at(s: str, i: int) -> int
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "at" {
+				if len(v.Args) != 2 {
+					c.errors = append(c.errors, fmt.Errorf("str.at: want 2 args (str,int), got %d", len(v.Args)))
+				} else {
+					if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
+						c.errors = append(c.errors, fmt.Errorf("str.at: first arg must be str, got %s", ak))
+					}
+					if ik := c.kindOfExpr(v.Args[1]); ik != KindInt && ik != KindUnknown {
+						c.errors = append(c.errors, fmt.Errorf("str.at: second arg must be int, got %s", ik))
+					}
+				}
+				return KindInt
+			}
+			// std.str.from_code(i: int) -> str
+			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "from_code" {
+				if len(v.Args) != 1 {
+					c.errors = append(c.errors, fmt.Errorf("str.from_code: want 1 arg (int), got %d", len(v.Args)))
+				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
+					c.errors = append(c.errors, fmt.Errorf("str.from_code: arg must be int, got %s", ak))
+				}
+				return KindStr
 			}
 		}
 		// user function call

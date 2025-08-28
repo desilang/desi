@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <errno.h>
 
 /* ---- I/O shims ---- */
 
@@ -42,7 +41,6 @@ int desi_fs_write_all(const char* path, const char* data) {
 }
 
 int desi_os_exit(int code) {
-  /* In a real runtime we’d call exit(code). Keeping it returnable eases testing. */
 #ifdef DESI_RUNTIME_EXIT_CALLS_EXIT
   exit(code);
 #endif
@@ -66,4 +64,29 @@ const char* desi_str_concat(const char* a, const char* b) {
 
 void desi_mem_free(const void* p) {
   if (p) free((void*)p);
+}
+
+int desi_str_len(const char* s) {
+  if (!s) return 0;
+  size_t n = strlen(s);
+  if (n > 0x7fffffff) n = 0x7fffffff;
+  return (int)n;
+}
+
+int desi_str_at(const char* s, int i) {
+  if (!s || i < 0) return -1;
+  size_t n = strlen(s);
+  if ((size_t)i >= n) return -1;
+  unsigned char ch = (unsigned char)s[i];
+  return (int)ch;
+}
+
+const char* desi_str_from_code(int c) {
+  if (c < 0) c = 0;
+  if (c > 255) c = 255;
+  char* out = (char*)malloc(2);
+  if (!out) return "";
+  out[0] = (char)(unsigned char)c;
+  out[1] = '\0';
+  return (const char*)out;
 }
