@@ -83,9 +83,9 @@ func cmdParse(args []string) int {
     return 1
   }
   p := parser.New(string(data))
-  f, err := p.ParseFile()
-  if err != nil {
-    term.Eprintf("parse: %v\n", err)
+  f, perr := p.ParseFile()
+  if perr != nil {
+    term.Eprintf("parse: %v\n", perr)
     return 1
   }
   out := ast.DumpFile(f)
@@ -239,8 +239,10 @@ func cgenCheckFileShim(f *ast.File) (*check.Info, []error, []check.Warning) {
 
 /* ---------- EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) ---------- */
 
-// We generate a small wrapper under examples/ so its import "compiler.desi.lexer"
-// resolves to examples/compiler/desi/lexer.desi (where your lexer lives).
+// We now generate the wrapper under gen/tmp/lexbridge and also copy the working
+// Desi lexer from examples/compiler/desi/lexer.desi into a temp import tree
+// so that the import "compiler.desi.lexer" still resolves relative to the
+// wrapper's directory (per Stage-1 import rules).
 func cmdLexDesi(path string) int {
   // Read input source
   data, err := os.ReadFile(path)
@@ -249,13 +251,27 @@ func cmdLexDesi(path string) int {
     return 1
   }
 
-  // Build wrapper in examples/ to keep import resolution simple.
-  if err := os.MkdirAll("examples", 0o755); err != nil {
-    term.Eprintf("mkdir examples: %v\n", err)
+  // Prep temp dirs
+  tmpRoot := filepath.Join("gen", "tmp", "lexbridge")
+  tmpWrapper := filepath.Join(tmpRoot, "main.desi")
+  tmpImportDir := filepath.Join(tmpRoot, "compiler", "desi")
+  tmpLexerPath := filepath.Join(tmpImportDir, "lexer.desi")
+
+  // Clean any previous run (best-effort)
+  _ = os.RemoveAll(tmpRoot)
+  if err := os.MkdirAll(tmpImportDir, 0o755); err != nil {
+    term.Eprintf("mkdir %s: %v\n", tmpImportDir, err)
     return 1
   }
-  wrapperPath := filepath.Join("examples", "lexbridge_main.desi")
 
+  // Copy the current dev lexer into the temp import tree
+  srcLexer := filepath.Join("examples", "compiler", "desi", "lexer.desi")
+  if err := copyFile(srcLexer, tmpLexerPath); err != nil {
+    term.Eprintf("copy lexer: %v\n", err)
+    return 1
+  }
+
+  // Build wrapper that calls lex_tokens on the provided source
   srcLiteral := escapeForDesiString(string(data))
   wrapper := strings.Join([]string{
     "import compiler.desi.lexer",
@@ -268,15 +284,14 @@ func cmdLexDesi(path string) int {
     "",
   }, "\n")
 
-  if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o644); err != nil {
+  if err := os.WriteFile(tmpWrapper, []byte(wrapper), 0o644); err != nil {
     term.Eprintf("write wrapper: %v\n", err)
     return 1
   }
 
   // Build the wrapper to a runnable binary (clang) using the same pipeline.
   binPath := filepath.Join("gen", "out", "lexbridge_run")
-  // Use our normal build machinery with cc enabled and out name fixed.
-  rc := cmdBuild([]string{"--cc=clang", "--out=lexbridge_run", wrapperPath})
+  rc := cmdBuild([]string{"--cc=clang", "--out=lexbridge_run", tmpWrapper})
   if rc != 0 {
     return rc
   }
@@ -291,7 +306,7 @@ func cmdLexDesi(path string) int {
     return 1
   }
 
-  // Print as-is (newline-delimited "KIND|TEXT|LINE|COL")
+  // Print as-is (current lexer returns "KIND|TEXT|LINE|COL\n")
   term.Printf("%s", out.String())
   return 0
 }
@@ -330,6 +345,15 @@ func escapeForDesiString(s string) string {
   }
   b.WriteByte('"')
   return b.String()
+}
+
+// copyFile reads from src and writes to dst, creating parent dirs already ensured by caller.
+func copyFile(src, dst string) error {
+  data, err := os.ReadFile(src)
+  if err != nil {
+    return err
+  }
+  return os.WriteFile(dst, data, 0o644)
 }
 
 /* ---------- main ---------- */
