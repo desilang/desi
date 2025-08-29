@@ -34,6 +34,7 @@ func usage() {
   term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file>")
   term.Eprintln("                                    EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) and print tokens")
   term.Eprintln("  lex-diff [--limit=N] <file>      Compare Go vs Desi token streams (by index)")
+  term.Eprintln("  lex-map <file>                   Report Desi→Go kind mapping coverage on this file")
   term.Eprintln("")
   term.Eprintln("Notes:")
   term.Eprintln("  - Imports like 'foo.bar' resolve to 'foo/bar.desi' relative to the entry file’s dir.")
@@ -377,6 +378,47 @@ func cmdLexDiff(args []string) int {
   return 0
 }
 
+/* ---------- lex-map (report mapping coverage) ---------- */
+
+func cmdLexMap(args []string) int {
+  if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+    term.Eprintln("usage: desic lex-map <file.desi>")
+    return 2
+  }
+  file := args[0]
+  data, err := os.ReadFile(file)
+  if err != nil {
+    term.Eprintf("read %s: %v\n", file, err)
+    return 1
+  }
+  // Run Desi lexer and get NDJSON
+  raw, rerr := lexbridge.BuildAndRunRaw(file, false)
+  if rerr != nil {
+    term.Eprintf("lex-map bridge: %v\n", rerr)
+    return 1
+  }
+  nd := lexbridge.ConvertRawToNDJSON(raw, true)
+  toks, perr := lexbridge.ParseNDJSON(strings.NewReader(nd))
+  if perr != nil {
+    term.Eprintf("ndjson parse warning: %v\n", perr)
+  }
+
+  // Tally coverage
+  km := lexbridge.DefaultKindMap()
+  cov := lexbridge.NewCoverage()
+  for _, t := range toks {
+    _, ok := km.MapKind(t.Kind, t.Text)
+    cov.Tally(t.Kind, t.Text, ok)
+  }
+
+  term.Printf("file: %s\n", file)
+  term.Printf("%s", cov.RenderReport())
+
+  // Avoid unused variable warning for data (kept if we later do cross-checks)
+  _ = data
+  return 0
+}
+
 /* ---------- main ---------- */
 
 func main() {
@@ -412,6 +454,12 @@ func main() {
       os.Exit(2)
     }
     os.Exit(cmdLexDiff(os.Args[2:]))
+  case "lex-map":
+    if len(os.Args) < 3 {
+      term.Eprintln("usage: desic lex-map <file.desi>")
+      os.Exit(2)
+    }
+    os.Exit(cmdLexMap(os.Args[2:]))
   default:
     term.Eprintf("unknown command: %s\n\n", os.Args[1])
     usage()
