@@ -12,6 +12,7 @@ import (
   "github.com/desilang/desi/compiler/internal/build"
   "github.com/desilang/desi/compiler/internal/check"
   cgen "github.com/desilang/desi/compiler/internal/codegen/c"
+  "github.com/desilang/desi/compiler/internal/lexbridge"
   "github.com/desilang/desi/compiler/internal/lexer"
   "github.com/desilang/desi/compiler/internal/parser"
   "github.com/desilang/desi/compiler/internal/term"
@@ -31,7 +32,7 @@ func usage() {
   term.Eprintln("  parse <file>                     Parse a .desi file and print AST outline")
   term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
   term.Eprintln("                                    (flags may appear before or after the file)")
-  term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson] <file>")
+  term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file>")
   term.Eprintln("                                    EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) and print tokens")
   term.Eprintln("")
   term.Eprintln("Notes:")
@@ -243,7 +244,7 @@ func cgenCheckFileShim(f *ast.File) (*check.Info, []error, []check.Warning) {
 type lexDesiArgs struct {
   file    string
   keepTmp bool
-  format  string // "raw" or "ndjson"
+  format  string // "raw" | "ndjson" | "pretty"
 }
 
 func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
@@ -259,7 +260,7 @@ func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
       continue
     case strings.HasPrefix(s, "--format="):
       a.format = strings.TrimPrefix(s, "--format=")
-      if a.format != "raw" && a.format != "ndjson" {
+      if a.format != "raw" && a.format != "ndjson" && a.format != "pretty" {
         return a, flag.ErrHelp
       }
       i++
@@ -288,7 +289,7 @@ func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
 func cmdLexDesiRun(args []string) int {
   a, err := parseLexDesiArgs(args)
   if err != nil {
-    term.Eprintln("usage: desic lex-desi [--keep-tmp] [--format=raw|ndjson] <file.desi>")
+    term.Eprintln("usage: desic lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file.desi>")
     return 2
   }
 
@@ -360,18 +361,25 @@ func cmdLexDesiRun(args []string) int {
     return 1
   }
 
-  // Convert/emit according to requested format.
   raw := out.String() // "KIND|TEXT|LINE|COL\n"...
+
   switch a.format {
   case "raw":
-    // Mirror ERR tokens to stderr as LEXERR lines too.
     mirrorErrsToStderr(raw)
     term.Printf("%s", raw)
   case "ndjson":
     nd := convertRawToNDJSON(raw, true) // also mirror ERR to stderr
     term.Printf("%s", nd)
+  case "pretty":
+    // Convert to NDJSON first, then into typed tokens, then pretty-print.
+    nd := convertRawToNDJSON(raw, true)
+    toks, perr := lexbridge.ParseNDJSON(strings.NewReader(nd))
+    if perr != nil {
+      term.Eprintf("ndjson parse warning: %v\n", perr)
+    }
+    pretty := lexbridge.DebugFormat(toks, 0)
+    term.Printf("%s", pretty)
   default:
-    // shouldn't happen due to parse guard
     term.Printf("%s", raw)
   }
 
@@ -471,15 +479,7 @@ func convertRawToNDJSON(raw string, mirrorErr bool) string {
     // JSON-escape text field minimally
     esc := strings.ReplaceAll(text, `\`, `\\`)
     esc = strings.ReplaceAll(esc, `"`, `\"`)
-    b.WriteString(`{"kind":"`)
-    b.WriteString(kind)
-    b.WriteString(`","text":"`)
-    b.WriteString(esc)
-    b.WriteString(`","line":`)
-    b.WriteString(line)
-    b.WriteString(`,"col":`)
-    b.WriteString(col)
-    b.WriteString("}\n")
+    term.Wprintf(&b, `{"kind":"%s","text":"%s","line":%s,"col":%s}`+"\n", kind, esc, line, col)
   }
   return b.String()
 }
@@ -509,7 +509,7 @@ func main() {
     os.Exit(cmdBuild(os.Args[2:]))
   case "lex-desi":
     if len(os.Args) < 3 {
-      term.Eprintln("usage: desic lex-desi [--keep-tmp] [--format=raw|ndjson] <file.desi>")
+      term.Eprintln("usage: desic lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file.desi>")
       os.Exit(2)
     }
     os.Exit(cmdLexDesiRun(os.Args[2:]))
