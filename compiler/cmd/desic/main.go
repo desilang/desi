@@ -1,7 +1,6 @@
 package main
 
 import (
-  "bytes"
   "flag"
   "os"
   "os/exec"
@@ -271,7 +270,6 @@ func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
       i++
       continue
     }
-    // unknown flag or extra positional
     if strings.HasPrefix(s, "-") {
       return a, flag.ErrHelp
     }
@@ -283,9 +281,6 @@ func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
   return a, nil
 }
 
-// We generate the wrapper under gen/tmp/lexbridge and also copy the working
-// Desi lexer from examples/compiler/desi/lexer.desi into a temp import tree
-// so that the import "compiler.desi.lexer" resolves relative to the wrapper.
 func cmdLexDesiRun(args []string) int {
   a, err := parseLexDesiArgs(args)
   if err != nil {
@@ -293,86 +288,21 @@ func cmdLexDesiRun(args []string) int {
     return 2
   }
 
-  // Read input source
-  data, rerr := os.ReadFile(a.file)
+  raw, rerr := lexbridge.BuildAndRunRaw(a.file, a.keepTmp)
   if rerr != nil {
-    term.Eprintf("read %s: %v\n", a.file, rerr)
+    term.Eprintf("lex-desi: %v\n", rerr)
     return 1
   }
-
-  // Prep temp dirs
-  tmpRoot := filepath.Join("gen", "tmp", "lexbridge")
-  tmpWrapper := filepath.Join(tmpRoot, "main.desi")
-  tmpImportDir := filepath.Join(tmpRoot, "compiler", "desi")
-  tmpLexerPath := filepath.Join(tmpImportDir, "lexer.desi")
-
-  // Always start clean
-  _ = os.RemoveAll(tmpRoot)
-  if merr := os.MkdirAll(tmpImportDir, 0o755); merr != nil {
-    term.Eprintf("mkdir %s: %v\n", tmpImportDir, merr)
-    return 1
-  }
-
-  // Copy the current dev lexer into the temp import tree
-  srcLexer := filepath.Join("examples", "compiler", "desi", "lexer.desi")
-  if cerr := copyFile(srcLexer, tmpLexerPath); cerr != nil {
-    term.Eprintf("copy lexer: %v\n", cerr)
-    return 1
-  }
-
-  // Build wrapper that calls lex_tokens on the provided source
-  srcLiteral := escapeForDesiString(string(data))
-  wrapper := strings.Join([]string{
-    "import compiler.desi.lexer",
-    "",
-    "def main() -> int:",
-    "  let src = " + srcLiteral,
-    "  let toks = lex_tokens(src)",
-    "  io.println(toks)",
-    "  return 0",
-    "",
-  }, "\n")
-
-  if werr := os.WriteFile(tmpWrapper, []byte(wrapper), 0o644); werr != nil {
-    term.Eprintf("write wrapper: %v\n", werr)
-    return 1
-  }
-
-  // Build the wrapper to a runnable binary (clang) using the same pipeline.
-  binPath := filepath.Join("gen", "out", "lexbridge_run")
-  rc := cmdBuild([]string{"--cc=clang", "--out=lexbridge_run", tmpWrapper})
-  if rc != 0 {
-    if !a.keepTmp {
-      _ = os.RemoveAll(tmpRoot)
-    }
-    return rc
-  }
-
-  // Run it and capture stdout (encoded token stream).
-  cmd := exec.Command(binPath)
-  var out bytes.Buffer
-  cmd.Stdout = &out
-  cmd.Stderr = os.Stderr
-  if rerr := cmd.Run(); rerr != nil {
-    term.Eprintf("run wrapper: %v\n", rerr)
-    if !a.keepTmp {
-      _ = os.RemoveAll(tmpRoot)
-    }
-    return 1
-  }
-
-  raw := out.String() // "KIND|TEXT|LINE|COL\n"...
 
   switch a.format {
   case "raw":
-    mirrorErrsToStderr(raw)
+    lexbridge.MirrorErrsToStderr(raw)
     term.Printf("%s", raw)
   case "ndjson":
-    nd := convertRawToNDJSON(raw, true) // also mirror ERR to stderr
+    nd := lexbridge.ConvertRawToNDJSON(raw, true)
     term.Printf("%s", nd)
   case "pretty":
-    // Convert to NDJSON first, then into typed tokens, then pretty-print.
-    nd := convertRawToNDJSON(raw, true)
+    nd := lexbridge.ConvertRawToNDJSON(raw, true)
     toks, perr := lexbridge.ParseNDJSON(strings.NewReader(nd))
     if perr != nil {
       term.Eprintf("ndjson parse warning: %v\n", perr)
@@ -382,106 +312,7 @@ func cmdLexDesiRun(args []string) int {
   default:
     term.Printf("%s", raw)
   }
-
-  // Cleanup temp files unless asked to keep them
-  if !a.keepTmp {
-    _ = os.RemoveAll(tmpRoot)
-  }
   return 0
-}
-
-// Escape a raw source string as a Desi string literal.
-// We rely on C string escapes since Stage-1 strings are lowered directly.
-func escapeForDesiString(s string) string {
-  var b strings.Builder
-  b.WriteByte('"')
-  for _, r := range s {
-    switch r {
-    case '\\':
-      b.WriteString(`\\`)
-    case '"':
-      b.WriteString(`\"`)
-    case '\n':
-      b.WriteString(`\n`)
-    case '\r':
-      b.WriteString(`\r`)
-    case '\t':
-      b.WriteString(`\t`)
-    default:
-      if r < 0x20 {
-        // control char → emit as octal \ooo
-        o1 := ((r >> 6) & 7) + '0'
-        o2 := ((r >> 3) & 7) + '0'
-        o3 := (r & 7) + '0'
-        b.WriteByte('\\')
-        b.WriteByte(byte(o1))
-        b.WriteByte(byte(o2))
-        b.WriteByte(byte(o3))
-      } else {
-        b.WriteRune(r)
-      }
-    }
-  }
-  b.WriteByte('"')
-  return b.String()
-}
-
-// copyFile reads from src and writes to dst, creating parent dirs already ensured by caller.
-func copyFile(src, dst string) error {
-  data, err := os.ReadFile(src)
-  if err != nil {
-    return err
-  }
-  return os.WriteFile(dst, data, 0o644)
-}
-
-/* ---------- helpers: token formatting ---------- */
-
-// mirrorErrsToStderr scans raw "K|T|L|C" lines and writes LEXERR lines to stderr for ERR tokens.
-func mirrorErrsToStderr(raw string) {
-  lines := strings.Split(raw, "\n")
-  for _, ln := range lines {
-    if ln == "" {
-      continue
-    }
-    parts := strings.SplitN(ln, "|", 4)
-    if len(parts) != 4 {
-      continue
-    }
-    kind, text, line, col := parts[0], parts[1], parts[2], parts[3]
-    if kind == "ERR" {
-      // Escape quotes in message
-      msg := strings.ReplaceAll(text, `"`, `\"`)
-      term.Eprintf("LEXERR line=%s col=%s msg=\"%s\"\n", line, col, msg)
-    }
-  }
-}
-
-// convertRawToNDJSON transforms "K|T|L|C" lines into NDJSON.
-// If mirrorErr is true, it also emits LEXERR lines for ERR tokens.
-func convertRawToNDJSON(raw string, mirrorErr bool) string {
-  var b strings.Builder
-  lines := strings.Split(raw, "\n")
-  for _, ln := range lines {
-    if ln == "" {
-      continue
-    }
-    parts := strings.SplitN(ln, "|", 4)
-    if len(parts) != 4 {
-      // skip malformed line
-      continue
-    }
-    kind, text, line, col := parts[0], parts[1], parts[2], parts[3]
-    if mirrorErr && kind == "ERR" {
-      msg := strings.ReplaceAll(text, `"`, `\"`)
-      term.Eprintf("LEXERR line=%s col=%s msg=\"%s\"\n", line, col, msg)
-    }
-    // JSON-escape text field minimally
-    esc := strings.ReplaceAll(text, `\`, `\\`)
-    esc = strings.ReplaceAll(esc, `"`, `\"`)
-    term.Wprintf(&b, `{"kind":"%s","text":"%s","line":%s,"col":%s}`+"\n", kind, esc, line, col)
-  }
-  return b.String()
 }
 
 /* ---------- main ---------- */
