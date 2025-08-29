@@ -33,6 +33,7 @@ func usage() {
   term.Eprintln("                                    (flags may appear before or after the file)")
   term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file>")
   term.Eprintln("                                    EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) and print tokens")
+  term.Eprintln("  lex-diff [--limit=N] <file>      Compare Go vs Desi token streams (by index)")
   term.Eprintln("")
   term.Eprintln("Notes:")
   term.Eprintln("  - Imports like 'foo.bar' resolve to 'foo/bar.desi' relative to the entry file’s dir.")
@@ -315,6 +316,67 @@ func cmdLexDesiRun(args []string) int {
   return 0
 }
 
+/* ---------- lex-diff (Go vs Desi) ---------- */
+
+func cmdLexDiff(args []string) int {
+  // parse flags: [--limit=N] <file>
+  var limitStr string
+  var file string
+  for i := 0; i < len(args); i++ {
+    s := args[i]
+    if strings.HasPrefix(s, "--limit=") {
+      limitStr = strings.TrimPrefix(s, "--limit=")
+      continue
+    }
+    if !strings.HasPrefix(s, "-") && file == "" {
+      file = s
+      continue
+    }
+    if strings.HasPrefix(s, "-") {
+      term.Eprintln("usage: desic lex-diff [--limit=N] <file.desi>")
+      return 2
+    }
+  }
+  if file == "" {
+    term.Eprintln("usage: desic lex-diff [--limit=N] <file.desi>")
+    return 2
+  }
+  limit := 0
+  if limitStr != "" {
+    // parse int; ignore error silently → 0 (no limit)
+    n := 0
+    for _, r := range limitStr {
+      if r < '0' || r > '9' {
+        n = 0
+        break
+      }
+      n = n*10 + int(r-'0')
+    }
+    limit = n
+  }
+
+  data, err := os.ReadFile(file)
+  if err != nil {
+    term.Eprintf("read %s: %v\n", file, err)
+    return 1
+  }
+
+  // Get Desi NDJSON via bridge
+  raw, rerr := lexbridge.BuildAndRunRaw(file, false)
+  if rerr != nil {
+    term.Eprintf("lex-diff bridge: %v\n", rerr)
+    return 1
+  }
+  nd := lexbridge.ConvertRawToNDJSON(raw, true)
+
+  rows, derr := lexbridge.BuildLexDiff(string(data), nd)
+  if derr != nil {
+    term.Eprintf("ndjson parse warning: %v\n", derr)
+  }
+  term.Printf("%s", lexbridge.FormatDiff(rows, limit))
+  return 0
+}
+
 /* ---------- main ---------- */
 
 func main() {
@@ -344,6 +406,12 @@ func main() {
       os.Exit(2)
     }
     os.Exit(cmdLexDesiRun(os.Args[2:]))
+  case "lex-diff":
+    if len(os.Args) < 3 {
+      term.Eprintln("usage: desic lex-diff [--limit=N] <file.desi>")
+      os.Exit(2)
+    }
+    os.Exit(cmdLexDiff(os.Args[2:]))
   default:
     term.Eprintf("unknown command: %s\n\n", os.Args[1])
     usage()
