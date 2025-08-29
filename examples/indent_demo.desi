@@ -1,0 +1,8 @@
+def main() -> int:
+    let x = 1
+    if x:
+        let y = 2
+        # comment
+        io.println(y)
+    io.println(x)
+    return 0
