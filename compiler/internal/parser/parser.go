@@ -8,18 +8,48 @@ import (
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
 
+type tokenSource interface {
+	Next() lexer.Token
+}
+
+type goLexerSource struct{ lx *lexer.Lexer }
+
+func (s *goLexerSource) Next() lexer.Token { return s.lx.Next() }
+
+type sliceSource struct {
+	toks []lexer.Token
+	i    int
+}
+
+func (s *sliceSource) Next() lexer.Token {
+	if s.i >= len(s.toks) {
+		return lexer.Token{Kind: lexer.TokEOF}
+	}
+	t := s.toks[s.i]
+	s.i++
+	return t
+}
+
 type Parser struct {
-	lx  *lexer.Lexer
+	src tokenSource
 	tok lexer.Token
 }
 
 func New(src string) *Parser {
-	p := &Parser{lx: lexer.New(src)}
+	p := &Parser{src: &goLexerSource{lx: lexer.New(src)}}
 	p.next()
 	return p
 }
 
-func (p *Parser) next()                   { p.tok = p.lx.Next() }
+// NewFromTokens builds a parser that reads from a provided token slice,
+// enabling hybrid pipelines (Desi lexer → mapped Go tokens → parser).
+func NewFromTokens(toks []lexer.Token) *Parser {
+	p := &Parser{src: &sliceSource{toks: toks}}
+	p.next()
+	return p
+}
+
+func (p *Parser) next()                   { p.tok = p.src.Next() }
 func (p *Parser) at(k lexer.TokKind) bool { return p.tok.Kind == k }
 func (p *Parser) accept(k lexer.TokKind) bool {
 	if p.at(k) {
