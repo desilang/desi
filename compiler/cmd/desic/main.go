@@ -1,6 +1,7 @@
 package main
 
 import (
+  "bytes"
   "flag"
   "os"
   "os/exec"
@@ -18,29 +19,30 @@ import (
 )
 
 func usage() {
-  term.Eprintln("desic — Desi compiler (Stage-0)")
+  term.Eprintln("desic — Desi compiler (Stage-1)")
   term.Eprintln("")
   term.Eprintln("Usage:")
   term.Eprintln("  desic <command> [args]")
   term.Eprintln("")
   term.Eprintln("Commands:")
-  term.Eprintln("  version                    Print version")
-  term.Eprintln("  help                       Show this help")
-  term.Eprintln("  lex <file>                 Lex a .desi file and print tokens")
-  term.Eprintln("  parse <file>               Parse a .desi file and print AST outline")
+  term.Eprintln("  version                          Print version")
+  term.Eprintln("  help                             Show this help")
+  term.Eprintln("  lex <file>                       Lex a .desi file (Go lexer) and print tokens")
+  term.Eprintln("  parse <file>                     Parse a .desi file and print AST outline")
   term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
-  term.Eprintln("        (flags may appear before or after the file)")
+  term.Eprintln("                                    (flags may appear before or after the file)")
+  term.Eprintln("  lex-desi <file>                  EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) and print encoded tokens")
   term.Eprintln("")
   term.Eprintln("Notes:")
   term.Eprintln("  - Imports like 'foo.bar' resolve to 'foo/bar.desi' relative to the entry file’s dir.")
-  term.Eprintln("  - Imports starting with 'std.' are ignored in Stage-0 (provided by runtime).")
+  term.Eprintln("  - Imports starting with 'std.' are ignored in Stage-0/1 (provided by runtime).")
   term.Eprintln("")
   term.Eprintln("Outputs:")
-  term.Eprintln("  generated C:  gen/out/<basename>.c")
+  term.Eprintln("  generated C:   gen/out/<basename>.c")
   term.Eprintln("  binary (if --cc): gen/out/<out|basename>")
 }
 
-/* ---------- lex ---------- */
+/* ---------- lex (Go lexer) ---------- */
 
 func cmdLexDirect(path string) int {
   data, err := os.ReadFile(path)
@@ -235,6 +237,101 @@ func cgenCheckFileShim(f *ast.File) (*check.Info, []error, []check.Warning) {
   return check.CheckFile(f)
 }
 
+/* ---------- EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) ---------- */
+
+// We generate a small wrapper under examples/ so its import "compiler.desi.lexer"
+// resolves to examples/compiler/desi/lexer.desi (where your lexer lives).
+func cmdLexDesi(path string) int {
+  // Read input source
+  data, err := os.ReadFile(path)
+  if err != nil {
+    term.Eprintf("read %s: %v\n", path, err)
+    return 1
+  }
+
+  // Build wrapper in examples/ to keep import resolution simple.
+  if err := os.MkdirAll("examples", 0o755); err != nil {
+    term.Eprintf("mkdir examples: %v\n", err)
+    return 1
+  }
+  wrapperPath := filepath.Join("examples", "lexbridge_main.desi")
+
+  srcLiteral := escapeForDesiString(string(data))
+  wrapper := strings.Join([]string{
+    "import compiler.desi.lexer",
+    "",
+    "def main() -> int:",
+    "  let src = " + srcLiteral,
+    "  let toks = lex_tokens(src)",
+    "  io.println(toks)",
+    "  return 0",
+    "",
+  }, "\n")
+
+  if err := os.WriteFile(wrapperPath, []byte(wrapper), 0o644); err != nil {
+    term.Eprintf("write wrapper: %v\n", err)
+    return 1
+  }
+
+  // Build the wrapper to a runnable binary (clang) using the same pipeline.
+  binPath := filepath.Join("gen", "out", "lexbridge_run")
+  // Use our normal build machinery with cc enabled and out name fixed.
+  rc := cmdBuild([]string{"--cc=clang", "--out=lexbridge_run", wrapperPath})
+  if rc != 0 {
+    return rc
+  }
+
+  // Run it and capture stdout (the encoded token stream).
+  cmd := exec.Command(binPath)
+  var out bytes.Buffer
+  cmd.Stdout = &out
+  cmd.Stderr = os.Stderr
+  if err := cmd.Run(); err != nil {
+    term.Eprintf("run wrapper: %v\n", err)
+    return 1
+  }
+
+  // Print as-is (newline-delimited "KIND|TEXT|LINE|COL")
+  term.Printf("%s", out.String())
+  return 0
+}
+
+// Escape a raw source string as a Desi string literal.
+// We rely on C string escapes since Stage-1 strings are lowered directly.
+func escapeForDesiString(s string) string {
+  var b strings.Builder
+  b.WriteByte('"')
+  for _, r := range s {
+    switch r {
+    case '\\':
+      b.WriteString(`\\`)
+    case '"':
+      b.WriteString(`\"`)
+    case '\n':
+      b.WriteString(`\n`)
+    case '\r':
+      b.WriteString(`\r`)
+    case '\t':
+      b.WriteString(`\t`)
+    default:
+      if r < 0x20 {
+        // control char → emit as octal \ooo
+        o1 := ((r >> 6) & 7) + '0'
+        o2 := ((r >> 3) & 7) + '0'
+        o3 := (r & 7) + '0'
+        b.WriteByte('\\')
+        b.WriteByte(byte(o1))
+        b.WriteByte(byte(o2))
+        b.WriteByte(byte(o3))
+      } else {
+        b.WriteRune(r)
+      }
+    }
+  }
+  b.WriteByte('"')
+  return b.String()
+}
+
 /* ---------- main ---------- */
 
 func main() {
@@ -258,6 +355,12 @@ func main() {
     os.Exit(cmdParse(os.Args[2:]))
   case "build":
     os.Exit(cmdBuild(os.Args[2:]))
+  case "lex-desi":
+    if len(os.Args) != 3 {
+      term.Eprintln("usage: desic lex-desi <file.desi>")
+      os.Exit(2)
+    }
+    os.Exit(cmdLexDesi(os.Args[2]))
   default:
     term.Eprintf("unknown command: %s\n\n", os.Args[1])
     usage()
