@@ -1,6 +1,6 @@
 # Minimal Desi lexer (Stage-1)
 # - decimal integers
-# - strings "..." (no escapes)
+# - strings "..." with basic escapes: \" \\ \n \t \r
 # - identifiers & a few keywords
 # - single-char ops/parens; 2-char: '==', '!=', ':=', '->', '<=', '>='
 # - emits NEWLINE, INDENT, DEDENT
@@ -376,6 +376,39 @@ def lex_tokens(src: str) -> str:
           i := i + 1
           col := col + 1
           done4 := 1
+        elif d2 == 92:            # backslash '\'
+          if i + 1 < n:
+            let e = ch_at(src, i + 1)
+            if e == 110:         # \n
+              val := val + ch_str(10)
+              i := i + 2
+              col := col + 2
+            elif e == 116:       # \t
+              val := val + ch_str(9)
+              i := i + 2
+              col := col + 2
+            elif e == 114:       # \r
+              val := val + ch_str(13)
+              i := i + 2
+              col := col + 2
+            elif e == 34:        # \"
+              val := val + ch_str(34)
+              i := i + 2
+              col := col + 2
+            elif e == 92:        # \\
+              val := val + ch_str(92)
+              i := i + 2
+              col := col + 2
+            else:
+              # unknown escape -> include literally
+              val := val + ch_str(92)
+              val := val + ch_str(e)
+              i := i + 2
+              col := col + 2
+          else:
+            # dangling backslash at end-of-input → error + stop string
+            out := emit_to(out, "ERR", "unterminated string", line, start_col3)
+            done4 := 1
         elif is_newline(d2) == 1:
           done4 := 1
         else:
