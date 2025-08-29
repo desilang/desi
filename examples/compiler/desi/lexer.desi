@@ -10,7 +10,8 @@
 #     * mixing tabs and spaces at line start → error
 # - skips '#' comments
 # - lex_file(path) wrapper
-# - prints tokens as: io.println(kind, " ", text, " ", line, " ", col)
+# - printing demo:   lex_string(src) -> int  (prints tokens)
+# - token sink demo: lex_tokens(src) -> str  (returns "KIND|TEXT|LINE|COL\n"...)
 
 def is_space(c: int) -> int:
   return c == 32
@@ -113,7 +114,6 @@ def stack_top(s: str) -> int:
   else:
     let tail = str_slice(s, sep + 1, str_len(s))
     return parse_int(tail)
-  # explicit fall-through (defensive)
   return 0
 
 def stack_push(s: str, n: int) -> str:
@@ -125,7 +125,6 @@ def stack_pop(s: str) -> str:
     return "0"
   else:
     return str_slice(s, 0, sep)
-  # explicit fall-through (defensive)
   return "0"
 
 def starts_with(s: str, i: int, a: int, b: int) -> int:
@@ -173,32 +172,43 @@ def is_keyword(name: str) -> int:
     return 1
   return 0
 
+# ------- Token sinks -------
+
+# Print sink (legacy demo)
 def emit(kind: str, text: str, line: int, col: int) -> void:
   io.println(kind, " ", text, " ", line, " ", col)
+
+# Accumulator sink: returns new string with one encoded token line appended
+def emit_to(acc: str, kind: str, text: str, line: int, col: int) -> str:
+  let sline = int_to_str(line)
+  let scol = int_to_str(col)
+  # KIND|TEXT|LINE|COL\n
+  let row = kind + "|" + text + "|" + sline + "|" + scol + "\n"
+  return acc + row
 
 def lex_file(path: str) -> int:
   let src = fs.read_all(path)
   return lex_string(src)
 
-def lex_string(src: str) -> int:
+# Returns tokens as a single string ("K|T|L|C\n"...)
+def lex_tokens(src: str) -> str:
   let n = str_len(src)
   let mut i = 0
   let mut line = 1
   let mut col = 1
-  let mut indents = "0"   # stack "0;2;4;..."
-  let mut mode = 0        # 0 unknown, 1 spaces, 2 tabs
+  let mut indents = "0"
+  let mut mode = 0
+  let mut out = ""
 
   while i < n:
     let mut handled = 0
     let c = ch_at(src, i)
 
-    # skip spaces inside a line
     if handled == 0 and is_space(c) == 1:
       i := i + 1
       col := col + 1
       handled := 1
 
-    # comments: '#' to end-of-line
     elif handled == 0 and (c == 35):
       i := i + 1
       col := col + 1
@@ -212,9 +222,8 @@ def lex_string(src: str) -> int:
           col := col + 1
       handled := 1
 
-    # CR or CRLF → NEWLINE + compute indent for next line
     elif handled == 0 and (c == 13):
-      emit("NEWLINE", "", line, col)
+      out := emit_to(out, "NEWLINE", "", line, col)
       if (i + 1 < n) and (ch_at(src, i + 1) == 10):
         i := i + 2
       else:
@@ -222,7 +231,6 @@ def lex_string(src: str) -> int:
       line := line + 1
       col := 1
 
-      # compute indent (tabs or spaces; no mixing)
       let mut j = i
       let mut indent = 0
       let mut seen_space = 0
@@ -242,7 +250,7 @@ def lex_string(src: str) -> int:
           done2 := 1
 
       if (seen_space == 1) and (seen_tab == 1):
-        emit("ERR", "mixed tabs and spaces in indentation", line, 1)
+        out := emit_to(out, "ERR", "mixed tabs and spaces in indentation", line, 1)
 
       if (mode == 0) and (indent > 0):
         if seen_tab == 1:
@@ -262,21 +270,20 @@ def lex_string(src: str) -> int:
       else:
         let top = stack_top(indents)
         if indent > top:
-          emit("INDENT", "", line, 1)
+          out := emit_to(out, "INDENT", "", line, 1)
           indents := stack_push(indents, indent)
         elif indent < top:
           let mut cur = top
           while cur > indent:
-            emit("DEDENT", "", line, 1)
+            out := emit_to(out, "DEDENT", "", line, 1)
             indents := stack_pop(indents)
             cur := stack_top(indents)
           if cur != indent:
-            emit("ERR", "inconsistent indentation", line, 1)
+            out := emit_to(out, "ERR", "inconsistent indentation", line, 1)
         handled := 1
 
-    # LF → NEWLINE + compute indent for next line
     elif handled == 0 and (c == 10):
-      emit("NEWLINE", "", line, col)
+      out := emit_to(out, "NEWLINE", "", line, col)
       i := i + 1
       line := line + 1
       col := 1
@@ -300,7 +307,7 @@ def lex_string(src: str) -> int:
           done3 := 1
 
       if (seen_space2 == 1) and (seen_tab2 == 1):
-        emit("ERR", "mixed tabs and spaces in indentation", line, 1)
+        out := emit_to(out, "ERR", "mixed tabs and spaces in indentation", line, 1)
 
       if (mode == 0) and (indent2 > 0):
         if seen_tab2 == 1:
@@ -320,19 +327,18 @@ def lex_string(src: str) -> int:
       else:
         let top2 = stack_top(indents)
         if indent2 > top2:
-          emit("INDENT", "", line, 1)
+          out := emit_to(out, "INDENT", "", line, 1)
           indents := stack_push(indents, indent2)
         elif indent2 < top2:
           let mut cur2 = top2
           while cur2 > indent2:
-            emit("DEDENT", "", line, 1)
+            out := emit_to(out, "DEDENT", "", line, 1)
             indents := stack_pop(indents)
             cur2 := stack_top(indents)
           if cur2 != indent2:
-            emit("ERR", "inconsistent indentation", line, 1)
+            out := emit_to(out, "ERR", "inconsistent indentation", line, 1)
         handled := 1
 
-    # identifiers / keywords
     elif handled == 0 and is_alpha(c) == 1:
       let mut name = ""
       let start_col = col
@@ -341,12 +347,11 @@ def lex_string(src: str) -> int:
         i := i + 1
         col := col + 1
       if is_keyword(name) == 1:
-        emit("KW", name, line, start_col)
+        out := emit_to(out, "KW", name, line, start_col)
       else:
-        emit("IDENT", name, line, start_col)
+        out := emit_to(out, "IDENT", name, line, start_col)
       handled := 1
 
-    # integers (decimal)
     elif handled == 0 and is_digit(c) == 1:
       let mut lit = ""
       let start_col2 = col
@@ -354,10 +359,9 @@ def lex_string(src: str) -> int:
         lit := lit + ch_str(ch_at(src, i))
         i := i + 1
         col := col + 1
-      emit("INT", lit, line, start_col2)
+      out := emit_to(out, "INT", lit, line, start_col2)
       handled := 1
 
-    # strings "..." (no escapes)
     elif handled == 0 and (c == 34):
       let start_col3 = col
       i := i + 1
@@ -379,145 +383,147 @@ def lex_string(src: str) -> int:
           i := i + 1
           col := col + 1
       if closed == 1:
-        emit("STR", val, line, start_col3)
+        out := emit_to(out, "STR", val, line, start_col3)
       else:
-        emit("ERR", "unterminated string", line, start_col3)
+        out := emit_to(out, "ERR", "unterminated string", line, start_col3)
       handled := 1
 
-    # two-char tokens
     elif handled == 0 and (starts_with(src, i, 61, 61) == 1):
-      emit("EQEQ", "==", line, col)
+      out := emit_to(out, "EQEQ", "==", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 33, 61) == 1):
-      emit("NE", "!=", line, col)
+      out := emit_to(out, "NE", "!=", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 58, 61) == 1):
-      emit("ASSIGN", ":=", line, col)
+      out := emit_to(out, "ASSIGN", ":=", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 45, 62) == 1):
-      emit("ARROW", "->", line, col)
+      out := emit_to(out, "ARROW", "->", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 60, 61) == 1):
-      emit("LE", "<=", line, col)
+      out := emit_to(out, "LE", "<=", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 62, 61) == 1):
-      emit("GE", ">=", line, col)
+      out := emit_to(out, "GE", ">=", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
     elif handled == 0 and (starts_with(src, i, 124, 62) == 1):
-      emit("PIPE", "|>", line, col)
+      out := emit_to(out, "PIPE", "|>", line, col)
       i := i + 2
       col := col + 2
       handled := 1
 
-    # single-char tokens
     elif handled == 0 and (c == 40):
-      emit("LPAREN", "(", line, col)
+      out := emit_to(out, "LPAREN", "(", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 41):
-      emit("RPAREN", ")", line, col)
+      out := emit_to(out, "RPAREN", ")", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 44):
-      emit("COMMA", ",", line, col)
+      out := emit_to(out, "COMMA", ",", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 58):
-      emit("COLON", ":", line, col)
+      out := emit_to(out, "COLON", ":", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 46):
-      emit("DOT", ".", line, col)
+      out := emit_to(out, "DOT", ".", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 43):
-      emit("PLUS", "+", line, col)
+      out := emit_to(out, "PLUS", "+", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 45):
-      emit("MINUS", "-", line, col)
+      out := emit_to(out, "MINUS", "-", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 42):
-      emit("STAR", "*", line, col)
+      out := emit_to(out, "STAR", "*", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 47):
-      emit("SLASH", "/", line, col)
+      out := emit_to(out, "SLASH", "/", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 37):
-      emit("PERCENT", "%", line, col)
+      out := emit_to(out, "PERCENT", "%", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 61):
-      emit("EQ", "=", line, col)
+      out := emit_to(out, "EQ", "=", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 60):
-      emit("LT", "<", line, col)
+      out := emit_to(out, "LT", "<", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
     elif handled == 0 and (c == 62):
-      emit("GT", ">", line, col)
+      out := emit_to(out, "GT", ">", line, col)
       i := i + 1
       col := col + 1
       handled := 1
 
-    # unknown char
     if handled == 0:
-      emit("ERR", "unknown char " + ch_str(c), line, col)
+      out := emit_to(out, "ERR", "unknown char " + ch_str(c), line, col)
       i := i + 1
       col := col + 1
 
-  # on EOF, emit any pending DEDENTs back to 0
   let mut top_final = stack_top(indents)
   while top_final > 0:
-    emit("DEDENT", "", line, 1)
+    out := emit_to(out, "DEDENT", "", line, 1)
     indents := stack_pop(indents)
     top_final := stack_top(indents)
 
-  emit("EOF", "", line, col)
+  out := emit_to(out, "EOF", "", line, col)
+  return out
+
+# Legacy printer (kept for old demo)
+def lex_string(src: str) -> int:
+  let toks = lex_tokens(src)
+  io.println(toks)
   return 0
