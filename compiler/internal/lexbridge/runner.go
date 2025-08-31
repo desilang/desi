@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/build"
@@ -15,6 +16,7 @@ import (
 
 // BuildAndRunRaw builds the temp wrapper, runs it, and returns the raw token stream
 // ("KIND|TEXT|LINE|COL\n" ...). If keepTmp=false, it deletes gen/tmp/lexbridge afterward.
+// On Windows we emit/rerun lexbridge_run.exe and execute it via absolute path.
 func BuildAndRunRaw(filePath string, keepTmp bool) (string, error) {
 	// Read user source
 	data, err := os.ReadFile(filePath)
@@ -58,8 +60,7 @@ func BuildAndRunRaw(filePath string, keepTmp bool) (string, error) {
 	}
 
 	// Build wrapper using existing pipeline (emit C + compile with clang)
-	binPath := filepath.Join("gen", "out", "lexbridge_run")
-	rc := buildWrapper(tmpWrapper, "lexbridge_run")
+	binPath, rc := buildWrapper(tmpWrapper, "lexbridge_run")
 	if rc != 0 {
 		if !keepTmp {
 			_ = os.RemoveAll(tmpRoot)
@@ -67,8 +68,9 @@ func BuildAndRunRaw(filePath string, keepTmp bool) (string, error) {
 		return "", ErrBuildFailed
 	}
 
-	// Execute and capture stdout
-	cmd := exec.Command(binPath)
+	// Execute and capture stdout using absolute path (no PATH lookups)
+	absBin, _ := filepath.Abs(binPath)
+	cmd := exec.Command(absBin)
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = os.Stderr
@@ -86,11 +88,12 @@ func BuildAndRunRaw(filePath string, keepTmp bool) (string, error) {
 }
 
 // ErrBuildFailed is returned when C compilation failed via buildWrapper path.
-var ErrBuildFailed = exec.ErrNotFound // sentinel; replaced by a generic non-nil
+var ErrBuildFailed = exec.ErrNotFound // sentinel; non-nil indicates failure
 
 // buildWrapper is a tiny local copy of the critical steps from main.cmdBuild, so
 // this package can be used by both CLI and (later) build/parse paths.
-func buildWrapper(entry string, outName string) int {
+// It returns the final executable path (with .exe on Windows) and a return code.
+func buildWrapper(entry string, outName string) (string, int) {
 	// Resolve+parse (multi-file)
 	merged, perr := build.ResolveAndParse(entry)
 	if len(perr) > 0 {
@@ -98,7 +101,7 @@ func buildWrapper(entry string, outName string) int {
 			term.Eprintf("error: %v\n", e)
 		}
 		term.Eprintf("summary: %d error(s), %d warning(s)\n", len(perr), 0)
-		return 1
+		return "", 1
 	}
 
 	// Typecheck
@@ -111,7 +114,7 @@ func buildWrapper(entry string, outName string) int {
 	}
 	if len(errs) > 0 {
 		term.Eprintf("summary: %d error(s), %d warning(s)\n", len(errs), len(warns))
-		return 1
+		return "", 1
 	}
 
 	// Emit C
@@ -119,31 +122,40 @@ func buildWrapper(entry string, outName string) int {
 	outDir := filepath.Join("gen", "out")
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		term.Eprintf("mkdir %s: %v\n", outDir, err)
-		return 1
+		return "", 1
 	}
 	cpath := filepath.Join(outDir, base+".c")
 	csrc := cgen.EmitFile(merged, info)
 	if err := os.WriteFile(cpath, []byte(csrc), 0o644); err != nil {
 		term.Eprintf("write %s: %v\n", cpath, err)
-		return 1
+		return "", 1
 	}
 	term.Eprintf("wrote %s\n", cpath)
 
-	// Compile with clang
+	// Compute final binary path (+.exe on Windows)
 	binPath := filepath.Join(outDir, outName)
-	cmd := exec.Command("clang",
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binPath), ".exe") {
+		binPath += ".exe"
+	}
+
+	// Compile with clang (silence fopen deprecation on Windows)
+	args := []string{
 		cpath,
 		filepath.Join("runtime", "c", "desi_std.c"),
 		"-I", filepath.Join("runtime", "c"),
 		"-o", binPath,
-	)
+	}
+	if runtime.GOOS == "windows" {
+		args = append([]string{"-D_CRT_SECURE_NO_WARNINGS"}, args...)
+	}
+	cmd := exec.Command("clang", args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		term.Eprintf("cc failed: %v\n", err)
-		return 1
+		return "", 1
 	}
 	term.Eprintf("built %s\n", binPath)
 	term.Eprintf("summary: %d error(s), %d warning(s)\n", 0, len(warns))
-	return 0
+	return binPath, 0
 }

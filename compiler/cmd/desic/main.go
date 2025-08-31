@@ -1,10 +1,13 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -28,7 +31,7 @@ func usage() {
 	term.Eprintln("  version                          Print version")
 	term.Eprintln("  help                             Show this help")
 	term.Eprintln("  lex <file>                       Lex a .desi file (Go lexer) and print tokens")
-	term.Eprintln("  parse [--use-desi-lexer] <file>  Parse a .desi file and print AST outline")
+	term.Eprintln("  parse <file>                     Parse a .desi file and print AST outline")
 	term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
 	term.Eprintln("                                    (flags may appear before or after the file)")
 	term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] <file>")
@@ -76,58 +79,16 @@ func cmdLexDirect(path string) int {
 /* ---------- parse ---------- */
 
 func cmdParse(args []string) int {
-	// flags: [--use-desi-lexer] <file>
-	useDesi := false
-	var file string
-	for i := 0; i < len(args); i++ {
-		s := args[i]
-		if s == "--use-desi-lexer" {
-			useDesi = true
-			continue
-		}
-		if !strings.HasPrefix(s, "-") && file == "" {
-			file = s
-			continue
-		}
-		if strings.HasPrefix(s, "-") {
-			term.Eprintln("usage: desic parse [--use-desi-lexer] <file.desi>")
-			return 2
-		}
-	}
-	if file == "" {
-		term.Eprintln("usage: desic parse [--use-desi-lexer] <file.desi>")
+	if len(args) != 1 {
+		term.Eprintln("usage: desic parse <file.desi>")
 		return 2
 	}
-
-	data, err := os.ReadFile(file)
+	data, err := os.ReadFile(args[0])
 	if err != nil {
-		term.Eprintf("read %s: %v\n", file, err)
+		term.Eprintf("read %s: %v\n", args[0], err)
 		return 1
 	}
-
-	var p *parser.Parser
-	if useDesi {
-		// Desi lexer → NDJSON → []lexbridge.Token → []lexer.Token → parser
-		raw, rerr := lexbridge.BuildAndRunRaw(file, false)
-		if rerr != nil {
-			term.Eprintf("parse bridge: %v\n", rerr)
-			return 1
-		}
-		nd := lexbridge.ConvertRawToNDJSON(raw, true)
-		toks, perr := lexbridge.ParseNDJSON(strings.NewReader(nd))
-		if perr != nil {
-			term.Eprintf("ndjson parse warning: %v\n", perr)
-		}
-		goToks, merr := lexbridge.ToGoTokens(toks)
-		if merr != nil {
-			term.Eprintf("token mapping: %v\n", merr)
-			return 1
-		}
-		p = parser.NewFromTokens(goToks)
-	} else {
-		p = parser.New(string(data))
-	}
-
+	p := parser.New(string(data))
 	f, perr := p.ParseFile()
 	if perr != nil {
 		term.Eprintf("parse: %v\n", perr)
@@ -252,17 +213,22 @@ func cmdBuild(args []string) int {
 	}
 	term.Eprintf("wrote %s\n", cpath)
 
-	// Optionally compile to gen/out/<out|basename>
+	// Optionally compile to gen/out/<out|basename>[.exe]
 	if a.cc != "" {
 		outName := a.out
 		if outName == "" {
 			outName = base
 		}
 		binPath := filepath.Join(outDir, outName)
+		if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binPath), ".exe") {
+			binPath += ".exe"
+		}
 		cmd := exec.Command(a.cc,
 			cpath,
 			filepath.Join("runtime", "c", "desi_std.c"),
 			"-I", filepath.Join("runtime", "c"),
+			// Silence MSVC deprecation spam for fopen on Windows:
+			"-D_CRT_SECURE_NO_WARNINGS",
 			"-o", binPath,
 		)
 		cmd.Stdout = os.Stdout
@@ -325,6 +291,57 @@ func parseLexDesiArgs(argv []string) (lexDesiArgs, error) {
 	return a, nil
 }
 
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
+}
+
+func runOne(bin string) (string, error) {
+	abs, _ := filepath.Abs(bin)
+	cmd := exec.Command(abs)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func runLexbridgeFallbackSmart() (string, error) {
+	// Try likely outputs in priority order.
+	base := filepath.Join("gen", "out", "lexbridge_run")
+	candidates := []string{
+		base,
+		base + ".exe",
+	}
+	// Prefer .exe first on Windows
+	if runtime.GOOS == "windows" {
+		candidates = []string{base + ".exe", base}
+	}
+	for _, c := range candidates {
+		if fileExists(c) {
+			return runOne(c)
+		}
+	}
+	// Nothing found — show a tiny directory listing to aid debugging.
+	outDir := filepath.Join("gen", "out")
+	ents, _ := os.ReadDir(outDir)
+	var names []string
+	for _, e := range ents {
+		names = append(names, e.Name())
+	}
+	return "", fmt.Errorf("lexbridge fallback: no runnable binary found. checked: %v; gen/out contains: %v", candidates, names)
+}
+
+func shouldTryExeFallback(err error) bool {
+	msg := err.Error()
+	return strings.Contains(msg, "executable file not found") ||
+		strings.Contains(msg, "The system cannot find the file specified") ||
+		strings.Contains(msg, "not recognized as an internal or external command")
+}
+
 func cmdLexDesiRun(args []string) int {
 	a, err := parseLexDesiArgs(args)
 	if err != nil {
@@ -334,8 +351,18 @@ func cmdLexDesiRun(args []string) int {
 
 	raw, rerr := lexbridge.BuildAndRunRaw(a.file, a.keepTmp)
 	if rerr != nil {
-		term.Eprintf("lex-desi: %v\n", rerr)
-		return 1
+		if shouldTryExeFallback(rerr) {
+			if alt, altErr := runLexbridgeFallbackSmart(); altErr == nil {
+				raw = alt
+			} else {
+				term.Eprintf("lex-desi: %v\n", rerr)
+				term.Eprintf("lex-desi fallback detail: %v\n", altErr)
+				return 1
+			}
+		} else {
+			term.Eprintf("lex-desi: %v\n", rerr)
+			return 1
+		}
 	}
 
 	switch a.format {
@@ -386,7 +413,6 @@ func cmdLexDiff(args []string) int {
 	}
 	limit := 0
 	if limitStr != "" {
-		// parse int; ignore error silently → 0 (no limit)
 		n := 0
 		for _, r := range limitStr {
 			if r < '0' || r > '9' {
@@ -407,8 +433,18 @@ func cmdLexDiff(args []string) int {
 	// Get Desi NDJSON via bridge
 	raw, rerr := lexbridge.BuildAndRunRaw(file, false)
 	if rerr != nil {
-		term.Eprintf("lex-diff bridge: %v\n", rerr)
-		return 1
+		if shouldTryExeFallback(rerr) {
+			if alt, altErr := runLexbridgeFallbackSmart(); altErr == nil {
+				raw = alt
+			} else {
+				term.Eprintf("lex-diff bridge: %v\n", rerr)
+				term.Eprintf("lex-diff fallback detail: %v\n", altErr)
+				return 1
+			}
+		} else {
+			term.Eprintf("lex-diff bridge: %v\n", rerr)
+			return 1
+		}
 	}
 	nd := lexbridge.ConvertRawToNDJSON(raw, true)
 
@@ -436,8 +472,18 @@ func cmdLexMap(args []string) int {
 	// Run Desi lexer and get NDJSON
 	raw, rerr := lexbridge.BuildAndRunRaw(file, false)
 	if rerr != nil {
-		term.Eprintf("lex-map bridge: %v\n", rerr)
-		return 1
+		if shouldTryExeFallback(rerr) {
+			if alt, altErr := runLexbridgeFallbackSmart(); altErr == nil {
+				raw = alt
+			} else {
+				term.Eprintf("lex-map bridge: %v\n", rerr)
+				term.Eprintf("lex-map fallback detail: %v\n", altErr)
+				return 1
+			}
+		} else {
+			term.Eprintf("lex-map bridge: %v\n", rerr)
+			return 1
+		}
 	}
 	nd := lexbridge.ConvertRawToNDJSON(raw, true)
 	toks, perr := lexbridge.ParseNDJSON(strings.NewReader(nd))
@@ -456,7 +502,6 @@ func cmdLexMap(args []string) int {
 	term.Printf("file: %s\n", file)
 	term.Printf("%s", cov.RenderReport())
 
-	// Avoid unused variable warning for data (kept if we later do cross-checks)
 	_ = data
 	return 0
 }
@@ -497,7 +542,7 @@ func main() {
 		}
 		os.Exit(cmdLexDiff(os.Args[2:]))
 	case "lex-map":
-		if len(os.Args) < 3 {
+		if len(os.Args) != 3 {
 			term.Eprintln("usage: desic lex-map <file.desi>")
 			os.Exit(2)
 		}
