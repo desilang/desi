@@ -235,7 +235,11 @@ func (lx *Lexer) Next() Token {
 
 	// Strings (simple "..." with basic escapes)
 	if ch, ok := lx.peek(); ok && ch == '"' {
-		lex := lx.scanString()
+		lex, closed := lx.scanString()
+		if !closed {
+			// Do not consume the newline here; let the normal flow emit NEWLINE next.
+			return lx.make(TokErr, "unterminated string literal", startLine, startCol)
+		}
 		return lx.make(TokStr, lex, startLine, startCol)
 	}
 
@@ -381,30 +385,55 @@ func (lx *Lexer) scanNumber() string {
 	return string(lx.src[start:lx.i])
 }
 
-func (lx *Lexer) scanString() string {
+// scanString returns the *contents* of the string literal (without quotes).
+// It supports simple C-like escapes. If a closing quote is not found before
+// a newline/EOF, it returns closed=false and does *not* consume the newline.
+func (lx *Lexer) scanString() (val string, closed bool) {
 	start := lx.i
+	_ = start
 	lx.advance() // consume opening "
+	var out []rune
 	for {
 		r, ok := lx.peek()
 		if !ok {
-			break
+			// EOF before closing quote
+			return string(out), false
 		}
 		if r == '\\' {
 			lx.advance() // backslash
-			_, _ = lx.advance()
+			er, ok2 := lx.peek()
+			if !ok2 {
+				return string(out), false
+			}
+			switch er {
+			case 'n':
+				out = append(out, '\n')
+			case 't':
+				out = append(out, '\t')
+			case 'r':
+				out = append(out, '\r')
+			case '"':
+				out = append(out, '"')
+			case '\\':
+				out = append(out, '\\')
+			default:
+				// unknown escape: keep literal char
+				out = append(out, er)
+			}
+			lx.advance()
 			continue
 		}
 		if r == '"' {
 			lx.advance()
-			break
+			return string(out), true
 		}
-		// allow newlines to terminate strings? Stage-0: stop at newline too
 		if r == '\n' {
-			break
+			// newline terminates without closing quote; leave newline for caller
+			return string(out), false
 		}
+		out = append(out, r)
 		lx.advance()
 	}
-	return string(lx.src[start:lx.i])
 }
 
 // keywordKind maps identifiers to keyword tokens.

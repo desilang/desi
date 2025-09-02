@@ -8,48 +8,32 @@ import (
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
 
-type tokenSource interface {
+// TokenSource is any source that can produce lexer.Token values.
+// It lets us plug in either the built-in Go lexer or an adapter
+// that replays tokens from the Desi lexer via the bridge.
+type TokenSource interface {
 	Next() lexer.Token
 }
 
-type goLexerSource struct{ lx *lexer.Lexer }
-
-func (s *goLexerSource) Next() lexer.Token { return s.lx.Next() }
-
-type sliceSource struct {
-	toks []lexer.Token
-	i    int
-}
-
-func (s *sliceSource) Next() lexer.Token {
-	if s.i >= len(s.toks) {
-		return lexer.Token{Kind: lexer.TokEOF}
-	}
-	t := s.toks[s.i]
-	s.i++
-	return t
-}
-
 type Parser struct {
-	src tokenSource
+	lx  TokenSource
 	tok lexer.Token
 }
 
+// New keeps the legacy code path: build-in Go lexer over source text.
 func New(src string) *Parser {
-	p := &Parser{src: &goLexerSource{lx: lexer.New(src)}}
+	return NewFromSource(lexer.New(src))
+}
+
+// NewFromSource allows callers to supply any TokenSource (e.g. the
+// lexbridge NDJSON adapter) instead of the built-in Go lexer.
+func NewFromSource(src TokenSource) *Parser {
+	p := &Parser{lx: src}
 	p.next()
 	return p
 }
 
-// NewFromTokens builds a parser that reads from a provided token slice,
-// enabling hybrid pipelines (Desi lexer → mapped Go tokens → parser).
-func NewFromTokens(toks []lexer.Token) *Parser {
-	p := &Parser{src: &sliceSource{toks: toks}}
-	p.next()
-	return p
-}
-
-func (p *Parser) next()                   { p.tok = p.src.Next() }
+func (p *Parser) next()                   { p.tok = p.lx.Next() }
 func (p *Parser) at(k lexer.TokKind) bool { return p.tok.Kind == k }
 func (p *Parser) accept(k lexer.TokKind) bool {
 	if p.at(k) {
@@ -111,6 +95,11 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			}
 			f.Decls = append(f.Decls, fn)
 		default:
+			// Surface lexer errors immediately at top-level
+			if p.at(lexer.TokErr) {
+				t := p.tok
+				return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+			}
 			for !p.at(lexer.TokNewline) && !p.at(lexer.TokEOF) {
 				p.next()
 			}
@@ -266,6 +255,12 @@ func (p *Parser) parseBlock() ([]ast.Stmt, error) {
 }
 
 func (p *Parser) parseStmt() (ast.Stmt, error) {
+	// Surface lexer errors immediately inside statements
+	if p.at(lexer.TokErr) {
+		t := p.tok
+		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+	}
+
 	switch {
 	case p.accept(lexer.TokLet):
 		mut := p.accept(lexer.TokMut)
@@ -422,6 +417,11 @@ func (p *Parser) parseWhileStmt() (*ast.WhileStmt, error) {
 /*** Expressions (Pratt parser) ***/
 
 func (p *Parser) parseExpr() (ast.Expr, error) {
+	// Surface lexer errors immediately inside expressions
+	if p.at(lexer.TokErr) {
+		t := p.tok
+		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+	}
 	left, err := p.parseUnary()
 	if err != nil {
 		return nil, err
@@ -430,6 +430,10 @@ func (p *Parser) parseExpr() (ast.Expr, error) {
 }
 
 func (p *Parser) parseExprWithLHS(lhs ast.Expr) (ast.Expr, error) {
+	if p.at(lexer.TokErr) {
+		t := p.tok
+		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+	}
 	post, err := p.parsePostfix(lhs)
 	if err != nil {
 		return nil, err
@@ -438,6 +442,11 @@ func (p *Parser) parseExprWithLHS(lhs ast.Expr) (ast.Expr, error) {
 }
 
 func (p *Parser) parseUnary() (ast.Expr, error) {
+	// Surface lexer errors if a unary operator position contains TokErr
+	if p.at(lexer.TokErr) {
+		t := p.tok
+		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+	}
 	switch {
 	case p.accept(lexer.TokMinus):
 		x, err := p.parseUnary()
@@ -463,6 +472,11 @@ func (p *Parser) parseUnary() (ast.Expr, error) {
 }
 
 func (p *Parser) parsePrimary() (ast.Expr, error) {
+	// Surface lexer errors at primary positions (e.g., unterminated string)
+	if p.at(lexer.TokErr) {
+		t := p.tok
+		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+	}
 	if p.at(lexer.TokIdent) {
 		t := p.tok
 		p.next()
@@ -509,6 +523,11 @@ func (p *Parser) parsePostfix(base ast.Expr) (ast.Expr, error) {
 					if p.at(lexer.TokRParen) {
 						p.next()
 						break
+					}
+					// Allow TokErr to bubble as a cleaner message (e.g., unterminated string)
+					if p.at(lexer.TokErr) {
+						t := p.tok
+						return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
 					}
 					a, err := p.parseExpr()
 					if err != nil {
