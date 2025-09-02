@@ -1,0 +1,3 @@
+def main() -> int:
+  io.println("hello from desi on windows 🎉")
+  return 0
