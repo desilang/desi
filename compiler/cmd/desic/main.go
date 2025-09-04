@@ -29,7 +29,7 @@ func usage() {
   term.Eprintln("  version                                   Print version")
   term.Eprintln("  help                                      Show this help")
   term.Eprintln("  lex <file>                                Lex a .desi file (Go lexer) and print tokens")
-  term.Eprintln("  parse <file>                              Parse a .desi file and print AST outline")
+  term.Eprintln("  parse [--use-desi-lexer] <file>           Parse a .desi file and print AST outline")
   term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
   term.Eprintln("                                             (flags may appear before or after the file)")
   term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] [--verbose] <file>")
@@ -77,13 +77,46 @@ func cmdLexDirect(path string) int {
 /* ---------- parse ---------- */
 
 func cmdParse(args []string) int {
-  if len(args) != 1 {
-    term.Eprintln("usage: desic parse <file.desi>")
+  // Accept: parse [--use-desi-lexer] <file>
+  useDesi := false
+  var file string
+  for _, s := range args {
+    switch {
+    case s == "--use-desi-lexer":
+      useDesi = true
+    case !strings.HasPrefix(s, "-") && file == "":
+      file = s
+    case strings.HasPrefix(s, "-"):
+      term.Eprintln("usage: desic parse [--use-desi-lexer] <file.desi>")
+      return 2
+    }
+  }
+  if file == "" {
+    term.Eprintln("usage: desic parse [--use-desi-lexer] <file.desi>")
     return 2
   }
-  data, err := os.ReadFile(args[0])
+
+  if useDesi {
+    src, err := lexbridge.NewSourceFromFile(file)
+    if err != nil {
+      term.Eprintf("desi-lexer adapter: %v\n", err)
+      return 1
+    }
+    p := parser.NewFromSource(src)
+    f, perr := p.ParseFile()
+    if perr != nil {
+      term.Eprintf("parse: %v\n", perr)
+      return 1
+    }
+    out := ast.DumpFile(f)
+    term.Printf("%s", out)
+    return 0
+  }
+
+  // Legacy Go-lexer path
+  data, err := os.ReadFile(file)
   if err != nil {
-    term.Eprintf("read %s: %v\n", args[0], err)
+    term.Eprintf("read %s: %v\n", file, err)
     return 1
   }
   p := parser.New(string(data))
