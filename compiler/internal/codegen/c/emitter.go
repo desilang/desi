@@ -252,7 +252,7 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 
 func emitCallOrExpr(b *bytes.Buffer, indent int, expr ast.Expr, e *env) {
 	ind := spaces(indent)
-	// io.println(...)
+	// io.println(...): special-case to printf
 	if call, ok := expr.(*ast.CallExpr); ok && isIoPrintln(call) {
 		emitPrintln(b, indent, call, e)
 		return
@@ -330,7 +330,8 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		return v.Value, "int"
 
 	case *ast.StrLit:
-		return v.Value, "str"
+		// Be robust: if Value already has quotes, keep; otherwise add quotes+escapes.
+		return ensureCStringLiteral(v.Value), "str"
 
 	case *ast.BoolLit:
 		if v.Value {
@@ -387,12 +388,15 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		return "(" + l + " " + v.Op + " " + r + ")", k
 
 	case *ast.FieldExpr:
+		// Not lowered in Stage-1 except for known std.* call-sites handled above.
 		return "0", ""
 
 	case *ast.IndexExpr:
+		// Not lowered in Stage-1.
 		return "0", ""
 
 	case *ast.CallExpr:
+		// Builtins / std shims
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				switch id.Name + "." + fe.Name {
@@ -459,6 +463,8 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 	}
 }
 
+// ---- helpers ----
+
 func spaces(n int) string {
 	if n <= 0 {
 		return ""
@@ -489,4 +495,49 @@ func stripOuterParens(s string) string {
 		return strings.TrimSpace(s[1 : len(s)-1])
 	}
 	return s
+}
+
+// ensureCStringLiteral guarantees a valid, quoted C string literal.
+// If s already looks quoted ("..."), it is returned as-is; otherwise
+// we add quotes and escape control characters.
+func ensureCStringLiteral(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
+		return s
+	}
+	return quoteCLike(s)
+}
+
+// quoteCLike adds quotes and escapes: \" \\ \n \r \t and octal for other control chars.
+func quoteCLike(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				o1 := ((r >> 6) & 7) + '0'
+				o2 := ((r >> 3) & 7) + '0'
+				o3 := (r & 7) + '0'
+				b.WriteByte('\\')
+				b.WriteByte(byte(o1))
+				b.WriteByte(byte(o2))
+				b.WriteByte(byte(o3))
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
