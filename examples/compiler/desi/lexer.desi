@@ -138,6 +138,45 @@ def starts_with(s: str, i: int, a: int, b: int) -> int:
     return 1
   return 0
 
+# JSON-escape a string value
+def json_escape(s: str) -> str:
+  let n = str_len(s)
+  let mut i = 0
+  let mut out = ""
+  while i < n:
+    let c = ch_at(s, i)
+    if c == 34:        # "
+      out := out + "\\\""
+    elif c == 92:      # \
+      out := out + "\\\\"
+    elif c == 8:       # \b (we don't really produce control chars, but be safe)
+      out := out + "\\b"
+    elif c == 12:      # \f
+      out := out + "\\f"
+    elif c == 10:      # \n
+      out := out + "\\n"
+    elif c == 13:      # \r
+      out := out + "\\r"
+    elif c == 9:       # \t
+      out := out + "\\t"
+    else:
+      if c < 32:
+        # \u00XX; we only need two hex digits since c<32
+        # No hex helpers yet, so emit as "\\u00" + two hex nybbles (0-9,A-F).
+        let hi = (c >> 4) & 15
+        let lo = c & 15
+        let mut hx = ""
+        # convert nybble to hex char
+        if hi < 10: hx := ch_str(48 + hi)
+        else: hx := ch_str(55 + hi)   # 'A' = 65 → 55 + 10
+        if lo < 10: hx := hx + ch_str(48 + lo)
+        else: hx := hx + ch_str(55 + lo)
+        out := out + "\\u00" + hx
+      else:
+        out := out + ch_str(c)
+    i := i + 1
+  return out
+
 def is_keyword(name: str) -> int:
   if name == "def":
     return 1
@@ -200,9 +239,11 @@ def enc_field(s: str) -> str:
 def emit_to(acc: str, kind: str, text: str, line: int, col: int) -> str:
   let sline = int_to_str(line)
   let scol = int_to_str(col)
-  # KIND|TEXT|LINE|COL\n   (TEXT is escaped so '|' won't break the row)
-  let row = kind + "|" + enc_field(text) + "|" + sline + "|" + scol + "\n"
+  let jtext = json_escape(text)
+  # {"kind":"KW","text":"...","line":N,"col":N}\n
+  let row = "{\"kind\":\"" + kind + "\",\"text\":\"" + jtext + "\",\"line\":" + sline + ",\"col\":" + scol + "}\n"
   return acc + row
+
 
 def lex_file(path: str) -> int:
   let src = fs.read_all(path)
