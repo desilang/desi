@@ -49,12 +49,23 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 	var lexers []string
 
 	for _, r := range rows {
+		// Ignore empty/garbled rows defensively (fixes kind="" text="" cases)
+		if r.Kind == "" {
+			continue
+		}
+		// Ignore non-semantic rows if they appear
+		if r.Kind == "WS" || r.Kind == "COMMENT" {
+			continue
+		}
+
 		if r.Kind == "ERR" {
 			lexers = append(lexers, fmt.Sprintf("LEXERR line=%d col=%d msg=%q", r.Line, r.Col, r.Text))
 			continue
 		}
+
 		gk, ok := mapDesiToTokKind(r.Kind, r.Text)
 		if !ok {
+			// Surface true mapping gaps loudly with source coordinates.
 			return nil, fmt.Errorf("desi-adapter: unmapped token kind=%q text=%q at %d:%d", r.Kind, r.Text, r.Line, r.Col)
 		}
 
