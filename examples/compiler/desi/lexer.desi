@@ -179,12 +179,29 @@ def is_keyword(name: str) -> int:
 def emit(kind: str, text: str, line: int, col: int) -> void:
   io.println(kind, " ", text, " ", line, " ", col)
 
+# Escape TEXT field for raw rows so the '|' field separator is unambiguous.
+# We encode '\' as '\\' and '|' as '\|'.
+def enc_field(s: str) -> str:
+  let n = str_len(s)
+  let mut i = 0
+  let mut out = ""
+  while i < n:
+    let c = ch_at(s, i)
+    if c == 92:         # '\'
+      out := out + "\\\\"
+    elif c == 124:      # '|'
+      out := out + "\\|"
+    else:
+      out := out + ch_str(c)
+    i := i + 1
+  return out
+
 # Accumulator sink: returns new string with one encoded token line appended
 def emit_to(acc: str, kind: str, text: str, line: int, col: int) -> str:
   let sline = int_to_str(line)
   let scol = int_to_str(col)
-  # KIND|TEXT|LINE|COL\n
-  let row = kind + "|" + text + "|" + sline + "|" + scol + "\n"
+  # KIND|TEXT|LINE|COL\n   (TEXT is escaped so '|' won't break the row)
+  let row = kind + "|" + enc_field(text) + "|" + sline + "|" + scol + "\n"
   return acc + row
 
 def lex_file(path: str) -> int:

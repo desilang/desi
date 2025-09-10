@@ -88,17 +88,10 @@ func MirrorErrsToStderr(raw string) {
 }
 
 // ConvertRawToNDJSON turns the raw "KIND|TEXT|LINE|COL\n..." stream into NDJSON.
-// Robust to embedded newlines in TEXT and Windows CRLF line endings.
-// Also robust if the record terminator newline is missing: COL is parsed as digits only.
+// Robust to escaped '|' in TEXT (\|), backslashes (\\), embedded \n (literal),
+// and Windows CRLF line endings. If the record terminator newline is missing,
+// COL is parsed as digits only.
 func ConvertRawToNDJSON(raw string, includeErrors bool) string {
-	type state int
-	const (
-		sKind state = iota
-		sText
-		sLine
-		sCol
-	)
-
 	var b strings.Builder
 	i, n := 0, len(raw)
 
@@ -110,6 +103,28 @@ func ConvertRawToNDJSON(raw string, includeErrors bool) string {
 		}
 		return raw[start:i]
 	}
+	// TEXT requires a special reader: stop only at an *unescaped* '|'.
+	readTextField := func() string {
+		var out strings.Builder
+		for i < n {
+			c := raw[i]
+			if c == '|' {
+				// Count preceding backslashes to know if this '|' is escaped.
+				backs := 0
+				for j := i - 1; j >= 0 && raw[j] == '\\'; j-- {
+					backs++
+				}
+				if backs%2 == 0 {
+					// even number of preceding backslashes -> '|' is a delimiter
+					break
+				}
+				// otherwise it was escaped: treat as data and continue
+			}
+			out.WriteByte(c)
+			i++
+		}
+		return out.String()
+	}
 	isDigits := func(s string) bool {
 		if s == "" {
 			return false
@@ -120,6 +135,35 @@ func ConvertRawToNDJSON(raw string, includeErrors bool) string {
 			}
 		}
 		return true
+	}
+	// Undo TEXT escaping done by the Stage-1 Desi lexer:
+	//   '\\' -> '\', '\|' -> '|'
+	unescapeRawText := func(s string) string {
+		if s == "" {
+			return s
+		}
+		var out strings.Builder
+		for k := 0; k < len(s); k++ {
+			c := s[k]
+			if c == '\\' && k+1 < len(s) {
+				nc := s[k+1]
+				if nc == '|' {
+					out.WriteByte('|')
+					k++
+					continue
+				}
+				if nc == '\\' {
+					out.WriteByte('\\')
+					k++
+					continue
+				}
+				// Unknown escape: keep the backslash literally.
+				out.WriteByte('\\')
+				continue
+			}
+			out.WriteByte(c)
+		}
+		return out.String()
 	}
 	esc := func(s string) string {
 		var jb strings.Builder
@@ -170,21 +214,22 @@ func ConvertRawToNDJSON(raw string, includeErrors bool) string {
 			break
 		}
 
-		_ = sKind
+		// KIND
 		kind := readUntil('|')
 		if i >= n {
 			break
 		}
 		i++ // skip '|'
 
-		_ = sText
-		text := readUntil('|')
+		// TEXT (handles escaped pipes)
+		text := readTextField()
 		if i >= n {
 			break
 		}
 		i++ // skip '|'
+		text = unescapeRawText(text)
 
-		_ = sLine
+		// LINE
 		lineStr := readUntil('|')
 		if i >= n {
 			break
@@ -192,7 +237,6 @@ func ConvertRawToNDJSON(raw string, includeErrors bool) string {
 		i++ // skip '|'
 
 		// COL: scan digits ONLY (don't rely on newline)
-		_ = sCol
 		startCol := i
 		for i < n && raw[i] >= '0' && raw[i] <= '9' {
 			i++
