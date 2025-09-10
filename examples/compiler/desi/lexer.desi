@@ -138,7 +138,7 @@ def starts_with(s: str, i: int, a: int, b: int) -> int:
     return 1
   return 0
 
-# JSON-escape a string value
+# JSON-escape a string value (no bit shifts; Stage-0 friendly)
 def json_escape(s: str) -> str:
   let n = str_len(s)
   let mut i = 0
@@ -149,7 +149,7 @@ def json_escape(s: str) -> str:
       out := out + "\\\""
     elif c == 92:      # \
       out := out + "\\\\"
-    elif c == 8:       # \b (we don't really produce control chars, but be safe)
+    elif c == 8:       # \b
       out := out + "\\b"
     elif c == 12:      # \f
       out := out + "\\f"
@@ -161,21 +161,24 @@ def json_escape(s: str) -> str:
       out := out + "\\t"
     else:
       if c < 32:
-        # \u00XX; we only need two hex digits since c<32
-        # No hex helpers yet, so emit as "\\u00" + two hex nybbles (0-9,A-F).
-        let hi = (c >> 4) & 15
-        let lo = c & 15
+        # \u00XX using division/modulo (no >>)
+        let hi = (c / 16) % 16
+        let lo = c % 16
         let mut hx = ""
-        # convert nybble to hex char
-        if hi < 10: hx := ch_str(48 + hi)
-        else: hx := ch_str(55 + hi)   # 'A' = 65 → 55 + 10
-        if lo < 10: hx := hx + ch_str(48 + lo)
-        else: hx := hx + ch_str(55 + lo)
+        if hi < 10:
+          hx := ch_str(48 + hi)
+        else:
+          hx := ch_str(55 + hi)   # 'A'..'F'
+        if lo < 10:
+          hx := hx + ch_str(48 + lo)
+        else:
+          hx := hx + ch_str(55 + lo)
         out := out + "\\u00" + hx
       else:
         out := out + ch_str(c)
     i := i + 1
   return out
+
 
 def is_keyword(name: str) -> int:
   if name == "def":
@@ -238,10 +241,16 @@ def enc_field(s: str) -> str:
 # Accumulator sink: returns new string with one encoded token line appended
 def emit_to(acc: str, kind: str, text: str, line: int, col: int) -> str:
   let sline = int_to_str(line)
-  let scol = int_to_str(col)
+  let scol  = int_to_str(col)
   let jtext = json_escape(text)
-  # {"kind":"KW","text":"...","line":N,"col":N}\n
-  let row = "{\"kind\":\"" + kind + "\",\"text\":\"" + jtext + "\",\"line\":" + sline + ",\"col\":" + scol + "}\n"
+  let q  = ch_str(34)
+  let nl = ch_str(10)
+  let mut row = "{"
+  row := row + q + "kind" + q + ":" + q + kind + q + ","
+  row := row + q + "text" + q + ":" + q + jtext + q + ","
+  row := row + q + "line" + q + ":" + sline + ","
+  row := row + q + "col"  + q + ":" + scol + "}"
+  row := row + nl
   return acc + row
 
 

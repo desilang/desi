@@ -498,12 +498,11 @@ func stripOuterParens(s string) string {
 }
 
 // ensureCStringLiteral guarantees a valid, quoted C string literal.
-// If s already looks quoted ("..."), it is returned as-is; otherwise
-// we add quotes and escape control characters.
+// We strip any surrounding quotes if present, then always escape.
 func ensureCStringLiteral(s string) string {
 	s = strings.TrimSpace(s)
 	if len(s) >= 2 && s[0] == '"' && s[len(s)-1] == '"' {
-		return s
+		s = s[1 : len(s)-1]
 	}
 	return quoteCLike(s)
 }
