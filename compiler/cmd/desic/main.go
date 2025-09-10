@@ -2,6 +2,7 @@ package main
 
 import (
   "flag"
+  "fmt"
   "os"
   "os/exec"
   "path/filepath"
@@ -29,8 +30,8 @@ func usage() {
   term.Eprintln("  version                                   Print version")
   term.Eprintln("  help                                      Show this help")
   term.Eprintln("  lex <file>                                Lex a .desi file (Go lexer) and print tokens")
-  term.Eprintln("  parse [--use-desi-lexer] <file>           Parse a .desi file and print AST outline")
-  term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
+  term.Eprintln("  parse [--use-desi-lexer] [--verbose] <file>  Parse a .desi file and print AST outline")
+  term.Eprintln("  build [--cc=clang] [--out=name] [--Werror] [--use-desi-lexer] [--verbose] <entry.desi>")
   term.Eprintln("                                             (flags may appear before or after the file)")
   term.Eprintln("  lex-desi [--keep-tmp] [--format=raw|ndjson|pretty] [--verbose] <file>")
   term.Eprintln("                                             EXPERIMENTAL: run Desi lexer (compiler.desi.lexer) and print tokens")
@@ -106,7 +107,6 @@ func cmdParse(args []string) int {
       term.Eprintf("desi-lexer adapter: %v\n", err)
       return 1
     }
-    // interface-to-interface assertion (see previous step)
     ts, ok := src.(parser.TokenSource)
     if !ok {
       term.Eprintln("desi-lexer adapter: internal type mismatch (value does not satisfy parser.TokenSource)")
@@ -143,10 +143,12 @@ func cmdParse(args []string) int {
 /* ---------- build (flags anywhere) ---------- */
 
 type buildArgs struct {
-  cc   string
-  out  string
-  file string
-  werr bool // --Werror
+  cc      string
+  out     string
+  file    string
+  werr    bool // --Werror
+  useDesi bool
+  verbose bool
 }
 
 func parseBuildArgs(argv []string) (buildArgs, error) {
@@ -185,6 +187,14 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
       a.werr = true
       i++
       continue
+    case s == "--use-desi-lexer":
+      a.useDesi = true
+      i++
+      continue
+    case s == "--verbose":
+      a.verbose = true
+      i++
+      continue
     }
     if !strings.HasPrefix(s, "-") && a.file == "" {
       a.file = s
@@ -211,12 +221,34 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
 func cmdBuild(args []string) int {
   a, err := parseBuildArgs(args)
   if err != nil {
-    term.Eprintln("usage: desic build [--cc=clang] [--out=name] [--Werror] <entry.desi>")
+    term.Eprintln("usage: desic build [--cc=clang] [--out=name] [--Werror] [--use-desi-lexer] [--verbose] <entry.desi>")
     return 2
   }
 
-  // Multi-file resolve + parse (entry + imports)
-  merged, perr := build.ResolveAndParse(a.file)
+  var (
+    merged *ast.File
+    perr   []error
+  )
+
+  if a.useDesi {
+    // Desi-lexer path: provide a TokenSource loader to the resolver
+    loader := func(absPath string) (parser.TokenSource, error) {
+      src, err := lexbridge.NewSourceFromFileOpts(absPath, false /*keepTmp*/, a.verbose /*verbose*/)
+      if err != nil {
+        return nil, err
+      }
+      ts, ok := src.(parser.TokenSource)
+      if !ok {
+        return nil, fmt.Errorf("lexbridge: internal type mismatch (value does not satisfy parser.TokenSource)")
+      }
+      return ts, nil
+    }
+    merged, perr = build.ResolveAndParseWith(a.file, loader)
+  } else {
+    // Legacy Go-lexer path
+    merged, perr = build.ResolveAndParse(a.file)
+  }
+
   if len(perr) > 0 {
     for _, e := range perr {
       term.Eprintf("error: %v\n", e)
