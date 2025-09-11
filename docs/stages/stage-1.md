@@ -98,6 +98,28 @@ go run ./compiler/cmd/desic lex-map examples/lex_demo.desi
 
 > Add `--verbose` to any of the above to surface clang output if something fails.
 
+### End-to-end build
+
+Stage-1 also wires the new `desic build` command. This compiles a `.desi` file to C and, by default, invokes a C compiler to link it with the standard runtime.
+
+```bash
+# Standard build (Go lexer path)
+go run ./compiler/cmd/desic build examples/lex_demo.desi
+
+# Use the self-hosted Desi lexer end-to-end
+go run ./compiler/cmd/desic build --use-desi-lexer examples/lex_demo.desi
+````
+
+Flags of interest:
+
+* `--no-cc` → stop after emitting `gen/out/<file>.c`
+* `--cc-bin` / `--cc-arg` → override C compiler / add flags
+* `--out` → set custom output binary name
+* `--Werror` → treat warnings as errors
+* `--verbose` → show bridge / compiler debug output
+
+> The runtime sources (`runtime/c/desi_std.[ch]`) are automatically included — no manual copying required.
+
 ---
 
 ## Directory map (Stage-1 relevant)

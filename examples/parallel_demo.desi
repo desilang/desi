@@ -1,0 +1,6 @@
+def main() -> int:
+  let mut a, b, c = 1, 2, 3
+  io.println(a, b, c)
+  a, b := b, a
+  io.println(a, b, c)
+  return 0
