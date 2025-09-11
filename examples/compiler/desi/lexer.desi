@@ -161,7 +161,6 @@ def json_escape(s: str) -> str:
       out := out + "\\t"
     else:
       if c < 32:
-        # \u00XX using division/modulo (no >>)
         let hi = (c / 16) % 16
         let lo = c % 16
         let mut hx = ""
@@ -272,12 +271,15 @@ def lex_tokens(src: str) -> str:
     let mut handled = 0
     let c = ch_at(src, i)
 
+    # spaces
     if handled == 0 and is_space(c) == 1:
       i := i + 1
       col := col + 1
       handled := 1
 
+    # line comment: '#....<EOL>' (we do not emit NEWLINE here; we let the EOL handler below do it)
     elif handled == 0 and (c == 35):
+      # consume until (but not including) newline
       i := i + 1
       col := col + 1
       let mut done = 0
@@ -290,123 +292,112 @@ def lex_tokens(src: str) -> str:
           col := col + 1
       handled := 1
 
-    elif handled == 0 and (c == 13):
-      out := emit_to(out, "NEWLINE", "", line, col)
-      if (i + 1 < n) and (ch_at(src, i + 1) == 10):
+    # CR or LF — collapse runs of blank/comment-only logical lines into ONE NEWLINE,
+    # then compute indentation for the first non-blank, non-comment line.
+    elif handled == 0 and ((c == 13) or (c == 10)):
+      # normalize: consume CRLF as one logical newline
+      if c == 13 and (i + 1 < n) and (ch_at(src, i + 1) == 10):
         i := i + 2
       else:
         i := i + 1
+      out := emit_to(out, "NEWLINE", "", line, col)
       line := line + 1
       col := 1
 
+      # Now skip over any number of blank or comment-only lines, but don't emit
+      # more NEWLINEs for them. Track indentation of the first code line we find.
       let mut j = i
       let mut indent = 0
       let mut seen_space = 0
       let mut seen_tab = 0
-      let mut done2 = 0
-      while (j < n) and (done2 == 0):
-        let t = ch_at(src, j)
-        if is_space(t) == 1:
-          seen_space := 1
-          indent := indent + 1
-          j := j + 1
-        elif is_tab(t) == 1:
-          seen_tab := 1
-          indent := indent + 2
-          j := j + 1
+      let mut have_code_line = 0
+
+      while (j < n) and (have_code_line == 0):
+        # measure indentation (spaces/tabs) for this physical line
+        indent := 0
+        seen_space := 0
+        seen_tab := 0
+        let mut k = j
+        let mut done_ind = 0
+        while (k < n) and (done_ind == 0):
+          let t = ch_at(src, k)
+          if is_space(t) == 1:
+            seen_space := 1
+            indent := indent + 1
+            k := k + 1
+          elif is_tab(t) == 1:
+            seen_tab := 1
+            indent := indent + 2
+            k := k + 1
+          else:
+            done_ind := 1
+
+        # empty line? (next is EOL)
+        let mut nextc = 0
+        if k < n:
+          nextc := ch_at(src, k)
+
+        if (nextc == 35):
+          # comment-only line → skip whole physical line, no NEWLINE emitted
+          # consume until EOL and then the EOL itself
+          k := k + 1
+          let mut done_c = 0
+          while (k < n) and (done_c == 0):
+            let d = ch_at(src, k)
+            if is_newline(d) == 1:
+              done_c := 1
+            else:
+              k := k + 1
+          # consume EOL (CRLF or LF)
+          if (k < n) and (ch_at(src, k) == 13) and ((k + 1) < n) and (ch_at(src, k + 1) == 10):
+            k := k + 2
+          elif (k < n) and (ch_at(src, k) == 10):
+            k := k + 1
+          # advance j and logical line number; do NOT emit another NEWLINE token
+          j := k
+          line := line + 1
+          # continue scanning next physical line
+        elif (nextc == 10) or (nextc == 13):
+          # blank line → consume the EOL; advance; do NOT emit another NEWLINE
+          if (ch_at(src, k) == 13) and ((k + 1) < n) and (ch_at(src, k + 1) == 10):
+            j := k + 2
+          else:
+            j := k + 1
+          line := line + 1
+          # continue scanning next physical line
         else:
-          done2 := 1
+          # first non-blank, non-comment line → we will use its indent
+          have_code_line := 1
+          i := k
+          # set current column to indent + 1 for that line
+          col := 1 + indent
 
-      if (seen_space == 1) and (seen_tab == 1):
-        out := emit_to(out, "ERR", "mixed tabs and spaces in indentation", line, 1)
+          if (seen_space == 1) and (seen_tab == 1):
+            out := emit_to(out, "ERR", "mixed tabs and spaces in indentation", line, 1)
 
-      if (mode == 0) and (indent > 0):
-        if seen_tab == 1:
-          mode := 2
-        else:
-          mode := 1
+          if (mode == 0) and (indent > 0):
+            if seen_tab == 1:
+              mode := 2
+            else:
+              mode := 1
 
-      let mut nextc = 0
-      if j < n:
-        nextc := ch_at(src, j)
+          # compare indent vs stack and emit INDENT/DEDENTs now
+          let top = stack_top(indents)
+          if indent > top:
+            out := emit_to(out, "INDENT", "", line, 1)
+            indents := stack_push(indents, indent)
+          elif indent < top:
+            let mut cur = top
+            while cur > indent:
+              out := emit_to(out, "DEDENT", "", line, 1)
+              indents := stack_pop(indents)
+              cur := stack_top(indents)
+            if cur != indent:
+              out := emit_to(out, "ERR", "inconsistent indentation", line, 1)
 
-      i := j
-      col := 1 + indent
+      handled := 1
 
-      if (nextc == 10) or (nextc == 13) or (nextc == 35):
-        handled := 1
-      else:
-        let top = stack_top(indents)
-        if indent > top:
-          out := emit_to(out, "INDENT", "", line, 1)
-          indents := stack_push(indents, indent)
-        elif indent < top:
-          let mut cur = top
-          while cur > indent:
-            out := emit_to(out, "DEDENT", "", line, 1)
-            indents := stack_pop(indents)
-            cur := stack_top(indents)
-          if cur != indent:
-            out := emit_to(out, "ERR", "inconsistent indentation", line, 1)
-        handled := 1
-
-    elif handled == 0 and (c == 10):
-      out := emit_to(out, "NEWLINE", "", line, col)
-      i := i + 1
-      line := line + 1
-      col := 1
-
-      let mut j2 = i
-      let mut indent2 = 0
-      let mut seen_space2 = 0
-      let mut seen_tab2 = 0
-      let mut done3 = 0
-      while (j2 < n) and (done3 == 0):
-        let t2 = ch_at(src, j2)
-        if is_space(t2) == 1:
-          seen_space2 := 1
-          indent2 := indent2 + 1
-          j2 := j2 + 1
-        elif is_tab(t2) == 1:
-          seen_tab2 := 1
-          indent2 := indent2 + 2
-          j2 := j2 + 1
-        else:
-          done3 := 1
-
-      if (seen_space2 == 1) and (seen_tab2 == 1):
-        out := emit_to(out, "ERR", "mixed tabs and spaces in indentation", line, 1)
-
-      if (mode == 0) and (indent2 > 0):
-        if seen_tab2 == 1:
-          mode := 2
-        else:
-          mode := 1
-
-      let mut nextc2 = 0
-      if j2 < n:
-        nextc2 := ch_at(src, j2)
-
-      i := j2
-      col := 1 + indent2
-
-      if (nextc2 == 10) or (nextc2 == 13) or (nextc2 == 35):
-        handled := 1
-      else:
-        let top2 = stack_top(indents)
-        if indent2 > top2:
-          out := emit_to(out, "INDENT", "", line, 1)
-          indents := stack_push(indents, indent2)
-        elif indent2 < top2:
-          let mut cur2 = top2
-          while cur2 > indent2:
-            out := emit_to(out, "DEDENT", "", line, 1)
-            indents := stack_pop(indents)
-            cur2 := stack_top(indents)
-          if cur2 != indent2:
-            out := emit_to(out, "ERR", "inconsistent indentation", line, 1)
-        handled := 1
-
+    # identifiers / keywords
     elif handled == 0 and is_alpha(c) == 1:
       let mut name = ""
       let start_col = col
@@ -420,6 +411,7 @@ def lex_tokens(src: str) -> str:
         out := emit_to(out, "IDENT", name, line, start_col)
       handled := 1
 
+    # integer literal
     elif handled == 0 and is_digit(c) == 1:
       let mut lit = ""
       let start_col2 = col
@@ -430,6 +422,7 @@ def lex_tokens(src: str) -> str:
       out := emit_to(out, "INT", lit, line, start_col2)
       handled := 1
 
+    # string literal
     elif handled == 0 and (c == 34):
       let start_col3 = col
       i := i + 1
@@ -444,10 +437,9 @@ def lex_tokens(src: str) -> str:
           i := i + 1
           col := col + 1
           done4 := 1
-        elif d2 == 92:        # backslash escapes; preserve verbatim to keep raw line-safe
+        elif d2 == 92:
           if (i + 1) < n:
             let e = ch_at(src, i + 1)
-            # Append '\' + e literally (supports \" \\ \n \t \r and unknown escapes)
             val := val + ch_str(92) + ch_str(e)
             i := i + 2
             col := col + 2
@@ -465,6 +457,7 @@ def lex_tokens(src: str) -> str:
         out := emit_to(out, "ERR", "unterminated string", line, start_col3)
       handled := 1
 
+    # two-char ops
     elif handled == 0 and (starts_with(src, i, 61, 61) == 1):
       out := emit_to(out, "EQEQ", "==", line, col)
       i := i + 2
@@ -507,6 +500,7 @@ def lex_tokens(src: str) -> str:
       col := col + 2
       handled := 1
 
+    # single-char tokens
     elif handled == 0 and (c == 40):
       out := emit_to(out, "LPAREN", "(", line, col)
       i := i + 1
@@ -585,11 +579,13 @@ def lex_tokens(src: str) -> str:
       col := col + 1
       handled := 1
 
+    # unknown
     if handled == 0:
       out := emit_to(out, "ERR", "unknown char " + ch_str(c), line, col)
       i := i + 1
       col := col + 1
 
+  # unwind indentation at EOF
   let mut top_final = stack_top(indents)
   while top_final > 0:
     out := emit_to(out, "DEDENT", "", line, 1)
