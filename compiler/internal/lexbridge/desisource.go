@@ -33,6 +33,8 @@ func NewSourceFromFile(file string) (lexer.Source, error) {
 }
 
 // NewSourceFromFileOpts is the option-bearing variant (keepTmp, verbose).
+// It compiles/runs the Desi lexer for the given file, converts the raw output
+// to NDJSON rows, maps them into Go-lexer tokens, and returns a Source.
 func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, error) {
 	raw, err := BuildAndRunRaw(file, keepTmp, verbose)
 	if err != nil {
@@ -46,7 +48,7 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 	}
 
 	var mapped []lexer.Token
-	var lexers []string
+	var lexerrs []string
 
 	for _, r := range rows {
 		// Ignore empty/garbled rows defensively (fixes kind="" text="" cases)
@@ -59,7 +61,7 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 		}
 
 		if r.Kind == "ERR" {
-			lexers = append(lexers, fmt.Sprintf("LEXERR line=%d col=%d msg=%q", r.Line, r.Col, r.Text))
+			lexerrs = append(lexerrs, fmt.Sprintf("LEXERR line=%d col=%d msg=%q", r.Line, r.Col, r.Text))
 			continue
 		}
 
@@ -83,8 +85,8 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 		})
 	}
 
-	if len(lexers) > 0 {
-		return nil, errors.New(strings.Join(lexers, "\n"))
+	if len(lexerrs) > 0 {
+		return nil, errors.New(strings.Join(lexerrs, "\n"))
 	}
 
 	// Inject a NEWLINE before any DEDENT if the previous token wasn't a NEWLINE.

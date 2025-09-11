@@ -1,0 +1,13 @@
+{
+  "lexer": {
+    "unterminated_string": {
+      "id": "DLE0001",
+      "title": "unterminated string",
+      "help": "did you forget a closing quote?"
+    }
+  },
+  "parser": {
+  },
+  "type": {
+  }
+}
