@@ -212,29 +212,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 	switch st := s.(type) {
 	case *ast.LetStmt:
-		k := c.kindOfExpr(st.Expr)
-		v := &varInfo{kind: k, mutable: st.Mutable, declName: st.Name, written: true}
-		if err := c.scope.define(st.Name, v); err != nil {
-			c.errors = append(c.errors, err)
-		} else {
-			c.locals = append(c.locals, v)
-		}
+		c.checkLet(st)
 	case *ast.AssignStmt:
-		v, ok := c.scope.lookup(st.Name)
-		if !ok {
-			c.errors = append(c.errors, fmt.Errorf("assign to undeclared variable %q", st.Name))
-			return
-		}
-		if !v.mutable {
-			c.errors = append(c.errors, fmt.Errorf("cannot assign to immutable variable %q", st.Name))
-		}
-		rk := c.kindOfExpr(st.Expr)
-		if k, ok := unifyKinds(v.kind, rk); !ok {
-			c.errors = append(c.errors, fmt.Errorf("type mismatch: %q is %s but assigned %s", st.Name, v.kind, rk))
-		} else if v.kind == KindUnknown {
-			v.kind = k
-		}
-		v.written = true
+		c.checkAssign(st)
 	case *ast.ReturnStmt:
 		exp := c.fnSig.Ret
 		if st.Expr == nil {
@@ -308,6 +288,73 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.errors = append(c.errors, fmt.Errorf("defer expects a call expression"))
 		}
 		c.kindOfExpr(st.Call)
+	}
+}
+
+func (c *checker) checkLet(st *ast.LetStmt) {
+	// Arity check
+	if len(st.Binds) != len(st.Values) {
+		c.errors = append(c.errors, fmt.Errorf("let arity mismatch: %d name(s) but %d value(s)", len(st.Binds), len(st.Values)))
+		// still attempt to check pairs we do have
+	}
+
+	max := min(len(st.Binds), len(st.Values))
+	for i := 0; i < max; i++ {
+		bd := st.Binds[i]
+		rk := c.kindOfExpr(st.Values[i])
+
+		var want Kind = KindUnknown
+		if strings.TrimSpace(bd.Type) != "" {
+			want = mapTextType(bd.Type)
+		}
+		kind := rk
+		if want != KindUnknown {
+			if k, ok := unifyKinds(want, rk); ok {
+				kind = k
+			} else {
+				c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
+			}
+		}
+
+		v := &varInfo{kind: kind, mutable: st.Mutable, declName: bd.Name, written: true}
+		if err := c.scope.define(bd.Name, v); err != nil {
+			c.errors = append(c.errors, err)
+		} else {
+			c.locals = append(c.locals, v)
+		}
+	}
+
+	// Optional group type currently informational — future work: check tuple type vs. RHS.
+	if strings.TrimSpace(st.GroupType) != "" {
+		// No-op for now.
+	}
+}
+
+func (c *checker) checkAssign(st *ast.AssignStmt) {
+	if len(st.Names) != len(st.Exprs) {
+		c.errors = append(c.errors, fmt.Errorf("assignment arity mismatch: %d name(s) but %d value(s)", len(st.Names), len(st.Exprs)))
+	}
+
+	max := min(len(st.Names), len(st.Exprs))
+	for i := 0; i < max; i++ {
+		name := st.Names[i]
+		rk := c.kindOfExpr(st.Exprs[i])
+
+		v, ok := c.scope.lookup(name)
+		if !ok {
+			c.errors = append(c.errors, fmt.Errorf("assign to undeclared variable %q", name))
+			continue
+		}
+		if !v.mutable {
+			c.errors = append(c.errors, fmt.Errorf("cannot assign to immutable variable %q", name))
+			continue
+		}
+		if k, ok := unifyKinds(v.kind, rk); !ok {
+			c.errors = append(c.errors, fmt.Errorf("type mismatch: %q is %s but assigned %s", name, v.kind, rk))
+		} else if v.kind == KindUnknown {
+			v.kind = k
+		}
+		v.written = true
 	}
 }
 

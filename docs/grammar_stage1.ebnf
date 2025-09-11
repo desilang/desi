@@ -3,24 +3,24 @@
 # - Indentation is Python-style via NEWLINE/INDENT/DEDENT tokens (produced by the Go lexer).
 # - The self-hosted Desi lexer currently emits a simplified token stream (no INDENT/DEDENT yet).
 # - This EBNF describes the language surface; lexical rules are in tokens_stage1.md.
+# - Type is “textual” for now; the checker maps to kinds (int, str, bool, void, unknown).
+# - Arity matching (same number of LHS binders and RHS expressions) is enforced in the checker.
 
 File        ::= Newlines? PackageDecl? ImportDecl* Decl* EOF
 
 PackageDecl ::= "package" DottedIdent NEWLINE
-
 ImportDecl  ::= "import" DottedIdent NEWLINE
 
 Decl        ::= FuncDecl
 
 FuncDecl    ::= "def" Ident "(" ParamList? ")" "->" Type ":" NEWLINE INDENT Stmt* DEDENT
-
 ParamList   ::= Param ("," Param)*
 Param       ::= Ident ":" Type
 
-# Type is “textual” for now; checker maps to kinds: int, str, bool, void, unknown
-Type        ::= TypeToken+
+# ---------- Types ----------
+Type        ::= TypeToken+   # textual for Stage-1
 
-# Statements
+# ---------- Statements ----------
 Stmt        ::= LetStmt
               | AssignStmt
               | ReturnStmt
@@ -29,8 +29,14 @@ Stmt        ::= LetStmt
               | DeferStmt
               | ExprStmt
 
-LetStmt     ::= "let" "mut"? Ident "=" Expr NEWLINE
-AssignStmt  ::= Ident ":=" Expr NEWLINE
+# let: parallel binds; per-identifier type is allowed everywhere;
+# a group type (applies to binders without their own type) is only allowed
+# when the LHS is parenthesized. The parser enforces this restriction.
+LetStmt     ::= "let" "mut"? LetLHS GroupTypeOpt? "=" ExprList NEWLINE
+
+# Parallel ':=' assignment; same arity semantics as LetStmt.
+AssignStmt  ::= AssignLHS ":=" ExprList NEWLINE
+
 ReturnStmt  ::= "return" Expr? NEWLINE
 
 IfStmt      ::= "if" Expr ":" NEWLINE INDENT Stmt* DEDENT
@@ -44,8 +50,31 @@ DeferStmt   ::= "defer" CallExpr NEWLINE
 
 ExprStmt    ::= Expr NEWLINE
 
-# Expressions (Pratt; precedence from low → high)
-# 1) pipe (|>)      — currently parsed, lowered as left-associative binary op
+# ---------- Let/Assign LHS & lists ----------
+# Bind with optional per-identifier type:  a:int  |  b
+Bind        ::= Ident (":" Type)?
+
+# Parenthesized form allows an optional GroupTypeOpt after the whole list:
+#   let (a, b): int = ...
+#   let (a:int, b): int = ...
+# Non-parenthesized form:
+#   let a:int, b, c:str = ...
+# (group type not allowed here; parser rejects)
+LetLHS      ::= Bind
+              | Bind ("," Bind)+
+              | "(" Bind ("," Bind)* ")"
+
+AssignLHS   ::= Ident
+              | Ident ("," Ident)+
+              | "(" Ident ("," Ident)* ")"
+
+# Only valid if the LHS is the parenthesized LetLHS form; otherwise rejected by parser.
+GroupTypeOpt ::= ":" Type
+
+ExprList    ::= Expr ("," Expr)* ("," )?    # trailing comma allowed
+
+# ---------- Expressions (Pratt; precedence low → high) ----------
+# 1) pipe (|>)      — parsed, lowered as left-associative binary op
 # 2) or
 # 3) and
 # 4) == !=
@@ -58,7 +87,7 @@ ExprStmt    ::= Expr NEWLINE
 Expr        ::= Unary ( PipeRHS | OrRHS | AndRHS | EqRelRHS | AddRHS | MulRHS )*
 
 PipeRHS     ::= "|>" Unary
-OrRHS       ::= "or" Unary
+OrRHS       ::= "and" Unary  |  "or" Unary        # (kept for readability)
 AndRHS      ::= "and" Unary
 EqRelRHS    ::= ("==" | "!=" | "<" | "<=" | ">" | ">=") Unary
 AddRHS      ::= ("+" | "-") Unary
@@ -80,12 +109,13 @@ ArgList     ::= Expr ("," Expr)* ("," )?    # trailing comma allowed
 IndexSuffix ::= "[" Expr "]"
 FieldSuffix ::= "." Ident
 
-# Literals & identifiers
+# ---------- Literals & identifiers ----------
 Literal     ::= IntLit | StrLit | BoolLit
 
 DottedIdent ::= Ident ("." Ident)*
 Ident       ::= IdentToken
 
+# ---------- Tokens ----------
 # Tokens named here are specified lexically in tokens_stage1.md.
 Newlines    ::= NEWLINE+
 EOF         ::= <end of file>

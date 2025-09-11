@@ -115,11 +115,17 @@ func cParamList(fn *ast.FuncDecl) string {
 // ---- function/code emission ----
 
 type env struct {
-	fn      *ast.FuncDecl
-	sigs    map[string]sig
-	vars    map[string]string // name -> kind ("int"/"str")
-	retKind string
-	defers  []ast.Expr // function-scope defers (LIFO)
+	fn          *ast.FuncDecl
+	sigs        map[string]sig
+	vars        map[string]string // name -> kind ("int"/"str")
+	retKind     string
+	defers      []ast.Expr // function-scope defers (LIFO)
+	tempCounter int
+}
+
+func (e *env) newTemp() string {
+	e.tempCounter++
+	return "__tmp" + strconv.Itoa(e.tempCounter)
 }
 
 func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *check.Info, isMain bool) {
@@ -169,16 +175,63 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 	ind := spaces(indent)
 	switch st := s.(type) {
 	case *ast.LetStmt:
-		cExpr, kind := cExprFor(st.Expr, e)
-		if kind == "" {
-			kind = "int"
+		// declare each name with initializer
+		// pairwise over binds/values; if counts mismatch, checker already errored,
+		// we still emit what we can and default the rest.
+		n := min(len(st.Binds), len(st.Values))
+		for i := 0; i < n; i++ {
+			name := st.Binds[i].Name
+			ce, kind := cExprFor(st.Values[i], e)
+			if kind == "" {
+				kind = "int"
+			}
+			e.vars[name] = kind
+			term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(kind), name, ce)
 		}
-		e.vars[st.Name] = kind
-		term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(kind), st.Name, cExpr)
+		// any leftover binds -> default-init
+		for i := n; i < len(st.Binds); i++ {
+			name := st.Binds[i].Name
+			kind := "int"
+			if t := strings.TrimSpace(st.Binds[i].Type); t != "" {
+				kind = typeToKind(t)
+			}
+			e.vars[name] = kind
+			def := "0"
+			if kind == "str" {
+				def = "\"\""
+			}
+			term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(kind), name, def)
+		}
 
 	case *ast.AssignStmt:
-		cExpr, _ := cExprFor(st.Expr, e)
-		term.Wprintf(b, "%s%s = %s;\n", ind, st.Name, cExpr)
+		// parallel assign: evaluate all RHS into temps first, then assign to LHS
+		n := min(len(st.Names), len(st.Exprs))
+		type tmpRec struct {
+			name string
+			cx   string
+			kind string
+		}
+		var tmps []tmpRec
+		for i := 0; i < n; i++ {
+			cx, k := cExprFor(st.Exprs[i], e)
+			if k == "" {
+				k = "int"
+			}
+			t := e.newTemp()
+			term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(k), t, cx)
+			tmps = append(tmps, tmpRec{name: t, cx: cx, kind: k})
+		}
+		for i := 0; i < n; i++ {
+			lhs := st.Names[i]
+			// ensure we know the type of LHS (declared earlier)
+			if _, ok := e.vars[lhs]; !ok {
+				// fallback: treat as int
+				e.vars[lhs] = "int"
+				term.Wprintf(b, "%s/* warning: assigning to undeclared %s; assuming int */\n", ind, lhs)
+			}
+			term.Wprintf(b, "%s%s = %s;\n", ind, lhs, tmps[i].name)
+		}
+		// if arity mismatch, drop extras silently (checker already errored)
 
 	case *ast.ExprStmt:
 		emitCallOrExpr(b, indent, st.Expr, e)

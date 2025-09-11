@@ -263,46 +263,11 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 
 	switch {
 	case p.accept(lexer.TokLet):
-		mut := p.accept(lexer.TokMut)
-		id, err := p.expect(lexer.TokIdent)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(lexer.TokEq); err != nil {
-			return nil, err
-		}
-		expr, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
-			return nil, err
-		}
-		return &ast.LetStmt{Mutable: mut, Name: id.Lex, Expr: expr}, nil
+		return p.parseLetStmt()
 
 	case p.at(lexer.TokIdent):
-		save := p.tok
-		p.next()
-		if p.at(lexer.TokAssign) {
-			p.next()
-			expr, err := p.parseExpr()
-			if err != nil {
-				return nil, err
-			}
-			if _, err := p.expect(lexer.TokNewline); err != nil {
-				return nil, err
-			}
-			return &ast.AssignStmt{Name: save.Lex, Expr: expr}, nil
-		}
-		lhs := &ast.IdentExpr{Name: save.Lex}
-		expr, err := p.parseExprWithLHS(lhs)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
-			return nil, err
-		}
-		return &ast.ExprStmt{Expr: expr}, nil
+		// Could be: parallel assignment "a, b := ..." OR an expression starting with an ident.
+		return p.parseAssignOrExpr()
 
 	case p.accept(lexer.TokReturn):
 		if p.at(lexer.TokNewline) {
@@ -353,6 +318,175 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		}
 		return &ast.ExprStmt{Expr: expr}, nil
 	}
+}
+
+/*** let (single or parallel) ***/
+
+func (p *Parser) parseLetStmt() (ast.Stmt, error) {
+	mut := p.accept(lexer.TokMut)
+
+	var binds []ast.LetBind
+	groupType := ""
+
+	// Parenthesized LHS allows an optional group type: (a: A, b: B): TupleType
+	if p.accept(lexer.TokLParen) {
+		// One or more binds
+		for {
+			b, err := p.parseLetBind(lexer.TokComma, lexer.TokRParen, lexer.TokEq)
+			if err != nil {
+				return nil, err
+			}
+			binds = append(binds, b)
+			if p.accept(lexer.TokComma) {
+				continue
+			}
+			if _, err := p.expect(lexer.TokRParen); err != nil {
+				return nil, err
+			}
+			break
+		}
+		// Optional group type after ')'
+		if p.accept(lexer.TokColon) {
+			ty, err := p.parseTypeUntil(lexer.TokEq)
+			if err != nil {
+				return nil, err
+			}
+			groupType = ty
+		}
+	} else {
+		// Unparenthesized: mixed annotation allowed per name, no group type.
+		// At least one binder.
+		b, err := p.parseLetBind(lexer.TokComma, lexer.TokEq, lexer.TokNewline)
+		if err != nil {
+			return nil, err
+		}
+		binds = append(binds, b)
+		for p.accept(lexer.TokComma) {
+			b, err := p.parseLetBind(lexer.TokComma, lexer.TokEq, lexer.TokNewline)
+			if err != nil {
+				return nil, err
+			}
+			binds = append(binds, b)
+		}
+	}
+
+	if _, err := p.expect(lexer.TokEq); err != nil {
+		return nil, err
+	}
+
+	values, err := p.parseExprListUntilNewline()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokNewline); err != nil {
+		return nil, err
+	}
+
+	return &ast.LetStmt{
+		Mutable:   mut,
+		Binds:     binds,
+		GroupType: groupType,
+		Values:    values,
+	}, nil
+}
+
+// parseLetBind parses: Ident ( ":" Type )?
+// It stops when encountering any stopper token at top-level (comma, rparen, eq, newline).
+func (p *Parser) parseLetBind(stoppers ...lexer.TokKind) (ast.LetBind, error) {
+	id, err := p.expect(lexer.TokIdent)
+	if err != nil {
+		return ast.LetBind{}, err
+	}
+	// Optional per-name type
+	if p.accept(lexer.TokColon) {
+		ty, err := p.parseTypeUntil(stoppers...)
+		if err != nil {
+			return ast.LetBind{}, err
+		}
+		return ast.LetBind{Name: id.Lex, Type: ty}, nil
+	}
+	return ast.LetBind{Name: id.Lex}, nil
+}
+
+/*** assignment or expression ***/
+
+func (p *Parser) parseAssignOrExpr() (ast.Stmt, error) {
+	// First ident is guaranteed by caller (parseStmt case).
+	first, _ := p.expect(lexer.TokIdent)
+
+	// Case 1: single assignment immediately: "a :="
+	if p.accept(lexer.TokAssign) {
+		exprs, err := p.parseExprListUntilNewline()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokNewline); err != nil {
+			return nil, err
+		}
+		return &ast.AssignStmt{Names: []string{first.Lex}, Exprs: exprs}, nil
+	}
+
+	// Case 2: parallel assignment starting "a, ..."
+	if p.accept(lexer.TokComma) {
+		var names []string
+		names = append(names, first.Lex)
+
+		for {
+			id, err := p.expect(lexer.TokIdent)
+			if err != nil {
+				return nil, err
+			}
+			names = append(names, id.Lex)
+			if p.accept(lexer.TokComma) {
+				continue
+			}
+			break
+		}
+		if _, err := p.expect(lexer.TokAssign); err != nil {
+			return nil, err
+		}
+		exprs, err := p.parseExprListUntilNewline()
+		if err != nil {
+			return nil, err
+		}
+		if _, err := p.expect(lexer.TokNewline); err != nil {
+			return nil, err
+		}
+		return &ast.AssignStmt{Names: names, Exprs: exprs}, nil
+	}
+
+	// Case 3: not an assignment → this is an expression starting with that ident
+	lhs := &ast.IdentExpr{Name: first.Lex}
+	expr, err := p.parseExprWithLHS(lhs)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokNewline); err != nil {
+		return nil, err
+	}
+	return &ast.ExprStmt{Expr: expr}, nil
+}
+
+func (p *Parser) parseExprListUntilNewline() ([]ast.Expr, error) {
+	var xs []ast.Expr
+	// Allow empty RHS? No — require at least one expr.
+	e, err := p.parseExpr()
+	if err != nil {
+		return nil, err
+	}
+	xs = append(xs, e)
+	for p.accept(lexer.TokComma) {
+		// Trailing comma before NEWLINE is allowed.
+		if p.at(lexer.TokNewline) {
+			break
+		}
+		e2, err := p.parseExpr()
+		if err != nil {
+			return nil, err
+		}
+		xs = append(xs, e2)
+	}
+	return xs, nil
 }
 
 func (p *Parser) parseIfStmt() (*ast.IfStmt, error) {

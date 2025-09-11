@@ -123,18 +123,36 @@ type Stmt interface {
 	stmt()
 }
 
+/*
+Parallel lets:
+
+	let a, b:int, c = 1, 2, 3
+	let mut (x: A, y: B): Pair[A,B] = f(), g()
+*/
+type LetBind struct {
+	Name string
+	Type string // optional per-name type annotation (textual)
+}
+
 type LetStmt struct {
-	Mutable bool
-	Name    string
-	Expr    Expr
+	Mutable   bool
+	Binds     []LetBind // one or more names
+	GroupType string    // optional overall type after ')' when LHS was parenthesized
+	Values    []Expr    // one or more expressions
 }
 
 func (LetStmt) node() {}
 func (LetStmt) stmt() {}
 
+/*
+Parallel assignment:
+
+	a, b := b, a
+	single-name still represented the same: Names=[x], Exprs=[...]
+*/
 type AssignStmt struct {
-	Name string
-	Expr Expr
+	Names []string
+	Exprs []Expr
 }
 
 func (AssignStmt) node() {}
@@ -208,13 +226,50 @@ func DumpFile(f *File) string {
 			for _, s := range fn.Body {
 				switch st := s.(type) {
 				case *LetStmt:
+					// let / let mut
 					if st.Mutable {
-						fmt.Fprintf(&b, "  let mut %s = %s\n", st.Name, exprString(st.Expr))
+						fmt.Fprintf(&b, "  let mut ")
 					} else {
-						fmt.Fprintf(&b, "  let %s = %s\n", st.Name, exprString(st.Expr))
+						fmt.Fprintf(&b, "  let ")
 					}
+					// print binds (show per-name types when present)
+					for i, bd := range st.Binds {
+						if i > 0 {
+							b.WriteString(", ")
+						}
+						if strings.TrimSpace(bd.Type) == "" {
+							fmt.Fprintf(&b, "%s", bd.Name)
+						} else {
+							fmt.Fprintf(&b, "%s: %s", bd.Name, bd.Type)
+						}
+					}
+					if strings.TrimSpace(st.GroupType) != "" {
+						fmt.Fprintf(&b, " : %s", st.GroupType)
+					}
+					b.WriteString(" = ")
+					for i, e := range st.Values {
+						if i > 0 {
+							b.WriteString(", ")
+						}
+						b.WriteString(exprString(e))
+					}
+					b.WriteString("\n")
 				case *AssignStmt:
-					fmt.Fprintf(&b, "  %s := %s\n", st.Name, exprString(st.Expr))
+					fmt.Fprintf(&b, "  ")
+					for i, n := range st.Names {
+						if i > 0 {
+							b.WriteString(", ")
+						}
+						b.WriteString(n)
+					}
+					b.WriteString(" := ")
+					for i, e := range st.Exprs {
+						if i > 0 {
+							b.WriteString(", ")
+						}
+						b.WriteString(exprString(e))
+					}
+					b.WriteString("\n")
 				case *ReturnStmt:
 					if st.Expr == nil {
 						fmt.Fprintf(&b, "  return\n")
@@ -296,12 +351,49 @@ func exprString(e Expr) string {
 func stmtString(s Stmt) string {
 	switch st := s.(type) {
 	case *LetStmt:
+		var b strings.Builder
 		if st.Mutable {
-			return "let mut " + st.Name + " = " + exprString(st.Expr)
+			b.WriteString("let mut ")
+		} else {
+			b.WriteString("let ")
 		}
-		return "let " + st.Name + " = " + exprString(st.Expr)
+		for i, bd := range st.Binds {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			if strings.TrimSpace(bd.Type) == "" {
+				b.WriteString(bd.Name)
+			} else {
+				fmt.Fprintf(&b, "%s: %s", bd.Name, bd.Type)
+			}
+		}
+		if strings.TrimSpace(st.GroupType) != "" {
+			fmt.Fprintf(&b, " : %s", st.GroupType)
+		}
+		b.WriteString(" = ")
+		for i, e := range st.Values {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(exprString(e))
+		}
+		return b.String()
 	case *AssignStmt:
-		return st.Name + " := " + exprString(st.Expr)
+		var b strings.Builder
+		for i, n := range st.Names {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(n)
+		}
+		b.WriteString(" := ")
+		for i, e := range st.Exprs {
+			if i > 0 {
+				b.WriteString(", ")
+			}
+			b.WriteString(exprString(e))
+		}
+		return b.String()
 	case *ReturnStmt:
 		if st.Expr == nil {
 			return "return"
