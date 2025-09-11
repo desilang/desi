@@ -10,9 +10,10 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/desilang/desi/compiler/internal/build"
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	cgen "github.com/desilang/desi/compiler/internal/codegen/c"
+	"github.com/desilang/desi/compiler/internal/parser"
 )
 
 // BuildAndRunRaw compiles a tiny wrapper that calls compiler.desi.lexer::lex_tokens
@@ -43,7 +44,7 @@ func BuildAndRunRaw(srcFile string, keepTmp bool, verbose bool) (string, error) 
 
 	// 3) Write wrapper
 	wrapperPath := filepath.Join(tmpRoot, "main.desi")
-	srcLiteral := EscapeForDesiString(string(data))
+	srcLiteral := escapeDesiString(string(data))
 	wrapper := strings.Join([]string{
 		"import compiler.desi.lexer",
 		"",
@@ -61,8 +62,8 @@ func BuildAndRunRaw(srcFile string, keepTmp bool, verbose bool) (string, error) 
 		return "", fmt.Errorf("write wrapper: %w", err)
 	}
 
-	// 4) Resolve+parse+typecheck wrapper (no noisy prints)
-	merged, perr := build.ResolveAndParse(wrapperPath)
+	// 4) Resolve+parse+typecheck wrapper (no noisy prints) — local resolver to avoid build import cycles
+	merged, perr := resolveAndParseLocal(wrapperPath)
 	if len(perr) > 0 {
 		if !keepTmp {
 			_ = os.RemoveAll(tmpRoot)
@@ -162,6 +163,104 @@ func BuildAndRunRaw(srcFile string, keepTmp bool, verbose bool) (string, error) 
 	return out.String(), nil
 }
 
+// resolveAndParseLocal mirrors Stage-0 import rules without importing build:
+//   - "foo.bar" -> "<root>/foo/bar.desi"
+//   - ignore imports starting with "std."
+//   - detect cycles; skip duplicates
+//
+// It merges entry decls first, then deps.
+func resolveAndParseLocal(entryPath string) (*ast.File, []error) {
+	entryAbs, err := filepath.Abs(entryPath)
+	if err != nil {
+		return nil, []error{fmt.Errorf("abs(%s): %v", entryPath, err)}
+	}
+	rootDir := filepath.Dir(entryAbs)
+
+	type unit struct {
+		path string
+		file *ast.File
+	}
+	var (
+		errs   []error
+		seen   = map[string]bool{}
+		stack  = []string{}
+		result = []*unit{}
+	)
+
+	var load func(absPath string)
+	load = func(absPath string) {
+		if seen[absPath] {
+			return
+		}
+		// cycle check
+		for _, on := range stack {
+			if on == absPath {
+				errs = append(errs, fmt.Errorf("import cycle detected involving %s", rel(rootDir, absPath)))
+				return
+			}
+		}
+		stack = append(stack, absPath)
+		defer func() { stack = stack[:len(stack)-1] }()
+
+		data, rerr := os.ReadFile(absPath)
+		if rerr != nil {
+			errs = append(errs, fmt.Errorf("read %s: %v", rel(rootDir, absPath), rerr))
+			return
+		}
+		p := parser.New(string(data))
+		f, perr := p.ParseFile()
+		if perr != nil {
+			errs = append(errs, fmt.Errorf("parse %s: %v", rel(rootDir, absPath), perr))
+			return
+		}
+
+		// resolve imports (Stage-0 rules)
+		for _, imp := range f.Imports {
+			path := imp.Path
+			if strings.HasPrefix(path, "std.") {
+				continue
+			}
+			relPath := strings.ReplaceAll(path, ".", string(filepath.Separator)) + ".desi"
+			target := filepath.Join(rootDir, relPath)
+			if _, statErr := os.Stat(target); statErr != nil {
+				errs = append(errs, fmt.Errorf("import %q → %s not found (from %s)",
+					path, rel(rootDir, target), rel(rootDir, absPath)))
+				continue
+			}
+			load(mustAbs(target))
+		}
+
+		result = append(result, &unit{path: absPath, file: f})
+		seen[absPath] = true
+	}
+
+	load(entryAbs)
+
+	if len(errs) > 0 {
+		return nil, errs
+	}
+
+	var merged ast.File
+	merged.Pkg = nil
+	merged.Imports = nil
+	merged.Decls = nil
+
+	// entry first
+	for _, u := range result {
+		if same(u.path, entryAbs) {
+			merged.Decls = append(merged.Decls, u.file.Decls...)
+		}
+	}
+	// then deps
+	for _, u := range result {
+		if !same(u.path, entryAbs) {
+			merged.Decls = append(merged.Decls, u.file.Decls...)
+		}
+	}
+
+	return &merged, nil
+}
+
 // mirrorDevLexer copies examples/compiler/desi/lexer.desi under tmpRoot/compiler/desi/lexer.desi
 func mirrorDevLexer(tmpRoot string) error {
 	src := filepath.Join("examples", "compiler", "desi", "lexer.desi")
@@ -178,4 +277,63 @@ func mirrorDevLexer(tmpRoot string) error {
 		return fmt.Errorf("write %s: %w", dst, err)
 	}
 	return nil
+}
+
+// --- small local helpers (avoid importing build) ---
+
+func mustAbs(p string) string {
+	a, _ := filepath.Abs(p)
+	return a
+}
+func same(a, b string) bool {
+	aa, _ := filepath.EvalSymlinks(a)
+	bb, _ := filepath.EvalSymlinks(b)
+	if aa == "" {
+		aa = a
+	}
+	if bb == "" {
+		bb = b
+	}
+	return aa == bb
+}
+func rel(root, p string) string {
+	r, err := filepath.Rel(root, p)
+	if err != nil {
+		return p
+	}
+	return r
+}
+
+// escapeDesiString converts raw text into a double-quoted Desi string literal.
+func escapeDesiString(s string) string {
+	var b strings.Builder
+	b.WriteByte('"')
+	for _, r := range s {
+		switch r {
+		case '\\':
+			b.WriteString(`\\`)
+		case '"':
+			b.WriteString(`\"`)
+		case '\n':
+			b.WriteString(`\n`)
+		case '\r':
+			b.WriteString(`\r`)
+		case '\t':
+			b.WriteString(`\t`)
+		default:
+			if r < 0x20 {
+				o1 := ((r >> 6) & 7) + '0'
+				o2 := ((r >> 3) & 7) + '0'
+				o3 := (r & 7) + '0'
+				b.WriteByte('\\')
+				b.WriteByte(byte(o1))
+				b.WriteByte(byte(o2))
+				b.WriteByte(byte(o3))
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	b.WriteByte('"')
+	return b.String()
 }
