@@ -13,7 +13,7 @@ import (
 )
 
 /* =============================================================================
-   Diagnostic data model (future-proofed for richer messages)
+   Diagnostic data model
    ========================================================================== */
 
 type Level string
@@ -24,48 +24,40 @@ const (
 	LevelNote    Level = "note"
 )
 
-// Applicability hints for suggestions (loosely following rustc’s semantics).
 type Applicability string
 
 const (
-	// MachineApplicable means the replacement can be applied automatically.
 	MachineApplicable Applicability = "machine-applicable"
-	// MaybeIncorrect means the suggestion may be right but needs review.
-	MaybeIncorrect Applicability = "maybe-incorrect"
-	// HasPlaceholders means the suggestion includes placeholders.
-	HasPlaceholders Applicability = "has-placeholders"
+	MaybeIncorrect    Applicability = "maybe-incorrect"
+	HasPlaceholders   Applicability = "has-placeholders"
 )
 
-// Span identifies a region in a source file. EndCol is exclusive; if EndCol==0
-// the span is treated as a single-column marker at Col.
 type Span struct {
-	File    string // path to file for display/loading
-	Line    int    // 1-based
-	Col     int    // 1-based
-	EndCol  int    // 1-based, exclusive (0 => single-col)
-	Label   string // inline label shown next to the caret/underline
-	Primary bool   // whether this is the primary span
+	File    string
+	Line    int
+	Col     int
+	EndCol  int // exclusive; 0 => single-col
+	Label   string
+	Primary bool
 }
 
-// Suggestion describes a potential fix.
 type Suggestion struct {
 	At            Span
-	Replacement   string        // textual replacement (or insertion if zero-width)
-	Message       string        // short human-readable hint
-	Applicability Applicability // how safe it is to auto-apply
+	Replacement   string
+	Message       string
+	Applicability Applicability
 }
 
-// Diagnostic models a rust-like diagnostic with structured data.
 type Diagnostic struct {
 	Level   Level
-	Code    string // e.g., "DLE0001"
+	Code    string
 	Message string
 
 	Primary     Span
 	Secondaries []Span
 
-	Notes   []string // "note: ..." lines
-	Help    string   // singular help (still supported)
+	Notes   []string
+	Help    string
 	Suggest []Suggestion
 }
 
@@ -73,38 +65,28 @@ type Diagnostic struct {
    Rendering
    ========================================================================== */
 
-// RenderRustStyle renders a single diagnostic in a Rust-like multi-line format.
 func RenderRustStyle(d Diagnostic, srcLoader func(string) ([]byte, error)) string {
 	if srcLoader == nil {
 		srcLoader = os.ReadFile
 	}
 
 	var b strings.Builder
-
-	// Header: e.g., error[DLE0001]: unterminated string
 	if d.Code != "" {
 		fmt.Fprintf(&b, "%s[%s]: %s\n", d.Level, d.Code, d.Message)
 	} else {
 		fmt.Fprintf(&b, "%s: %s\n", d.Level, d.Message)
 	}
-
-	// Location header
 	if d.Primary.File != "" && d.Primary.Line > 0 && d.Primary.Col > 0 {
 		fmt.Fprintf(&b, " --> %s:%d:%d\n", d.Primary.File, d.Primary.Line, d.Primary.Col)
 	}
 
-	// Source preview with stacked underlines
 	printLineWithUnderlines(&b, d.Primary, d.Secondaries, d.Suggest, srcLoader)
 
-	// Notes
 	for _, n := range d.Notes {
-		if strings.TrimSpace(n) == "" {
-			continue
+		if strings.TrimSpace(n) != "" {
+			fmt.Fprintf(&b, "note: %s\n", n)
 		}
-		fmt.Fprintf(&b, "note: %s\n", n)
 	}
-
-	// Singular help (legacy)
 	if strings.TrimSpace(d.Help) != "" {
 		if !strings.HasPrefix(d.Help, "help:") && !strings.HasPrefix(d.Help, "note:") {
 			b.WriteString("help: ")
@@ -112,8 +94,6 @@ func RenderRustStyle(d Diagnostic, srcLoader func(string) ([]byte, error)) strin
 		b.WriteString(d.Help)
 		b.WriteByte('\n')
 	}
-
-	// Suggestions after the source block
 	for _, s := range d.Suggest {
 		lead := "help"
 		if s.Applicability != "" {
@@ -127,7 +107,6 @@ func RenderRustStyle(d Diagnostic, srcLoader func(string) ([]byte, error)) strin
 			fmt.Fprintf(&b, "%s: %s\n", lead, msg)
 		}
 	}
-
 	return b.String()
 }
 
@@ -144,13 +123,11 @@ func printLineWithUnderlines(b *strings.Builder, primary Span, secondaries []Spa
 	linePrefix := " " + lnStr + " | "
 	underPrefix := " " + strings.Repeat(" ", len(lnStr)) + " | "
 
-	// Primary line + underline
 	fmt.Fprintf(b, "%s%s\n", linePrefix, lineText)
 	b.WriteString(underPrefix)
 	writeUnderline(b, lineText, primary.Col, primary.EndCol, primary.Label)
 	b.WriteByte('\n')
 
-	// Stack secondaries/suggestions for the same file/line
 	for _, s := range secondaries {
 		if s.File == primary.File && s.Line == primary.Line {
 			b.WriteString(underPrefix)
@@ -174,8 +151,6 @@ func printLineWithUnderlines(b *strings.Builder, primary Span, secondaries []Spa
 			b.WriteByte('\n')
 		}
 	}
-
-	// Other-file/line spans/suggestions as mini-blocks
 	for _, s := range secondaries {
 		if !(s.File == primary.File && s.Line == primary.Line) {
 			printMiniBlock(b, s, loader)
@@ -230,12 +205,9 @@ func writeUnderline(b *strings.Builder, line string, col, endCol int, label stri
 }
 
 /* =============================================================================
-   Lexbridge adapter (pretty-print lex errors via code registry)
+   Lexbridge adapter with registry keys + JSON shaping
    ========================================================================== */
 
-// RenderLexbridgeErrorPretty pretty-prints lexbridge "LEXERR ..." lines in Rust style.
-// Uses the diag codes registry (JSON) for code IDs/titles/help.
-// Also enriches certain messages with suggestions (no duplicate underlines).
 func RenderLexbridgeErrorPretty(err error, defaultFile string, srcLoader func(string) ([]byte, error)) string {
 	if err == nil {
 		return ""
@@ -245,16 +217,19 @@ func RenderLexbridgeErrorPretty(err error, defaultFile string, srcLoader func(st
 		return ""
 	}
 
+	// Reset key stash per call.
+	diagKeys = nil
+
 	// Determine display/load path
 	extracted := extractLoadFilePrefix(lines[0])
 	effPath := resolveErrorPath(defaultFile, extracted)
 
-	diags := parseLexErrLinesLoose(lines, effPath)
+	diags := parseLexErrLinesLoose(lines, effPath) // supports optional key=...
 	if len(diags) == 0 {
 		return ""
 	}
 
-	// Try to load file (for precise suggestions)
+	// Try to load file for shaping & suggestion placement
 	loader := srcLoader
 	if loader == nil {
 		loader = os.ReadFile
@@ -268,12 +243,11 @@ func RenderLexbridgeErrorPretty(err error, defaultFile string, srcLoader func(st
 		}
 	}
 
-	// Apply registry-based code/help + heuristics without creating duplicate underlines
+	// Apply registry: code/title/help, primary_end shaping, suggestions
 	for i := range diags {
-		applyRegistryAndHeuristics(&diags[i], data)
+		applyRegistry(&diags[i], data)
 	}
 
-	// Render all (usually just one)
 	var out strings.Builder
 	for i, d := range diags {
 		if i > 0 {
@@ -284,7 +258,7 @@ func RenderLexbridgeErrorPretty(err error, defaultFile string, srcLoader func(st
 	return out.String()
 }
 
-// Matches: "... load <whatever>:" and captures <whatever>
+// "... load <path>:" → capture path.
 var loadPrefixRe = regexp.MustCompile(`(?i)\bload\s+(.+?):`)
 
 func extractLoadFilePrefix(line string) string {
@@ -295,7 +269,6 @@ func extractLoadFilePrefix(line string) string {
 	return ""
 }
 
-// Resolve display/load path given a default path and an extracted path from the error line.
 func resolveErrorPath(defaultFile, extracted string) string {
 	if strings.TrimSpace(extracted) == "" {
 		return defaultFile
@@ -309,8 +282,11 @@ func resolveErrorPath(defaultFile, extracted string) string {
 	return filepath.Join(filepath.Dir(defaultFile), extracted)
 }
 
-// Matches only the "LEXERR line=N col=M msg="..."" portion, ignoring any prefix.
-var lexErrCoreRe = regexp.MustCompile(`LEXERR\s+line=(\d+)\s+col=(\d+)\s+msg="(.*)"\s*$`)
+// Optional key=...  Example:
+//
+//	LEXERR line=1 col=9 key=unterminated_string msg="unterminated string"
+//	LEXERR line=1 col=9 msg="unterminated string"
+var lexErrCoreRe = regexp.MustCompile(`LEXERR\s+line=(\d+)\s+col=(\d+)(?:\s+key=([A-Za-z0-9_]+))?\s+msg="(.*)"\s*$`)
 
 func parseLexErrLinesLoose(lines []string, file string) []Diagnostic {
 	var out []Diagnostic
@@ -321,15 +297,16 @@ func parseLexErrLinesLoose(lines []string, file string) []Diagnostic {
 		}
 		core := ln[idx:]
 		m := lexErrCoreRe.FindStringSubmatch(core)
-		if len(m) != 4 {
+		if len(m) != 5 {
 			continue
 		}
 		line := atoiSafe(m[1])
 		col := atoiSafe(m[2])
-		msg := m[3]
+		key := strings.TrimSpace(m[3])
+		msg := m[4]
 		out = append(out, Diagnostic{
 			Level:   LevelError,
-			Code:    "", // filled from registry
+			Code:    "",
 			Message: msg,
 			Primary: Span{
 				File:    file,
@@ -340,48 +317,153 @@ func parseLexErrLinesLoose(lines []string, file string) []Diagnostic {
 				Primary: true,
 			},
 		})
+		diagKeys = append(diagKeys, key)
 	}
 	return out
 }
 
-// applyRegistryAndHeuristics assigns code/title/help from the JSON registry and
-// adds targeted suggestions without adding duplicate underline lines.
-func applyRegistryAndHeuristics(d *Diagnostic, fileData []byte) {
-	msgLower := strings.ToLower(d.Message)
+// We maintain a parallel slice of keys for the diags parsed above (same order).
+var diagKeys []string
 
-	// Map known lexer messages to registry keys
-	switch {
-	case strings.Contains(msgLower, "unterminated string"):
-		// Pull from registry
-		ce := diag.MustLookup("lexer", "unterminated_string", "DLE0001", "unterminated string")
-		d.Code = ce.ID
-		// Prefer registry title for Message; keep original label as-is
-		d.Message = ce.Title
-		if d.Help == "" && strings.TrimSpace(ce.Help) != "" {
-			d.Help = ce.Help
-		}
+func applyRegistry(d *Diagnostic, fileData []byte) {
+	var key string
+	if len(diagKeys) > 0 {
+		key = diagKeys[0]
+		diagKeys = diagKeys[1:]
+	}
 
-		// Suggest inserting a closing quote at end-of-line (single underline line).
-		// We DO NOT add a secondary span here to avoid duplicate underline output.
-		if fileData != nil && d.Primary.Line > 0 {
-			lineText := getLineText(fileData, d.Primary.Line)
-			endVis := len(visualize(lineText))
-			if endVis > 0 {
-				d.Suggest = append(d.Suggest, Suggestion{
-					At: Span{
-						File:    d.Primary.File,
-						Line:    d.Primary.Line,
-						Col:     endVis + 1, // caret after last visible char
-						EndCol:  0,
-						Label:   `add this: "\""`,
-						Primary: false,
-					},
-					Replacement:   `"`,
-					Message:       "insert closing quote",
-					Applicability: MachineApplicable,
-				})
-			}
+	// Fallback mapping by substring (compat path)
+	if key == "" {
+		msgLower := strings.ToLower(d.Message)
+		if strings.Contains(msgLower, "unterminated string") {
+			key = "unterminated_string"
 		}
+	}
+	if key == "" {
+		return // unknown; leave plain
+	}
+
+	// Lookup full definition
+	cf, ok := diag.LookupFull("lexer", key)
+	if !ok {
+		return
+	}
+
+	// Fill code/title/help
+	if cf.Entry.ID != "" {
+		d.Code = cf.Entry.ID
+	}
+	if cf.Entry.Title != "" {
+		d.Message = cf.Entry.Title
+	}
+	if d.Help == "" && strings.TrimSpace(cf.Entry.Help) != "" {
+		d.Help = cf.Entry.Help
+	}
+
+	// Shape primary end from JSON (e.g., eol)
+	if endCol, okCol := primaryEndFromWhereSpec(cf.PrimaryEnd, d.Primary, fileData); okCol && endCol > d.Primary.Col {
+		d.Primary.EndCol = endCol
+	}
+
+	// Materialize JSON suggestions (no duplicate underline lines)
+	for _, s := range cf.Suggestions {
+		sp, ok := placeFromWhereSpec(s.Where, d.Primary, fileData)
+		if !ok {
+			continue
+		}
+		d.Suggest = append(d.Suggest, Suggestion{
+			At:            sp,
+			Replacement:   s.Replacement,
+			Message:       s.Message,
+			Applicability: mapApplicability(s.Applicability),
+		})
+		// carry label onto the underline span
+		d.Suggest[len(d.Suggest)-1].At.Label = s.Label
+	}
+}
+
+func mapApplicability(s string) Applicability {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "machine-applicable":
+		return MachineApplicable
+	case "has-placeholders":
+		return HasPlaceholders
+	case "maybe-incorrect":
+		return MaybeIncorrect
+	default:
+		return MaybeIncorrect
+	}
+}
+
+func primaryEndFromWhereSpec(w diag.WhereSpec, primary Span, fileData []byte) (int, bool) {
+	switch strings.ToLower(strings.TrimSpace(w.Kind)) {
+	case "eol":
+		if fileData == nil || primary.Line <= 0 || primary.File == "" {
+			return 0, false
+		}
+		line := getLineText(fileData, primary.Line)
+		endVis := len(visualize(line))
+		if endVis == 0 {
+			return 0, false
+		}
+		// EndCol is exclusive; +1 highlights through the last visible char.
+		return endVis + 1, true
+	case "primary_offset":
+		col := primary.Col + w.Delta
+		if col < 1 {
+			col = 1
+		}
+		return col, true
+	case "pos":
+		if w.Line == primary.Line && w.Col > 0 {
+			return w.Col, true
+		}
+		return 0, false
+	default:
+		return 0, false
+	}
+}
+
+func placeFromWhereSpec(w diag.WhereSpec, primary Span, fileData []byte) (Span, bool) {
+	switch strings.ToLower(strings.TrimSpace(w.Kind)) {
+	case "eol":
+		if fileData == nil || primary.Line <= 0 || primary.File == "" {
+			return Span{}, false
+		}
+		line := getLineText(fileData, primary.Line)
+		endVis := len(visualize(line))
+		if endVis == 0 {
+			return Span{}, false
+		}
+		return Span{
+			File:   primary.File,
+			Line:   primary.Line,
+			Col:    endVis + 1,
+			EndCol: 0,
+		}, true
+	case "primary_offset":
+		col := primary.Col + w.Delta
+		if col < 1 {
+			col = 1
+		}
+		return Span{
+			File:   primary.File,
+			Line:   primary.Line,
+			Col:    col,
+			EndCol: 0,
+		}, true
+	case "pos":
+		if primary.File == "" || w.Line <= 0 || w.Col <= 0 {
+			return Span{}, false
+		}
+		return Span{
+			File:   primary.File,
+			Line:   w.Line,
+			Col:    w.Col,
+			EndCol: 0,
+		}, true
+	default:
+		return Span{}, false
 	}
 }
 
@@ -409,7 +491,6 @@ func splitLines(s string) []string {
 	return out
 }
 
-// getLineText returns the raw text (without trailing newline) for a 1-based line number.
 func getLineText(src []byte, line int) string {
 	if line <= 0 {
 		return ""
@@ -431,8 +512,6 @@ func getLineText(src []byte, line int) string {
 	return ""
 }
 
-// visualize returns a "visual column" slice for a line, expanding tabs to 4 spaces
-// and treating invalid UTF-8 as width 1. This lets us place carets correctly.
 func visualize(s string) []rune {
 	const tabw = 4
 	var vis []rune

@@ -3,7 +3,17 @@
     "unterminated_string": {
       "id": "DLE0001",
       "title": "unterminated string",
-      "help": "did you forget a closing quote?"
+      "help": "did you forget a closing quote?",
+      "primary_end": { "kind": "eol" },
+      "suggestions": [
+        {
+          "where": { "kind": "eol" },
+          "label": "add this: '\"'",
+          "message": "insert closing quote",
+          "replacement": "\"",
+          "applicability": "machine-applicable"
+        }
+      ]
     }
   },
   "parser": {
