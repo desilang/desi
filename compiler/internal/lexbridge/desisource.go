@@ -33,8 +33,6 @@ func NewSourceFromFile(file string) (lexer.Source, error) {
 }
 
 // NewSourceFromFileOpts is the option-bearing variant (keepTmp, verbose).
-// It compiles/runs the Desi lexer for the given file, converts the raw output
-// to NDJSON rows, maps them into Go-lexer tokens, and returns a Source.
 func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, error) {
 	raw, err := BuildAndRunRaw(file, keepTmp, verbose)
 	if err != nil {
@@ -48,7 +46,7 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 	}
 
 	var mapped []lexer.Token
-	var lexerrs []string
+	var lexers []string
 
 	for _, r := range rows {
 		// Ignore empty/garbled rows defensively (fixes kind="" text="" cases)
@@ -61,7 +59,15 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 		}
 
 		if r.Kind == "ERR" {
-			lexerrs = append(lexerrs, fmt.Sprintf("LEXERR line=%d col=%d msg=%q", r.Line, r.Col, r.Text))
+			// Prefer structured key if provided; validate to avoid breaking our regex.
+			keyFrag := ""
+			if goodKey(r.Key) {
+				keyFrag = fmt.Sprintf(" key=%s", r.Key)
+			}
+			lexers = append(lexers, fmt.Sprintf(
+				"LEXERR line=%d col=%d%s msg=%q",
+				r.Line, r.Col, keyFrag, r.Text,
+			))
 			continue
 		}
 
@@ -85,8 +91,8 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 		})
 	}
 
-	if len(lexerrs) > 0 {
-		return nil, errors.New(strings.Join(lexerrs, "\n"))
+	if len(lexers) > 0 {
+		return nil, errors.New(strings.Join(lexers, "\n"))
 	}
 
 	// Inject a NEWLINE before any DEDENT if the previous token wasn't a NEWLINE.
@@ -113,6 +119,19 @@ func NewSourceFromFileOpts(file string, keepTmp, verbose bool) (lexer.Source, er
 	}
 
 	return &desiSource{toks: mapped}, nil
+}
+
+func goodKey(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // mapDesiToTokKind converts the Desi stream's (Kind,Text) into our Go lexer TokKind.
