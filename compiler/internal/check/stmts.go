@@ -101,12 +101,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 func (c *checker) checkLet(st *ast.LetStmt) {
 	// Arity check
 	if len(st.Binds) != len(st.Values) {
-		c.errors = append(c.errors, fmt.Errorf("let arity mismatch: %d name(s) but %d value(s)", len(st.Binds), len(st.Values)))
+		c.errors = append(c.errors, typedErr(
+			"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+			"let", len(st.Binds), len(st.Values),
+		))
 		// still attempt to check pairs we do have
 	}
 
-	max := min(len(st.Binds), len(st.Values))
-	for i := 0; i < max; i++ {
+	_max := min(len(st.Binds), len(st.Values))
+	for i := 0; i < _max; i++ {
 		bd := st.Binds[i]
 		rk := c.kindOfExpr(st.Values[i])
 
@@ -139,11 +142,14 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 
 func (c *checker) checkAssign(st *ast.AssignStmt) {
 	if len(st.Names) != len(st.Exprs) {
-		c.errors = append(c.errors, fmt.Errorf("assignment arity mismatch: %d name(s) but %d value(s)", len(st.Names), len(st.Exprs)))
+		c.errors = append(c.errors, typedErr(
+			"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+			"assignment", len(st.Names), len(st.Exprs),
+		))
 	}
 
-	max := min(len(st.Names), len(st.Exprs))
-	for i := 0; i < max; i++ {
+	_max := min(len(st.Names), len(st.Exprs))
+	for i := 0; i < _max; i++ {
 		name := st.Names[i]
 		rk := c.kindOfExpr(st.Exprs[i])
 
