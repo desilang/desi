@@ -1,0 +1,9 @@
+def func_one() -> int:
+  let a, b = 1, 2, 3
+  return 0
+
+
+def func_two() -> int:
+  let mut a, b = 1, 2
+  a, b, c := 3, 4
+  return 0
