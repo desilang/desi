@@ -12,6 +12,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/cc"
 	"github.com/desilang/desi/compiler/internal/check"
 	cgen "github.com/desilang/desi/compiler/internal/codegen/c"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lexbridge"
 	"github.com/desilang/desi/compiler/internal/term"
 )
@@ -188,9 +189,23 @@ func cmdBuild(args []string) int {
 	merged, perr := build.ResolveAndParseMaybeDesi(a.file, a.useDesi, a.keepBridgeTmp, a.verbose)
 	if len(perr) > 0 {
 		for _, e := range perr {
-			// Pretty lexbridge errors if present; otherwise print raw.
+			// Pretty lexbridge errors if present; otherwise print raw or typed.
 			if pretty := lexbridge.RenderLexbridgeErrorPretty(e, guessErrFile(e.Error(), a.file), nil); pretty != "" {
 				term.Eprintf("%s", pretty)
+				continue
+			}
+			// If a typed error (from future phases), render header with code and help.
+			type codedWithKey interface {
+				Code() string
+				Title() string
+				Domain() string
+				Key() string
+			}
+			if te, ok := e.(codedWithKey); ok && strings.TrimSpace(te.Code()) != "" {
+				term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
+				if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+					term.Eprintf("help: %s\n", h)
+				}
 			} else {
 				term.Eprintf("error: %v\n", e)
 			}
@@ -201,12 +216,38 @@ func cmdBuild(args []string) int {
 
 	// Typecheck
 	info, errs, warns := cgenCheckFileShim(merged)
+
+	// warnings
 	for _, w := range warns {
-		term.Eprintf("warning: %s\n", w.String())
+		code := strings.TrimSpace(w.Code)
+		if code != "" {
+			term.Eprintf("warning[%s]: %s\n", code, w.Msg)
+			if h := warnHelpFromCode(code); strings.TrimSpace(h) != "" {
+				term.Eprintf("help: %s\n", h)
+			}
+		} else {
+			term.Eprintf("warning: %s\n", w.Msg)
+		}
 	}
+
+	// errors
 	for _, e := range errs {
-		term.Eprintf("error: %v\n", e)
+		type codedWithKey interface {
+			Code() string
+			Title() string
+			Domain() string
+			Key() string
+		}
+		if te, ok := e.(codedWithKey); ok && strings.TrimSpace(te.Code()) != "" {
+			term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
+			if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+				term.Eprintf("help: %s\n", h)
+			}
+		} else {
+			term.Eprintf("error: %v\n", e)
+		}
 	}
+
 	if len(errs) > 0 || (a.werr && len(warns) > 0) {
 		term.Eprintf("summary: %d error(s), %d warning(s)\n", len(errs), len(warns))
 		return 1
@@ -266,4 +307,27 @@ func guessErrFile(errText, defaultFile string) string {
 		return strings.TrimSpace(m[1])
 	}
 	return defaultFile
+}
+
+// lookupHelp fetches the catalog help text for a (domain,key).
+func lookupHelp(domain, key string) string {
+	if info, ok := diag.LookupFull(domain, key); ok {
+		return info.Entry.Help
+	}
+	return ""
+}
+
+// warnHelpFromCode resolves a warning code (DW...) back to a known key and returns help.
+func warnHelpFromCode(code string) string {
+	// Known warn keys we emit today.
+	if info, ok := diag.LookupFull("warn", "unused_variable"); ok && info.Entry.ID == code {
+		return info.Entry.Help
+	}
+	if info, ok := diag.LookupFull("warn", "unreachable_code"); ok && info.Entry.ID == code {
+		return info.Entry.Help
+	}
+	if info, ok := diag.LookupFull("warn", "missing_explicit_return"); ok && info.Entry.ID == code {
+		return info.Entry.Help
+	}
+	return ""
 }
