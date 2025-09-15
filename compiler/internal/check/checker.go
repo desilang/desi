@@ -86,7 +86,7 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 	// Non-void fallthrough warning (codegen synthesizes default)
 	if fnRet := c.fnSig.Ret; fnRet != KindVoid && !hasReturn {
 		c.warnings = append(c.warnings, Warning{
-			Code: "W0006",
+			Code: warnCode("warn", "missing_explicit_return", "DW0006"),
 			Msg:  fmt.Sprintf("function %q returns %s but may fall through without an explicit return", fn.Name, fnRet),
 		})
 	}
@@ -98,7 +98,7 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 		}
 		if !v.read {
 			c.warnings = append(c.warnings, Warning{
-				Code: "W0001",
+				Code: warnCode("warn", "unused_variable", "DW0001"),
 				Msg:  fmt.Sprintf("unused variable or parameter %q", v.declName),
 			})
 		}
