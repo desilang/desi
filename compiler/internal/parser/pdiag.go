@@ -7,9 +7,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
 
-// parseError is a lightweight error that carries a catalog code and title.
-// We keep it simple: code + rendered message. The CLI can still look up
-// help text from (domain,key) if we ever expose those.
+// parseError carries a catalog code and a rendered message.
 type parseError struct {
 	code   string
 	title  string
@@ -47,7 +45,7 @@ func ErrUnexpectedToken(context string, tok lexer.Token) error {
 }
 
 // ErrExpectedToken => DPE0002
-func ErrExpectedToken(context string, expected lexer.Kind, got lexer.Token) error {
+func ErrExpectedToken(context string, expected lexer.TokKind, got lexer.Token) error {
 	id, title := lookupIDTitle("parser", "expected_token", "DPE0002", "expected a different token")
 	msg := fmt.Sprintf("%s in %s at %d:%d: expected %s, got %s",
 		title, context, got.Line, got.Col, expected.String(), got.Kind.String())
