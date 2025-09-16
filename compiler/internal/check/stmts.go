@@ -20,16 +20,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	switch st := s.(type) {
 	case *ast.LetStmt:
 		c.checkLet(st)
-
 	case *ast.AssignStmt:
 		c.checkAssign(st)
-
 	case *ast.ReturnStmt:
 		exp := c.fnSig.Ret
-
 		if st.Expr == nil {
 			if exp != KindVoid {
-				// missing return value: treat as return type mismatch (expected exp, found void)
 				c.errors = append(c.errors, ErrWrongReturnKind(fmt.Sprintf("%s", exp), "void", "return"))
 			}
 			if br := top(c.blockReturned); br != nil {
@@ -37,28 +33,22 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 			return
 		}
-
 		got := c.kindOfExpr(st.Expr)
-
 		if exp == KindVoid {
-			// function returns void but value was provided
 			c.errors = append(c.errors, ErrWrongReturnKind("void", fmt.Sprintf("%s", got), "return"))
 			if br := top(c.blockReturned); br != nil {
 				*br = true
 			}
 			return
 		}
-
 		if _, ok := unifyKinds(exp, got); !ok {
 			c.errors = append(c.errors, ErrWrongReturnKind(fmt.Sprintf("%s", exp), fmt.Sprintf("%s", got), "return"))
 		}
 		if br := top(c.blockReturned); br != nil {
 			*br = true
 		}
-
 	case *ast.ExprStmt:
 		c.kindOfExpr(st.Expr)
-
 	case *ast.IfStmt:
 		k := c.kindOfExpr(st.Cond)
 		if k != KindBool && k != KindInt && k != KindUnknown {
@@ -87,7 +77,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 			})
 		}
-
 	case *ast.WhileStmt:
 		k := c.kindOfExpr(st.Cond)
 		if k != KindBool && k != KindInt && k != KindUnknown {
@@ -98,7 +87,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.checkStmt(s2)
 			}
 		})
-
 	case *ast.DeferStmt:
 		if len(c.blockReturned) > 1 {
 			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
@@ -138,9 +126,17 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 			}
 		}
 
+		// Shadowing warning: if not already defined locally, but exists in an outer scope.
+		if _, ok := c.scope.lookupLocal(bd.Name); !ok && c.scope.existsInOuter(bd.Name) {
+			c.warnings = append(c.warnings, Warning{
+				Code: CodeShadowedVariable(),
+				Msg:  fmt.Sprintf("name %q shadows an outer binding", bd.Name),
+			})
+		}
+
 		v := &varInfo{kind: kind, mutable: st.Mutable, declName: bd.Name, written: true}
 		if err := c.scope.define(bd.Name, v); err != nil {
-			// scope.define likely returns a raw error; keep it, or map if we later expose the name.
+			// define() now returns a catalog-backed DTE0003 on redeclare
 			c.errors = append(c.errors, err)
 		} else {
 			c.locals = append(c.locals, v)
