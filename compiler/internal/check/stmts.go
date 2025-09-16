@@ -12,7 +12,7 @@ import (
 func (c *checker) checkStmt(s ast.Stmt) {
   if br := top(c.blockReturned); br != nil && *br {
     c.warnings = append(c.warnings, Warning{
-      Code: warnCode("warn", "unreachable_code", "DW0004"),
+      Code: CodeUnreachableCode(),
       Msg:  "unreachable code: statement after return",
     })
   }
@@ -20,35 +20,45 @@ func (c *checker) checkStmt(s ast.Stmt) {
   switch st := s.(type) {
   case *ast.LetStmt:
     c.checkLet(st)
+
   case *ast.AssignStmt:
     c.checkAssign(st)
+
   case *ast.ReturnStmt:
     exp := c.fnSig.Ret
+
     if st.Expr == nil {
       if exp != KindVoid {
-        c.errors = append(c.errors, fmt.Errorf("missing return value; function returns %s", exp))
+        // missing return value: treat as return type mismatch (expected exp, found void)
+        c.errors = append(c.errors, ErrWrongReturnKind(fmt.Sprintf("%s", exp), "void", "return"))
       }
       if br := top(c.blockReturned); br != nil {
         *br = true
       }
       return
     }
+
     got := c.kindOfExpr(st.Expr)
+
     if exp == KindVoid {
-      c.errors = append(c.errors, fmt.Errorf("return value in function returning void"))
+      // function returns void but value was provided
+      c.errors = append(c.errors, ErrWrongReturnKind("void", fmt.Sprintf("%s", got), "return"))
       if br := top(c.blockReturned); br != nil {
         *br = true
       }
       return
     }
+
     if _, ok := unifyKinds(exp, got); !ok {
-      c.errors = append(c.errors, fmt.Errorf("return kind mismatch: have %s, got %s", exp, got))
+      c.errors = append(c.errors, ErrWrongReturnKind(fmt.Sprintf("%s", exp), fmt.Sprintf("%s", got), "return"))
     }
     if br := top(c.blockReturned); br != nil {
       *br = true
     }
+
   case *ast.ExprStmt:
     c.kindOfExpr(st.Expr)
+
   case *ast.IfStmt:
     k := c.kindOfExpr(st.Cond)
     if k != KindBool && k != KindInt && k != KindUnknown {
@@ -77,6 +87,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
         }
       })
     }
+
   case *ast.WhileStmt:
     k := c.kindOfExpr(st.Cond)
     if k != KindBool && k != KindInt && k != KindUnknown {
@@ -87,6 +98,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
         c.checkStmt(s2)
       }
     })
+
   case *ast.DeferStmt:
     if len(c.blockReturned) > 1 {
       c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
@@ -128,6 +140,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 
     v := &varInfo{kind: kind, mutable: st.Mutable, declName: bd.Name, written: true}
     if err := c.scope.define(bd.Name, v); err != nil {
+      // scope.define likely returns a raw error; keep it, or map if we later expose the name.
       c.errors = append(c.errors, err)
     } else {
       c.locals = append(c.locals, v)
@@ -155,7 +168,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 
     v, ok := c.scope.lookup(name)
     if !ok {
-      c.errors = append(c.errors, fmt.Errorf("assign to undeclared variable %q", name))
+      c.errors = append(c.errors, ErrUndefinedName(name, "assignment"))
       continue
     }
     if !v.mutable {
@@ -163,7 +176,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
       continue
     }
     if k, ok := unifyKinds(v.kind, rk); !ok {
-      c.errors = append(c.errors, fmt.Errorf("type mismatch: %q is %s but assigned %s", name, v.kind, rk))
+      c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", v.kind), fmt.Sprintf("%s", rk), "assignment"))
     } else if v.kind == KindUnknown {
       v.kind = k
     }
