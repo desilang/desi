@@ -61,6 +61,11 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		}
 		return &ast.DeferStmt{Call: expr}, nil
 
+	// Stray elif/else at statement start: make it a clear parser error instead of
+	// falling through to expression parsing.
+	case p.at(lexer.TokElif), p.at(lexer.TokElse):
+		return nil, ErrUnexpectedToken("statement", p.tok)
+
 	default:
 		expr, err := p.parseExpr()
 		if err != nil {
