@@ -103,8 +103,7 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
     }
     return p.parsePostfix(e)
   }
-  // Old:
-  // return nil, fmt.Errorf("unexpected token in expression: %v at %d:%d", p.tok.Kind, p.tok.Line, p.tok.Col)
+  // Registry-backed parser error
   return nil, ErrUnexpectedToken("expression", p.tok)
 }
 
