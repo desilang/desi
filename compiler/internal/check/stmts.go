@@ -172,7 +172,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 			continue
 		}
 		if !v.mutable {
-			c.errors = append(c.errors, fmt.Errorf("cannot assign to immutable variable %q", name))
+			c.errors = append(c.errors, ErrAssignToImmutable(name, "assignment"))
 			continue
 		}
 		if k, ok := unifyKinds(v.kind, rk); !ok {
