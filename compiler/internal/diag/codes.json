@@ -83,6 +83,11 @@
       "id": "DTE0005",
       "title": "return type mismatch",
       "help": "the returned expression does not match the function's declared return type"
+    },
+    "assign_to_immutable": {
+      "id": "DTE0006",
+      "title": "cannot assign to immutable variable",
+      "help": "declare the variable with 'mut' if you intend to reassign it"
     }
   },
   "warn": {
