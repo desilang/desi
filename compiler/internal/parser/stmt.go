@@ -22,19 +22,23 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		// Could be: parallel assignment "a, b := ..." OR an expression starting with an ident.
 		return p.parseAssignOrExpr()
 
-	case p.accept(lexer.TokReturn):
+	case p.at(lexer.TokReturn):
+		retTok := p.tok
+		p.next()
 		if p.at(lexer.TokNewline) {
+			nl := p.tok
 			p.next()
-			return &ast.ReturnStmt{Expr: nil}, nil
+			return &ast.ReturnStmt{Expr: nil, Span: spanTok(retTok, nl)}, nil
 		}
 		expr, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
+		nl, err := p.expect(lexer.TokNewline)
+		if err != nil {
 			return nil, err
 		}
-		return &ast.ReturnStmt{Expr: expr}, nil
+		return &ast.ReturnStmt{Expr: expr, Span: spanTok(retTok, nl)}, nil
 
 	case p.accept(lexer.TokIf):
 		ifs, err := p.parseIfStmt()
@@ -50,19 +54,21 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		}
 		return ws, nil
 
-	case p.accept(lexer.TokDefer):
+	case p.at(lexer.TokDefer):
+		dTok := p.tok
+		p.next()
 		// Stage-0: defer <call-expr> NEWLINE
 		expr, err := p.parseExpr()
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
+		nl, err := p.expect(lexer.TokNewline)
+		if err != nil {
 			return nil, err
 		}
-		return &ast.DeferStmt{Call: expr}, nil
+		return &ast.DeferStmt{Call: expr, Span: spanTok(dTok, nl)}, nil
 
-	// Stray elif/else at statement start: make it a clear parser error instead of
-	// falling through to expression parsing.
+	// Stray elif/else at statement start → clear parser error
 	case p.at(lexer.TokElif), p.at(lexer.TokElse):
 		return nil, ErrUnexpectedToken("statement", p.tok)
 
@@ -71,9 +77,10 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
+		nl, err := p.expect(lexer.TokNewline)
+		if err != nil {
 			return nil, err
 		}
-		return &ast.ExprStmt{Expr: expr}, nil
+		return &ast.ExprStmt{Expr: expr, Span: spanFrom(exprStart(expr), endPosFrom(nl))}, nil
 	}
 }

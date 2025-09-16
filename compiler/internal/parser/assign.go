@@ -17,10 +17,15 @@ func (p *Parser) parseAssignOrExpr() (ast.Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
+		nl, err := p.expect(lexer.TokNewline)
+		if err != nil {
 			return nil, err
 		}
-		return &ast.AssignStmt{Names: []string{first.Lex}, Exprs: exprs}, nil
+		return &ast.AssignStmt{
+			Names: []string{first.Lex},
+			Exprs: exprs,
+			Span:  spanTok(first, nl),
+		}, nil
 	}
 
 	// Case 2: parallel assignment starting "a, ..."
@@ -46,22 +51,31 @@ func (p *Parser) parseAssignOrExpr() (ast.Stmt, error) {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
+		nl, err := p.expect(lexer.TokNewline)
+		if err != nil {
 			return nil, err
 		}
-		return &ast.AssignStmt{Names: names, Exprs: exprs}, nil
+		return &ast.AssignStmt{
+			Names: names,
+			Exprs: exprs,
+			Span:  spanTok(first, nl),
+		}, nil
 	}
 
 	// Case 3: not an assignment → this is an expression starting with that ident
-	lhs := &ast.IdentExpr{Name: first.Lex}
+	lhs := &ast.IdentExpr{Name: first.Lex, Span: spanTok(first, first)}
 	expr, err := p.parseExprWithLHS(lhs)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.expect(lexer.TokNewline); err != nil {
+	nl, err := p.expect(lexer.TokNewline)
+	if err != nil {
 		return nil, err
 	}
-	return &ast.ExprStmt{Expr: expr}, nil
+	return &ast.ExprStmt{
+		Expr: expr,
+		Span: spanFrom(exprStart(expr), endPosFrom(nl)),
+	}, nil
 }
 
 func (p *Parser) parseExprListUntilNewline() ([]ast.Expr, error) {
