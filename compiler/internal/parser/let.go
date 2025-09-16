@@ -7,7 +7,14 @@ import (
 
 /*** let (single or parallel) ***/
 
+// Back-compat wrapper (in case anything else called parseLetStmt previously).
+// When used, we won't have the real 'let' token; we approximate from current.
 func (p *Parser) parseLetStmt() (ast.Stmt, error) {
+	approxStart := p.tok
+	return p.parseLetStmtAt(approxStart)
+}
+
+func (p *Parser) parseLetStmtAt(letTok lexer.Token) (ast.Stmt, error) {
 	mut := p.accept(lexer.TokMut)
 
 	var binds []ast.LetBind
@@ -63,7 +70,8 @@ func (p *Parser) parseLetStmt() (ast.Stmt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := p.expect(lexer.TokNewline); err != nil {
+	nl, err := p.expect(lexer.TokNewline)
+	if err != nil {
 		return nil, err
 	}
 
@@ -72,6 +80,7 @@ func (p *Parser) parseLetStmt() (ast.Stmt, error) {
 		Binds:     binds,
 		GroupType: groupType,
 		Values:    values,
+		Span:      spanTok(letTok, nl), // from 'let' to end-of-line
 	}, nil
 }
 
@@ -88,7 +97,9 @@ func (p *Parser) parseLetBind(stoppers ...lexer.TokKind) (ast.LetBind, error) {
 		if err != nil {
 			return ast.LetBind{}, err
 		}
-		return ast.LetBind{Name: id.Lex, Type: ty}, nil
+		// Span currently covers just the identifier (Stage-0). We can expand to include
+		// the type once parseTypeUntil returns the last token position.
+		return ast.LetBind{Name: id.Lex, Type: ty, Span: spanTok(id, id)}, nil
 	}
-	return ast.LetBind{Name: id.Lex}, nil
+	return ast.LetBind{Name: id.Lex, Span: spanTok(id, id)}, nil
 }

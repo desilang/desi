@@ -15,8 +15,10 @@ func (p *Parser) parseStmt() (ast.Stmt, error) {
 	}
 
 	switch {
-	case p.accept(lexer.TokLet):
-		return p.parseLetStmt()
+	case p.at(lexer.TokLet):
+		letTok := p.tok
+		p.next() // consume 'let'
+		return p.parseLetStmtAt(letTok)
 
 	case p.at(lexer.TokIdent):
 		// Could be: parallel assignment "a, b := ..." OR an expression starting with an ident.
