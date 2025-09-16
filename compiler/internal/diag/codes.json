@@ -4,10 +4,14 @@
       "id": "DLE0001",
       "title": "unterminated string",
       "help": "did you forget a closing quote?",
-      "primary_end": { "kind": "eol" },
+      "primary_end": {
+        "kind": "eol"
+      },
       "suggestions": [
         {
-          "where": { "kind": "eol" },
+          "where": {
+            "kind": "eol"
+          },
           "label": "add this: '\"'",
           "message": "insert closing quote",
           "replacement": "\"",
@@ -17,12 +21,68 @@
     }
   },
   "parser": {
+    "unexpected_token": {
+      "id": "DPE0001",
+      "title": "unexpected token",
+      "help": "this token is not valid here; check for a missing delimiter or keyword before it"
+    },
+    "expected_token": {
+      "id": "DPE0002",
+      "title": "expected a different token",
+      "help": "the parser expected a specific token here; verify punctuation and keywords"
+    },
+    "unclosed_delimiter": {
+      "id": "DPE0003",
+      "title": "unclosed delimiter",
+      "help": "a '(' '[' or '{' was opened but not closed on this path",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "eol"
+          },
+          "label": "add a closing delimiter",
+          "message": "insert the matching closing delimiter",
+          "replacement": ")",
+          "applicability": "machine-applicable"
+        }
+      ]
+    },
+    "trailing_or_extra_token": {
+      "id": "DPE0004",
+      "title": "trailing or extra token",
+      "help": "remove extra punctuation or a stray comma at the end of the list"
+    },
+    "invalid_assignment_target": {
+      "id": "DPE0005",
+      "title": "invalid assignment target",
+      "help": "only names, tuple patterns, or index/field targets may appear on the left of an assignment"
+    }
   },
   "type": {
+    "undefined_name": {
+      "id": "DTE0001",
+      "title": "undefined name",
+      "help": "this name is not defined in the current scope"
+    },
     "arity_mismatch": {
       "id": "DTE0002",
       "title": "arity mismatch in grouped binding",
       "help": "the number of names on the left must equal the number of values on the right"
+    },
+    "redeclared_symbol": {
+      "id": "DTE0003",
+      "title": "name already defined in this scope",
+      "help": "choose a different name or remove the earlier declaration"
+    },
+    "type_mismatch": {
+      "id": "DTE0004",
+      "title": "type mismatch",
+      "help": "the expression does not have the expected type"
+    },
+    "wrong_return_kind": {
+      "id": "DTE0005",
+      "title": "return type mismatch",
+      "help": "the returned expression does not match the function's declared return type"
     }
   },
   "warn": {
@@ -30,6 +90,11 @@
       "id": "DW0001",
       "title": "unused variable or parameter",
       "help": "Prefix the name with '_' to silence this warning."
+    },
+    "shadowed_variable": {
+      "id": "DW0002",
+      "title": "name shadows an outer binding",
+      "help": "consider renaming to avoid confusion"
     },
     "unreachable_code": {
       "id": "DW0004",
