@@ -24,23 +24,23 @@ def scan_imports(src: str) -> str:
         # stop at newline, space, tab, or comment '#'
         if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
           break
-        name = name + str.from_code(c)
-        j = j + 1
+        name := name + str.from_code(c)
+        j := j + 1
       if str.len(name) > 0:
         if not first:
-          out = out + ","
-        out = out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
-        first = false
+          out := out + ","
+        out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
+        first := false
       # advance to end-of-line
-      i = j
+      i := j
       while i < n:
         let c2 = str.at(src, i)
-        if c2 == 10:
-          i = i + 1
+        if c2 == 10:  # '\n'
+          i := i + 1
           break
-        i = i + 1
+        i := i + 1
       continue
-    i = i + 1
+    i := i + 1
   return out
 
 # starts_with checks if src at offset pos begins with pat.
@@ -53,5 +53,5 @@ def starts_with(src: str, pos: int, pat: str) -> bool:
   while k < m:
     if str.at(src, pos + k) != str.at(pat, k):
       return false
-    k = k + 1
+    k := k + 1
   return true
