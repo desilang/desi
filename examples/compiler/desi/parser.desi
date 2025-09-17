@@ -1,7 +1,10 @@
 # Stage-0 parser stub (self-hosting path)
 # Implements: parse_to_json(path: str) -> str
 # Emits a valid AST JSON with kind="File", imports, and minimal FuncDecls.
-# Note: No multi-return values are used; callers compute index advances.
+# v0.2: Emits tiny function bodies:
+#   - ExprStmt(CallExpr)  e.g., io.println(add(2, 3))
+#   - ReturnStmt          e.g., return 0 / return x / return a + b
+# No multiple returns, no break/continue, indentation-based block detection.
 
 def parse_to_json(path: str) -> str:
   let src = fs.read_all(path)
@@ -38,11 +41,13 @@ def scan_imports(src: str) -> str:
       i := i + 1
   return out
 
-# ---------- funcs (headers only) ----------
+# ---------- funcs (headers + tiny bodies) ----------
 
-# Recognizes:  def Name "(" params? ")" "->" Type ":"   (body ignored)
-# Emits JSON objects:
-# {"kind":"FuncDecl","name":"main","params":[...],"ret":"int","body":[]}
+# Recognizes header:
+#   def Name "(" params? ")" "->" Type ":"
+# Then captures a simple body by indentation:
+#   - ExprStmt(CallExpr)
+#   - ReturnStmt (single expr)
 def scan_funcs(src: str) -> str:
   let n = str.len(src)
   let mut i = 0
@@ -110,19 +115,195 @@ def scan_funcs(src: str) -> str:
                 j := j + str.len(ret_ty)
                 if j < n and str.at(src, j) == 58:
                   j := j + 1
-                  # found a header; emit JSON object
+                  # parse body at next line(s)
+                  let body_res = parse_func_body(src, j)
+                  let body_json = tuple_first(body_res)
+                  let next_i = tuple_second(body_res)
+                  # emit JSON object
                   if not first:
                     out := out + ","
-                  out := out + "{\"kind\":\"FuncDecl\",\"name\":\"" + name + "\",\"params\":[" + params_json + "],\"ret\":\"" + rtrim + "\",\"body\":[]}"
+                  out := out + "{\"kind\":\"FuncDecl\",\"name\":\"" + name + "\",\"params\":[" + params_json + "],\"ret\":\"" + rtrim + "\",\"body\":[" + body_json + "]}"
                   first := false
-                  # advance to next line; ignore body
-                  i := advance_to_next_line(src, j)
+                  i := next_i
                   handled := true
     if not handled:
       i := i + 1
   return out
 
-# ---------- small helpers ----------
+# ---------- body parser (very small) ----------
+
+# Returns tuple(body_json: str, next_index: int)
+# Body is a sequence of lines indented deeper than the header's line.
+# Recognizes:
+#   - return <expr>
+#   - <expr>              (as ExprStmt)
+# Where <expr> supports:
+#   - int literal:  123
+#   - identifier:   foo
+#   - a + b         (no precedence beyond one '+', depth-0)
+#   - call:         callee(args)
+#   - dotted call:  obj.method(args)
+#   - nested call in args: add(2, 3)
+def parse_func_body(src: str, after_colon_pos: int) -> str:
+  let n = str.len(src)
+  # Start at next line after the header colon
+  let mut i = advance_to_next_line(src, after_colon_pos)
+
+  # Find first non-blank/non-comment line to set base indent
+  let mut base_indent = -1
+  let mut probe = i
+  let mut found_body = false
+  while probe < n and not found_body:
+    if is_line_start(src, probe):
+      let j = skip_hspace(src, probe)
+      # blank or comment?
+      let line_head = line_head_char(src, j)
+      if line_head == 0:
+        probe := advance_to_next_line(src, probe)
+      else:
+        if line_head == 35:  # '#'
+          probe := advance_to_next_line(src, probe)
+        else:
+          base_indent := j - probe
+          found_body := true
+    else:
+      probe := probe + 1
+
+  if not found_body:
+    return make_tuple("", i)
+
+  # Collect statements until dedent (indent < base_indent) on a non-blank/non-comment line
+  let mut out = ""
+  let mut first = true
+  let mut cur = probe
+  let mut done = false
+  while cur < n and not done:
+    if is_line_start(src, cur):
+      let line_start = cur
+      let j = skip_hspace(src, cur)
+      let indent = j - line_start
+      let head = line_head_char(src, j)
+
+      if head == 0:
+        cur := advance_to_next_line(src, cur)
+      else:
+        if head == 35:  # '#'
+          cur := advance_to_next_line(src, cur)
+        else:
+          if indent < base_indent:
+            done := true
+          else:
+            # Read the full logical line (single-line statements only for v0.2)
+            let line = read_line(src, j)
+            let tline = trim_space(line)
+
+            # Parse statement
+            let stmt_json = parse_stmt_line(tline)
+            if str.len(stmt_json) > 0:
+              if not first:
+                out := out + ","
+              out := out + stmt_json
+              first := false
+
+            cur := advance_to_next_line(src, j)
+    else:
+      cur := cur + 1
+
+  return make_tuple(out, cur)
+
+# Parses a single statement line into JSON (or "" if unknown)
+def parse_stmt_line(tline: str) -> str:
+  if starts_with(tline, 0, "return"):
+    # "return" or "return <expr>"
+    let rest = trim_space(slice_from(tline, 6))
+    if str.len(rest) == 0:
+      return "{\"kind\":\"ReturnStmt\",\"expr\":null}"
+    let ej = parse_expr_json(rest)
+    if str.len(ej) == 0:
+      return "{\"kind\":\"ReturnStmt\",\"expr\":null}"
+    return "{\"kind\":\"ReturnStmt\",\"expr\":" + ej + "}"
+  # else: expression stmt
+  let ej = parse_expr_json(tline)
+  if str.len(ej) == 0:
+    return ""
+  return "{\"kind\":\"ExprStmt\",\"expr\":" + ej + "}"
+
+# ---------- expression parser (tiny) ----------
+
+def parse_expr_json(s: str) -> str:
+  let t = trim_space(s)
+  if str.len(t) == 0:
+    return ""
+
+  # int literal?
+  if is_digits(t):
+    return "{\"kind\":\"IntLit\",\"value\":\"" + t + "\"}"
+
+  # depth-0 '+' binary (single split)
+  let plus_pos = find_plus_depth0(t)
+  if plus_pos >= 0:
+    let lhs = trim_space(slice(t, 0, plus_pos))
+    let rhs = trim_space(slice_from(t, plus_pos + 1))
+    let lj = parse_expr_json(lhs)
+    let rj = parse_expr_json(rhs)
+    if str.len(lj) > 0 and str.len(rj) > 0:
+      return "{\"kind\":\"BinaryExpr\",\"op\":\"+\",\"left\":" + lj + ",\"right\":" + rj + "}"
+
+  # call?  <callee>(args)
+  let lp = find_char_depth0(t, 40)  # '('
+  if lp >= 0 and ends_with_paren(t):
+    let callee_txt = trim_space(slice(t, 0, lp))
+    let args_txt = inside_parens(t, lp)
+    let callee_json = parse_callee_json(callee_txt)
+    if str.len(callee_json) == 0:
+      return ""
+    let args_json = parse_args_list(args_txt)
+    return "{\"kind\":\"CallExpr\",\"callee\":" + callee_json + ",\"args\":[" + args_json + "]}"
+
+  # dotted field: a.b  (as expression receiver; callers typically use in call)
+  let dotp = find_dot_depth0(t)
+  if dotp >= 0:
+    let left = trim_space(slice(t, 0, dotp))
+    let right = trim_space(slice_from(t, dotp + 1))
+    if is_ident(left) and is_ident(right):
+      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":\"" + left + "\"},\"name\":\"" + right + "\"}"
+
+  # bare ident
+  if is_ident(t):
+    return "{\"kind\":\"IdentExpr\",\"name\":\"" + t + "\"}"
+
+  return ""
+
+def parse_callee_json(s: str) -> str:
+  let dotp = find_dot_depth0(s)
+  if dotp >= 0:
+    let left = trim_space(slice(s, 0, dotp))
+    let right = trim_space(slice_from(s, dotp + 1))
+    if is_ident(left) and is_ident(right):
+      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":\"" + left + "\"},\"name\":\"" + right + "\"}"
+    return ""
+  if is_ident(s):
+    return "{\"kind\":\"IdentExpr\",\"name\":\"" + s + "\"}"
+  return ""
+
+def parse_args_list(s: str) -> str:
+  let items = split_args_depth(s)
+  let mut out = ""
+  let mut first = true
+  let mut i = 0
+  let m = list_len(items)
+  while i < m:
+    let it = list_get(items, i)
+    let ej = parse_expr_json(trim_space(it))
+    if str.len(ej) > 0:
+      if not first:
+        out := out + ","
+      out := out + ej
+      first := false
+    i := i + 1
+  return out
+
+# ---------- tiny utilities for strings & scanning ----------
 
 def is_line_start(src: str, pos: int) -> bool:
   if pos == 0:
@@ -156,7 +337,32 @@ def advance_to_next_line(src: str, pos: int) -> int:
       j := j + 1
   return j
 
-# Reads identifier [A-Za-z_$][A-Za-z0-9_$]*, returns the text.
+# First visible char code at position (0 if EOL/EOF)
+def line_head_char(s: str, pos: int) -> int:
+  let n = str.len(s)
+  if pos >= n:
+    return 0
+  let c = str.at(s, pos)
+  if c == 10 or c == 13:
+    return 0
+  return c
+
+# Read a whole line starting at pos (pos is first non-space of that line)
+def read_line(s: str, pos: int) -> str:
+  let n = str.len(s)
+  let mut j = pos
+  let mut out = ""
+  let mut run = true
+  while j < n and run:
+    let c = str.at(s, j)
+    if c == 10 or c == 13:
+      run := false
+    else:
+      out := out + str.from_code(c)
+      j := j + 1
+  return out
+
+# Reads identifier [A-Za-z_$][A-Za-z0-9_$]*
 def read_ident(src: str, pos: int) -> str:
   let n = str.len(src)
   let mut j = pos
@@ -192,7 +398,37 @@ def is_ident_part(c: int) -> bool:
     return true
   return false
 
-# Read until a single delimiter codepoint (e.g., ':'). Returns the text (no delim).
+def is_ident(s: str) -> bool:
+  let n = str.len(s)
+  if n == 0:
+    return false
+  let c0 = str.at(s, 0)
+  if not is_ident_start(c0):
+    return false
+  let mut i = 1
+  let mut ok = true
+  while i < n and ok:
+    let c = str.at(s, i)
+    if not is_ident_part(c):
+      ok := false
+    else:
+      i := i + 1
+  return ok
+
+def is_digits(s: str) -> bool:
+  let n = str.len(s)
+  if n == 0:
+    return false
+  let mut i = 0
+  let mut ok = true
+  while i < n and ok:
+    let c = str.at(s, i)
+    if c < 48 or c > 57:
+      ok := false
+    else:
+      i := i + 1
+  return ok
+
 def read_until_delim(src: str, pos: int, delim: int) -> str:
   let n = str.len(src)
   let mut j = pos
@@ -207,7 +443,6 @@ def read_until_delim(src: str, pos: int, delim: int) -> str:
       j := j + 1
   return s
 
-# Read until any of two delimiters (e.g., ',' or ')'). Returns the text (no delim).
 def read_until_either(src: str, pos: int, d1: int, d2: int) -> str:
   let n = str.len(src)
   let mut j = pos
@@ -222,7 +457,6 @@ def read_until_either(src: str, pos: int, d1: int, d2: int) -> str:
       j := j + 1
   return s
 
-# Read until any of up to five delimiters (helper for imports).
 def read_until_delims(src: str, pos: int, d1: int, d2: int, d3: int, d4: int, d5: int) -> str:
   let n = str.len(src)
   let mut j = pos
@@ -237,7 +471,6 @@ def read_until_delims(src: str, pos: int, d1: int, d2: int, d3: int, d4: int, d5
       j := j + 1
   return s
 
-# Poor-man's trim for spaces/tabs.
 def trim_space(s: str) -> str:
   let n = str.len(s)
   let mut lo = 0
@@ -263,7 +496,6 @@ def trim_space(s: str) -> str:
     i := i + 1
   return out
 
-# Simple prefix match
 def starts_with(src: str, pos: int, pat: str) -> bool:
   let n = str.len(src)
   let m = str.len(pat)
@@ -277,3 +509,250 @@ def starts_with(src: str, pos: int, pat: str) -> bool:
     else:
       k := k + 1
   return ok
+
+# ---------- small "list" helpers via sentinel-splitting ----------
+
+# Split an argument string by commas at depth-0 (parentheses-balanced).
+# Returns a synthetic list encoded as a comma-joined string array we can index via helpers.
+def split_args_depth(s: str) -> str:
+  let n = str.len(s)
+  let mut i = 0
+  let mut depth = 0
+  let mut cur = ""
+  let mut out = ""
+  let mut first = true
+  while i < n:
+    let c = str.at(s, i)
+    if c == 40:  # '('
+      depth := depth + 1
+      cur := cur + "("
+      i := i + 1
+    else:
+      if c == 41 and depth > 0:  # ')'
+        depth := depth - 1
+        cur := cur + ")"
+        i := i + 1
+      else:
+        if c == 44 and depth == 0:  # ','
+          if not first:
+            out := out + "\n"
+          out := out + cur
+          cur := ""
+          first := false
+          i := i + 1
+        else:
+          cur := cur + str.from_code(c)
+          i := i + 1
+  # flush
+  if str.len(cur) > 0 or first:
+    if not first:
+      out := out + "\n"
+    out := out + cur
+  return out
+
+# Our "list" is a single string with newline separators.
+def list_len(s: str) -> int:
+  let n = str.len(s)
+  if n == 0:
+    return 0
+  let mut i = 0
+  let mut cnt = 1
+  while i < n:
+    if str.at(s, i) == 10:
+      cnt := cnt + 1
+    i := i + 1
+  return cnt
+
+def list_get(s: str, idx: int) -> str:
+  let n = str.len(s)
+  let mut i = 0
+  let mut cur = 0
+  let mut start = 0
+  let mut end = 0
+  let mut done = false
+  while i <= n and not done:
+    if i == n or str.at(s, i) == 10:
+      end := i
+      if cur == idx:
+        done := true
+      else:
+        cur := cur + 1
+        start := i + 1
+        end := start
+      i := i + 1
+    else:
+      i := i + 1
+  return slice(s, start, end)
+
+# ---------- tiny substring helpers ----------
+
+def slice(s: str, a: int, b: int) -> str:
+  let n = str.len(s)
+  let mut i = a
+  let mut out = ""
+  while i < b and i < n:
+    out := out + str.from_code(str.at(s, i))
+    i := i + 1
+  return out
+
+def slice_from(s: str, a: int) -> str:
+  return slice(s, a, str.len(s))
+
+# find '+' at depth-0 (not inside parens). Returns index or -1.
+def find_plus_depth0(s: str) -> int:
+  let n = str.len(s)
+  let mut i = 0
+  let mut depth = 0
+  let mut pos = -1
+  let mut done = false
+  while i < n and not done:
+    let c = str.at(s, i)
+    if c == 40:
+      depth := depth + 1
+    else:
+      if c == 41 and depth > 0:
+        depth := depth - 1
+      else:
+        if c == 43 and depth == 0:
+          pos := i
+          done := true
+    i := i + 1
+  return pos
+
+# find char at depth-0 (like '(' or '.'). Returns index or -1.
+def find_char_depth0(s: str, target: int) -> int:
+  let n = str.len(s)
+  let mut i = 0
+  let mut depth = 0
+  while i < n:
+    let c = str.at(s, i)
+    if c == 40:
+      depth := depth + 1
+    else:
+      if c == 41 and depth > 0:
+        depth := depth - 1
+      else:
+        if c == target and depth == 0:
+          return i
+    i := i + 1
+  return -1
+
+def find_dot_depth0(s: str) -> int:
+  return find_char_depth0(s, 46)  # '.'
+
+def ends_with_paren(s: str) -> bool:
+  let n = str.len(s)
+  if n == 0:
+    return false
+  if str.at(s, n-1) == 41:  # ')'
+    return true
+  return false
+
+# returns inside text of first '(' ... its matching ')'
+def inside_parens(s: str, lp: int) -> str:
+  let n = str.len(s)
+  let mut i = lp + 1
+  let mut depth = 1
+  let mut out = ""
+  let mut run = true
+  while i < n and run:
+    let c = str.at(s, i)
+    if c == 40:
+      depth := depth + 1
+      out := out + "("
+      i := i + 1
+    else:
+      if c == 41:
+        depth := depth - 1
+        if depth == 0:
+          run := false
+        else:
+          out := out + ")"
+        i := i + 1
+      else:
+        out := out + str.from_code(c)
+        i := i + 1
+  return out
+
+# Tuple helpers (encoded as "A\nB" to avoid new types)
+def make_tuple(a: str, b: int) -> str:
+  # We pack int as decimal string; consumer knows which is which.
+  return a + "\n@@@" + itoa(b)
+
+def tuple_first(t: str) -> str:
+  let sep = "\n@@@"
+  let n = str.len(t)
+  let m = str.len(sep)
+  let mut i = 0
+  let mut pos = -1
+  let mut done = false
+  while i+m <= n and not done:
+    if slice(t, i, i+m) == sep:
+      pos := i
+      done := true
+    else:
+      i := i + 1
+  if pos < 0:
+    return t
+  return slice(t, 0, pos)
+
+def tuple_second(t: str) -> int:
+  let sep = "\n@@@"
+  let n = str.len(t)
+  let m = str.len(sep)
+  let mut i = 0
+  let mut pos = -1
+  let mut done = false
+  while i+m <= n and not done:
+    if slice(t, i, i+m) == sep:
+      pos := i
+      done := true
+    else:
+      i := i + 1
+  if pos < 0:
+    return 0
+  let s = slice_from(t, pos + m)
+  return atoi(s)
+
+# itoa / atoi (tiny)
+def itoa(x: int) -> str:
+  if x == 0:
+    return "0"
+  let mut n = x
+  let mut neg = false
+  if n < 0:
+    neg := true
+    n := 0 - n
+  let mut rev = ""
+  while n > 0:
+    let d = n % 10
+    rev := rev + str.from_code(48 + d)
+    n := n / 10
+  let mut out = ""
+  let mut i = str.len(rev) - 1
+  while i >= 0:
+    out := out + str.from_code(str.at(rev, i))
+    if i == 0:
+      i := 0  # avoid negative
+      # manual break replacement:
+      i := -1
+    else:
+      i := i - 1
+  if neg:
+    out := "-" + out
+  return out
+
+def atoi(s: str) -> int:
+  let n = str.len(s)
+  let mut i = 0
+  let mut sign = 1
+  if n > 0 and str.at(s, 0) == 45:
+    sign := -1
+    i := 1
+  let mut v = 0
+  while i < n:
+    let c = str.at(s, i)
+    if c >= 48 and c <= 57:
+      v := v * 10 + (c - 48)
+    i := i + 1
+  return v * sign
