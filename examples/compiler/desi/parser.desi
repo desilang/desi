@@ -1,60 +1,271 @@
-# Minimal Stage-0 parser stub.
+# Stage-0 parser stub (self-hosting path)
 # Implements: parse_to_json(path: str) -> str
-# Produces a valid AST JSON with kind="File" and populated "imports" array.
+# Emits a valid AST JSON with kind="File", imports, and minimal FuncDecls.
 
 def parse_to_json(path: str) -> str:
   let src = fs.read_all(path)
   let imports_json = scan_imports(src)
-  return "{\"kind\":\"File\",\"pkg\":null,\"imports\":[" + imports_json + "],\"decls\":[]}"
+  let decls_json = scan_funcs(src)
+  return "{\"kind\":\"File\",\"pkg\":null,\"imports\":[" + imports_json + "],\"decls\":[" + decls_json + "]}"
 
-# scan_imports finds lines like:  import util.math
+# ---------- imports ----------
+
+# Finds lines like:  import util.math
 # Returns JSON list payload:
-# {"kind":"ImportDecl","path":"util.math"},{"kind":"ImportDecl","path":"x.y"}
+# {"kind":"ImportDecl","path":"util.math"},...
 def scan_imports(src: str) -> str:
   let n = str.len(src)
   let mut i = 0
   let mut out = ""
   let mut first = true
   while i < n:
-    let mut handled_line = false
-
-    if starts_with(src, i, "import "):
-      let mut j = i + 7  # len("import ")
-      let mut name = ""
-
-      # consume the import path until delimiter (space/tab/#/newline)
-      let mut stop = false
-      while j < n and not stop:
-        let c = str.at(src, j)
-        if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
-          stop := true
-        else:
-          name := name + str.from_code(c)
-          j := j + 1
-
-      if str.len(name) > 0:
-        if not first:
-          out := out + ","
-        out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
-        first := false
-
-      # advance i to start of next line (no break/continue)
-      let mut found_nl = false
-      i := j
-      while i < n and not found_nl:
-        let c2 = str.at(src, i)
-        if c2 == 10:
-          i := i + 1
-          found_nl := true
-        else:
-          i := i + 1
-      handled_line := true
-
-    if not handled_line:
+    let mut handled = false
+    if is_line_start(src, i):
+      let j0 = skip_hspace(src, i)
+      if starts_with(src, j0, "import "):
+        let mut j = j0 + 7  # len("import ")
+        let mut name = ""
+        let mut stop = false
+        while j < n and not stop:
+          let c = str.at(src, j)
+          if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
+            stop := true
+          else:
+            name := name + str.from_code(c)
+            j := j + 1
+        if str.len(name) > 0:
+          if not first:
+            out := out + ","
+          out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
+          first := false
+        i := advance_to_next_line(src, j)
+        handled := true
+    if not handled:
       i := i + 1
   return out
 
-# starts_with checks if src at offset pos begins with pat.
+# ---------- funcs (headers only) ----------
+
+# Recognizes:  def Name "(" params? ")" "->" Type ":"   (body ignored)
+# Emits JSON objects:
+# {"kind":"FuncDecl","name":"main","params":[...],"ret":"int","body":[]}
+def scan_funcs(src: str) -> str:
+  let n = str.len(src)
+  let mut i = 0
+  let mut out = ""
+  let mut first = true
+
+  while i < n:
+    let mut handled = false
+    if is_line_start(src, i):
+      let j0 = skip_hspace(src, i)
+      if starts_with(src, j0, "def "):
+        let mut j = j0 + 4  # after "def "
+        # name
+        let name, j1 = read_ident(src, j)
+        if str.len(name) > 0:
+          j := skip_hspace(src, j1)
+          # "("
+          if j < n and str.at(src, j) == 40:  # '('
+            j := j + 1
+            # params
+            let params_json, j2 = read_params(src, j)
+            j := j2
+            # ")"
+            if j < n and str.at(src, j) == 41:  # ')'
+              j := j + 1
+              j := skip_hspace(src, j)
+              # "->"
+              if j+1 < n and str.at(src, j) == 45 and str.at(src, j+1) == 62:  # '-' '>'
+                j := j + 2
+                j := skip_hspace(src, j)
+                # return type until ':'
+                let ret_ty, j3 = read_until(src, j, 58)  # ':'
+                j := j3
+                if j < n and str.at(src, j) == 58:
+                  j := j + 1
+                  # we found a header; emit JSON object
+                  let rtrim = trim_space(ret_ty)
+                  if not first:
+                    out := out + ","
+                  out := out + "{\"kind\":\"FuncDecl\",\"name\":\"" + name + "\",\"params\":[" + params_json + "],\"ret\":\"" + rtrim + "\",\"body\":[]}"
+                  first := false
+                  # advance to next line; ignore body
+                  i := advance_to_next_line(src, j)
+                  handled := true
+        # if any step failed, fall through and advance i by 1
+    if not handled:
+      i := i + 1
+  return out
+
+# params ::= (Ident ":" Type) ("," Ident ":" Type)*
+# Returns ("{\"kind\":\"Param\",\"name\":\"a\",\"type\":\"int\"},...", nextIndex)
+def read_params(src: str, pos: int) -> (str, int):
+  let n = str.len(src)
+  let mut j = pos
+  let mut out = ""
+  let mut first = true
+  let mut done = false
+
+  # allow empty params
+  j := skip_hspace(src, j)
+  if j < n and str.at(src, j) == 41:   # ')'
+    return "", j
+
+  while j < n and not done:
+    let nm, j1 = read_ident(src, j)
+    if str.len(nm) == 0:
+      done := true
+    else:
+      j := skip_hspace(src, j1)
+      if j < n and str.at(src, j) == 58:  # ':'
+        j := j + 1
+        j := skip_hspace(src, j)
+        let ty, j2 = read_until_multi(src, j, 44, 41)  # ',' or ')'
+        let ttrim = trim_space(ty)
+        if not first:
+          out := out + ","
+        out := out + "{\"kind\":\"Param\",\"name\":\"" + nm + "\",\"type\":\"" + ttrim + "\"}"
+        first := false
+        j := j2
+        # if comma, consume and continue
+        if j < n and str.at(src, j) == 44:  # ','
+          j := j + 1
+          j := skip_hspace(src, j)
+        else:
+          done := true
+      else:
+        done := true
+  return out, j
+
+# ---------- small helpers ----------
+
+def is_line_start(src: str, pos: int) -> bool:
+  if pos == 0:
+    return true
+  if pos > 0 and str.at(src, pos-1) == 10:
+    return true
+  return false
+
+def skip_hspace(src: str, pos: int) -> int:
+  let n = str.len(src)
+  let mut j = pos
+  let mut run = true
+  while j < n and run:
+    let c = str.at(src, j)
+    if c == 32 or c == 9:  # space or tab
+      j := j + 1
+    else:
+      run := false
+  return j
+
+def advance_to_next_line(src: str, pos: int) -> int:
+  let n = str.len(src)
+  let mut j = pos
+  let mut found = false
+  while j < n and not found:
+    let c = str.at(src, j)
+    if c == 10:
+      j := j + 1
+      found := true
+    else:
+      j := j + 1
+  return j
+
+# Reads identifier [A-Za-z_$][A-Za-z0-9_$]*
+def read_ident(src: str, pos: int) -> (str, int):
+  let n = str.len(src)
+  let mut j = pos
+  if j >= n:
+    return "", j
+  let c0 = str.at(src, j)
+  if not is_ident_start(c0):
+    return "", j
+  let mut s = ""
+  s := s + str.from_code(c0)
+  j := j + 1
+  let mut run = true
+  while j < n and run:
+    let c = str.at(src, j)
+    if is_ident_part(c):
+      s := s + str.from_code(c)
+      j := j + 1
+    else:
+      run := false
+  return s, j
+
+def is_ident_start(c: int) -> bool:
+  if c == 95 or c == 36: # '_' or '$'
+    return true
+  if (c >= 65 and c <= 90) or (c >= 97 and c <= 122):
+    return true
+  return false
+
+def is_ident_part(c: int) -> bool:
+  if is_ident_start(c):
+    return true
+  if c >= 48 and c <= 57: # digit
+    return true
+  return false
+
+# Read until a single delimiter codepoint (e.g., ':').
+def read_until(src: str, pos: int, delim: int) -> (str, int):
+  let n = str.len(src)
+  let mut j = pos
+  let mut s = ""
+  let mut done = false
+  while j < n and not done:
+    let c = str.at(src, j)
+    if c == delim:
+      done := true
+    else:
+      s := s + str.from_code(c)
+      j := j + 1
+  return s, j
+
+# Read until any of two delimiters (e.g., ',' or ')').
+def read_until_multi(src: str, pos: int, d1: int, d2: int) -> (str, int):
+  let n = str.len(src)
+  let mut j = pos
+  let mut s = ""
+  let mut done = false
+  while j < n and not done:
+    let c = str.at(src, j)
+    if c == d1 or c == d2:
+      done := true
+    else:
+      s := s + str.from_code(c)
+      j := j + 1
+  return s, j
+
+# Poor-man's trim for spaces/tabs.
+def trim_space(s: str) -> str:
+  let n = str.len(s)
+  let mut lo = 0
+  let mut hi = n
+  let mut cont = true
+  while lo < hi and cont:
+    let c = str.at(s, lo)
+    if c == 32 or c == 9:
+      lo := lo + 1
+    else:
+      cont := false
+  cont := true
+  while hi > lo and cont:
+    let c = str.at(s, hi - 1)
+    if c == 32 or c == 9:
+      hi := hi - 1
+    else:
+      cont := false
+  # substring(s[lo:hi])
+  let mut out = ""
+  let mut i = lo
+  while i < hi:
+    out := out + str.from_code(str.at(s, i))
+    i := i + 1
+  return out
+
+# Simple prefix match
 def starts_with(src: str, pos: int, pat: str) -> bool:
   let n = str.len(src)
   let m = str.len(pat)
