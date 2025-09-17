@@ -2,7 +2,6 @@ package lexbridge
 
 import (
 	"bufio"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
