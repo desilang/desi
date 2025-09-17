@@ -1,6 +1,5 @@
-# Minimal Stage-0 stub: return an empty AST JSON compatible with ast.UnmarshalFileJSON.
+# Minimal Stage-0 stub: return an empty AST JSON with the required discriminator.
 # Contract: parse_to_json(path: str) -> str
 
 def parse_to_json(path: str) -> str:
-  # TODO: replace with real parser that emits full AST JSON
-  return "{\"pkg\":null,\"imports\":[],\"decls\":[]}"
+  return "{\"kind\":\"File\",\"pkg\":null,\"imports\":[],\"decls\":[]}"
