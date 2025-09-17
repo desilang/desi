@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strings"
 
@@ -15,21 +16,27 @@ import (
 
 func cmdParse(args []string) int {
 	// Accept:
-	//   desic parse [--use-desi-lexer] [--keep-bridge-tmp] [--bridge-verbose] [--dump-go] [--dump-spans] [--dump-json] <file.desi>
+	//   desic parse [--use-desi-lexer] [--keep-bridge-tmp] [--bridge-verbose]
+	//                [--dump-go] [--dump-spans] [--dump-json]
+	//                [--read-json <path>]
+	//                <file.desi>
 	useDesi := false
 	keepTmp := false
 	verbose := false
 	dumpGo := false
 	dumpSpans := false
 	dumpJSON := false
+	readJSON := "" // optional path to JSON AST to read instead of parsing .desi
 	var file string
 
 	usage := func() int {
-		term.Eprintln("usage: desic parse [--use-desi-lexer] [--keep-bridge-tmp] [--bridge-verbose] [--dump-go] [--dump-spans] [--dump-json] <file.desi>")
+		term.Eprintln("usage: desic parse [--use-desi-lexer] [--keep-bridge-tmp] [--bridge-verbose] [--dump-go] [--dump-spans] [--dump-json] [--read-json <path>] <file.desi>")
 		return 2
 	}
 
-	for _, s := range args {
+	// simple argv parse (allow --read-json=path or split)
+	for i := 0; i < len(args); i++ {
+		s := args[i]
 		switch {
 		case s == "--use-desi-lexer":
 			useDesi = true
@@ -43,12 +50,36 @@ func cmdParse(args []string) int {
 			dumpSpans = true
 		case s == "--dump-json":
 			dumpJSON = true
+		case strings.HasPrefix(s, "--read-json="):
+			readJSON = strings.TrimPrefix(s, "--read-json=")
+		case s == "--read-json":
+			if i+1 >= len(args) {
+				return usage()
+			}
+			readJSON = args[i+1]
+			i++
 		case !strings.HasPrefix(s, "-") && file == "":
 			file = s
 		case strings.HasPrefix(s, "-"):
 			return usage()
 		}
 	}
+
+	// If --read-json is used, we bypass parsing and reconstruct the AST.
+	if strings.TrimSpace(readJSON) != "" {
+		data, err := os.ReadFile(readJSON)
+		if err != nil {
+			term.Eprintf("error: read %s: %v\n", readJSON, err)
+			return 1
+		}
+		f, err := ast.UnmarshalFileJSON(data)
+		if err != nil {
+			term.Eprintf("error: %v\n", err)
+			return 1
+		}
+		return outputParsed(f, dumpGo, dumpSpans, dumpJSON)
+	}
+
 	if file == "" {
 		return usage()
 	}
@@ -66,6 +97,10 @@ func cmdParse(args []string) int {
 		return 1
 	}
 
+	return outputParsed(f, dumpGo, dumpSpans, dumpJSON)
+}
+
+func outputParsed(f *ast.File, dumpGo, dumpSpans, dumpJSON bool) int {
 	if dumpGo {
 		fmt.Printf("%#v\n", f)
 		return 0
@@ -83,7 +118,6 @@ func cmdParse(args []string) int {
 		term.Printf("%s\n", js)
 		return 0
 	}
-
 	out := ast.DumpFile(f)
 	term.Printf("%s", out)
 	return 0
