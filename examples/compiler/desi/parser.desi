@@ -1,23 +1,20 @@
 # Minimal Stage-0 parser stub.
 # Implements: parse_to_json(path: str) -> str
 # Produces a valid AST JSON with kind="File" and populated "imports" array.
-# It line-scans source text; simple but good enough to exercise the bridge.
 
 def parse_to_json(path: str) -> str:
   let src = fs.read_all(path)
   let imports_json = scan_imports(src)
-  # Build the File JSON. We only populate "imports" for now.
   return "{\"kind\":\"File\",\"pkg\":null,\"imports\":[" + imports_json + "],\"decls\":[]}"
 
 # scan_imports finds lines like:  import util.math
-# and returns a JSON list payload like:
+# Returns JSON list payload:
 # {"kind":"ImportDecl","path":"util.math"},{"kind":"ImportDecl","path":"x.y"}
 def scan_imports(src: str) -> str:
   let n = str.len(src)
   let mut i = 0
   let mut out = ""
   let mut first = true
-
   while i < n:
     if starts_with(src, i, "import "):
       let mut j = i + 7  # len("import ")
@@ -25,47 +22,36 @@ def scan_imports(src: str) -> str:
       while j < n:
         let c = str.at(src, j)
         # stop at newline, space, tab, or comment '#'
-        if c == 10 or c == 13 or c == 35 or c == 32 or c == 9 {
+        if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
           break
-        }
         name = name + str.from_code(c)
         j = j + 1
-      }
-      if str.len(name) > 0 {
-        if not first {
+      if str.len(name) > 0:
+        if not first:
           out = out + ","
-        }
         out = out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
         first = false
-      }
       # advance to end-of-line
       i = j
-      while i < n {
+      while i < n:
         let c2 = str.at(src, i)
-        if c2 == 10 {  # '\n'
+        if c2 == 10:
           i = i + 1
           break
-        }
         i = i + 1
-      }
       continue
-    }
     i = i + 1
-  }
   return out
 
 # starts_with checks if src at offset pos begins with pat.
 def starts_with(src: str, pos: int, pat: str) -> bool:
   let n = str.len(src)
   let m = str.len(pat)
-  if pos + m > n {
+  if pos + m > n:
     return false
-  }
   let mut k = 0
-  while k < m {
-    if str.at(src, pos + k) != str.at(pat, k) {
+  while k < m:
+    if str.at(src, pos + k) != str.at(pat, k):
       return false
-    }
     k = k + 1
-  }
   return true
