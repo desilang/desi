@@ -20,12 +20,14 @@ func cmdParse(args []string) int {
   //   desic parse
   //     [--use-desi-lexer]
   //     [--use-desi-parser] [--parsebridge-bin <path>]
+  //     [--use-desi-parser-auto]
   //     [--keep-bridge-tmp] [--bridge-verbose]
   //     [--dump-go] [--dump-spans] [--dump-json]
   //     [--read-json <path>]
   //     <file.desi>
   useDesiLexer := false
   useDesiParser := false
+  useDesiParserAuto := false
   parsebridgeBin := ""
   keepTmp := false
   verbose := false
@@ -36,7 +38,7 @@ func cmdParse(args []string) int {
   var file string
 
   usage := func() int {
-    term.Eprintln("usage: desic parse [--use-desi-lexer] [--use-desi-parser] [--parsebridge-bin <path>] [--keep-bridge-tmp] [--bridge-verbose] [--dump-go] [--dump-spans] [--dump-json] [--read-json <path>] <file.desi>")
+    term.Eprintln("usage: desic parse [--use-desi-lexer] [--use-desi-parser] [--use-desi-parser-auto] [--parsebridge-bin <path>] [--keep-bridge-tmp] [--bridge-verbose] [--dump-go] [--dump-spans] [--dump-json] [--read-json <path>] <file.desi>")
     return 2
   }
 
@@ -48,6 +50,8 @@ func cmdParse(args []string) int {
       useDesiLexer = true
     case s == "--use-desi-parser":
       useDesiParser = true
+    case s == "--use-desi-parser-auto":
+      useDesiParserAuto = true
     case strings.HasPrefix(s, "--parsebridge-bin="):
       parsebridgeBin = strings.TrimPrefix(s, "--parsebridge-bin=")
     case s == "--parsebridge-bin":
@@ -100,26 +104,61 @@ func cmdParse(args []string) int {
     return usage()
   }
 
-  // If --use-desi-parser, invoke external bridge that emits AST JSON.
-  if useDesiParser {
-    js, err := parsebridge.Run(file, parsebridgeBin, verbose)
-    if err != nil {
-      // Helpful message when not installed
-      if _, ok := err.(parsebridge.NotInstalledError); ok {
-        term.Eprintln("error: Desi parser bridge not installed.")
-        term.Eprintln("hint: put a 'desi-parsebridge' binary on your PATH or pass --parsebridge-bin <path>")
-        term.Eprintln("      the tool should print AST JSON compatible with ast.MarshalFileJSON")
+  // Desi parser modes (external and/or auto-build).
+  if useDesiParser || useDesiParserAuto {
+    // Try external bridge first if requested.
+    if useDesiParser {
+      js, err := parsebridge.Run(file, parsebridgeBin, verbose)
+      if err == nil {
+        f, uerr := ast.UnmarshalFileJSON(js)
+        if uerr != nil {
+          term.Eprintf("error: parsebridge produced invalid AST JSON: %v\n", uerr)
+          return 1
+        }
+        return outputParsed(f, dumpGo, dumpSpans, dumpJSON)
+      }
+      // If it's not installed and auto mode is allowed, fall through.
+      if _, ok := err.(parsebridge.NotInstalledError); !ok || !useDesiParserAuto {
+        if _, isNI := err.(parsebridge.NotInstalledError); isNI {
+          term.Eprintln("error: Desi parser bridge not installed.")
+          term.Eprintln("hint: put a 'desi-parsebridge' binary on your PATH or pass --parsebridge-bin <path>")
+          term.Eprintln("      the tool should print AST JSON compatible with ast.MarshalFileJSON")
+        } else {
+          term.Eprintf("error: %v\n", err)
+        }
         return 1
       }
-      term.Eprintf("error: %v\n", err)
-      return 1
+      // else: NotInstalledError and auto is enabled → continue to auto build.
     }
-    f, uerr := ast.UnmarshalFileJSON(js)
-    if uerr != nil {
-      term.Eprintf("error: parsebridge produced invalid AST JSON: %v\n", uerr)
-      return 1
+
+    // Auto-build bridge path.
+    if useDesiParserAuto {
+      js, err := parsebridge.BuildAndRunJSON(file, keepTmp, verbose)
+      if err != nil {
+        switch e := err.(type) {
+        case parsebridge.ParserSourcesMissingError:
+          term.Eprintln("error: " + e.Error())
+          term.Eprintln("hint: add a Desi parser at examples/compiler/desi/parser.desi implementing:")
+          term.Eprintln("      def parse_to_json(path: str) -> str")
+          return 1
+        default:
+          term.Eprintf("error: %v\n", err)
+          return 1
+        }
+      }
+      f, uerr := ast.UnmarshalFileJSON(js)
+      if uerr != nil {
+        term.Eprintf("error: parsebridge produced invalid AST JSON: %v\n", uerr)
+        return 1
+      }
+      return outputParsed(f, dumpGo, dumpSpans, dumpJSON)
     }
-    return outputParsed(f, dumpGo, dumpSpans, dumpJSON)
+
+    // Shouldn’t reach here, but just in case.
+    term.Eprintln("error: Desi parser bridge not installed.")
+    term.Eprintln("hint: put a 'desi-parsebridge' binary on your PATH or pass --parsebridge-bin <path>")
+    term.Eprintln("      or use --use-desi-parser-auto to build from examples/compiler/desi/parser.desi")
+    return 1
   }
 
   // Otherwise: Go-lexer or Desi-lexer (Stage-1) paths.
