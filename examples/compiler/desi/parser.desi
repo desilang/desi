@@ -1,6 +1,7 @@
 # Stage-0 parser stub (self-hosting path)
 # Implements: parse_to_json(path: str) -> str
 # Emits a valid AST JSON with kind="File", imports, and minimal FuncDecls.
+# Note: No multi-return values are used; callers compute index advances.
 
 def parse_to_json(path: str) -> str:
   let src = fs.read_all(path)
@@ -23,21 +24,14 @@ def scan_imports(src: str) -> str:
     if is_line_start(src, i):
       let j0 = skip_hspace(src, i)
       if starts_with(src, j0, "import "):
-        let mut j = j0 + 7  # len("import ")
-        let mut name = ""
-        let mut stop = false
-        while j < n and not stop:
-          let c = str.at(src, j)
-          if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
-            stop := true
-          else:
-            name := name + str.from_code(c)
-            j := j + 1
+        let mut j = j0 + 7  # after "import "
+        let name = read_until_delims(src, j, 10, 13, 35, 32, 9)  # until NL, CR, '#', space, tab
         if str.len(name) > 0:
           if not first:
             out := out + ","
           out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
           first := false
+        j := j + str.len(name)
         i := advance_to_next_line(src, j)
         handled := true
     if not handled:
@@ -62,15 +56,46 @@ def scan_funcs(src: str) -> str:
       if starts_with(src, j0, "def "):
         let mut j = j0 + 4  # after "def "
         # name
-        let name, j1 = read_ident(src, j)
+        let name = read_ident(src, j)
         if str.len(name) > 0:
-          j := skip_hspace(src, j1)
+          j := j + str.len(name)
+          j := skip_hspace(src, j)
           # "("
           if j < n and str.at(src, j) == 40:  # '('
             j := j + 1
+            j := skip_hspace(src, j)
             # params
-            let params_json, j2 = read_params(src, j)
-            j := j2
+            let mut params_json = ""
+            let mut params_first = true
+            if not (j < n and str.at(src, j) == 41):  # not ')'
+              let mut params_done = false
+              while j < n and not params_done:
+                # name
+                let pn = read_ident(src, j)
+                if str.len(pn) == 0:
+                  params_done := true
+                else:
+                  j := j + str.len(pn)
+                  j := skip_hspace(src, j)
+                  if j < n and str.at(src, j) == 58:  # ':'
+                    j := j + 1
+                    j := skip_hspace(src, j)
+                    # type until ',' or ')'
+                    let pty = read_until_either(src, j, 44, 41)  # ',' or ')'
+                    j := j + str.len(pty)
+                    let pty_trim = trim_space(pty)
+                    if not params_first:
+                      params_json := params_json + ","
+                    params_json := params_json + "{\"kind\":\"Param\",\"name\":\"" + pn + "\",\"type\":\"" + pty_trim + "\"}"
+                    params_first := false
+                    # if comma, consume and continue
+                    if j < n and str.at(src, j) == 44:
+                      j := j + 1
+                      j := skip_hspace(src, j)
+                    else:
+                      params_done := true
+                  else:
+                    params_done := true
             # ")"
             if j < n and str.at(src, j) == 41:  # ')'
               j := j + 1
@@ -80,12 +105,12 @@ def scan_funcs(src: str) -> str:
                 j := j + 2
                 j := skip_hspace(src, j)
                 # return type until ':'
-                let ret_ty, j3 = read_until(src, j, 58)  # ':'
-                j := j3
+                let ret_ty = read_until_delim(src, j, 58)  # ':'
+                let rtrim = trim_space(ret_ty)
+                j := j + str.len(ret_ty)
                 if j < n and str.at(src, j) == 58:
                   j := j + 1
-                  # we found a header; emit JSON object
-                  let rtrim = trim_space(ret_ty)
+                  # found a header; emit JSON object
                   if not first:
                     out := out + ","
                   out := out + "{\"kind\":\"FuncDecl\",\"name\":\"" + name + "\",\"params\":[" + params_json + "],\"ret\":\"" + rtrim + "\",\"body\":[]}"
@@ -93,50 +118,9 @@ def scan_funcs(src: str) -> str:
                   # advance to next line; ignore body
                   i := advance_to_next_line(src, j)
                   handled := true
-        # if any step failed, fall through and advance i by 1
     if not handled:
       i := i + 1
   return out
-
-# params ::= (Ident ":" Type) ("," Ident ":" Type)*
-# Returns ("{\"kind\":\"Param\",\"name\":\"a\",\"type\":\"int\"},...", nextIndex)
-def read_params(src: str, pos: int) -> (str, int):
-  let n = str.len(src)
-  let mut j = pos
-  let mut out = ""
-  let mut first = true
-  let mut done = false
-
-  # allow empty params
-  j := skip_hspace(src, j)
-  if j < n and str.at(src, j) == 41:   # ')'
-    return "", j
-
-  while j < n and not done:
-    let nm, j1 = read_ident(src, j)
-    if str.len(nm) == 0:
-      done := true
-    else:
-      j := skip_hspace(src, j1)
-      if j < n and str.at(src, j) == 58:  # ':'
-        j := j + 1
-        j := skip_hspace(src, j)
-        let ty, j2 = read_until_multi(src, j, 44, 41)  # ',' or ')'
-        let ttrim = trim_space(ty)
-        if not first:
-          out := out + ","
-        out := out + "{\"kind\":\"Param\",\"name\":\"" + nm + "\",\"type\":\"" + ttrim + "\"}"
-        first := false
-        j := j2
-        # if comma, consume and continue
-        if j < n and str.at(src, j) == 44:  # ','
-          j := j + 1
-          j := skip_hspace(src, j)
-        else:
-          done := true
-      else:
-        done := true
-  return out, j
 
 # ---------- small helpers ----------
 
@@ -172,15 +156,15 @@ def advance_to_next_line(src: str, pos: int) -> int:
       j := j + 1
   return j
 
-# Reads identifier [A-Za-z_$][A-Za-z0-9_$]*
-def read_ident(src: str, pos: int) -> (str, int):
+# Reads identifier [A-Za-z_$][A-Za-z0-9_$]*, returns the text.
+def read_ident(src: str, pos: int) -> str:
   let n = str.len(src)
   let mut j = pos
   if j >= n:
-    return "", j
+    return ""
   let c0 = str.at(src, j)
   if not is_ident_start(c0):
-    return "", j
+    return ""
   let mut s = ""
   s := s + str.from_code(c0)
   j := j + 1
@@ -192,7 +176,7 @@ def read_ident(src: str, pos: int) -> (str, int):
       j := j + 1
     else:
       run := false
-  return s, j
+  return s
 
 def is_ident_start(c: int) -> bool:
   if c == 95 or c == 36: # '_' or '$'
@@ -208,8 +192,8 @@ def is_ident_part(c: int) -> bool:
     return true
   return false
 
-# Read until a single delimiter codepoint (e.g., ':').
-def read_until(src: str, pos: int, delim: int) -> (str, int):
+# Read until a single delimiter codepoint (e.g., ':'). Returns the text (no delim).
+def read_until_delim(src: str, pos: int, delim: int) -> str:
   let n = str.len(src)
   let mut j = pos
   let mut s = ""
@@ -221,10 +205,10 @@ def read_until(src: str, pos: int, delim: int) -> (str, int):
     else:
       s := s + str.from_code(c)
       j := j + 1
-  return s, j
+  return s
 
-# Read until any of two delimiters (e.g., ',' or ')').
-def read_until_multi(src: str, pos: int, d1: int, d2: int) -> (str, int):
+# Read until any of two delimiters (e.g., ',' or ')'). Returns the text (no delim).
+def read_until_either(src: str, pos: int, d1: int, d2: int) -> str:
   let n = str.len(src)
   let mut j = pos
   let mut s = ""
@@ -236,7 +220,22 @@ def read_until_multi(src: str, pos: int, d1: int, d2: int) -> (str, int):
     else:
       s := s + str.from_code(c)
       j := j + 1
-  return s, j
+  return s
+
+# Read until any of up to five delimiters (helper for imports).
+def read_until_delims(src: str, pos: int, d1: int, d2: int, d3: int, d4: int, d5: int) -> str:
+  let n = str.len(src)
+  let mut j = pos
+  let mut s = ""
+  let mut done = false
+  while j < n and not done:
+    let c = str.at(src, j)
+    if c == d1 or c == d2 or c == d3 or c == d4 or c == d5:
+      done := true
+    else:
+      s := s + str.from_code(c)
+      j := j + 1
+  return s
 
 # Poor-man's trim for spaces/tabs.
 def trim_space(s: str) -> str:
@@ -257,7 +256,6 @@ def trim_space(s: str) -> str:
       hi := hi - 1
     else:
       cont := false
-  # substring(s[lo:hi])
   let mut out = ""
   let mut i = lo
   while i < hi:
