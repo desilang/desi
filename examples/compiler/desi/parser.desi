@@ -16,31 +16,42 @@ def scan_imports(src: str) -> str:
   let mut out = ""
   let mut first = true
   while i < n:
+    let mut handled_line = false
+
     if starts_with(src, i, "import "):
       let mut j = i + 7  # len("import ")
       let mut name = ""
-      while j < n:
+
+      # consume the import path until delimiter (space/tab/#/newline)
+      let mut stop = false
+      while j < n and not stop:
         let c = str.at(src, j)
-        # stop at newline, space, tab, or comment '#'
         if c == 10 or c == 13 or c == 35 or c == 32 or c == 9:
-          break
-        name := name + str.from_code(c)
-        j := j + 1
+          stop := true
+        else:
+          name := name + str.from_code(c)
+          j := j + 1
+
       if str.len(name) > 0:
         if not first:
           out := out + ","
         out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
         first := false
-      # advance to end-of-line
+
+      # advance i to start of next line (no break/continue)
+      let mut found_nl = false
       i := j
-      while i < n:
+      while i < n and not found_nl:
         let c2 = str.at(src, i)
-        if c2 == 10:  # '\n'
+        if c2 == 10:
           i := i + 1
-          break
-        i := i + 1
-      continue
-    i := i + 1
+          found_nl := true
+        else:
+          i := i + 1
+      handled_line := true
+
+    if not handled_line:
+      i := i + 1
   return out
 
 # starts_with checks if src at offset pos begins with pat.
@@ -50,8 +61,10 @@ def starts_with(src: str, pos: int, pat: str) -> bool:
   if pos + m > n:
     return false
   let mut k = 0
-  while k < m:
+  let mut ok = true
+  while k < m and ok:
     if str.at(src, pos + k) != str.at(pat, k):
-      return false
-    k := k + 1
-  return true
+      ok := false
+    else:
+      k := k + 1
+  return ok
