@@ -56,6 +56,8 @@ func Run(path string, bin string, verbose bool) ([]byte, error) {
 	}
 
 	data := out.Bytes()
+	// Same sanitizer as auto-build path: grab the first top-level JSON object.
+	data = sanitizeBridgeOutput(data)
 	if len(bytes.TrimSpace(data)) == 0 {
 		return nil, errors.New("parsebridge produced empty output")
 	}

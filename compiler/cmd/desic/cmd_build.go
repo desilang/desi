@@ -30,11 +30,14 @@ type buildArgs struct {
 	out  string // executable name (no dir); defaults to entry basename
 	file string // entry .desi file
 
-	// diagnostics
-	werr          bool // --Werror treats warnings as errors
-	useDesi       bool // --use-desi-lexer: route through lexbridge
-	verbose       bool // --verbose: pass to lexbridge
-	keepBridgeTmp bool // --keep-bridge-tmp: retain gen/tmp bridge artifacts
+	// diagnostics / front-end selection
+	werr              bool   // --Werror treats warnings as errors
+	useDesiLexer      bool   // --use-desi-lexer: route through lexbridge
+	useDesiParser     bool   // --use-desi-parser: use external desi-parsebridge
+	useDesiParserAuto bool   // --use-desi-parser-auto: auto-build-and-cache bridge
+	parsebridgeBin    string // --parsebridge-bin <path>
+	verbose           bool   // --verbose or --bridge-verbose: bridge logging
+	keepBridgeTmp     bool   // --keep-bridge-tmp: retain gen/tmp bridge artifacts
 }
 
 func parseBuildArgs(argv []string) (buildArgs, error) {
@@ -118,16 +121,35 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
 			i += 2
 			continue
 
-		// diagnostics / behavior
+		// diagnostics / behavior (shared with bridges)
 		case s == "--Werror" || s == "--werror":
 			a.werr = true
 			i++
 			continue
 		case s == "--use-desi-lexer":
-			a.useDesi = true
+			a.useDesiLexer = true
 			i++
 			continue
-		case s == "--verbose":
+		case s == "--use-desi-parser":
+			a.useDesiParser = true
+			i++
+			continue
+		case s == "--use-desi-parser-auto":
+			a.useDesiParserAuto = true
+			i++
+			continue
+		case strings.HasPrefix(s, "--parsebridge-bin="):
+			a.parsebridgeBin = s[len("--parsebridge-bin="):]
+			i++
+			continue
+		case s == "--parsebridge-bin":
+			if i+1 >= len(argv) {
+				return a, flag.ErrHelp
+			}
+			a.parsebridgeBin = argv[i+1]
+			i += 2
+			continue
+		case s == "--verbose" || s == "--bridge-verbose":
 			a.verbose = true
 			i++
 			continue
@@ -165,10 +187,13 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
 
 func usageBuild() {
 	term.Eprintln("usage: desic build [flags] <entry.desi>")
-	term.Eprintln("\nGeneral:")
+	term.Eprintln("\nFront-end selection:")
 	term.Eprintln("  --use-desi-lexer         use the self-hosted Desi lexer via bridge")
+	term.Eprintln("  --use-desi-parser        parse via external 'desi-parsebridge' binary")
+	term.Eprintln("  --use-desi-parser-auto   auto-build & cache parser bridge from examples/compiler/desi/parser.desi")
+	term.Eprintln("  --parsebridge-bin=<path> path to 'desi-parsebridge' (with --use-desi-parser)")
 	term.Eprintln("  --keep-bridge-tmp        keep gen/tmp bridge artifacts (debugging)")
-	term.Eprintln("  --verbose                verbose bridge logging")
+	term.Eprintln("  --verbose                verbose bridge logging (alias: --bridge-verbose)")
 	term.Eprintln("  --Werror                 treat warnings as errors")
 	term.Eprintln("\nC compile/link (enabled by default):")
 	term.Eprintln("  --no-cc                  only emit C (skip compiling)")
@@ -185,30 +210,33 @@ func cmdBuild(args []string) int {
 		return 2
 	}
 
-	// Parse + import resolution using selected lexer (Go vs Desi bridge)
-	merged, perr := build.ResolveAndParseMaybeDesi(a.file, a.useDesi, a.keepBridgeTmp, a.verbose)
+	// Choose front-end:
+	// Priority: parser bridge (external/auto) > lexbridge > built-in Go lexer.
+	var merged *ast.File
+	var perr []error
+
+	switch {
+	case a.useDesiParser:
+		merged, perr = build.ResolveAndParseWithParserBridge(
+			a.file, true /*external*/, a.parsebridgeBin, a.keepBridgeTmp, a.verbose,
+		)
+	case a.useDesiParserAuto:
+		merged, perr = build.ResolveAndParseWithParserBridge(
+			a.file, false /*auto*/, "" /*bin*/, a.keepBridgeTmp, a.verbose,
+		)
+	default:
+		// Go-lexer path or Desi-lexer (Stage-1) bridge
+		merged, perr = build.ResolveAndParseMaybeDesi(a.file, a.useDesiLexer, a.keepBridgeTmp, a.verbose)
+	}
+
 	if len(perr) > 0 {
 		for _, e := range perr {
-			// Pretty lexbridge errors if present; otherwise print raw or typed.
+			// Pretty-print lexbridge tokenization errors when applicable.
 			if pretty := lexbridge.RenderLexbridgeErrorPretty(e, guessErrFile(e.Error(), a.file), nil); pretty != "" {
 				term.Eprintf("%s", pretty)
 				continue
 			}
-			// If a typed error (from future phases), render header with code and help.
-			type codedWithKey interface {
-				Code() string
-				Title() string
-				Domain() string
-				Key() string
-			}
-			if te, ok := e.(codedWithKey); ok && strings.TrimSpace(te.Code()) != "" {
-				term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
-				if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
-					term.Eprintf("help: %s\n", h)
-				}
-			} else {
-				term.Eprintf("error: %v\n", e)
-			}
+			term.Eprintf("error: %v\n", e)
 		}
 		term.Eprintf("summary: %d error(s), %d warning(s)\n", len(perr), 0)
 		return 1
