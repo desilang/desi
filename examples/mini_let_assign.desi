@@ -1,0 +1,4 @@
+def main() -> int:
+  let a: int = 1
+  a := add(a, 2)
+  return 0

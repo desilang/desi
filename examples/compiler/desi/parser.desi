@@ -207,14 +207,16 @@ def json_quote(s: str) -> str:
 
 # ---------- statement parsers ----------
 
-def parse_assign_line_from_pos(s: str, apos: int) -> str:  # ":="
+def parse_assign_line_from_pos(s: str, apos: int) -> str:
   let n = str.len(s)
-  if not (apos + 1 < n and str.at(s, apos + 1) == 61):
+  let j0 = apos + 1
+  let j = skip_hspace_str(s, j0)
+  if not (j < n and str.at(s, j) == 61):   # '='
     return ""
   let lhs = trim_space(slice(s, 0, apos))
   if not is_ident(lhs):
     return ""
-  let rhs = strip_comment_depth0(trim_space(slice_from(s, apos + 2)))
+  let rhs = strip_comment_depth0(trim_space(slice_from(s, j + 1)))
   let ej = parse_expr_json(rhs)
   if str.len(ej) == 0:
     return ""
@@ -306,6 +308,7 @@ def parse_let_line(tline: str) -> str:
   i := skip_hspace_str(s, i)
 
   # expect '='
+  i := skip_hspace_str(s, i)
   if not (i < str.len(s) and str.at(s, i) == 61):
     return ""
   i := i + 1
@@ -728,18 +731,21 @@ def find_plus_depth0(s: str) -> int:
 # find specific char at depth-0
 def find_char_depth0(s: str, target: int) -> int:
   let n = str.len(s)
-  let mut i = 0
   let mut depth = 0
+  let mut i = 0
   while i < n:
     let c = str.at(s, i)
-    if c == 40:
+
+    # check at current depth BEFORE changing it
+    if depth == 0 and c == target:
+      return i
+
+    # now update depth
+    if c == 40:                 # '('
       depth := depth + 1
-    else:
-      if c == 41 and depth > 0:
-        depth := depth - 1
-      else:
-        if c == target and depth == 0:
-          return i
+    elif c == 41 and depth > 0: # ')'
+      depth := depth - 1
+
     i := i + 1
   return -1
 
@@ -798,14 +804,14 @@ def strip_comment_depth0(s: str) -> str:
     i := i + 1
   return s
 
-# find ':=' at depth-0 (returns index of ':')
+# find ':=' at depth-0 (returns index of ':'); allows spaces between ':' and '='
 def find_assign_depth0(s: str) -> int:
   let n = str.len(s)
   let mut i = 0
   let mut depth = 0
   let mut pos = -1
   let mut done = false
-  while i + 1 < n and not done:
+  while i < n and not done:
     let c = str.at(s, i)
     if c == 40:
       depth := depth + 1
@@ -813,9 +819,13 @@ def find_assign_depth0(s: str) -> int:
       if c == 41 and depth > 0:
         depth := depth - 1
       else:
-        if c == 58 and str.at(s, i + 1) == 61 and depth == 0:
-          pos := i
-          done := true
+        if c == 58 and depth == 0:          # ':'
+          # look ahead for '=' while skipping spaces/tabs
+          let mut j = i + 1
+          j := skip_hspace_str(s, j)
+          if j < n and str.at(s, j) == 61:  # '='
+            pos := i
+            done := true
     i := i + 1
   return pos
 
