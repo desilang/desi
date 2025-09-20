@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -38,10 +39,11 @@ func Run(path string, bin string, verbose bool) ([]byte, error) {
 
 	cmd := exec.Command(bin, path)
 	var out, errb bytes.Buffer
-	cmd.Stdout = &out
 	if verbose {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &out) // tee for debugging
 		cmd.Stderr = os.Stderr
 	} else {
+		cmd.Stdout = &out
 		cmd.Stderr = &errb
 	}
 
@@ -55,11 +57,13 @@ func Run(path string, bin string, verbose bool) ([]byte, error) {
 		return nil, fmt.Errorf("parsebridge failed: %w", err)
 	}
 
-	data := out.Bytes()
-	// Same sanitizer as auto-build path: grab the first top-level JSON object.
-	data = sanitizeBridgeOutput(data)
-	if len(bytes.TrimSpace(data)) == 0 {
+	raw := out.Bytes()
+	if len(bytes.TrimSpace(raw)) == 0 {
 		return nil, errors.New("parsebridge produced empty output")
 	}
-	return data, nil
+	clean, err := sanitizeJSONOutput(raw)
+	if err != nil {
+		return nil, err
+	}
+	return clean, nil
 }

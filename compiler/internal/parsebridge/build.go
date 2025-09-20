@@ -301,10 +301,11 @@ func runBin(binPath string, verbose bool) ([]byte, error) {
 	absBin, _ := filepath.Abs(binPath)
 	cmd := exec.Command(absBin)
 	var out bytes.Buffer
-	cmd.Stdout = &out
 	if verbose {
+		cmd.Stdout = io.MultiWriter(os.Stdout, &out) // tee JSON for debugging
 		cmd.Stderr = os.Stderr
 	} else {
+		cmd.Stdout = &out
 		cmd.Stderr = io.Discard
 	}
 	if err := cmd.Run(); err != nil {
@@ -313,12 +314,12 @@ func runBin(binPath string, verbose bool) ([]byte, error) {
 		}
 		return nil, fmt.Errorf("run parsebridge failed; re-run with --bridge-verbose for details")
 	}
-	// Sanitize: extract the first complete top-level JSON object from stdout.
-	cleaned := sanitizeBridgeOutput(out.Bytes())
-	if len(bytes.TrimSpace(cleaned)) == 0 {
-		return nil, fmt.Errorf("parsebridge produced empty/unsanitized output")
+	raw := out.Bytes()
+	clean, err := sanitizeJSONOutput(raw)
+	if err != nil {
+		return nil, err
 	}
-	return cleaned, nil
+	return clean, nil
 }
 
 func sha256Sum(parts ...string) string {
