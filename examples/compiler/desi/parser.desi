@@ -84,7 +84,7 @@ def scan_funcs(src: str) -> str:
                     let pty_trim = trim_space(pty)
                     if not params_first:
                       params_json := params_json + ","
-                    params_json := params_json + "{\"kind\":\"Param\",\"name\":\"" + pn + "\",\"type\":\"" + pty_trim + "\"}"
+                    params_json := params_json + "{\"kind\":\"Param\",\"name\":" + json_quote(pn) + ",\"type\":" + json_quote(pty_trim) + "}"
                     params_first := false
                     if j < n and str.at(src, j) == 44:
                       j := j + 1
