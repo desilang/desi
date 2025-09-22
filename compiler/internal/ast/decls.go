@@ -30,3 +30,20 @@ type TypeDecl struct {
 
 func (TypeDecl) node() {}
 func (TypeDecl) decl() {}
+
+/*** NEW: StructDecl (M7 P1) ***/
+
+type StructDecl struct {
+	Name   string
+	Fields []Field
+	Span   Span // whole struct span
+}
+
+func (StructDecl) node() {}
+func (StructDecl) decl() {}
+
+type Field struct {
+	Name string
+	Type string
+	Span Span // 'name: type' span
+}

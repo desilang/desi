@@ -57,10 +57,24 @@ type jTypeDecl struct {
 	Span       jSpan  `json:"span"`
 }
 
+type jStructDecl struct {
+	Kind   string   `json:"kind"` // "StructDecl"
+	Name   string   `json:"name"`
+	Fields []jField `json:"fields"`
+	Span   jSpan    `json:"span"`
+}
+
 type jParam struct {
 	Kind string `json:"kind"` // "Param"
 	Name string `json:"name"`
 	Type string `json:"type,omitempty"`
+	Span jSpan  `json:"span"`
+}
+
+type jField struct {
+	Kind string `json:"kind"` // "Field"
+	Name string `json:"name"`
+	Type string `json:"type"`
 	Span jSpan  `json:"span"`
 }
 
@@ -221,6 +235,8 @@ func toJFile(f *File) jFile {
 			d = append(d, toJFunc(v))
 		case *TypeDecl:
 			d = append(d, toJType(v))
+		case *StructDecl:
+			d = append(d, toJStruct(v))
 		default:
 			// future decl kinds
 		}
@@ -258,6 +274,24 @@ func toJType(td *TypeDecl) jTypeDecl {
 		Name:       td.Name,
 		Underlying: td.Underlying,
 		Span:       spanJS(td.Span),
+	}
+}
+
+func toJStruct(sd *StructDecl) jStructDecl {
+	fs := make([]jField, 0, len(sd.Fields))
+	for _, f := range sd.Fields {
+		fs = append(fs, jField{
+			Kind: "Field",
+			Name: f.Name,
+			Type: f.Type,
+			Span: spanJS(f.Span),
+		})
+	}
+	return jStructDecl{
+		Kind:   "StructDecl",
+		Name:   sd.Name,
+		Fields: fs,
+		Span:   spanJS(sd.Span),
 	}
 }
 

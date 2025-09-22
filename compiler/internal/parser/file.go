@@ -57,6 +57,15 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			}
 			f.Decls = append(f.Decls, td)
 
+		case p.at(lexer.TokStruct):
+			structTok := p.tok
+			p.next() // consume 'struct'
+			sd, err := p.parseStructDeclAt(structTok)
+			if err != nil {
+				return nil, err
+			}
+			f.Decls = append(f.Decls, sd)
+
 		default:
 			// Surface lexer errors immediately at top-level
 			if p.at(lexer.TokErr) {

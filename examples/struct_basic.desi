@@ -1,0 +1,7 @@
+struct User:
+  id: int
+  name: str
+
+def main() -> int:
+  # no codegen yet for struct usage; just a stub to keep examples compiling
+  return 0
