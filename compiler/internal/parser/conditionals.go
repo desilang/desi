@@ -1,97 +1,157 @@
 package parser
 
 import (
-	"github.com/desilang/desi/compiler/internal/ast"
-	"github.com/desilang/desi/compiler/internal/lexer"
+  "github.com/desilang/desi/compiler/internal/ast"
+  "github.com/desilang/desi/compiler/internal/lexer"
 )
 
-func (p *Parser) parseIfStmt() (*ast.IfStmt, error) {
-	// Back-compat path if called directly: approximate start at current token.
-	return p.parseIfStmtAt(p.tok)
-}
-
+// parseIfStmtAt parses an if-statement starting after the 'if' token (already consumed).
+// M2 supports:
+//
+//	if <expr> ":" ( NEWLINE INDENT stmts DEDENT | <single-line-stmt> )
+//	(elif <expr> ":" (block | <single-line-stmt>))*
+//	(else ":" (block | <single-line-stmt>))?
 func (p *Parser) parseIfStmtAt(ifTok lexer.Token) (*ast.IfStmt, error) {
-	cond, err := p.parseExpr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(lexer.TokColon); err != nil {
-		return nil, err
-	}
-	thenBody, err := p.parseBlock()
-	if err != nil {
-		return nil, err
-	}
-	node := &ast.IfStmt{Cond: cond, Then: thenBody}
+  // cond
+  cond, err := p.parseExpr()
+  if err != nil {
+    return nil, err
+  }
+  if _, err := p.expect(lexer.TokColon); err != nil {
+    return nil, err
+  }
 
-	// zero or more elif
-	lastEnd := blockEnd(thenBody)
-	for p.at(lexer.TokElif) {
-		elifTok := p.tok
-		p.next()
+  // then body: block vs single-line
+  var then []ast.Stmt
+  if p.at(lexer.TokNewline) {
+    then, err = p.parseBlock()
+    if err != nil {
+      return nil, err
+    }
+  } else {
+    s, err := p.parseStmt()
+    if err != nil {
+      return nil, err
+    }
+    then = []ast.Stmt{s}
+  }
 
-		ec, err := p.parseExpr()
-		if err != nil {
-			return nil, err
-		}
-		if _, err := p.expect(lexer.TokColon); err != nil {
-			return nil, err
-		}
-		eb, err := p.parseBlock()
-		if err != nil {
-			return nil, err
-		}
-		el := ast.ElseIf{
-			Cond: ec,
-			Body: eb,
-			Span: spanFrom(posFrom(elifTok), blockEnd(eb)),
-		}
-		node.Elifs = append(node.Elifs, el)
-		lastEnd = blockEnd(eb)
-	}
+  var elifs []ast.ElseIf
+  var elseBody []ast.Stmt
+  end := blockEnd(then)
+  if len(then) == 1 {
+    end = stmtEnd(then[0])
+  }
 
-	// optional else
-	if p.at(lexer.TokElse) {
-		elseTok := p.tok
-		p.next()
-		if _, err := p.expect(lexer.TokColon); err != nil {
-			return nil, err
-		}
-		eb, err := p.parseBlock()
-		if err != nil {
-			return nil, err
-		}
-		node.Else = eb
-		// else-branch end is the overall end
-		lastEnd = blockEnd(eb)
-		// we could record an internal span for 'else' if needed later using elseTok
-		_ = elseTok
-	}
+  // zero or more elif groups
+  for p.at(lexer.TokElif) {
+    elifTok := p.tok
+    p.next() // consume 'elif'
 
-	// Whole-if span: from 'if' to end of last arm
-	node.Span = spanFrom(posFrom(ifTok), lastEnd)
-	return node, nil
+    econd, err := p.parseExpr()
+    if err != nil {
+      return nil, err
+    }
+    if _, err := p.expect(lexer.TokColon); err != nil {
+      return nil, err
+    }
+
+    var body []ast.Stmt
+    if p.at(lexer.TokNewline) {
+      body, err = p.parseBlock()
+      if err != nil {
+        return nil, err
+      }
+    } else {
+      s, err := p.parseStmt()
+      if err != nil {
+        return nil, err
+      }
+      body = []ast.Stmt{s}
+    }
+
+    ebEnd := blockEnd(body)
+    if len(body) == 1 {
+      ebEnd = stmtEnd(body[0])
+    }
+    elifs = append(elifs, ast.ElseIf{
+      Cond: econd,
+      Body: body,
+      Span: spanFrom(posFrom(elifTok), ebEnd),
+    })
+    end = ebEnd
+  }
+
+  // optional else
+  if p.accept(lexer.TokElse) {
+    if _, err := p.expect(lexer.TokColon); err != nil {
+      return nil, err
+    }
+
+    if p.at(lexer.TokNewline) {
+      elseBody, err = p.parseBlock()
+      if err != nil {
+        return nil, err
+      }
+    } else {
+      s, err := p.parseStmt()
+      if err != nil {
+        return nil, err
+      }
+      elseBody = []ast.Stmt{s}
+    }
+
+    eEnd := blockEnd(elseBody)
+    if len(elseBody) == 1 {
+      eEnd = stmtEnd(elseBody[0])
+    }
+    end = eEnd
+  }
+
+  return &ast.IfStmt{
+    Cond:  cond,
+    Then:  then,
+    Elifs: elifs,
+    Else:  elseBody,
+    Span:  spanFrom(posFrom(ifTok), end),
+  }, nil
 }
 
-func (p *Parser) parseWhileStmt() (*ast.WhileStmt, error) {
-	return p.parseWhileStmtAt(p.tok)
-}
-
+// parseWhileStmtAt parses while after 'while' consumed.
+// Supports both forms:
+//
+//	while <expr> ":" NEWLINE INDENT stmts DEDENT
+//	while <expr> ":" <single-line-stmt>
 func (p *Parser) parseWhileStmtAt(whileTok lexer.Token) (*ast.WhileStmt, error) {
-	cond, err := p.parseExpr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := p.expect(lexer.TokColon); err != nil {
-		return nil, err
-	}
-	body, err := p.parseBlock()
-	if err != nil {
-		return nil, err
-	}
-	return &ast.WhileStmt{
-		Cond: cond,
-		Body: body,
-		Span: spanFrom(posFrom(whileTok), blockEnd(body)),
-	}, nil
+  cond, err := p.parseExpr()
+  if err != nil {
+    return nil, err
+  }
+  if _, err := p.expect(lexer.TokColon); err != nil {
+    return nil, err
+  }
+
+  var body []ast.Stmt
+  if p.at(lexer.TokNewline) {
+    body, err = p.parseBlock()
+    if err != nil {
+      return nil, err
+    }
+  } else {
+    s, err := p.parseStmt()
+    if err != nil {
+      return nil, err
+    }
+    body = []ast.Stmt{s}
+  }
+
+  end := blockEnd(body)
+  if len(body) == 1 {
+    end = stmtEnd(body[0])
+  }
+  return &ast.WhileStmt{
+    Cond: cond,
+    Body: body,
+    Span: spanFrom(posFrom(whileTok), end),
+  }, nil
 }
