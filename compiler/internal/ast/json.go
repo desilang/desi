@@ -50,6 +50,13 @@ type jFuncDecl struct {
 	Span   jSpan    `json:"span"`
 }
 
+type jTypeDecl struct {
+	Kind       string `json:"kind"` // "TypeDecl"
+	Name       string `json:"name"`
+	Underlying string `json:"underlying"`
+	Span       jSpan  `json:"span"`
+}
+
 type jParam struct {
 	Kind string `json:"kind"` // "Param"
 	Name string `json:"name"`
@@ -209,10 +216,14 @@ func toJFile(f *File) jFile {
 	}
 	d := make([]any, 0, len(f.Decls))
 	for _, dec := range f.Decls {
-		if fd, ok := dec.(*FuncDecl); ok {
-			d = append(d, toJFunc(fd))
+		switch v := dec.(type) {
+		case *FuncDecl:
+			d = append(d, toJFunc(v))
+		case *TypeDecl:
+			d = append(d, toJType(v))
+		default:
+			// future decl kinds
 		}
-		// add more decl kinds here when they exist
 	}
 	return jFile{Kind: "File", Package: pkg, Imports: imps, Decls: d}
 }
@@ -238,6 +249,15 @@ func toJFunc(fd *FuncDecl) jFuncDecl {
 		Ret:    fd.Ret,
 		Body:   body,
 		Span:   spanJS(fd.Span),
+	}
+}
+
+func toJType(td *TypeDecl) jTypeDecl {
+	return jTypeDecl{
+		Kind:       "TypeDecl",
+		Name:       td.Name,
+		Underlying: td.Underlying,
+		Span:       spanJS(td.Span),
 	}
 }
 

@@ -39,6 +39,7 @@ type FuncSig struct {
 
 type Info struct {
 	Funcs map[string]FuncSig // function table for arity/type checks
+	Types map[string]string  // NEW: type aliases: Name -> Underlying (textual)
 }
 
 // Warning is a lightweight compiler warning.

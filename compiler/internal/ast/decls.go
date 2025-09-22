@@ -19,3 +19,14 @@ type Param struct {
 	Type string
 	Span Span // optional: 'name: type'
 }
+
+/*** NEW: TypeDecl (M6) ***/
+
+type TypeDecl struct {
+	Name       string // alias name
+	Underlying string // textual underlying type
+	Span       Span   // whole decl span (optional for now)
+}
+
+func (TypeDecl) node() {}
+func (TypeDecl) decl() {}

@@ -484,6 +484,8 @@ func keywordKind(s string) (TokKind, bool) {
     return TokImport, true
   case "as":
     return TokAs, true
+  case "type":
+    return TokType, true
   case "true":
     return TokTrue, true
   case "false":

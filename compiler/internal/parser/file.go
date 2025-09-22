@@ -47,6 +47,16 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 				return nil, err
 			}
 			f.Decls = append(f.Decls, fn)
+
+		case p.at(lexer.TokType):
+			typeTok := p.tok
+			p.next() // consume 'type'
+			td, err := p.parseTypeDeclAt(typeTok)
+			if err != nil {
+				return nil, err
+			}
+			f.Decls = append(f.Decls, td)
+
 		default:
 			// Surface lexer errors immediately at top-level
 			if p.at(lexer.TokErr) {
@@ -120,4 +130,34 @@ func (p *Parser) parseTypeUntil(stoppers ...lexer.TokKind) (string, error) {
 		p.next()
 	}
 	return strings.TrimSpace(b.String()), nil
+}
+
+/*** NEW: type alias parser (M6) ***/
+
+// parseTypeDeclAt expects we've just consumed 'type'.
+// Grammar:
+//
+//	type <Ident> = <type> NEWLINE
+func (p *Parser) parseTypeDeclAt(typeTok lexer.Token) (*ast.TypeDecl, error) {
+	nameTok, err := p.expect(lexer.TokIdent)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokEq); err != nil {
+		return nil, err
+	}
+	under, err := p.parseTypeUntil(lexer.TokNewline)
+	if err != nil {
+		return nil, err
+	}
+	nl, err := p.expect(lexer.TokNewline)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ast.TypeDecl{
+		Name:       nameTok.Lex,
+		Underlying: under,
+		Span:       spanTok(typeTok, nl),
+	}, nil
 }

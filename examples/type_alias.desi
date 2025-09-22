@@ -1,0 +1,6 @@
+type ID = int
+
+def main() -> int:
+  let x: ID = 41
+  io.println(x + 1)
+  return 0
