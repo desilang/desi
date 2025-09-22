@@ -18,6 +18,8 @@ import (
 	"github.com/desilang/desi/compiler/internal/parser"
 )
 
+// ----- errors -----
+
 type ParserSourcesMissingError struct {
 	Path string
 }
@@ -26,39 +28,40 @@ func (e ParserSourcesMissingError) Error() string {
 	return "Desi parser source not found at " + e.Path
 }
 
+// ----- public entrypoint -----
+
 // BuildAndRunJSON compiles (and caches) a tiny wrapper that calls
 // compiler.desi.parser::parse_to_json(path) and returns its stdout (AST JSON).
 // Requires a dev parser at examples/compiler/desi/parser.desi.
 // We also mirror examples/compiler/desi/lexer.desi so the parser can import it.
 func BuildAndRunJSON(entryFile string, keepTmp, verbose bool) ([]byte, error) {
-	// 1) Abs the user entry path (we embed it into the wrapper)
 	entryAbs, err := filepath.Abs(entryFile)
 	if err != nil {
 		return nil, fmt.Errorf("abs(%s): %v", entryFile, err)
 	}
 
-	// 2) Load dev parser and (optionally) dev lexer
+	// dev sources
 	repoRelParser := filepath.Join("examples", "compiler", "desi", "parser.desi")
 	devParserSrc, err := os.ReadFile(repoRelParser)
 	if err != nil {
 		return nil, ParserSourcesMissingError{Path: repoRelParser}
 	}
 	repoRelLexer := filepath.Join("examples", "compiler", "desi", "lexer.desi")
-	devLexerSrc, _ := os.ReadFile(repoRelLexer) // optional; mirror if present
+	devLexerSrc, _ := os.ReadFile(repoRelLexer)
 
-	// 3) Runtime C sources — include in cache signature
+	// runtime bits
 	rtDir := filepath.Join("runtime", "c")
 	rtC := filepath.Join(rtDir, "desi_std.c")
 	rtH := filepath.Join(rtDir, "desi_std.h")
 	rtCSrc, _ := os.ReadFile(rtC)
 	rtHSrc, _ := os.ReadFile(rtH)
 
-	// 4) Build wrapper source
+	// wrapper source
 	wrapper := buildWrapper(entryAbs)
 
-	// 5) Compute cache key (include parser + lexer content + runtime + platform)
+	// cache key
 	sig := sha256Sum(
-		"parsebridge-v2",
+		"parsebridge-v3",
 		runtime.GOOS, runtime.GOARCH,
 		string(wrapper),
 		string(devParserSrc),
@@ -71,48 +74,46 @@ func BuildAndRunJSON(entryFile string, keepTmp, verbose bool) ([]byte, error) {
 		binPath += ".exe"
 	}
 
-	// 6) If cached, run
+	// fast path
 	if fileExists(binPath) {
-		return runBin(binPath, verbose)
+		return runAndClean(binPath, cacheRoot, verbose)
 	}
 
-	// 7) Work dir = cache dir
-	workDir := cacheRoot
-	if err := os.MkdirAll(workDir, 0o755); err != nil {
-		return nil, fmt.Errorf("mkdir %s: %w", workDir, err)
+	// work dir
+	if err := os.MkdirAll(cacheRoot, 0o755); err != nil {
+		return nil, fmt.Errorf("mkdir %s: %w", cacheRoot, err)
 	}
 
-	// Mirror parser
-	if err := mirrorDevParserInto(workDir, devParserSrc); err != nil {
+	// mirror dev parser/lexer
+	if err := mirrorDevParserInto(cacheRoot, devParserSrc); err != nil {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		return nil, err
 	}
-	// Mirror lexer if available
 	if len(devLexerSrc) > 0 {
-		if err := mirrorDevLexerInto(workDir, devLexerSrc); err != nil {
+		if err := mirrorDevLexerInto(cacheRoot, devLexerSrc); err != nil {
 			if !keepTmp {
-				_ = os.RemoveAll(workDir)
+				_ = os.RemoveAll(cacheRoot)
 			}
 			return nil, err
 		}
 	}
 
-	// Write wrapper
-	wrapperPath := filepath.Join(workDir, "main.desi")
+	// write wrapper
+	wrapperPath := filepath.Join(cacheRoot, "main.desi")
 	if err := os.WriteFile(wrapperPath, wrapper, 0o644); err != nil {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		return nil, fmt.Errorf("write wrapper: %w", err)
 	}
 
-	// 8) Resolve+parse+typecheck wrapper locally
-	merged, perr := resolveAndParseLocal(workDir, wrapperPath)
+	// parse+typecheck wrapper locally
+	merged, perr := resolveAndParseLocal(cacheRoot, wrapperPath)
 	if len(perr) > 0 {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		var b strings.Builder
 		for _, e := range perr {
@@ -123,7 +124,7 @@ func BuildAndRunJSON(entryFile string, keepTmp, verbose bool) ([]byte, error) {
 	info, errs, _ := check.CheckFile(merged)
 	if len(errs) > 0 {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		var b strings.Builder
 		for _, e := range errs {
@@ -132,18 +133,18 @@ func BuildAndRunJSON(entryFile string, keepTmp, verbose bool) ([]byte, error) {
 		return nil, fmt.Errorf("typecheck wrapper failed:\n%s", b.String())
 	}
 
-	// 9) Emit C and compile
-	cpath := filepath.Join(workDir, "main.c")
+	// emit C and compile
+	cpath := filepath.Join(cacheRoot, "main.c")
 	csrc := cgen.EmitFile(merged, info)
 	if err := os.WriteFile(cpath, []byte(csrc), 0o644); err != nil {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		return nil, fmt.Errorf("write %s: %w", cpath, err)
 	}
 	if err := compileBin(cpath, rtDir, binPath, verbose); err != nil {
 		if !keepTmp {
-			_ = os.RemoveAll(workDir)
+			_ = os.RemoveAll(cacheRoot)
 		}
 		if verbose {
 			return nil, fmt.Errorf("cc failed: %w", err)
@@ -151,8 +152,8 @@ func BuildAndRunJSON(entryFile string, keepTmp, verbose bool) ([]byte, error) {
 		return nil, fmt.Errorf("cc failed; re-run with --bridge-verbose to see compiler output")
 	}
 
-	// 10) Run and capture JSON (sanitize stdout to first JSON object)
-	return runBin(binPath, verbose)
+	// run bridge program and return cleaned JSON
+	return runAndClean(binPath, cacheRoot, verbose)
 }
 
 /* ---------- wrapper and helpers ---------- */
@@ -172,7 +173,6 @@ func buildWrapper(entryAbs string) []byte {
 	return []byte(b.String())
 }
 
-// The resolver is a clone of the lexbridge local resolver, specialized here.
 func resolveAndParseLocal(rootDir, entryPath string) (*ast.File, []error) {
 	entryAbs, err := filepath.Abs(entryPath)
 	if err != nil {
@@ -297,30 +297,52 @@ func compileBin(cpath, rtDir, outBin string, verbose bool) error {
 	return cc.Run()
 }
 
-func runBin(binPath string, verbose bool) ([]byte, error) {
+// runAndClean executes the bridge program, dumps raw+clean outputs for debugging,
+// and returns the cleaned JSON bytes.
+func runAndClean(binPath, cacheRoot string, verbose bool) ([]byte, error) {
 	absBin, _ := filepath.Abs(binPath)
 	cmd := exec.Command(absBin)
 	var out bytes.Buffer
 	if verbose {
-		cmd.Stdout = io.MultiWriter(os.Stdout, &out) // tee JSON for debugging
 		cmd.Stderr = os.Stderr
 	} else {
-		cmd.Stdout = &out
 		cmd.Stderr = io.Discard
 	}
+	cmd.Stdout = &out
 	if err := cmd.Run(); err != nil {
 		if verbose {
 			return nil, fmt.Errorf("run parsebridge: %w", err)
 		}
 		return nil, fmt.Errorf("run parsebridge failed; re-run with --bridge-verbose for details")
 	}
+
 	raw := out.Bytes()
+	if verbose {
+		_ = os.WriteFile(filepath.Join(cacheRoot, "bridge_raw.out.txt"), raw, 0o644)
+	}
+
 	clean, err := sanitizeJSONOutput(raw)
 	if err != nil {
+		// When verbose, also echo the raw to stderr to help eyeball it quickly.
+		if verbose {
+			_, _ = fmt.Fprintln(os.Stderr, "---- parsebridge raw stdout (first 4KB) ----")
+			lim := raw
+			if len(lim) > 4096 {
+				lim = lim[:4096]
+			}
+			_, _ = os.Stderr.Write(lim)
+			_, _ = fmt.Fprintln(os.Stderr, "\n---- end raw ----")
+		}
 		return nil, err
+	}
+
+	if verbose {
+		_ = os.WriteFile(filepath.Join(cacheRoot, "bridge_clean.json"), clean, 0o644)
 	}
 	return clean, nil
 }
+
+/* ---------- small helpers (sha, fs, etc.) ---------- */
 
 func sha256Sum(parts ...string) string {
 	h := sha256.New()
@@ -364,16 +386,8 @@ func escapeDesiString(s string) string {
 	return b.String()
 }
 
-/* ---------- small fs/helpers ---------- */
-
-func fileExists(p string) bool {
-	_, err := os.Stat(p)
-	return err == nil
-}
-func mustAbs(p string) string {
-	a, _ := filepath.Abs(p)
-	return a
-}
+func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+func mustAbs(p string) string  { a, _ := filepath.Abs(p); return a }
 func same(a, b string) bool {
 	aa, _ := filepath.EvalSymlinks(a)
 	bb, _ := filepath.EvalSymlinks(b)
@@ -391,50 +405,4 @@ func rel(root, p string) string {
 		return p
 	}
 	return r
-}
-
-/* ---------- output sanitizer ---------- */
-
-// sanitizeBridgeOutput returns the first complete top-level JSON object
-// found in b (handles quotes and escapes). Falls back to trimmed b.
-func sanitizeBridgeOutput(b []byte) []byte {
-	// Find first '{'
-	i := bytes.IndexByte(b, '{')
-	if i < 0 {
-		return bytes.TrimSpace(b)
-	}
-	depth := 0
-	inStr := false
-	esc := false
-	for j := i; j < len(b); j++ {
-		c := b[j]
-		if inStr {
-			if esc {
-				esc = false
-				continue
-			}
-			if c == '\\' {
-				esc = true
-				continue
-			}
-			if c == '"' {
-				inStr = false
-				continue
-			}
-			continue
-		}
-		switch c {
-		case '"':
-			inStr = true
-		case '{':
-			depth++
-		case '}':
-			depth--
-			if depth == 0 {
-				return b[i : j+1]
-			}
-		}
-	}
-	// If we get here, brace matching failed; return a trimmed suffix as best-effort.
-	return bytes.TrimSpace(b[i:])
 }

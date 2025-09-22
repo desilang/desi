@@ -13,7 +13,7 @@ def parse_to_json(path: str) -> str:
   let src = fs.read_all(path)
   let imports_json = scan_imports(src)
   let decls_json = scan_funcs(src)
-  return "{\"kind\":\"File\",\"pkg\":null,\"imports\":[" + imports_json + "],\"decls\":[" + decls_json + "]}"
+  return "{\"kind\":\"File\",\"package\":null,\"imports\":[" + imports_json + "],\"decls\":[" + decls_json + "]}"
 
 # ---------- imports ----------
 
@@ -26,14 +26,15 @@ def scan_imports(src: str) -> str:
     let mut handled = false
     if is_line_start(src, i):
       let j0 = skip_hspace(src, i)
-      # accept "import " (with a space); some codegen trims, so the length below stays 7
       if starts_with(src, j0, "import "):
         let mut j = j0 + 7
         let name = read_until_delims(src, j, 10, 13, 35, 32, 9)  # NL, CR, '#', space, tab
-        if str.len(name) > 0:
+        let name_trim = trim_space(name)
+        if str.len(name_trim) > 0:
           if not first:
             out := out + ","
-          out := out + "{\"kind\":\"ImportDecl\",\"path\":\"" + name + "\"}"
+          # IMPORTANT: quote+escape the path value
+          out := out + "{\"kind\":\"ImportDecl\",\"path\":" + json_quote(name_trim) + "}"
           first := false
         j := j + str.len(name)
         i := advance_to_next_line(src, j)
@@ -333,7 +334,7 @@ def parse_expr_json(s: str) -> str:
 
   # int literal
   if is_digits(t):
-    return "{\"kind\":\"IntLit\",\"value\":\"" + t + "\"}"
+    return "{\"kind\":\"IntLit\",\"value\":" + json_quote(t) + "}"
 
   # depth-0 '+' binary
   let plus_pos = find_plus_depth0(t)
@@ -362,11 +363,11 @@ def parse_expr_json(s: str) -> str:
     let left = trim_space(slice(t, 0, dotp))
     let right = trim_space(slice_from(t, dotp + 1))
     if is_ident(left) and is_ident(right):
-      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":\"" + left + "\"},\"name\":\"" + right + "\"}"
+      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":" + json_quote(left) + "},\"name\":" + json_quote(right) + "}"
 
   # bare ident
   if is_ident(t):
-    return "{\"kind\":\"IdentExpr\",\"name\":\"" + t + "\"}"
+    return "{\"kind\":\"IdentExpr\",\"name\":" + json_quote(t) + "}"
 
   return ""
 
@@ -376,10 +377,10 @@ def parse_callee_json(s: str) -> str:
     let left = trim_space(slice(s, 0, dotp))
     let right = trim_space(slice_from(s, dotp + 1))
     if is_ident(left) and is_ident(right):
-      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":\"" + left + "\"},\"name\":\"" + right + "\"}"
+      return "{\"kind\":\"FieldExpr\",\"x\":{\"kind\":\"IdentExpr\",\"name\":" + json_quote(left) + "},\"name\":" + json_quote(right) + "}"
     return ""
   if is_ident(s):
-    return "{\"kind\":\"IdentExpr\",\"name\":\"" + s + "\"}"
+    return "{\"kind\":\"IdentExpr\",\"name\":" + json_quote(s) + "}"
   return ""
 
 def parse_args_list(s: str) -> str:

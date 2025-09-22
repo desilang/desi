@@ -30,14 +30,16 @@ type buildArgs struct {
   out  string // executable name (no dir); defaults to entry basename
   file string // entry .desi file
 
-  // diagnostics / frontends
-  werr              bool   // --Werror treats warnings as errors
-  useDesi           bool   // --use-desi-lexer: route through lexbridge
-  useDesiParser     bool   // --use-desi-parser: use external bridge bin
-  useDesiParserAuto bool   // --use-desi-parser-auto: auto-build examples/compiler/desi/parser.desi
-  parsebridgeBin    string // --parsebridge-bin
-  verbose           bool   // --verbose: pass to bridge
-  keepBridgeTmp     bool   // --keep-bridge-tmp: retain gen/tmp bridge artifacts
+  // diagnostics / behavior
+  werr          bool // --Werror treats warnings as errors
+  useDesi       bool // --use-desi-lexer: route through lexbridge (Go parser)
+  verbose       bool // --verbose: pass to bridges
+  keepBridgeTmp bool // --keep-bridge-tmp: retain gen/tmp artifacts
+
+  // NEW: Desi parser bridge options
+  useDesiParser     bool   // --use-desi-parser (external bridge)
+  useDesiParserAuto bool   // --use-desi-parser-auto (auto build)
+  parsebridgeBin    string // --parsebridge-bin <path> (for external)
 }
 
 func parseBuildArgs(argv []string) (buildArgs, error) {
@@ -130,6 +132,16 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
       a.useDesi = true
       i++
       continue
+    case s == "--verbose":
+      a.verbose = true
+      i++
+      continue
+    case s == "--keep-bridge-tmp":
+      a.keepBridgeTmp = true
+      i++
+      continue
+
+    // NEW: Desi parser bridge flags
     case s == "--use-desi-parser":
       a.useDesiParser = true
       i++
@@ -148,14 +160,6 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
       }
       a.parsebridgeBin = argv[i+1]
       i += 2
-      continue
-    case s == "--verbose":
-      a.verbose = true
-      i++
-      continue
-    case s == "--keep-bridge-tmp":
-      a.keepBridgeTmp = true
-      i++
       continue
     }
 
@@ -187,15 +191,14 @@ func parseBuildArgs(argv []string) (buildArgs, error) {
 
 func usageBuild() {
   term.Eprintln("usage: desic build [flags] <entry.desi>")
-  term.Eprintln("\nFrontends:")
-  term.Eprintln("  --use-desi-lexer           use the self-hosted Desi *lexer* via bridge")
-  term.Eprintln("  --use-desi-parser          use an external desi parser bridge binary")
-  term.Eprintln("  --use-desi-parser-auto     auto-build & cache parser from examples/compiler/desi/parser.desi")
-  term.Eprintln("  --parsebridge-bin=<path>   path to parser bridge binary (with --use-desi-parser)")
+  term.Eprintln("\nGeneral:")
+  term.Eprintln("  --use-desi-lexer           use the self-hosted Desi lexer via bridge (Go parser)")
+  term.Eprintln("  --use-desi-parser          use an external Desi parser bridge (AST JSON)")
+  term.Eprintln("  --use-desi-parser-auto     auto-build + cache bridge from examples/compiler/desi/parser.desi")
+  term.Eprintln("  --parsebridge-bin <path>   path to external parser bridge when using --use-desi-parser")
   term.Eprintln("  --keep-bridge-tmp          keep gen/tmp bridge artifacts (debugging)")
   term.Eprintln("  --verbose                  verbose bridge logging")
   term.Eprintln("  --Werror                   treat warnings as errors")
-
   term.Eprintln("\nC compile/link (enabled by default):")
   term.Eprintln("  --no-cc                    only emit C (skip compiling)")
   term.Eprintln("  --cc-bin=<cc>              choose compiler (clang/gcc/cl). Alias: --cc=<cc>")
@@ -211,26 +214,22 @@ func cmdBuild(args []string) int {
     return 2
   }
 
-  // sanity: parser-bridge vs lexer-bridge are mutually exclusive
-  if a.useDesi && (a.useDesiParser || a.useDesiParserAuto) {
-    term.Eprintln("error: --use-desi-lexer cannot be combined with --use-desi-parser{,-auto}")
-    return 2
-  }
-
-  var merged *ast.File
-  var perr []error
-
-  // Choose frontend
+  // Choose parsing path:
+  // 1) Parser bridge (external or auto) if requested
+  // 2) Else: Go/Desi lexer path (existing behavior)
+  var (
+    merged *ast.File
+    perr   []error
+  )
   if a.useDesiParser || a.useDesiParserAuto {
     merged, perr = build.ResolveAndParseWithParserBridge(
       a.file,
-      a.useDesiParser,  // useExternal
-      a.parsebridgeBin, // bin path if external
+      a.useDesiParser,  // useExternal when true
+      a.parsebridgeBin, // optional path for external
       a.keepBridgeTmp,
       a.verbose,
     )
   } else {
-    // Go lexer (default) or Desi lexer bridge (if --use-desi-lexer)
     merged, perr = build.ResolveAndParseMaybeDesi(a.file, a.useDesi, a.keepBridgeTmp, a.verbose)
   }
 
