@@ -71,6 +71,12 @@ const (
 	TokOr
 	TokNot
 	TokDefer // NEW
+
+	// Compound assignments (M3)
+	TokPlusEq  // +=
+	TokMinusEq // -=
+	TokStarEq  // *=
+	TokSlashEq // /=
 )
 
 // Token is a single lexeme with source position.
@@ -191,6 +197,14 @@ func (k TokKind) String() string {
 		return "not"
 	case TokDefer:
 		return "defer"
+	case TokPlusEq:
+		return "+="
+	case TokMinusEq:
+		return "-="
+	case TokStarEq:
+		return "*="
+	case TokSlashEq:
+		return "/="
 	default:
 		return "TokKind(" + strconv.Itoa(int(k)) + ")"
 	}
