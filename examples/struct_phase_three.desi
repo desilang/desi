@@ -1,0 +1,11 @@
+# struct local + field assign + literal + nested read
+# examples/struct_basic.desi (or new file)
+struct User:
+  id: int
+  name: str
+
+def main() -> int:
+  let mut u: User = User{ id: 1, name: "V" }
+  u.id := 42
+  io.println("id:", u.id, "name:", u.name)
+  return 0
