@@ -27,8 +27,6 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 				// infer from kind
 				if kind == "str" {
 					e.vars[name] = "str"
-				} else if strings.HasPrefix(kind, "struct:") {
-					e.vars[name] = strings.TrimPrefix(kind, "struct:")
 				} else {
 					e.vars[name] = "int"
 				}
@@ -45,43 +43,26 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 			def := "0"
 			if isStrText(typ) {
 				def = "\"\""
-			} else if isStructType(typ, e.info) {
-				def = "(" + typ + "){0}"
 			}
 			term.Wprintf(b, "%s%s %s = %s;\n", ind, cTypeFromText(typ, e.info), name, def)
 		}
 
 	case *ast.AssignStmt:
-		// New path: prefer LHS []Expr when present, else fall back to legacy Names.
-		if len(st.LHS) > 0 {
-			n := _min(len(st.LHS), len(st.Exprs))
-			type tmpRec struct {
-				name string
-				kind string
+		n := _min(len(st.Names), len(st.Exprs))
+
+		// Fast path: single assignment -> emit directly, no temporaries.
+		if n == 1 {
+			lhs := st.Names[0]
+			cx, _ := cExprFor(st.Exprs[0], e)
+			if _, ok := e.vars[lhs]; !ok {
+				e.vars[lhs] = "int"
+				term.Wprintf(b, "%s/* warning: assigning to undeclared %s; assuming int */\n", ind, lhs)
 			}
-			var tmps []tmpRec
-			for i := 0; i < n; i++ {
-				cx, k := cExprFor(st.Exprs[i], e)
-				if k == "" {
-					k = "int"
-				}
-				t := e.newTemp()
-				term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(k), t, cx)
-				tmps = append(tmps, tmpRec{name: t, kind: k})
-			}
-			for i := 0; i < n; i++ {
-				lhs := cLValue(st.LHS[i], e, ind)
-				if lhs == "" {
-					term.Wprintf(b, "%s/* unsupported assignment target */\n", ind)
-					continue
-				}
-				term.Wprintf(b, "%s%s = %s;\n", ind, lhs, tmps[i].name)
-			}
+			term.Wprintf(b, "%s%s = %s;\n", ind, lhs, cx)
 			break
 		}
 
-		// Legacy path (Names).
-		n := _min(len(st.Names), len(st.Exprs))
+		// Parallel assignment → use temporaries to preserve evaluation order.
 		type tmpRec struct {
 			name string
 			kind string
@@ -120,35 +101,18 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 			}
 			return
 		}
-
-		// Effective return kind: prefer signature (handles struct returns)
-		rk := e.retKind
-		if fs, ok := e.sigs[e.fn.Name]; ok && strings.HasPrefix(fs.ret, "struct:") {
-			rk = fs.ret
-		}
-
-		cExpression, kind := cExprFor(st.Expr, e)
-		switch rk {
-		case "int":
-			if kind != "int" {
-				term.Wprintf(b, "%s/* non-int return; force 0 */\n", ind)
-				term.Wprintf(b, "%sreturn 0;\n", ind)
-				return
-			}
-		case "str":
-			if kind != "str" {
-				term.Wprintf(b, "%s/* non-str return; force \"\" */\n", ind)
-				term.Wprintf(b, "%sreturn \"\";\n", ind)
-				return
-			}
-		case "void":
-			term.Wprintf(b, "%s/* value in void-return function; discard */\n", ind)
-			term.Wprintf(b, "%sreturn;\n", ind)
+		cExpr, kind := cExprFor(st.Expr, e)
+		if e.retKind == "int" && kind != "int" {
+			term.Wprintf(b, "%s/* non-int return; force 0 */\n", ind)
+			term.Wprintf(b, "%sreturn 0;\n", ind)
 			return
-		default:
-			// struct:<Name> — let C do the type check.
 		}
-		term.Wprintf(b, "%sreturn %s;\n", ind, cExpression)
+		if e.retKind == "str" && kind != "str" {
+			term.Wprintf(b, "%s/* non-str return; force \"\" */\n", ind)
+			term.Wprintf(b, "%sreturn \"\";\n", ind)
+			return
+		}
+		term.Wprintf(b, "%sreturn %s;\n", ind, cExpr)
 
 	case *ast.IfStmt:
 		cond, _ := cExprFor(st.Cond, e)
@@ -255,21 +219,6 @@ func buildPrintfArgs(args []ast.Expr, e *env) string {
 		return fmt.String() + ", " + strings.Join(argv, ", ")
 	}
 	return fmt.String()
-}
-
-// cLValue renders an assignable C lvalue for an LHS expression.
-func cLValue(e ast.Expr, env *env, _ string) string {
-	switch v := e.(type) {
-	case *ast.IdentExpr:
-		if _, ok := env.vars[v.Name]; !ok {
-			env.vars[v.Name] = "int"
-		}
-		return v.Name
-	case *ast.FieldExpr:
-		return fieldAccessChain(v)
-	default:
-		return ""
-	}
 }
 
 // small helper to avoid importing math
