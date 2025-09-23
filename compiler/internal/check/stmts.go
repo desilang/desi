@@ -159,6 +159,98 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 }
 
 func (c *checker) checkAssign(st *ast.AssignStmt) {
+	// Prefer new LHS form if present; fall back to legacy Names for old tests/tools.
+	if len(st.LHS) > 0 {
+		if len(st.LHS) != len(st.Exprs) {
+			c.errors = append(c.errors, typedErr(
+				"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+				"assignment", len(st.LHS), len(st.Exprs),
+			))
+		}
+
+		_max := _min(len(st.LHS), len(st.Exprs))
+		for i := 0; i < _max; i++ {
+			lhs := st.LHS[i]
+			rk := c.kindOfExpr(st.Exprs[i])
+
+			switch lv := lhs.(type) {
+			case *ast.IdentExpr:
+				v, ok := c.scope.lookup(lv.Name)
+				if !ok {
+					c.errors = append(c.errors, ErrUndefinedName(lv.Name, "assignment"))
+					continue
+				}
+				if !v.mutable {
+					c.errors = append(c.errors, ErrAssignToImmutable(lv.Name, "assignment"))
+					continue
+				}
+				// Struct whole-value assignment: only allow from same struct type var (conservative).
+				if v.kind == KindStruct {
+					rhsStruct := c.structNameOfExpr(st.Exprs[i])
+					if rhsStruct != "" && rhsStruct == v.structName {
+						v.written = true
+						continue
+					}
+					if rk != KindUnknown {
+						c.errors = append(c.errors, fmt.Errorf("assignment to %q: incompatible struct value", lv.Name))
+					}
+					v.written = true
+					continue
+				}
+				if k, ok := unifyKinds(v.kind, rk); !ok {
+					c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", v.kind), fmt.Sprintf("%s", rk), "assignment"))
+				} else if v.kind == KindUnknown {
+					v.kind = k
+				}
+				v.written = true
+
+			case *ast.FieldExpr:
+				// Only support base identifier for now (u.id := ...)
+				baseId, ok := lv.X.(*ast.IdentExpr)
+				if !ok {
+					c.errors = append(c.errors, fmt.Errorf("unsupported assignment target"))
+					continue
+				}
+				v, ok := c.scope.lookup(baseId.Name)
+				if !ok {
+					c.errors = append(c.errors, ErrUndefinedName(baseId.Name, "assignment"))
+					continue
+				}
+				if !v.mutable {
+					c.errors = append(c.errors, ErrAssignToImmutable(baseId.Name, "field assignment"))
+					continue
+				}
+				if v.kind != KindStruct || v.structName == "" {
+					c.errors = append(c.errors, fmt.Errorf("cannot assign to field %q on non-struct %q", lv.Name, baseId.Name))
+					continue
+				}
+				si, ok := c.info.Structs[v.structName]
+				if !ok {
+					c.errors = append(c.errors, fmt.Errorf("unknown struct type %q for %q", v.structName, baseId.Name))
+					continue
+				}
+				ftText, ok := si.Fields[lv.Name]
+				if !ok {
+					c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", lv.Name, v.structName))
+					continue
+				}
+				want, _ := mapTypeOrStruct(ftText, c.info)
+				// If the declared field type is unknown (e.g., generic), accept anything for now.
+				if want != KindUnknown {
+					if _, ok := unifyKinds(want, rk); !ok {
+						c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", want), fmt.Sprintf("%s", rk), "field assignment"))
+					}
+				}
+				v.written = true
+
+			default:
+				c.errors = append(c.errors, fmt.Errorf("unsupported assignment target"))
+			}
+		}
+		return
+	}
+
+	// ---- Legacy path (Names) ----
 	if len(st.Names) != len(st.Exprs) {
 		c.errors = append(c.errors, typedErr(
 			"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",

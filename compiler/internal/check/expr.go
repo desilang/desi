@@ -62,28 +62,34 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		}
 
 	case *ast.FieldExpr:
-		// Phase 3: struct field typing
-		// If X is an identifier bound to a struct variable, fetch field type.
-		if id, ok := v.X.(*ast.IdentExpr); ok {
-			if vi, ok := c.scope.lookup(id.Name); ok {
-				vi.read = true
-				if vi.kind == KindStruct && vi.structName != "" {
-					if sInfo, ok := c.info.Structs[vi.structName]; ok {
-						if tText, ok := sInfo.Fields[v.Name]; ok {
-							k, _ := mapTypeOrStruct(tText, c.info)
-							return k
-						}
-						// unknown field name
-						c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", v.Name, vi.structName))
-						return KindUnknown
+		// Support nested base: either an identifier or another field expr.
+		baseKind := c.kindOfExpr(v.X)
+		if baseKind == KindStruct {
+			// Resolve the struct name of v.X
+			sname := c.structNameOfExpr(v.X)
+			if sname != "" {
+				if sInfo, ok := c.info.Structs[sname]; ok {
+					if tText, ok := sInfo.Fields[v.Name]; ok {
+						k, _ := mapTypeOrStruct(tText, c.info)
+						return k
 					}
+					c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", v.Name, sname))
+					return KindUnknown
 				}
 			}
+		}
+		// If base is unknown, propagate unknown
+		if baseKind == KindUnknown {
+			return KindUnknown
 		}
 		return KindUnknown
 
 	case *ast.IndexExpr:
 		return KindUnknown
+
+	case *ast.StructLitExpr:
+		// Treat as a value of struct type; callers can obtain sname via structNameOfExpr.
+		return KindStruct
 
 	case *ast.CallExpr:
 		// std shims first
