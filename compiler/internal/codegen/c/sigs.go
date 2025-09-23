@@ -10,20 +10,21 @@ import (
 // ---- signatures & helpers ----
 
 type sig struct {
-	ret    string // "int"|"str"|"void"
+	// "void" | "int" | "str" | "struct:<Name>"
+	ret    string
 	params []string
 }
 
-func collectFuncSigs(f *ast.File) map[string]sig {
+func collectFuncSigs(f *ast.File, info *check.Info) map[string]sig {
 	m := make(map[string]sig)
 	for _, d := range f.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
 			continue
 		}
-		s := sig{ret: typeToKind(fn.Ret)}
+		s := sig{ret: typeToKindOrStruct(fn.Ret, info)}
 		for _, p := range fn.Params {
-			s.params = append(s.params, typeToKind(p.Type))
+			s.params = append(s.params, typeToKindOrStruct(p.Type, info))
 		}
 		m[fn.Name] = s
 	}
@@ -39,9 +40,11 @@ func findMain(f *ast.File) *ast.FuncDecl {
 	return nil
 }
 
-func typeToKind(t string) string {
-	t = strings.TrimSpace(strings.ToLower(t))
-	switch t {
+// map textual types to compact codegen kind
+// "void" | "int" | "str" | "struct:<Name>"
+func typeToKindOrStruct(t string, info *check.Info) string {
+	tt := strings.TrimSpace(strings.ToLower(t))
+	switch tt {
 	case "", "void":
 		return "void"
 	case "i32", "int", "u32", "bool":
@@ -49,7 +52,12 @@ func typeToKind(t string) string {
 	case "str", "string":
 		return "str"
 	default:
-		// Unknown textual types (including struct names) — treat as int for returns (stage-1).
+		if info != nil && info.Structs != nil {
+			raw := strings.TrimSpace(t)
+			if _, ok := info.Structs[raw]; ok {
+				return "struct:" + raw
+			}
+		}
 		return "int"
 	}
 }
@@ -60,7 +68,12 @@ func cType(kind string) string {
 		return "void"
 	case "str":
 		return "const char*"
+	case "int":
+		return "int"
 	default:
+		if strings.HasPrefix(kind, "struct:") {
+			return kind[len("struct:"):]
+		}
 		return "int"
 	}
 }
@@ -75,13 +88,11 @@ func cTypeFromText(t string, info *check.Info) string {
 	case "str", "string":
 		return "const char*"
 	}
-	// struct?
 	if info != nil && info.Structs != nil {
 		if _, ok := info.Structs[tt]; ok {
 			return tt
 		}
 	}
-	// fallback
 	return "int"
 }
 

@@ -25,13 +25,14 @@ func EmitFile(f *ast.File, info *check.Info) string {
 		}
 	}
 
-	sigs := collectFuncSigs(f)
+	// NOTE: struct-aware signatures (params + returns)
+	sigs := collectFuncSigs(f, info)
 
 	// Prototypes for non-main
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name != "main" {
 			term.Wprintf(&b, "static %s %s(%s);\n",
-				cType(typeToKind(fn.Ret)), fn.Name, cParamList(fn, info))
+				cType(typeToKindOrStruct(fn.Ret, info)), fn.Name, cParamList(fn, info))
 		}
 	}
 	if len(sigs) > 0 {

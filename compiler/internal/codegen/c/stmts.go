@@ -27,6 +27,8 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 				// infer from kind
 				if kind == "str" {
 					e.vars[name] = "str"
+				} else if strings.HasPrefix(kind, "struct:") {
+					e.vars[name] = strings.TrimPrefix(kind, "struct:")
 				} else {
 					e.vars[name] = "int"
 				}
@@ -43,6 +45,8 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 			def := "0"
 			if isStrText(typ) {
 				def = "\"\""
+			} else if isStructType(typ, e.info) {
+				def = "(" + typ + "){0}"
 			}
 			term.Wprintf(b, "%s%s %s = %s;\n", ind, cTypeFromText(typ, e.info), name, def)
 		}
@@ -116,18 +120,35 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 			}
 			return
 		}
-		cExpr, kind := cExprFor(st.Expr, e)
-		if e.retKind == "int" && kind != "int" {
-			term.Wprintf(b, "%s/* non-int return; force 0 */\n", ind)
-			term.Wprintf(b, "%sreturn 0;\n", ind)
-			return
+
+		// Effective return kind: prefer signature (handles struct returns)
+		rk := e.retKind
+		if fs, ok := e.sigs[e.fn.Name]; ok && strings.HasPrefix(fs.ret, "struct:") {
+			rk = fs.ret
 		}
-		if e.retKind == "str" && kind != "str" {
-			term.Wprintf(b, "%s/* non-str return; force \"\" */\n", ind)
-			term.Wprintf(b, "%sreturn \"\";\n", ind)
+
+		cExpression, kind := cExprFor(st.Expr, e)
+		switch rk {
+		case "int":
+			if kind != "int" {
+				term.Wprintf(b, "%s/* non-int return; force 0 */\n", ind)
+				term.Wprintf(b, "%sreturn 0;\n", ind)
+				return
+			}
+		case "str":
+			if kind != "str" {
+				term.Wprintf(b, "%s/* non-str return; force \"\" */\n", ind)
+				term.Wprintf(b, "%sreturn \"\";\n", ind)
+				return
+			}
+		case "void":
+			term.Wprintf(b, "%s/* value in void-return function; discard */\n", ind)
+			term.Wprintf(b, "%sreturn;\n", ind)
 			return
+		default:
+			// struct:<Name> — let C do the type check.
 		}
-		term.Wprintf(b, "%sreturn %s;\n", ind, cExpr)
+		term.Wprintf(b, "%sreturn %s;\n", ind, cExpression)
 
 	case *ast.IfStmt:
 		cond, _ := cExprFor(st.Cond, e)
@@ -237,30 +258,17 @@ func buildPrintfArgs(args []ast.Expr, e *env) string {
 }
 
 // cLValue renders an assignable C lvalue for an LHS expression.
-func cLValue(e ast.Expr, env *env, ind string) string {
+func cLValue(e ast.Expr, env *env, _ string) string {
 	switch v := e.(type) {
 	case *ast.IdentExpr:
-		// If undeclared, assume int (emit comment like legacy path).
 		if _, ok := env.vars[v.Name]; !ok {
 			env.vars[v.Name] = "int"
-			term.Wprintf(nil, "%s", "") // no-op; keep signature symmetric
 		}
 		return v.Name
 	case *ast.FieldExpr:
-		return cFieldAccessChain(v)
+		return fieldAccessChain(v)
 	default:
 		return ""
-	}
-}
-
-func cFieldAccessChain(fe *ast.FieldExpr) string {
-	switch base := fe.X.(type) {
-	case *ast.IdentExpr:
-		return base.Name + "." + fe.Name
-	case *ast.FieldExpr:
-		return cFieldAccessChain(base) + "." + fe.Name
-	default:
-		return "/*unsupported_lhs*/"
 	}
 }
 

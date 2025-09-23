@@ -32,33 +32,24 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			if isStrText(t) {
 				return v.Name, "str"
 			}
-			// If it's a struct variable, its C type is the typedef name; kind-wise treat as int for ops.
 			if isStructType(t, env.info) {
-				return v.Name, "int"
+				return v.Name, "struct:" + strings.TrimSpace(t)
 			}
 			return v.Name, "int"
 		}
 		return v.Name, "int"
 
 	case *ast.FieldExpr:
-		// Resolve nested chains: determine base textual type step by step.
-		ex, _ := cExprFor(v.X, env)
-		baseText := ""
-		switch bx := v.X.(type) {
-		case *ast.IdentExpr:
-			baseText = strings.TrimSpace(env.vars[bx.Name])
-		default:
-			// Try to derive textual type from nested field chains using info
-			baseText = deriveStructTextFromExpr(v.X, env)
-		}
-		if baseText != "" && isStructType(baseText, env.info) {
-			if ftyp, ok := fieldTypeOf(env.info, strings.TrimSpace(baseText), v.Name); ok {
-				expr := ex + "." + v.Name
-				if isStrText(ftyp) {
-					return expr, "str"
-				}
-				return expr, "int"
+		// Only handle base identifiers (and nested) that are known struct-typed variables.
+		if ft, ok := exprTextualType(v, env); ok {
+			ex := fieldAccessChain(v)
+			if isStrText(ft) {
+				return ex, "str"
 			}
+			if isStructType(ft, env.info) {
+				return ex, "struct:" + strings.TrimSpace(ft)
+			}
+			return ex, "int"
 		}
 		return "0", ""
 
@@ -102,15 +93,6 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 
 	case *ast.IndexExpr:
 		return "0", ""
-
-	case *ast.StructLitExpr:
-		// Emit C designated initializer: (Type){ .field = value, ... }
-		var parts []string
-		for _, kv := range v.Inits {
-			ax, _ := cExprFor(kv.Value, env)
-			parts = append(parts, "."+kv.Name+" = "+ax)
-		}
-		return "(" + v.Name + "){" + strings.Join(parts, ", ") + "}", "int"
 
 	case *ast.CallExpr:
 		// Builtins / std shims
@@ -175,26 +157,52 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		}
 		return "0", ""
 
+	case *ast.StructLit:
+		var parts []string
+		for _, f := range v.Fields {
+			cv, _ := cExprFor(f.Value, env)
+			parts = append(parts, "."+f.Name+" = "+cv)
+		}
+		return "(" + v.Name + "){" + strings.Join(parts, ", ") + "}", "struct:" + v.Name
+
 	default:
 		return "0", ""
 	}
 }
 
-/*** helper: derive textual struct name from nested field chain ***/
-func deriveStructTextFromExpr(e ast.Expr, env *env) string {
+// ---- helpers for expr typing ----
+
+func exprTextualType(e ast.Expr, env *env) (string, bool) {
 	switch v := e.(type) {
 	case *ast.IdentExpr:
-		return strings.TrimSpace(env.vars[v.Name])
+		if t, ok := env.vars[v.Name]; ok {
+			return strings.TrimSpace(t), true
+		}
+		return "", false
 	case *ast.FieldExpr:
-		base := deriveStructTextFromExpr(v.X, env)
-		if base == "" || !isStructType(base, env.info) {
-			return ""
+		bt, ok := exprTextualType(v.X, env)
+		if !ok {
+			return "", false
 		}
-		if ftyp, ok := fieldTypeOf(env.info, base, v.Name); ok {
-			return ftyp
+		if !isStructType(bt, env.info) {
+			return "", false
 		}
-		return ""
+		if ft, ok := fieldTypeOf(env.info, strings.TrimSpace(bt), v.Name); ok {
+			return strings.TrimSpace(ft), true
+		}
+		return "", false
 	default:
-		return ""
+		return "", false
+	}
+}
+
+func fieldAccessChain(fe *ast.FieldExpr) string {
+	switch base := fe.X.(type) {
+	case *ast.IdentExpr:
+		return base.Name + "." + fe.Name
+	case *ast.FieldExpr:
+		return fieldAccessChain(base) + "." + fe.Name
+	default:
+		return "/*unsupported*/"
 	}
 }

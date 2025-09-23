@@ -15,8 +15,8 @@ type env struct {
 	info        *check.Info
 	sigs        map[string]sig
 	vars        map[string]string // name -> textual type ("int"/"str"/struct name/...)
-	retKind     string
-	defers      []ast.Expr // function-scope defers (LIFO)
+	retKind     string            // "void"|"int"|"str"|"struct:<Name>"
+	defers      []ast.Expr        // function-scope defers (LIFO)
 	tempCounter int
 }
 
@@ -31,7 +31,7 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		info:    info,
 		sigs:    sigs,
 		vars:    map[string]string{},
-		retKind: typeToKind(fn.Ret),
+		retKind: typeToKindOrStruct(fn.Ret, info),
 		defers:  nil,
 	}
 	for _, p := range fn.Params {
@@ -60,8 +60,23 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 	if len(e.defers) > 0 {
 		emitDefers(b, 2, e)
 	}
-	if e.retKind != "void" && !hasTailReturn(fn.Body) {
-		term.Wprintf(b, "  return 0;\n")
+	if !hasTailReturn(fn.Body) {
+		switch e.retKind {
+		case "void":
+			// no-op
+		case "int":
+			term.Wprintf(b, "  return 0;\n")
+		case "str":
+			term.Wprintf(b, "  return \"\";\n")
+		default:
+			if strings.HasPrefix(e.retKind, "struct:") {
+				name := strings.TrimPrefix(e.retKind, "struct:")
+				// Zero-init struct return on fallthrough.
+				term.Wprintf(b, "  return (%s){0};\n", name)
+			} else {
+				term.Wprintf(b, "  return 0;\n")
+			}
+		}
 	}
 	term.Wprintf(b, "}\n")
 }
