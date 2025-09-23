@@ -108,25 +108,29 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		// still attempt to check pairs we do have
 	}
 
-	_max := min(len(st.Binds), len(st.Values))
+	_max := _min(len(st.Binds), len(st.Values))
 	for i := 0; i < _max; i++ {
 		bd := st.Binds[i]
 		rk := c.kindOfExpr(st.Values[i])
 
-		var want Kind = KindUnknown
-		if strings.TrimSpace(bd.Type) != "" {
-			want = mapTextType(bd.Type)
-		}
+		declText := strings.TrimSpace(bd.Type)
+		want, sname := mapTypeOrStruct(declText, c.info)
+
 		kind := rk
-		if want != KindUnknown {
-			if k, ok := unifyKinds(want, rk); ok {
-				kind = k
-			} else {
-				c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
+		if declText != "" {
+			if want == KindStruct {
+				// For now: allow any RHS kind (will be refined when struct values exist).
+				kind = KindStruct
+			} else if want != KindUnknown {
+				if k, ok := unifyKinds(want, rk); ok {
+					kind = k
+				} else {
+					c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
+				}
 			}
 		}
 
-		// Shadowing warning: if not already defined locally, but exists in an outer scope.
+		// Shadowing warning
 		if _, ok := c.scope.lookupLocal(bd.Name); !ok && c.scope.existsInOuter(bd.Name) {
 			c.warnings = append(c.warnings, Warning{
 				Code: CodeShadowedVariable(),
@@ -134,9 +138,14 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 			})
 		}
 
-		v := &varInfo{kind: kind, mutable: st.Mutable, declName: bd.Name, written: true}
+		v := &varInfo{
+			kind:       kindIfDeclOr(kind, want),
+			mutable:    st.Mutable,
+			declName:   bd.Name,
+			structName: snameIfDeclOr(sname, want),
+			written:    true,
+		}
 		if err := c.scope.define(bd.Name, v); err != nil {
-			// define() now returns a catalog-backed DTE0003 on redeclare
 			c.errors = append(c.errors, err)
 		} else {
 			c.locals = append(c.locals, v)
@@ -157,7 +166,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 		))
 	}
 
-	_max := min(len(st.Names), len(st.Exprs))
+	_max := _min(len(st.Names), len(st.Exprs))
 	for i := 0; i < _max; i++ {
 		name := st.Names[i]
 		rk := c.kindOfExpr(st.Exprs[i])
@@ -171,6 +180,23 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 			c.errors = append(c.errors, ErrAssignToImmutable(name, "assignment"))
 			continue
 		}
+
+		// Special-case struct variables: we only allow assigning from
+		// another variable of the same struct type (very conservative).
+		if v.kind == KindStruct {
+			rhsStruct := c.structNameOfExpr(st.Exprs[i])
+			if rhsStruct != "" && rhsStruct == v.structName {
+				v.written = true
+				continue
+			}
+			// accept unknown for now (no struct literals yet), otherwise mismatch
+			if rk != KindUnknown {
+				c.errors = append(c.errors, fmt.Errorf("assignment to %q: incompatible struct value", name))
+			}
+			v.written = true
+			continue
+		}
+
 		if k, ok := unifyKinds(v.kind, rk); !ok {
 			c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", v.kind), fmt.Sprintf("%s", rk), "assignment"))
 		} else if v.kind == KindUnknown {
@@ -178,6 +204,16 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 		}
 		v.written = true
 	}
+}
+
+func (c *checker) structNameOfExpr(e ast.Expr) string {
+	switch v := e.(type) {
+	case *ast.IdentExpr:
+		if vi, ok := c.scope.lookup(v.Name); ok {
+			return vi.structName
+		}
+	}
+	return ""
 }
 
 func (c *checker) withChildScope(body func()) {
@@ -191,4 +227,20 @@ func (c *checker) withBlock(body func()) {
 	c.blockReturned = push(c.blockReturned, false)
 	c.withChildScope(body)
 	c.blockReturned = pop(c.blockReturned)
+}
+
+/* ---------- small helpers for let handling ---------- */
+
+func kindIfDeclOr(current Kind, want Kind) Kind {
+	if want == KindStruct {
+		return KindStruct
+	}
+	return current
+}
+
+func snameIfDeclOr(sname string, want Kind) string {
+	if want == KindStruct {
+		return sname
+	}
+	return ""
 }

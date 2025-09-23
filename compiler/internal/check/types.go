@@ -12,6 +12,7 @@ const (
 	KindStr
 	KindBool
 	KindVoid
+	KindStruct
 )
 
 func (k Kind) String() string {
@@ -24,6 +25,8 @@ func (k Kind) String() string {
 		return "bool"
 	case KindVoid:
 		return "void"
+	case KindStruct:
+		return "struct"
 	default:
 		return "unknown"
 	}
@@ -38,8 +41,8 @@ type FuncSig struct {
 }
 
 type StructInfo struct {
-	Name   string
-	Fields map[string]Kind // field name -> kind
+	// Field name -> textual type (e.g., "int", "str", or another struct name)
+	Fields map[string]string
 }
 
 type Info struct {

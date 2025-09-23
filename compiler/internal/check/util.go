@@ -29,6 +29,25 @@ func mapTextType(t string) Kind {
 	}
 }
 
+// mapTypeOrStruct returns (Kind, structName). If the textual type matches a known
+// struct, returns (KindStruct, structName). Otherwise uses the builtin map.
+func mapTypeOrStruct(t string, info *Info) (Kind, string) {
+	trim := strings.TrimSpace(t)
+	if trim == "" {
+		return KindVoid, ""
+	}
+	// Builtins first
+	if k := mapTextType(trim); k != KindUnknown {
+		return k, ""
+	}
+	// Struct name?
+	if _, ok := info.Structs[trim]; ok {
+		return KindStruct, trim
+	}
+	// Unknown type (generic/other) — treat as unknown for now.
+	return KindUnknown, ""
+}
+
 func unifyKinds(a, b Kind) (Kind, bool) {
 	if a == KindUnknown {
 		return b, true
@@ -42,10 +61,11 @@ func unifyKinds(a, b Kind) (Kind, bool) {
 	if (a == KindInt && b == KindBool) || (a == KindBool && b == KindInt) {
 		return KindInt, true
 	}
+	// Structs never unify in this helper (we compare names elsewhere if needed)
 	return KindUnknown, false
 }
 
-func min(a, b int) int {
+func _min(a, b int) int {
 	if a < b {
 		return a
 	}

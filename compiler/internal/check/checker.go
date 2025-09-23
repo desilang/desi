@@ -30,23 +30,18 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	var errs []error
 	var warns []Warning
 
-	// Collect type aliases and struct shapes first (so bodies can reference them).
+	// collect structs (M7 phase 2 foundation)
 	for _, d := range f.Decls {
-		switch v := d.(type) {
-		case *ast.TypeDecl:
-			// Last one wins; basic shadowing rules can be added later.
-			info.Types[v.Name] = v.Underlying
-
-		case *ast.StructDecl:
-			sf := StructInfo{Name: v.Name, Fields: map[string]Kind{}}
-			for _, fld := range v.Fields {
-				sf.Fields[fld.Name] = mapTextType(fld.Type)
+		if sd, ok := d.(*ast.StructDecl); ok {
+			fields := map[string]string{}
+			for _, ft := range sd.Fields {
+				fields[ft.Name] = ft.Type
 			}
-			info.Structs[v.Name] = sf
+			info.Structs[sd.Name] = StructInfo{Fields: fields}
 		}
 	}
 
-	// Collect function signatures
+	// collect function signatures
 	for _, d := range f.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -58,12 +53,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 		var ps []Kind
 		for _, p := range fn.Params {
-			ps = append(ps, mapTextType(p.Type))
+			k, _ := mapTypeOrStruct(p.Type, info)
+			ps = append(ps, k)
 		}
-		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: mapTextType(fn.Ret)}
+		retK, _ := mapTypeOrStruct(fn.Ret, info)
+		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
 	}
 
-	// Check bodies
+	// check bodies
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok {
 			fnErrs, fnWarns := checkFunc(info, fn)
@@ -83,12 +80,14 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 	}
 	// params (immutable)
 	for i, p := range fn.Params {
+		k, sname := mapTypeOrStruct(p.Type, info)
 		v := &varInfo{
-			kind:     mapTextType(p.Type),
-			mutable:  false,
-			declName: p.Name,
-			read:     false,
-			written:  true,
+			kind:       k,
+			mutable:    false,
+			declName:   p.Name,
+			structName: sname,
+			read:       false,
+			written:    true,
 		}
 		if err := c.scope.define(p.Name, v); err != nil {
 			c.errors = append(c.errors, fmt.Errorf("parameter %d %q: %v", i, p.Name, err))
