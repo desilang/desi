@@ -12,7 +12,7 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 	ind := spaces(indent)
 	switch st := s.(type) {
 	case *ast.LetStmt:
-		n := min(len(st.Binds), len(st.Values))
+		n := _min(len(st.Binds), len(st.Values))
 		for i := 0; i < n; i++ {
 			name := st.Binds[i].Name
 			ce, kind := cExprFor(st.Values[i], e)
@@ -48,7 +48,36 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 		}
 
 	case *ast.AssignStmt:
-		n := min(len(st.Names), len(st.Exprs))
+		// New path: prefer LHS []Expr when present, else fall back to legacy Names.
+		if len(st.LHS) > 0 {
+			n := _min(len(st.LHS), len(st.Exprs))
+			type tmpRec struct {
+				name string
+				kind string
+			}
+			var tmps []tmpRec
+			for i := 0; i < n; i++ {
+				cx, k := cExprFor(st.Exprs[i], e)
+				if k == "" {
+					k = "int"
+				}
+				t := e.newTemp()
+				term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(k), t, cx)
+				tmps = append(tmps, tmpRec{name: t, kind: k})
+			}
+			for i := 0; i < n; i++ {
+				lhs := cLValue(st.LHS[i], e, ind)
+				if lhs == "" {
+					term.Wprintf(b, "%s/* unsupported assignment target */\n", ind)
+					continue
+				}
+				term.Wprintf(b, "%s%s = %s;\n", ind, lhs, tmps[i].name)
+			}
+			break
+		}
+
+		// Legacy path (Names).
+		n := _min(len(st.Names), len(st.Exprs))
 		type tmpRec struct {
 			name string
 			kind string
@@ -207,8 +236,36 @@ func buildPrintfArgs(args []ast.Expr, e *env) string {
 	return fmt.String()
 }
 
+// cLValue renders an assignable C lvalue for an LHS expression.
+func cLValue(e ast.Expr, env *env, ind string) string {
+	switch v := e.(type) {
+	case *ast.IdentExpr:
+		// If undeclared, assume int (emit comment like legacy path).
+		if _, ok := env.vars[v.Name]; !ok {
+			env.vars[v.Name] = "int"
+			term.Wprintf(nil, "%s", "") // no-op; keep signature symmetric
+		}
+		return v.Name
+	case *ast.FieldExpr:
+		return cFieldAccessChain(v)
+	default:
+		return ""
+	}
+}
+
+func cFieldAccessChain(fe *ast.FieldExpr) string {
+	switch base := fe.X.(type) {
+	case *ast.IdentExpr:
+		return base.Name + "." + fe.Name
+	case *ast.FieldExpr:
+		return cFieldAccessChain(base) + "." + fe.Name
+	default:
+		return "/*unsupported_lhs*/"
+	}
+}
+
 // small helper to avoid importing math
-func min(a, b int) int {
+func _min(a, b int) int {
 	if a < b {
 		return a
 	}

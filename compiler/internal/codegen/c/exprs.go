@@ -32,24 +32,34 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			if isStrText(t) {
 				return v.Name, "str"
 			}
+			// If it's a struct variable, its C type is the typedef name; kind-wise treat as int for ops.
+			if isStructType(t, env.info) {
+				return v.Name, "int"
+			}
 			return v.Name, "int"
 		}
 		return v.Name, "int"
 
 	case *ast.FieldExpr:
-		// Only handle base identifiers that are known struct-typed variables.
-		if id, ok := v.X.(*ast.IdentExpr); ok {
-			if baseT, ok := env.vars[id.Name]; ok && isStructType(baseT, env.info) {
-				if ftyp, ok := fieldTypeOf(env.info, strings.TrimSpace(baseT), v.Name); ok {
-					ex := id.Name + "." + v.Name
-					if isStrText(ftyp) {
-						return ex, "str"
-					}
-					return ex, "int"
+		// Resolve nested chains: determine base textual type step by step.
+		ex, _ := cExprFor(v.X, env)
+		baseText := ""
+		switch bx := v.X.(type) {
+		case *ast.IdentExpr:
+			baseText = strings.TrimSpace(env.vars[bx.Name])
+		default:
+			// Try to derive textual type from nested field chains using info
+			baseText = deriveStructTextFromExpr(v.X, env)
+		}
+		if baseText != "" && isStructType(baseText, env.info) {
+			if ftyp, ok := fieldTypeOf(env.info, strings.TrimSpace(baseText), v.Name); ok {
+				expr := ex + "." + v.Name
+				if isStrText(ftyp) {
+					return expr, "str"
 				}
+				return expr, "int"
 			}
 		}
-		// Stage-1: unknown field -> 0
 		return "0", ""
 
 	case *ast.UnaryExpr:
@@ -92,6 +102,15 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 
 	case *ast.IndexExpr:
 		return "0", ""
+
+	case *ast.StructLitExpr:
+		// Emit C designated initializer: (Type){ .field = value, ... }
+		var parts []string
+		for _, kv := range v.Inits {
+			ax, _ := cExprFor(kv.Value, env)
+			parts = append(parts, "."+kv.Name+" = "+ax)
+		}
+		return "(" + v.Name + "){" + strings.Join(parts, ", ") + "}", "int"
 
 	case *ast.CallExpr:
 		// Builtins / std shims
@@ -158,5 +177,24 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 
 	default:
 		return "0", ""
+	}
+}
+
+/*** helper: derive textual struct name from nested field chain ***/
+func deriveStructTextFromExpr(e ast.Expr, env *env) string {
+	switch v := e.(type) {
+	case *ast.IdentExpr:
+		return strings.TrimSpace(env.vars[v.Name])
+	case *ast.FieldExpr:
+		base := deriveStructTextFromExpr(v.X, env)
+		if base == "" || !isStructType(base, env.info) {
+			return ""
+		}
+		if ftyp, ok := fieldTypeOf(env.info, base, v.Name); ok {
+			return ftyp
+		}
+		return ""
+	default:
+		return ""
 	}
 }
