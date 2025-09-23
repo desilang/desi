@@ -82,6 +82,7 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 	if p.at(lexer.TokIdent) {
 		t := p.tok
 		p.next()
+		// Postfix handles calls, indexes, fields **and** struct literals via "{"
 		return p.parsePostfix(&ast.IdentExpr{Name: t.Lex, Span: spanTok(t, t)})
 	}
 	if p.at(lexer.TokInt) {
@@ -190,6 +191,67 @@ func (p *Parser) parsePostfix(base ast.Expr) (ast.Expr, error) {
 				Span: spanFrom(exprStart(e), endPosFrom(id)),
 			}
 
+		// NEW: Struct literal after an Ident/type name:  User{ field: expr, ... }
+		case p.accept(lexer.TokLBrace):
+			// Only valid when base is IdentExpr (a type name)
+			_, isIdent := e.(*ast.IdentExpr)
+			if !isIdent {
+				return nil, ErrUnexpectedToken("struct literal", p.tok)
+			}
+			var inits []ast.StructFieldInit
+			var lastTok lexer.Token
+
+			if p.at(lexer.TokRBrace) {
+				lastTok = p.tok
+				p.next()
+			} else {
+				for {
+					// field name
+					fn, err := p.expect(lexer.TokIdent)
+					if err != nil {
+						return nil, err
+					}
+					if _, err := p.expect(lexer.TokColon); err != nil {
+						return nil, err
+					}
+					val, err := p.parseExpr()
+					if err != nil {
+						return nil, err
+					}
+					inits = append(inits, ast.StructFieldInit{
+						Name:  fn.Lex,
+						Value: val,
+						Span:  spanFrom(posFrom(fn), exprEnd(val)),
+					})
+					if p.accept(lexer.TokComma) {
+						// allow trailing comma
+						if p.at(lexer.TokRBrace) {
+							lastTok = p.tok
+							p.next()
+							break
+						}
+						continue
+					}
+					rb, err := p.expect(lexer.TokRBrace)
+					if err != nil {
+						return nil, err
+					}
+					lastTok = rb
+					break
+				}
+			}
+
+			// Replace base Ident + literal with a StructLitExpr
+			name := baseIdentName(e)
+			if name == "" {
+				return nil, ErrUnexpectedToken("struct literal type", p.tok)
+			}
+			e = &ast.StructLitExpr{
+				Name:  name,
+				Inits: inits,
+				Span:  spanFrom(exprStart(e), endPosFrom(lastTok)),
+			}
+
 		default:
 			return e, nil
 		}
@@ -229,4 +291,12 @@ func (p *Parser) parseBinaryRHS(minPrec int, left ast.Expr) (ast.Expr, error) {
 			Span:  spanFrom(leftStart, exprEnd(right)),
 		}
 	}
+}
+
+/*** small helper ***/
+func baseIdentName(e ast.Expr) string {
+	if id, ok := e.(*ast.IdentExpr); ok {
+		return id.Name
+	}
+	return ""
 }

@@ -31,13 +31,18 @@ func (LetStmt) node() {}
 func (LetStmt) stmt() {}
 
 /*
-Parallel assignment:
+Parallel assignment (now supports field LHS):
 
 	a, b := b, a
-	single-name still represented the same: Names=[x], Exprs=[...]
+	u.id, v.name := 1, "x"
+
+Legacy compatibility:
+  - Names keeps only plain identifier LHS ("" for non-ident LHS). Existing dump/json
+    code in Stage-1 reads Names; we preserve it while moving forward with LHS []Expr.
 */
 type AssignStmt struct {
-	Names []string
+	LHS   []Expr   // IdentExpr or FieldExpr (Stage-1)
+	Names []string // legacy: ident names; "" for non-ident LHS
 	Exprs []Expr
 	Span  Span // whole assignment
 }

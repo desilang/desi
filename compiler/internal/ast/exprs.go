@@ -84,3 +84,21 @@ type BinaryExpr struct {
 
 func (*BinaryExpr) node() {}
 func (*BinaryExpr) expr() {}
+
+/*** NEW: Struct literal ***/
+
+type StructFieldInit struct {
+	Name  string
+	Value Expr
+	Span  Span
+}
+
+type StructLitExpr struct {
+	// Name of the struct type, e.g., "User"
+	Name  string
+	Inits []StructFieldInit // .field = value (order not required)
+	Span  Span
+}
+
+func (*StructLitExpr) node() {}
+func (*StructLitExpr) expr() {}
