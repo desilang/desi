@@ -20,6 +20,9 @@ func EmitFile(f *ast.File, info *check.Info) string {
 	term.Wprintf(&b, "#include <string.h>\n") // strcmp
 	term.Wprintf(&b, "#include \"desi_std.h\"\n\n")
 
+	// Emit struct typedefs before any prototypes so they’re visible everywhere.
+	emitStructs(&b, f)
+
 	sigs := collectFuncSigs(f)
 
 	// Prototypes for non-main
@@ -45,6 +48,23 @@ func EmitFile(f *ast.File, info *check.Info) string {
 		emitFunc(&b, m, sigs, info, true)
 	}
 	return b.String()
+}
+
+// ---- struct emission ----
+
+func emitStructs(b *bytes.Buffer, f *ast.File) {
+	for _, d := range f.Decls {
+		sd, ok := d.(*ast.StructDecl)
+		if !ok {
+			continue
+		}
+		term.Wprintf(b, "typedef struct {\n")
+		for _, fld := range sd.Fields {
+			ctype := cType(typeToKind(fld.Type))
+			term.Wprintf(b, "  %s %s;\n", ctype, fld.Name)
+		}
+		term.Wprintf(b, "} %s;\n\n", sd.Name)
+	}
 }
 
 // ---- signatures & helpers ----

@@ -22,11 +22,31 @@ type checker struct {
 
 // CheckFile performs semantic checks and returns info, errors, and warnings.
 func CheckFile(f *ast.File) (*Info, []error, []Warning) {
-	info := &Info{Funcs: map[string]FuncSig{}}
+	info := &Info{
+		Funcs:   map[string]FuncSig{},
+		Types:   map[string]string{},
+		Structs: map[string]StructInfo{},
+	}
 	var errs []error
 	var warns []Warning
 
-	// collect function signatures
+	// Collect type aliases and struct shapes first (so bodies can reference them).
+	for _, d := range f.Decls {
+		switch v := d.(type) {
+		case *ast.TypeDecl:
+			// Last one wins; basic shadowing rules can be added later.
+			info.Types[v.Name] = v.Underlying
+
+		case *ast.StructDecl:
+			sf := StructInfo{Name: v.Name, Fields: map[string]Kind{}}
+			for _, fld := range v.Fields {
+				sf.Fields[fld.Name] = mapTextType(fld.Type)
+			}
+			info.Structs[v.Name] = sf
+		}
+	}
+
+	// Collect function signatures
 	for _, d := range f.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -43,7 +63,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: mapTextType(fn.Ret)}
 	}
 
-	// check bodies
+	// Check bodies
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok {
 			fnErrs, fnWarns := checkFunc(info, fn)

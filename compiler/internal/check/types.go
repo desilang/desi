@@ -37,9 +37,15 @@ type FuncSig struct {
 	Ret    Kind
 }
 
+type StructInfo struct {
+	Name   string
+	Fields map[string]Kind // field name -> kind
+}
+
 type Info struct {
-	Funcs map[string]FuncSig // function table for arity/type checks
-	Types map[string]string  // NEW: type aliases: Name -> Underlying (textual)
+	Funcs   map[string]FuncSig // function table for arity/type checks
+	Types   map[string]string  // type aliases: Name -> Underlying (textual)
+	Structs map[string]StructInfo
 }
 
 // Warning is a lightweight compiler warning.
