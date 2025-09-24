@@ -3,9 +3,7 @@ enum MaybeStr:
   None: none
 
 def main() -> int:
-  let m: MaybeStr = MaybeStr.Some("hi")
-  if MaybeStr.is_Some(m):
-    io.println("some:", MaybeStr.unwrap_Some(m))
-  else:
-    io.println("none")
+  let a: MaybeStr = MaybeStr.Some("hi")
+  let b: MaybeStr = MaybeStr.None()
+  io.println("maybe built")
   return 0

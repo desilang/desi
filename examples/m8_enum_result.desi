@@ -2,6 +2,14 @@ enum Result:
   Ok: int
   Err: str
 
+def mk_ok() -> Result:
+  return Result.Ok(200)
+
+def mk_err() -> Result:
+  return Result.Err("boom")
+
 def main() -> int:
-  # parse-only smoke: no enum construction yet
+  let r1: Result = mk_ok()
+  let r2: Result = mk_err()
+  io.println("constructed two results")
   return 0
