@@ -87,6 +87,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.checkStmt(s2)
 			}
 		})
+	case *ast.MatchStmt:
+		c.checkMatch(st)
 	case *ast.DeferStmt:
 		if len(c.blockReturned) > 1 {
 			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
@@ -95,6 +97,73 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.errors = append(c.errors, fmt.Errorf("defer expects a call expression"))
 		}
 		c.kindOfExpr(st.Call)
+	}
+}
+
+func (c *checker) checkMatch(m *ast.MatchStmt) {
+	// Scrutinee must be an enum-typed identifier (Stage-1).
+	k := c.kindOfExpr(m.Scrut) // also marks read if ident
+	if k != KindEnum && k != KindUnknown {
+		c.errors = append(c.errors, fmt.Errorf("match scrutinee must be an enum, got %s", k))
+	}
+
+	enumName := ""
+	if id, ok := m.Scrut.(*ast.IdentExpr); ok {
+		if vi, ok := c.scope.lookup(id.Name); ok {
+			enumName = vi.structName
+		}
+	}
+	if enumName == "" {
+		// best effort: continue to check body to surface more errors
+		enumName = "_"
+	}
+
+	ei, haveEnum := c.info.Enums[enumName]
+
+	// Check each arm
+	for _, arm := range m.Arms {
+		varPayload, ok := "", false
+		if haveEnum {
+			varPayload, ok = ei.Variants[arm.Pat.Variant]
+			if !ok {
+				c.errors = append(c.errors, fmt.Errorf("unknown variant %q for enum %q", arm.Pat.Variant, enumName))
+			}
+		}
+		// Payload binding rules
+		noPayload := isNoneLike(varPayload)
+		if noPayload && arm.Pat.Bind != "" {
+			c.errors = append(c.errors, fmt.Errorf("variant %q has no payload; remove binding %q", arm.Pat.Variant, arm.Pat.Bind))
+		}
+		if !noPayload && arm.Pat.Bind == "" {
+			// keep forgiving, but flag clearly
+			c.warnings = append(c.warnings, Warning{
+				Code: warnCode("warn", "unused_payload", "DW0007"),
+				Msg:  fmt.Sprintf("variant %q carries a payload but arm does not bind it", arm.Pat.Variant),
+			})
+		}
+
+		// Body in a child scope; if bound, define it
+		c.withBlock(func() {
+			if !noPayload && arm.Pat.Bind != "" {
+				kind, sname := mapTypeOrStruct(varPayload, c.info)
+				_ = sname // kept for future richness
+				v := &varInfo{
+					kind:       kind,
+					mutable:    false,
+					declName:   arm.Pat.Bind,
+					structName: sname,
+					written:    true,
+				}
+				if err := c.scope.define(arm.Pat.Bind, v); err != nil {
+					c.errors = append(c.errors, err)
+				} else {
+					c.locals = append(c.locals, v)
+				}
+			}
+			for _, s2 := range arm.Body {
+				c.checkStmt(s2)
+			}
+		})
 	}
 }
 
@@ -403,4 +472,10 @@ func decomposeFieldChain(e *ast.FieldExpr) (string, []string) {
 		}
 		return "", nil
 	}
+}
+
+// isNoneLike treats "", "none", or "void" as "no payload".
+func isNoneLike(s string) bool {
+	t := strings.TrimSpace(strings.ToLower(s))
+	return t == "" || t == "none" || t == "void"
 }

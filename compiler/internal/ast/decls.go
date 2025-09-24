@@ -64,3 +64,26 @@ type EnumVariant struct {
 	Payload string // textual payload type; "" means no payload (aka `none`)
 	Span    Span   // span of this variant line
 }
+
+/*** NEW: Match (M8 P3) ***/
+
+type Pattern struct {
+	Variant string // Variant name (e.g., Ok, None)
+	Bind    string // payload binding name ("" when none)
+	Span    Span
+}
+
+type MatchArm struct {
+	Pat  Pattern
+	Body []Stmt
+	Span Span
+}
+
+type MatchStmt struct {
+	Scrut Expr       // scrutinee (Stage-1: we expect IdentExpr, but keep Expr)
+	Arms  []MatchArm // one or more arms
+	Span  Span
+}
+
+func (MatchStmt) node() {}
+func (MatchStmt) stmt() {}
