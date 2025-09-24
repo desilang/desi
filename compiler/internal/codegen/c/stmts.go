@@ -48,21 +48,62 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 		}
 
 	case *ast.AssignStmt:
+		// ---- Preferred path: LHS as expressions ----
+		if len(st.LHS) > 0 {
+			n := _min(len(st.LHS), len(st.Exprs))
+
+			// Fast path: single assignment — emit directly, no temporaries.
+			if n == 1 {
+				lhsStr, ok := cLValueFor(st.LHS[0], e)
+				if !ok {
+					// Unsupported LHS kind in Stage-1: evaluate RHS for side-effects and drop.
+					rx, _ := cExprFor(st.Exprs[0], e)
+					term.Wprintf(b, "%s/* unsupported LHS */ (void)(%s);\n", ind, rx)
+					break
+				}
+				rx, _ := cExprFor(st.Exprs[0], e)
+				term.Wprintf(b, "%s%s = %s;\n", ind, lhsStr, rx)
+				break
+			}
+
+			// Parallel assignment → evaluate RHS first to preserve order.
+			type tmpRec struct {
+				name string
+				kind string
+			}
+			var tmps []tmpRec
+			for i := 0; i < n; i++ {
+				cx, k := cExprFor(st.Exprs[i], e)
+				if k == "" {
+					k = "int"
+				}
+				t := e.newTemp()
+				term.Wprintf(b, "%s%s %s = %s;\n", ind, cType(k), t, cx)
+				tmps = append(tmps, tmpRec{name: t, kind: k})
+			}
+			for i := 0; i < n; i++ {
+				lhsStr, ok := cLValueFor(st.LHS[i], e)
+				if !ok {
+					term.Wprintf(b, "%s/* unsupported LHS in parallel assign */;\n", ind)
+					continue
+				}
+				term.Wprintf(b, "%s%s = %s;\n", ind, lhsStr, tmps[i].name)
+			}
+			break
+		}
+
+		// ---- Legacy fallback: Names []string ----
 		n := _min(len(st.Names), len(st.Exprs))
 
-		// Fast path: single assignment -> emit directly, no temporaries.
+		// Single assignment (legacy) — emit directly, no temporaries, no C-side warnings.
 		if n == 1 {
 			lhs := st.Names[0]
 			cx, _ := cExprFor(st.Exprs[0], e)
-			if _, ok := e.vars[lhs]; !ok {
-				e.vars[lhs] = "int"
-				term.Wprintf(b, "%s/* warning: assigning to undeclared %s; assuming int */\n", ind, lhs)
-			}
 			term.Wprintf(b, "%s%s = %s;\n", ind, lhs, cx)
 			break
 		}
 
-		// Parallel assignment → use temporaries to preserve evaluation order.
+		// Parallel assignment (legacy)
 		type tmpRec struct {
 			name string
 			kind string
@@ -79,10 +120,6 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 		}
 		for i := 0; i < n; i++ {
 			lhs := st.Names[i]
-			if _, ok := e.vars[lhs]; !ok {
-				e.vars[lhs] = "int"
-				term.Wprintf(b, "%s/* warning: assigning to undeclared %s; assuming int */\n", ind, lhs)
-			}
 			term.Wprintf(b, "%s%s = %s;\n", ind, lhs, tmps[i].name)
 		}
 
