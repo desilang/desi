@@ -1,0 +1,11 @@
+enum MaybeStr:
+  Some: str
+  None: none
+
+def main() -> int:
+  let m: MaybeStr = MaybeStr.Some("hi")
+  if MaybeStr.is_Some(m):
+    io.println("some:", MaybeStr.unwrap_Some(m))
+  else:
+    io.println("none")
+  return 0

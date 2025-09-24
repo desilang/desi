@@ -1,0 +1,7 @@
+enum Result:
+  Ok: int
+  Err: str
+
+def main() -> int:
+  # parse-only smoke: no enum construction yet
+  return 0
