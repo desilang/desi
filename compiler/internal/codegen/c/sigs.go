@@ -41,7 +41,7 @@ func findMain(f *ast.File) *ast.FuncDecl {
 }
 
 // map textual types to compact codegen kind
-// "void" | "int" | "str" | "struct:<Name>"
+// "void" | "int" | "str" | "struct:<Name>" | "enum:<Name>"
 func typeToKindOrStruct(t string, info *check.Info) string {
 	tt := strings.TrimSpace(strings.ToLower(t))
 	switch tt {
@@ -52,10 +52,15 @@ func typeToKindOrStruct(t string, info *check.Info) string {
 	case "str", "string":
 		return "str"
 	default:
-		if info != nil && info.Structs != nil {
-			raw := strings.TrimSpace(t)
+		raw := strings.TrimSpace(t)
+		if info != nil {
 			if _, ok := info.Structs[raw]; ok {
 				return "struct:" + raw
+			}
+			if info.Enums != nil {
+				if _, ok := info.Enums[raw]; ok {
+					return "enum:" + raw
+				}
 			}
 		}
 		return "int"
@@ -71,8 +76,8 @@ func cType(kind string) string {
 	case "int":
 		return "int"
 	default:
-		if strings.HasPrefix(kind, "struct:") {
-			return kind[len("struct:"):]
+		if strings.HasPrefix(kind, "struct:") || strings.HasPrefix(kind, "enum:") {
+			return kind[strings.Index(kind, ":")+1:] // drop "struct:" or "enum:"
 		}
 		return "int"
 	}
@@ -88,9 +93,14 @@ func cTypeFromText(t string, info *check.Info) string {
 	case "str", "string":
 		return "const char*"
 	}
-	if info != nil && info.Structs != nil {
+	if info != nil {
 		if _, ok := info.Structs[tt]; ok {
 			return tt
+		}
+		if info.Enums != nil {
+			if _, ok := info.Enums[tt]; ok {
+				return tt
+			}
 		}
 	}
 	return "int"
@@ -116,6 +126,23 @@ func isStructType(text string, info *check.Info) bool {
 func isStrText(text string) bool {
 	switch strings.ToLower(strings.TrimSpace(text)) {
 	case "str", "string":
+		return true
+	}
+	return false
+}
+
+func isEnumType(text string, info *check.Info) bool {
+	if info == nil || info.Enums == nil {
+		return false
+	}
+	tt := strings.TrimSpace(text)
+	_, ok := info.Enums[tt]
+	return ok
+}
+
+func isNoneText(text string) bool {
+	switch strings.ToLower(strings.TrimSpace(text)) {
+	case "", "none":
 		return true
 	}
 	return false

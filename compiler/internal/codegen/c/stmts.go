@@ -19,15 +19,20 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 			if kind == "" {
 				kind = "int"
 			}
-			// store textual type for variable
+			// textual type given
 			if strings.TrimSpace(st.Binds[i].Type) != "" {
 				e.vars[name] = strings.TrimSpace(st.Binds[i].Type)
 				term.Wprintf(b, "%s%s %s = %s;\n", ind, cTypeFromText(e.vars[name], e.info), name, ce)
 			} else {
 				// infer from kind
-				if kind == "str" {
+				switch {
+				case kind == "str":
 					e.vars[name] = "str"
-				} else {
+				case strings.HasPrefix(kind, "struct:"):
+					e.vars[name] = strings.TrimSpace(kind[len("struct:"):])
+				case strings.HasPrefix(kind, "enum:"):
+					e.vars[name] = strings.TrimSpace(kind[len("enum:"):])
+				default:
 					e.vars[name] = "int"
 				}
 				term.Wprintf(b, "%s%s %s = %s;\n", ind, cTypeFromText(e.vars[name], e.info), name, ce)

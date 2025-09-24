@@ -25,6 +25,14 @@ func EmitFile(f *ast.File, info *check.Info) string {
 		}
 	}
 
+	// Emit typedefs for all enum declarations.
+	for _, d := range f.Decls {
+		if ed, ok := d.(*ast.EnumDecl); ok {
+			emitEnumTypedef(&b, ed, info)
+			term.Wprintf(&b, "\n")
+		}
+	}
+
 	// NOTE: struct-aware signatures (params + returns)
 	sigs := collectFuncSigs(f, info)
 
