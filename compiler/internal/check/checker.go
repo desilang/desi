@@ -42,19 +42,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 	}
 
-	// collect enums (M8 P1)
+	// collect enums (M8)
 	for _, d := range f.Decls {
 		if ed, ok := d.(*ast.EnumDecl); ok {
-			vars := map[string]string{}
+			variants := map[string]string{}
 			for _, v := range ed.Variants {
-				// Normalize payload: treat "", "none", "void" as no payload.
-				pt := strings.TrimSpace(v.Payload)
-				if pt == "" || strings.EqualFold(pt, "none") || strings.EqualFold(pt, "void") {
-					pt = ""
-				}
-				vars[v.Name] = pt
+				variants[v.Name] = v.Payload
 			}
-			info.Enums[ed.Name] = EnumInfo{Variants: vars}
+			info.Enums[ed.Name] = EnumInfo{Variants: variants}
 		}
 	}
 
@@ -70,7 +65,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 		var ps []Kind
 		for _, p := range fn.Params {
-			k, _ := mapTypeOrStruct(p.Type, info)
+			k, _ := mapTypeOrStruct(p.Type, info) // now also maps enums
 			ps = append(ps, k)
 		}
 		retK, _ := mapTypeOrStruct(fn.Ret, info)
@@ -102,7 +97,7 @@ func checkFunc(info *Info, fn *ast.FuncDecl) ([]error, []Warning) {
 			kind:       k,
 			mutable:    false,
 			declName:   p.Name,
-			structName: sname,
+			structName: sname, // reused for both struct+enum
 			read:       false,
 			written:    true,
 		}
