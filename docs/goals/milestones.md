@@ -31,126 +31,72 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 ### Implemented
 - **Parser**
   - Struct decls (`struct Name:\n  field: type`).
-  - Struct **literals** with designated init: `User{ id: 1, name: "X" }`.
-  - **Dotted LHS assignment**: `u.id := 42`, `u.name.first := "Ada"`.
+  - Struct **literals** `User{ id: 1, name: "X" }`.
+  - **Dotted LHS assignment** `u.id := 42`, `u.name.first := "Ada"`.
 - **Checker**
   - `Info.Structs` with field maps.
-  - Nested field access typing (`a.b.c`) + mark base var as read.
-  - Field-assignment validation along the full chain.
+  - Nested field access typing + base-var read.
+  - Field-assignment validation along the chain.
 - **Codegen (C)**
-  - `typedef struct { ... } Name;` emission.
-  - Locals of struct type; nested field assignment.
-  - Struct literals as designated initializers:
-    - `(User){ .id = 1, .name = "X" }`
-    - Nested: `(User){ .name = (Name){ .first = "x" } }`
-  - **Assignments use LHS expr** (ident or nested field). Legacy `Names` path retained for old tests.
-  - **Single assigns** emit directly (no temps). **Parallel assigns** still use temps to preserve eval order.
+  - `typedef struct { ... } Name;`.
+  - Locals of struct type; nested field assign.
+  - Designated initializers; nested inits.
+  - Assignments use **LHS expr**; single assigns are temp-free.
 
 ### Examples/Tests
-- `examples/struct_basic.desi`
-- `examples/struct_field_typecheck.desi`
-- `examples/struct_field_typecheck_bad.desi`
-- `examples/struct_phase_three.desi`
-- `examples/m7_structs_funcs.desi`
-- `examples/m7_structs_nested_assign.desi`
-- (legacy parallel) `examples/parallel_demo.desi`
+`examples/struct_basic.desi`, `examples/struct_field_typecheck*.desi`,
+`examples/struct_phase_three.desi`, `examples/m7_structs_funcs.desi`,
+`examples/m7_structs_nested_assign.desi`, `examples/parallel_demo.desi`
 
-### Follow-ups (tracked)
-- Move “undeclared assign” warnings from C emitter → **checker** (see `docs/goals/codegen-cleanup.md`).
-- LHS in emitter: **✅ A1 done**; remove legacy `Names` fallback in M8.
-- Consider struct pass/return by value (decide in M7 postscript or push to M8).
+### Follow-ups
+- Move undeclared-assign warnings to **checker** (see `docs/goals/codegen-cleanup.md`).
+- Remove legacy `Names` fallback in emitter (post-M8).
 
 ---
 
 ## M8 — Enums / Tagged Unions (In Progress)
 
-### Syntax (Phase-1)
-```desi
-enum Result:
-  Ok: int
-  Err: str
-
-enum MaybeStr:
-  Some: str
-  None: none  # zero-payload variant (maps to void/unit)
-```
-
-* Construction: `Result.Ok(42)`, `Result.Err("boom")`, `MaybeStr.Some("x")`, `MaybeStr.None()`.
-* Accessors/helpers auto-generated in Phase-1:
-
-  * `Result.is_Ok(x) -> bool`, `Result.unwrap_Ok(x) -> int`
-  * `MaybeStr.is_Some(x) -> bool`, `MaybeStr.unwrap_Some(x) -> str`
-  * (Unwrap on wrong variant: type error in future; Phase-1 returns default/UB-guarded stubs.)
-
-### Plan & Deliverables
-
-* **AST**
-
-  * `EnumDecl{Name string, Variants []EnumVariant}` with `EnumVariant{Name string, Type string /* "none" == void */}`.
-* **Parser**
-
-  * `enum` block with lines `Variant ":" Type`, permitting `none` for zero payload.
-* **Checker**
-
-  * `Info.Enums` table (like `Info.Structs`).
-  * Validate constructors’ arity/kinds; record variant payload kinds.
-  * Type for an enum value is the enum name (distinct from structs).
-* **Codegen (C)**
-
-  * Layout per enum:
-
-    ```c
-    typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
-    ```
-
-    (Tag values: 0,1,2… in declaration order.)
-  * Constructors: inline functions (or macros) `Result Result_Ok(int)`, `Result Result_Err(const char*)`.
-  * Predicates: `int Result_is_Ok(Result*)`, `int Result_is_Err(Result*)`.
-  * Unwraps: `int Result_unwrap_Ok(Result*)`, etc. (no panics yet; may return default if tag mismatch).
-* **Examples/Tests**
-
-  * `examples/m8_enum_result.desi`:
-
+### Implemented
+- **Parser**
+  - Enum decls:
     ```desi
     enum Result:
       Ok: int
       Err: str
-
-    def main() -> int:
-      let r: Result = Result.Ok(42)
-      if Result.is_Ok(r):
-        io.println("ok:", Result.unwrap_Ok(r))
-      else:
-        io.println("err:", Result.unwrap_Err(r))
-      return 0
     ```
-  * `examples/m8_enum_maybe.desi`:
-
+  - `match` statement:
     ```desi
-    enum MaybeStr:
-      Some: str
-      None: none
-
-    def main() -> int:
-      let m: MaybeStr = MaybeStr.Some("hi")
-      if MaybeStr.is_Some(m):
-        io.println("some:", MaybeStr.unwrap_Some(m))
-      else:
-        io.println("none")
-      return 0
+    match r:
+      Ok(x): ...
+      Err(e): ...
     ```
+- **Checker**
+  - Collect `Info.Enums` (variant → payload type).
+  - Constructor calls typed by variant payload (arity and type).
+  - `match`:
+    - Scrutinee must be enum.
+    - Unknown variant errors.
+    - Duplicate-arm error.
+    - Binder typed to payload.
+    - Non-exhaustive **warning** listing missing variants.
+- **Codegen (C)**
+  - C tagged union: `tag` + `union { ... } as;` and `#define Enum_Variant`.
+  - Constructors lower to designated initializers.
+  - `match` lowers to `switch(tag)` with payload extraction.
 
-### Future (not in Phase-1)
+### Examples/Tests
+- `examples/m8_enum_result.desi`
+- `examples/m8_enum_maybe.desi`
 
-* `match` with exhaustiveness checks.
-* Generics: `enum Result[T,E]: Ok: T; Err: E`.
-* Zero-cost `unwrap` with compile-time tag knowledge in `match`.
-* Better diagnostics on invalid unwraps.
+### Next
+- Wildcard/“default” arm (`_:`) → optional Stage-1 sugar (silences non-exhaustive).
+- Better diagnostics: point to missing variants in enum decl.
+- (Optional) Allow ignoring payload via `_` binder.
 
 ---
 
 ## How to update
 
-* Keep the table concise; put details under the milestone section.
-* When you land work, add the example(s)/test(s) and flip the status.
-* Cross-link deeper design docs (RFCS/spec) rather than duplicating content.
+- Keep the table concise; put details under the milestone section.
+- When you land work, add the example(s)/test(s) and flip the status.
+- Cross-link deeper design docs (RFCS/spec) rather than duplicating content.
