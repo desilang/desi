@@ -66,6 +66,15 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			}
 			f.Decls = append(f.Decls, sd)
 
+		case p.at(lexer.TokEnum):
+			enumTok := p.tok
+			p.next() // consume 'enum'
+			ed, err := p.parseEnumDeclAt(enumTok)
+			if err != nil {
+				return nil, err
+			}
+			f.Decls = append(f.Decls, ed)
+
 		default:
 			// Surface lexer errors immediately at top-level
 			if p.at(lexer.TokErr) {
@@ -144,7 +153,6 @@ func (p *Parser) parseTypeUntil(stoppers ...lexer.TokKind) (string, error) {
 /*** NEW: type alias parser (M6) ***/
 
 // parseTypeDeclAt expects we've just consumed 'type'.
-// Grammar:
 //
 //	type <Ident> = <type> NEWLINE
 func (p *Parser) parseTypeDeclAt(typeTok lexer.Token) (*ast.TypeDecl, error) {

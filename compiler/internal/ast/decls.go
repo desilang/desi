@@ -23,7 +23,7 @@ type Param struct {
 /*** NEW: TypeDecl (M6) ***/
 
 type TypeDecl struct {
-	Name       string // alias name
+	Name       string
 	Underlying string // textual underlying type
 	Span       Span   // whole decl span (optional for now)
 }
@@ -46,4 +46,21 @@ type Field struct {
 	Name string
 	Type string
 	Span Span // 'name: type' span
+}
+
+/*** NEW: EnumDecl (M8 P1) ***/
+
+type EnumDecl struct {
+	Name     string
+	Variants []EnumVariant
+	Span     Span // whole enum span
+}
+
+func (EnumDecl) node() {}
+func (EnumDecl) decl() {}
+
+type EnumVariant struct {
+	Name    string // variant name (e.g., Ok, Err)
+	Payload string // textual payload type; "" means no payload (aka `none`)
+	Span    Span   // span of this variant line
 }

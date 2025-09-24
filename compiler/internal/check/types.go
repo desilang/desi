@@ -13,6 +13,7 @@ const (
 	KindBool
 	KindVoid
 	KindStruct
+	// NOTE: We will add KindEnum when we typecheck enum *values* (M8 P2).
 )
 
 func (k Kind) String() string {
@@ -45,10 +46,16 @@ type StructInfo struct {
 	Fields map[string]string
 }
 
+type EnumInfo struct {
+	// Variant name -> textual payload type ("" => no payload)
+	Variants map[string]string
+}
+
 type Info struct {
 	Funcs   map[string]FuncSig // function table for arity/type checks
 	Types   map[string]string  // type aliases: Name -> Underlying (textual)
 	Structs map[string]StructInfo
+	Enums   map[string]EnumInfo // NEW (M8): enum definitions
 }
 
 // Warning is a lightweight compiler warning.

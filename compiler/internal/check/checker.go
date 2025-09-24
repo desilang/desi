@@ -26,11 +26,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Funcs:   map[string]FuncSig{},
 		Types:   map[string]string{},
 		Structs: map[string]StructInfo{},
+		Enums:   map[string]EnumInfo{}, // NEW
 	}
 	var errs []error
 	var warns []Warning
 
-	// collect structs (M7 phase 2 foundation)
+	// collect structs (M7)
 	for _, d := range f.Decls {
 		if sd, ok := d.(*ast.StructDecl); ok {
 			fields := map[string]string{}
@@ -38,6 +39,22 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				fields[ft.Name] = ft.Type
 			}
 			info.Structs[sd.Name] = StructInfo{Fields: fields}
+		}
+	}
+
+	// collect enums (M8 P1)
+	for _, d := range f.Decls {
+		if ed, ok := d.(*ast.EnumDecl); ok {
+			vars := map[string]string{}
+			for _, v := range ed.Variants {
+				// Normalize payload: treat "", "none", "void" as no payload.
+				pt := strings.TrimSpace(v.Payload)
+				if pt == "" || strings.EqualFold(pt, "none") || strings.EqualFold(pt, "void") {
+					pt = ""
+				}
+				vars[v.Name] = pt
+			}
+			info.Enums[ed.Name] = EnumInfo{Variants: vars}
 		}
 	}
 
