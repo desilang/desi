@@ -43,7 +43,8 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
   - Struct literals as designated initializers:
     - `(User){ .id = 1, .name = "X" }`
     - Nested: `(User){ .name = (Name){ .first = "x" } }`
-  - **Temps pruned** for single assignments (kept only for parallel assigns).
+  - **Assignments use LHS expr** (ident or nested field). Legacy `Names` path retained for old tests.
+  - **Single assigns** emit directly (no temps). **Parallel assigns** still use temps to preserve eval order.
 
 ### Examples/Tests
 - `examples/struct_basic.desi`
@@ -52,10 +53,11 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 - `examples/struct_phase_three.desi`
 - `examples/m7_structs_funcs.desi`
 - `examples/m7_structs_nested_assign.desi`
+- (legacy parallel) `examples/parallel_demo.desi`
 
 ### Follow-ups (tracked)
 - Move “undeclared assign” warnings from C emitter → **checker** (see `docs/goals/codegen-cleanup.md`).
-- Switch C emitter to use `AssignStmt.LHS` (Expr) fully; remove legacy `Names` path.
+- LHS in emitter: **✅ A1 done**; remove legacy `Names` fallback in M8.
 - Consider struct pass/return by value (decide in M7 postscript or push to M8).
 
 ---
@@ -65,4 +67,3 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 - Keep the table concise; put details under the milestone section.
 - When you land work, add the example(s)/test(s) and flip the status.
 - Cross-link deeper design docs (RFCS/spec) rather than duplicating content.
-
