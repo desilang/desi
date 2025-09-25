@@ -72,30 +72,29 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 * `Info.Enums` collected.
 * Constructor checks:
-  * Arity and payload type validation with detailed diagnostics (`Result.Ok expects int, got str`).
+  * Arity and payload type validation with **detailed diagnostics** (e.g., `wrong payload type for Result.Ok: expected int, got str`).
 * `match` rules:
-  * Scrutinee must be enum.
+  * Scrutinee must be enum (or Unknown while editing).
   * Duplicate/unknown variants error.
   * Binder typed from payload; `_` binder ignored.
-  * Exhaustiveness warning names the enum and lists missing variants.
-* Function return analysis:
-  * Accepts **implicit tail expression return** when type-compatible.
+  * Exhaustiveness warning **names the enum** and lists missing variants.
+* Function returns:
+  * **Implicit tail-expression return** accepted when type-compatible.
 
 **Codegen (C)**
 
 * Tagged union lowering:
 ```c
-  #define Result_Ok 0
-  #define Result_Err 1
-  typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
-
+#define Result_Ok 0
+#define Result_Err 1
+typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 ```
 
-* Constructors lower via designated inits.
-* `match` lowers to `switch (__scrut.tag)` with binder extraction.
+* Constructors via designated inits.
+* `match` → `switch (__scrut.tag)` with per-variant binder extraction.
 * Scrutinee evaluated once into `__scrut`.
 * `io.println` joins multiple args with spaces.
-* Implicit tail expression → lowered as `return <expr>;`.
+* Tail expression lowered as `return <expr>;`.
 
 **Emitter cleanup**
 
@@ -117,6 +116,8 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## M14 — Diagnostics (🚧 Ongoing)
 
-* JSON codes registry + Rust-style renderer (baseline ✅).
-* Bridge parses legacy lexer lines; plan to transition to structured `DIAG` rows.
-* To do: propagate spans from parser/checker everywhere; pretty notes/suggestions.
+* **Baseline ✅**: JSON codes registry + Rust-style renderer.
+* **Typed checker errors carry spans** where available (e.g., undefined name).
+* Bridge still parses legacy lexer lines; we’ll transition to structured `DIAG` rows.
+* Next: propagate spans from parser/checker broadly; add secondary notes/suggestions for common cases.
+
