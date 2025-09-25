@@ -1,0 +1,17 @@
+# Triggers a non-exhaustive match warning that names the enum and lists missing variants.
+enum Three:
+  A: none
+  B: none
+  C: none
+
+def mk() -> Three:
+  Three.A()
+
+def main() -> int:
+  match mk():
+    A():
+      io.println("saw A")
+    B():
+      io.println("saw B")
+  io.println("done")
+  0
