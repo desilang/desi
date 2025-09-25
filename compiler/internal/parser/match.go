@@ -9,7 +9,7 @@ import (
 
 // Grammar (Stage-1):
 //
-//	match <Ident> : NEWLINE
+//	match <Expr> : NEWLINE
 //	  INDENT
 //	    <Variant> ( "(" <Ident>? ")" )? ":" NEWLINE
 //	      INDENT
@@ -19,15 +19,15 @@ import (
 //	  DEDENT
 //
 // Additions in this version:
+// - Non-identifier scrutinee: any expression is allowed on the right of `match`.
 // - Wildcard arm: "_:" (no payload allowed).
 // - Ignore-binder: Variant(_) — "_" is accepted as the (ignored) payload binder.
 func (p *Parser) parseMatchStmtAt(matchTok lexer.Token) (*ast.MatchStmt, error) {
-	// Stage-1: require scrutinee to be a bare identifier
-	idTok, err := p.expect(lexer.TokIdent)
+	// NEW: allow full expression as scrutinee, not just a bare identifier.
+	scrut, err := p.parseExpr()
 	if err != nil {
 		return nil, err
 	}
-	scrut := &ast.IdentExpr{Name: idTok.Lex, Span: spanTok(idTok, idTok)}
 
 	if _, err := p.expect(lexer.TokColon); err != nil {
 		return nil, err
