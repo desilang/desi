@@ -4,23 +4,23 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Snapshot
 
-| ID  | Milestone                            | Status | Notes / Artifacts                        |
-| --- | ------------------------------------ | :----: | ---------------------------------------- |
-| M1  | Single-line function defs            |    ✅   | `examples/singleline_def.desi`           |
-| M2  | Single-line `if`                     |    ✅   | `examples/singleline_if*.desi`           |
-| M3  | Compound assignments (`+= −= *= /=`) |    ✅   | `examples/plus_assign.desi`              |
-| M4  | Dotted call exprs (`io.println(x)`)  |    ✅   | `examples/str_api_demo.desi`             |
-| M5  | String literals + escapes            |    ✅   | used across examples                     |
-| M6  | Type aliases                         |    ✅   | `examples/type_alias.desi`               |
-| M7  | Structs                              |    ✅   | see section below                        |
-| M8  | Enums / tagged unions                |   🚧   | see section below                        |
-| M9  | Import hygiene                       |    ⏳   | cycles, OS parity                        |
-| M10 | Public/exported decls                |    ⏳   | `pub def`, `pub struct`                  |
-| M11 | `async` / `await` (minimal)          |    ⏳   | —                                        |
-| M12 | Channels & `spawn`                   |    ⏳   | —                                        |
-| M13 | C-ABI module boundary                |    ⏳   | `.a/.so` + `.dmi`                        |
-| M14 | Spans & pretty errors everywhere     |   🚧   | lexer/parser many; full coverage pending |
-| M15 | Watch mode (`desic dev`)             |    ⏳   | —                                        |
+| ID  | Milestone                            | Status | Notes / Artifacts                                        |
+|-----|--------------------------------------|:------:|----------------------------------------------------------|
+| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`                           |
+| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`                           |
+| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`                              |
+| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`                             |
+| M5  | String literals + escapes            |   ✅    | used across examples                                     |
+| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`                               |
+| M7  | Structs                              |   ✅    | see section below                                        |
+| M8  | Enums / tagged unions                |   🚧   | **Code ✅ (this pass); docs pending** — see section below |
+| M9  | Import hygiene                       |   ⏳    | cycles, OS parity                                        |
+| M10 | Public/exported decls                |   ⏳    | `pub def`, `pub struct`                                  |
+| M11 | `async` / `await` (minimal)          |   ⏳    | —                                                        |
+| M12 | Channels & `spawn`                   |   ⏳    | —                                                        |
+| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                                        |
+| M14 | Spans & pretty errors everywhere     |   🚧   | lexer/parser many; full coverage pending                 |
+| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                                        |
 
 ---
 
@@ -29,18 +29,15 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 ### Implemented
 
 * **Parser**
-
   * Struct decls:
     `struct Name:\n  first: str\n  last: str`
   * Struct literals (designated): `User{ id: 1, name: "X" }`
   * Dotted LHS assignment (nested OK): `u.id := 42`, `u.name.first := "Ada"`
 * **Checker**
-
   * `Info.Structs` (field map).
   * Nested field access typing; base var marked read.
   * Field-assignment validation along full chain.
 * **Codegen (C)**
-
   * `typedef struct { ... } Name;`
   * Locals of struct type; nested field assign.
   * Designated initializers, incl. nested.
@@ -55,13 +52,12 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 ### Follow-ups
 
 * Move “undeclared assign” warnings from C emitter → **checker** (`docs/goals/codegen-cleanup.md`).
-* Remove legacy `AssignStmt.Names` fallback in emitter (post-M8).
 
 ---
 
-## M8 — Enums / Tagged Unions (🚧 In progress)
+## M8 — Enums / Tagged Unions (🚧 Code ✅; docs pending)
 
-### What enums look like (current Stage-1 syntax)
+### Syntax (Stage-1)
 
 ```desi
 enum Result:
@@ -71,99 +67,97 @@ enum Result:
 enum MaybeStr:
   Some: str
   None: none
-```
+````
 
 * Constructors are qualified calls: `Result.Ok(200)`, `Result.Err("boom")`, `MaybeStr.None()`.
 * `none|void|""` payload is treated as **no payload**.
 
-### Implemented so far
+### Implemented (this pass)
 
 **Parser**
 
-* `enum` declarations (`Variant: payloadType`), `none` means no payload.
-* `match` statement (Stage-1 scrutinee is an identifier):
+* `enum` declarations (`Variant: payloadType`), `none` ⇒ no payload.
+* `match` statement now supports **non-identifier scrutinee**:
 
-  ```
-  match r:
-    Ok(x): ...
-    Err(e): ...
-  ```
-* **Wildcard arm** `_:` (default case) supported.
-* **Ignore binder** `_` allowed in payload position: `Err(_): ...`
-* **Validation:** wildcard may **not** take a payload → parser error `"wildcard '_' cannot have a payload"`.
+  * `match r: ...`
+  * `match make_result(): ...`
+  * `match Result.Ok(1): ...`
+* **Wildcard arm** `_:` and **ignore binder** `_`:
+
+  * `Err(_): ...`
+  * wildcard may **not** have a payload (parser error).
 
 **Checker**
 
 * Collect `Info.Enums` (Variant → payload textual type).
-* Constructor calls typed by payload:
+* Constructor checking:
 
-  * Arity check (no/one arg depending on variant).
-  * Type check against payload type.
+  * Arity validation.
+  * Payload type validation with improved diagnostics:
+
+    * `wrong payload type for Result.Ok: expected int, got str`
+    * `Result.Ok expects 1 arg(s), got N`
 * `match` rules:
 
-  * Scrutinee must be enum (or Unknown → still check bodies).
-  * Unknown variant → error.
-  * Duplicate arm for same variant → error.
-  * Binder (e.g., `x` in `Ok(x)`) is typed to the variant payload; `_` binder is permitted and ignored.
-  * **Exhaustiveness:** if no wildcard arm, warn and list missing variants.
-  * With wildcard arm `_:` present, exhaustiveness warning is suppressed.
+  * Scrutinee must be enum (or Unknown while editing).
+  * Unknown/duplicate variants → error.
+  * Binder typed from variant payload; `_` allowed/ignored.
+  * **Exhaustiveness warning** lists missing variants and **names the enum**:
+
+    * `non-exhaustive match on enum Result: missing Ok, Err`
+* Function analysis:
+
+  * **Implicit tail-expression return** accepted (suppresses DW0006) when the last statement is an `ExprStmt` whose type unifies with the function’s return type.
 
 **Codegen (C)**
 
-* Tagged union layout per enum:
+* Tagged-union lowering:
 
   ```c
   #define Result_Ok 0
   #define Result_Err 1
   typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
   ```
-* Constructors lower to designated initializers:
+* Constructors lower via designated inits.
+* `match`:
 
-  * No payload: `(Enum){ .tag = Enum_Variant }`
-  * With payload: `(Enum){ .tag = Enum_Variant, .as.Variant = <expr> }`
-* `match` lowers to:
+  * Scrutinee expression is evaluated **once** into `__scrut`, then we `switch (__scrut.tag)`.
+  * Payload binder (if not `_`) is declared with the correct C type.
+* `io.println` joins multiple arguments with spaces:
 
-  ```c
-  Enum __scrut = r;
-  switch (__scrut.tag) {
-    case Result_Ok: { int x = __scrut.as.Ok; ...; break; }
-    case Result_Err: { const char* e = __scrut.as.Err; ...; break; }
-    default: { ... } // from wildcard arm
-  }
-  ```
-* `printf` format selection in `match` bodies respects inferred payload type (avoids `%d`/`%s` mismatch warnings).
+  * `io.println("a", "b", 1)` → `printf("%s %s %d\n", ...)`.
+* **Implicit tail return** lowering:
+
+  * If the last statement is an `ExprStmt` in a non-void function, it becomes `return <expr>;`.
+
+**Emitter cleanup**
+
+* Removed legacy `AssignStmt.Names` path from **emitter** and **checker**; assignments now use LHS expressions exclusively.
 
 ### Examples/Tests
 
-* Constructors & basic usage: `examples/m8_enum_result.desi`, `examples/m8_enum_maybe.desi`
-* New features:
+* Constructors & basics: `examples/m8_enum_result.desi`, `examples/m8_enum_maybe.desi`
+* Match features:
 
-  * Wildcard arm: `examples/m8_match_wildcard.desi`
+  * Wildcard: `examples/m8_match_wildcard.desi`
   * Ignore binder: `examples/m8_match_ignore_binder.desi`
+* New scrutinee support:
 
-### Open items / Next steps (M8)
+  * `examples/m8_match_call_scrutinee.desi`
+  * `examples/m8_match_ctor_literal_scrutinee.desi`
+* Diagnostics & println:
 
-1. **Parser**
+  * `examples/m8_ctor_payload_type_error.desi`
+  * `examples/m8_match_non_exhaustive.desi`
+  * `examples/println_spacing.desi`
 
-  * Allow non-identifier scrutinee: `match compute(): ...` (currently ident-only).
-  * Optional: support `match e` on a single line with inline blocks (later).
-2. **Checker**
+### Open items (to finish M8)
 
-  * Point missing-variant diagnostics at the enum declaration (nice-to-have).
-  * Enrich notes for wrong-payload types (tell which variant & expected type).
-3. **Codegen**
+* **Docs** (Task 4, pending in this pass):
 
-  * Remove legacy `AssignStmt.Names` path once tests are migrated.
-  * Consider emitting `enum` + `struct` tags as `enum { ... }` for readability (cosmetic).
-4. **Spec/Docs**
-
-  * Finalize `docs/spec/enums.md` & `docs/spec/grammar_enums.ebnf` (drafts added).
-  * Document `_:` wildcard & `_` ignore binder with gotchas (no payload on `_`).
-5. **Future (post-M8)**
-
-  * Pattern guards (`Ok(x) if x > 0:`).
-  * Multi-field payloads (tuple/struct-like) and destructuring.
-  * Generic Result/Option once generics land.
+  * `docs/spec/enums.md`: add wildcard / ignore-binder sections, pitfalls.
+  * `docs/spec/grammar_enums.ebnf`: include non-identifier scrutinee.
+* (Nice-to-have) Point missing-variant notes at the enum decl site (spans/notes).
 
 ---
 
@@ -172,12 +166,4 @@ enum MaybeStr:
 * JSON codes registry + Rust-style renderer (baseline ✅).
 * Bridge parses legacy lexer lines; plan to transition to structured `DIAG` rows.
 * To do: propagate spans from parser/checker everywhere; pretty notes/suggestions.
-
----
-
-## Suggested next actions
-
-1. **M8 polish**: enable non-ident scrutinee; add richer checker messages; finish docs/examples.
-2. **Emitter cleanup**: delete legacy `Names` path (make tests use LHS exprs).
-3. **M14**: start emitting structured `DIAG` from parser/checker for a couple of cases (pilot).
 
