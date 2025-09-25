@@ -1,5 +1,37 @@
 # Goal: Rust-like diagnostics in Desi
 
+## Code ID format (stable)
+
+Every diagnostic code is a fixed-width **7-character** token:
+
+```
+
+D <Domain> <Level> <NNNNN>
+
+```
+
+- The literal `D` prefixes all Desi diagnostics.
+- **Domain** (one letter):
+  - `L` — **Lexer**
+  - `P` — **Parser**
+  - `T` — **Type** checker / semantic analysis
+  - `M` — **Module/import** loader & resolution
+  - `C` — **Codegen** / backend
+  - `R` — **Runtime** (future)
+- **Level** (one letter):
+  - `E` — **Error**
+  - `W` — **Warning**
+  - `N` — **Note** (rare; typically attached to another diag)
+- **NNNNN** — zero-padded numeric ID per (Domain, Level)
+  - Example: `DLE0001` (Desi Lexer Error #1)
+  - Example: `DPW0002` (Desi Parser Warning #2)
+  - Example: `DME0001` (Desi Module Error #1 — e.g., import cycle)
+  - Example: `DTW0007` (Desi Type Warning #7 — e.g., non-exhaustive match)
+
+> The **registry** (`codes.json`) owns the mapping from `(domain, key)` to **ID** and **title**. Emitters pick the right `(domain, key)`, and the renderer hydrates the final ID/title/help.
+
+---
+
 ## Phase 0 — Baseline (✅ done)
 
 * JSON **codes registry** (`codes.json`) with IDs, titles, default help, shaping (`primary_end`), and default suggestions.
@@ -12,8 +44,8 @@ Define a single schema the Desi toolchain will emit (lexer/parser/typechecker), 
 
 **Fields (minimal, stable):**
 
-* `domain`: `"lexer" | "parser" | "type" | "other"`
-* `key`: stable registry key, e.g. `"unterminated_string"`, `"use_after_move"`
+* `domain`: `"lexer" | "parser" | "type" | "module" | "codegen" | "runtime"`
+* `key`: stable registry key, e.g. `"unterminated_string"`, `"use_after_move"`, `"import_cycle"`
 * `level`: `"error" | "warning" | "note"`
 * `code`: optional override (else derived from registry)
 * `message`: optional override (else registry title)
@@ -82,7 +114,7 @@ Create a small Desi library:
 
 * **Color** output (ANSI), with `--no-color` flag and TTY detection.
 * **Path elision**: shorten long paths (e.g., repo-relative) in headers.
-* **Tab/Unicode** alignment\*\*: already handled (visual column logic); keep it in Desi too.
+* **Tab/Unicode** alignment**: already handled (visual column logic); keep it in Desi too.
 * **`desic --explain CODE`**: print longform explanation (pull from a doc map).
 * **`--fix`**: apply machine-applicable suggestions (in-memory rewrite + write-back).
 * **i18n**: keep `codes.json` translatable (e.g., `title_en`, `title_xx`; renderer picks locale).
