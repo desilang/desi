@@ -363,10 +363,6 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
   }
 
   enumName := c.enumNameOfExpr(m.Scrut)
-  if enumName == "" {
-    // If we couldn't infer (Unknown), continue to check arms shallowly.
-  }
-
   // Build variant universe for exhaustiveness.
   var universe map[string]struct{}
   var payloadType = make(map[string]string)
@@ -382,14 +378,29 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 
   // Track duplicates & seen
   seen := map[string]struct{}{}
+  wildcardSeen := false
 
   for i := range m.Arms {
     arm := &m.Arms[i]
 
+    // Wildcard arm: "_:" — no variant name, no binder, just check body.
+    if arm.Pat.Variant == "_" {
+      if wildcardSeen {
+        c.errors = append(c.errors, fmt.Errorf("duplicate wildcard arm '_'"))
+      }
+      wildcardSeen = true
+      c.withBlock(func() {
+        for _, s := range arm.Body {
+          c.checkStmt(s)
+        }
+      })
+      continue
+    }
+
     // Unknown enum? We still check arm bodies in a block for general errors.
     if enumName == "" {
       c.withBlock(func() {
-        if arm.Pat.Bind != "" {
+        if arm.Pat.Bind != "" && arm.Pat.Bind != "_" {
           _ = c.scope.define(arm.Pat.Bind, &varInfo{
             kind:     KindUnknown,
             mutable:  false,
@@ -425,19 +436,23 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
     // Payload binder typing (if any)
     pt := strings.TrimSpace(payloadType[arm.Pat.Variant])
     c.withBlock(func() {
-      if !isNoneText(pt) && arm.Pat.Bind != "" {
-        k, sname := mapTypeOrStruct(pt, c.info)
-        _ = c.scope.define(arm.Pat.Bind, &varInfo{
-          kind:       k,
-          structName: sname, // reused for struct-or-enum name
-          mutable:    false,
-          declName:   arm.Pat.Bind,
-          written:    true,
-        })
-      } else if isNoneText(pt) && arm.Pat.Bind != "" {
-        c.errors = append(c.errors, fmt.Errorf("variant %q has no payload; binder %q is invalid", arm.Pat.Variant, arm.Pat.Bind))
-      } else if !isNoneText(pt) && arm.Pat.Bind == "" {
-        // allow ignoring payload
+      if !isNoneText(pt) {
+        // payloadful variant
+        if arm.Pat.Bind != "" && arm.Pat.Bind != "_" {
+          k, sname := mapTypeOrStruct(pt, c.info)
+          _ = c.scope.define(arm.Pat.Bind, &varInfo{
+            kind:       k,
+            structName: sname, // reused for struct-or-enum name
+            mutable:    false,
+            declName:   arm.Pat.Bind,
+            written:    true,
+          })
+        }
+      } else {
+        // payloadless variant
+        if arm.Pat.Bind != "" {
+          c.errors = append(c.errors, fmt.Errorf("variant %q has no payload; binder %q is invalid", arm.Pat.Variant, arm.Pat.Bind))
+        }
       }
 
       for _, s := range arm.Body {
@@ -446,8 +461,8 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
     })
   }
 
-  // Exhaustiveness warning (only if we know the enum)
-  if enumName != "" && universe != nil {
+  // Exhaustiveness warning (only if we know the enum and no wildcard)
+  if enumName != "" && universe != nil && !wildcardSeen {
     missing := make([]string, 0, len(universe))
     for v := range universe {
       if _, ok := seen[v]; !ok {

@@ -1,6 +1,8 @@
 package parser
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
@@ -15,6 +17,10 @@ import (
 //	      DEDENT
 //	    (more arms ...)
 //	  DEDENT
+//
+// Additions in this version:
+// - Wildcard arm: "_:" (no payload allowed).
+// - Ignore-binder: Variant(_) — "_" is accepted as the (ignored) payload binder.
 func (p *Parser) parseMatchStmtAt(matchTok lexer.Token) (*ast.MatchStmt, error) {
 	// Stage-1: require scrutinee to be a bare identifier
 	idTok, err := p.expect(lexer.TokIdent)
@@ -35,7 +41,7 @@ func (p *Parser) parseMatchStmtAt(matchTok lexer.Token) (*ast.MatchStmt, error) 
 
 	var arms []ast.MatchArm
 	for !p.at(lexer.TokDedent) && !p.at(lexer.TokEOF) {
-		// Variant name
+		// Variant name (including "_" for wildcard)
 		vTok, err := p.expect(lexer.TokIdent)
 		if err != nil {
 			return nil, err
@@ -43,15 +49,19 @@ func (p *Parser) parseMatchStmtAt(matchTok lexer.Token) (*ast.MatchStmt, error) 
 		pat := ast.Pattern{Variant: vTok.Lex}
 		endTok := vTok
 
-		// Optional "()" or "(name)"
+		// Wildcard can't carry payload.
+		if pat.Variant == "_" && p.at(lexer.TokLParen) {
+			return nil, fmt.Errorf("wildcard '_' cannot have a payload")
+		}
+
+		// Optional "()" or "(name)" — binder can be "_" (ignored) or any identifier.
 		if p.accept(lexer.TokLParen) {
-			// payload binding is optional (for None() we allow empty parens)
 			if p.at(lexer.TokIdent) {
 				bTok, err := p.expect(lexer.TokIdent)
 				if err != nil {
 					return nil, err
 				}
-				pat.Bind = bTok.Lex
+				pat.Bind = bTok.Lex // may be "_" (ignore-binder)
 				endTok = bTok
 			}
 			rp, err := p.expect(lexer.TokRParen)
