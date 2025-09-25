@@ -14,8 +14,8 @@ type env struct {
 	fn          *ast.FuncDecl
 	info        *check.Info
 	sigs        map[string]sig
-	vars        map[string]string // name -> textual type ("int"/"str"/struct name/...)
-	retKind     string            // "void"|"int"|"str"|"struct:<Name>"
+	vars        map[string]string // name -> textual type ("int"/"str"/struct name/enum name/...)
+	retKind     string            // "void"|"int"|"str"|"struct:<Name>"|"enum:<Name>"
 	defers      []ast.Expr        // function-scope defers (LIFO)
 	tempCounter int
 }
@@ -35,7 +35,7 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		defers:  nil,
 	}
 	for _, p := range fn.Params {
-		// keep textual type so we can know struct names
+		// keep textual type so we can know precise names for structs/enums
 		if strings.TrimSpace(p.Type) == "" {
 			e.vars[p.Name] = "int"
 		} else {
@@ -69,11 +69,17 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		case "str":
 			term.Wprintf(b, "  return \"\";\n")
 		default:
-			if strings.HasPrefix(e.retKind, "struct:") {
+			switch {
+			case strings.HasPrefix(e.retKind, "struct:"):
 				name := strings.TrimPrefix(e.retKind, "struct:")
 				// Zero-init struct return on fallthrough.
 				term.Wprintf(b, "  return (%s){0};\n", name)
-			} else {
+			case strings.HasPrefix(e.retKind, "enum:"):
+				name := strings.TrimPrefix(e.retKind, "enum:")
+				// Zero-init enum aggregate { tag=0, union=0 } on fallthrough.
+				term.Wprintf(b, "  return (%s){0};\n", name)
+			default:
+				// Fallback (shouldn't trigger, but stay safe)
 				term.Wprintf(b, "  return 0;\n")
 			}
 		}
