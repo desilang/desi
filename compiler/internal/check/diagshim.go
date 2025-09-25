@@ -3,16 +3,21 @@ package check
 import (
 	"fmt"
 
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
 // typedError carries a diagnostic code, a rendered title/message,
 // and (domain,key) so the CLI can fetch help text from the catalog.
+// Now with optional Span and Notes to enable pretty rendering.
 type typedError struct {
 	code   string
 	title  string
 	domain string
 	key    string
+
+	span  *ast.Span
+	notes []string
 }
 
 func (e typedError) Error() string {
@@ -25,6 +30,15 @@ func (e typedError) Code() string   { return e.code }
 func (e typedError) Title() string  { return e.title }
 func (e typedError) Domain() string { return e.domain }
 func (e typedError) Key() string    { return e.key }
+
+// Span Optional accessors for richer rendering in the CLI.
+func (e typedError) Span() (ast.Span, bool) {
+	if e.span == nil {
+		return ast.Span{}, false
+	}
+	return *e.span, true
+}
+func (e typedError) Notes() []string { return e.notes }
 
 // lookupIDTitle consults the diag catalog; falls back if missing.
 func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, string) {
@@ -59,7 +73,7 @@ func warnCode(domain, key, fallbackID string) string {
 }
 
 // -----------------------------------------------------------------------------
-// New helpers (catalog-driven) for common TYPE errors and WARN codes
+// Catalog-driven helpers (with and without spans)
 // -----------------------------------------------------------------------------
 
 // ErrTypeArityMismatch produces DTE0002 (arity mismatch) with contextual counts.
@@ -72,6 +86,13 @@ func ErrUndefinedName(name, context string) error {
 	id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "undefined_name"}
+}
+
+// ErrUndefinedNameAt span-aware version.
+func ErrUndefinedNameAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "undefined_name", span: &sp}
 }
 
 // ErrRedeclaredSymbol produces DTE0003 when a name is redefined in the same scope.
@@ -88,11 +109,25 @@ func ErrTypeMismatch(expected, found, context string) error {
 	return typedError{code: id, title: msg, domain: "type", key: "type_mismatch"}
 }
 
+// ErrTypeMismatchAt span-aware mismatch.
+func ErrTypeMismatchAt(sp ast.Span, expected, found, context string, notes ...string) error {
+	id, title := lookupIDTitle("type", "type_mismatch", "DTE0004", "type mismatch")
+	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
+	return typedError{code: id, title: msg, domain: "type", key: "type_mismatch", span: &sp, notes: notes}
+}
+
 // ErrWrongReturnKind produces DTE0005 when a function's return expression mismatches the declared type.
 func ErrWrongReturnKind(expected, found, context string) error {
 	id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
 	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
 	return typedError{code: id, title: msg, domain: "type", key: "wrong_return_kind"}
+}
+
+// ErrWrongReturnKindAt span-aware return-kind mismatch.
+func ErrWrongReturnKindAt(sp ast.Span, expected, found, context string) error {
+	id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
+	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
+	return typedError{code: id, title: msg, domain: "type", key: "wrong_return_kind", span: &sp}
 }
 
 // Warning code getters (IDs only). Use these to tag Warning models consistently.
@@ -118,4 +153,11 @@ func ErrAssignToImmutable(name, context string) error {
 	id, title := lookupIDTitle("type", "assign_to_immutable", "DTE0006", "cannot assign to immutable variable")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "assign_to_immutable"}
+}
+
+// ErrAssignToImmutableAt span-aware version.
+func ErrAssignToImmutableAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "assign_to_immutable", "DTE0006", "cannot assign to immutable variable")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "assign_to_immutable", span: &sp}
 }
