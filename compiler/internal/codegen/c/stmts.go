@@ -129,18 +129,21 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 		}
 
 	case *ast.MatchStmt:
-		// Determine the enum name & C expr for the scrutinee.
+		// Evaluate scrutinee exactly once into a temp, then switch on its tag.
 		sx, sk := cExprFor(st.Scrut, e)
+
 		enumName := ""
 		if strings.HasPrefix(sk, "enum:") {
 			enumName = strings.TrimSpace(sk[len("enum:"):])
-		} else if id, ok := st.Scrut.(*ast.IdentExpr); ok {
-			if t, ok := e.vars[id.Name]; ok && isEnumType(t, e.info) {
-				enumName = strings.TrimSpace(t)
+		}
+		if enumName == "" {
+			// Fallback: try to infer from constructor calls like Result.Ok(1)
+			if inferred := enumNameFromExprC(st.Scrut, e); inferred != "" {
+				enumName = inferred
 			}
 		}
 		if enumName == "" {
-			enumName = "int" // fallback (shouldn't happen with Stage-1)
+			enumName = "int" // last-resort fallback to avoid C type errors
 		}
 
 		term.Wprintf(b, "%s%s __scrut = %s;\n", ind, enumName, sx)
@@ -340,4 +343,25 @@ func isNoneTextC(t string) bool {
 	default:
 		return false
 	}
+}
+
+// Infer enum name from a scrutinee expression when cExprFor(kind) didn't provide it.
+func enumNameFromExprC(eexpr ast.Expr, e *env) string {
+	switch v := eexpr.(type) {
+	case *ast.CallExpr:
+		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
+			if id, ok := fe.X.(*ast.IdentExpr); ok {
+				if isEnumType(id.Name, e.info) {
+					return id.Name
+				}
+			}
+		}
+	case *ast.FieldExpr:
+		if id, ok := v.X.(*ast.IdentExpr); ok {
+			if isEnumType(id.Name, e.info) {
+				return id.Name
+			}
+		}
+	}
+	return ""
 }
