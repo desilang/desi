@@ -427,7 +427,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
       sort.Strings(missing)
       c.warnings = append(c.warnings, Warning{
         Code: warnCode("warn", "non_exhaustive_match", "DW0007"),
-        Msg:  fmt.Sprintf("non-exhaustive match on enum %s: missing %s", enumName, strings.Join(missing, ", ")),
+        Msg:  fmt.Sprintf("non-exhaustive match (in enum %s): missing %s", enumName, strings.Join(missing, ", ")),
       })
     }
   }

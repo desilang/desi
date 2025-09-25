@@ -26,8 +26,12 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		if _, isFn := c.info.Funcs[v.Name]; isFn {
 			return KindUnknown
 		}
-		// undefined name
-		c.errors = append(c.errors, ErrUndefinedName(v.Name, "identifier"))
+		// undefined name — attach span when available
+		if (v.Span != ast.Span{}) {
+			c.errors = append(c.errors, ErrUndefinedNameAt(v.Span, v.Name, "identifier"))
+		} else {
+			c.errors = append(c.errors, ErrUndefinedName(v.Name, "identifier"))
+		}
 		return KindUnknown
 
 	case *ast.UnaryExpr:
@@ -185,7 +189,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 						gotK := c.kindOfExpr(v.Args[0])
 						if wantK != KindUnknown {
 							if _, ok := unifyKinds(wantK, gotK); !ok {
-								// Improved diagnostic
+								// Improved diagnostic with enum & variant names
 								c.errors = append(c.errors, fmt.Errorf("wrong payload type for %s.%s: expected %s, got %s", id.Name, fe.Name, wantK, gotK))
 							}
 						}
