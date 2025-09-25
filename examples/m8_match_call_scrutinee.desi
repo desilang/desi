@@ -1,0 +1,15 @@
+enum Result:
+  Ok: int
+  Err: str
+
+def make_result() -> Result:
+  if 1 == 1: return Result.Ok(42)
+  else: return Result.Err("oops")
+
+def main() -> int:
+  match make_result():
+    Ok(x):
+      io.println("ok from call", x)
+    Err(_):
+      io.println("err from call")
+  0
