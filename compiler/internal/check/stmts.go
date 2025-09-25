@@ -356,14 +356,19 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 /* ---------- match checking (enums) ---------- */
 
 func (c *checker) checkMatch(m *ast.MatchStmt) {
-  // Scrutinee must be an enum-typed expression.
+  // Scrutinee must be an enum-typed expression (or Unknown while editing).
   sk := c.kindOfExpr(m.Scrut)
   if sk != KindEnum && sk != KindUnknown {
     c.errors = append(c.errors, fmt.Errorf("match expects an enum scrutinee, got %s", sk))
   }
 
+  // Try to resolve the enum name from the scrutinee expression.
   enumName := c.enumNameOfExpr(m.Scrut)
-  // Build variant universe for exhaustiveness.
+  if enumName == "" {
+    enumName = c.enumNameFromExprFallback(m.Scrut)
+  }
+
+  // Build variant universe for exhaustiveness & payload typing.
   var universe map[string]struct{}
   var payloadType = make(map[string]string)
   if enumName != "" {
@@ -477,6 +482,28 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
       })
     }
   }
+}
+
+// Try to infer enum name for non-identifier scrutinee, e.g. Result.Ok(1) calls.
+func (c *checker) enumNameFromExprFallback(e ast.Expr) string {
+  switch v := e.(type) {
+  case *ast.CallExpr:
+    // Result.Ok(1) → Callee is FieldExpr(X=Ident(Result), Name=Ok)
+    if fe, ok := v.Callee.(*ast.FieldExpr); ok {
+      if id, ok := fe.X.(*ast.IdentExpr); ok {
+        if _, ok2 := c.info.Enums[id.Name]; ok2 {
+          return id.Name
+        }
+      }
+    }
+  case *ast.FieldExpr:
+    if id, ok := v.X.(*ast.IdentExpr); ok {
+      if _, ok2 := c.info.Enums[id.Name]; ok2 {
+        return id.Name
+      }
+    }
+  }
+  return ""
 }
 
 func (c *checker) structNameOfExpr(e ast.Expr) string {
