@@ -51,8 +51,27 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 			cType(e.retKind), fn.Name, cParamList(fn, info))
 	}
 
-	// body
-	for _, s := range fn.Body {
+	// body (with implicit tail-expression return lowering)
+	tailReturned := false
+	for i, s := range fn.Body {
+		if i == len(fn.Body)-1 && e.retKind != "void" {
+			if es, ok := s.(*ast.ExprStmt); ok {
+				// Treat the tail expression as the function's return value.
+				cExpr, kind := cExprFor(es.Expr, e)
+				switch {
+				case e.retKind == "int" && kind != "int":
+					term.Wprintf(b, "%s/* non-int tail expr; force 0 */\n", "  ")
+					term.Wprintf(b, "%sreturn 0;\n", "  ")
+				case e.retKind == "str" && kind != "str":
+					term.Wprintf(b, "%s/* non-str tail expr; force \"\" */\n", "  ")
+					term.Wprintf(b, "%sreturn \"\";\n", "  ")
+				default:
+					term.Wprintf(b, "%sreturn %s;\n", "  ", cExpr)
+				}
+				tailReturned = true
+				continue
+			}
+		}
 		emitStmt(b, 2, s, e)
 	}
 
@@ -60,7 +79,7 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 	if len(e.defers) > 0 {
 		emitDefers(b, 2, e)
 	}
-	if !hasTailReturn(fn.Body) {
+	if !tailReturned && !hasTailReturn(fn.Body) {
 		switch e.retKind {
 		case "void":
 			// no-op
@@ -79,7 +98,7 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 				// Zero-init enum aggregate { tag=0, union=0 } on fallthrough.
 				term.Wprintf(b, "  return (%s){0};\n", name)
 			default:
-				// Fallback (shouldn't trigger, but stay safe)
+				// Fallback
 				term.Wprintf(b, "  return 0;\n")
 			}
 		}
