@@ -1,11 +1,16 @@
 (* Enum declarations *)
-enum_decl = "enum", IDENT, ":", NEWLINE, INDENT, { enum_variant, NEWLINE }, DEDENT ;
+enum_decl    = "enum", IDENT, ":", NEWLINE, INDENT, { enum_variant, NEWLINE }, DEDENT ;
 enum_variant = IDENT, ":", type_or_none ;
 type_or_none = "none" | type ;
 
 (* Match statement *)
-match_stmt = "match", expr, ":", NEWLINE, INDENT, { match_arm }, DEDENT ;
-match_arm  = pattern, ":", NEWLINE, INDENT, { stmt }, DEDENT ;
+match_stmt   = "match", expr, ":", NEWLINE, INDENT, { match_arm }, DEDENT ;
 
-(* Pattern: Variant(payload?) *)
-pattern    = IDENT, "(", [ IDENT ], ")" ;
+(* Pattern arms *)
+match_arm    = pattern, ":", NEWLINE, INDENT, { stmt }, DEDENT ;
+
+(* Pattern forms *)
+pattern      = "_"                       (* wildcard arm *)
+             | IDENT, "(", [ binder ], ")" ;
+
+binder       = IDENT | "_"               (* payload binder or ignore binder *)

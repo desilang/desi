@@ -52,13 +52,52 @@ match m:
     io.println("none")
 ```
 
+### Wildcard Arm
+
+A `_:` arm acts as a catch-all/default:
+
+```desi
+match r:
+  Ok(x): io.println("ok", x)
+  _:     io.println("something else")
+```
+
+Notes:
+
+* The `_:` wildcard cannot bind a payload (parser error if written as `_(_): …`).
+* If a wildcard arm is present, exhaustiveness warnings are suppressed.
+
+### Ignore Binder
+
+You may use `_` inside a variant pattern to ignore its payload:
+
+```desi
+match r:
+  Ok(_):  io.println("ok (ignored value)")
+  Err(_): io.println("err (ignored msg)")
+```
+
+### Non-identifier Scrutinee
+
+The scrutinee of `match` may be any expression, not just an identifier:
+
+```desi
+match make_result():
+  Ok(x):  io.println("ok from call", x)
+  Err(_): io.println("err from call")
+
+match Result.Ok(1):
+  Ok(v):  io.println("ctor literal", v)
+  Err(_): io.println("unexpected err")
+```
+
 Typechecking (Stage-1):
 
-* Scrutinee must be an enum.
+* Scrutinee must be an enum expression (variable, function call returning enum, or constructor literal).
 * Each arm must reference a valid variant of that enum.
 * Binder (e.g., `x`, `s`) is typed to the variant’s payload type.
 * Duplicate arms are an error.
-* Non-exhaustive matches emit a warning listing missing variants.
+* Non-exhaustive matches emit a warning listing missing variants (with enum name).
 
 ## C Lowering (overview)
 
