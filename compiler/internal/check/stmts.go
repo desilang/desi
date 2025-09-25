@@ -166,7 +166,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 }
 
 func (c *checker) checkAssign(st *ast.AssignStmt) {
-  // Prefer new LHS (Expr) if available; fall back to legacy Names.
+  // Preferred path: LHS []Expr only.
   if len(st.LHS) > 0 {
     if len(st.LHS) != len(st.Exprs) {
       c.errors = append(c.errors, typedErr(
@@ -296,60 +296,9 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
     return
   }
 
-  // ---- Legacy path (Names) ----
-  if len(st.Names) != len(st.Exprs) {
-    c.errors = append(c.errors, typedErr(
-      "type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
-      "assignment", len(st.Names), len(st.Exprs),
-    ))
-  }
-
-  _max := _min(len(st.Names), len(st.Exprs))
-  for i := 0; i < _max; i++ {
-    name := st.Names[i]
-    rk := c.kindOfExpr(st.Exprs[i])
-
-    v, ok := c.scope.lookup(name)
-    if !ok {
-      c.errors = append(c.errors, ErrUndefinedName(name, "assignment"))
-      continue
-    }
-    if !v.mutable {
-      c.errors = append(c.errors, ErrAssignToImmutable(name, "assignment"))
-      continue
-    }
-
-    if v.kind == KindStruct {
-      rhsStruct := c.structNameOfExpr(st.Exprs[i])
-      if rhsStruct != "" && rhsStruct == v.structName {
-        v.written = true
-        continue
-      }
-      if rk != KindUnknown {
-        c.errors = append(c.errors, fmt.Errorf("assignment to %q: incompatible struct value", name))
-      }
-      v.written = true
-      continue
-    }
-    if v.kind == KindEnum {
-      rhsEnum := c.enumNameOfExpr(st.Exprs[i])
-      if rhsEnum != "" && rhsEnum == v.structName {
-        v.written = true
-        continue
-      }
-      if rk != KindUnknown {
-        c.errors = append(c.errors, fmt.Errorf("assignment to %q: incompatible enum value", name))
-      }
-      v.written = true
-      continue
-    }
-
-    if k, ok := unifyKinds(v.kind, rk); !ok {
-      c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", v.kind), fmt.Sprintf("%s", rk), "assignment"))
-    } else if v.kind == KindUnknown {
-      v.kind = k
-    }
-    v.written = true
+  // ---- Legacy path removed ----
+  if len(st.Names) > 0 {
+    c.errors = append(c.errors, fmt.Errorf("internal: legacy AssignStmt.Names path is no longer supported; use LHS []Expr"))
   }
 }
 
@@ -478,7 +427,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
       sort.Strings(missing)
       c.warnings = append(c.warnings, Warning{
         Code: warnCode("warn", "non_exhaustive_match", "DW0007"),
-        Msg:  fmt.Sprintf("non-exhaustive match on %s: missing %s", enumName, strings.Join(missing, ", ")),
+        Msg:  fmt.Sprintf("non-exhaustive match on enum %s: missing %s", enumName, strings.Join(missing, ", ")),
       })
     }
   }

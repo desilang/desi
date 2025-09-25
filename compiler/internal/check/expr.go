@@ -179,13 +179,14 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 						expect = 1
 					}
 					if len(v.Args) != expect {
-						c.errors = append(c.errors, fmt.Errorf("%s.%s: want %d arg(s), got %d", id.Name, fe.Name, expect, len(v.Args)))
+						c.errors = append(c.errors, fmt.Errorf("%s.%s expects %d arg(s), got %d", id.Name, fe.Name, expect, len(v.Args)))
 					} else if expect == 1 {
 						wantK, _ := mapTypeOrStruct(vt, c.info)
 						gotK := c.kindOfExpr(v.Args[0])
 						if wantK != KindUnknown {
 							if _, ok := unifyKinds(wantK, gotK); !ok {
-								c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", wantK), fmt.Sprintf("%s", gotK), "enum payload"))
+								// Improved diagnostic
+								c.errors = append(c.errors, fmt.Errorf("wrong payload type for %s.%s: expected %s, got %s", id.Name, fe.Name, wantK, gotK))
 							}
 						}
 					}
