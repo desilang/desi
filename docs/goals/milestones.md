@@ -4,23 +4,23 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Snapshot
 
-| ID  | Milestone                            | Status | Notes / Artifacts                        |
-|-----|--------------------------------------|:------:|------------------------------------------|
-| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`           |
-| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`           |
-| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`              |
-| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`             |
-| M5  | String literals + escapes            |   ✅    | used across examples                     |
-| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`               |
-| M7  | Structs                              |   ✅    | see section below                        |
-| M8  | Enums / tagged unions                |   ✅    | see section below                        |
-| M9  | Import hygiene                       |   ⏳    | cycles, OS parity                        |
-| M10 | Public/exported decls                |   ⏳    | `pub def`, `pub struct`                  |
-| M11 | `async` / `await` (minimal)          |   ⏳    | —                                        |
-| M12 | Channels & `spawn`                   |   ⏳    | —                                        |
-| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                        |
-| M14 | Spans & pretty errors everywhere     |   🚧   | lexer/parser many; full coverage pending |
-| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                        |
+| ID  | Milestone                            | Status | Notes / Artifacts                         |
+|-----|--------------------------------------|:------:|-------------------------------------------|
+| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`            |
+| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`            |
+| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`               |
+| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`              |
+| M5  | String literals + escapes            |   ✅    | used across examples                      |
+| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`                |
+| M7  | Structs                              |   ✅    | see section below                         |
+| M8  | Enums / tagged unions                |   ✅    | see section below                         |
+| M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics |
+| M10 | Public/exported decls                |   ⏳    | `pub def`, `pub struct`                   |
+| M11 | `async` / `await` (minimal)          |   ⏳    | —                                         |
+| M12 | Channels & `spawn`                   |   ⏳    | —                                         |
+| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                         |
+| M14 | Spans & pretty errors everywhere     |   🚧   | lexer/parser many; full coverage pending  |
+| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                         |
 
 ---
 
@@ -84,6 +84,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 **Codegen (C)**
 
 * Tagged union lowering:
+
 ```c
 #define Result_Ok 0
 #define Result_Err 1
@@ -111,6 +112,68 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
 * `docs/spec/enums.md` finalized with wildcard, ignore binder, non-ident scrutinee.
 * `docs/spec/grammar_enums.ebnf` updated.
+
+---
+
+## M9 — Import hygiene (✅ Completed)
+
+### Implemented
+
+**Parser**
+
+* Plain module aliasing: `import util.math as m`.
+* From-imports with optional aliasing and spans:
+
+  * `from util.math import add`
+  * `from util.math import add as addition, sub`
+* Friendlier identifier diagnostics when a keyword is used where an identifier is required (alias/name):
+
+  * `DPE0002: keyword "def" cannot be used as an identifier for alias …`
+* `ast` JSON encode/decode updated to include `FromImportDecl` + `ImportItem` with spans.
+
+**Loader / Resolver**
+
+* Cross-platform module resolution against:
+
+  * current project directory, then
+  * each ancestor `compiler/lib` directory (OS-parity via `filepath` + symlink-aware comparisons).
+* Diagnostics (typed, with codes):
+
+  * `DME0001 import cycle` with a/b/c chain.
+  * `DME0002 cannot find module "X"` with “looked for:” attempted paths.
+  * `DMW0001 duplicate import` (per-file, de-duplicated by module path).
+* Merge order preserved: entry module first, then dependencies.
+
+**Checker**
+
+* From-import alias map threads into function bodies:
+
+  * `addition(1,2)` resolves to `util.math.add` signature.
+* Module alias calls: `m.add(x)` type-checked against actual function signature.
+* Shadowing rules: local bindings/params **override** module aliases:
+
+  * `let m = Point{...}; m.x` is a struct field access, not a module reference.
+* Diagnostics:
+
+  * Bare module alias used as a value: `error: module alias "m" (from "util.math") is not a value; use m.<symbol>`.
+  * Unknown symbol under a module alias: `error: unknown symbol "nope" in module alias "m" (from "util.math")`.
+  * Duplicate `from … import` aliases on the same line flagged clearly.
+  * Undefined names carry spans when available.
+
+**Codegen (C)**
+
+* Expression statements that don’t produce a value are lowered safely (e.g., `(void)(m.x);`) to avoid unused-value warnings.
+* No special casing otherwise—module aliasing is purely a front-end concern.
+
+### Examples/Tests
+
+* `examples/m9_import_alias.desi`
+* `examples/m9_module_alias_as_value.desi`
+* `examples/m9_module_unknows_symbol.desi`
+* `examples/m9_local_var_shadowing.desi`
+* `examples/m9_alias_collision_module_vs_from.desi`
+* `examples/m9_alias_collision_from_same_line.desi`
+* `examples/m9_alias_reserved_name.desi`
 
 ---
 
