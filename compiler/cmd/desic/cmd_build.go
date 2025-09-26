@@ -233,13 +233,16 @@ func cmdBuild(args []string) int {
 	}
 
 	if len(perr) > 0 {
+		loaderErrs := 0
+		loaderWarns := 0
 		for _, e := range perr {
-			// Pretty lexbridge errors if present; otherwise print raw or typed.
+			// Pretty lexbridge errors if present; treat as errors.
 			if pretty := lexbridge.RenderLexbridgeErrorPretty(e, guessErrFile(e.Error(), a.file), nil); pretty != "" {
 				term.Eprintf("%s", pretty)
+				loaderErrs++
 				continue
 			}
-			// If a typed error (from future phases), render header with code and help.
+			// Typed diagnostics from loader: warnings (DW...) vs errors (everything else).
 			type codedWithKey interface {
 				Code() string
 				Title() string
@@ -247,16 +250,32 @@ func cmdBuild(args []string) int {
 				Key() string
 			}
 			if te, ok := e.(codedWithKey); ok && strings.TrimSpace(te.Code()) != "" {
-				term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
-				if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
-					term.Eprintf("help: %s\n", h)
+				codeUp := strings.ToUpper(strings.TrimSpace(te.Code()))
+				if strings.HasPrefix(codeUp, "DW") {
+					term.Eprintf("warning[%s]: %s\n", te.Code(), te.Title())
+					if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+						term.Eprintf("help: %s\n", h)
+					}
+					loaderWarns++
+				} else {
+					term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
+					if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+						term.Eprintf("help: %s\n", h)
+					}
+					loaderErrs++
 				}
-			} else {
-				term.Eprintf("error: %v\n", e)
+				continue
 			}
+			// Fallback: unknown type → error.
+			term.Eprintf("error: %v\n", e)
+			loaderErrs++
 		}
-		term.Eprintf("summary: %d error(s), %d warning(s)\n", len(perr), 0)
-		return 1
+		if loaderErrs > 0 || (a.werr && loaderWarns > 0) {
+			term.Eprintf("summary: %d error(s), %d warning(s)\n", loaderErrs, loaderWarns)
+			return 1
+		}
+		// If only warnings, continue to typecheck/codegen.
+		term.Eprintf("summary: %d error(s), %d warning(s)\n", 0, loaderWarns)
 	}
 
 	// Typecheck
