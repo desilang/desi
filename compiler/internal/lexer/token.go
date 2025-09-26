@@ -36,6 +36,7 @@ const (
 	TokEnum
 	TokPackage
 	TokImport
+	TokFrom // NEW
 	TokAs
 	TokType // NEW (M6 type aliases)
 
@@ -140,6 +141,8 @@ func (k TokKind) String() string {
 		return "package"
 	case TokImport:
 		return "import"
+	case TokFrom:
+		return "from"
 	case TokAs:
 		return "as"
 	case TokType:

@@ -44,18 +44,19 @@ type FuncSig struct {
 }
 
 type StructInfo struct {
-	Fields map[string]string // Field -> textual type
+	Fields map[string]string
 }
 
 type EnumInfo struct {
-	Variants map[string]string // Variant -> textual payload type (""/"none"/"void" => no payload)
+	Variants map[string]string
 }
 
 type Info struct {
 	Funcs   map[string]FuncSig
 	Types   map[string]string
 	Structs map[string]StructInfo
-	Enums   map[string]EnumInfo // NEW
+	Enums   map[string]EnumInfo
+	Aliases map[string]string
 }
 
 // Warning is a lightweight compiler warning.

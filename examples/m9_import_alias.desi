@@ -1,0 +1,6 @@
+from util.math import add as addition
+
+def main() -> int:
+  let x = addition(1,2)
+  print(x)
+  return 0

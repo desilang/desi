@@ -23,10 +23,11 @@ type jSpan struct {
 /* ---------- top level ---------- */
 
 type jFile struct {
-	Kind    string    `json:"kind"` // "File"
-	Package *jPackage `json:"package,omitempty"`
-	Imports []jImport `json:"imports,omitempty"`
-	Decls   []any     `json:"decls,omitempty"`
+	Kind        string        `json:"kind"` // "File"
+	Package     *jPackage     `json:"package,omitempty"`
+	Imports     []jImport     `json:"imports,omitempty"`
+	FromImports []jFromImport `json:"from_imports,omitempty"`
+	Decls       []any         `json:"decls,omitempty"`
 }
 
 type jPackage struct {
@@ -37,6 +38,22 @@ type jPackage struct {
 type jImport struct {
 	Kind string `json:"kind"` // "ImportDecl"
 	Path string `json:"path"`
+}
+
+/*** NEW: from-imports ***/
+
+type jFromImport struct {
+	Kind   string        `json:"kind"` // "FromImportDecl"
+	Module string        `json:"module"`
+	Items  []jImportItem `json:"items,omitempty"`
+	Span   jSpan         `json:"span"`
+}
+
+type jImportItem struct {
+	Kind string `json:"kind"` // "ImportItem"
+	Name string `json:"name"`
+	As   string `json:"as,omitempty"`
+	Span jSpan  `json:"span"`
 }
 
 /* ---------- decls ---------- */
@@ -228,6 +245,24 @@ func toJFile(f *File) jFile {
 	for _, im := range f.Imports {
 		imps = append(imps, jImport{Kind: "ImportDecl", Path: im.Path})
 	}
+	fimps := make([]jFromImport, 0, len(f.FromImports))
+	for _, fi := range f.FromImports {
+		items := make([]jImportItem, 0, len(fi.Items))
+		for _, it := range fi.Items {
+			items = append(items, jImportItem{
+				Kind: "ImportItem",
+				Name: it.Name,
+				As:   it.As,
+				Span: spanJS(it.Span),
+			})
+		}
+		fimps = append(fimps, jFromImport{
+			Kind:   "FromImportDecl",
+			Module: fi.Module,
+			Items:  items,
+			Span:   spanJS(fi.Span),
+		})
+	}
 	d := make([]any, 0, len(f.Decls))
 	for _, dec := range f.Decls {
 		switch v := dec.(type) {
@@ -241,7 +276,7 @@ func toJFile(f *File) jFile {
 			// future decl kinds
 		}
 	}
-	return jFile{Kind: "File", Package: pkg, Imports: imps, Decls: d}
+	return jFile{Kind: "File", Package: pkg, Imports: imps, FromImports: fimps, Decls: d}
 }
 
 func toJFunc(fd *FuncDecl) jFuncDecl {

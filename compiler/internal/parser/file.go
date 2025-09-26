@@ -25,16 +25,27 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 		p.skipNewlines()
 	}
 
-	// imports
-	for p.accept(lexer.TokImport) {
-		path, err := p.parseDottedIdent()
-		if err != nil {
-			return nil, err
+	// imports (plain and from-imports)
+	for p.at(lexer.TokImport) || p.at(lexer.TokFrom) {
+		if p.accept(lexer.TokImport) {
+			path, err := p.parseDottedIdent()
+			if err != nil {
+				return nil, err
+			}
+			if _, err := p.expect(lexer.TokNewline); err != nil {
+				return nil, err
+			}
+			f.Imports = append(f.Imports, ast.ImportDecl{Path: path})
+		} else {
+			// from-import
+			fromTok := p.tok
+			p.next() // consume 'from'
+			fi, err := p.parseFromImportAt(fromTok)
+			if err != nil {
+				return nil, err
+			}
+			f.FromImports = append(f.FromImports, *fi)
 		}
-		if _, err := p.expect(lexer.TokNewline); err != nil {
-			return nil, err
-		}
-		f.Imports = append(f.Imports, ast.ImportDecl{Path: path})
 		p.skipNewlines()
 	}
 
@@ -105,6 +116,49 @@ func (p *Parser) parseDottedIdent() (string, error) {
 		parts = append(parts, t.Lex)
 	}
 	return strings.Join(parts, "."), nil
+}
+
+// from <module> import <name> [as <alias>] (',' <name> [as <alias>])*
+func (p *Parser) parseFromImportAt(fromTok lexer.Token) (*ast.FromImportDecl, error) {
+	mod, err := p.parseDottedIdent()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := p.expect(lexer.TokImport); err != nil {
+		return nil, err
+	}
+	var items []ast.ImportItem
+	// At least one item
+	for {
+		nameTok, err := p.expect(lexer.TokIdent)
+		if err != nil {
+			return nil, err
+		}
+		it := ast.ImportItem{Name: nameTok.Lex, Span: spanTok(nameTok, nameTok)}
+		if p.accept(lexer.TokAs) {
+			aliasTok, err := p.expect(lexer.TokIdent)
+			if err != nil {
+				return nil, err
+			}
+			it.As = aliasTok.Lex
+			it.Span = spanTok(nameTok, aliasTok)
+		}
+		items = append(items, it)
+		if p.accept(lexer.TokComma) {
+			// support further items; do not allow trailing comma before newline (Stage-1: keep strict)
+			continue
+		}
+		break
+	}
+	nl, err := p.expect(lexer.TokNewline)
+	if err != nil {
+		return nil, err
+	}
+	return &ast.FromImportDecl{
+		Module: mod,
+		Items:  items,
+		Span:   spanTok(fromTok, nl),
+	}, nil
 }
 
 func (p *Parser) parseTypeUntil(stoppers ...lexer.TokKind) (string, error) {

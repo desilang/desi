@@ -18,6 +18,9 @@ type env struct {
 	retKind     string            // "void"|"int"|"str"|"struct:<Name>"|"enum:<Name>"
 	defers      []ast.Expr        // function-scope defers (LIFO)
 	tempCounter int
+
+	// NEW: alias map from from-imports (alias -> original)
+	aliases map[string]string
 }
 
 func (e *env) newTemp() string {
@@ -33,9 +36,15 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		vars:    map[string]string{},
 		retKind: typeToKindOrStruct(fn.Ret, info),
 		defers:  nil,
+		aliases: nil,
 	}
+
+	// plumb alias map from checker info
+	if info != nil && info.Aliases != nil {
+		e.aliases = info.Aliases
+	}
+
 	for _, p := range fn.Params {
-		// keep textual type so we can know precise names for structs/enums
 		if strings.TrimSpace(p.Type) == "" {
 			e.vars[p.Name] = "int"
 		} else {
@@ -56,7 +65,6 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 	for i, s := range fn.Body {
 		if i == len(fn.Body)-1 && e.retKind != "void" {
 			if es, ok := s.(*ast.ExprStmt); ok {
-				// Treat the tail expression as the function's return value.
 				cExpr, kind := cExprFor(es.Expr, e)
 				switch {
 				case e.retKind == "int" && kind != "int":
@@ -75,7 +83,6 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 		emitStmt(b, 2, s, e)
 	}
 
-	// On normal fallthrough, run defers then synthesize default return if needed.
 	if len(e.defers) > 0 {
 		emitDefers(b, 2, e)
 	}
@@ -91,14 +98,11 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
 			switch {
 			case strings.HasPrefix(e.retKind, "struct:"):
 				name := strings.TrimPrefix(e.retKind, "struct:")
-				// Zero-init struct return on fallthrough.
 				term.Wprintf(b, "  return (%s){0};\n", name)
 			case strings.HasPrefix(e.retKind, "enum:"):
 				name := strings.TrimPrefix(e.retKind, "enum:")
-				// Zero-init enum aggregate { tag=0, union=0 } on fallthrough.
 				term.Wprintf(b, "  return (%s){0};\n", name)
 			default:
-				// Fallback
 				term.Wprintf(b, "  return 0;\n")
 			}
 		}
