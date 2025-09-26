@@ -1,0 +1,6 @@
+import util.math
+import util.math  # duplicate on purpose
+
+def main() -> int:
+  print("ok")
+  return 0
