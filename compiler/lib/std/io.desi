@@ -1,0 +1,6 @@
+# std.io shim
+# Note: println(...) is a compiler intrinsic lowered by the backend.
+# This file merely allows `import std.io` to resolve during M9.
+
+def __std_io_marker() -> int:
+  0
