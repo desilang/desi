@@ -100,6 +100,11 @@
       "id": "DME0002",
       "title": "cannot find module",
       "help": "verify the dotted path and ensure the file exists under a search root (project dir or compiler/lib)"
+    },
+    "duplicate_import": {
+      "id": "DMW0001",
+      "title": "duplicate import",
+      "help": "remove the repeated import; importing the same module multiple times has no effect"
     }
   },
   "warn": {
