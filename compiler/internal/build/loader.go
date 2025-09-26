@@ -15,7 +15,7 @@ import (
 /* ---------- typed module diagnostics (lightweight) ---------- */
 
 type modErr struct {
-  code   string // DME0001/2 (reserved for errors)
+  code   string // DME0001/2 (errors) or DMW0001 (warning)
   title  string
   key    string // stable key in catalog, e.g. "import_cycle"
   detail string // extra context shown after the title line
@@ -66,7 +66,6 @@ func rel(root, p string) string {
 }
 
 // collectLibRoots walks upward from startDir to / and returns every ancestor "compiler/lib" dir.
-// This avoids false-positives like "examples/compiler" and is future-proof if users add their own compiler/.
 func collectLibRoots(startDir string) []string {
   var libs []string
   seen := map[string]bool{}
@@ -175,11 +174,24 @@ func ResolveAndParse(entryPath string) (*ast.File, []error) {
     }
 
     // resolve imports (std.* resolves via any ancestor compiler/lib)
+    seenLocal := map[string]bool{} // per-file duplicate-import detection
     for _, imp := range f.Imports {
       path := strings.TrimSpace(imp.Path)
       if path == "" {
         continue
       }
+      if seenLocal[path] {
+        errs = append(errs, modErr{
+          code:   "DMW0001",
+          title:  "duplicate import",
+          key:    "duplicate_import",
+          detail: fmt.Sprintf("%q in %s", path, rel(rootDir, absPath)),
+        })
+        // do not re-load duplicates
+        continue
+      }
+      seenLocal[path] = true
+
       target, tried := resolveModule(roots, path)
       if target == "" {
         errs = append(errs, modErr{
@@ -277,11 +289,23 @@ func ResolveAndParseWith(entryPath string, loader func(absPath string) (parser.T
       return
     }
 
+    seenLocal := map[string]bool{}
     for _, imp := range f.Imports {
       path := strings.TrimSpace(imp.Path)
       if path == "" {
         continue
       }
+      if seenLocal[path] {
+        errs = append(errs, modErr{
+          code:   "DMW0001",
+          title:  "duplicate import",
+          key:    "duplicate_import",
+          detail: fmt.Sprintf("%q in %s", path, rel(rootDir, absPath)),
+        })
+        continue
+      }
+      seenLocal[path] = true
+
       target, tried := resolveModule(roots, path)
       if target == "" {
         errs = append(errs, modErr{
@@ -408,11 +432,23 @@ func ResolveAndParseWithParserBridge(entryFile string, useExternal bool, bin str
       return
     }
 
+    seenLocal := map[string]bool{}
     for _, im := range f.Imports {
       path := strings.TrimSpace(im.Path)
       if path == "" {
         continue
       }
+      if seenLocal[path] {
+        errs = append(errs, modErr{
+          code:   "DMW0001",
+          title:  "duplicate import",
+          key:    "duplicate_import",
+          detail: fmt.Sprintf("%q in %s", path, rel(rootDir, absPath)),
+        })
+        continue
+      }
+      seenLocal[path] = true
+
       target, tried := resolveModule(roots, path)
       if target == "" {
         errs = append(errs, modErr{
