@@ -19,10 +19,40 @@ type checker struct {
 	locals        []*varInfo
 	blockReturned []bool
 
-	// from-import alias -> original symbol name
+	// From-import alias map: alias -> original symbol name
 	aliases map[string]string
-	// module alias -> module path (e.g., "m" -> "util.math")
+
+	// Module alias map: alias -> module path (e.g., "util.math")
 	modAliases map[string]string
+}
+
+// ---------- reserved names for aliasing ----------
+
+func reservedAliasReason(name string) string {
+	n := strings.ToLower(strings.TrimSpace(name))
+	if n == "" {
+		return ""
+	}
+
+	// language keywords (Stage-1 superset, harmless if extra)
+	keywords := map[string]struct{}{
+		"package": {}, "import": {}, "from": {}, "as": {}, "def": {}, "struct": {}, "enum": {}, "type": {},
+		"let": {}, "mut": {}, "if": {}, "elif": {}, "else": {}, "while": {}, "return": {}, "match": {}, "defer": {},
+		"true": {}, "false": {},
+	}
+	if _, ok := keywords[n]; ok {
+		return "reserved keyword"
+	}
+
+	// builtins / std shims / known module roots
+	builtins := map[string]struct{}{
+		"print": {}, "io": {}, "fs": {}, "os": {}, "mem": {}, "str": {},
+	}
+	if _, ok := builtins[n]; ok {
+		return "reserved builtin"
+	}
+
+	return ""
 }
 
 // CheckFile performs semantic checks and returns info, errors, and warnings.
@@ -77,26 +107,63 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
 	}
 
-	// build alias maps
-	fromAlias := map[string]string{}  // alias -> original symbol
-	modAliases := map[string]string{} // alias -> module path
+	// ---------- Build alias maps + diagnostics ----------
+
+	// 1) from-import aliases
+	fromAliases := map[string]string{} // alias -> original
 	for _, fi := range f.FromImports {
+		seenLine := map[string]struct{}{}
 		for _, it := range fi.Items {
-			if as := strings.TrimSpace(it.As); as != "" {
-				fromAlias[as] = it.Name
+			a := strings.TrimSpace(it.As)
+			if a == "" {
+				continue // only 'as' aliases are tracked here
+			}
+			if reason := reservedAliasReason(a); reason != "" {
+				errs = append(errs, fmt.Errorf("invalid alias name %q (%s)", a, reason))
+			}
+			if _, dup := seenLine[a]; dup {
+				errs = append(errs, fmt.Errorf("duplicate alias %q in from-import from %q", a, fi.Module))
+			}
+			seenLine[a] = struct{}{}
+			if prev, exists := fromAliases[a]; exists {
+				errs = append(errs, fmt.Errorf("duplicate from-import alias %q (already used for %q)", a, prev))
+			} else {
+				fromAliases[a] = it.Name
 			}
 		}
 	}
+
+	// 2) module aliases
+	modAliases := map[string]string{} // alias -> module path
 	for _, im := range f.Imports {
-		if as := strings.TrimSpace(im.As); as != "" {
-			modAliases[as] = im.Path
+		if len(im.Aliases) == 0 {
+			continue
+		}
+		alias := strings.TrimSpace(im.Aliases[0])
+		if alias == "" {
+			continue
+		}
+		if reason := reservedAliasReason(alias); reason != "" {
+			errs = append(errs, fmt.Errorf("invalid alias name %q (%s)", alias, reason))
+		}
+		if prev, exists := modAliases[alias]; exists {
+			errs = append(errs, fmt.Errorf("duplicate module alias %q (for %q and %q)", alias, prev, im.Path))
+			continue
+		}
+		modAliases[alias] = im.Path
+	}
+
+	// 3) cross conflicts: same name used as module alias and from-alias
+	for a, modPath := range modAliases {
+		if orig, ok := fromAliases[a]; ok {
+			errs = append(errs, fmt.Errorf("alias %q used both as module alias (from %q) and as from-import alias (to %q)", a, modPath, orig))
 		}
 	}
 
-	// check bodies
+	// ---------- check bodies ----------
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok {
-			fnErrs, fnWarns := checkFunc(info, fn, fromAlias, modAliases)
+			fnErrs, fnWarns := checkFunc(info, fn, fromAliases, modAliases)
 			errs = append(errs, fnErrs...)
 			warns = append(warns, fnWarns...)
 		}
@@ -104,14 +171,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	return info, errs, warns
 }
 
-func checkFunc(info *Info, fn *ast.FuncDecl, aliasMap map[string]string, modAliases map[string]string) ([]error, []Warning) {
+func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, modAliasMap map[string]string) ([]error, []Warning) {
 	c := &checker{
 		info:       info,
 		fnSig:      info.Funcs[fn.Name],
 		scope:      &scope{vars: map[string]*varInfo{}},
 		locals:     nil,
-		aliases:    aliasMap,
-		modAliases: modAliases,
+		aliases:    fromAliasMap,
+		modAliases: modAliasMap,
 	}
 	// params (immutable)
 	for i, p := range fn.Params {
