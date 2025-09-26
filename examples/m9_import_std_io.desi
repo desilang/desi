@@ -1,0 +1,5 @@
+import std.io
+
+def main() -> int:
+  io.println("hello from std.io", 42)
+  return 0
