@@ -90,6 +90,18 @@
       "help": "declare the variable with 'mut' if you intend to reassign it"
     }
   },
+  "module": {
+    "import_cycle": {
+      "id": "DME0001",
+      "title": "import cycle",
+      "help": "break the cycle by removing or refactoring one of the imports"
+    },
+    "missing_module": {
+      "id": "DME0002",
+      "title": "cannot find module",
+      "help": "verify the dotted path and ensure the file exists under a search root (project dir or compiler/lib)"
+    }
+  },
   "warn": {
     "unused_variable": {
       "id": "DW0001",
