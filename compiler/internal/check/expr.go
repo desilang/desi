@@ -17,11 +17,20 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindStr
 	case *ast.BoolLit:
 		return KindBool
+	case *ast.StructLit:
+		// struct literal has a known, named struct type
+		return KindStruct
 
 	case *ast.IdentExpr:
+		// Prefer locals first (a local var named like a module alias should win)
 		if vi, ok := c.scope.lookup(v.Name); ok {
 			vi.read = true
 			return vi.kind
+		}
+		// Bare module alias used as a value? That's an error.
+		if modPath, ok := c.modAliases[v.Name]; ok {
+			c.errors = append(c.errors, fmt.Errorf("module alias %q (from %q) is not a value; use %s.<symbol>", v.Name, modPath, v.Name))
+			return KindUnknown
 		}
 		if _, isFn := c.info.Funcs[v.Name]; isFn {
 			return KindUnknown
@@ -70,38 +79,43 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		// Struct field chains (a.b.c) for typing
 		baseName, path, ok := decomposeFieldExpr(v)
 		if ok && baseName != "" && len(path) > 0 {
-			vi, ok := c.scope.lookup(baseName)
-			if !ok {
-				// Not a local var; leave to call handling or enum handling elsewhere.
-				return KindUnknown
-			}
-			vi.read = true
-			if vi.kind != KindStruct || vi.structName == "" {
-				c.errors = append(c.errors, fmt.Errorf("field access on non-struct %q", baseName))
-				return KindUnknown
-			}
-			current := vi.structName
-			for i, seg := range path {
-				si, ok := c.info.Structs[current]
-				if !ok {
-					c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
+			// LOCAL shadowing beats module aliasing here.
+			if vi, ok := c.scope.lookup(baseName); ok {
+				vi.read = true
+				if vi.kind != KindStruct || vi.structName == "" {
+					c.errors = append(c.errors, fmt.Errorf("field access on non-struct %q", baseName))
 					return KindUnknown
 				}
-				tText, ok := si.Fields[seg]
-				if !ok {
-					c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", seg, current))
-					return KindUnknown
-				}
-				k, sname := mapTypeOrStruct(tText, c.info)
-				if i < len(path)-1 {
-					if k != KindStruct || sname == "" {
-						c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", seg, current))
+				current := vi.structName
+				for i, seg := range path {
+					si, ok := c.info.Structs[current]
+					if !ok {
+						c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
 						return KindUnknown
 					}
-					current = sname
-					continue
+					tText, ok := si.Fields[seg]
+					if !ok {
+						c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", seg, current))
+						return KindUnknown
+					}
+					k, sname := mapTypeOrStruct(tText, c.info)
+					if i < len(path)-1 {
+						if k != KindStruct || sname == "" {
+							c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", seg, current))
+							return KindUnknown
+						}
+						current = sname
+						continue
+					}
+					return k
 				}
-				return k
+				return KindUnknown
+			}
+
+			// If it's NOT a local var but matches a module alias, we treat it in the call path.
+			if _, isAlias := c.modAliases[baseName]; isAlias {
+				// return unknown here; the CallExpr case handles m.func(...).
+				return KindUnknown
 			}
 		}
 		return KindUnknown
@@ -195,23 +209,29 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			}
 
 			// module alias call: m.add(...)
-			if id, ok := fe.X.(*ast.IdentExpr); ok && c.modAliases[id.Name] {
-				if sig, ok := c.info.Funcs[fe.Name]; ok {
-					if len(sig.Params) != len(v.Args) {
-						c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", fe.Name, len(sig.Params), len(v.Args)))
-					}
-					n := _min(len(sig.Params), len(v.Args))
-					for i := 0; i < n; i++ {
-						ak := c.kindOfExpr(v.Args[i])
-						pk := sig.Params[i]
-						if _, ok := unifyKinds(pk, ak); !ok {
-							c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+			if id, ok := fe.X.(*ast.IdentExpr); ok {
+				// local shadowing wins over module alias
+				if _, isLocal := c.scope.lookup(id.Name); !isLocal {
+					if modPath, isAlias := c.modAliases[id.Name]; isAlias {
+						if sig, ok := c.info.Funcs[fe.Name]; ok {
+							if len(sig.Params) != len(v.Args) {
+								c.errors = append(c.errors, fmt.Errorf("call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
+							}
+							n := _min(len(sig.Params), len(v.Args))
+							for i := 0; i < n; i++ {
+								ak := c.kindOfExpr(v.Args[i])
+								pk := sig.Params[i]
+								if _, ok := unifyKinds(pk, ak); !ok {
+									c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+								}
+							}
+							return sig.Ret
 						}
+						// no symbol found in that module alias
+						c.errors = append(c.errors, fmt.Errorf("unknown symbol %q in module alias %q (from %q)", fe.Name, id.Name, modPath))
+						return KindUnknown
 					}
-					return sig.Ret
 				}
-				c.errors = append(c.errors, ErrUndefinedName(fe.Name, "call"))
-				return KindUnknown
 			}
 		}
 

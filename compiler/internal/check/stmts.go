@@ -120,11 +120,32 @@ func (c *checker) checkLet(st *ast.LetStmt) {
   _max := _min(len(st.Binds), len(st.Values))
   for i := 0; i < _max; i++ {
     bd := st.Binds[i]
-    rk := c.kindOfExpr(st.Values[i])
+    rhs := st.Values[i]
+    rk := c.kindOfExpr(rhs)
 
     declText := strings.TrimSpace(bd.Type)
-    want, sname := mapTypeOrStruct(declText, c.info)
+    want, snameDecl := mapTypeOrStruct(declText, c.info)
 
+    // Infer precise struct/enum names from RHS when possible.
+    inferredStruct := ""
+    inferredEnum := ""
+    if rk == KindStruct {
+      // Known struct literal?
+      if sl, ok := rhs.(*ast.StructLit); ok {
+        // Unknown struct type? Report early.
+        if _, exists := c.info.Structs[sl.Name]; !exists {
+          c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", sl.Name))
+        } else {
+          inferredStruct = sl.Name
+        }
+      } else {
+        inferredStruct = c.structNameOfExpr(rhs)
+      }
+    } else if rk == KindEnum {
+      inferredEnum = c.enumNameOfExpr(rhs)
+    }
+
+    // Choose the variable's kind (decl types win over inference when provided).
     kind := rk
     if declText != "" {
       if want == KindStruct || want == KindEnum {
@@ -146,11 +167,24 @@ func (c *checker) checkLet(st *ast.LetStmt) {
       })
     }
 
+    // Decide stored struct/enum name:
+    // - If a declared struct/enum type exists, use that name.
+    // - Else, use inferred struct/enum names from RHS when available.
+    var storedSName string
+    switch {
+    case want == KindStruct || want == KindEnum:
+      storedSName = snameDecl
+    case kind == KindStruct && inferredStruct != "":
+      storedSName = inferredStruct
+    case kind == KindEnum && inferredEnum != "":
+      storedSName = inferredEnum
+    }
+
     v := &varInfo{
       kind:       kindIfDeclOr(kind, want),
       mutable:    st.Mutable,
       declName:   bd.Name,
-      structName: snameIfDeclOr(sname, want), // reused for enum name too
+      structName: storedSName, // used for both struct and enum names
       written:    true,
     }
     if err := c.scope.define(bd.Name, v); err != nil {
@@ -188,7 +222,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
           continue
         }
         if !v.mutable {
-          c.errors = append(c.errors, ErrAssignToImmutable(lv.Name, "assignment"))
+          c.errors = append(c.errors, ErrAssignToImmutable(lv.Name, "field assignment"))
           continue
         }
         // Struct whole-value assignment.
@@ -457,6 +491,9 @@ func (c *checker) enumNameFromExprFallback(e ast.Expr) string {
 
 func (c *checker) structNameOfExpr(e ast.Expr) string {
   switch v := e.(type) {
+  case *ast.StructLit:
+    // Direct struct literal: we know its name.
+    return v.Name
   case *ast.IdentExpr:
     if vi, ok := c.scope.lookup(v.Name); ok && vi.kind == KindStruct {
       return vi.structName

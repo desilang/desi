@@ -19,10 +19,10 @@ type checker struct {
 	locals        []*varInfo
 	blockReturned []bool
 
-	// From-import alias map: alias -> original symbol name
+	// from-import alias -> original symbol name
 	aliases map[string]string
-	// Module alias set: alias -> true (for `import x.y as z`)
-	modAliases map[string]bool
+	// module alias -> module path (e.g., "m" -> "util.math")
+	modAliases map[string]string
 }
 
 // CheckFile performs semantic checks and returns info, errors, and warnings.
@@ -31,7 +31,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Funcs:   map[string]FuncSig{},
 		Types:   map[string]string{},
 		Structs: map[string]StructInfo{},
-		Enums:   map[string]EnumInfo{},
+		Enums:   map[string]EnumInfo{}, // NEW
 	}
 	var errs []error
 	var warns []Warning
@@ -77,19 +77,19 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
 	}
 
-	// build alias maps from imports
-	fromAlias := map[string]string{}
+	// build alias maps
+	fromAlias := map[string]string{}  // alias -> original symbol
+	modAliases := map[string]string{} // alias -> module path
 	for _, fi := range f.FromImports {
 		for _, it := range fi.Items {
-			if strings.TrimSpace(it.As) != "" {
-				fromAlias[it.As] = it.Name
+			if as := strings.TrimSpace(it.As); as != "" {
+				fromAlias[as] = it.Name
 			}
 		}
 	}
-	modAliases := map[string]bool{}
 	for _, im := range f.Imports {
-		if strings.TrimSpace(im.As) != "" {
-			modAliases[im.As] = true
+		if as := strings.TrimSpace(im.As); as != "" {
+			modAliases[as] = im.Path
 		}
 	}
 
@@ -104,7 +104,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	return info, errs, warns
 }
 
-func checkFunc(info *Info, fn *ast.FuncDecl, aliasMap map[string]string, modAliases map[string]bool) ([]error, []Warning) {
+func checkFunc(info *Info, fn *ast.FuncDecl, aliasMap map[string]string, modAliases map[string]string) ([]error, []Warning) {
 	c := &checker{
 		info:       info,
 		fnSig:      info.Funcs[fn.Name],

@@ -1,0 +1,4 @@
+import util.math as m
+def main() -> int:
+  let x = m   # error: module alias 'm' is not a value
+  return 0
