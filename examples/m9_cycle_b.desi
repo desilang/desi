@@ -1,4 +1,4 @@
-import examples.m9_cycle_a
+import m9_cycle_a
 
 def main() -> int:
   print("B")
