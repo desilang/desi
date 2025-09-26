@@ -7,19 +7,6 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
-func (e *env) resolveAlias(name string) string {
-	if e == nil || e.aliases == nil {
-		return name
-	}
-	if real, ok := e.aliases[name]; ok {
-		real = strings.TrimSpace(real)
-		if real != "" {
-			return real
-		}
-	}
-	return name
-}
-
 func cExprFor(e ast.Expr, env *env) (string, string) {
 	switch v := e.(type) {
 	case *ast.IntLit:
@@ -56,6 +43,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		return v.Name, "int"
 
 	case *ast.FieldExpr:
+		// Only handle base identifiers (and nested) that are known struct-typed variables.
 		if ft, ok := exprTextualType(v, env); ok {
 			ex := fieldAccessChain(v)
 			if isStrText(ft) {
@@ -115,12 +103,15 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				enumName := id.Name
 				if isEnumType(enumName, env.info) {
+					// lookup variant payload type
 					if ei, ok := env.info.Enums[enumName]; ok {
-						vtype := ei.Variants[fe.Name]
+						vtype := ei.Variants[fe.Name] // "" or "none" => no payload
 						tag := enumName + "_" + fe.Name
 						if isNoneText(vtype) {
+							// no payload variant: `(<Enum>){ .tag = <TAG> }`
 							return "(" + enumName + "){ .tag = " + tag + " }", "enum:" + enumName
 						}
+						// one-arg payload
 						var ax string
 						if len(v.Args) > 0 {
 							ax, _ = cExprFor(v.Args[0], env)
@@ -183,16 +174,33 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			}
 		}
 
-		// user function call (with alias support)
+		// module alias call: m.add(...)  → add(...)
+		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
+			if id, ok := fe.X.(*ast.IdentExpr); ok {
+				// Heuristic: treat as module alias when base isn't a known var
+				// and target function exists. Checker already validates imports.
+				if _, isVar := env.vars[id.Name]; !isVar {
+					if fs, ok := env.sigs[fe.Name]; ok {
+						var args []string
+						for _, a := range v.Args {
+							ax, _ := cExprFor(a, env)
+							args = append(args, ax)
+						}
+						return fe.Name + "(" + strings.Join(args, ", ") + ")", fs.ret
+					}
+				}
+			}
+		}
+
+		// user function call
 		if id, ok := v.Callee.(*ast.IdentExpr); ok {
-			callName := env.resolveAlias(id.Name)
-			if fs, ok := env.sigs[callName]; ok {
+			if fs, ok := env.sigs[id.Name]; ok {
 				var args []string
 				for _, a := range v.Args {
 					ax, _ := cExprFor(a, env)
 					args = append(args, ax)
 				}
-				return callName + "(" + strings.Join(args, ", ") + ")", fs.ret
+				return id.Name + "(" + strings.Join(args, ", ") + ")", fs.ret
 			}
 		}
 		return "0", ""
@@ -248,6 +256,7 @@ func fieldAccessChain(fe *ast.FieldExpr) string {
 }
 
 // cLValueFor converts an LHS expression into a C lvalue string.
+// Supports identifiers and nested field chains (a.b.c).
 func cLValueFor(e ast.Expr, env *env) (string, bool) {
 	switch v := e.(type) {
 	case *ast.IdentExpr:

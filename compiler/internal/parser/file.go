@@ -32,10 +32,18 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			if err != nil {
 				return nil, err
 			}
+			as := ""
+			if p.accept(lexer.TokAs) {
+				aid, err := p.expect(lexer.TokIdent)
+				if err != nil {
+					return nil, err
+				}
+				as = aid.Lex
+			}
 			if _, err := p.expect(lexer.TokNewline); err != nil {
 				return nil, err
 			}
-			f.Imports = append(f.Imports, ast.ImportDecl{Path: path})
+			f.Imports = append(f.Imports, ast.ImportDecl{Path: path, As: as})
 		} else {
 			// from-import
 			fromTok := p.tok
@@ -145,7 +153,6 @@ func (p *Parser) parseFromImportAt(fromTok lexer.Token) (*ast.FromImportDecl, er
 		}
 		items = append(items, it)
 		if p.accept(lexer.TokComma) {
-			// support further items; do not allow trailing comma before newline (Stage-1: keep strict)
 			continue
 		}
 		break

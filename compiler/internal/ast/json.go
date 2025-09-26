@@ -38,6 +38,7 @@ type jPackage struct {
 type jImport struct {
 	Kind string `json:"kind"` // "ImportDecl"
 	Path string `json:"path"`
+	As   string `json:"as,omitempty"`
 }
 
 /*** NEW: from-imports ***/
@@ -243,7 +244,7 @@ func toJFile(f *File) jFile {
 	}
 	imps := make([]jImport, 0, len(f.Imports))
 	for _, im := range f.Imports {
-		imps = append(imps, jImport{Kind: "ImportDecl", Path: im.Path})
+		imps = append(imps, jImport{Kind: "ImportDecl", Path: im.Path, As: im.As})
 	}
 	fimps := make([]jFromImport, 0, len(f.FromImports))
 	for _, fi := range f.FromImports {

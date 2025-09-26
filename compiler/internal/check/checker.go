@@ -19,8 +19,10 @@ type checker struct {
 	locals        []*varInfo
 	blockReturned []bool
 
-	// NEW: from-import alias map (alias -> original)
+	// From-import alias map: alias -> original symbol name
 	aliases map[string]string
+	// Module alias set: alias -> true (for `import x.y as z`)
+	modAliases map[string]bool
 }
 
 // CheckFile performs semantic checks and returns info, errors, and warnings.
@@ -29,7 +31,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Funcs:   map[string]FuncSig{},
 		Types:   map[string]string{},
 		Structs: map[string]StructInfo{},
-		Enums:   map[string]EnumInfo{}, // NEW
+		Enums:   map[string]EnumInfo{},
 	}
 	var errs []error
 	var warns []Warning
@@ -75,22 +77,26 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
 	}
 
-	// build alias map once from top-level from-imports
-	aliasMap := map[string]string{}
+	// build alias maps from imports
+	fromAlias := map[string]string{}
 	for _, fi := range f.FromImports {
 		for _, it := range fi.Items {
 			if strings.TrimSpace(it.As) != "" {
-				aliasMap[it.As] = it.Name
+				fromAlias[it.As] = it.Name
 			}
 		}
 	}
-
-	info.Aliases = aliasMap
+	modAliases := map[string]bool{}
+	for _, im := range f.Imports {
+		if strings.TrimSpace(im.As) != "" {
+			modAliases[im.As] = true
+		}
+	}
 
 	// check bodies
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok {
-			fnErrs, fnWarns := checkFunc(info, fn, aliasMap)
+			fnErrs, fnWarns := checkFunc(info, fn, fromAlias, modAliases)
 			errs = append(errs, fnErrs...)
 			warns = append(warns, fnWarns...)
 		}
@@ -98,13 +104,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 	return info, errs, warns
 }
 
-func checkFunc(info *Info, fn *ast.FuncDecl, aliasMap map[string]string) ([]error, []Warning) {
+func checkFunc(info *Info, fn *ast.FuncDecl, aliasMap map[string]string, modAliases map[string]bool) ([]error, []Warning) {
 	c := &checker{
-		info:    info,
-		fnSig:   info.Funcs[fn.Name],
-		scope:   &scope{vars: map[string]*varInfo{}},
-		locals:  nil,
-		aliases: aliasMap,
+		info:       info,
+		fnSig:      info.Funcs[fn.Name],
+		scope:      &scope{vars: map[string]*varInfo{}},
+		locals:     nil,
+		aliases:    aliasMap,
+		modAliases: modAliases,
 	}
 	// params (immutable)
 	for i, p := range fn.Params {

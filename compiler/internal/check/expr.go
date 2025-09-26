@@ -19,17 +19,11 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindBool
 
 	case *ast.IdentExpr:
-		// locals first
 		if vi, ok := c.scope.lookup(v.Name); ok {
 			vi.read = true
 			return vi.kind
 		}
-		// function identifiers (possibly via alias). As bare exprs they don't have a first-class kind.
-		if _real, ok := c.resolveAlias(v.Name); ok {
-			if _, isFn := c.info.Funcs[_real]; isFn {
-				return KindUnknown
-			}
-		} else if _, isFn := c.info.Funcs[v.Name]; isFn {
+		if _, isFn := c.info.Funcs[v.Name]; isFn {
 			return KindUnknown
 		}
 		// undefined name — attach span when available
@@ -73,42 +67,42 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		}
 
 	case *ast.FieldExpr:
+		// Struct field chains (a.b.c) for typing
 		baseName, path, ok := decomposeFieldExpr(v)
-		if !ok || baseName == "" || len(path) == 0 {
-			return KindUnknown
-		}
-		vi, ok := c.scope.lookup(baseName)
-		if !ok {
-			c.errors = append(c.errors, ErrUndefinedName(baseName, "field access"))
-			return KindUnknown
-		}
-		vi.read = true
-		if vi.kind != KindStruct || vi.structName == "" {
-			c.errors = append(c.errors, fmt.Errorf("field access on non-struct %q", baseName))
-			return KindUnknown
-		}
-		current := vi.structName
-		for i, seg := range path {
-			si, ok := c.info.Structs[current]
+		if ok && baseName != "" && len(path) > 0 {
+			vi, ok := c.scope.lookup(baseName)
 			if !ok {
-				c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
+				// Not a local var; leave to call handling or enum handling elsewhere.
 				return KindUnknown
 			}
-			tText, ok := si.Fields[seg]
-			if !ok {
-				c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", seg, current))
+			vi.read = true
+			if vi.kind != KindStruct || vi.structName == "" {
+				c.errors = append(c.errors, fmt.Errorf("field access on non-struct %q", baseName))
 				return KindUnknown
 			}
-			k, sname := mapTypeOrStruct(tText, c.info)
-			if i < len(path)-1 {
-				if k != KindStruct || sname == "" {
-					c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", seg, current))
+			current := vi.structName
+			for i, seg := range path {
+				si, ok := c.info.Structs[current]
+				if !ok {
+					c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
 					return KindUnknown
 				}
-				current = sname
-				continue
+				tText, ok := si.Fields[seg]
+				if !ok {
+					c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", seg, current))
+					return KindUnknown
+				}
+				k, sname := mapTypeOrStruct(tText, c.info)
+				if i < len(path)-1 {
+					if k != KindStruct || sname == "" {
+						c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", seg, current))
+						return KindUnknown
+					}
+					current = sname
+					continue
+				}
+				return k
 			}
-			return k
 		}
 		return KindUnknown
 
@@ -199,6 +193,26 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					return KindEnum
 				}
 			}
+
+			// module alias call: m.add(...)
+			if id, ok := fe.X.(*ast.IdentExpr); ok && c.modAliases[id.Name] {
+				if sig, ok := c.info.Funcs[fe.Name]; ok {
+					if len(sig.Params) != len(v.Args) {
+						c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", fe.Name, len(sig.Params), len(v.Args)))
+					}
+					n := _min(len(sig.Params), len(v.Args))
+					for i := 0; i < n; i++ {
+						ak := c.kindOfExpr(v.Args[i])
+						pk := sig.Params[i]
+						if _, ok := unifyKinds(pk, ak); !ok {
+							c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+						}
+					}
+					return sig.Ret
+				}
+				c.errors = append(c.errors, ErrUndefinedName(fe.Name, "call"))
+				return KindUnknown
+			}
 		}
 
 		// builtin print(...)
@@ -216,11 +230,11 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			return KindVoid
 		}
 
-		// user function call (with alias support)
+		// user function call (supports from-import aliasing)
 		if id, ok := v.Callee.(*ast.IdentExpr); ok {
 			name := id.Name
-			if _real, ok := c.resolveAlias(name); ok {
-				name = _real
+			if orig, ok := c.aliases[name]; ok {
+				name = orig
 			}
 			if sig, ok := c.info.Funcs[name]; ok {
 				if len(sig.Params) != len(v.Args) {
@@ -248,25 +262,14 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 
 /* ---------- helpers ---------- */
 
-func (c *checker) resolveAlias(local string) (string, bool) {
-	if c.aliases == nil {
-		return "", false
-	}
-	_real, ok := c.aliases[local]
-	_real = strings.TrimSpace(_real)
-	if !ok || _real == "" {
-		return "", false
-	}
-	return _real, true
-}
-
-// decomposeFieldExpr and enumNameOfExpr unchanged…
+// decomposeFieldExpr flattens a FieldExpr chain a.b.c -> ("a", ["b","c"], true).
 func decomposeFieldExpr(e *ast.FieldExpr) (string, []string, bool) {
 	var parts []string
 	cur := e
 	parts = append(parts, cur.Name)
 	for {
 		if id, ok := cur.X.(*ast.IdentExpr); ok {
+			// reverse parts so they are in left-to-right order
 			for i, j := 0, len(parts)-1; i < j; i, j = i+1, j-1 {
 				parts[i], parts[j] = parts[j], parts[i]
 			}
@@ -281,6 +284,7 @@ func decomposeFieldExpr(e *ast.FieldExpr) (string, []string, bool) {
 	}
 }
 
+// enumNameOfExpr: when an expr denotes a value of a particular enum, return its enum name.
 func (c *checker) enumNameOfExpr(e ast.Expr) string {
 	switch v := e.(type) {
 	case *ast.IdentExpr:

@@ -25,6 +25,7 @@ type ImportDecl struct {
 	Path    string   // e.g. "std.io"
 	Aliases []string // reserved for future use
 	Span    Span     // optional
+	As      string
 }
 
 func (ImportDecl) node() {}
