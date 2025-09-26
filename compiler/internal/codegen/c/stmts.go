@@ -236,9 +236,11 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 func emitCallOrExpr(b *bytes.Buffer, indent int, expr ast.Expr, e *env) {
 	ind := spaces(indent)
 	// io.println(...): special-case to printf
-	if call, ok := expr.(*ast.CallExpr); ok && isIoPrintln(call) {
-		emitPrintln(b, indent, call, e)
-		return
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if isIoPrintln(call) || isBarePrint(call) {
+			emitPrintln(b, indent, call, e)
+			return
+		}
 	}
 	cx, _ := cExprFor(expr, e)
 	term.Wprintf(b, "%s(void)(%s);\n", ind, cx)
@@ -248,7 +250,7 @@ func emitDefers(b *bytes.Buffer, indent int, e *env) {
 	ind := spaces(indent)
 	for i := len(e.defers) - 1; i >= 0; i-- {
 		call := e.defers[i]
-		if ce, ok := call.(*ast.CallExpr); ok && isIoPrintln(ce) {
+		if ce, ok := call.(*ast.CallExpr); ok && (isIoPrintln(ce) || isBarePrint(ce)) {
 			emitPrintln(b, indent, ce, e)
 			continue
 		}
@@ -262,6 +264,13 @@ func isIoPrintln(c *ast.CallExpr) bool {
 		if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "io" {
 			return true
 		}
+	}
+	return false
+}
+
+func isBarePrint(c *ast.CallExpr) bool {
+	if id, ok := c.Callee.(*ast.IdentExpr); ok && id.Name == "print" {
+		return true
 	}
 	return false
 }
