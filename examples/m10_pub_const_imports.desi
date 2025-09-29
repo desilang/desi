@@ -1,0 +1,8 @@
+#from util.consts import CONST_HEIGHT
+import util.consts as c
+
+def main()-> int:
+  #print(CONST_HEIGHT)   # 180 (from-import)
+  print(c.CONST_HEIGHT) # 180 (module alias)
+  print(c.area(2, 3))   # 6   (pub def)
+  0

@@ -1,0 +1,5 @@
+from util.consts import LOCAL_WIDTH
+
+def main()-> int:
+  print(LOCAL_WIDTH) # expect DTE0010 (not public)
+  0

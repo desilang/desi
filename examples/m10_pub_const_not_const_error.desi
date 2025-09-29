@@ -1,0 +1,6 @@
+pub let BAD2: int = 1 + 2  # expression, not a literal
+
+def main()-> int:
+  print(BAD2) # expect DTE0011 (public constant must be compile-time constant)
+  0
+

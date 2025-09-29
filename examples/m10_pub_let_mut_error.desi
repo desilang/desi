@@ -1,0 +1,5 @@
+pub let mut BAD = 1
+
+def main()-> int:
+  print(BAD) # expect DTE0012 (pub let cannot be mutable)
+  0
