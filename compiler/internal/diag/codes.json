@@ -4,14 +4,10 @@
       "id": "DLE0001",
       "title": "unterminated string",
       "help": "did you forget a closing quote?",
-      "primary_end": {
-        "kind": "eol"
-      },
+      "primary_end": { "kind": "eol" },
       "suggestions": [
         {
-          "where": {
-            "kind": "eol"
-          },
+          "where": { "kind": "eol" },
           "label": "add this: '\"'",
           "message": "insert closing quote",
           "replacement": "\"",
@@ -37,9 +33,7 @@
       "help": "a '(' '[' or '{' was opened but not closed on this path",
       "suggestions": [
         {
-          "where": {
-            "kind": "eol"
-          },
+          "where": { "kind": "eol" },
           "label": "add a closing delimiter",
           "message": "insert the matching closing delimiter",
           "replacement": ")",
@@ -92,17 +86,17 @@
     "not_public": {
       "id": "DTE0010",
       "title": "symbol is not public",
-      "help": "to use a symbol from another module, declare it with 'pub'"
+      "help": "this symbol is private to its defining module; mark it 'pub' to export"
     },
     "public_const_not_const": {
       "id": "DTE0011",
-      "title": "public constant is not a compile-time constant",
-      "help": "public constants must be immutable and computed at compile time"
+      "title": "public constant must be compile-time constant",
+      "help": "public constants must be literal-only in Phase B; later phases will allow folding"
     },
     "pub_let_mut_forbidden": {
       "id": "DTE0012",
-      "title": "public mutable variable is forbidden",
-      "help": "exported mutable globals are not allowed; expose a function or immutable constant instead"
+      "title": "public let cannot be mutable",
+      "help": "remove 'mut' from a public constant declaration"
     }
   },
   "module": {
