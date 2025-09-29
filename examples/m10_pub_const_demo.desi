@@ -1,0 +1,7 @@
+pub let CONST_HEIGHT: int = 100
+let LOCAL_WIDTH = 50
+
+def main() -> int:
+  print(CONST_HEIGHT)
+  print(LOCAL_WIDTH)
+  return 0

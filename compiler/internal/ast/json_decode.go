@@ -151,10 +151,12 @@ func fromJDecl(v any) (Decl, error) {
 	switch getString(m, "kind") {
 	case "FuncDecl":
 		return fromJFunc(m)
-	case "StructDecl":
-		return fromJStruct(m)
 	case "TypeDecl":
 		return fromJType(m)
+	case "StructDecl":
+		return fromJStruct(m)
+	case "ConstDecl":
+		return fromJConst(m)
 	default:
 		// ignore unknown decl kinds for now
 		return nil, nil
@@ -165,7 +167,7 @@ func fromJFunc(m map[string]any) (*FuncDecl, error) {
 	fd := &FuncDecl{
 		Name: getString(m, "name"),
 		Ret:  getString(m, "ret"),
-		Pub:  getBool(m, "pub"), // NEW
+		Pub:  getBool(m, "pub"),
 		Span: parseSpan(getMap(m, "span")),
 	}
 	// params
@@ -197,10 +199,18 @@ func fromJFunc(m map[string]any) (*FuncDecl, error) {
 	return fd, nil
 }
 
+func fromJType(m map[string]any) (*TypeDecl, error) {
+	return &TypeDecl{
+		Name:       getString(m, "name"),
+		Underlying: getString(m, "underlying"),
+		Span:       parseSpan(getMap(m, "span")),
+	}, nil
+}
+
 func fromJStruct(m map[string]any) (*StructDecl, error) {
 	sd := &StructDecl{
 		Name: getString(m, "name"),
-		Pub:  getBool(m, "pub"), // NEW
+		Pub:  getBool(m, "pub"),
 		Span: parseSpan(getMap(m, "span")),
 	}
 	if arr := getSlice(m, "fields"); arr != nil {
@@ -219,11 +229,18 @@ func fromJStruct(m map[string]any) (*StructDecl, error) {
 	return sd, nil
 }
 
-func fromJType(m map[string]any) (*TypeDecl, error) {
-	return &TypeDecl{
-		Name:       getString(m, "name"),
-		Underlying: getString(m, "underlying"),
-		Span:       parseSpan(getMap(m, "span")),
+func fromJConst(m map[string]any) (*ConstDecl, error) {
+	v, err := fromJExpr(m["value"])
+	if err != nil {
+		return nil, err
+	}
+	return &ConstDecl{
+		Name:    getString(m, "name"),
+		Type:    getString(m, "type"),
+		Value:   v,
+		Pub:     getBool(m, "pub"),
+		Mutable: getBool(m, "mutable"),
+		Span:    parseSpan(getMap(m, "span")),
 	}, nil
 }
 
