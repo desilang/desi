@@ -7,7 +7,7 @@ import (
 
 func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 	// We are called after 'def' has already been consumed by the caller.
-	// Grammar (M1):
+	// Grammar (M1 + M10 modifier handled by caller):
 	//   def <name> "(" params? ")" "->" type ":" ( NEWLINE INDENT stmts DEDENT | <single-line-stmt> )
 	//
 	// The single-line form ends at the first NEWLINE after the ':'.
@@ -56,9 +56,7 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		return nil, err
 	}
 
-	// M1 decision point: after ':'
-	// If the very next token is NEWLINE, we parse an indented block (legacy behavior).
-	// Otherwise, we parse a single statement on the same line and wrap it as the function body.
+	// After ':'
 	var body []ast.Stmt
 	if p.at(lexer.TokNewline) {
 		body, err = p.parseBlock()
@@ -66,8 +64,6 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 			return nil, err
 		}
 	} else {
-		// Single-line body: parse exactly one statement; parseStmt() already
-		// consumes the trailing NEWLINE, so nothing special to do here.
 		stmt, err := p.parseStmt()
 		if err != nil {
 			return nil, err
@@ -80,6 +76,7 @@ func (p *Parser) parseFuncDecl() (*ast.FuncDecl, error) {
 		Params: params,
 		Ret:    ret,
 		Body:   body,
+		// Pub is set by caller (file-level) when 'pub' modifier is present.
 		// Span optional for now (M14 will tighten spans across decls)
 	}, nil
 }

@@ -70,21 +70,27 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 
 	// decls
 	for !p.at(lexer.TokEOF) {
+		// Optional 'pub' modifier before certain decls (M10 Phase A).
+		seenPub := p.accept(lexer.TokPub)
+
 		switch {
 		case p.accept(lexer.TokDef):
 			fn, err := p.parseFuncDecl()
 			if err != nil {
 				return nil, err
 			}
+			fn.Pub = seenPub
 			f.Decls = append(f.Decls, fn)
 
 		case p.at(lexer.TokType):
+			// 'pub type' not supported yet; ignore 'pub' if present.
 			typeTok := p.tok
 			p.next() // consume 'type'
 			td, err := p.parseTypeDeclAt(typeTok)
 			if err != nil {
 				return nil, err
 			}
+			// td has no Pub flag in AST (not part of M10 surface yet).
 			f.Decls = append(f.Decls, td)
 
 		case p.at(lexer.TokStruct):
@@ -94,9 +100,11 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			if err != nil {
 				return nil, err
 			}
+			sd.Pub = seenPub
 			f.Decls = append(f.Decls, sd)
 
 		case p.at(lexer.TokEnum):
+			// 'pub enum' is planned later; ignore 'pub' if present.
 			enumTok := p.tok
 			p.next() // consume 'enum'
 			ed, err := p.parseEnumDeclAt(enumTok)
@@ -106,11 +114,17 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			f.Decls = append(f.Decls, ed)
 
 		default:
+			// If we saw 'pub' but it's not followed by a supported decl, surface a clear error.
+			if seenPub {
+				t := p.tok
+				return nil, fmt.Errorf("unexpected 'pub' before %q at %d:%d", t.Kind.String(), t.Line, t.Col)
+			}
 			// Surface lexer errors immediately at top-level
 			if p.at(lexer.TokErr) {
 				t := p.tok
 				return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
 			}
+			// Skip to newline/EOF to avoid infinite loop on unknown tokens.
 			for !p.at(lexer.TokNewline) && !p.at(lexer.TokEOF) {
 				p.next()
 			}
@@ -287,7 +301,8 @@ func isKeywordToken(k lexer.TokKind) bool {
 		lexer.TokElse,
 		lexer.TokWhile,
 		lexer.TokReturn,
-		lexer.TokMatch:
+		lexer.TokMatch,
+		lexer.TokPub:
 		return true
 	default:
 		return false

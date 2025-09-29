@@ -67,5 +67,6 @@ func (p *Parser) parseStructDeclAt(structTok lexer.Token) (*ast.StructDecl, erro
     Name:   nameTok.Lex,
     Fields: fields,
     Span:   spanTok(structTok, ded),
+    // Pub is set by caller (file-level) when 'pub' modifier is present.
   }, nil
 }
