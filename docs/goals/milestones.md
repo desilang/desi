@@ -15,7 +15,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 | M7  | Structs                              |   ✅    | see section below                         |
 | M8  | Enums / tagged unions                |   ✅    | see section below                         |
 | M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics |
-| M10 | Public/exported decls                |   ⏳    | `pub def`, `pub struct`                   |
+| M10 | Public/exported decls                |   ⏳    | `pub def`, `pub struct`, `pub let CONST`  |
 | M11 | `async` / `await` (minimal)          |   ⏳    | —                                         |
 | M12 | Channels & `spawn`                   |   ⏳    | —                                         |
 | M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                         |
@@ -89,7 +89,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 #define Result_Ok 0
 #define Result_Err 1
 typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
-```
+````
 
 * Constructors via designated inits.
 * `match` → `switch (__scrut.tag)` with per-variant binder extraction.
@@ -169,11 +169,36 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
 * `examples/m9_import_alias.desi`
 * `examples/m9_module_alias_as_value.desi`
+* `examples/m9_module_alias_call.desi`
 * `examples/m9_module_unknows_symbol.desi`
 * `examples/m9_local_var_shadowing.desi`
 * `examples/m9_alias_collision_module_vs_from.desi`
 * `examples/m9_alias_collision_from_same_line.desi`
 * `examples/m9_alias_reserved_name.desi`
+
+---
+
+## M10 — Public/exported decls (⏳ Planned)
+
+**Why:** Python makes everything importable by default; Desi needs compile-time encapsulation for API clarity, optimization, and safe concurrency stories.
+
+### Phase A — syntax + plumbing (no enforcement)
+
+* **Lexer:** add `pub` token.
+* **Parser:** optional `pub` before top-level `def`, `struct`, and `let` (const-only).
+* **AST:** `Pub: bool` on `FuncDecl`, `StructDecl`, and top-level `LetDecl`.
+* **Checker:** record publicity (no cross-module checks yet).
+* **Docs:** update grammar & tokens to include `pub`.
+* **Examples/Tests:** round-trip JSON; builds unchanged.
+
+### Phase B — visibility enforcement (light)
+
+* **Rules:** using symbols from another module (`from … import X`, or `m.X`) requires `X` be `pub`.
+* **Public constants:** must be compile-time constants; can be imported/used.
+* **Diagnostics:** `DTE0010` (not public), `DTE0011` (public const not const), `DTE0012` (forbid `pub let mut`).
+* **Examples/Tests:** positive and negative cases.
+
+**Nice-to-haves (later):** C namespacing, per-module symbol tables, `pub enum`, `pub type`.
 
 ---
 
@@ -183,4 +208,3 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 * **Typed checker errors carry spans** where available (e.g., undefined name).
 * Bridge still parses legacy lexer lines; we’ll transition to structured `DIAG` rows.
 * Next: propagate spans from parser/checker broadly; add secondary notes/suggestions for common cases.
-
