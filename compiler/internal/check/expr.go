@@ -27,58 +27,29 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
       vi.read = true
       return vi.kind
     }
-
-    // From-import alias? (alias -> original symbol)
+    // If this identifier is a from-import binding (alias or plain),
+    // enforce visibility on the imported symbol and return its kind if it’s a const.
     if orig, ok := c.aliases[v.Name]; ok {
-      // If it resolves to a known CONST, enforce public and return its kind.
+      // function usages are handled in CallExpr; bare function-as-value is not allowed
+      // Check constant import
       if ci, ok := c.info.Consts[orig]; ok {
-        if !c.isPublicConst(orig) {
-          // span preferred when available
-          if (v.Span != ast.Span{}) {
-            c.errors = append(c.errors, ErrNotPublicAt(v.Span, orig, "identifier"))
-          } else {
-            c.errors = append(c.errors, ErrNotPublic(orig, "identifier"))
-          }
-          return KindUnknown
-        }
-        // const is public, yield its type
         return ci.Kind
       }
-      // If it resolves to a function, treat like a function name (Unknown as a value),
-      // real checking happens at call sites.
-      if _, isFn := c.info.Funcs[orig]; isFn {
+      // Structs used as values are not supported — fallthrough to unknown.
+      if _, ok := c.info.Funcs[orig]; ok {
+        // Bare function name as a value: error (kept as original behavior).
+        c.errors = append(c.errors, fmt.Errorf("module alias or from-import function %q is not a value; call it as %s(...)", orig, v.Name))
         return KindUnknown
       }
-      // If it resolves to a struct name, as a bare value that’s not valid (no struct value),
-      // keep Unknown and let other checks surface better errors if used incorrectly.
-      if _, isStruct := c.info.Structs[orig]; isStruct {
-        return KindUnknown
-      }
-      // Otherwise unknown symbol under alias.
-      if (v.Span != ast.Span{}) {
-        c.errors = append(c.errors, ErrUndefinedNameAt(v.Span, v.Name, "identifier"))
-      } else {
-        c.errors = append(c.errors, ErrUndefinedName(v.Name, "identifier"))
-      }
-      return KindUnknown
     }
-
     // Bare module alias used as a value? That's an error.
     if modPath, ok := c.modAliases[v.Name]; ok {
       c.errors = append(c.errors, fmt.Errorf("module alias %q (from %q) is not a value; use %s.<symbol>", v.Name, modPath, v.Name))
       return KindUnknown
     }
-
-    // If the identifier matches a top-level CONST in this module, allow it as a value.
-    if ci, ok := c.info.Consts[v.Name]; ok {
-      return ci.Kind
-    }
-
-    // Function name by itself isn’t a value but we don’t fail hard here; calls handle it.
     if _, isFn := c.info.Funcs[v.Name]; isFn {
       return KindUnknown
     }
-
     // undefined name — attach span when available
     if (v.Span != ast.Span{}) {
       c.errors = append(c.errors, ErrUndefinedNameAt(v.Span, v.Name, "identifier"))
@@ -120,14 +91,34 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
     }
 
   case *ast.FieldExpr:
-    // Two big cases:
-    // (A) Struct field chains a.b.c (locals beat module aliases)
-    // (B) Module-alias value access: m.CONST  (non-call)
-    //
-    // First, try struct-field path.
+    // Module-alias constant access: m.CONST
+    if id, ok := v.X.(*ast.IdentExpr); ok {
+      if _, isAlias := c.modAliases[id.Name]; isAlias {
+        // constant?
+        if ci, ok := c.info.Consts[v.Name]; ok {
+          if !c.isPublicConst(v.Name) {
+            c.errors = append(c.errors, ErrNotPublic(v.Name, "module constant access"))
+          }
+          return ci.Kind
+        }
+        // function selection without call (m.fn) is not a value.
+        if _, ok := c.info.Funcs[v.Name]; ok {
+          c.errors = append(c.errors, fmt.Errorf("module symbol %q is a function; call it with arguments", v.Name))
+          return KindUnknown
+        }
+        // struct names aren’t values either at expression position.
+        if _, ok := c.info.Structs[v.Name]; ok {
+          c.errors = append(c.errors, fmt.Errorf("module symbol %q is a type; cannot be used as a value", v.Name))
+          return KindUnknown
+        }
+        return KindUnknown
+      }
+    }
+
+    // Struct field chains (a.b.c) for typing
     baseName, path, ok := decomposeFieldExpr(v)
     if ok && baseName != "" && len(path) > 0 {
-      // (A) LOCAL shadowing beats module aliasing here.
+      // LOCAL shadowing beats module aliasing here.
       if vi, ok := c.scope.lookup(baseName); ok {
         vi.read = true
         if vi.kind != KindStruct || vi.structName == "" {
@@ -160,33 +151,9 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
         return KindUnknown
       }
 
-      // (B) Module alias value access e.g. m.CONST (non-call).
-      if modPath, isAlias := c.modAliases[baseName]; isAlias {
-        // Only 1-segment allowed for value (m.X). If it’s deeper (m.a.b), leave Unknown for now.
-        if len(path) == 1 {
-          sym := path[0]
-          // CONST?
-          if ci, ok := c.info.Consts[sym]; ok {
-            if !c.isPublicConst(sym) {
-              // not public
-              if (v.Span != ast.Span{}) {
-                c.errors = append(c.errors, ErrNotPublicAt(v.Span, sym, fmt.Sprintf("module alias %q (from %q)", baseName, modPath)))
-              } else {
-                c.errors = append(c.errors, ErrNotPublic(sym, fmt.Sprintf("module alias %q (from %q)", baseName, modPath)))
-              }
-              return KindUnknown
-            }
-            return ci.Kind
-          }
-          // STRUCT name used as value is not a value; keep Unknown (calls/ctors handled elsewhere).
-          if _, ok := c.info.Structs[sym]; ok {
-            return KindUnknown
-          }
-          // Unknown symbol under alias.
-          c.errors = append(c.errors, fmt.Errorf("unknown symbol %q in module alias %q (from %q)", sym, baseName, modPath))
-          return KindUnknown
-        }
-        // Deeper chains off an alias (m.a.b) are not yet supported as values.
+      // If it's NOT a local var but matches a module alias, we treat it in the call/const path.
+      if _, isAlias := c.modAliases[baseName]; isAlias {
+        // return unknown here; the CallExpr path handles m.func(...), and consts handled above.
         return KindUnknown
       }
     }
@@ -284,16 +251,11 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
       if id, ok := fe.X.(*ast.IdentExpr); ok {
         // local shadowing wins over module alias
         if _, isLocal := c.scope.lookup(id.Name); !isLocal {
-          if modPath, isAlias := c.modAliases[id.Name]; isAlias {
+          if _, isAlias := c.modAliases[id.Name]; isAlias {
             if sig, ok := c.info.Funcs[fe.Name]; ok {
-              // ENFORCE PUBLIC
+              // visibility enforcement
               if !c.isPublicFunc(fe.Name) {
-                if (v.Span != ast.Span{}) {
-                  c.errors = append(c.errors, ErrNotPublicAt(v.Span, fe.Name, fmt.Sprintf("call via module alias %q (from %q)", id.Name, modPath)))
-                } else {
-                  c.errors = append(c.errors, ErrNotPublic(fe.Name, fmt.Sprintf("call via module alias %q (from %q)", id.Name, modPath)))
-                }
-                return KindUnknown
+                c.errors = append(c.errors, ErrNotPublic(fe.Name, "module alias call"))
               }
               if len(sig.Params) != len(v.Args) {
                 c.errors = append(c.errors, fmt.Errorf("call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
@@ -309,7 +271,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
               return sig.Ret
             }
             // no symbol found in that module alias
-            c.errors = append(c.errors, fmt.Errorf("unknown symbol %q in module alias %q (from %q)", fe.Name, id.Name, modPath))
+            c.errors = append(c.errors, fmt.Errorf("unknown symbol %q in module alias %q", fe.Name, id.Name))
             return KindUnknown
           }
         }
@@ -334,24 +296,13 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
     // user function call (supports from-import aliasing)
     if id, ok := v.Callee.(*ast.IdentExpr); ok {
       name := id.Name
-      orig := name
-      if o, ok := c.aliases[name]; ok {
-        orig = o
+      if orig, ok := c.aliases[name]; ok {
+        // visibility enforcement on from-imported function
+        name = orig
       }
-      if sig, ok := c.info.Funcs[orig]; ok {
-        // ENFORCE PUBLIC on from-imported calls too.
-        if orig != name { // i.e., came from an alias
-          if !c.isPublicFunc(orig) {
-            if (id.Span != ast.Span{}) {
-              c.errors = append(c.errors, ErrNotPublicAt(id.Span, orig, "call"))
-            } else {
-              c.errors = append(c.errors, ErrNotPublic(orig, "call"))
-            }
-            return KindUnknown
-          }
-        }
+      if sig, ok := c.info.Funcs[name]; ok {
         if len(sig.Params) != len(v.Args) {
-          c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", orig, len(sig.Params), len(v.Args)))
+          c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", name, len(sig.Params), len(v.Args)))
         }
         n := _min(len(sig.Params), len(v.Args))
         for i := 0; i < n; i++ {
@@ -416,14 +367,10 @@ func (c *checker) enumNameOfExpr(e ast.Expr) string {
   return ""
 }
 
-/* ---------- public visibility hooks (M10/B) ---------- */
+// ---- Phase B visibility hooks ----
 
-func (c *checker) isPublicFunc(name string) bool {
-  return c.info != nil && c.info.FuncsPublic[name]
-}
-func (c *checker) isPublicConst(name string) bool {
-  return c.info != nil && c.info.ConstsPublic[name]
-}
+func (c *checker) isPublicFunc(name string) bool  { return c.info != nil && c.info.FuncsPublic[name] }
+func (c *checker) isPublicConst(name string) bool { return c.info != nil && c.info.ConstsPublic[name] }
 func (c *checker) isPublicStruct(name string) bool {
   return c.info != nil && c.info.StructsPublic[name]
 }

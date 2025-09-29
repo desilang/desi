@@ -153,7 +153,7 @@ func ErrAssignToImmutable(name, context string) error {
 // NEW (M10/B): visibility + public-const diagnostics
 // -----------------------------------------------------------------------------
 
-// ErrNotPublic => DTE0010
+// ErrNotPublic => DTE0010 (span-less)
 func ErrNotPublic(name, context string) error {
 	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
@@ -186,9 +186,15 @@ func ErrPubLetMutForbidden(sp ast.Span, name string) error {
 	}
 }
 
-// ErrNotPublicAt => DTE0010 with span
+// ErrNotPublicAt => DTE0010 (with primary span)
 func ErrNotPublicAt(sp ast.Span, name, context string) error {
 	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "not_public", span: &sp}
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "not_public",
+		span:   &sp,
+	}
 }
