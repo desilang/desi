@@ -494,6 +494,8 @@ func keywordKind(s string) (TokKind, bool) {
 		return TokAs, true
 	case "type":
 		return TokType, true
+	case "pub":
+		return TokPub, true
 	case "true":
 		return TokTrue, true
 	case "false":

@@ -36,9 +36,10 @@ const (
 	TokEnum
 	TokPackage
 	TokImport
-	TokFrom // NEW
+	TokFrom
 	TokAs
-	TokType // NEW (M6 type aliases)
+	TokType
+	TokPub
 
 	// Operators/punctuation
 	TokEq      // =
@@ -147,6 +148,8 @@ func (k TokKind) String() string {
 		return "as"
 	case TokType:
 		return "type"
+	case TokPub:
+		return "pub"
 	case TokEq:
 		return "="
 	case TokAssign:
