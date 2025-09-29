@@ -7,88 +7,79 @@ import "fmt"
 type Kind int
 
 const (
-  KindUnknown Kind = iota
-  KindInt
-  KindStr
-  KindBool
-  KindVoid
-  KindStruct
-  KindEnum
+	KindUnknown Kind = iota
+	KindInt
+	KindStr
+	KindBool
+	KindVoid
+	KindStruct
+	KindEnum
 )
 
 func (k Kind) String() string {
-  switch k {
-  case KindInt:
-    return "int"
-  case KindStr:
-    return "str"
-  case KindBool:
-    return "bool"
-  case KindVoid:
-    return "void"
-  case KindStruct:
-    return "struct"
-  case KindEnum:
-    return "enum"
-  default:
-    return "unknown"
-  }
+	switch k {
+	case KindInt:
+		return "int"
+	case KindStr:
+		return "str"
+	case KindBool:
+		return "bool"
+	case KindVoid:
+		return "void"
+	case KindStruct:
+		return "struct"
+	case KindEnum:
+		return "enum"
+	default:
+		return "unknown"
+	}
 }
 
 /* ---------- public info ---------- */
 
 type FuncSig struct {
-  Name   string
-  Params []Kind
-  Ret    Kind
+	Name   string
+	Params []Kind
+	Ret    Kind
 }
 
 type StructInfo struct {
-  Fields map[string]string
+	Fields map[string]string
 }
 
 type EnumInfo struct {
-  Variants map[string]string
+	Variants map[string]string
 }
 
-// ConstInfo records a top-level constant's declared type (text) and kind.
-// Kind may be KindUnknown when no explicit type is provided.
+// Minimal shape for constants; we only need kind for typing/checking now.
 type ConstInfo struct {
-  Type string
-  Kind Kind
-  Pub  bool
-  // Future: Value folding, literal tracking, etc.
-}
-
-// PublicInfo records which top-level symbols are marked public (M10 Phase A).
-type PublicInfo struct {
-  Funcs   map[string]bool
-  Structs map[string]bool
-  Consts  map[string]bool
-  // Future: Types map[string]bool, Enums map[string]bool
+	Kind Kind
+	// (Future: track literal payload for constant folding, etc.)
 }
 
 type Info struct {
-  Funcs   map[string]FuncSig
-  Types   map[string]string
-  Structs map[string]StructInfo
-  Enums   map[string]EnumInfo
-  Aliases map[string]string
+	Funcs   map[string]FuncSig
+	Types   map[string]string
+	Structs map[string]StructInfo
+	Enums   map[string]EnumInfo
+	Aliases map[string]string
 
-  Consts map[string]ConstInfo // NEW (M10): top-level constants collected
-
-  Public PublicInfo // NEW (M10): publicity table, populated during collection
+	// NEW (M10 Phase B): visibility + consts
+	FuncsPublic   map[string]bool
+	StructsPublic map[string]bool
+	Consts        map[string]ConstInfo
+	ConstsPublic  map[string]bool
 }
 
 // Warning is a lightweight compiler warning.
 type Warning struct {
-  Code string
-  Msg  string
+	Code string
+	Msg  string
 }
 
 func (w Warning) String() string {
-  if w.Code == "" {
-    return "warning: " + w.Msg
-  }
-  return fmt.Sprintf("%s: %s", w.Code, w.Msg)
+	if w.Code == "" {
+		return "warning: " + w.Msg
+	}
+	return fmt.Sprintf("%s: %s", w.Code, w.Msg)
 }
