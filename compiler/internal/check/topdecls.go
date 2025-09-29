@@ -1,0 +1,75 @@
+package check
+
+import (
+	"github.com/desilang/desi/compiler/internal/ast"
+)
+
+/*
+Top-level pass for Phase B:
+
+• Records visibility bits for funcs/structs into Info.{FuncsPublic,StructsPublic}
+• Records top-level consts into Info.Consts (+ Info.ConstsPublic)
+• Enforces:
+    - DTE0012: `pub let mut` is forbidden
+    - DTE0011: `pub let` must be a compile-time literal (Phase B: int/str/bool only)
+*/
+
+func (c *checker) collectVisibilityAndConsts(f *ast.File) {
+	// Ensure maps exist
+	if c.info.FuncsPublic == nil {
+		c.info.FuncsPublic = map[string]bool{}
+	}
+	if c.info.StructsPublic == nil {
+		c.info.StructsPublic = map[string]bool{}
+	}
+	if c.info.Consts == nil {
+		c.info.Consts = map[string]ConstInfo{}
+	}
+	if c.info.ConstsPublic == nil {
+		c.info.ConstsPublic = map[string]bool{}
+	}
+
+	for _, d := range f.Decls {
+		switch v := d.(type) {
+		case *ast.FuncDecl:
+			// We assume FuncSig itself is collected elsewhere (existing pass).
+			c.info.FuncsPublic[v.Name] = v.Pub
+
+		case *ast.StructDecl:
+			// Field map etc. already handled by existing pass.
+			c.info.StructsPublic[v.Name] = v.Pub
+
+		case *ast.ConstDecl:
+			// Phase B rules:
+			// 1) `pub let mut` is forbidden (DTE0012).
+			if v.Pub && v.Mutable {
+				c.errors = append(c.errors, ErrPubLetMutForbidden(v.Span, v.Name))
+			}
+
+			// 2) `pub let` must be a compile-time constant (literal only).
+			ck, isConst := constKindIfLiteral(v.Value)
+			if v.Pub && !isConst {
+				c.errors = append(c.errors, ErrPublicConstNotConst(v.Span, v.Name))
+			}
+
+			// Record const for intra-module resolution regardless (helps local typing).
+			// If not a literal, ck will be KindUnknown — fine for local typing fall-throughs.
+			c.info.Consts[v.Name] = ConstInfo{Kind: ck}
+			c.info.ConstsPublic[v.Name] = v.Pub && isConst && !v.Mutable
+		}
+	}
+}
+
+// Phase B: a constant is compile-time iff it's a bare literal (int/str/bool).
+func constKindIfLiteral(e ast.Expr) (Kind, bool) {
+	switch e.(type) {
+	case *ast.IntLit:
+		return KindInt, true
+	case *ast.StrLit:
+		return KindStr, true
+	case *ast.BoolLit:
+		return KindBool, true
+	default:
+		return KindUnknown, false
+	}
+}

@@ -150,26 +150,38 @@ func ErrAssignToImmutable(name, context string) error {
 }
 
 // -----------------------------------------------------------------------------
-// NEW (M10 Phase B): visibility + public-const diagnostics
+// NEW (M10/B): visibility + public-const diagnostics
 // -----------------------------------------------------------------------------
 
-// ErrNotPublic: accessing a symbol across modules that is not public.
+// ErrNotPublic => DTE0010
 func ErrNotPublic(name, context string) error {
 	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "not_public"}
 }
 
-// ErrPublicConstNotConst: public const must be compile-time constant.
-func ErrPublicConstNotConst(name string) error {
+// ErrPublicConstNotConst => DTE0011
+func ErrPublicConstNotConst(sp ast.Span, name string) error {
 	id, title := lookupIDTitle("type", "public_const_not_const", "DTE0011", "public constant must be compile-time constant")
 	msg := fmt.Sprintf("%s: %s", title, name)
-	return typedError{code: id, title: msg, domain: "type", key: "public_const_not_const"}
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "public_const_not_const",
+		span:   &sp,
+	}
 }
 
-// ErrPubLetMutForbidden: forbid `pub let mut`.
-func ErrPubLetMutForbidden(name string) error {
+// ErrPubLetMutForbidden => DTE0012
+func ErrPubLetMutForbidden(sp ast.Span, name string) error {
 	id, title := lookupIDTitle("type", "pub_let_mut_forbidden", "DTE0012", "public let cannot be mutable")
 	msg := fmt.Sprintf("%s: %s", title, name)
-	return typedError{code: id, title: msg, domain: "type", key: "pub_let_mut_forbidden"}
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "pub_let_mut_forbidden",
+		span:   &sp,
+	}
 }

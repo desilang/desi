@@ -71,7 +71,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
   var errs []error
   var warns []Warning
 
-  // collect structs (M7) + publicity (M10)
+  // ---- Phase B: collect visibility + consts (and enforce DTE0011/DTE0012) ----
+  c0 := &checker{info: info}
+  c0.collectVisibilityAndConsts(f)
+  errs = append(errs, c0.errors...)
+
+  // ---- collect structs (M7) — fields only (pub flags already recorded above) ----
   for _, d := range f.Decls {
     if sd, ok := d.(*ast.StructDecl); ok {
       fields := map[string]string{}
@@ -79,13 +84,11 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
         fields[ft.Name] = ft.Type
       }
       info.Structs[sd.Name] = StructInfo{Fields: fields}
-      if sd.Pub {
-        info.StructsPublic[sd.Name] = true
-      }
+      // visibility already handled by collectVisibilityAndConsts
     }
   }
 
-  // collect enums (M8)
+  // ---- collect enums (M8) ----
   for _, d := range f.Decls {
     if ed, ok := d.(*ast.EnumDecl); ok {
       variants := map[string]string{}
@@ -96,29 +99,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect top-level constants (M10)
-  for _, d := range f.Decls {
-    cd, ok := d.(*ast.ConstDecl)
-    if !ok {
-      continue
-    }
-    // pub let mut is forbidden
-    if cd.Pub && cd.Mutable {
-      errs = append(errs, ErrPubLetMutForbidden(cd.Name))
-    }
-    // public constants must be compile-time constants (simple rule: literal only for now)
-    if cd.Pub && !isConstExpr(cd.Value) {
-      errs = append(errs, ErrPublicConstNotConst(cd.Name))
-    }
-    // record kind (best-effort; literal-only right now)
-    k := constKind(cd.Value)
-    info.Consts[cd.Name] = ConstInfo{Kind: k}
-    if cd.Pub {
-      info.ConstsPublic[cd.Name] = true
-    }
-  }
-
-  // collect function signatures + publicity
+  // ---- collect function signatures (pub flags already recorded above) ----
   for _, d := range f.Decls {
     fn, ok := d.(*ast.FuncDecl)
     if !ok {
@@ -130,14 +111,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
     var ps []Kind
     for _, p := range fn.Params {
-      k, _ := mapTypeOrStruct(p.Type, info) // now also maps enums
+      k, _ := mapTypeOrStruct(p.Type, info) // maps structs/enums too
       ps = append(ps, k)
     }
     retK, _ := mapTypeOrStruct(fn.Ret, info)
     info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
-    if fn.Pub {
-      info.FuncsPublic[fn.Name] = true
-    }
+    // visibility already handled by collectVisibilityAndConsts
   }
 
   // ---------- Build alias maps + diagnostics ----------
@@ -201,7 +180,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
   return info, errs, warns
 }
 
-// ---- helpers for public-const checks ----
+// ---- helpers for public-const checks (kept for future folding/inference) ----
 
 // isConstExpr: Phase B minimal rule — only simple literals count as compile-time constants.
 func isConstExpr(e ast.Expr) bool {
