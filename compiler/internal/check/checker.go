@@ -61,10 +61,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Funcs:   map[string]FuncSig{},
 		Types:   map[string]string{},
 		Structs: map[string]StructInfo{},
-		Enums:   map[string]EnumInfo{}, // NEW
-		Public: PublicInfo{ // NEW (M10)
+		Enums:   map[string]EnumInfo{},
+		Consts:  map[string]ConstInfo{}, // NEW
+		Public: PublicInfo{
 			Funcs:   map[string]bool{},
 			Structs: map[string]bool{},
+			Consts:  map[string]bool{},
 		},
 	}
 	var errs []error
@@ -78,7 +80,6 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				fields[ft.Name] = ft.Type
 			}
 			info.Structs[sd.Name] = StructInfo{Fields: fields}
-			// M10: record Pub flag
 			if sd.Pub {
 				info.Public.Structs[sd.Name] = true
 			}
@@ -93,7 +94,29 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				variants[v.Name] = v.Payload
 			}
 			info.Enums[ed.Name] = EnumInfo{Variants: variants}
-			// Note: publicity for enums will be handled in a later milestone (M10b).
+			// Publicity for enums to be added in later milestone.
+		}
+	}
+
+	// collect constants (M10): no evaluation, only declared type → kind
+	for _, d := range f.Decls {
+		if cd, ok := d.(*ast.ConstDecl); ok {
+			if _, exists := info.Consts[cd.Name]; exists {
+				errs = append(errs, fmt.Errorf("duplicate constant %q", cd.Name))
+				continue
+			}
+			k := KindUnknown
+			if strings.TrimSpace(cd.Type) != "" {
+				k, _ = mapTypeOrStruct(cd.Type, info)
+			}
+			info.Consts[cd.Name] = ConstInfo{
+				Type: cd.Type,
+				Kind: k,
+				Pub:  cd.Pub,
+			}
+			if cd.Pub {
+				info.Public.Consts[cd.Name] = true
+			}
 		}
 	}
 
@@ -109,12 +132,11 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 		var ps []Kind
 		for _, p := range fn.Params {
-			k, _ := mapTypeOrStruct(p.Type, info) // now also maps enums
+			k, _ := mapTypeOrStruct(p.Type, info)
 			ps = append(ps, k)
 		}
 		retK, _ := mapTypeOrStruct(fn.Ret, info)
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
-		// M10: record Pub flag
 		if fn.Pub {
 			info.Public.Funcs[fn.Name] = true
 		}
@@ -193,6 +215,20 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
 		aliases:    fromAliasMap,
 		modAliases: modAliasMap,
 	}
+	// Make top-level constants visible inside every function (immutable, no writes).
+	for name, ci := range info.Consts {
+		v := &varInfo{
+			kind:       ci.Kind,
+			mutable:    false,
+			declName:   name,
+			structName: "", // N/A
+			read:       false,
+			written:    true, // treat as defined/initialized
+		}
+		// Ignore redefine errors silently here: function params/locals will shadow.
+		_ = c.scope.define(name, v)
+	}
+
 	// params (immutable)
 	for i, p := range fn.Params {
 		k, sname := mapTypeOrStruct(p.Type, info)

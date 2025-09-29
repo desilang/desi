@@ -51,12 +51,21 @@ type EnumInfo struct {
   Variants map[string]string
 }
 
+// ConstInfo records a top-level constant's declared type (text) and kind.
+// Kind may be KindUnknown when no explicit type is provided.
+type ConstInfo struct {
+  Type string
+  Kind Kind
+  Pub  bool
+  // Future: Value folding, literal tracking, etc.
+}
+
 // PublicInfo records which top-level symbols are marked public (M10 Phase A).
-// Phase A only threads the bit; Phase B will use it for visibility checks.
 type PublicInfo struct {
   Funcs   map[string]bool
   Structs map[string]bool
-  // Future: Consts map[string]bool, Types map[string]bool, Enums map[string]bool
+  Consts  map[string]bool
+  // Future: Types map[string]bool, Enums map[string]bool
 }
 
 type Info struct {
@@ -65,6 +74,8 @@ type Info struct {
   Structs map[string]StructInfo
   Enums   map[string]EnumInfo
   Aliases map[string]string
+
+  Consts map[string]ConstInfo // NEW (M10): top-level constants collected
 
   Public PublicInfo // NEW (M10): publicity table, populated during collection
 }
