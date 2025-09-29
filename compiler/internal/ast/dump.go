@@ -1,8 +1,9 @@
 package ast
 
 import (
-  "fmt"
   "strings"
+
+  "github.com/desilang/desi/compiler/internal/term"
 )
 
 /*** DUMP (pretty outline for CLI) ***/
@@ -10,30 +11,35 @@ import (
 func DumpFile(f *File) string {
   var b strings.Builder
   if f.Pkg != nil {
-    fmt.Fprintf(&b, "package %s\n", f.Pkg.Name)
+    term.Bprintf(&b, "package %s\n", f.Pkg.Name)
   }
   for _, im := range f.Imports {
-    fmt.Fprintf(&b, "import %s\n", im.Path)
+    term.Bprintf(&b, "import %s\n", im.Path)
   }
   for _, d := range f.Decls {
-    switch fn := d.(type) {
+    switch dn := d.(type) {
+
     case *FuncDecl:
-      fmt.Fprintf(&b, "\ndef %s(", fn.Name)
-      for i, p := range fn.Params {
+      if dn.Pub {
+        term.Bprintf(&b, "\npub def %s(", dn.Name)
+      } else {
+        term.Bprintf(&b, "\ndef %s(", dn.Name)
+      }
+      for i, p := range dn.Params {
         if i > 0 {
           b.WriteString(", ")
         }
-        fmt.Fprintf(&b, "%s: %s", p.Name, p.Type)
+        term.Bprintf(&b, "%s: %s", p.Name, p.Type)
       }
-      fmt.Fprintf(&b, ") -> %s:\n", orDefault(fn.Ret, "void"))
-      for _, s := range fn.Body {
+      term.Bprintf(&b, ") -> %s:\n", orDefault(dn.Ret, "void"))
+      for _, s := range dn.Body {
         switch st := s.(type) {
         case *LetStmt:
           // let / let mut
           if st.Mutable {
-            fmt.Fprintf(&b, "  let mut ")
+            term.Bprintf(&b, "  let mut ")
           } else {
-            fmt.Fprintf(&b, "  let ")
+            term.Bprintf(&b, "  let ")
           }
           // print binds (show per-name types when present)
           for i, bd := range st.Binds {
@@ -41,13 +47,13 @@ func DumpFile(f *File) string {
               b.WriteString(", ")
             }
             if strings.TrimSpace(bd.Type) == "" {
-              fmt.Fprintf(&b, "%s", bd.Name)
+              term.Bprintf(&b, "%s", bd.Name)
             } else {
-              fmt.Fprintf(&b, "%s: %s", bd.Name, bd.Type)
+              term.Bprintf(&b, "%s: %s", bd.Name, bd.Type)
             }
           }
           if strings.TrimSpace(st.GroupType) != "" {
-            fmt.Fprintf(&b, " : %s", st.GroupType)
+            term.Bprintf(&b, " : %s", st.GroupType)
           }
           b.WriteString(" = ")
           for i, e := range st.Values {
@@ -58,7 +64,7 @@ func DumpFile(f *File) string {
           }
           b.WriteString("\n")
         case *AssignStmt:
-          fmt.Fprintf(&b, "  ")
+          term.Bprintf(&b, "  ")
           for i, n := range st.Names {
             if i > 0 {
               b.WriteString(", ")
@@ -75,37 +81,47 @@ func DumpFile(f *File) string {
           b.WriteString("\n")
         case *ReturnStmt:
           if st.Expr == nil {
-            fmt.Fprintf(&b, "  return\n")
+            term.Bprintf(&b, "  return\n")
           } else {
-            fmt.Fprintf(&b, "  return %s\n", exprString(st.Expr))
+            term.Bprintf(&b, "  return %s\n", exprString(st.Expr))
           }
         case *ExprStmt:
-          fmt.Fprintf(&b, "  %s\n", exprString(st.Expr))
+          term.Bprintf(&b, "  %s\n", exprString(st.Expr))
         case *IfStmt:
-          fmt.Fprintf(&b, "  if %s:\n", exprString(st.Cond))
+          term.Bprintf(&b, "  if %s:\n", exprString(st.Cond))
           for _, s2 := range st.Then {
-            fmt.Fprintf(&b, "    %s\n", stmtString(s2))
+            term.Bprintf(&b, "    %s\n", stmtString(s2))
           }
           for _, e := range st.Elifs {
-            fmt.Fprintf(&b, "  elif %s:\n", exprString(e.Cond))
+            term.Bprintf(&b, "  elif %s:\n", exprString(e.Cond))
             for _, s2 := range e.Body {
-              fmt.Fprintf(&b, "    %s\n", stmtString(s2))
+              term.Bprintf(&b, "    %s\n", stmtString(s2))
             }
           }
           if st.Else != nil {
-            fmt.Fprintf(&b, "  else:\n")
+            term.Bprintf(&b, "  else:\n")
             for _, s2 := range st.Else {
-              fmt.Fprintf(&b, "    %s\n", stmtString(s2))
+              term.Bprintf(&b, "    %s\n", stmtString(s2))
             }
           }
         case *WhileStmt:
-          fmt.Fprintf(&b, "  while %s:\n", exprString(st.Cond))
+          term.Bprintf(&b, "  while %s:\n", exprString(st.Cond))
           for _, s2 := range st.Body {
-            fmt.Fprintf(&b, "    %s\n", stmtString(s2))
+            term.Bprintf(&b, "    %s\n", stmtString(s2))
           }
         case *DeferStmt:
-          fmt.Fprintf(&b, "  defer %s\n", exprString(st.Call))
+          term.Bprintf(&b, "  defer %s\n", exprString(st.Call))
         }
+      }
+
+    case *StructDecl:
+      if dn.Pub {
+        term.Bprintf(&b, "\npub struct %s:\n", dn.Name)
+      } else {
+        term.Bprintf(&b, "\nstruct %s:\n", dn.Name)
+      }
+      for _, f := range dn.Fields {
+        term.Bprintf(&b, "  %s: %s\n", f.Name, f.Type)
       }
     }
   }
@@ -167,11 +183,11 @@ func stmtString(s Stmt) string {
       if strings.TrimSpace(bd.Type) == "" {
         b.WriteString(bd.Name)
       } else {
-        fmt.Fprintf(&b, "%s: %s", bd.Name, bd.Type)
+        term.Bprintf(&b, "%s: %s", bd.Name, bd.Type)
       }
     }
     if strings.TrimSpace(st.GroupType) != "" {
-      fmt.Fprintf(&b, " : %s", st.GroupType)
+      term.Bprintf(&b, " : %s", st.GroupType)
     }
     b.WriteString(" = ")
     for i, e := range st.Values {
