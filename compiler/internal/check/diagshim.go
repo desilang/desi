@@ -185,3 +185,10 @@ func ErrPubLetMutForbidden(sp ast.Span, name string) error {
 		span:   &sp,
 	}
 }
+
+// ErrNotPublicAt => DTE0010 with span
+func ErrNotPublicAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "not_public", span: &sp}
+}

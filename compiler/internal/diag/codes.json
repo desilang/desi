@@ -86,17 +86,17 @@
     "not_public": {
       "id": "DTE0010",
       "title": "symbol is not public",
-      "help": "this symbol is private to its defining module; mark it 'pub' to export"
+      "help": "symbols imported from another module must be declared with 'pub'"
     },
     "public_const_not_const": {
       "id": "DTE0011",
       "title": "public constant must be compile-time constant",
-      "help": "public constants must be literal-only in Phase B; later phases will allow folding"
+      "help": "public constants must be literal compile-time values"
     },
     "pub_let_mut_forbidden": {
       "id": "DTE0012",
       "title": "public let cannot be mutable",
-      "help": "remove 'mut' from a public constant declaration"
+      "help": "remove 'mut' from public top-level let declarations"
     }
   },
   "module": {
