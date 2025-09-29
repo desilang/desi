@@ -214,6 +214,10 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if _, isLocal := c.scope.lookup(id.Name); !isLocal {
 					if modPath, isAlias := c.modAliases[id.Name]; isAlias {
 						if sig, ok := c.info.Funcs[fe.Name]; ok {
+							// NEW: visibility check (stubbed true for now)
+							if !c.isPublicFunc(fe.Name) {
+								c.errors = append(c.errors, ErrNotPublic(fe.Name, "module access"))
+							}
 							if len(sig.Params) != len(v.Args) {
 								c.errors = append(c.errors, fmt.Errorf("call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
 							}
@@ -257,6 +261,10 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				name = orig
 			}
 			if sig, ok := c.info.Funcs[name]; ok {
+				// NEW: visibility check (stubbed true for now)
+				if !c.isPublicFunc(name) {
+					c.errors = append(c.errors, ErrNotPublic(name, "imported function"))
+				}
 				if len(sig.Params) != len(v.Args) {
 					c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", name, len(sig.Params), len(v.Args)))
 				}
@@ -321,4 +329,17 @@ func (c *checker) enumNameOfExpr(e ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+// ---- NEW (M10-B): visibility stubs ----
+
+func (c *checker) isPublicFunc(name string) bool {
+	// Phase B hook: once Info carries visibility, consult it here.
+	return true
+}
+func (c *checker) isPublicConst(name string) bool {
+	return true
+}
+func (c *checker) isPublicStruct(name string) bool {
+	return true
 }

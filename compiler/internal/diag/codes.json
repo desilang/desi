@@ -88,6 +88,21 @@
       "id": "DTE0006",
       "title": "cannot assign to immutable variable",
       "help": "declare the variable with 'mut' if you intend to reassign it"
+    },
+    "not_public": {
+      "id": "DTE0010",
+      "title": "symbol is not public",
+      "help": "to use a symbol from another module, declare it with 'pub'"
+    },
+    "public_const_not_const": {
+      "id": "DTE0011",
+      "title": "public constant is not a compile-time constant",
+      "help": "public constants must be immutable and computed at compile time"
+    },
+    "pub_let_mut_forbidden": {
+      "id": "DTE0012",
+      "title": "public mutable variable is forbidden",
+      "help": "exported mutable globals are not allowed; expose a function or immutable constant instead"
     }
   },
   "module": {
