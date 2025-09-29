@@ -28,6 +28,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
     return "0", "int"
 
   case *ast.IdentExpr:
+    // Local/param first
     if t, ok := env.vars[v.Name]; ok {
       if isStrText(t) {
         return v.Name, "str"
@@ -40,10 +41,23 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
       }
       return v.Name, "int"
     }
+    // NEW: top-level constant macro in this unit or known const in Info.
+    if env != nil && env.info != nil && env.info.Consts != nil {
+      if ci, ok := env.info.Consts[v.Name]; ok {
+        switch ci.Kind {
+        case checkKindStr:
+          return v.Name, "str"
+        case checkKindInt, checkKindBool:
+          return v.Name, "int"
+        default:
+          return v.Name, "int"
+        }
+      }
+    }
     return v.Name, "int"
 
   case *ast.FieldExpr:
-    // Only handle base identifiers (and nested) that are known struct-typed variables.
+    // Struct field chains (existing path).
     if ft, ok := exprTextualType(v, env); ok {
       ex := fieldAccessChain(v)
       if isStrText(ft) {
@@ -53,6 +67,25 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
         return ex, "struct:" + strings.TrimSpace(ft)
       }
       return ex, "int"
+    }
+    // NEW: Module-alias or from-alias constant access: m.CONST -> CONST
+    if _, ok := v.X.(*ast.IdentExpr); ok {
+      if env != nil && env.info != nil && env.info.Consts != nil {
+        if ci, ok := env.info.Consts[v.Name]; ok {
+          // We drop the alias/object and reference just the macro name.
+          switch ci.Kind {
+          case checkKindStr:
+            return v.Name, "str"
+          case checkKindInt, checkKindBool:
+            return v.Name, "int"
+          default:
+            return v.Name, "int"
+          }
+        }
+      }
+      // If we don't know it, best-effort: pass through the RHS name.
+      // This lets future external defines work; otherwise C will error (which is fine).
+      return v.Name, "int"
     }
     return "0", ""
 
@@ -267,3 +300,12 @@ func cLValueFor(e ast.Expr, env *env) (string, bool) {
     return "", false
   }
 }
+
+// Small shim to keep Kind mapping localized for consts (int/bool/str only here).
+// We don't import check.Kind directly in this file, so mirror the cases we need.
+const (
+  checkKindUnknown = 0
+  checkKindInt     = 1
+  checkKindStr     = 2
+  checkKindBool    = 3
+)

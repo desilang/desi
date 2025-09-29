@@ -2,6 +2,7 @@ package c
 
 import (
 	"bytes"
+	"strconv"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
@@ -33,6 +34,44 @@ func EmitFile(f *ast.File, info *check.Info) string {
 		}
 	}
 
+	// ---- NEW: #define macros for top-level constants in this file ----
+	// We only need a textual define; uses will refer to the macro name.
+	for _, d := range f.Decls {
+		cd, ok := d.(*ast.ConstDecl)
+		if !ok {
+			continue
+		}
+		name := cd.Name
+		switch v := cd.Value.(type) {
+		case *ast.IntLit:
+			// accept 0b... too; C define may be decimal only — normalize
+			if hasPrefixAny(v.Value, "0b", "0B") {
+				if n, err := strconv.ParseInt(v.Value[2:], 2, 64); err == nil {
+					term.Wprintf(&b, "#define %s %d\n", name, n)
+				} else {
+					term.Wprintf(&b, "#define %s 0\n", name)
+				}
+			} else {
+				term.Wprintf(&b, "#define %s %s\n", name, v.Value)
+			}
+		case *ast.BoolLit:
+			if v.Value {
+				term.Wprintf(&b, "#define %s 1\n", name)
+			} else {
+				term.Wprintf(&b, "#define %s 0\n", name)
+			}
+		case *ast.StrLit:
+			term.Wprintf(&b, "#define %s %s\n", name, ensureCStringLiteral(v.Value))
+		default:
+			// Non-literal consts are already forbidden for pub in checker;
+			// for local non-literal we fall back to 0 to keep C happy.
+			term.Wprintf(&b, "#define %s 0\n", name)
+		}
+	}
+	if hasAnyConst(f) {
+		term.Wprintf(&b, "\n")
+	}
+
 	// NOTE: struct-aware signatures (params + returns)
 	sigs := collectFuncSigs(f, info)
 
@@ -59,4 +98,13 @@ func EmitFile(f *ast.File, info *check.Info) string {
 		emitFunc(&b, m, sigs, info, true)
 	}
 	return b.String()
+}
+
+func hasAnyConst(f *ast.File) bool {
+	for _, d := range f.Decls {
+		if _, ok := d.(*ast.ConstDecl); ok {
+			return true
+		}
+	}
+	return false
 }
