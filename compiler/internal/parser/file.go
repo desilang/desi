@@ -37,13 +37,13 @@ func (p *Parser) ParseFile() (*ast.File, error) {
       }
 
       // Optional: plain module aliasing — `import foo.bar as baz`
-      var aliases []string
+      as := ""
       if p.accept(lexer.TokAs) {
         aliasTok, err := p.expectIdent("module alias")
         if err != nil {
           return nil, err
         }
-        aliases = append(aliases, aliasTok.Lex)
+        as = aliasTok.Lex
       }
 
       nlTok, err := p.expect(lexer.TokNewline)
@@ -51,9 +51,9 @@ func (p *Parser) ParseFile() (*ast.File, error) {
         return nil, err
       }
       f.Imports = append(f.Imports, ast.ImportDecl{
-        Path:    path,
-        Aliases: aliases,
-        Span:    spanTok(importTok, nlTok),
+        Path: path,
+        As:   as,
+        Span: spanTok(importTok, nlTok),
       })
     } else {
       // from-import
@@ -70,8 +70,44 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 
   // decls
   for !p.at(lexer.TokEOF) {
-    // Optional 'pub' modifier before certain decls (M10).
-    seenPub := p.accept(lexer.TokPub)
+    // Optional 'pub' prefix before def/struct/let (const-only)
+    if p.accept(lexer.TokPub) {
+      switch {
+      case p.at(lexer.TokDef):
+        p.next() // consume 'def'
+        fn, err := p.parseFuncDecl()
+        if err != nil {
+          return nil, err
+        }
+        fn.Pub = true
+        f.Decls = append(f.Decls, fn)
+
+      case p.at(lexer.TokStruct):
+        structTok := p.tok
+        p.next() // consume 'struct'
+        sd, err := p.parseStructDeclAt(structTok)
+        if err != nil {
+          return nil, err
+        }
+        sd.Pub = true
+        f.Decls = append(f.Decls, sd)
+
+      case p.at(lexer.TokLet):
+        letTok := p.tok
+        p.next() // consume 'let'
+        cd, err := p.parseTopConstAt(letTok, true /*pub*/)
+        if err != nil {
+          return nil, err
+        }
+        f.Decls = append(f.Decls, cd)
+
+      default:
+        // 'pub' not followed by a known decl keyword
+        return nil, fmt.Errorf("DPE0001: unexpected token after 'pub': %s", p.tok.Kind.String())
+      }
+      p.skipNewlines()
+      continue
+    }
 
     switch {
     case p.accept(lexer.TokDef):
@@ -79,11 +115,9 @@ func (p *Parser) ParseFile() (*ast.File, error) {
       if err != nil {
         return nil, err
       }
-      fn.Pub = seenPub
       f.Decls = append(f.Decls, fn)
 
     case p.at(lexer.TokType):
-      // 'pub type' not supported yet; ignore 'pub' if present.
       typeTok := p.tok
       p.next() // consume 'type'
       td, err := p.parseTypeDeclAt(typeTok)
@@ -99,11 +133,9 @@ func (p *Parser) ParseFile() (*ast.File, error) {
       if err != nil {
         return nil, err
       }
-      sd.Pub = seenPub
       f.Decls = append(f.Decls, sd)
 
     case p.at(lexer.TokEnum):
-      // 'pub enum' is planned later; ignore 'pub' if present.
       enumTok := p.tok
       p.next() // consume 'enum'
       ed, err := p.parseEnumDeclAt(enumTok)
@@ -113,26 +145,21 @@ func (p *Parser) ParseFile() (*ast.File, error) {
       f.Decls = append(f.Decls, ed)
 
     case p.at(lexer.TokLet):
+      // Top-level const (non-pub)
       letTok := p.tok
       p.next() // consume 'let'
-      cd, err := p.parseTopConstDeclAt(letTok, seenPub)
+      cd, err := p.parseTopConstAt(letTok, false /*pub*/)
       if err != nil {
         return nil, err
       }
       f.Decls = append(f.Decls, cd)
 
     default:
-      // If we saw 'pub' but it's not followed by a supported decl, surface a clear error.
-      if seenPub {
-        t := p.tok
-        return nil, fmt.Errorf("unexpected 'pub' before %q at %d:%d", t.Kind.String(), t.Line, t.Col)
-      }
       // Surface lexer errors immediately at top-level
       if p.at(lexer.TokErr) {
         t := p.tok
         return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
       }
-      // Skip to newline/EOF to avoid infinite loop on unknown tokens.
       for !p.at(lexer.TokNewline) && !p.at(lexer.TokEOF) {
         p.next()
       }
@@ -273,67 +300,6 @@ func (p *Parser) parseTypeDeclAt(typeTok lexer.Token) (*ast.TypeDecl, error) {
   }, nil
 }
 
-/*** NEW (M10): top-level constant decl ***/
-
-// Grammar (restricted):
-//
-//	[pub] let <name> (":" type)? "=" <expr> NEWLINE
-//
-// Notes:
-//   - Only a SINGLE binding allowed (no parallel binds) at top-level.
-//   - 'mut' is forbidden at top-level (we error if encountered).
-func (p *Parser) parseTopConstDeclAt(letTok lexer.Token, pub bool) (*ast.ConstDecl, error) {
-  // Optional (forbidden) 'mut'
-  if p.accept(lexer.TokMut) {
-    return nil, fmt.Errorf("top-level 'let mut' is not allowed; use an immutable constant or declare inside a function")
-  }
-
-  // Name
-  idTok, err := p.expectIdent("constant name")
-  if err != nil {
-    return nil, err
-  }
-
-  // Optional ': type'
-  ty := ""
-  if p.accept(lexer.TokColon) {
-    ty, err = p.parseTypeUntil(lexer.TokEq)
-    if err != nil {
-      return nil, err
-    }
-  }
-
-  // Reject any attempt to add another binder (comma)
-  if p.at(lexer.TokComma) {
-    return nil, fmt.Errorf("multiple bindings are not allowed in a top-level constant declaration")
-  }
-
-  // '=' expr NEWLINE
-  if _, err := p.expect(lexer.TokEq); err != nil {
-    return nil, err
-  }
-  values, err := p.parseExprListUntilNewline()
-  if err != nil {
-    return nil, err
-  }
-  nl, err := p.expect(lexer.TokNewline)
-  if err != nil {
-    return nil, err
-  }
-  if len(values) != 1 {
-    return nil, fmt.Errorf("top-level constant requires exactly one initializer expression")
-  }
-
-  return &ast.ConstDecl{
-    Name:    idTok.Lex,
-    Type:    strings.TrimSpace(ty),
-    Value:   values[0],
-    Pub:     pub,
-    Mutable: false,
-    Span:    spanTok(letTok, nl),
-  }, nil
-}
-
 /*** ------------------ helpers (friendlier ident errors) ------------------ ***/
 
 // expectIdent is like expect(TokIdent) but produces a nicer message if we
@@ -370,10 +336,62 @@ func isKeywordToken(k lexer.TokKind) bool {
     lexer.TokElse,
     lexer.TokWhile,
     lexer.TokReturn,
-    lexer.TokMatch,
-    lexer.TokPub:
+    lexer.TokMatch:
     return true
   default:
     return false
   }
+}
+
+/*** NEW (M10): top-level const parsing ***/
+
+// parseTopConstAt parses a single-name top-level constant:
+//
+//	let NAME (":" Type)? "=" <expr> NEWLINE
+//
+// When pub=true, the returned ConstDecl has Pub set.
+func (p *Parser) parseTopConstAt(letTok lexer.Token, pub bool) (*ast.ConstDecl, error) {
+  // Optional 'mut' (parser accepts; checker will forbid when pub)
+  mutable := p.accept(lexer.TokMut)
+
+  // Single name (no tuple/group syntax at top level)
+  idTok, err := p.expectIdent("const name")
+  if err != nil {
+    return nil, err
+  }
+
+  annType := ""
+  if p.accept(lexer.TokColon) {
+    t, err := p.parseTypeUntil(lexer.TokEq)
+    if err != nil {
+      return nil, err
+    }
+    annType = t
+  }
+
+  if _, err := p.expect(lexer.TokEq); err != nil {
+    return nil, err
+  }
+
+  // Reuse expression list, but require exactly one value.
+  values, err := p.parseExprListUntilNewline()
+  if err != nil {
+    return nil, err
+  }
+  nl, err := p.expect(lexer.TokNewline)
+  if err != nil {
+    return nil, err
+  }
+  if len(values) != 1 {
+    return nil, fmt.Errorf("DPE0004: trailing or extra value in top-level const (expected 1 value)")
+  }
+
+  return &ast.ConstDecl{
+    Name:    idTok.Lex,
+    Type:    annType,
+    Value:   values[0],
+    Pub:     pub,
+    Mutable: mutable,
+    Span:    spanTok(letTok, nl),
+  }, nil
 }

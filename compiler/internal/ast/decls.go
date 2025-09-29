@@ -7,8 +7,8 @@ type FuncDecl struct {
 	Params []Param
 	Ret    string // textual type for now
 	Body   []Stmt
+	Pub    bool // NEW (M10): exported
 
-	Pub  bool // NEW (M10): true if declared with 'pub'
 	Span Span // span of the whole decl (from 'def' to end)
 }
 
@@ -37,7 +37,7 @@ func (TypeDecl) decl() {}
 type StructDecl struct {
 	Name   string
 	Fields []Field
-	Pub    bool // NEW (M10): true if declared with 'pub'
+	Pub    bool // NEW (M10): exported
 	Span   Span // whole struct span
 }
 
@@ -67,20 +67,6 @@ type EnumVariant struct {
 	Span    Span   // span of this variant line
 }
 
-/*** NEW (M10): Top-level constant declarations ***/
-
-type ConstDecl struct {
-	Name    string // identifier
-	Type    string // optional explicit type (text form); "" means inferred
-	Value   Expr   // required initializer
-	Pub     bool   // true if declared with 'pub'
-	Mutable bool   // should always be false (top-level mut is forbidden)
-	Span    Span   // whole decl span
-}
-
-func (ConstDecl) node() {}
-func (ConstDecl) decl() {}
-
 /*** NEW: Match (M8 P3) ***/
 
 type Pattern struct {
@@ -103,3 +89,25 @@ type MatchStmt struct {
 
 func (MatchStmt) node() {}
 func (MatchStmt) stmt() {}
+
+/*** NEW (M10): Top-level constant declaration ***/
+
+// ConstDecl represents a top-level constant:
+//
+//	[pub] let NAME (":" Type)? "=" <expr>
+//
+// Notes:
+//   - Parser will set Pub=true when prefixed with `pub`.
+//   - Mutable must be false for valid public constants; if parser sees `pub let mut`
+//     it will still record it as Mutable=true so the checker can emit DTE0012.
+type ConstDecl struct {
+	Name    string
+	Type    string // optional type annotation
+	Value   Expr   // single expression
+	Pub     bool   // exported?
+	Mutable bool   // should be false for public constants
+	Span    Span
+}
+
+func (ConstDecl) node() {}
+func (ConstDecl) decl() {}
