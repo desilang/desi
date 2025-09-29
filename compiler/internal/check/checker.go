@@ -62,11 +62,15 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Types:   map[string]string{},
 		Structs: map[string]StructInfo{},
 		Enums:   map[string]EnumInfo{}, // NEW
+		Public: PublicInfo{ // NEW (M10)
+			Funcs:   map[string]bool{},
+			Structs: map[string]bool{},
+		},
 	}
 	var errs []error
 	var warns []Warning
 
-	// collect structs (M7)
+	// collect structs (M7) + publicity (M10)
 	for _, d := range f.Decls {
 		if sd, ok := d.(*ast.StructDecl); ok {
 			fields := map[string]string{}
@@ -74,6 +78,10 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				fields[ft.Name] = ft.Type
 			}
 			info.Structs[sd.Name] = StructInfo{Fields: fields}
+			// M10: record Pub flag
+			if sd.Pub {
+				info.Public.Structs[sd.Name] = true
+			}
 		}
 	}
 
@@ -85,10 +93,11 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				variants[v.Name] = v.Payload
 			}
 			info.Enums[ed.Name] = EnumInfo{Variants: variants}
+			// Note: publicity for enums will be handled in a later milestone (M10b).
 		}
 	}
 
-	// collect function signatures
+	// collect function signatures + publicity (M10)
 	for _, d := range f.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -105,6 +114,10 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 		retK, _ := mapTypeOrStruct(fn.Ret, info)
 		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
+		// M10: record Pub flag
+		if fn.Pub {
+			info.Public.Funcs[fn.Name] = true
+		}
 	}
 
 	// ---------- Build alias maps + diagnostics ----------
