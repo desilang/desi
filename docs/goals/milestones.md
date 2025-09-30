@@ -4,23 +4,31 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Snapshot
 
-| ID  | Milestone                            | Status | Notes / Artifacts                         |
-|-----|--------------------------------------|:------:|-------------------------------------------|
-| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`            |
-| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`            |
-| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`               |
-| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`              |
-| M5  | String literals + escapes            |   ✅    | used across examples                      |
-| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`                |
-| M7  | Structs                              |   ✅    | see section below                         |
-| M8  | Enums / tagged unions                |   ✅    | see section below                         |
-| M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics |
-| M10 | Public/exported decls                |   ✅    | Phase A+B + `pub enum`/`pub type`         |
-| M11 | `async` / `await` (minimal)          |   ⏳    | —                                         |
-| M12 | Channels & `spawn`                   |   ⏳    | —                                         |
-| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                         |
-| M14 | Spans & pretty errors everywhere     |   🚧   | many wired; broadening coverage           |
-| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                         |
+| ID  | Milestone                                | Status | Notes / Artifacts                                |
+|-----|------------------------------------------|:------:|--------------------------------------------------|
+| M1  | Single-line function defs                |   ✅    | `examples/singleline_def.desi`                   |
+| M2  | Single-line `if`                         |   ✅    | `examples/singleline_if*.desi`                   |
+| M3  | Compound assignments (`+= −= *= /=`)     |   ✅    | `examples/plus_assign.desi`                      |
+| M4  | Dotted call exprs (`io.println(x)`)      |   ✅    | `examples/str_api_demo.desi`                     |
+| M5  | String literals + escapes                |   ✅    | used across examples                             |
+| M6  | Type aliases                             |   ✅    | `examples/type_alias.desi`                       |
+| M7  | Structs                                  |   ✅    | see section below                                |
+| M8  | Enums / tagged unions                    |   ✅    | see section below                                |
+| M9  | Import hygiene                           |   ✅    | module aliases, from-imports, diagnostics        |
+| M10 | Public/exported decls                    |   ✅    | Phase A+B + `pub enum`/`pub type`                |
+| M11 | `async` / `await` (minimal)              |   ⏳    | grammar + state-machine lowering + tiny executor |
+| M12 | Channels & `spawn`                       |   ⏳    | MPSC channel + `spawn` on single-thread executor |
+| M13 | C-ABI module boundary                    |   ⏳    | `.a/.so` + `.dmi`                                |
+| M14 | Spans & pretty errors everywhere         |   🚧   | many wired; broadening coverage                  |
+| M15 | Watch mode (`desic dev`)                 |   ⏳    | —                                                |
+| M16 | Docstrings & `desic doc`                 |   ⏳    | module/func/struct/enum doc + Markdown output    |
+| M17 | Multiline strings (`"""..."""`)          |   ⏳    | nicer docs/examples                              |
+| M18 | Borrowing surface (`ref T` / `inout T`)  |   ⏳    | front-end borrow checker, move semantics         |
+| M19 | ARC runtime shim (C backend)             |   ⏳    | retain/release for owned aggregates              |
+| M20 | LLVM backend (experimental)              |   ⏳    | SSA lowering, sanitizer integration              |
+| M21 | Toolchains (“virtual env”)               |   ⏳    | `desi.toml`, `desi use`, per-project pinning     |
+| M22 | Package manager                          |   ⏳    | `desi pkg add name@^ver` + lockfile              |
+| M23 | Stdlib growth (prelude/io/fs/json/net/…) |   ⏳    | versioned with toolchain                         |
 
 ---
 
@@ -218,7 +226,7 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
     * `examples/m10_vis/mod_pub/main_alias.desi` (`import util.math as m` → `m.add` with `pub def add`).
     * `examples/m10_vis/mod_pub/main_from.desi` (`from util.math import add` with `pub def add`).
-  * **Types & Enums visibility** (also see Nice-to-haves below):
+  * **Types & Enums visibility**:
 
     * `examples/m10_pub_type_enum/mod/main_ok.desi`
     * `examples/m10_pub_type_enum/mod/main_bad.desi`
