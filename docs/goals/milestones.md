@@ -15,7 +15,7 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 | M7  | Structs                              |   ✅    | see section below                         |
 | M8  | Enums / tagged unions                |   ✅    | see section below                         |
 | M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics |
-| M10 | Public/exported decls                |   ✅    | Phase A + B complete (see section)        |
+| M10 | Public/exported decls                |   ✅    | Phase A+B + `pub enum`/`pub type`         |
 | M11 | `async` / `await` (minimal)          |   ⏳    | —                                         |
 | M12 | Channels & `spawn`                   |   ⏳    | —                                         |
 | M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                         |
@@ -178,7 +178,7 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
 ---
 
-## M10 — Public/exported decls (✅ Phase A + B Completed)
+## M10 — Public/exported decls (✅ Completed)
 
 **Why:** Desi needs compile-time encapsulation for API clarity, optimization, and concurrency safety.
 
@@ -197,19 +197,20 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
   * **From-imports**: `from X import Y` must import **public** symbols. Non-public import sites produce `DTE0010` with a span on the item.
   * **Module-alias calls**: `m.f(...)` require `f` to be public, else `DTE0010`.
   * **Module-alias constants**: `m.CONST` is typed to the const’s kind and requires the const to be public, else `DTE0010`.
-  * **Unqualified cross-module calls**: Using `foo()` from another module **without** a `from` alias or `m.foo` is rejected:
-
-    * `DTE0010` “symbol is not public in unqualified cross-module use: foo” with a span on the callee.
-    * Suggestion in message nudges to `from mod import foo` (pub) or `m.foo(...)`.
+  * **Unqualified cross-module calls**: Using `foo()` from another module **without** a `from` alias or `m.foo` is rejected with `DTE0010`.
   * **Public const rules**: `pub let mut` → `DTE0012`. `pub let X = <non-literal>` → `DTE0011`.
+
 * **Checker wiring**:
 
-  * Eager check on `from … import` items.
+  * Eager check on `from … import` items (span on each item).
   * Use-site checks for `m.symbol`, unqualified calls, and alias lookups.
   * Identifiers that are from-imported constants type as their literal kind.
+
 * **Codegen (C)**:
 
-  * Top-level constants are handled during emission so no undefined C names leak from other modules (lowered at use sites / safe emission paths).
+  * **Enum constructors** lower directly: `Mode.On` → `(Mode){ .tag = Mode_On }`.
+  * Top-level constants are safely handled during emission so no undefined C names leak from other modules.
+
 * **Examples/Tests**:
 
   * **Negative**: `examples/m10_vis/mod/main.desi` (unqualified call to private `util.math.add` → `DTE0010`).
@@ -217,16 +218,23 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
     * `examples/m10_vis/mod_pub/main_alias.desi` (`import util.math as m` → `m.add` with `pub def add`).
     * `examples/m10_vis/mod_pub/main_from.desi` (`from util.math import add` with `pub def add`).
-  * Existing const visibility demos stay green:
+  * **Types & Enums visibility** (also see Nice-to-haves below):
 
-    * `examples/m10_pub_const_demo.desi`, `examples/m10_pub_const_errors.desi`,
-      `examples/m10_pub_const_not_const_error.desi`, `examples/m10_pub_let_mut_error.desi`.
+    * `examples/m10_pub_type_enum/mod/main_ok.desi`
+    * `examples/m10_pub_type_enum/mod/main_bad.desi`
 
-**Nice-to-haves (later):**
+### Nice-to-haves (delivered as part of M10 ✅)
 
-* `pub enum` / `pub type`.
-* Per-module symbol tables (avoid global map collisions as the language grows).
-* C namespacing once we ship a multi-module C-ABI boundary.
+* **`pub enum`** and **`pub type`**:
+
+  * Parser/AST/JSON support (`Pub: bool` on `EnumDecl` and `TypeDecl`).
+  * Checker visibility enforcement for types/enums in `from` imports and module-alias contexts.
+  * Codegen fix for **enum constructors** (see above).
+
+### Out of scope for M10 (tracked for later)
+
+* **Per-module symbol tables** (avoid global-map collisions as the language grows).
+* **C namespacing** once we ship a multi-module C-ABI boundary.
 
 ---
 
