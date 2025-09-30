@@ -166,12 +166,18 @@ func ResolveAndParseWithParserBridge(entryFile string, useExternal bool, bin str
 	}
 
 	var merged ast.File
+	merged.LocalFuncNames = map[string]bool{}
 	for _, u := range result {
 		if same(u.path, entryAbs) {
 			merged.Pkg = u.file.Pkg
 			merged.Imports = append(merged.Imports, u.file.Imports...)
 			merged.FromImports = append(merged.FromImports, u.file.FromImports...)
 			merged.Decls = append(merged.Decls, u.file.Decls...)
+			for _, d := range u.file.Decls {
+				if fn, ok := d.(*ast.FuncDecl); ok {
+					merged.LocalFuncNames[fn.Name] = true
+				}
+			}
 		}
 	}
 	for _, u := range result {

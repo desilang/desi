@@ -10,6 +10,10 @@ type File struct {
 	Imports     []ImportDecl
 	FromImports []FromImportDecl
 	Decls       []Decl
+
+	// Funcs defined in the *entry* file (populated by resolver during merge).
+	// Used by the checker to distinguish local vs cross-module unqualified refs.
+	LocalFuncNames map[string]bool
 }
 
 func (File) node() {}

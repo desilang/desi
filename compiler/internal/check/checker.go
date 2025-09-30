@@ -67,9 +67,17 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		StructsPublic: map[string]bool{},
 		Consts:        map[string]ConstInfo{},
 		ConstsPublic:  map[string]bool{},
+		FuncsLocal:    map[string]bool{},
 	}
 	var errs []error
 	var warns []Warning
+
+	// Seed local funcs set from resolver's entry-file annotation.
+	if f != nil && f.LocalFuncNames != nil {
+		for n := range f.LocalFuncNames {
+			info.FuncsLocal[n] = true
+		}
+	}
 
 	// collect structs (M7) + publicity (M10)
 	for _, d := range f.Decls {

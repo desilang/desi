@@ -151,12 +151,19 @@ func ResolveAndParse(entryPath string) (*ast.File, []error) {
 
 	// Merge: entry first, then others.
 	var merged ast.File
+	merged.LocalFuncNames = map[string]bool{}
 	for _, u := range result {
 		if same(u.path, entryAbs) {
 			merged.Pkg = u.file.Pkg
 			merged.Imports = append(merged.Imports, u.file.Imports...)
 			merged.FromImports = append(merged.FromImports, u.file.FromImports...)
 			merged.Decls = append(merged.Decls, u.file.Decls...)
+			// record local (entry) function names
+			for _, d := range u.file.Decls {
+				if fn, ok := d.(*ast.FuncDecl); ok {
+					merged.LocalFuncNames[fn.Name] = true
+				}
+			}
 		}
 	}
 	for _, u := range result {
@@ -164,6 +171,7 @@ func ResolveAndParse(entryPath string) (*ast.File, []error) {
 			merged.Imports = append(merged.Imports, u.file.Imports...)
 			merged.FromImports = append(merged.FromImports, u.file.FromImports...)
 			merged.Decls = append(merged.Decls, u.file.Decls...)
+			// deliberately do NOT add non-entry funcs to LocalFuncNames
 		}
 	}
 	return &merged, nil
