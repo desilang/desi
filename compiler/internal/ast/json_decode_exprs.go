@@ -68,6 +68,11 @@ func fromJExpr(v any) (Expr, error) {
 			Right: mustExpr(fromJExpr(m["right"])),
 			Span:  parseSpan(getMap(m, "span")),
 		}, nil
+	case "AwaitExpr":
+		return &AwaitExpr{
+			Expr: mustExpr(fromJExpr(m["expr"])),
+			Span: parseSpan(getMap(m, "span")),
+		}, nil
 	default:
 		return nil, fmt.Errorf("AST JSON: unknown expr kind %q", getString(m, "kind"))
 	}

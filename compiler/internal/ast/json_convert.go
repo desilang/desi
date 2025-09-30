@@ -78,7 +78,8 @@ func toJFunc(fd *FuncDecl) jFuncDecl {
 		Params: ps,
 		Ret:    fd.Ret,
 		Body:   body,
-		Pub:    fd.Pub, // NEW
+		Pub:    fd.Pub,   // NEW
+		Async:  fd.Async, // NEW (M11)
 		Span:   spanJS(fd.Span),
 	}
 }
@@ -231,6 +232,8 @@ func toJExpr(e Expr) any {
 		return jUnaryExpr{Kind: "UnaryExpr", Op: v.Op, X: toJExpr(v.X), Span: spanJS(v.Span)}
 	case *BinaryExpr:
 		return jBinaryExpr{Kind: "BinaryExpr", Op: v.Op, Left: toJExpr(v.Left), Right: toJExpr(v.Right), Span: spanJS(v.Span)}
+	case *AwaitExpr:
+		return jAwaitExpr{Kind: "AwaitExpr", Expr: toJExpr(v.Expr), Span: spanJS(v.Span)}
 	default:
 		return map[string]any{"kind": "UnknownExpr"}
 	}

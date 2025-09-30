@@ -62,7 +62,8 @@ type jFuncDecl struct {
 	Params []jParam `json:"params,omitempty"`
 	Ret    string   `json:"ret,omitempty"`
 	Body   []any    `json:"body,omitempty"`
-	Pub    bool     `json:"pub,omitempty"` // NEW (M10)
+	Pub    bool     `json:"pub,omitempty"`   // NEW (M10)
+	Async  bool     `json:"async,omitempty"` // NEW (M11)
 	Span   jSpan    `json:"span"`
 }
 
@@ -247,4 +248,10 @@ type jBinaryExpr struct {
 	Left  any    `json:"left"`
 	Right any    `json:"right"`
 	Span  jSpan  `json:"span"`
+}
+
+type jAwaitExpr struct {
+	Kind string `json:"kind"` // "AwaitExpr"
+	Expr any    `json:"expr"`
+	Span jSpan  `json:"span"`
 }

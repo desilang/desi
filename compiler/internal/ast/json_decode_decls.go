@@ -30,10 +30,11 @@ func fromJDecl(v any) (Decl, error) {
 
 func fromJFunc(m map[string]any) (*FuncDecl, error) {
 	fd := &FuncDecl{
-		Name: getString(m, "name"),
-		Ret:  getString(m, "ret"),
-		Pub:  getBool(m, "pub"),
-		Span: parseSpan(getMap(m, "span")),
+		Name:  getString(m, "name"),
+		Ret:   getString(m, "ret"),
+		Pub:   getBool(m, "pub"),
+		Async: getBool(m, "async"),
+		Span:  parseSpan(getMap(m, "span")),
 	}
 	// params
 	if arr := getSlice(m, "params"); arr != nil {
