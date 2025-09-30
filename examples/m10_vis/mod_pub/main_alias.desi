@@ -1,0 +1,5 @@
+import util.math as m
+
+def main() -> int:
+  io.println(m.add(2, 3))  # OK via module alias (and pub)
+  return 0

@@ -1,0 +1,5 @@
+from util.math import add
+
+def main() -> int:
+  io.println(add(2, 3))  # OK via from-import (and pub)
+  return 0

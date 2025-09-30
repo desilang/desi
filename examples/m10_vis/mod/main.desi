@@ -1,0 +1,5 @@
+import util.math
+
+def main() -> int:
+  io.println(add(2, 3))  # should FAIL (unqualified cross-module, not pub)
+  return 0
