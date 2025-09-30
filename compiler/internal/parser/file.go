@@ -1,3 +1,4 @@
+// compiler/internal/parser/file.go
 package parser
 
 import (
@@ -72,6 +73,23 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 		// Optional 'pub' prefix before def/struct/let/type/enum
 		if p.accept(lexer.TokPub) {
 			switch {
+			case p.at(lexer.TokAsync):
+				// pub async def ...
+				if !p.features.Async {
+					return nil, ErrAsyncOnlyBeforeDef(p.tok)
+				}
+				p.next() // consume 'async'
+				if !p.accept(lexer.TokDef) {
+					return nil, ErrAsyncOnlyBeforeDef(p.tok)
+				}
+				fn, err := p.parseFuncDecl()
+				if err != nil {
+					return nil, err
+				}
+				fn.Pub = true
+				fn.Async = true
+				f.Decls = append(f.Decls, fn)
+
 			case p.at(lexer.TokDef):
 				p.next() // consume 'def'
 				fn, err := p.parseFuncDecl()
@@ -129,6 +147,22 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 		}
 
 		switch {
+		case p.at(lexer.TokAsync):
+			// async def ...
+			if !p.features.Async {
+				return nil, ErrAsyncOnlyBeforeDef(p.tok)
+			}
+			p.next() // consume 'async'
+			if !p.accept(lexer.TokDef) {
+				return nil, ErrAsyncOnlyBeforeDef(p.tok)
+			}
+			fn, err := p.parseFuncDecl()
+			if err != nil {
+				return nil, err
+			}
+			fn.Async = true
+			f.Decls = append(f.Decls, fn)
+
 		case p.accept(lexer.TokDef):
 			fn, err := p.parseFuncDecl()
 			if err != nil {

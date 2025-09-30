@@ -1,3 +1,4 @@
+// compiler/internal/parser/helpers.go
 package parser
 
 import (
@@ -103,7 +104,9 @@ func isKeywordToken(k lexer.TokKind) bool {
 		lexer.TokElse,
 		lexer.TokWhile,
 		lexer.TokReturn,
-		lexer.TokMatch:
+		lexer.TokMatch,
+		lexer.TokAsync, // NEW (M11)
+		lexer.TokAwait: // NEW (M11)
 		return true
 	default:
 		return false
