@@ -41,6 +41,10 @@ const (
 	TokType
 	TokPub
 
+	// M11 async/await
+	TokAsync
+	TokAwait
+
 	// Operators/punctuation
 	TokEq      // =
 	TokAssign  // :=
@@ -150,6 +154,10 @@ func (k TokKind) String() string {
 		return "type"
 	case TokPub:
 		return "pub"
+	case TokAsync:
+		return "async"
+	case TokAwait:
+		return "await"
 	case TokEq:
 		return "="
 	case TokAssign:

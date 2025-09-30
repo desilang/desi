@@ -41,6 +41,10 @@ func keywordKind(s string) (TokKind, bool) {
 		return TokType, true
 	case "pub":
 		return TokPub, true
+	case "async":
+		return TokAsync, true
+	case "await":
+		return TokAwait, true
 	case "true":
 		return TokTrue, true
 	case "false":
