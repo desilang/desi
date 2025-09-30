@@ -4,23 +4,23 @@ Legend: ✅ done · 🚧 in progress · ⏳ not started
 
 ## Snapshot
 
-| ID  | Milestone                            | Status | Notes / Artifacts                                 |
-|-----|--------------------------------------|:------:|---------------------------------------------------|
-| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`                    |
-| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`                    |
-| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`                       |
-| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`                      |
-| M5  | String literals + escapes            |   ✅    | used across examples                              |
-| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`                        |
-| M7  | Structs                              |   ✅    | see section below                                 |
-| M8  | Enums / tagged unions                |   ✅    | see section below                                 |
-| M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics         |
-| M10 | Public/exported decls                |   🚧   | Phase A: `pub def`, `pub struct`, `pub let CONST` |
-| M11 | `async` / `await` (minimal)          |   ⏳    | —                                                 |
-| M12 | Channels & `spawn`                   |   ⏳    | —                                                 |
-| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                                 |
-| M14 | Spans & pretty errors everywhere     |   🚧   | lexer/parser many; full coverage pending          |
-| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                                 |
+| ID  | Milestone                            | Status | Notes / Artifacts                         |
+|-----|--------------------------------------|:------:|-------------------------------------------|
+| M1  | Single-line function defs            |   ✅    | `examples/singleline_def.desi`            |
+| M2  | Single-line `if`                     |   ✅    | `examples/singleline_if*.desi`            |
+| M3  | Compound assignments (`+= −= *= /=`) |   ✅    | `examples/plus_assign.desi`               |
+| M4  | Dotted call exprs (`io.println(x)`)  |   ✅    | `examples/str_api_demo.desi`              |
+| M5  | String literals + escapes            |   ✅    | used across examples                      |
+| M6  | Type aliases                         |   ✅    | `examples/type_alias.desi`                |
+| M7  | Structs                              |   ✅    | see section below                         |
+| M8  | Enums / tagged unions                |   ✅    | see section below                         |
+| M9  | Import hygiene                       |   ✅    | module aliases, from-imports, diagnostics |
+| M10 | Public/exported decls                |   ✅    | Phase A + B complete (see section)        |
+| M11 | `async` / `await` (minimal)          |   ⏳    | —                                         |
+| M12 | Channels & `spawn`                   |   ⏳    | —                                         |
+| M13 | C-ABI module boundary                |   ⏳    | `.a/.so` + `.dmi`                         |
+| M14 | Spans & pretty errors everywhere     |   🚧   | many wired; broadening coverage           |
+| M15 | Watch mode (`desic dev`)             |   ⏳    | —                                         |
 
 ---
 
@@ -156,7 +156,7 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 * Diagnostics:
 
   * Bare module alias used as a value: `error: module alias "m" (from "util.math") is not a value; use m.<symbol>`.
-  * Unknown symbol under a module alias: `error: unknown symbol "nope" in module alias "m" (from "util.math")`.
+  * Unknown symbol under a module alias: `error: unknown symbol "nope" in module alias "m"`.
   * Duplicate `from … import` aliases on the same line flagged clearly.
   * Undefined names carry spans when available.
 
@@ -178,41 +178,61 @@ typedef struct { int tag; union { int Ok; const char* Err; } as; } Result;
 
 ---
 
-## M10 — Public/exported decls (🚧 Phase A complete, Phase B next)
+## M10 — Public/exported decls (✅ Phase A + B Completed)
 
-**Why:** Python exports everything by default; Desi needs compile-time encapsulation for API clarity, optimization, and concurrency safety.
+**Why:** Desi needs compile-time encapsulation for API clarity, optimization, and concurrency safety.
 
 ### Phase A — syntax + plumbing (✅)
 
-* **Lexer:** `pub` token added.
-* **Parser:** optional `pub` before top-level `def`, `struct`, and **const** (`let` at top level; `pub let mut` rejected in parser).
-* **AST:** `Pub: bool` on `FuncDecl`, `StructDecl`, and `ConstDecl`.
-* **Checker:** collects `Public` table (`Funcs`, `Structs`, `Consts`) and makes top-level constants visible in function scopes (module-internal use OK). No cross-module enforcement yet.
+* **Lexer:** `pub` token.
+* **Parser:** optional `pub` before top-level `def`, `struct`, and **const** (`let` at top level). Parser accepts `pub let mut` so the checker can flag it.
+* **AST:** `Pub: bool` on `FuncDecl`, `StructDecl`, `ConstDecl`.
+* **Checker:** collects `Public` tables and tracks top-level constants for intra-module typing.
 * **AST JSON:** round-trips `pub` on `FuncDecl`, `StructDecl`, `ConstDecl`.
-* **Codegen:** **no change yet** — file-scope constants are not emitted to C yet (will be in a follow-up).
-* **Examples:** `examples/m10_pub_const_demo.desi` (demonstrates parse/check; currently fails at C link due to pending const emission).
 
-### Phase B — visibility enforcement (⏳)
+### Phase B — visibility enforcement (✅)
 
-* **Rules:** using symbols from another module (`from … import X` or `m.X`) requires `X` be `pub`.
-* **Diagnostics:** `DTE0010` (symbol not public in module), `DTE0012` (forbid `pub let mut`; parser already blocks), future `DTE0011` if needed for non-const “public const”.
-* **Checker changes:**
+* **Rules enforced**:
 
-  * Validate `from` imports target public symbols.
-  * Validate `m.symbol` lookups target public symbols.
-* **Examples/Tests:**
+  * **From-imports**: `from X import Y` must import **public** symbols. Non-public import sites produce `DTE0010` with a span on the item.
+  * **Module-alias calls**: `m.f(...)` require `f` to be public, else `DTE0010`.
+  * **Module-alias constants**: `m.CONST` is typed to the const’s kind and requires the const to be public, else `DTE0010`.
+  * **Unqualified cross-module calls**: Using `foo()` from another module **without** a `from` alias or `m.foo` is rejected:
 
-  * `examples/m10_pub_ok.desi` (cross-module ok with `pub`)
-  * `examples/m10_pub_violation_from_import.desi`
-  * `examples/m10_pub_violation_alias_call.desi`
+    * `DTE0010` “symbol is not public in unqualified cross-module use: foo” with a span on the callee.
+    * Suggestion in message nudges to `from mod import foo` (pub) or `m.foo(...)`.
+  * **Public const rules**: `pub let mut` → `DTE0012`. `pub let X = <non-literal>` → `DTE0011`.
+* **Checker wiring**:
 
-**Nice-to-haves (later):** C namespacing for merged modules, per-module symbol tables, `pub enum`, `pub type`, and constant emission to C (`#define` or `static const`).
+  * Eager check on `from … import` items.
+  * Use-site checks for `m.symbol`, unqualified calls, and alias lookups.
+  * Identifiers that are from-imported constants type as their literal kind.
+* **Codegen (C)**:
+
+  * Top-level constants are handled during emission so no undefined C names leak from other modules (lowered at use sites / safe emission paths).
+* **Examples/Tests**:
+
+  * **Negative**: `examples/m10_vis/mod/main.desi` (unqualified call to private `util.math.add` → `DTE0010`).
+  * **Positive**:
+
+    * `examples/m10_vis/mod_pub/main_alias.desi` (`import util.math as m` → `m.add` with `pub def add`).
+    * `examples/m10_vis/mod_pub/main_from.desi` (`from util.math import add` with `pub def add`).
+  * Existing const visibility demos stay green:
+
+    * `examples/m10_pub_const_demo.desi`, `examples/m10_pub_const_errors.desi`,
+      `examples/m10_pub_const_not_const_error.desi`, `examples/m10_pub_let_mut_error.desi`.
+
+**Nice-to-haves (later):**
+
+* `pub enum` / `pub type`.
+* Per-module symbol tables (avoid global map collisions as the language grows).
+* C namespacing once we ship a multi-module C-ABI boundary.
 
 ---
 
 ## M14 — Diagnostics (🚧 Ongoing)
 
 * **Baseline ✅**: JSON codes registry + Rust-style renderer.
-* **Typed checker errors carry spans** where available (e.g., undefined name).
-* Bridge still parses legacy lexer lines; we’ll transition to structured `DIAG` rows.
-* Next: propagate spans from parser/checker broadly; add secondary notes/suggestions for common cases.
+* **Typed checker errors carry spans** where available (e.g., undefined name; M10 not-public errors).
+* Parser/bridge still accept legacy lines; expanding structured spans across more constructs.
+* Next: broaden span coverage in checker/codegen; add secondary notes/suggestions for common cases.
