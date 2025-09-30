@@ -1,3 +1,4 @@
+// compiler/internal/parser/expr.go
 package parser
 
 import (
@@ -67,6 +68,25 @@ func (p *Parser) parseUnary() (ast.Expr, error) {
 			return nil, err
 		}
 		return &ast.UnaryExpr{Op: "not", X: x, Span: spanFrom(posFrom(op), exprEnd(x))}, nil
+
+	case p.at(lexer.TokAwait):
+		awTok := p.tok
+		if !p.features.Async {
+			// If the feature is gated off, treat as error.
+			return nil, ErrAwaitRequiresExpr(awTok)
+		}
+		p.next() // consume 'await'
+
+		// Provide a precise diagnostic if no expression follows.
+		if isAwaitExprStopper(p.tok.Kind) {
+			return nil, ErrAwaitRequiresExpr(awTok)
+		}
+
+		x, err := p.parseUnary()
+		if err != nil {
+			return nil, err
+		}
+		return &ast.AwaitExpr{Expr: x, Span: spanFrom(posFrom(awTok), exprEnd(x))}, nil
 
 	default:
 		return p.parsePrimary()
@@ -290,5 +310,19 @@ func (p *Parser) parseBinaryRHS(minPrec int, left ast.Expr) (ast.Expr, error) {
 			Right: right,
 			Span:  spanFrom(leftStart, exprEnd(right)),
 		}
+	}
+}
+
+// --- helpers for await ---
+
+func isAwaitExprStopper(k lexer.TokKind) bool {
+	// If any of these appear immediately after 'await', there's no valid expression.
+	switch k {
+	case lexer.TokEOF, lexer.TokNewline,
+		lexer.TokRParen, lexer.TokRBrack, lexer.TokRBrace,
+		lexer.TokComma, lexer.TokColon, lexer.TokArrow:
+		return true
+	default:
+		return false
 	}
 }
