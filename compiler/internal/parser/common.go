@@ -1,3 +1,4 @@
+// compiler/internal/parser/common.go
 package parser
 
 import (
@@ -11,9 +12,15 @@ type TokenSource interface {
 	Next() lexer.Token
 }
 
+type parserFeatures struct {
+	Async bool
+}
+
 type Parser struct {
 	lx  TokenSource
 	tok lexer.Token
+
+	features parserFeatures
 }
 
 // New keeps the legacy code path: built-in Go lexer over source text.
@@ -25,6 +32,8 @@ func New(src string) *Parser {
 // lexbridge NDJSON adapter) instead of the built-in Go lexer.
 func NewFromSource(src TokenSource) *Parser {
 	p := &Parser{lx: src}
+	// Default-enable async feature for M11; CLI can override later.
+	p.features.Async = true
 	p.next()
 	return p
 }

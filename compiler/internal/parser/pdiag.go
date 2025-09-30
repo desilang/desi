@@ -1,3 +1,4 @@
+// compiler/internal/parser/pdiag.go
 package parser
 
 import (
@@ -72,4 +73,18 @@ func ErrInvalidAssignmentTarget(context string, tok lexer.Token) error {
 	id, title := lookupIDTitle("parser", "invalid_assignment_target", "DPE0005", "invalid assignment target")
 	msg := fmt.Sprintf("%s in %s at %d:%d: token %s", title, context, tok.Line, tok.Col, tok.Kind.String())
 	return parseError{code: id, title: msg, domain: "parser", key: "invalid_assignment_target"}
+}
+
+// NEW (M11) — ErrAsyncOnlyBeforeDef => DPE1001
+func ErrAsyncOnlyBeforeDef(got lexer.Token) error {
+	id, title := lookupIDTitle("parser", "async_before_def", "DPE1001", "async only valid before 'def'")
+	msg := fmt.Sprintf("%s at %d:%d: got %s", title, got.Line, got.Col, got.Kind.String())
+	return parseError{code: id, title: msg, domain: "parser", key: "async_before_def"}
+}
+
+// NEW (M11) — ErrAwaitRequiresExpr => DPE1002
+func ErrAwaitRequiresExpr(at lexer.Token) error {
+	id, title := lookupIDTitle("parser", "await_requires_expr", "DPE1002", "await requires an expression")
+	msg := fmt.Sprintf("%s at %d:%d", title, at.Line, at.Col)
+	return parseError{code: id, title: msg, domain: "parser", key: "await_requires_expr"}
 }
