@@ -26,6 +26,7 @@ type Param struct {
 type TypeDecl struct {
 	Name       string
 	Underlying string // textual underlying type
+	Pub        bool   // NEW (M10): exported
 	Span       Span   // whole decl span (optional for now)
 }
 
@@ -55,6 +56,7 @@ type Field struct {
 type EnumDecl struct {
 	Name     string
 	Variants []EnumVariant
+	Pub      bool // NEW (M10): exported
 	Span     Span // whole enum span
 }
 

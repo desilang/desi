@@ -64,14 +64,14 @@ type Info struct {
   Enums   map[string]EnumInfo
   Aliases map[string]string
 
-  // NEW (M10 Phase B): visibility + consts
   FuncsPublic   map[string]bool
   StructsPublic map[string]bool
   Consts        map[string]ConstInfo
   ConstsPublic  map[string]bool
 
-  // NEW: functions defined in the *entry* file only.
-  FuncsLocal map[string]bool
+  FuncsLocal  map[string]bool
+  TypesPublic map[string]bool
+  EnumsPublic map[string]bool
 }
 
 // Warning is a lightweight compiler warning.

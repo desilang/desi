@@ -68,6 +68,9 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		Consts:        map[string]ConstInfo{},
 		ConstsPublic:  map[string]bool{},
 		FuncsLocal:    map[string]bool{},
+		// NEW:
+		TypesPublic: map[string]bool{},
+		EnumsPublic: map[string]bool{},
 	}
 	var errs []error
 	var warns []Warning
@@ -93,7 +96,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 	}
 
-	// collect enums (M8)
+	// collect enums (M8) + publicity (M10)
 	for _, d := range f.Decls {
 		if ed, ok := d.(*ast.EnumDecl); ok {
 			variants := map[string]string{}
@@ -101,6 +104,19 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				variants[v.Name] = v.Payload
 			}
 			info.Enums[ed.Name] = EnumInfo{Variants: variants}
+			if ed.Pub {
+				info.EnumsPublic[ed.Name] = true
+			}
+		}
+	}
+
+	// collect type aliases (M6) + publicity (M10)
+	for _, d := range f.Decls {
+		if td, ok := d.(*ast.TypeDecl); ok {
+			info.Types[td.Name] = td.Underlying
+			if td.Pub {
+				info.TypesPublic[td.Name] = true
+			}
 		}
 	}
 
@@ -183,6 +199,10 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 				errs = append(errs, ErrNotPublicAt(it.Span, name, "from-import"))
 			case hasStruct(info, name) && !info.StructsPublic[name]:
 				errs = append(errs, ErrNotPublicAt(it.Span, name, "from-import"))
+			case hasType(info, name) && !info.TypesPublic[name]:
+				errs = append(errs, ErrNotPublicAt(it.Span, name, "from-import"))
+			case hasEnum(info, name) && !info.EnumsPublic[name]:
+				errs = append(errs, ErrNotPublicAt(it.Span, name, "from-import"))
 			default:
 				// If it doesn't exist at all, we'll let later stages complain if referenced.
 			}
@@ -231,6 +251,8 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 func hasConst(info *Info, name string) bool  { _, ok := info.Consts[name]; return ok }
 func hasFunc(info *Info, name string) bool   { _, ok := info.Funcs[name]; return ok }
 func hasStruct(info *Info, name string) bool { _, ok := info.Structs[name]; return ok }
+func hasType(info *Info, name string) bool   { _, ok := info.Types[name]; return ok }
+func hasEnum(info *Info, name string) bool   { _, ok := info.Enums[name]; return ok }
 
 // ---- helpers for public-const checks ----
 

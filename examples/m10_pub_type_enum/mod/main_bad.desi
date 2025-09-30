@@ -1,0 +1,5 @@
+from util.types import Hidden  # expect DTE0010
+
+def main() -> int:
+  let s: Hidden = "nope"
+  0

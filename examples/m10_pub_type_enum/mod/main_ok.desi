@@ -1,0 +1,6 @@
+from util.types import Mode, Id
+
+def main() -> int:
+  let x: Id = 42
+  let m: Mode = Mode.On
+  0

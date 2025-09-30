@@ -1,0 +1,6 @@
+pub type Id = int
+type Hidden = str
+
+pub enum Mode:
+  On: none
+  Off: none

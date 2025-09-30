@@ -155,6 +155,8 @@ func fromJDecl(v any) (Decl, error) {
 		return fromJType(m)
 	case "StructDecl":
 		return fromJStruct(m)
+	case "EnumDecl":
+		return fromJEnum(m)
 	case "ConstDecl":
 		return fromJConst(m)
 	default:
@@ -203,6 +205,7 @@ func fromJType(m map[string]any) (*TypeDecl, error) {
 	return &TypeDecl{
 		Name:       getString(m, "name"),
 		Underlying: getString(m, "underlying"),
+		Pub:        getBool(m, "pub"),
 		Span:       parseSpan(getMap(m, "span")),
 	}, nil
 }
@@ -227,6 +230,28 @@ func fromJStruct(m map[string]any) (*StructDecl, error) {
 		}
 	}
 	return sd, nil
+}
+
+func fromJEnum(m map[string]any) (*EnumDecl, error) {
+	ed := &EnumDecl{
+		Name: getString(m, "name"),
+		Pub:  getBool(m, "pub"),
+		Span: parseSpan(getMap(m, "span")),
+	}
+	if arr := getSlice(m, "variants"); arr != nil {
+		for _, v := range arr {
+			vm, ok := asMap(v)
+			if !ok || getString(vm, "kind") != "EnumVariant" {
+				continue
+			}
+			ed.Variants = append(ed.Variants, EnumVariant{
+				Name:    getString(vm, "name"),
+				Payload: getString(vm, "payload"),
+				Span:    parseSpan(getMap(vm, "span")),
+			})
+		}
+	}
+	return ed, nil
 }
 
 func fromJConst(m map[string]any) (*ConstDecl, error) {
