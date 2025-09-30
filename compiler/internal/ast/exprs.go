@@ -85,6 +85,16 @@ type BinaryExpr struct {
 func (*BinaryExpr) node() {}
 func (*BinaryExpr) expr() {}
 
+/*** NEW (M11): await expression ***/
+
+type AwaitExpr struct {
+	Expr Expr
+	Span Span
+}
+
+func (*AwaitExpr) node() {}
+func (*AwaitExpr) expr() {}
+
 /*** NEW: Struct literal ***/
 
 type StructLitField struct {
