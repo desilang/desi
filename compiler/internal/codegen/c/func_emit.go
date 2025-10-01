@@ -66,6 +66,26 @@ func emitFunc(b *bytes.Buffer, fn *ast.FuncDecl, sigs map[string]sig, info *chec
       cType(e.retKind), fn.Name, cParamList(fn, info))
   }
 
+  // ---- SPECIAL-CASE: task shims ----
+  // If the user imported compiler/lib/task.desi, its bodies are just stubs.
+  // Emit real C wrappers that call the runtime instead of lowering the stub body.
+  //   pub def sleep_ms(ms: int) -> future
+  //   pub def block_on(fut: future) -> int
+  if fn.Name == "sleep_ms" && len(fn.Params) == 1 && e.retKind == "future" {
+    // Return a future via runtime shim.
+    pn := fn.Params[0].Name
+    term.Wprintf(b, "  return desi_task_sleep_ms(%s);\n", pn)
+    term.Wprintf(b, "}\n")
+    return
+  }
+  if fn.Name == "block_on" && len(fn.Params) == 1 && e.retKind == "int" {
+    // Block and return int result via runtime shim.
+    pn := fn.Params[0].Name
+    term.Wprintf(b, "  return desi_task_block_on_int(%s);\n", pn)
+    term.Wprintf(b, "}\n")
+    return
+  }
+
   // body (with implicit tail-expression return lowering)
   tailReturned := false
   for i, s := range fn.Body {
