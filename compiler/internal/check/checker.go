@@ -24,6 +24,11 @@ type checker struct {
 
 	// Module alias map: alias -> module path (e.g., "util.math")
 	modAliases map[string]string
+
+	// Feature gate (M11)
+	features struct {
+		Async bool
+	}
 }
 
 // ---------- reserved names for aliasing ----------
@@ -157,8 +162,20 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 			k, _ := mapTypeOrStruct(p.Type, info) // now also maps enums
 			ps = append(ps, k)
 		}
-		retK, _ := mapTypeOrStruct(fn.Ret, info)
-		info.Funcs[fn.Name] = FuncSig{Name: fn.Name, Params: ps, Ret: retK}
+		retElem, _ := mapTypeOrStruct(fn.Ret, info)
+		sig := FuncSig{
+			Name:    fn.Name,
+			Params:  ps,
+			Ret:     retElem,
+			Async:   false,
+			RetElem: KindUnknown,
+		}
+		if fn.Async {
+			sig.Async = true
+			sig.Ret = KindFuture
+			sig.RetElem = retElem
+		}
+		info.Funcs[fn.Name] = sig
 		if fn.Pub {
 			info.FuncsPublic[fn.Name] = true
 		}
@@ -289,6 +306,9 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
 		aliases:    fromAliasMap,
 		modAliases: modAliasMap,
 	}
+	// Feature flags (default ON; CLI may toggle later)
+	c.features.Async = true
+
 	// params (immutable)
 	for i, p := range fn.Params {
 		k, sname := mapTypeOrStruct(p.Type, info)
