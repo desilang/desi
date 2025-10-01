@@ -198,3 +198,32 @@ func ErrNotPublicAt(sp ast.Span, name, context string) error {
 		span:   &sp,
 	}
 }
+
+// -----------------------------------------------------------------------------
+// NEW (M11): async/await diagnostics
+// -----------------------------------------------------------------------------
+
+// DTE1001: await_outside_async
+func ErrAwaitOutsideAsyncAt(sp ast.Span) error {
+	id, title := lookupIDTitle("type", "await_outside_async", "DTE1001", "`await` is only valid inside async functions")
+	return typedError{
+		code:   id,
+		title:  title,
+		domain: "type",
+		key:    "await_outside_async",
+		span:   &sp,
+	}
+}
+
+// DTE1002: await_non_future (with got-kind)
+func ErrAwaitNonFutureAt(sp ast.Span, got Kind) error {
+	id, title := lookupIDTitle("type", "await_non_future", "DTE1002", "cannot await a non-future value")
+	msg := fmt.Sprintf("%s: got %s", title, got.String())
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "await_non_future",
+		span:   &sp,
+	}
+}
