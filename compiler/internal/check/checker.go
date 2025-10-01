@@ -87,7 +87,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect structs (M7) + publicity (M10)
+  // collect structs (M7)  publicity (M10)
   for _, d := range f.Decls {
     if sd, ok := d.(*ast.StructDecl); ok {
       fields := map[string]string{}
@@ -101,7 +101,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect enums (M8) + publicity (M10)
+  // collect enums (M8)  publicity (M10)
   for _, d := range f.Decls {
     if ed, ok := d.(*ast.EnumDecl); ok {
       variants := map[string]string{}
@@ -115,7 +115,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect type aliases (M6) + publicity (M10)
+  // collect type aliases (M6)  publicity (M10)
   for _, d := range f.Decls {
     if td, ok := d.(*ast.TypeDecl); ok {
       info.Types[td.Name] = td.Underlying
@@ -147,7 +147,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect function signatures + publicity
+  // collect function signatures  publicity
   for _, d := range f.Decls {
     fn, ok := d.(*ast.FuncDecl)
     if !ok {
@@ -181,7 +181,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // ---------- Build alias maps + diagnostics ----------
+  // ---------- Build alias maps  diagnostics ----------
 
   // 1) from-import aliases
   fromAliases := map[string]string{} // alias -> original
@@ -341,22 +341,26 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
 
   // Non-void fallthrough check:
   // Accept either an explicit return OR a tail expression stmt as satisfying.
+  // Special-case: if the declared return is a Future, do not warn (future-producing
+  // factories and async state machines don't need an explicit return here).
   if fnRet := c.fnSig.Ret; fnRet != KindVoid && !hasReturn {
-    tailExprOK := false
-    if len(fn.Body) > 0 {
-      if es, ok := fn.Body[len(fn.Body)-1].(*ast.ExprStmt); ok {
-        // quick kind check: tail expr kind should unify with return kind
-        tk := c.kindOfExpr(es.Expr)
-        if _, ok := unifyKinds(fnRet, tk); ok {
-          tailExprOK = true
+    if fnRet != KindFuture {
+      tailExprOK := false
+      if len(fn.Body) > 0 {
+        if es, ok := fn.Body[len(fn.Body)-1].(*ast.ExprStmt); ok {
+          // quick kind check: tail expr kind should unify with return kind
+          tk := c.kindOfExpr(es.Expr)
+          if _, ok := unifyKinds(fnRet, tk); ok {
+            tailExprOK = true
+          }
         }
       }
-    }
-    if !tailExprOK {
-      c.warnings = append(c.warnings, Warning{
-        Code: warnCode("warn", "missing_explicit_return", "DW0006"),
-        Msg:  fmt.Sprintf("function %q returns %s but may fall through without an explicit return", fn.Name, fnRet),
-      })
+      if !tailExprOK {
+        c.warnings = append(c.warnings, Warning{
+          Code: warnCode("warn", "missing_explicit_return", "DW0006"),
+          Msg:  fmt.Sprintf("function %q returns %s but may fall through without an explicit return", fn.Name, fnRet),
+        })
+      }
     }
   }
 
