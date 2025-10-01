@@ -39,6 +39,41 @@ int desi_str_at(const char* s, int i);
 /* Allocate and return a 1-character string from byte code c (clamped 0..255). */
 const char* desi_str_from_code(int c);
 
+/* ---- Minimal future/executor (M11) ---- */
+
+/* A generic single-thread future handle with small vtable. */
+typedef struct desi_future {
+  int  (*poll)(void* self);              /* return 0:Pending, 1:Ready */
+  void (*destroy)(void* self);           /* optional */
+  int  (*get_int)(void* self);           /* optional: for Future[int] */
+  const char* (*get_str)(void* self);    /* optional: for Future[str] */
+  void* self;                            /* user state */
+} desi_future;
+
+/* Construct a future handle. All callbacks may be NULL except poll. */
+desi_future desi_future_make(
+  int (*poll)(void*),
+  void (*destroy)(void*),
+  int (*get_int)(void*),
+  const char* (*get_str)(void*),
+  void* self
+);
+
+/* Convenience helpers */
+static inline int desi_future_poll(desi_future f) {
+  return f.poll ? f.poll(f.self) : 1;
+}
+static inline void desi_future_destroy(desi_future f) {
+  if (f.destroy) f.destroy(f.self);
+}
+
+/* Executor: run-to-completion (spin-poll). */
+int desi_task_block_on_int(desi_future f);       /* returns result of get_int */
+void desi_task_block_on_void(desi_future f);     /* waits only */
+
+/* Timer future (becomes ready >= ms after creation). */
+desi_future desi_task_sleep_ms(int ms);
+
 #ifdef __cplusplus
 }
 #endif
