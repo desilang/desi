@@ -24,6 +24,8 @@ func mapTextType(t string) Kind {
 		return KindBool
 	case "str", "string":
 		return KindStr
+	case "future": // NEW: async placeholder type
+		return KindFuture
 	case "none":
 		return KindVoid // treat 'none' like 'void' for payloads
 	default:
@@ -33,6 +35,7 @@ func mapTextType(t string) Kind {
 
 // mapTypeOrStruct returns (Kind, userTypeName).
 // Builtins -> (KindX, "")
+// Type alias -> resolved recursively
 // Struct name -> (KindStruct, "Name")
 // Enum name   -> (KindEnum,   "Name")
 func mapTypeOrStruct(t string, info *Info) (Kind, string) {
@@ -40,23 +43,39 @@ func mapTypeOrStruct(t string, info *Info) (Kind, string) {
 	if trim == "" {
 		return KindVoid, ""
 	}
-	// Builtins first
+
+	// Builtins / special textuals first
 	if k := mapTextType(trim); k != KindUnknown {
 		return k, ""
 	}
+
+	// Type alias?
+	if info != nil && info.Types != nil {
+		if under, ok := info.Types[trim]; ok {
+			return mapTypeOrStruct(under, info)
+		}
+	}
+
 	// Struct?
-	if _, ok := info.Structs[trim]; ok {
-		return KindStruct, trim
+	if info != nil && info.Structs != nil {
+		if _, ok := info.Structs[trim]; ok {
+			return KindStruct, trim
+		}
 	}
+
 	// Enum?
-	if _, ok := info.Enums[trim]; ok {
-		return KindEnum, trim
+	if info != nil && info.Enums != nil {
+		if _, ok := info.Enums[trim]; ok {
+			return KindEnum, trim
+		}
 	}
-	// Unknown type (generic/other) — treat as unknown for now.
+
+	// Unknown type (generic/other)
 	return KindUnknown, ""
 }
 
 func unifyKinds(a, b Kind) (Kind, bool) {
+	// Keep prior forgiving behavior:
 	if a == KindUnknown {
 		return b, true
 	}
@@ -69,7 +88,7 @@ func unifyKinds(a, b Kind) (Kind, bool) {
 	if (a == KindInt && b == KindBool) || (a == KindBool && b == KindInt) {
 		return KindInt, true
 	}
-	// Structs/enums never unify here; names checked in higher-level logic.
+	// Structs/enums/future don't cross-unify here.
 	return KindUnknown, false
 }
 
