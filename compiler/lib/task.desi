@@ -1,13 +1,12 @@
-# std: task (M11 scaffold)
-# Minimal surface so imports resolve during M11 bring-up.
-# Actual behavior is provided by the runtime/codegen shims in this milestone.
+# compiler/lib/task.desi
+# Stage-1 placeholder: expose async-friendly signatures.
+# These stubs don't implement real async yet; they just type-check.
 
-pub def sleep_ms(ms: int) -> void:
-  0
+# Produce a future that completes after ms milliseconds.
+pub def sleep_ms(_ms: int) -> future:
+  0  # stub future token/id
 
-# block_on returns the inner type T of Future[T].
-# Until the full async checker/codegen lands, we keep a placeholder signature
-# that accepts an opaque future handle as int and returns int.
-# The real signature will be updated when Future[T] is modeled.
-pub def block_on(fut: int) -> int:
+# Block the current thread until the future completes and return its value.
+# (For the demo, just return 0.)
+pub def block_on(_fut: future) -> int:
   0
