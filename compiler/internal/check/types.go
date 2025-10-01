@@ -14,6 +14,7 @@ const (
 	KindVoid
 	KindStruct
 	KindEnum
+	KindFuture
 )
 
 func (k Kind) String() string {
@@ -30,6 +31,8 @@ func (k Kind) String() string {
 		return "struct"
 	case KindEnum:
 		return "enum"
+	case KindFuture:
+		return "future"
 	default:
 		return "unknown"
 	}
@@ -38,9 +41,11 @@ func (k Kind) String() string {
 /* ---------- public info ---------- */
 
 type FuncSig struct {
-	Name   string
-	Params []Kind
-	Ret    Kind
+	Name    string
+	Params  []Kind
+	Ret     Kind
+	Async   bool // NEW (M11): function is async
+	RetElem Kind // NEW (M11): inner kind for Future[T]; valid when Ret==KindFuture
 }
 
 type StructInfo struct {
