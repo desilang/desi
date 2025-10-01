@@ -1,0 +1,13 @@
+# std: task (M11 scaffold)
+# Minimal surface so imports resolve during M11 bring-up.
+# Actual behavior is provided by the runtime/codegen shims in this milestone.
+
+pub def sleep_ms(ms: int) -> void:
+  0
+
+# block_on returns the inner type T of Future[T].
+# Until the full async checker/codegen lands, we keep a placeholder signature
+# that accepts an opaque future handle as int and returns int.
+# The real signature will be updated when Future[T] is modeled.
+pub def block_on(fut: int) -> int:
+  0
