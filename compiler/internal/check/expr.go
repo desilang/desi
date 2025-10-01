@@ -21,6 +21,34 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		// struct literal has a known, named struct type
 		return KindStruct
 
+	case *ast.AwaitExpr:
+		// Feature gate + context rule
+		if !c.features.Async || !c.fnSig.Async {
+			// Prefer span-carrying error when available.
+			if (v.Span != ast.Span{}) {
+				c.errors = append(c.errors, ErrAwaitOutsideAsyncAt(v.Span))
+			} else {
+				c.errors = append(c.errors, ErrAwaitOutsideAsyncAt(ast.Span{}))
+			}
+			return KindUnknown
+		}
+		inner := c.kindOfExpr(v.Expr)
+		if inner != KindFuture {
+			if (v.Span != ast.Span{}) {
+				c.errors = append(c.errors, ErrAwaitNonFutureAt(v.Span, inner))
+			} else {
+				c.errors = append(c.errors, ErrAwaitNonFutureAt(ast.Span{}, inner))
+			}
+			return KindUnknown
+		}
+		// try to recover the inner element kind from common shapes (calls, etc.)
+		elem := c.futureElemOfExpr(v.Expr)
+		if elem == KindUnknown {
+			// best-effort: still type as unknown if we cannot infer
+			return KindUnknown
+		}
+		return elem
+
 	case *ast.IdentExpr:
 		// Prefer locals first (a local var named like a module alias should win)
 		if vi, ok := c.scope.lookup(v.Name); ok {
@@ -268,6 +296,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 									c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
 								}
 							}
+							// async functions return Future[T]
 							return sig.Ret
 						}
 						// no symbol found in that module alias
@@ -326,6 +355,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 						c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
 					}
 				}
+				// async functions return Future[T]
 				return sig.Ret
 			}
 			c.errors = append(c.errors, ErrUndefinedName(id.Name, "call"))
@@ -379,6 +409,35 @@ func (c *checker) enumNameOfExpr(e ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+// try to extract Future[T]'s T from common expression shapes.
+func (c *checker) futureElemOfExpr(e ast.Expr) Kind {
+	switch t := e.(type) {
+	case *ast.CallExpr:
+		// Ident call: f(...)
+		if id, ok := t.Callee.(*ast.IdentExpr); ok {
+			name := id.Name
+			if orig, ok := c.aliases[name]; ok {
+				name = orig
+			}
+			if sig, ok := c.info.Funcs[name]; ok && sig.Async {
+				return sig.RetElem
+			}
+			return KindUnknown
+		}
+		// Module alias call: m.f(...)
+		if fe, ok := t.Callee.(*ast.FieldExpr); ok {
+			if id, ok := fe.X.(*ast.IdentExpr); ok {
+				if _, isAlias := c.modAliases[id.Name]; isAlias {
+					if sig, ok := c.info.Funcs[fe.Name]; ok && sig.Async {
+						return sig.RetElem
+					}
+				}
+			}
+		}
+	}
+	return KindUnknown
 }
 
 // ---- Phase B visibility hooks ----
