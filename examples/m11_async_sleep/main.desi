@@ -1,0 +1,18 @@
+package main
+import task
+import io
+
+# Simple M11 demo:
+# - async function `foo` that awaits a timer
+# - main blocks on the future and prints the result
+
+async def foo() -> int:
+  await task.sleep_ms(50)
+  42
+
+def main() -> int:
+  io.println("before")
+  fut = foo()
+  x = task.block_on(fut)
+  io.println("result", x)
+  0
