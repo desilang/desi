@@ -23,10 +23,19 @@ func collectFuncSigs(f *ast.File, info *check.Info) map[string]sig {
 			continue
 		}
 		var s sig
-		if fn.Async {
-			s = sig{ret: "future"}
+		// Prefer checker info (it knows about async/future).
+		if info != nil {
+			if si, ok := info.Funcs[fn.Name]; ok {
+				if si.Async {
+					s.ret = "future"
+				} else {
+					s.ret = typeToKindOrStruct(fn.Ret, info)
+				}
+			} else {
+				s.ret = typeToKindOrStruct(fn.Ret, info)
+			}
 		} else {
-			s = sig{ret: typeToKindOrStruct(fn.Ret, info)}
+			s.ret = typeToKindOrStruct(fn.Ret, info)
 		}
 		for _, p := range fn.Params {
 			s.params = append(s.params, typeToKindOrStruct(p.Type, info))
@@ -56,6 +65,8 @@ func typeToKindOrStruct(t string, info *check.Info) string {
 		return "int"
 	case "str", "string":
 		return "str"
+	case "future":
+		return "future"
 	default:
 		raw := strings.TrimSpace(t)
 		if info != nil {
@@ -99,6 +110,8 @@ func cTypeFromText(t string, info *check.Info) string {
 		return "int"
 	case "str", "string":
 		return "const char*"
+	case "future":
+		return "struct desi_future"
 	}
 	if info != nil {
 		if _, ok := info.Structs[tt]; ok {
