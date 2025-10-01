@@ -16,6 +16,7 @@ func EmitFile(f *ast.File, info *check.Info) string {
 	term.Wprintf(&b, "#include <stdint.h>\n")
 	term.Wprintf(&b, "#include <stdio.h>\n")
 	term.Wprintf(&b, "#include <string.h>\n") // strcmp
+	term.Wprintf(&b, "#include <stdlib.h>\n") // malloc/free for async futures
 	term.Wprintf(&b, "#include \"desi_std.h\"\n\n")
 
 	// Emit typedefs for all struct declarations directly from the AST.
@@ -78,8 +79,13 @@ func EmitFile(f *ast.File, info *check.Info) string {
 	// Prototypes for non-main
 	for _, d := range f.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name != "main" {
-			term.Wprintf(&b, "static %s %s(%s);\n",
-				cType(typeToKindOrStruct(fn.Ret, info)), fn.Name, cParamList(fn, info))
+			// Async functions return a future handle
+			if fn.Async {
+				term.Wprintf(&b, "static struct desi_future %s(%s);\n", fn.Name, cParamList(fn, info))
+			} else {
+				term.Wprintf(&b, "static %s %s(%s);\n",
+					cType(typeToKindOrStruct(fn.Ret, info)), fn.Name, cParamList(fn, info))
+			}
 		}
 	}
 	if len(sigs) > 0 {

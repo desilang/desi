@@ -58,8 +58,6 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 
 	case *ast.FieldExpr:
 		// ---------- ENUM CONSTRUCTOR (no-call form): Enum.Variant ----------
-		// If base is an identifier naming an enum type and Variant has no payload,
-		// synthesize a value: (Enum){ .tag = Enum_Variant }
 		if id, ok := v.X.(*ast.IdentExpr); ok {
 			enumName := strings.TrimSpace(id.Name)
 			if isEnumType(enumName, env.info) {
@@ -72,7 +70,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			}
 		}
 
-		// ---------- Struct field chain (existing path) ----------
+		// ---------- Struct field chain ----------
 		if ft, ok := exprTextualType(v, env); ok {
 			ex := fieldAccessChain(v)
 			if isStrText(ft) {
@@ -84,7 +82,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			return ex, "int"
 		}
 
-		// ---------- Module-alias / from-alias constant access: m.CONST ----------
+		// ---------- Module-alias / from-alias constant access ----------
 		if _, ok := v.X.(*ast.IdentExpr); ok {
 			if env != nil && env.info != nil && env.info.Consts != nil {
 				if ci, ok := env.info.Consts[v.Name]; ok {
@@ -98,7 +96,6 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 					}
 				}
 			}
-			// Best-effort passthrough so external defines can resolve in C.
 			return v.Name, "int"
 		}
 		return "0", ""
@@ -145,20 +142,17 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		return "0", ""
 
 	case *ast.CallExpr:
-		// Enum constructors: Result.Ok(x), Maybe.None()
+		// Enum constructors
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				enumName := id.Name
 				if isEnumType(enumName, env.info) {
-					// lookup variant payload type
 					if ei, ok := env.info.Enums[enumName]; ok {
-						vtype := ei.Variants[fe.Name] // "" or "none" => no payload
+						vtype := ei.Variants[fe.Name]
 						tag := enumName + "_" + fe.Name
 						if isNoneText(vtype) {
-							// no payload variant: `(<Enum>){ .tag = <TAG> }`
 							return "(" + enumName + "){ .tag = " + tag + " }", "enum:" + enumName
 						}
-						// one-arg payload
 						var ax string
 						if len(v.Args) > 0 {
 							ax, _ = cExprFor(v.Args[0], env)
@@ -170,7 +164,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 				}
 			}
 		}
-		// Builtins / std shims
+		// std shims: fs/os/mem/str
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				switch id.Name + "." + fe.Name {
@@ -216,12 +210,31 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 						args = append(args, ax)
 					}
 					return "desi_str_from_code(" + strings.Join(args, ", ") + ")", "str"
+				/* NEW: task.* */
+				case "task.sleep_ms":
+					{
+						var args []string
+						for _, a := range v.Args {
+							ax, _ := cExprFor(a, env)
+							args = append(args, ax)
+						}
+						return "desi_task_sleep_ms(" + strings.Join(args, ", ") + ")", "future"
+					}
+				case "task.block_on":
+					{
+						// Minimal v1: assume Future[int]
+						var args []string
+						for _, a := range v.Args {
+							ax, _ := cExprFor(a, env)
+							args = append(args, ax)
+						}
+						return "desi_task_block_on_int(" + strings.Join(args, ", ") + ")", "int"
+					}
 				}
 			}
 		}
 
-		// NEW: Plain module alias calls, e.g. m.add(...)
-		// Lower to a direct C call to the symbol name, if we have a known signature.
+		// NEW: module alias calls m.add(...) → add(...)
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if _, ok := fe.X.(*ast.IdentExpr); ok {
 				if fs, ok := env.sigs[fe.Name]; ok {

@@ -10,7 +10,7 @@ import (
 // ---- signatures & helpers ----
 
 type sig struct {
-	// "void" | "int" | "str" | "struct:<Name>"
+	// "void" | "int" | "str" | "struct:<Name>" | "enum:<Name>" | "future"
 	ret    string
 	params []string
 }
@@ -22,7 +22,12 @@ func collectFuncSigs(f *ast.File, info *check.Info) map[string]sig {
 		if !ok {
 			continue
 		}
-		s := sig{ret: typeToKindOrStruct(fn.Ret, info)}
+		var s sig
+		if fn.Async {
+			s = sig{ret: "future"}
+		} else {
+			s = sig{ret: typeToKindOrStruct(fn.Ret, info)}
+		}
 		for _, p := range fn.Params {
 			s.params = append(s.params, typeToKindOrStruct(p.Type, info))
 		}
@@ -75,6 +80,8 @@ func cType(kind string) string {
 		return "const char*"
 	case "int":
 		return "int"
+	case "future":
+		return "struct desi_future"
 	default:
 		if strings.HasPrefix(kind, "struct:") || strings.HasPrefix(kind, "enum:") {
 			return kind[strings.Index(kind, ":")+1:] // drop "struct:" or "enum:"
