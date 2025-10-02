@@ -59,7 +59,7 @@ func findMain(f *ast.File) *ast.FuncDecl {
 func typeToKindOrStruct(t string, info *check.Info) string {
 	tt := strings.TrimSpace(strings.ToLower(t))
 	switch tt {
-	case "", "void":
+	case "", "none":
 		return "void"
 	case "i32", "int", "u32", "bool":
 		return "int"
@@ -79,6 +79,8 @@ func typeToKindOrStruct(t string, info *check.Info) string {
 				}
 			}
 		}
+		// Fallback for unknown text types: keep 'int' to not explode emit,
+		// but validator will have inserted a #error for unsupported numeric spellings.
 		return "int"
 	}
 }
@@ -104,7 +106,7 @@ func cType(kind string) string {
 func cTypeFromText(t string, info *check.Info) string {
 	tt := strings.TrimSpace(t)
 	switch strings.ToLower(tt) {
-	case "", "void":
+	case "", "none":
 		return "void"
 	case "i32", "int", "u32", "bool":
 		return "int"
@@ -123,6 +125,7 @@ func cTypeFromText(t string, info *check.Info) string {
 			}
 		}
 	}
+	// Fallback: validator will have inserted a #error if this is an unsupported builtin
 	return "int"
 }
 
