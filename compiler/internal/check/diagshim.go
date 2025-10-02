@@ -240,3 +240,29 @@ func ErrImportNameConflict(name, context string) error {
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "import_name_conflict"}
 }
+
+// ErrUseNoneInsteadOfVoid (span-less)
+func ErrUseNoneInsteadOfVoid(where string) error {
+	id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
+	msg := title
+	if where != "" {
+		msg = fmt.Sprintf("%s in %s", title, where)
+	}
+	return typedError{code: id, title: msg, domain: "type", key: "use_none_instead_of_void"}
+}
+
+// ErrUseNoneInsteadOfVoidAt (span-carrying)
+func ErrUseNoneInsteadOfVoidAt(sp ast.Span, where string) error {
+	id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
+	msg := title
+	if where != "" {
+		msg = fmt.Sprintf("%s in %s", title, where)
+	}
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "use_none_instead_of_void",
+		span:   &sp,
+	}
+}

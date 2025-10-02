@@ -128,6 +128,11 @@
       "id": "DTE0022",
       "title": "name conflicts with imported symbol",
       "help": "rename your declaration; imported names cannot be redefined"
+    },
+    "use_none_instead_of_void": {
+      "id": "DTE0023",
+      "title": "'void' is not a type; use 'none'",
+      "help": "Desi uses 'none' to denote no value. Replace 'void' with 'none'."
     }
   },
   "module": {

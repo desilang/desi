@@ -10,7 +10,20 @@ import (
 func (c *checker) checkLet(st *ast.LetStmt) {
 	// Arity check
 	if len(st.Binds) != len(st.Values) {
-		c.errors = append(c.errors, ErrTypeArityMismatch("let", len(st.Binds), len(st.Values)))
+		c.errors = append(c.errors, typedErr(
+			"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+			"let", len(st.Binds), len(st.Values),
+		))
+	}
+
+	// NEW: forbid textual 'void' in per-binder types and group type
+	for _, bd := range st.Binds {
+		if strings.EqualFold(strings.TrimSpace(bd.Type), "void") {
+			c.errors = append(c.errors, ErrUseNoneInsteadOfVoid("let binding type"))
+		}
+	}
+	if strings.EqualFold(strings.TrimSpace(st.GroupType), "void") {
+		c.errors = append(c.errors, ErrUseNoneInsteadOfVoid("let group type"))
 	}
 
 	_max := _min(len(st.Binds), len(st.Values))
@@ -18,20 +31,6 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		bd := st.Binds[i]
 		rhs := st.Values[i]
 		rk := c.kindOfExpr(rhs)
-
-		// ---- Forbid reserved/builtins and imported names as identifiers ----
-		if isReservedIdent(bd.Name) {
-			c.errors = append(c.errors, ErrReservedIdentifier(bd.Name, "let binding"))
-			continue
-		}
-		if isPreludeBuiltin(bd.Name) {
-			c.errors = append(c.errors, ErrShadowBuiltin(bd.Name, "let binding"))
-			continue
-		}
-		if c.info != nil && c.info.ImportedNames != nil && c.info.ImportedNames[bd.Name] {
-			c.errors = append(c.errors, ErrImportNameConflict(bd.Name, "let binding"))
-			continue
-		}
 
 		declText := strings.TrimSpace(bd.Type)
 		want, snameDecl := mapTypeOrStruct(declText, c.info)
@@ -64,7 +63,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 				if k, ok := unifyKinds(want, rk); ok {
 					kind = k
 				} else {
-					c.errors = append(c.errors, ErrTypeMismatch(want.String(), rk.String(), fmt.Sprintf("let %q", bd.Name)))
+					c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
 				}
 			}
 		}
@@ -77,7 +76,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 			})
 		}
 
-		// Decide stored struct/enum name:
+		// Decide stored struct/enum name
 		var storedSName string
 		switch {
 		case want == KindStruct || want == KindEnum:
