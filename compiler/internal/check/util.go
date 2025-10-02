@@ -15,15 +15,23 @@ func top[T any](s []T) *T {
 /* ---------- helpers ---------- */
 
 // mapTextType maps a textual type annotation to a Kind.
-// Note: empty string means "no annotation" => KindUnknown.
-// `none` is the only "no value" type. `void` is not a Desi type.
+// Policy:
+//   - "" (no annotation)     → KindNone (function returns default to none)
+//   - "none"                 → KindNone
+//   - "void"                 → KindNone (back-compat; later we can emit a diag nudging to 'none')
+//   - All integer spellings  → KindInt (until we introduce sized/signed kinds)
+//   - "str"/"string"         → KindStr
+//   - "bool"                 → KindBool
+//   - "future"               → KindFuture
+//   - "f32"/"f64"            → KindUnknown (not yet implemented)
 func mapTextType(t string) Kind {
   switch strings.TrimSpace(strings.ToLower(t)) {
   case "":
-    return KindUnknown
+    return KindNone
+  case "none", "void":
+    return KindNone
 
   // Integers: treat all spellings as `int` for now (non-breaking aliasing).
-  // We'll refine sizes/signs in a later milestone when numeric kinds land.
   case "int", "i32":
     return KindInt
   case "i8", "i16", "i64", "i128", "isize":
@@ -35,13 +43,10 @@ func mapTextType(t string) Kind {
     return KindBool
   case "str", "string":
     return KindStr
-  case "none":
-    return KindNone
   case "future":
     return KindFuture
 
-  // Floats are declared in the spec but not yet implemented in checker/codegen.
-  // Leave them unknown for now so we don't mis-type them as ints.
+  // Floats: reserved but not implemented yet.
   case "f32", "f64":
     return KindUnknown
 
@@ -57,7 +62,7 @@ func mapTextType(t string) Kind {
 func mapTypeOrStruct(t string, info *Info) (Kind, string) {
   trim := strings.TrimSpace(t)
   if trim == "" {
-    return KindUnknown, ""
+    return KindNone, ""
   }
   // Builtins first
   if k := mapTextType(trim); k != KindUnknown {

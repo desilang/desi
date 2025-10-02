@@ -17,6 +17,9 @@ const (
 	KindFuture // async placeholder/result carrier
 )
 
+// Back-compat: keep old symbol compiling; semantically identical to KindNone.
+const KindVoid = KindNone
+
 func (k Kind) String() string {
 	switch k {
 	case KindInt:
@@ -78,7 +81,7 @@ type Info struct {
 	TypesPublic map[string]bool
 	EnumsPublic map[string]bool
 
-	// NEW: names introduced by imports in this file (aliases and from-items)
+	// names introduced by imports in this file (aliases and from-items)
 	ImportedNames map[string]bool
 }
 
