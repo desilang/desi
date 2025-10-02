@@ -1,6 +1,8 @@
 package check
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
@@ -12,6 +14,7 @@ Top-level pass for Phase B:
 • Enforces:
     - DTE0012: `pub let mut` is forbidden
     - DTE0011: `pub let` must be a compile-time literal (Phase B: int/str/bool only)
+    - New: forbid reserved/builtins as top-level names
 */
 
 func (c *checker) collectVisibilityAndConsts(f *ast.File) {
@@ -32,15 +35,24 @@ func (c *checker) collectVisibilityAndConsts(f *ast.File) {
 	for _, d := range f.Decls {
 		switch v := d.(type) {
 		case *ast.FuncDecl:
-			// We assume FuncSig itself is collected elsewhere (existing pass).
+			// Forbid reserved/builtins as function names
+			if isReservedIdent(v.Name) || isPreludeBuiltin(v.Name) {
+				c.errors = append(c.errors, fmt.Errorf("invalid function name %q: reserved/builtin", v.Name))
+			}
 			c.info.FuncsPublic[v.Name] = v.Pub
 
 		case *ast.StructDecl:
-			// Field map etc. already handled by existing pass.
+			if isReservedIdent(v.Name) || isPreludeBuiltin(v.Name) {
+				c.errors = append(c.errors, fmt.Errorf("invalid struct name %q: reserved/builtin", v.Name))
+			}
 			c.info.StructsPublic[v.Name] = v.Pub
 
 		case *ast.ConstDecl:
-			// Phase B rules:
+			// Forbid reserved/builtins as const names
+			if isReservedIdent(v.Name) || isPreludeBuiltin(v.Name) {
+				c.errors = append(c.errors, fmt.Errorf("invalid constant name %q: reserved/builtin", v.Name))
+			}
+
 			// 1) `pub let mut` is forbidden (DTE0012).
 			if v.Pub && v.Mutable {
 				c.errors = append(c.errors, ErrPubLetMutForbidden(v.Span, v.Name))

@@ -11,7 +11,7 @@ const (
 	KindInt
 	KindStr
 	KindBool
-	KindVoid
+	KindNone
 	KindStruct
 	KindEnum
 	KindFuture // async placeholder/result carrier
@@ -25,8 +25,8 @@ func (k Kind) String() string {
 		return "str"
 	case KindBool:
 		return "bool"
-	case KindVoid:
-		return "void"
+	case KindNone:
+		return "none"
 	case KindStruct:
 		return "struct"
 	case KindEnum:
@@ -44,8 +44,8 @@ type FuncSig struct {
 	Name    string
 	Params  []Kind
 	Ret     Kind
-	Async   bool // NEW: function declared with `async`
-	RetElem Kind // NEW: element kind when Ret==KindFuture (e.g., future<int> -> KindInt)
+	Async   bool // function declared with `async`
+	RetElem Kind // element kind when Ret==KindFuture (e.g., future<int> -> KindInt)
 }
 
 type StructInfo struct {

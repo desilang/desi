@@ -22,6 +22,17 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		rhs := st.Values[i]
 		rk := c.kindOfExpr(rhs)
 
+		// ---- New: forbid reserved/builtins as identifiers ----
+		if isReservedIdent(bd.Name) {
+			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: reserved keyword/builtin; choose a different name", bd.Name))
+			// Skip defining this binding; continue to next to avoid cascading errors.
+			continue
+		}
+		if isPreludeBuiltin(bd.Name) {
+			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: cannot shadow prelude builtin", bd.Name))
+			continue
+		}
+
 		declText := strings.TrimSpace(bd.Type)
 		want, snameDecl := mapTypeOrStruct(declText, c.info)
 

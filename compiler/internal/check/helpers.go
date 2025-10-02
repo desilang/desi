@@ -21,9 +21,11 @@ func (c *checker) structNameOfExpr(e ast.Expr) string {
 
 /* ---------- misc helpers ---------- */
 
+// isNoneText returns true iff the textual type means the "no value" type.
+// We only accept `none` now (no `void`).
 func isNoneText(t string) bool {
 	switch strings.ToLower(strings.TrimSpace(t)) {
-	case "", "none", "void":
+	case "none":
 		return true
 	default:
 		return false
