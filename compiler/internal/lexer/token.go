@@ -81,6 +81,9 @@ const (
 	TokNot
 	TokDefer // NEW
 
+	// Reserved-but-forbidden identifiers (lexed as distinct tokens for nicer diags)
+	TokVoid // "void" — forbidden; users must use "none"
+
 	// Compound assignments (M3)
 	TokPlusEq  // +=
 	TokMinusEq // -=
@@ -220,6 +223,8 @@ func (k TokKind) String() string {
 		return "not"
 	case TokDefer:
 		return "defer"
+	case TokVoid:
+		return "void"
 	case TokPlusEq:
 		return "+="
 	case TokMinusEq:
