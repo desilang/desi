@@ -7,7 +7,7 @@ Desi uses **indentation-based blocks** (no braces) and is expression-oriented. N
 package tool.lexer
 import std.{io, fmt}
 import tool.common as common
-```
+````
 
 ## Bindings & assignment
 
@@ -64,7 +64,7 @@ enum Token:
 `match` is expression-valued. `_` is a catch-all (exhaustiveness checks may be relaxed in Stage-0).
 
 ```desi
-def show(t: Token) -> void:
+def show(t: Token) -> none:
   match t:
     Ident(n) => io.println(n)
     Int(v)   => io.println(fmt.int(v))
@@ -98,7 +98,7 @@ def read_all(path: str) -> Result[str, IoError]:
 
 ## Immutability & moves
 
-Values move by default; scalars (`i32`, etc.) are `Copy`. Heap objects (e.g., `str`, `Vec`) are ARC-managed. `defer` schedules cleanup at scope exit.
+Values move by default; scalars (e.g., `i32`) are `Copy`. Heap objects (e.g., `str`, `Vec`) are ARC-managed. `defer` schedules cleanup at scope exit.
 
 ```desi
 let mut buf = Vec[u8].with_cap(1024)
@@ -112,7 +112,7 @@ defer buf.clear()
 3. `*  /  %`
 4. `+  -`
 5. `<  <=  >  >=`
-6. `==  !=  is`
+6. `==  !=` (and `is` in later stages)
 7. `and  or`
 8. pipeline `|>` (sugar; optional, may be feature-flagged)
 
@@ -127,4 +127,5 @@ data |> parse() |> validate() |> compute()
 
 ## Reserved keywords (Stage-0 set)
 
-`package, import, def, let, mut, return, if, elif, else, while, for, in, match, struct, enum, type, as, is, and, or, not, defer, panic`
+`package, import, from, as, pub, def, let, mut, return, if, elif, else, while, for, in, match, struct, enum, type, and, or, not, defer, async, await, none, true, false, panic`
+

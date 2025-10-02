@@ -5,15 +5,23 @@ This document defines the **minimal type system** needed to implement the compil
 ---
 
 ## 1) Primitive types
+
 - `bool` — `true` / `false`
-- Signed integers: `i32`, `i64`
-- Unsigned integers: `u32`, `u64`, `u8` (bytes)
-- Floating point: `f64`
+- **Signed integers:** `i8`, `i16`, `i32`, `i64`, `i128`, `isize`
+- **Unsigned integers:** `u8`, `u16`, `u32`, `u64`, `u128`, `usize`
+- **Floats:** `f32`, `f64`
 - `str` — immutable UTF-8 string (ARC-managed)
 
+**Aliases**
+- `int ≡ i32`
+- `string ≡ str`
+
+**Backend support note**
+- `i128` / `u128` are **LLVM-only** for now. The C backend will emit a diagnostic if these appear in signatures or values.
+
 **Copy vs Move**
-- **Copy**: `bool`, all integers, `f64`, `u8`
-- **Move**: `str`, `Vec[T]`, slices `[]T`, and all user aggregates (`struct`, `enum`)
+- **Copy:** `bool`, all fixed-width integers, `f32`, `f64`, `u8`
+- **Move:** `str`, containers (`Vec[T]`, slices `[]T`), and all user aggregates (`struct`, `enum`)
 
 ---
 
@@ -84,8 +92,8 @@ def head[T](xs: Vec[T]) -> Option[T]:
   else: Some(xs[0])
 ```
 
-* Compiled via **monomorphization**: each used `T` gets a concrete instantiation
-* No trait/constraint system in Stage-0; only “used operations” on `T` are those provided by containers themselves
+* Compiled via **monomorphization** (each used `T` gets a concrete instantiation)
+* No trait/constraint system in Stage-0; only operations provided by containers themselves
 
 ---
 
@@ -99,11 +107,6 @@ let s = "hi"        # s: str
 ```
 
 * **Function parameters and returns** must be annotated
-* Generic parameters must be explicit where inference is impossible:
-
-```desi
-let bs = Vec[u8].with_cap(64)
-```
 
 ---
 
@@ -116,31 +119,30 @@ let bs = Vec[u8].with_cap(64)
 let x: i64 = (i64)(some_i32)
 ```
 
-(Cast rules are conservative in Stage-0 and may be restricted further.)
-
 ---
 
 ## 7) Strings
 
 * `str` is immutable, UTF-8; concatenation produces a new `str`
-* Slicing `str` yields `[]u8` in Stage-0 (text algorithms can live in std later)
+* Slicing `str` yields `[]u8` in Stage-0
 
 ---
 
 ## 8) Equality & ordering
 
-* `==` / `!=` available for primitives and same-shape enums without payloads
-* Ordering `< <= > >=` defined for numeric types only (Stage-0)
+* `==` / `!=` for primitives and same-shape enums without payloads
+* `< <= > >=` defined for numeric types
 
 ---
 
-## 9) No null
+## 9) No `void`
 
-* The language has no null value. Use `Option[T]` for absence.
+* Desi uses **`none`** (Python-like) to denote “no value.”
+* The name `void` is **not a type** in Desi and cannot be used as an identifier.
 
 ---
 
-## 10) FFI & layout (forward-looking note)
+## 10) FFI & layout (forward-looking)
 
 * Stage-0 reserves `repr(C)`/ABI decisions for Stage-1+.
 * Struct/enum layout is defined but not yet exposed for FFI.
