@@ -1,0 +1,20 @@
+
+# 10 · Strings & Stdlib
+
+`print` joins multiple arguments with spaces. String helpers (`str.*`) are available without importing std.
+
+```desi
+def main() -> int:
+  let s = "abc"
+  let n = str.len(s)
+  let mut i = 0
+  let mut out = ""
+  while i < n:
+    let code = str.at(s, i)
+    let ch = str.from_code(code)
+    out := out + ch
+    i := i + 1
+  print(out)
+  0
+```
+

@@ -1,0 +1,115 @@
+(* Desi grammar — v0 (examples-derived). Will be reconciled with Go sources. *)
+
+program        = { toplevel_decl | stmt } ;
+
+toplevel_decl  = package_decl
+               | import_decl
+               | visibility_opt ( type_alias | enum_decl | struct_decl | func_decl | const_decl ) ;
+
+visibility_opt = [ "pub" ] ;
+
+package_decl   = "package" ident ;
+
+import_decl    = ( "import" module_path [ "as" ident ] )
+               | ( "from" module_path "import" import_list ) ;
+
+import_list    = import_item { "," import_item } ;
+import_item    = ident [ "as" ident ] ;
+
+module_path    = ident { "." ident } ;
+
+type_alias     = "type" ident "=" type ;
+
+enum_decl      = "enum" ident ":" NEWLINE INDENT enum_variant { NEWLINE enum_variant } DEDENT ;
+enum_variant   = ident ":" type ;
+
+struct_decl    = "struct" ident ":" NEWLINE INDENT struct_field { NEWLINE struct_field } DEDENT ;
+struct_field   = ident ":" type ;
+
+(* constants and lets; semantics: if "pub" present → must be immutable and a compile-time literal *)
+const_decl     = "let" [ "mut" ] ident_list [ ":" type ] "=" const_expr ;
+
+func_decl      = [ "async" ] "def" ident "(" [ param_list ] ")" "->" type ":" ( simple_stmt | NEWLINE INDENT block DEDENT ) ;
+
+param_list     = param { "," param } ;
+param          = ident ":" type ;
+
+block          = { stmt NEWLINE } [ return_stmt ] ;
+
+stmt           = simple_stmt
+               | if_stmt
+               | while_stmt
+               | match_stmt
+               | return_stmt
+               | defer_stmt ;
+
+simple_stmt    = assign
+               | expr_stmt ;
+
+assign         = lvalue_list ":=" expr_list
+               | "let" [ "mut" ] ident_list [ ":" type ] "=" expr_list ;
+
+lvalue_list    = lvalue { "," lvalue } ;
+lvalue         = ident | selector ;
+
+ident_list     = ident { "," ident } ;
+expr_list      = expr { "," expr } ;
+
+if_stmt        = "if" expr ":" ( simple_stmt | NEWLINE INDENT block DEDENT )
+                 { NEWLINE "elif" expr ":" ( simple_stmt | NEWLINE INDENT block DEDENT ) }
+                 [ NEWLINE "else" ":" ( simple_stmt | NEWLINE INDENT block DEDENT ) ] ;
+
+while_stmt     = "while" expr ":" ( simple_stmt | NEWLINE INDENT block DEDENT ) ;
+
+match_stmt     = "match" expr ":" NEWLINE INDENT match_arm { NEWLINE match_arm } DEDENT ;
+match_arm      = pattern ":" ( simple_stmt | NEWLINE INDENT block DEDENT ) ;
+
+pattern        = "_"                         (* wildcard *)
+               | ident "(" [ pattern_list ] ")"  (* Variant(payload...) *)
+               | ident ;                         (* zero-arg variant may appear without () in some styles *)
+
+pattern_list   = pattern { "," pattern } ;
+
+defer_stmt     = "defer" expr_stmt ;
+
+return_stmt    = "return" [ expr ] ;
+
+expr_stmt      = expr ;
+
+expr           = logic_or ;
+
+logic_or       = logic_and { "or" logic_and } ;
+logic_and      = equality { "and" equality } ;
+equality       = comparison { ( "==" | "!=" ) comparison } ;
+comparison     = addition { ( "<" | "<=" | ">" | ">=" ) addition } ;
+addition       = multiplication { ( "+" | "-" ) multiplication } ;
+multiplication = unary { ( "*" | "/" ) unary } ;
+unary          = [ "!" | "-" ] unary | primary ;
+
+primary        = literal
+               | "await" primary
+               | selector
+               | call
+               | "(" expr ")"
+               | struct_lit
+               | ident ;
+
+selector       = primary "." ident ;
+
+call           = ( ident | selector ) "(" [ arg_list ] ")" ;
+arg_list       = expr { "," expr } ;
+
+struct_lit     = ident "{" field_inits "}" ;
+field_inits    = field_init { "," field_init } ;
+field_init     = ident ":" expr ;
+
+literal        = INT | STRING | "true" | "false" | "none" ;
+
+type           = ident | "int" | "i32" | "str" | "void" | "none" | qualified_type ;
+qualified_type = module_path ;
+
+ident          = /* per lexer: letter/_ start, then letters/digits/_ */ ;
+
+NEWLINE, INDENT, DEDENT = /* indentation tokens provided by lexer */ ;
+
+const_expr     = literal ;  (* examples imply pub const requires literal *)

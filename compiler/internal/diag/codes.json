@@ -4,10 +4,14 @@
       "id": "DLE0001",
       "title": "unterminated string",
       "help": "did you forget a closing quote?",
-      "primary_end": { "kind": "eol" },
+      "primary_end": {
+        "kind": "eol"
+      },
       "suggestions": [
         {
-          "where": { "kind": "eol" },
+          "where": {
+            "kind": "eol"
+          },
           "label": "add this: '\"'",
           "message": "insert closing quote",
           "replacement": "\"",
@@ -33,7 +37,9 @@
       "help": "a '(' '[' or '{' was opened but not closed on this path",
       "suggestions": [
         {
-          "where": { "kind": "eol" },
+          "where": {
+            "kind": "eol"
+          },
           "label": "add a closing delimiter",
           "message": "insert the matching closing delimiter",
           "replacement": ")",
@@ -97,6 +103,16 @@
       "id": "DTE0012",
       "title": "public let cannot be mutable",
       "help": "remove 'mut' from public top-level let declarations"
+    },
+    "await_outside_async": {
+      "id": "DTE1001",
+      "title": "`await` is only valid inside async functions",
+      "help": "Mark the function `async`, or remove `await`."
+    },
+    "await_non_future": {
+      "id": "DTE1002",
+      "title": "cannot await a non-future value",
+      "help": "Only values of kind `future<T>` can be awaited."
     }
   },
   "module": {
@@ -134,6 +150,11 @@
     "missing_explicit_return": {
       "id": "DW0006",
       "title": "function may fall through without an explicit return"
+    },
+    "non_exhaustive_match": {
+      "id": "DW0007",
+      "title": "non-exhaustive match",
+      "help": "add arms for the missing variants or a wildcard '_' arm"
     }
   }
 }
