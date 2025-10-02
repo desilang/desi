@@ -22,14 +22,17 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		rhs := st.Values[i]
 		rk := c.kindOfExpr(rhs)
 
-		// ---- New: forbid reserved/builtins as identifiers ----
+		// ---- Forbid reserved/builtins and imported names as identifiers ----
 		if isReservedIdent(bd.Name) {
 			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: reserved keyword/builtin; choose a different name", bd.Name))
-			// Skip defining this binding; continue to next to avoid cascading errors.
 			continue
 		}
 		if isPreludeBuiltin(bd.Name) {
 			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: cannot shadow prelude builtin", bd.Name))
+			continue
+		}
+		if c.info != nil && c.info.ImportedNames != nil && c.info.ImportedNames[bd.Name] {
+			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: name conflicts with an imported symbol", bd.Name))
 			continue
 		}
 
@@ -78,8 +81,6 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		}
 
 		// Decide stored struct/enum name:
-		// - If a declared struct/enum type exists, use that name.
-		// - Else, use inferred struct/enum names from RHS when available.
 		var storedSName string
 		switch {
 		case want == KindStruct || want == KindEnum:

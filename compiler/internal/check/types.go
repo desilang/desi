@@ -77,6 +77,9 @@ type Info struct {
 	FuncsLocal  map[string]bool
 	TypesPublic map[string]bool
 	EnumsPublic map[string]bool
+
+	// NEW: names introduced by imports in this file (aliases and from-items)
+	ImportedNames map[string]bool
 }
 
 // Warning is a lightweight compiler warning.
