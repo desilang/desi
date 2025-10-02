@@ -10,10 +10,7 @@ import (
 func (c *checker) checkLet(st *ast.LetStmt) {
 	// Arity check
 	if len(st.Binds) != len(st.Values) {
-		c.errors = append(c.errors, typedErr(
-			"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
-			"let", len(st.Binds), len(st.Values),
-		))
+		c.errors = append(c.errors, ErrTypeArityMismatch("let", len(st.Binds), len(st.Values)))
 	}
 
 	_max := _min(len(st.Binds), len(st.Values))
@@ -24,15 +21,15 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 
 		// ---- Forbid reserved/builtins and imported names as identifiers ----
 		if isReservedIdent(bd.Name) {
-			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: reserved keyword/builtin; choose a different name", bd.Name))
+			c.errors = append(c.errors, ErrReservedIdentifier(bd.Name, "let binding"))
 			continue
 		}
 		if isPreludeBuiltin(bd.Name) {
-			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: cannot shadow prelude builtin", bd.Name))
+			c.errors = append(c.errors, ErrShadowBuiltin(bd.Name, "let binding"))
 			continue
 		}
 		if c.info != nil && c.info.ImportedNames != nil && c.info.ImportedNames[bd.Name] {
-			c.errors = append(c.errors, fmt.Errorf("invalid identifier %q: name conflicts with an imported symbol", bd.Name))
+			c.errors = append(c.errors, ErrImportNameConflict(bd.Name, "let binding"))
 			continue
 		}
 
@@ -67,7 +64,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 				if k, ok := unifyKinds(want, rk); ok {
 					kind = k
 				} else {
-					c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
+					c.errors = append(c.errors, ErrTypeMismatch(want.String(), rk.String(), fmt.Sprintf("let %q", bd.Name)))
 				}
 			}
 		}

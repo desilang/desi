@@ -125,22 +125,10 @@ func ErrWrongReturnKind(expected, found, context string) error {
 }
 
 // Warning code getters (IDs only). Use these to tag Warning models consistently.
-
-func CodeUnusedVariable() string {
-	return warnCode("warn", "unused_variable", "DW0001")
-}
-
-func CodeShadowedVariable() string {
-	return warnCode("warn", "shadowed_variable", "DW0002")
-}
-
-func CodeUnreachableCode() string {
-	return warnCode("warn", "unreachable_code", "DW0004")
-}
-
-func CodeMissingExplicitReturn() string {
-	return warnCode("warn", "missing_explicit_return", "DW0006")
-}
+func CodeUnusedVariable() string        { return warnCode("warn", "unused_variable", "DW0001") }
+func CodeShadowedVariable() string      { return warnCode("warn", "shadowed_variable", "DW0002") }
+func CodeUnreachableCode() string       { return warnCode("warn", "unreachable_code", "DW0004") }
+func CodeMissingExplicitReturn() string { return warnCode("warn", "missing_explicit_return", "DW0006") }
 
 // ErrAssignToImmutable produces DTE0006 for attempts to assign to a let-bound name.
 func ErrAssignToImmutable(name, context string) error {
@@ -226,4 +214,29 @@ func ErrAwaitNonFutureAt(sp ast.Span, got Kind) error {
 		key:    "await_non_future",
 		span:   &sp,
 	}
+}
+
+// -----------------------------------------------------------------------------
+// NEW: identifier hygiene helpers (cataloged)
+// -----------------------------------------------------------------------------
+
+// ErrReservedIdentifier => DTE0020
+func ErrReservedIdentifier(name, context string) error {
+	id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "reserved_identifier"}
+}
+
+// ErrShadowBuiltin => DTE0021
+func ErrShadowBuiltin(name, context string) error {
+	id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "shadow_builtin"}
+}
+
+// ErrImportNameConflict => DTE0022
+func ErrImportNameConflict(name, context string) error {
+	id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{code: id, title: msg, domain: "type", key: "import_name_conflict"}
 }

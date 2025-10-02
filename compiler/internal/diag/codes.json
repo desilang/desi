@@ -113,6 +113,21 @@
       "id": "DTE1002",
       "title": "cannot await a non-future value",
       "help": "Only values of kind `future<T>` can be awaited."
+    },
+    "reserved_identifier": {
+      "id": "DTE0020",
+      "title": "reserved keyword used as an identifier",
+      "help": "choose a different name; language keywords and special names cannot be used as identifiers"
+    },
+    "shadow_builtin": {
+      "id": "DTE0021",
+      "title": "cannot shadow prelude builtin",
+      "help": "rename your binding; builtins like 'len' and 'print' cannot be redefined"
+    },
+    "import_name_conflict": {
+      "id": "DTE0022",
+      "title": "name conflicts with imported symbol",
+      "help": "rename your declaration; imported names cannot be redefined"
     }
   },
   "module": {
