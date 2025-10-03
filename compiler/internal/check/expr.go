@@ -14,8 +14,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
   case *ast.IntLit:
     return KindInt
   case *ast.FloatLit:
-    // Treat as untyped numeric literal for now; will unify with f32/f64 by context.
-    return KindUnknown
+    return KindFloat
   case *ast.StrLit:
     return KindStr
   case *ast.BoolLit:
@@ -91,12 +90,22 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 
   case *ast.UnaryExpr:
     k := c.kindOfExpr(v.X)
-    if v.Op == "-" || v.Op == "!" || v.Op == "not" {
-      if k == KindInt || k == KindBool || k == KindUnknown {
-        return KindInt
+    switch v.Op {
+    case "-":
+      // numeric negation: preserve int/float/unknown
+      if k == KindInt || k == KindFloat || k == KindUnknown {
+        return k
       }
+      return KindUnknown
+    case "!", "not":
+      // logical: collapse to int (truthy) unless unknown
+      if k == KindUnknown {
+        return KindUnknown
+      }
+      return KindInt
+    default:
+      return KindUnknown
     }
-    return KindUnknown
 
   case *ast.BinaryExpr:
     lk := c.kindOfExpr(v.Left)
@@ -106,12 +115,33 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
       if lk == KindStr || rk == KindStr {
         return KindStr
       }
-      if lk == KindInt && rk == KindInt {
+      if uk, ok := unifyKinds(lk, rk); ok {
+        if uk == KindFloat {
+          return KindFloat
+        }
+        if uk == KindInt {
+          return KindInt
+        }
+      }
+      return KindUnknown
+    case "-", "*", "/", "%":
+      if uk, ok := unifyKinds(lk, rk); ok {
+        if uk == KindFloat {
+          return KindFloat
+        }
+        if uk == KindInt {
+          return KindInt
+        }
+      }
+      return KindUnknown
+    case "<", "<=", ">", ">=":
+      if _, ok := unifyKinds(lk, rk); ok {
         return KindInt
       }
       return KindUnknown
-    case "-", "*", "/", "%", "<", "<=", ">", ">=", "==", "!=":
-      if _, ok := unifyKinds(lk, rk); ok {
+    case "==", "!=":
+      // allow str==str, float==float, int/bool mixes
+      if _, ok := unifyKinds(lk, rk); ok || (lk == KindStr && rk == KindStr) {
         return KindInt
       }
       return KindUnknown
@@ -121,6 +151,19 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
       return KindUnknown
     }
 
+  case *ast.FieldExpr:
+    // handled below (kept from existing code)
+  case *ast.IndexExpr:
+    return KindUnknown
+  case *ast.CallExpr:
+    // handled below (kept from existing code)
+  default:
+    return KindUnknown
+  }
+
+  // ---------------- existing logic preserved below ----------------
+
+  switch v := e.(type) {
   case *ast.FieldExpr:
     // Module-alias constant access: m.CONST
     if id, ok := v.X.(*ast.IdentExpr); ok {
@@ -200,7 +243,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
         for i, a := range v.Args {
           ak := c.kindOfExpr(a)
           switch ak {
-          case KindInt, KindStr, KindBool, KindUnknown:
+          case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
           case KindVoid:
             c.errors = append(c.errors, fmt.Errorf("io.println arg %d is void (no value)", i+1))
           default:
@@ -270,7 +313,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
             gotK := c.kindOfExpr(v.Args[0])
             if wantK != KindUnknown {
               if _, ok := unifyKinds(wantK, gotK); !ok {
-                c.errors = append(c.errors, fmt.Errorf("wrong payload type for %s.%s: expected %s, got %s", id.Name, fe.Name, wantK, gotK))
+                c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", wantK), fmt.Sprintf("%s", gotK), "call argument"))
               }
             }
           }
@@ -315,7 +358,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
       for i, a := range v.Args {
         ak := c.kindOfExpr(a)
         switch ak {
-        case KindInt, KindStr, KindBool, KindUnknown:
+        case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
         case KindVoid:
           c.errors = append(c.errors, fmt.Errorf("print arg %d is void (no value)", i+1))
         default:
@@ -335,10 +378,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
         wasAlias = true
       }
       if sig, ok := c.info.Funcs[name]; ok {
-        // NEW: visibility for unqualified cross-module calls.
-        // Allow if:
-        //  • came via a from-import alias (wasAlias), OR
-        //  • defined in the entry file (FuncsLocal), otherwise reject.
+        // visibility for unqualified cross-module calls.
         if !wasAlias && !c.info.FuncsLocal[name] {
           if (id.Span != ast.Span{}) {
             c.errors = append(c.errors, ErrNotPublicAt(id.Span, name, "unqualified cross-module use"))

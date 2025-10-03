@@ -38,13 +38,12 @@ func enforceAllowedTopName(info *Info, name, context string) error {
 // mapTextType maps a textual type annotation to a Kind.
 // Policy:
 //   - "" (no annotation)     → KindNone (function returns default to none)
-//   - "none"                 → KindNone
-//   - "void"                 → KindNone (back-compat; later we can emit a diag nudging to 'none')
-//   - All integer spellings  → KindInt (until we introduce sized/signed kinds)
+//   - "none"/"void"          → KindNone
+//   - Integer family         → KindInt (coarse bucket)
 //   - "str"/"string"         → KindStr
 //   - "bool"                 → KindBool
 //   - "future"               → KindFuture
-//   - "f32"/"f64"            → KindUnknown (not yet implemented)
+//   - "f32"/"f64"            → KindFloat
 func mapTextType(t string) Kind {
 	switch strings.TrimSpace(strings.ToLower(t)) {
 	case "":
@@ -52,7 +51,7 @@ func mapTextType(t string) Kind {
 	case "none", "void":
 		return KindNone
 
-	// Integers: treat all spellings as `int` for now (non-breaking aliasing).
+	// Integers: coarse bucket
 	case "int", "i32":
 		return KindInt
 	case "i8", "i16", "i64", "i128", "isize":
@@ -67,9 +66,9 @@ func mapTextType(t string) Kind {
 	case "future":
 		return KindFuture
 
-	// Floats: reserved but not implemented yet.
+	// Floats
 	case "f32", "f64":
-		return KindUnknown
+		return KindFloat
 
 	default:
 		return KindUnknown
@@ -102,17 +101,25 @@ func mapTypeOrStruct(t string, info *Info) (Kind, string) {
 }
 
 func unifyKinds(a, b Kind) (Kind, bool) {
+	// Unknown unifies with the other side
 	if a == KindUnknown {
 		return b, true
 	}
 	if b == KindUnknown {
 		return a, true
 	}
+	// Exact match
 	if a == b {
 		return a, true
 	}
+	// bool <-> int → int (legacy coercion)
 	if (a == KindInt && b == KindBool) || (a == KindBool && b == KindInt) {
 		return KindInt, true
+	}
+	// float with int/bool → float
+	if (a == KindFloat && (b == KindInt || b == KindBool)) ||
+		(b == KindFloat && (a == KindInt || a == KindBool)) {
+		return KindFloat, true
 	}
 	// Structs/enums never unify here; names checked in higher-level logic.
 	return KindUnknown, false
