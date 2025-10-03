@@ -6,5 +6,5 @@ def widen_u16(x: u16) -> u32: x
 def main() -> int:
   let _x: i8 = 1
   let _y: u64 = 2
-  let _z: f64 = 3.0
+  # let _z: f64 = 3.0
   0
