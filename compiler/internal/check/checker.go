@@ -33,18 +33,30 @@ type checker struct {
 
 // ---------- reserved names for aliasing ----------
 
-// Use the canonical helpers from reserved.go.
 func reservedAliasReason(name string) string {
-  n := strings.TrimSpace(name)
+  n := strings.ToLower(strings.TrimSpace(name))
   if n == "" {
     return ""
   }
-  if isReservedIdent(n) {
+
+  // language keywords (Stage-1 superset, harmless if extra)
+  keywords := map[string]struct{}{
+    "package": {}, "import": {}, "from": {}, "as": {}, "def": {}, "struct": {}, "enum": {}, "type": {},
+    "let": {}, "mut": {}, "if": {}, "elif": {}, "else": {}, "while": {}, "return": {}, "match": {}, "defer": {},
+    "true": {}, "false": {},
+  }
+  if _, ok := keywords[n]; ok {
     return "reserved keyword"
   }
-  if isPreludeBuiltin(n) {
+
+  // builtins / std shims / known module roots
+  builtins := map[string]struct{}{
+    "print": {}, "io": {}, "fs": {}, "os": {}, "mem": {}, "str": {},
+  }
+  if _, ok := builtins[n]; ok {
     return "reserved builtin"
   }
+
   return ""
 }
 
@@ -113,7 +125,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // ---- forbid textual 'void' anywhere in type positions ----
+  // ---- NEW: forbid textual 'void' anywhere in type positions ----
   errs = append(errs, scanForVoidTypes(f)...)
 
   // collect top-level constants (M10)
@@ -245,55 +257,6 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // ---------- Enforce top-level identifier rules (reserved/builtin/import-conflict) ----------
-  isImportedName := func(n string) bool {
-    if _, ok := fromAliases[n]; ok {
-      return true
-    }
-    if _, ok := modAliases[n]; ok {
-      return true
-    }
-    return false
-  }
-  topNameCheck := func(kind, name string) {
-    if isReservedIdent(name) {
-      errs = append(errs, ErrReservedIdentifier(name, kind))
-    } else if isPreludeBuiltin(name) {
-      errs = append(errs, ErrShadowBuiltin(name, kind))
-    } else if isImportedName(name) {
-      errs = append(errs, ErrImportNameConflict(name, kind))
-    }
-  }
-
-  for _, d := range f.Decls {
-    switch v := d.(type) {
-    case *ast.FuncDecl:
-      topNameCheck("function", v.Name)
-    case *ast.StructDecl:
-      topNameCheck("struct", v.Name)
-      for _, fld := range v.Fields {
-        if isReservedIdent(fld.Name) {
-          errs = append(errs, ErrReservedIdentifier(fld.Name, "struct field"))
-        } else if isPreludeBuiltin(fld.Name) {
-          errs = append(errs, ErrShadowBuiltin(fld.Name, "struct field"))
-        }
-      }
-    case *ast.EnumDecl:
-      topNameCheck("enum", v.Name)
-      for _, ev := range v.Variants {
-        if isReservedIdent(ev.Name) {
-          errs = append(errs, ErrReservedIdentifier(ev.Name, "enum variant"))
-        } else if isPreludeBuiltin(ev.Name) {
-          errs = append(errs, ErrShadowBuiltin(ev.Name, "enum variant"))
-        }
-      }
-    case *ast.TypeDecl:
-      topNameCheck("type alias", v.Name)
-    case *ast.ConstDecl:
-      topNameCheck("constant", v.Name)
-    }
-  }
-
   // ---------- check bodies ----------
   for _, d := range f.Decls {
     if fn, ok := d.(*ast.FuncDecl); ok {
@@ -351,12 +314,14 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
   // Feature flags (default ON; CLI may toggle later)
   c.features.Async = true
 
-  // params (immutable) + identifier hygiene
+  // params (immutable)  — STRICT: forbid collisions with imported names
   for i, p := range fn.Params {
-    if isReservedIdent(p.Name) {
-      c.errors = append(c.errors, ErrReservedIdentifier(p.Name, "parameter"))
-    } else if isPreludeBuiltin(p.Name) {
-      c.errors = append(c.errors, ErrShadowBuiltin(p.Name, "parameter"))
+    // STRICT RULE: parameter name must not collide with from-import alias or module alias
+    if _, ok := c.aliases[p.Name]; ok {
+      c.errors = append(c.errors, ErrImportNameConflict(p.Name, "parameter"))
+    }
+    if _, ok := c.modAliases[p.Name]; ok {
+      c.errors = append(c.errors, ErrImportNameConflict(p.Name, "parameter"))
     }
 
     k, sname := mapTypeOrStruct(p.Type, info)
@@ -381,16 +346,12 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
   hasReturn := *top(c.blockReturned)
   c.blockReturned = pop(c.blockReturned)
 
-  // Non-void fallthrough check:
-  // Accept either an explicit return OR a tail expression stmt as satisfying.
-  // Special-case: if the declared return is a Future, do not warn (future-producing
-  // factories and async state machines don't need an explicit return here).
+  // Non-void fallthrough check (keep as-is)
   if fnRet := c.fnSig.Ret; fnRet != KindVoid && !hasReturn {
     if fnRet != KindFuture {
       tailExprOK := false
       if len(fn.Body) > 0 {
         if es, ok := fn.Body[len(fn.Body)-1].(*ast.ExprStmt); ok {
-          // quick kind check: tail expr kind should unify with return kind
           tk := c.kindOfExpr(es.Expr)
           if _, ok := unifyKinds(fnRet, tk); ok {
             tailExprOK = true
@@ -422,7 +383,7 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
   return c.errors, c.warnings
 }
 
-// ---- scan textual 'void' in type positions ----
+// ---- NEW: scan textual 'void' in type positions ----
 
 func scanForVoidTypes(f *ast.File) []error {
   var out []error
@@ -454,8 +415,7 @@ func scanForVoidTypes(f *ast.File) []error {
     case *ast.TypeDecl:
       add(fmt.Sprintf("type alias %q", v.Name), v.Underlying)
     case *ast.ConstDecl:
-      // If ConstDecl has an explicit type in your AST (optional), add a check here.
-      // add(fmt.Sprintf("type annotation of constant %q", v.Name), v.Type)
+      // (no explicit type field on ConstDecl today)
     }
   }
   return out
