@@ -10,8 +10,9 @@ import (
 // ---- signatures & helpers ----
 
 type sig struct {
-	// "void" | scalar kind ("bool","i8","u16","i32","u64","isize","usize","f32","f64","str","future")
-	// or "struct:<Name>" | "enum:<Name>"
+	// "void" | "int" | "str" | "float" | "double" |
+	// "i8"|"u8"|"i16"|"u16"|"i32"|"u32"|"i64"|"u64"|"isize"|"usize" |
+	// "struct:<Name>" | "enum:<Name>" | "future"
 	ret    string
 	params []string
 }
@@ -24,11 +25,14 @@ func collectFuncSigs(f *ast.File, info *check.Info) map[string]sig {
 			continue
 		}
 		var s sig
-
-		// Prefer checker info (it knows about async/future), but map textual type for precision.
+		// Prefer checker info (it knows about async/future).
 		if info != nil {
-			if si, ok := info.Funcs[fn.Name]; ok && si.Async {
-				s.ret = "future"
+			if si, ok := info.Funcs[fn.Name]; ok {
+				if si.Async {
+					s.ret = "future"
+				} else {
+					s.ret = typeToKindOrStruct(fn.Ret, info)
+				}
 			} else {
 				s.ret = typeToKindOrStruct(fn.Ret, info)
 			}
@@ -52,26 +56,28 @@ func findMain(f *ast.File) *ast.FuncDecl {
 	return nil
 }
 
-// Map textual types to compact codegen kinds.
-// Returns: "void" | scalar kind | "str" | "future" | "struct:<Name>" | "enum:<Name>"
+// map textual types to compact codegen kind tokens we handle in cType()
 func typeToKindOrStruct(t string, info *check.Info) string {
-	lc := strings.ToLower(strings.TrimSpace(t))
-	switch lc {
+	tt := strings.TrimSpace(strings.ToLower(t))
+	switch tt {
 	case "", "none", "void":
 		return "void"
-	case "bool":
-		return "bool"
-	case "i8", "i16", "i32", "i64", "isize",
-		"u8", "u16", "u32", "u64", "usize",
-		"f32", "f64",
-		"int": // int ≡ i32
-		return normalizeScalarKind(lc)
+	case "bool", "int", "i32":
+		return "int"
+	case "u32":
+		return "u32"
+	case "i8", "i16", "i64", "isize",
+		"u8", "u16", "u64", "usize":
+		return tt
+	case "f32":
+		return "float"
+	case "f64":
+		return "double"
 	case "str", "string":
 		return "str"
 	case "future":
 		return "future"
 	default:
-		// user types (struct/enum) if known
 		raw := strings.TrimSpace(t)
 		if info != nil {
 			if _, ok := info.Structs[raw]; ok {
@@ -83,81 +89,96 @@ func typeToKindOrStruct(t string, info *check.Info) string {
 				}
 			}
 		}
-		// Unknown user types default to int at C level, but keep it simple here:
-		return "i32"
+		return "int"
 	}
 }
 
-// Collapse aliases to canonical scalar tags used by cType().
-func normalizeScalarKind(k string) string {
-	switch k {
-	case "int":
-		return "i32"
-	case "string":
-		return "str"
-	default:
-		return k
-	}
-}
-
-// Map compact kind → C type used in signatures.
 func cType(kind string) string {
 	switch kind {
 	case "void":
 		return "void"
 	case "str":
 		return "const char*"
-	case "future":
-		return "struct desi_future"
-
-	// bool: use int for ABI simplicity (you can switch to _Bool if desired)
-	case "bool":
-		return "int"
-
-	// Signed integers
+	case "int":
+		return "int" // our canonical 'int' (incl. bool/i32 alias)
+	case "u32":
+		return "unsigned int" // keep parity with 'int' choice above
+	case "float":
+		return "float"
+	case "double":
+		return "double"
 	case "i8":
 		return "int8_t"
-	case "i16":
-		return "int16_t"
-	case "i32":
-		return "int32_t"
-	case "i64":
-		return "int64_t"
-	case "isize":
-		return "intptr_t"
-
-	// Unsigned integers
 	case "u8":
 		return "uint8_t"
+	case "i16":
+		return "int16_t"
 	case "u16":
 		return "uint16_t"
-	case "u32":
-		return "uint32_t"
+	case "i64":
+		return "int64_t"
 	case "u64":
 		return "uint64_t"
+	case "isize":
+		return "intptr_t"
 	case "usize":
 		return "uintptr_t"
+	case "future":
+		return "struct desi_future"
+	default:
+		if strings.HasPrefix(kind, "struct:") || strings.HasPrefix(kind, "enum:") {
+			return kind[strings.Index(kind, ":")+1:] // drop "struct:" or "enum:"
+		}
+		return "int"
+	}
+}
 
-	// Floats
+// For parameter lists and local vars we map textual type names straight to C types.
+func cTypeFromText(t string, info *check.Info) string {
+	tt := strings.TrimSpace(strings.ToLower(t))
+	switch tt {
+	case "", "none", "void":
+		return "void"
+	case "bool", "int", "i32":
+		return "int"
+	case "u32":
+		return "unsigned int"
+	case "i8":
+		return "int8_t"
+	case "u8":
+		return "uint8_t"
+	case "i16":
+		return "int16_t"
+	case "u16":
+		return "uint16_t"
+	case "i64":
+		return "int64_t"
+	case "u64":
+		return "uint64_t"
+	case "isize":
+		return "intptr_t"
+	case "usize":
+		return "uintptr_t"
 	case "f32":
 		return "float"
 	case "f64":
 		return "double"
+	case "str", "string":
+		return "const char*"
+	case "future":
+		return "struct desi_future"
 	}
-
-	// struct/enum:<Name>
-	if strings.HasPrefix(kind, "struct:") || strings.HasPrefix(kind, "enum:") {
-		return kind[strings.Index(kind, ":")+1:]
+	if info != nil {
+		if _, ok := info.Structs[tt]; ok {
+			return tt
+		}
+		if info.Enums != nil {
+			if _, ok := info.Enums[tt]; ok {
+				return tt
+			}
+		}
 	}
-
-	// Fallback
-	return "int32_t"
-}
-
-// Direct map from textual type → C type (used for params list building).
-func cTypeFromText(t string, info *check.Info) string {
-	k := typeToKindOrStruct(t, info)
-	return cType(k)
+	return "int"
 }
 
 func cParamList(fn *ast.FuncDecl, info *check.Info) string {

@@ -30,6 +30,10 @@ func emitStmt(b *bytes.Buffer, indent int, s ast.Stmt, e *env) {
 					e.vars[name] = "str"
 				case kind == "future":
 					e.vars[name] = "future"
+				case kind == "float":
+					e.vars[name] = "f32"
+				case kind == "double":
+					e.vars[name] = "f64"
 				case strings.HasPrefix(kind, "struct:"):
 					e.vars[name] = strings.TrimSpace(kind[len("struct:"):])
 				case strings.HasPrefix(kind, "enum:"):
@@ -295,12 +299,14 @@ func buildPrintfArgs(args []ast.Expr, e *env) string {
 	}
 	for i, a := range args {
 		ce, kind := cExprFor(a, e)
-		if kind == "str" {
+		switch kind {
+		case "str":
 			fmt.WriteString("%s")
-		} else {
+		case "float", "double":
+			fmt.WriteString("%f")
+		default:
 			fmt.WriteString("%d")
 		}
-		// Insert a space between arguments (but not after the last one)
 		if i < len(args)-1 {
 			fmt.WriteString(" ")
 		}

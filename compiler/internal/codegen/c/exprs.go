@@ -19,8 +19,7 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		return v.Value, "int"
 
 	case *ast.FloatLit:
-		// Emit as-is; C treats it as double by default.
-		return v.Value, "int"
+		return v.Value, "double"
 
 	case *ast.StrLit:
 		return ensureCStringLiteral(v.Value), "str"
@@ -34,14 +33,21 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 	case *ast.IdentExpr:
 		// Local/param first
 		if t, ok := env.vars[v.Name]; ok {
-			if isStrText(t) {
+			tt := strings.TrimSpace(t)
+			if isStrText(tt) {
 				return v.Name, "str"
 			}
-			if isStructType(t, env.info) {
-				return v.Name, "struct:" + strings.TrimSpace(t)
+			if tt == "f32" {
+				return v.Name, "float"
 			}
-			if isEnumType(t, env.info) {
-				return v.Name, "enum:" + strings.TrimSpace(t)
+			if tt == "f64" {
+				return v.Name, "double"
+			}
+			if isStructType(tt, env.info) {
+				return v.Name, "struct:" + strings.TrimSpace(tt)
+			}
+			if isEnumType(tt, env.info) {
+				return v.Name, "enum:" + strings.TrimSpace(tt)
 			}
 			return v.Name, "int"
 		}
@@ -79,6 +85,12 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			ex := fieldAccessChain(v)
 			if isStrText(ft) {
 				return ex, "str"
+			}
+			if strings.TrimSpace(ft) == "f32" {
+				return ex, "float"
+			}
+			if strings.TrimSpace(ft) == "f64" {
+				return ex, "double"
 			}
 			if isStructType(ft, env.info) {
 				return ex, "struct:" + strings.TrimSpace(ft)
@@ -134,9 +146,12 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 			return "(" + l + " || " + r + ")", "int"
 		}
 
+		// Result "kind" is a coarse bucket for downstream (e.g., print formatting)
 		k := ""
 		if lk == "str" || rk == "str" {
 			k = "str"
+		} else if lk == "double" || rk == "double" || lk == "float" || rk == "float" {
+			k = "double"
 		} else if lk == "int" && rk == "int" {
 			k = "int"
 		}
@@ -168,6 +183,36 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 				}
 			}
 		}
+
+		// builtin print(...)
+		if id, ok := v.Callee.(*ast.IdentExpr); ok && id.Name == "print" {
+			var specs []string
+			var args []string
+			for _, a := range v.Args {
+				ax, ak := cExprFor(a, env)
+				switch ak {
+				case "str":
+					specs = append(specs, "%s")
+				case "double", "float":
+					specs = append(specs, "%f")
+				default:
+					specs = append(specs, "%d")
+				}
+				args = append(args, ax)
+			}
+			if len(specs) == 0 {
+				// print() with no args — just newline
+				return "(printf(\"\\n\"), 0)", "void"
+			}
+			fmt := "\"" + strings.Join(specs, " ") + "\\n\""
+			call := "printf(" + fmt
+			if len(args) > 0 {
+				call += ", " + strings.Join(args, ", ")
+			}
+			call += ")"
+			return "(" + call + ", 0)", "void"
+		}
+
 		// std shims: fs/os/mem/str
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
