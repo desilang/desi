@@ -23,6 +23,15 @@ type IntLit struct {
 func (*IntLit) node() {}
 func (*IntLit) expr() {}
 
+/*** NEW: Float literal ***/
+type FloatLit struct {
+	Value string
+	Span  Span
+}
+
+func (*FloatLit) node() {}
+func (*FloatLit) expr() {}
+
 type StrLit struct {
 	Value string
 	Span  Span

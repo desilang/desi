@@ -18,6 +18,10 @@ func cExprFor(e ast.Expr, env *env) (string, string) {
 		}
 		return v.Value, "int"
 
+	case *ast.FloatLit:
+		// Emit as-is; C treats it as double by default.
+		return v.Value, "int"
+
 	case *ast.StrLit:
 		return ensureCStringLiteral(v.Value), "str"
 

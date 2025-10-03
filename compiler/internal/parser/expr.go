@@ -134,6 +134,11 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 		}
 		return p.parsePostfix(e)
 	}
+	if p.at(lexer.TokFloat) {
+		t := p.tok
+		p.next()
+		return p.parsePostfix(&ast.FloatLit{Value: t.Lex, Span: spanTok(t, t)})
+	}
 	// Registry-backed parser error
 	return nil, ErrUnexpectedToken("expression", p.tok)
 }
