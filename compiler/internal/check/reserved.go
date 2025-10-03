@@ -15,10 +15,12 @@ var reservedWords = map[string]struct{}{
 	// Literals / special
 	"true": {}, "false": {},
 	// Type-ish words that must not be used as identifiers
-	"none": {}, "void": {},
+	"none": {}, "void": {}, "bool": {}, "str": {}, "string": {}, "future": {},
+	"int": {}, "i8": {}, "i16": {}, "i32": {}, "i64": {}, "i128": {}, "isize": {},
+	"u8": {}, "u16": {}, "u32": {}, "u64": {}, "u128": {}, "usize": {},
 }
 
-// Prelude / builtins that should never be shadowed by locals.
+// Prelude / builtins that should never be shadowed by locals/tops.
 var preludeBuiltins = map[string]struct{}{
 	"print": {}, "panic": {},
 }
@@ -42,6 +44,16 @@ func isStdModuleRoot(name string) bool {
 	return ok
 }
 
+// isReservedIdent wraps the notion of "cannot be used as an identifier"
+// including keywords, literal words, scalar type names, and std roots.
+func isReservedIdent(name string) bool {
+	n := strings.TrimSpace(name)
+	if n == "" {
+		return false
+	}
+	return isReservedWord(n) || isStdModuleRoot(n)
+}
+
 // enforceAllowedLocalName validates a local binding/parameter name against
 // (1) reserved words, (2) prelude builtins, and (3) imported names in this file.
 func enforceAllowedLocalName(info *Info, name, context string) error {
@@ -49,8 +61,7 @@ func enforceAllowedLocalName(info *Info, name, context string) error {
 	if n == "" {
 		return nil
 	}
-	if isReservedWord(n) || isStdModuleRoot(n) {
-		// treat std module root as "reserved identifier" too
+	if isReservedIdent(n) {
 		return ErrReservedIdentifier(n, context)
 	}
 	if isPreludeBuiltin(n) {

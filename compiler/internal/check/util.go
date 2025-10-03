@@ -14,6 +14,27 @@ func top[T any](s []T) *T {
 
 /* ---------- helpers ---------- */
 
+// enforceAllowedTopName applies global (file-scope) hygiene to top-level names:
+// - reserved identifiers (keywords, literals, scalar type names, std roots)
+// - prelude builtins (print/…)
+// - collisions with imported names visible in this file
+func enforceAllowedTopName(info *Info, name, context string) error {
+	n := strings.TrimSpace(name)
+	if n == "" {
+		return nil
+	}
+	if isReservedIdent(n) {
+		return ErrReservedIdentifier(n, context)
+	}
+	if isPreludeBuiltin(n) {
+		return ErrShadowBuiltin(n, context)
+	}
+	if info != nil && info.ImportedNames != nil && info.ImportedNames[n] {
+		return ErrImportNameConflict(n, context)
+	}
+	return nil
+}
+
 // mapTextType maps a textual type annotation to a Kind.
 // Policy:
 //   - "" (no annotation)     → KindNone (function returns default to none)

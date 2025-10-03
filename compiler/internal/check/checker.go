@@ -80,6 +80,11 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
   var errs []error
   var warns []Warning
 
+  // Make imported names available early for top-level hygiene checks.
+  if f != nil && info.ImportedNames != nil {
+    collectImportedNamesInto(info.ImportedNames, f)
+  }
+
   // Seed local funcs set from resolver's entry-file annotation.
   if f != nil && f.LocalFuncNames != nil {
     for n := range f.LocalFuncNames {
@@ -87,9 +92,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect structs (M7)  publicity (M10)
+  // collect structs (M7)  publicity (M10) + top-level hygiene
   for _, d := range f.Decls {
     if sd, ok := d.(*ast.StructDecl); ok {
+      if err := enforceAllowedTopName(info, sd.Name, "struct"); err != nil {
+        errs = append(errs, err)
+      }
       fields := map[string]string{}
       for _, ft := range sd.Fields {
         fields[ft.Name] = ft.Type
@@ -101,9 +109,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect enums (M8)  publicity (M10)
+  // collect enums (M8)  publicity (M10) + top-level hygiene
   for _, d := range f.Decls {
     if ed, ok := d.(*ast.EnumDecl); ok {
+      if err := enforceAllowedTopName(info, ed.Name, "enum"); err != nil {
+        errs = append(errs, err)
+      }
       variants := map[string]string{}
       for _, v := range ed.Variants {
         variants[v.Name] = v.Payload
@@ -115,9 +126,12 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect type aliases (M6)  publicity (M10)
+  // collect type aliases (M6)  publicity (M10) + top-level hygiene
   for _, d := range f.Decls {
     if td, ok := d.(*ast.TypeDecl); ok {
+      if err := enforceAllowedTopName(info, td.Name, "type"); err != nil {
+        errs = append(errs, err)
+      }
       info.Types[td.Name] = td.Underlying
       if td.Pub {
         info.TypesPublic[td.Name] = true
@@ -128,11 +142,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
   // ---- NEW: forbid textual 'void' anywhere in type positions ----
   errs = append(errs, scanForVoidTypes(f)...)
 
-  // collect top-level constants (M10)
+  // collect top-level constants (M10) + top-level hygiene
   for _, d := range f.Decls {
     cd, ok := d.(*ast.ConstDecl)
     if !ok {
       continue
+    }
+    if err := enforceAllowedTopName(info, cd.Name, "constant"); err != nil {
+      errs = append(errs, err)
     }
     // pub let mut is forbidden
     if cd.Pub && cd.Mutable {
@@ -150,11 +167,14 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
-  // collect function signatures  publicity
+  // collect function signatures  publicity + top-level hygiene
   for _, d := range f.Decls {
     fn, ok := d.(*ast.FuncDecl)
     if !ok {
       continue
+    }
+    if err := enforceAllowedTopName(info, fn.Name, "function"); err != nil {
+      errs = append(errs, err)
     }
     if _, exists := info.Funcs[fn.Name]; exists {
       errs = append(errs, fmt.Errorf("duplicate function %q", fn.Name))
@@ -169,7 +189,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     sig := FuncSig{
       Name:    fn.Name,
       Params:  ps,
-      Ret:     retElem,
+      Ret:     KindUnknown,
       Async:   false,
       RetElem: KindUnknown,
     }
@@ -177,6 +197,8 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
       sig.Async = true
       sig.Ret = KindFuture
       sig.RetElem = retElem
+    } else {
+      sig.Ret = retElem
     }
     info.Funcs[fn.Name] = sig
     if fn.Pub {
@@ -422,7 +444,7 @@ func scanForVoidTypes(f *ast.File) []error {
       }
     case *ast.StructDecl:
       for _, ft := range v.Fields {
-        add(fmt.Sprintf("field %q of struct %q", ft.Name, v.Name), ft.Type)
+        add(fmt.Sprintf("field %q of struct %q", ft.Name), ft.Type)
       }
     case *ast.EnumDecl:
       for _, ev := range v.Variants {
