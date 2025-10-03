@@ -256,7 +256,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("fs.read_all: want 1 arg (path: str), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-					c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
+					c.errors = append(c.errors, ErrTypeMismatch("str", fmt.Sprintf("%s", ak), "fs.read_all path"))
 				}
 				return KindStr
 			}
@@ -264,7 +264,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("os.exit: want 1 arg (code: int), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-					c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
+					c.errors = append(c.errors, ErrTypeMismatch("int", fmt.Sprintf("%s", ak), "os.exit code"))
 				}
 				return KindVoid
 			}
