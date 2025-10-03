@@ -10,10 +10,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 	// Preferred path: LHS []Expr only.
 	if len(st.LHS) > 0 {
 		if len(st.LHS) != len(st.Exprs) {
-			c.errors = append(c.errors, typedErr(
-				"type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
-				"assignment", len(st.LHS), len(st.Exprs),
-			))
+			c.errors = append(c.errors, ErrTypeArityMismatch("assignment", len(st.LHS), len(st.Exprs)))
 		}
 
 		_max := _min(len(st.LHS), len(st.Exprs))
