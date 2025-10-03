@@ -220,25 +220,56 @@ func ErrAwaitNonFutureAt(sp ast.Span, got Kind) error {
 // NEW: identifier hygiene helpers (cataloged)
 // -----------------------------------------------------------------------------
 
-// ErrReservedIdentifier => DTE0020
+// Non-span (legacy) variants — kept for compatibility with older call sites.
 func ErrReservedIdentifier(name, context string) error {
 	id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "reserved_identifier"}
 }
-
-// ErrShadowBuiltin => DTE0021
 func ErrShadowBuiltin(name, context string) error {
 	id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "shadow_builtin"}
 }
-
-// ErrImportNameConflict => DTE0022
 func ErrImportNameConflict(name, context string) error {
 	id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
 	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
 	return typedError{code: id, title: msg, domain: "type", key: "import_name_conflict"}
+}
+
+// New span-carrying variants for rust-like caret rendering.
+func ErrReservedIdentifierAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "reserved_identifier",
+		span:   &sp,
+	}
+}
+func ErrShadowBuiltinAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "shadow_builtin",
+		span:   &sp,
+	}
+}
+func ErrImportNameConflictAt(sp ast.Span, name, context string) error {
+	id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
+	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "import_name_conflict",
+		span:   &sp,
+	}
 }
 
 // ErrUseNoneInsteadOfVoid (span-less)

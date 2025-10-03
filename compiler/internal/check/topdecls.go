@@ -43,38 +43,38 @@ func (c *checker) collectVisibilityAndConsts(f *ast.File) {
 		case *ast.FuncDecl:
 			// Forbid reserved/builtins and imported names
 			if isReservedIdent(v.Name) {
-				c.errors = append(c.errors, ErrReservedIdentifier(v.Name, "function"))
+				c.errors = append(c.errors, ErrReservedIdentifierAt(v.Span, v.Name, "function"))
 			}
 			if isPreludeBuiltin(v.Name) {
-				c.errors = append(c.errors, ErrShadowBuiltin(v.Name, "function"))
+				c.errors = append(c.errors, ErrShadowBuiltinAt(v.Span, v.Name, "function"))
 			}
 			if c.info.ImportedNames[v.Name] {
-				c.errors = append(c.errors, ErrImportNameConflict(v.Name, "function"))
+				c.errors = append(c.errors, ErrImportNameConflictAt(v.Span, v.Name, "function"))
 			}
 			c.info.FuncsPublic[v.Name] = v.Pub
 
 		case *ast.StructDecl:
 			if isReservedIdent(v.Name) {
-				c.errors = append(c.errors, ErrReservedIdentifier(v.Name, "struct"))
+				c.errors = append(c.errors, ErrReservedIdentifierAt(v.Span, v.Name, "struct"))
 			}
 			if isPreludeBuiltin(v.Name) {
-				c.errors = append(c.errors, ErrShadowBuiltin(v.Name, "struct"))
+				c.errors = append(c.errors, ErrShadowBuiltinAt(v.Span, v.Name, "struct"))
 			}
 			if c.info.ImportedNames[v.Name] {
-				c.errors = append(c.errors, ErrImportNameConflict(v.Name, "struct"))
+				c.errors = append(c.errors, ErrImportNameConflictAt(v.Span, v.Name, "struct"))
 			}
 			c.info.StructsPublic[v.Name] = v.Pub
 
 		case *ast.ConstDecl:
 			// Forbid reserved/builtins and imported names
 			if isReservedIdent(v.Name) {
-				c.errors = append(c.errors, ErrReservedIdentifier(v.Name, "constant"))
+				c.errors = append(c.errors, ErrReservedIdentifierAt(v.Span, v.Name, "constant"))
 			}
 			if isPreludeBuiltin(v.Name) {
-				c.errors = append(c.errors, ErrShadowBuiltin(v.Name, "constant"))
+				c.errors = append(c.errors, ErrShadowBuiltinAt(v.Span, v.Name, "constant"))
 			}
 			if c.info.ImportedNames[v.Name] {
-				c.errors = append(c.errors, ErrImportNameConflict(v.Name, "constant"))
+				c.errors = append(c.errors, ErrImportNameConflictAt(v.Span, v.Name, "constant"))
 			}
 
 			// 1) `pub let mut` is forbidden (DTE0012).
