@@ -73,9 +73,9 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     Consts:        map[string]ConstInfo{},
     ConstsPublic:  map[string]bool{},
     FuncsLocal:    map[string]bool{},
-    // NEW:
-    TypesPublic: map[string]bool{},
-    EnumsPublic: map[string]bool{},
+    TypesPublic:   map[string]bool{},
+    EnumsPublic:   map[string]bool{},
+    ImportedNames: map[string]bool{},
   }
   var errs []error
   var warns []Warning
@@ -257,6 +257,19 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
     }
   }
 
+  // 4) NEW: record the set of *locally visible imported names* for hygiene checks.
+  //     - from-imports introduce local names (= alias or item name)
+  //     - plain imports introduce a local module alias (explicit or derived)
+  if info.ImportedNames == nil {
+    info.ImportedNames = map[string]bool{}
+  }
+  for a := range fromAliases {
+    info.ImportedNames[a] = true
+  }
+  for a := range modAliases {
+    info.ImportedNames[a] = true
+  }
+
   // ---------- check bodies ----------
   for _, d := range f.Decls {
     if fn, ok := d.(*ast.FuncDecl); ok {
@@ -322,6 +335,9 @@ func checkFunc(info *Info, fn *ast.FuncDecl, fromAliasMap map[string]string, mod
     }
     if _, ok := c.modAliases[p.Name]; ok {
       c.errors = append(c.errors, ErrImportNameConflict(p.Name, "parameter"))
+    }
+    if err := enforceAllowedLocalName(c.info, p.Name, "parameter"); err != nil {
+      c.errors = append(c.errors, err)
     }
 
     k, sname := mapTypeOrStruct(p.Type, info)
