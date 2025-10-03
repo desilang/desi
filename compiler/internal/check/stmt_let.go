@@ -8,24 +8,37 @@ import (
 )
 
 func (c *checker) checkLet(st *ast.LetStmt) {
-  // Arity check (unchanged)
+  // Arity check
   if len(st.Binds) != len(st.Values) {
     c.errors = append(c.errors, ErrTypeArityMismatch("let", len(st.Binds), len(st.Values)))
   }
 
-  // NEW: forbid textual 'void' + enforce identifier hygiene for each binder
+  // Binder hygiene + forbid textual 'void' in type positions
   for _, bd := range st.Binds {
-    // name checks (reserved/builtin/import-conflict)
-    if err := enforceAllowedLocalName(c.info, bd.Name, "let binding"); err != nil {
-      c.errors = append(c.errors, err)
+    // Identifier hygiene (span-carrying)
+    if isReservedIdent(bd.Name) {
+      c.errors = append(c.errors, ErrReservedIdentifierAt(bd.Span, bd.Name, "let binding"))
     }
-    // type 'void' check
+    if isPreludeBuiltin(bd.Name) {
+      c.errors = append(c.errors, ErrShadowBuiltinAt(bd.Span, bd.Name, "let binding"))
+    }
+    // Conflicts with imported names in this function (from-import aliases or module aliases)
+    if _, ok := c.aliases[bd.Name]; ok {
+      c.errors = append(c.errors, ErrImportNameConflictAt(bd.Span, bd.Name, "let binding"))
+    }
+    if _, ok := c.modAliases[bd.Name]; ok {
+      c.errors = append(c.errors, ErrImportNameConflictAt(bd.Span, bd.Name, "let binding"))
+    }
+
+    // Forbid textual 'void' as a type
     if strings.EqualFold(strings.TrimSpace(bd.Type), "void") {
-      c.errors = append(c.errors, ErrUseNoneInsteadOfVoid("let binding type"))
+      c.errors = append(c.errors, ErrUseNoneInsteadOfVoidAt(bd.Span, "let binding type"))
     }
   }
+
+  // Group type cannot be 'void'
   if strings.EqualFold(strings.TrimSpace(st.GroupType), "void") {
-    c.errors = append(c.errors, ErrUseNoneInsteadOfVoid("let group type"))
+    c.errors = append(c.errors, ErrUseNoneInsteadOfVoidAt(st.Span, "let group type"))
   }
 
   _max := _min(len(st.Binds), len(st.Values))
@@ -41,9 +54,8 @@ func (c *checker) checkLet(st *ast.LetStmt) {
     inferredStruct := ""
     inferredEnum := ""
     if rk == KindStruct {
-      // Known struct literal?
+      // Known struct literal with a type name?
       if sl, ok := rhs.(*ast.StructLit); ok {
-        // Unknown struct type? Report early.
         if _, exists := c.info.Structs[sl.Name]; !exists {
           c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", sl.Name))
         } else {
@@ -56,21 +68,22 @@ func (c *checker) checkLet(st *ast.LetStmt) {
       inferredEnum = c.enumNameOfExpr(rhs)
     }
 
-    // Choose the variable's kind (decl types win over inference when provided).
+    // Choose final variable kind (decl wins over inference when provided).
     kind := rk
     if declText != "" {
-      if want == KindStruct || want == KindEnum {
+      switch {
+      case want == KindStruct || want == KindEnum:
         kind = want
-      } else if want != KindUnknown {
+      case want != KindUnknown:
         if k, ok := unifyKinds(want, rk); ok {
           kind = k
         } else {
-          c.errors = append(c.errors, fmt.Errorf("let %q: type mismatch (declared %s, got %s)", bd.Name, want, rk))
+          c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", want), fmt.Sprintf("%s", rk), "let binding"))
         }
       }
     }
 
-    // Shadowing warning
+    // Shadowing warning (with outer-scope check)
     if _, ok := c.scope.lookupLocal(bd.Name); !ok && c.scope.existsInOuter(bd.Name) {
       c.warnings = append(c.warnings, Warning{
         Code: CodeShadowedVariable(),
@@ -78,7 +91,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
       })
     }
 
-    // Decide stored struct/enum name
+    // Decide stored struct/enum name for this variable
     var storedSName string
     switch {
     case want == KindStruct || want == KindEnum:
@@ -90,7 +103,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
     }
 
     v := &varInfo{
-      kind:       kindIfDeclOr(kind, want),
+      kind:       kind,
       mutable:    st.Mutable,
       declName:   bd.Name,
       structName: storedSName, // used for both struct and enum names
@@ -103,9 +116,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
     }
   }
 
-  // Optional group type: no-op for now.
-  if strings.TrimSpace(st.GroupType) != "" {
-  }
+  // Optional group type currently unused beyond 'void' check.
 }
 
 /* ---------- small helpers for let handling ---------- */
