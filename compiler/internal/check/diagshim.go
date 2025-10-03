@@ -266,3 +266,9 @@ func ErrUseNoneInsteadOfVoidAt(sp ast.Span, where string) error {
 		span:   &sp,
 	}
 }
+
+// ErrUseNoneNotVoid => DTE0014
+func ErrUseNoneNotVoid(context string) error {
+	id, title := lookupIDTitle("type", "use_none_not_void", "DTE0014", "use 'none' instead of 'void'")
+	return typedError{code: id, title: title, domain: "type", key: "use_none_not_void"}
+}

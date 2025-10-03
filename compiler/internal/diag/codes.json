@@ -104,6 +104,11 @@
       "title": "public let cannot be mutable",
       "help": "remove 'mut' from public top-level let declarations"
     },
+    "use_none_not_void": {
+      "id": "DTE0014",
+      "title": "use 'none' instead of 'void'",
+      "help": "Desi does not have 'void'; use 'none' for no-value types"
+    },
     "await_outside_async": {
       "id": "DTE1001",
       "title": "`await` is only valid inside async functions",
