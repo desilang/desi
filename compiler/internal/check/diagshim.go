@@ -7,9 +7,8 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
-// typedError carries a diagnostic code, a rendered title/message,
-// and (domain,key) so the CLI can fetch help text from the catalog.
-// It can optionally carry a primary span and notes for pretty rendering.
+/*** core error type ***/
+
 type typedError struct {
 	code   string
 	title  string
@@ -42,7 +41,8 @@ func (e typedError) Span() (ast.Span, bool) {
 // Notes returns any extra note lines attached to this diagnostic.
 func (e typedError) Notes() []string { return e.notes }
 
-// lookupIDTitle consults the diag catalog; falls back if missing.
+/*** catalog lookup ***/
+
 func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, string) {
 	if info, ok := diag.LookupFull(domain, key); ok {
 		id := info.Entry.ID
@@ -58,15 +58,33 @@ func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, strin
 	return fallbackID, fallbackTitle
 }
 
-// typedErr constructs a typedError using catalog (or fallbacks) and contextualizes it.
-// This variant is tailored for arity messages and keeps your existing call sites stable.
-func typedErr(domain, key, fallbackID, fallbackTitle, context string, names, values int) error {
-	id, title := lookupIDTitle(domain, key, fallbackID, fallbackTitle)
-	msg := fmt.Sprintf("%s in %s: names=%d, values=%d", title, context, names, values)
-	return typedError{code: id, title: msg, domain: domain, key: key}
+/*** generic constructors (DRY helpers) ***/
+
+// typeErrf formats a type-domain error message. The first %s in format is
+// always the catalog title; remaining args follow.
+func typeErrf(key, fallbackID, fallbackTitle, format string, args ...any) error {
+	id, title := lookupIDTitle("type", key, fallbackID, fallbackTitle)
+	msg := fmt.Sprintf(format, append([]any{title}, args...)...)
+	return typedError{code: id, title: msg, domain: "type", key: key}
 }
 
-// warnCode returns the catalog ID for a warning or a fallback.
+// typeErrAtf is the span-carrying variant.
+func typeErrAtf(sp ast.Span, key, fallbackID, fallbackTitle, format string, args ...any) error {
+	id, title := lookupIDTitle("type", key, fallbackID, fallbackTitle)
+	msg := fmt.Sprintf(format, append([]any{title}, args...)...)
+	return typedError{code: id, title: msg, domain: "type", key: key, span: &sp}
+}
+
+// common pattern: "title in <context>: <name>"
+func nameInContext(key, id, title, name, context string) error {
+	return typeErrf(key, id, title, "%s in %s: %s", context, name)
+}
+func nameInContextAt(sp ast.Span, key, id, title, name, context string) error {
+	return typeErrAtf(sp, key, id, title, "%s in %s: %s", context, name)
+}
+
+/*** warnings ***/
+
 func warnCode(domain, key, fallbackID string) string {
 	if info, ok := diag.LookupFull(domain, key); ok && info.Entry.ID != "" {
 		return info.Entry.ID
@@ -74,245 +92,124 @@ func warnCode(domain, key, fallbackID string) string {
 	return fallbackID
 }
 
-// -----------------------------------------------------------------------------
-// Span-aware helpers for common TYPE errors (keep old ones intact)
-// -----------------------------------------------------------------------------
-
-// ErrTypeArityMismatch produces DTE0002 (arity mismatch) with contextual counts.
-func ErrTypeArityMismatch(context string, names, values int) error {
-	return typedErr("type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding", context, names, values)
-}
-
-// ErrUndefinedName produces DTE0001 with the missing identifier spelled out.
-func ErrUndefinedName(name, context string) error {
-	id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "undefined_name"}
-}
-
-// ErrUndefinedNameAt is the span-carrying variant of ErrUndefinedName.
-func ErrUndefinedNameAt(sp ast.Span, name, context string) error {
-	id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "undefined_name",
-		span:   &sp,
-	}
-}
-
-// ErrRedeclaredSymbol produces DTE0003 when a name is redefined in the same scope.
-func ErrRedeclaredSymbol(name, context string) error {
-	id, title := lookupIDTitle("type", "redeclared_symbol", "DTE0003", "name already defined in this scope")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "redeclared_symbol"}
-}
-
-// ErrTypeMismatch produces DTE0004 including expected vs found descriptions.
-func ErrTypeMismatch(expected, found, context string) error {
-	id, title := lookupIDTitle("type", "type_mismatch", "DTE0004", "type mismatch")
-	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-	return typedError{code: id, title: msg, domain: "type", key: "type_mismatch"}
-}
-
-// ErrWrongReturnKind produces DTE0005 when a function's return expression mismatches the declared type.
-func ErrWrongReturnKind(expected, found, context string) error {
-	id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
-	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-	return typedError{code: id, title: msg, domain: "type", key: "wrong_return_kind"}
-}
-
-// Warning code getters (IDs only). Use these to tag Warning models consistently.
 func CodeUnusedVariable() string        { return warnCode("warn", "unused_variable", "DW0001") }
 func CodeShadowedVariable() string      { return warnCode("warn", "shadowed_variable", "DW0002") }
 func CodeUnreachableCode() string       { return warnCode("warn", "unreachable_code", "DW0004") }
 func CodeMissingExplicitReturn() string { return warnCode("warn", "missing_explicit_return", "DW0006") }
 
-// ErrAssignToImmutable produces DTE0006 for attempts to assign to a let-bound name.
+/*** concrete error constructors (now thin wrappers) ***/
+
+// ErrTypeArityMismatch DTE0002: arity mismatch (grouped binding)
+func ErrTypeArityMismatch(context string, names, values int) error {
+	return typeErrf("arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+		"%s in %s: names=%d, values=%d", context, names, values)
+}
+
+// ErrUndefinedName DTE0001: undefined name
+func ErrUndefinedName(name, context string) error {
+	return nameInContext("undefined_name", "DTE0001", "undefined name", name, context)
+}
+func ErrUndefinedNameAt(sp ast.Span, name, context string) error {
+	return nameInContextAt(sp, "undefined_name", "DTE0001", "undefined name", name, context)
+}
+
+// ErrRedeclaredSymbol DTE0003: redeclared symbol
+func ErrRedeclaredSymbol(name, context string) error {
+	return nameInContext("redeclared_symbol", "DTE0003", "name already defined in this scope", name, context)
+}
+
+// ErrTypeMismatch DTE0004: type mismatch
+func ErrTypeMismatch(expected, found, context string) error {
+	return typeErrf("type_mismatch", "DTE0004", "type mismatch",
+		"%s in %s: expected %s, found %s", context, expected, found)
+}
+
+// ErrWrongReturnKind DTE0005: wrong return kind
+func ErrWrongReturnKind(expected, found, context string) error {
+	return typeErrf("wrong_return_kind", "DTE0005", "return type mismatch",
+		"%s in %s: expected %s, found %s", context, expected, found)
+}
+func ErrWrongReturnKindAt(sp ast.Span, expected, found, context string) error {
+	return typeErrAtf(sp, "wrong_return_kind", "DTE0005", "return type mismatch",
+		"%s in %s: expected %s, found %s", context, expected, found)
+}
+
+// ErrAssignToImmutable DTE0006: assign to immutable
 func ErrAssignToImmutable(name, context string) error {
-	id, title := lookupIDTitle("type", "assign_to_immutable", "DTE0006", "cannot assign to immutable variable")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "assign_to_immutable"}
+	return nameInContext("assign_to_immutable", "DTE0006", "cannot assign to immutable variable", name, context)
 }
 
-// -----------------------------------------------------------------------------
-// NEW (M10/B): visibility + public-const diagnostics
-// -----------------------------------------------------------------------------
-
-// ErrNotPublic => DTE0010 (span-less)
+// ErrNotPublic DTE0010: not public
 func ErrNotPublic(name, context string) error {
-	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "not_public"}
+	return nameInContext("not_public", "DTE0010", "symbol is not public", name, context)
 }
-
-// ErrPublicConstNotConst => DTE0011
-func ErrPublicConstNotConst(sp ast.Span, name string) error {
-	id, title := lookupIDTitle("type", "public_const_not_const", "DTE0011", "public constant must be compile-time constant")
-	msg := fmt.Sprintf("%s: %s", title, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "public_const_not_const",
-		span:   &sp,
-	}
-}
-
-// ErrPubLetMutForbidden => DTE0012
-func ErrPubLetMutForbidden(sp ast.Span, name string) error {
-	id, title := lookupIDTitle("type", "pub_let_mut_forbidden", "DTE0012", "public let cannot be mutable")
-	msg := fmt.Sprintf("%s: %s", title, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "pub_let_mut_forbidden",
-		span:   &sp,
-	}
-}
-
-// ErrNotPublicAt => DTE0010 (with primary span)
 func ErrNotPublicAt(sp ast.Span, name, context string) error {
-	id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "not_public",
-		span:   &sp,
-	}
+	return nameInContextAt(sp, "not_public", "DTE0010", "symbol is not public", name, context)
 }
 
-// -----------------------------------------------------------------------------
-// NEW (M11): async/await diagnostics
-// -----------------------------------------------------------------------------
+// ErrPublicConstNotConst DTE0011: public const must be const
+func ErrPublicConstNotConst(sp ast.Span, name string) error {
+	return typeErrAtf(sp, "public_const_not_const", "DTE0011", "public constant must be compile-time constant",
+		"%s: %s", name)
+}
 
-// DTE1001: await_outside_async
+// ErrPubLetMutForbidden DTE0012: pub let mut forbidden
+func ErrPubLetMutForbidden(sp ast.Span, name string) error {
+	return typeErrAtf(sp, "pub_let_mut_forbidden", "DTE0012", "public let cannot be mutable",
+		"%s: %s", name)
+}
+
+// ErrAwaitOutsideAsyncAt DTE1001: await outside async
 func ErrAwaitOutsideAsyncAt(sp ast.Span) error {
-	id, title := lookupIDTitle("type", "await_outside_async", "DTE1001", "`await` is only valid inside async functions")
-	return typedError{
-		code:   id,
-		title:  title,
-		domain: "type",
-		key:    "await_outside_async",
-		span:   &sp,
-	}
+	return typeErrAtf(sp, "await_outside_async", "DTE1001", "`await` is only valid inside async functions",
+		"%s")
 }
 
-// DTE1002: await_non_future (with got-kind)
+// ErrAwaitNonFutureAt DTE1002: await non-future
 func ErrAwaitNonFutureAt(sp ast.Span, got Kind) error {
-	id, title := lookupIDTitle("type", "await_non_future", "DTE1002", "cannot await a non-future value")
-	msg := fmt.Sprintf("%s: got %s", title, got.String())
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "await_non_future",
-		span:   &sp,
-	}
+	return typeErrAtf(sp, "await_non_future", "DTE1002", "cannot await a non-future value",
+		"%s: got %s", got.String())
 }
 
-// -----------------------------------------------------------------------------
-// NEW: identifier hygiene helpers (cataloged)
-// -----------------------------------------------------------------------------
-
-// Non-span (legacy) variants — kept for compatibility with older call sites.
+// ErrReservedIdentifier DTE0020/21/22: identifier hygiene
 func ErrReservedIdentifier(name, context string) error {
-	id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "reserved_identifier"}
+	return nameInContext("reserved_identifier", "DTE0020", "reserved keyword used as an identifier", name, context)
 }
 func ErrShadowBuiltin(name, context string) error {
-	id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "shadow_builtin"}
+	return nameInContext("shadow_builtin", "DTE0021", "cannot shadow prelude builtin", name, context)
 }
 func ErrImportNameConflict(name, context string) error {
-	id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{code: id, title: msg, domain: "type", key: "import_name_conflict"}
+	return nameInContext("import_name_conflict", "DTE0022", "name conflicts with imported symbol", name, context)
 }
-
-// New span-carrying variants for rust-like caret rendering.
 func ErrReservedIdentifierAt(sp ast.Span, name, context string) error {
-	id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "reserved_identifier",
-		span:   &sp,
-	}
+	return nameInContextAt(sp, "reserved_identifier", "DTE0020", "reserved keyword used as an identifier", name, context)
 }
 func ErrShadowBuiltinAt(sp ast.Span, name, context string) error {
-	id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "shadow_builtin",
-		span:   &sp,
-	}
+	return nameInContextAt(sp, "shadow_builtin", "DTE0021", "cannot shadow prelude builtin", name, context)
 }
 func ErrImportNameConflictAt(sp ast.Span, name, context string) error {
-	id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
-	msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "import_name_conflict",
-		span:   &sp,
-	}
+	return nameInContextAt(sp, "import_name_conflict", "DTE0022", "name conflicts with imported symbol", name, context)
 }
 
-// ErrUseNoneInsteadOfVoid (span-less)
+// ErrUseNoneInsteadOfVoid DTE0023: 'void' is not a type; use 'none'
 func ErrUseNoneInsteadOfVoid(where string) error {
-	id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
-	msg := title
-	if where != "" {
-		msg = fmt.Sprintf("%s in %s", title, where)
+	// Allow optional context text after the title.
+	if where == "" {
+		return typeErrf("use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s")
 	}
-	return typedError{code: id, title: msg, domain: "type", key: "use_none_instead_of_void"}
+	return typeErrf("use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s in %s", where)
 }
-
-// ErrUseNoneInsteadOfVoidAt (span-carrying)
 func ErrUseNoneInsteadOfVoidAt(sp ast.Span, where string) error {
-	id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
-	msg := title
-	if where != "" {
-		msg = fmt.Sprintf("%s in %s", title, where)
+	if where == "" {
+		return typeErrAtf(sp, "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s")
 	}
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "use_none_instead_of_void",
-		span:   &sp,
-	}
+	return typeErrAtf(sp, "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s in %s", where)
 }
 
-// ErrUseNoneNotVoid => DTE0014
+// ErrUseNoneNotVoid DTE0014: use 'none' not 'void' (older lint)
 func ErrUseNoneNotVoid(context string) error {
-	id, title := lookupIDTitle("type", "use_none_not_void", "DTE0014", "use 'none' instead of 'void'")
-	return typedError{code: id, title: title, domain: "type", key: "use_none_not_void"}
-}
-
-// ErrWrongReturnKindAt produces DTE0005 and carries a primary span (e.g., the `return` stmt).
-func ErrWrongReturnKindAt(sp ast.Span, expected, found, context string) error {
-	id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
-	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-	return typedError{
-		code:   id,
-		title:  msg,
-		domain: "type",
-		key:    "wrong_return_kind",
-		span:   &sp,
+	if context == "" {
+		return typeErrf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s")
 	}
+	return typeErrf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s in %s", context)
 }
