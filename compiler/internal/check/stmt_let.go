@@ -16,10 +16,16 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		))
 	}
 
-	// NEW: forbid textual 'void' in per-binder types and group type
+	// Forbid textual 'void' in per-binder types and group type
 	for _, bd := range st.Binds {
 		if strings.EqualFold(strings.TrimSpace(bd.Type), "void") {
 			c.errors = append(c.errors, ErrUseNoneInsteadOfVoid("let binding type"))
+		}
+		// Identifier hygiene for local names
+		if isReservedIdent(bd.Name) {
+			c.errors = append(c.errors, ErrReservedIdentifier(bd.Name, "local binding"))
+		} else if isPreludeBuiltin(bd.Name) {
+			c.errors = append(c.errors, ErrShadowBuiltin(bd.Name, "local binding"))
 		}
 	}
 	if strings.EqualFold(strings.TrimSpace(st.GroupType), "void") {

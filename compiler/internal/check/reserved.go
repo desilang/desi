@@ -2,39 +2,37 @@ package check
 
 import "strings"
 
-// Reserved language keywords and special words that must not be used as identifiers.
-// We include names that the lexer might still emit as IDENT in some contexts (e.g. "none"),
-// so that the checker can enforce the restriction consistently.
-var reservedKeywords = map[string]struct{}{
-	"package": {}, "import": {}, "from": {}, "as": {}, "type": {}, "pub": {},
+// Reserved language words (superset of lexer keywords; includes 'none' and 'panic').
+var reservedWords = map[string]struct{}{
+	"package": {}, "import": {}, "from": {}, "as": {}, "pub": {},
 	"def": {}, "let": {}, "mut": {}, "return": {},
 	"if": {}, "elif": {}, "else": {}, "while": {}, "for": {}, "in": {},
-	"match": {}, "struct": {}, "enum": {},
+	"match": {}, "struct": {}, "enum": {}, "type": {},
 	"and": {}, "or": {}, "not": {}, "defer": {},
 	"async": {}, "await": {},
 	"true": {}, "false": {},
-	"none": {},
-
-	// Explicitly forbid "void" everywhere (use 'none').
+	"none": {}, "panic": {},
+	// We also treat 'void' as reserved (banned identifier + banned type name).
 	"void": {},
 }
 
-// Prelude builtins that cannot be shadowed or redefined by user code.
+// Prelude/builtin names we don't allow users to shadow with bindings/defs.
 var preludeBuiltins = map[string]struct{}{
-	"print": {},
-	"len":   {},
-	"str":   {},
+	"print": {}, "len": {},
+	// Core module roots and well-known std namespaces (avoid confusing shadowing).
+	"io": {}, "fs": {}, "os": {}, "mem": {}, "str": {}, "math": {}, "fmt": {},
 }
 
-// Case-sensitive check after trimming spaces (source is case-sensitive).
+// isReservedIdent reports whether name is a reserved word (or 'void').
 func isReservedIdent(name string) bool {
-	n := strings.TrimSpace(name)
-	_, ok := reservedKeywords[n]
+	n := strings.ToLower(strings.TrimSpace(name))
+	_, ok := reservedWords[n]
 	return ok
 }
 
+// isPreludeBuiltin reports whether name is a builtin/prelude symbol we forbid shadowing.
 func isPreludeBuiltin(name string) bool {
-	n := strings.TrimSpace(name)
+	n := strings.ToLower(strings.TrimSpace(name))
 	_, ok := preludeBuiltins[n]
 	return ok
 }
