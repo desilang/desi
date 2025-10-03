@@ -272,3 +272,16 @@ func ErrUseNoneNotVoid(context string) error {
 	id, title := lookupIDTitle("type", "use_none_not_void", "DTE0014", "use 'none' instead of 'void'")
 	return typedError{code: id, title: title, domain: "type", key: "use_none_not_void"}
 }
+
+// ErrWrongReturnKindAt produces DTE0005 and carries a primary span (e.g., the `return` stmt).
+func ErrWrongReturnKindAt(sp ast.Span, expected, found, context string) error {
+	id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
+	msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
+	return typedError{
+		code:   id,
+		title:  msg,
+		domain: "type",
+		key:    "wrong_return_kind",
+		span:   &sp,
+	}
+}

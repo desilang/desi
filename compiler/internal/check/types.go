@@ -11,6 +11,7 @@ const (
 	KindInt
 	KindStr
 	KindBool
+	KindFloat // NEW: f32/f64
 	KindNone
 	KindStruct
 	KindEnum
@@ -28,6 +29,8 @@ func (k Kind) String() string {
 		return "str"
 	case KindBool:
 		return "bool"
+	case KindFloat:
+		return "float"
 	case KindNone:
 		return "none"
 	case KindStruct:
