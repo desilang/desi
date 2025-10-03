@@ -1,0 +1,2 @@
+# expect: error reserved keyword cannot be used as identifier
+def def() -> int: 0
