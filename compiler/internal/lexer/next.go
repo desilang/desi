@@ -82,10 +82,10 @@ func (lx *Lexer) Next() Token {
 		return lx.make(TokIdent, lex, startLine, startCol)
 	}
 
-	// Numbers (decimal, 0x..., 0b...)
+	// Numbers: decimal, hex/bin, optional fraction+exponent
 	if ch, ok := lx.peek(); ok && unicode.IsDigit(ch) {
-		lex := lx.scanNumber()
-		return lx.make(TokInt, lex, startLine, startCol)
+		lex, kind := lx.scanNumberWithOptionalFractionAndExp()
+		return lx.make(kind, lex, startLine, startCol)
 	}
 
 	// Strings (simple "..." with basic escapes)
