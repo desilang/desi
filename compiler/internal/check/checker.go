@@ -421,19 +421,65 @@ func scanForVoidTypes(f *ast.File) []error {
   isVoid := func(s string) bool {
     return strings.EqualFold(strings.TrimSpace(s), "void")
   }
-  add := func(where string, typ string, sp ast.Span) {
+  hasSpan := func(sp ast.Span) bool { return sp != (ast.Span{}) }
+
+  spanOfStmt := func(s ast.Stmt) ast.Span {
+    switch t := s.(type) {
+    case *ast.LetStmt:
+      return t.Span
+    case *ast.AssignStmt:
+      return t.Span
+    case *ast.ReturnStmt:
+      return t.Span
+    case *ast.ExprStmt:
+      return t.Span
+    case *ast.IfStmt:
+      return t.Span
+    case *ast.WhileStmt:
+      return t.Span
+    case *ast.DeferStmt:
+      return t.Span
+    case *ast.MatchStmt:
+      return t.Span
+    default:
+      return ast.Span{}
+    }
+  }
+
+  bestSpanForFunc := func(fd *ast.FuncDecl) ast.Span {
+    // Prefer the function decl span if present.
+    if hasSpan(fd.Span) {
+      return fd.Span
+    }
+    // Then any parameter span.
+    for _, p := range fd.Params {
+      if hasSpan(p.Span) {
+        return p.Span
+      }
+    }
+    // Then the first stmt span in the body.
+    if len(fd.Body) > 0 {
+      if sp := spanOfStmt(fd.Body[0]); hasSpan(sp) {
+        return sp
+      }
+    }
+    return ast.Span{}
+  }
+
+  add := func(where, typ string, sp ast.Span) {
     if isVoid(typ) {
-      // span-aware, so the pretty renderer can anchor the caret
-      out = append(out, ErrUseNoneInsteadOfVoidAt(sp, where))
+      if hasSpan(sp) {
+        out = append(out, ErrUseNoneInsteadOfVoidAt(sp, where))
+      } else {
+        out = append(out, ErrUseNoneInsteadOfVoid(where))
+      }
     }
   }
 
   for _, d := range f.Decls {
     switch v := d.(type) {
     case *ast.FuncDecl:
-      // Return type — anchor to the function decl span
-      add(fmt.Sprintf("function %q return type", v.Name), v.Ret, v.Span)
-      // Params — each has its own span
+      add(fmt.Sprintf("function %q return type", v.Name), v.Ret, bestSpanForFunc(v))
       for _, p := range v.Params {
         add(fmt.Sprintf("parameter %q of function %q", p.Name, v.Name), p.Type, p.Span)
       }
@@ -447,8 +493,6 @@ func scanForVoidTypes(f *ast.File) []error {
       }
     case *ast.TypeDecl:
       add(fmt.Sprintf("type alias %q", v.Name), v.Underlying, v.Span)
-    case *ast.ConstDecl:
-      // (no explicit type field on ConstDecl today)
     }
   }
   return out
