@@ -67,7 +67,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 				// Struct field assignment checking.
 				base, path := decomposeFieldChain(lv)
 				if base == "" || len(path) == 0 {
-					c.errors = append(c.errors, fmt.Errorf("unsupported assignment target"))
+					c.errors = append(c.errors, ErrUnsupportedAssignmentTargetAt(lv.Span))
 					continue
 				}
 				bv, ok := c.scope.lookup(base)
@@ -80,26 +80,26 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 					continue
 				}
 				if bv.kind != KindStruct || bv.structName == "" {
-					c.errors = append(c.errors, fmt.Errorf("cannot assign to field on non-struct %q", base))
+					c.errors = append(c.errors, ErrCannotAssignFieldOnNonStructAt(lv.Span, base))
 					continue
 				}
 				current := bv.structName
 				for j := 0; j < len(path)-1; j++ {
 					si, ok := c.info.Structs[current]
 					if !ok {
-						c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
+						c.errors = append(c.errors, ErrUnknownStructTypeAt(lv.Span, current))
 						current = ""
 						break
 					}
 					ftText, ok := si.Fields[path[j]]
 					if !ok {
-						c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", path[j], current))
+						c.errors = append(c.errors, ErrUnknownFieldOnStructAt(lv.Span, path[j], current))
 						current = ""
 						break
 					}
 					k, sname := mapTypeOrStruct(ftText, c.info)
 					if k != KindStruct || sname == "" {
-						c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", path[j], current))
+						c.errors = append(c.errors, ErrFieldOnNotStructAt(lv.Span, path[j], current))
 						current = ""
 						break
 					}
@@ -110,13 +110,13 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 				}
 				si, ok := c.info.Structs[current]
 				if !ok {
-					c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
+					c.errors = append(c.errors, ErrUnknownStructTypeAt(lv.Span, current))
 					continue
 				}
 				last := path[len(path)-1]
 				ftText, ok := si.Fields[last]
 				if !ok {
-					c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", last, current))
+					c.errors = append(c.errors, ErrUnknownFieldOnStructAt(lv.Span, last, current))
 					continue
 				}
 				want, _ := mapTypeOrStruct(ftText, c.info)
@@ -128,7 +128,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 				bv.written = true
 
 			default:
-				c.errors = append(c.errors, fmt.Errorf("unsupported assignment target"))
+				c.errors = append(c.errors, ErrUnsupportedAssignmentTarget())
 			}
 		}
 		return

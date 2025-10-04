@@ -1,7 +1,6 @@
 package check
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -174,7 +173,7 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 		}
 
 		if _, exists := info.Funcs[fn.Name]; exists {
-			errs = append(errs, fmt.Errorf("duplicate function %q", fn.Name))
+			errs = append(errs, ErrRedeclaredSymbolAt(fn.Span, fn.Name, "function"))
 			continue
 		}
 		var ps []Kind
@@ -214,16 +213,23 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 			if alias == "" {
 				alias = it.Name // include no-`as` bindings
 			}
-			if reason := reservedAliasReason(alias); reason != "" {
-				errs = append(errs, fmt.Errorf("invalid alias name %q (%s)", alias, reason))
+			// alias hygiene
+			if isReservedIdent(alias) {
+				errs = append(errs, ErrReservedIdentifierAt(it.Span, alias, "import alias"))
 			}
+			if isPreludeBuiltin(alias) {
+				errs = append(errs, ErrShadowBuiltinAt(it.Span, alias, "import alias"))
+			}
+			// duplicates within a single from-import
 			if _, dup := seenLine[alias]; dup {
-				errs = append(errs, fmt.Errorf("duplicate alias %q in from-import from %q", alias, fi.Module))
+				errs = append(errs, ErrRedeclaredSymbolAt(it.Span, alias, "from-import alias"))
 			}
 			seenLine[alias] = struct{}{}
 
+			// duplicates across all from-imports
 			if prev, exists := fromAliases[alias]; exists {
-				errs = append(errs, fmt.Errorf("duplicate from-import alias %q (already used for %q)", alias, prev))
+				_ = prev // previous symbol name not needed for typed diag
+				errs = append(errs, ErrRedeclaredSymbolAt(it.Span, alias, "from-import alias"))
 			} else {
 				fromAliases[alias] = it.Name
 			}
@@ -259,20 +265,26 @@ func CheckFile(f *ast.File) (*Info, []error, []Warning) {
 			parts := strings.Split(p, ".")
 			alias = parts[len(parts)-1]
 		}
-		if reason := reservedAliasReason(alias); reason != "" {
-			errs = append(errs, fmt.Errorf("invalid alias name %q (%s)", alias, reason))
+		// alias hygiene
+		if isReservedIdent(alias) {
+			errs = append(errs, ErrReservedIdentifierAt(im.Span, alias, "module alias"))
 		}
+		if isPreludeBuiltin(alias) {
+			errs = append(errs, ErrShadowBuiltinAt(im.Span, alias, "module alias"))
+		}
+		// duplicate module alias
 		if prev, exists := modAliases[alias]; exists {
-			errs = append(errs, fmt.Errorf("duplicate module alias %q (for %q and %q)", alias, prev, im.Path))
+			_ = prev
+			errs = append(errs, ErrRedeclaredSymbolAt(im.Span, alias, "module alias"))
 			continue
 		}
 		modAliases[alias] = im.Path
 	}
 
 	// 3) cross conflicts
-	for a, modPath := range modAliases {
-		if orig, ok := fromAliases[a]; ok {
-			errs = append(errs, fmt.Errorf("alias %q used both as module alias (from %q) and as from-import alias (to %q)", a, modPath, orig))
+	for a := range modAliases {
+		if _, ok := fromAliases[a]; ok {
+			errs = append(errs, ErrImportNameConflict(a, "alias used for both module import and from-import"))
 		}
 	}
 

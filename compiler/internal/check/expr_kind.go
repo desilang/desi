@@ -67,14 +67,14 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			}
 			// Structs used as values are not supported — fallthrough to unknown.
 			if _, ok := c.info.Funcs[orig]; ok {
-				// Bare function name as a value: error (kept as original behavior).
-				c.errors = append(c.errors, fmt.Errorf("module alias or from-import function %q is not a value; call it as %s(...)", orig, v.Name))
+				// Bare function name as a value: typed error with span.
+				c.errors = append(c.errors, ErrImportedFuncNotValueAt(v.Span, orig, v.Name))
 				return KindUnknown
 			}
 		}
 		// Bare module alias used as a value? That's an error.
 		if modPath, ok := c.modAliases[v.Name]; ok {
-			c.errors = append(c.errors, fmt.Errorf("module alias %q (from %q) is not a value; use %s.<symbol>", v.Name, modPath, v.Name))
+			c.errors = append(c.errors, ErrModuleAliasNotValueAt(v.Span, v.Name, modPath))
 			return KindUnknown
 		}
 		if _, isFn := c.info.Funcs[v.Name]; isFn {
@@ -177,12 +177,12 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				}
 				// function selection without call (m.fn) is not a value.
 				if _, ok := c.info.Funcs[v.Name]; ok {
-					c.errors = append(c.errors, fmt.Errorf("module symbol %q is a function; call it with arguments", v.Name))
+					c.errors = append(c.errors, ErrFunctionNotValueAt(v.Span, v.Name))
 					return KindUnknown
 				}
 				// struct names aren’t values either at expression position.
 				if _, ok := c.info.Structs[v.Name]; ok {
-					c.errors = append(c.errors, fmt.Errorf("module symbol %q is a type; cannot be used as a value", v.Name))
+					c.errors = append(c.errors, ErrTypeNotValueAt(v.Span, v.Name))
 					return KindUnknown
 				}
 				return KindUnknown
@@ -196,25 +196,25 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			if vi, ok := c.scope.lookup(baseName); ok {
 				vi.read = true
 				if vi.kind != KindStruct || vi.structName == "" {
-					c.errors = append(c.errors, fmt.Errorf("field access on non-struct %q", baseName))
+					c.errors = append(c.errors, ErrFieldAccessOnNonStructAt(v.Span, baseName))
 					return KindUnknown
 				}
 				current := vi.structName
 				for i, seg := range path {
 					si, ok := c.info.Structs[current]
 					if !ok {
-						c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", current))
+						c.errors = append(c.errors, ErrUnknownStructTypeAt(v.Span, current))
 						return KindUnknown
 					}
 					tText, ok := si.Fields[seg]
 					if !ok {
-						c.errors = append(c.errors, fmt.Errorf("unknown field %q on struct %q", seg, current))
+						c.errors = append(c.errors, ErrUnknownFieldOnStructAt(v.Span, seg, current))
 						return KindUnknown
 					}
 					k, sname := mapTypeOrStruct(tText, c.info)
 					if i < len(path)-1 {
 						if k != KindStruct || sname == "" {
-							c.errors = append(c.errors, fmt.Errorf("field %q on %q is not a struct", seg, current))
+							c.errors = append(c.errors, ErrFieldOnNotStructAt(v.Span, seg, current))
 							return KindUnknown
 						}
 						current = sname
@@ -256,7 +256,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("fs.read_all: want 1 arg (path: str), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-					c.errors = append(c.errors, ErrTypeMismatch("str", fmt.Sprintf("%s", ak), "fs.read_all path"))
+					c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
 				}
 				return KindStr
 			}
@@ -264,7 +264,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if len(v.Args) != 1 {
 					c.errors = append(c.errors, fmt.Errorf("os.exit: want 1 arg (code: int), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-					c.errors = append(c.errors, ErrTypeMismatch("int", fmt.Sprintf("%s", ak), "os.exit code"))
+					c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
 				}
 				return KindVoid
 			}
@@ -298,7 +298,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				if einfo, ok := c.info.Enums[id.Name]; ok {
 					vt, ok := einfo.Variants[fe.Name]
 					if !ok {
-						c.errors = append(c.errors, fmt.Errorf("unknown variant %q on enum %q", fe.Name, id.Name))
+						c.errors = append(c.errors, ErrUnknownEnumVariantAt(v.Span, fe.Name, id.Name))
 						return KindUnknown
 					}
 					vtLower := strings.TrimSpace(strings.ToLower(vt))
@@ -346,7 +346,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 							return sig.Ret
 						}
 						// no symbol found in that module alias
-						c.errors = append(c.errors, fmt.Errorf("unknown symbol %q in module alias %q", fe.Name, id.Name))
+						c.errors = append(c.errors, ErrUnknownSymbolInModuleAliasAt(v.Span, fe.Name, id.Name))
 						return KindUnknown
 					}
 				}

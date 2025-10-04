@@ -55,7 +55,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.IfStmt:
 		k := c.kindOfExpr(st.Cond)
 		if k != KindBool && k != KindInt && k != KindUnknown {
-			c.errors = append(c.errors, fmt.Errorf("if-condition must be bool/int, got %s", k))
+			c.errors = append(c.errors, ErrBadConditionTypeAt(st.Span, "if", k))
 		}
 		c.withBlock(func() {
 			for _, s2 := range st.Then {
@@ -65,7 +65,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		for _, el := range st.Elifs {
 			k := c.kindOfExpr(el.Cond)
 			if k != KindBool && k != KindInt && k != KindUnknown {
-				c.errors = append(c.errors, fmt.Errorf("elif-condition must be bool/int, got %s", k))
+				c.errors = append(c.errors, ErrBadConditionTypeAt(el.Span, "elif", k))
 			}
 			c.withBlock(func() {
 				for _, s2 := range el.Body {
@@ -84,7 +84,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.WhileStmt:
 		k := c.kindOfExpr(st.Cond)
 		if k != KindBool && k != KindInt && k != KindUnknown {
-			c.errors = append(c.errors, fmt.Errorf("while-condition must be bool/int, got %s", k))
+			c.errors = append(c.errors, ErrBadConditionTypeAt(st.Span, "while", k))
 		}
 		c.withBlock(func() {
 			for _, s2 := range st.Body {
@@ -94,10 +94,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 	case *ast.DeferStmt:
 		if len(c.blockReturned) > 1 {
-			c.errors = append(c.errors, fmt.Errorf("defer is only allowed at function top-level in Stage-0"))
+			c.errors = append(c.errors, ErrIllegalDeferPositionAt(st.Span))
 		}
 		if _, ok := st.Call.(*ast.CallExpr); !ok {
-			c.errors = append(c.errors, fmt.Errorf("defer expects a call expression"))
+			c.errors = append(c.errors, ErrDeferExpectsCallAt(st.Span))
 		}
 		c.kindOfExpr(st.Call)
 

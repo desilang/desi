@@ -109,16 +109,6 @@
       "title": "use 'none' instead of 'void'",
       "help": "Desi does not have 'void'; use 'none' for no-value types"
     },
-    "await_outside_async": {
-      "id": "DTE1001",
-      "title": "`await` is only valid inside async functions",
-      "help": "Mark the function `async`, or remove `await`."
-    },
-    "await_non_future": {
-      "id": "DTE1002",
-      "title": "cannot await a non-future value",
-      "help": "Only values of kind `future<T>` can be awaited."
-    },
     "reserved_identifier": {
       "id": "DTE0020",
       "title": "reserved keyword used as an identifier",
@@ -138,6 +128,81 @@
       "id": "DTE0023",
       "title": "'void' is not a type; use 'none'",
       "help": "Desi uses 'none' to denote no value. Replace 'void' with 'none'."
+    },
+    "unsupported_assignment_target": {
+      "id": "DTE0031",
+      "title": "unsupported assignment target",
+      "help": "the left-hand side must be a name, index, or field expression"
+    },
+    "unknown_struct_type": {
+      "id": "DTE0032",
+      "title": "unknown struct type",
+      "help": "this struct type is not defined"
+    },
+    "field_access_on_non_struct": {
+      "id": "DTE0033",
+      "title": "field access on non-struct",
+      "help": "only struct values support field access"
+    },
+    "cannot_assign_field_on_non_struct": {
+      "id": "DTE0034",
+      "title": "cannot assign to field on non-struct",
+      "help": "the left-hand side must be a struct value"
+    },
+    "illegal_defer_position": {
+      "id": "DTE0035",
+      "title": "defer is not allowed here",
+      "help": "move the 'defer' to the function top level"
+    },
+    "defer_expects_call": {
+      "id": "DTE0036",
+      "title": "defer expects a call expression",
+      "help": "use 'defer some_func(...)'"
+    },
+    "bad_condition_type": {
+      "id": "DTE0037",
+      "title": "invalid condition type",
+      "help": "conditions must be bool or int"
+    },
+    "symbol_not_value": {
+      "id": "DTE0038",
+      "title": "symbol is not a value",
+      "help": "call the function or refer to a constant/type as appropriate"
+    },
+    "unknown_symbol_in_module_alias": {
+      "id": "DTE0039",
+      "title": "unknown symbol in module alias",
+      "help": "verify the symbol name exported by that module"
+    },
+    "unknown_field_on_struct": {
+      "id": "DTE0040",
+      "title": "unknown field on struct",
+      "help": "check the field name against the struct definition"
+    },
+    "unknown_enum_variant": {
+      "id": "DTE0041",
+      "title": "unknown enum variant",
+      "help": "verify the variant name declared in the enum"
+    },
+    "duplicate_match_arm": {
+      "id": "DTE0042",
+      "title": "duplicate match arm",
+      "help": "each variant should appear at most once"
+    },
+    "payloadless_variant_binder": {
+      "id": "DTE0043",
+      "title": "payloadless variant used with a binder",
+      "help": "remove the binder or use a variant that carries a payload"
+    },
+    "await_outside_async": {
+      "id": "DTE1001",
+      "title": "`await` is only valid inside async functions",
+      "help": "Mark the function `async`, or remove `await`."
+    },
+    "await_non_future": {
+      "id": "DTE1002",
+      "title": "cannot await a non-future value",
+      "help": "Only values of kind `future<T>` can be awaited."
     }
   },
   "module": {

@@ -46,7 +46,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 		// Wildcard arm: "_:" — no variant name, no binder, just check body.
 		if arm.Pat.Variant == "_" {
 			if wildcardSeen {
-				c.errors = append(c.errors, fmt.Errorf("duplicate wildcard arm '_'"))
+				c.errors = append(c.errors, ErrDuplicateMatchArmAt(arm.Span, "_"))
 			}
 			wildcardSeen = true
 			c.withBlock(func() {
@@ -77,7 +77,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 
 		// Validate variant exists
 		if _, ok := universe[arm.Pat.Variant]; !ok {
-			c.errors = append(c.errors, fmt.Errorf("unknown variant %q for enum %q", arm.Pat.Variant, enumName))
+			c.errors = append(c.errors, ErrUnknownEnumVariantAt(arm.Span, arm.Pat.Variant, enumName))
 			// still check body
 			c.withBlock(func() {
 				for _, s := range arm.Body {
@@ -89,7 +89,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 
 		// Duplicate variant in same match?
 		if _, dup := seen[arm.Pat.Variant]; dup {
-			c.errors = append(c.errors, fmt.Errorf("duplicate match arm for %q", arm.Pat.Variant))
+			c.errors = append(c.errors, ErrDuplicateMatchArmAt(arm.Span, arm.Pat.Variant))
 		}
 		seen[arm.Pat.Variant] = struct{}{}
 
@@ -111,7 +111,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 			} else {
 				// payloadless variant
 				if arm.Pat.Bind != "" {
-					c.errors = append(c.errors, fmt.Errorf("variant %q has no payload; binder %q is invalid", arm.Pat.Variant, arm.Pat.Bind))
+					c.errors = append(c.errors, ErrPayloadlessVariantBinderAt(arm.Span, arm.Pat.Variant, arm.Pat.Bind))
 				}
 			}
 

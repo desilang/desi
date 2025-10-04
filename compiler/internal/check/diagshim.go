@@ -117,6 +117,9 @@ func ErrUndefinedNameAt(sp ast.Span, name, context string) error {
 func ErrRedeclaredSymbol(name, context string) error {
 	return nameInContext("redeclared_symbol", "DTE0003", "name already defined in this scope", name, context)
 }
+func ErrRedeclaredSymbolAt(sp ast.Span, name, context string) error {
+	return nameInContextAt(sp, "redeclared_symbol", "DTE0003", "name already defined in this scope", name, context)
+}
 
 // ErrTypeMismatch DTE0004: type mismatch
 func ErrTypeMismatch(expected, found, context string) error {
@@ -212,4 +215,97 @@ func ErrUseNoneNotVoid(context string) error {
 		return typeErrf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s")
 	}
 	return typeErrf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s in %s", context)
+}
+
+/*** specialized typed errors used in checker ***/
+
+// ErrUnsupportedAssignmentTarget DTE0031: unsupported assignment target
+func ErrUnsupportedAssignmentTarget() error {
+	return typeErrf("unsupported_assignment_target", "DTE0031", "unsupported assignment target", "%s")
+}
+func ErrUnsupportedAssignmentTargetAt(sp ast.Span) error {
+	return typeErrAtf(sp, "unsupported_assignment_target", "DTE0031", "unsupported assignment target", "%s")
+}
+
+// ErrUnknownStructType DTE0032: unknown struct type
+func ErrUnknownStructType(name string) error {
+	return typeErrf("unknown_struct_type", "DTE0032", "unknown struct type", "%s: %s", name)
+}
+func ErrUnknownStructTypeAt(sp ast.Span, name string) error {
+	return typeErrAtf(sp, "unknown_struct_type", "DTE0032", "unknown struct type", "%s: %s", name)
+}
+
+// ErrFieldAccessOnNonStructAt DTE0033: field access on non-struct
+func ErrFieldAccessOnNonStructAt(sp ast.Span, base string) error {
+	return typeErrAtf(sp, "field_access_on_non_struct", "DTE0033", "field access on non-struct", "%s: %q", base)
+}
+func ErrFieldOnNotStructAt(sp ast.Span, field, owner string) error {
+	return typeErrAtf(sp, "field_access_on_non_struct", "DTE0033", "field access on non-struct",
+		"%s: field %q on %q is not a struct", field, owner)
+}
+
+// ErrCannotAssignFieldOnNonStructAt DTE0034: cannot assign field on non-struct
+func ErrCannotAssignFieldOnNonStructAt(sp ast.Span, base string) error {
+	return typeErrAtf(sp, "cannot_assign_field_on_non_struct", "DTE0034", "cannot assign to field on non-struct", "%s: %q", base)
+}
+
+// ErrIllegalDeferPositionAt DTE0035: illegal defer position
+func ErrIllegalDeferPositionAt(sp ast.Span) error {
+	return typeErrAtf(sp, "illegal_defer_position", "DTE0035", "defer is not allowed here", "%s")
+}
+
+// ErrDeferExpectsCallAt DTE0036: defer expects call
+func ErrDeferExpectsCallAt(sp ast.Span) error {
+	return typeErrAtf(sp, "defer_expects_call", "DTE0036", "defer expects a call expression", "%s")
+}
+
+// ErrBadConditionTypeAt DTE0037: bad condition type
+func ErrBadConditionTypeAt(sp ast.Span, where string, got Kind) error {
+	return typeErrAtf(sp, "bad_condition_type", "DTE0037", "invalid condition type",
+		"%s in %s: must be bool/int, got %s", where, got.String())
+}
+
+// ErrFunctionNotValueAt DTE0038: symbol is not a value
+func ErrFunctionNotValueAt(sp ast.Span, name string) error {
+	return typeErrAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+		"%s: %q is a function; call it with arguments", name)
+}
+func ErrTypeNotValueAt(sp ast.Span, name string) error {
+	return typeErrAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+		"%s: %q is a type; cannot be used as a value", name)
+}
+func ErrModuleAliasNotValueAt(sp ast.Span, alias, modPath string) error {
+	// Suggest: alias.<symbol>
+	return typeErrAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+		"%s: module alias %q (from %q) is not a value; use %s.<symbol>", alias, modPath, alias)
+}
+func ErrImportedFuncNotValueAt(sp ast.Span, orig, display string) error {
+	return typeErrAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+		"%s: %q is a function; call it as %s(...)", orig, display)
+}
+
+// ErrUnknownSymbolInModuleAliasAt DTE0039: unknown symbol in module alias
+func ErrUnknownSymbolInModuleAliasAt(sp ast.Span, sym, alias string) error {
+	return typeErrAtf(sp, "unknown_symbol_in_module_alias", "DTE0039", "unknown symbol in module alias",
+		"%s: %q in %q", sym, alias)
+}
+
+// ErrUnknownFieldOnStructAt DTE0040: unknown field on struct
+func ErrUnknownFieldOnStructAt(sp ast.Span, field, structName string) error {
+	return typeErrAtf(sp, "unknown_field_on_struct", "DTE0040", "unknown field on struct",
+		"%s: %q on %q", field, structName)
+}
+
+// ErrUnknownEnumVariantAt DTE0041/42/43: match / enum diagnostics
+func ErrUnknownEnumVariantAt(sp ast.Span, variant, enumName string) error {
+	return typeErrAtf(sp, "unknown_enum_variant", "DTE0041", "unknown enum variant",
+		"%s: %q on enum %q", variant, enumName)
+}
+func ErrDuplicateMatchArmAt(sp ast.Span, variant string) error {
+	return typeErrAtf(sp, "duplicate_match_arm", "DTE0042", "duplicate match arm",
+		"%s: %q", variant)
+}
+func ErrPayloadlessVariantBinderAt(sp ast.Span, variant, binder string) error {
+	return typeErrAtf(sp, "payloadless_variant_binder", "DTE0043", "payloadless variant used with a binder",
+		"%s: variant %q has no payload; binder %q is invalid", variant, variant, binder)
 }
