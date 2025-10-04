@@ -1,0 +1,18 @@
+# EXPECT:
+# - DW0006 function may fall through (no explicit return)
+# - DW0004 unreachable code after return
+# - DW0001 unused variable
+
+def fallthrough() -> int:
+  let _tmp = 1
+  print(1)             # last stmt has void kind -> DW0006
+  # (no return)
+
+def reachability() -> int:
+  return 1
+  let x = 2            # DW0004 (unreachable)
+  return 0
+
+def unused_var_demo() -> int:
+  let x = 123          # DW0001 (unused)
+  return 0

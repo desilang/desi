@@ -1,0 +1,21 @@
+# Library module used by other tests
+
+pub const PUB: int = 1
+const PRIV: int = 2
+
+pub struct Point:
+  x: int
+  y: int
+
+struct Hidden:
+  z: int
+
+pub enum Res:
+  Ok: int
+  Err: none
+
+pub def add(a: int, b: int) -> int:
+  return a + b
+
+def secret() -> int:
+  return 42

@@ -1,0 +1,13 @@
+# EXPECT:
+# - DW0007 non-exhaustive match (missing one variant)
+
+enum Tri:
+  A: none
+  B: none
+  C: none
+
+def g(t: Tri) -> int:
+  match t:
+    A: return 1
+    B: return 2
+  # no C arm -> DW0007

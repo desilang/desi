@@ -1,0 +1,9 @@
+# EXPECT:
+# - DTE0010 not public (from-import 'secret')
+# - DTE0022 name conflicts with imported symbol (function name vs module alias)
+
+from examples.diags.mod_a import secret      # DTE0010
+import examples.diags.mod_a as mod
+
+def mod() -> int:                            # DTE0022 (conflict with module alias 'mod')
+  return 0

@@ -1,0 +1,9 @@
+# EXPECT:
+# - DTE0020 reserved keyword used as identifier (struct name 'if')
+# - DTE0021 cannot shadow prelude builtin (parameter name 'len')
+
+struct if:                    # DTE0020
+  val: int
+
+def uses_builtin(len: int) -> int:  # DTE0021
+  return len
