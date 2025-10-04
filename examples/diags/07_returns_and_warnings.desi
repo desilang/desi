@@ -12,7 +12,7 @@ def unused_var_demo() -> int:
   return 0
 
 def main() -> int:
-  _ = fallthrough()
+  let _t1 = fallthrough()
   reachability()
-  unused_var_demo()
+  let _t2 = unused_var_demo()
   return 0

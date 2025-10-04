@@ -1,10 +1,10 @@
-import "mod_a" as mod
+import mod_a as mod
 
 def main() -> int:
-  _ = mod.add(1, 2)   # OK
-  _ = add(1, 2)       # DTE0010: unqualified cross-module use
-  _ = mod.secret()    # DTE0010: not public
-  _ = secret()        # DTE0010: unqualified cross-module use
-  _ = mod.PUB         # OK
-  _ = mod.PRIV        # DTE0010: not public const
+  let _a = mod.add(1, 2)   # OK
+  let _b = add(1, 2)       # DTE0010: unqualified cross-module use
+  let _c = mod.secret()    # DTE0010: not public
+  let _d = secret()        # DTE0010: unqualified cross-module use
+  let _e = mod.PUB         # OK
+  let _f = mod.PRIV        # DTE0010: not public const
   return 0

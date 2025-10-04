@@ -10,7 +10,7 @@ def main() -> int:
     A:
       return 1
     B(x):
-      _ = x
+      let _tmp = x
       return 2
   # Missing arm for C -> DW0007 non-exhaustive match
   return 0
