@@ -1,7 +1,7 @@
 # Library module used by other tests
 
-pub const PUB: int = 1
-const PRIV: int = 2
+pub let PUB: int = 1
+let PRIV: int = 2
 
 pub struct Point:
   x: int
