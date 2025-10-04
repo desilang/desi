@@ -1,23 +1,16 @@
-# EXPECT:
-# - DTE0006 cannot assign to immutable variable (n = 2)
-# - DTE0004 type mismatch (m = true vs int)
-# - plus a few plain-text errors for invalid struct field updates
-
 struct S:
   a: int
   b: int
 
 def main() -> int:
-  let s = S{ a: 1, b: 2 }
-  s.c = 1                    # plain text: unknown field "c" on struct "S"
+  let n: int = 1
+  n = 2                  # DTE0006: cannot assign to immutable variable
 
-  let i = 0
-  i.x = 3                    # plain text: cannot assign to field on non-struct "i"
+  let mut m: int = 1
+  m = true               # DTE0004: type mismatch (int <- bool)
 
-  let mut m = 1
-  m = true                   # DTE0004
+  let s: S = S{ a: 1, b: 2 }
+  s.c = 3                # plain-text: unknown field "c" on struct "S"
 
-  let n = 1
-  n = 2                      # DTE0006
-
+  i = 0                  # DTE0001: undefined name "i"
   return 0

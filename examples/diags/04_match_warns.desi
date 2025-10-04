@@ -1,13 +1,16 @@
-# EXPECT:
-# - DW0007 non-exhaustive match (missing one variant)
-
-enum Tri:
+enum E:
   A: none
-  B: none
+  B: int
   C: none
 
-def g(t: Tri) -> int:
-  match t:
-    A: return 1
-    B: return 2
-  # no C arm -> DW0007
+def main() -> int:
+  let v: E = E.A
+
+  match v:
+    A:
+      return 1
+    B(x):
+      _ = x
+      return 2
+  # Missing arm for C -> DW0007 non-exhaustive match
+  return 0

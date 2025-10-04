@@ -1,14 +1,10 @@
-# EXPECT:
-# - DTE0010 not public (unqualified cross-module use of secret)
-# - DTE0010 not public (module alias call to secret)
-# - DTE0010 not public (module constant PRIV)
-
-import examples.diags.mod_a as mod
+import "mod_a" as mod
 
 def main() -> int:
-  _ = secret()         # DTE0010 (unqualified, cross-module; not public)
-  _ = mod.secret()     # DTE0010 (not public via module alias)
-  _ = mod.add(1, 2)    # OK (public)
-  _ = mod.PUB          # OK (public const)
-  _ = mod.PRIV         # DTE0010 (not public const)
+  _ = mod.add(1, 2)   # OK
+  _ = add(1, 2)       # DTE0010: unqualified cross-module use
+  _ = mod.secret()    # DTE0010: not public
+  _ = secret()        # DTE0010: unqualified cross-module use
+  _ = mod.PUB         # OK
+  _ = mod.PRIV        # DTE0010: not public const
   return 0

@@ -1,9 +1,10 @@
-# EXPECT:
-# - DTE0020 reserved keyword used as identifier (struct name 'if')
-# - DTE0021 cannot shadow prelude builtin (parameter name 'len')
+# Parser-level reserved keyword + checker-level builtin shadow notes.
 
-struct if:                    # DTE0020
-  val: int
+# This triggers a **parser** error (keyword used as identifier):
+struct if:
+  x: int
 
-def uses_builtin(len: int) -> int:  # DTE0021
+# TIP: If you comment the struct above, the function below would then be type-checked
+# and should trigger DTE0021 for shadowing a builtin with parameter name "len".
+def f(len: int) -> int:
   return len

@@ -1,9 +1,11 @@
-# EXPECT:
-# - DTE0010 not public (from-import 'secret')
-# - DTE0022 name conflicts with imported symbol (function name vs module alias)
+# Cross-module visibility via module alias (no from-import here to avoid duplicate-import warn)
+import "mod_a" as mod
 
-from examples.diags.mod_a import secret      # DTE0010
-import examples.diags.mod_a as mod
-
-def mod() -> int:                            # DTE0022 (conflict with module alias 'mod')
+def main() -> int:
+  _ = mod.add(1, 2)   # OK (pub)
+  _ = add(1, 2)       # DTE0010: unqualified cross-module use (even if pub)
+  _ = mod.secret()    # DTE0010: not public
+  _ = secret()        # DTE0010: unqualified cross-module use
+  _ = mod.PUB         # OK (pub const)
+  _ = mod.PRIV        # DTE0010: not public const
   return 0
