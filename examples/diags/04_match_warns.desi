@@ -4,9 +4,7 @@ enum E:
   C: none
 
 def main() -> int:
-  let v: E = E.A
-
-  match v:
+  match E.A:
     A:
       return 1
     B(x):
