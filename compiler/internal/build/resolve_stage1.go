@@ -59,7 +59,8 @@ func ResolveAndParseWith(entryPath string, loader func(absPath string) (parser.T
 		p := parser.NewFromSource(src)
 		f, perr := p.ParseFile()
 		if perr != nil {
-			errs = append(errs, fmt.Errorf("parse %s: %v", rel(rootDir, absPath), perr))
+			// Do not wrap parser errors; keep typed spans so the CLI can render carets.
+			errs = append(errs, perr)
 			return
 		}
 

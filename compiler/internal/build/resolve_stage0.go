@@ -60,7 +60,8 @@ func ResolveAndParse(entryPath string) (*ast.File, []error) {
 		p := parser.New(string(data))
 		f, perr := p.ParseFile()
 		if perr != nil {
-			errs = append(errs, fmt.Errorf("parse %s: %v", rel(rootDir, absPath), perr))
+			// IMPORTANT: do not wrap parser errors; keep their typed diagnostics + spans.
+			errs = append(errs, perr)
 			return
 		}
 

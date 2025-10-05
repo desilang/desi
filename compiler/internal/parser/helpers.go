@@ -2,7 +2,6 @@
 package parser
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/lexer"
@@ -80,8 +79,7 @@ func (p *Parser) expectIdent(context string) (lexer.Token, error) {
 	}
 	t := p.tok
 	if isKeywordToken(t.Kind) {
-		return lexer.Token{}, fmt.Errorf("DPE0002: keyword %q cannot be used as an identifier for %s at %d:%d",
-			t.Lex, context, t.Line, t.Col)
+		return lexer.Token{}, ErrExpectedToken("expect", t.Kind, p.tok)
 	}
 	// Fallback to the normal expect error (keeps original formatting/code).
 	return p.expect(lexer.TokIdent)
