@@ -1,6 +1,0 @@
-def main() -> int:
-  let x = 2
-  if x == 1: io.println(1)
-  elif x == 2: io.println(2)
-  else: io.println(0)
-  return 0

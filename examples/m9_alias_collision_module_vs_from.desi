@@ -1,4 +1,0 @@
-import util.math as add
-from util.math import add as add
-def main() -> int:
-  return 0

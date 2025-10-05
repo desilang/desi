@@ -1,7 +1,0 @@
-import util.math as m
-
-def main() -> int:
-  let a = m.add(1, 2)
-  print(a)
-  return 0
-

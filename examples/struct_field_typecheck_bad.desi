@@ -1,7 +1,0 @@
-struct User:
-  id: int
-  name: str
-
-def bad(u: User) -> int:
-  io.println(u.missing)  # should error
-  return 0

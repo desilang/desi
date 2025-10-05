@@ -1,4 +1,0 @@
-# expect: error that builtin/prelude name cannot be used as an identifier
-def main() -> int:
-  let print = 1
-  0

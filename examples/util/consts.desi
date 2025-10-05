@@ -1,5 +1,0 @@
-pub let CONST_HEIGHT: int = 180
-let LOCAL_WIDTH: int = 75
-
-pub def area(w: int, h: int)-> int:
-  w * h

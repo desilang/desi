@@ -1,4 +1,0 @@
-def main() -> int:
-  let mut i: int = 0
-  while i < 3: io.println(i)
-  return 0

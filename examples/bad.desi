@@ -1,3 +1,0 @@
-def main() -> int:
-  io.println("oops
-  return 0

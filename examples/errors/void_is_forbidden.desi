@@ -1,3 +1,0 @@
-# expect: error about 'void' not allowed; use 'none'
-def bad() -> void:
-  return none

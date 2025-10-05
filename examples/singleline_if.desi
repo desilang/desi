@@ -1,4 +1,0 @@
-def main() -> int:
-  let mut a: int = 0
-  if a == 0: io.println(42)
-  return 0

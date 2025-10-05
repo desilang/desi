@@ -1,4 +1,0 @@
-import util.math as m
-def main() -> int:
-  m.nope()    # error: unknown symbol 'nope' in module alias 'm' (from 'util.math')
-  return 0

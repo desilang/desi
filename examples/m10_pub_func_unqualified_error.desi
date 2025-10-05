@@ -1,5 +1,0 @@
-import util.math
-
-def main() -> int:
-  io.println(add(2, 3))  # expect: DTE0010 (non-public cross-module unqualified)
-  return 0

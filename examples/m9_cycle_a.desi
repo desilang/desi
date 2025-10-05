@@ -1,5 +1,0 @@
-import m9_cycle_b
-
-def main() -> int:
-  print("A")
-  return 0

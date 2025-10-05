@@ -1,7 +1,0 @@
-def add(x: int, y: int) -> int:
-  return x + y
-
-def main() -> int:
-  let mut a: int = 1
-  a := add(a, 2)
-  return 0

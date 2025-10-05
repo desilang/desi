@@ -1,5 +1,0 @@
-# Demonstrates that io.println joins multiple args with spaces.
-def main() -> int:
-  io.println("this", "is", "test", 123)
-  io.println("hello", "world")
-  0

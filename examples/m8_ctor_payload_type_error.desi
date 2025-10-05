@@ -1,9 +1,0 @@
-# Triggers a checker error: Result.Ok expects int, but gets str.
-enum Result:
-  Ok: int
-  Err: str
-
-def main() -> int:
-  let r: Result = Result.Ok("boom")
-  io.println("should not reach:", r)  # just to keep structure consistent
-  0

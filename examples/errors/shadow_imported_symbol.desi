@@ -1,5 +1,0 @@
-from std.io import println
-
-def main() -> int:
-  let println = 1   # expect: imported name conflict
-  0

@@ -1,5 +1,0 @@
-def main() -> int:
-  let mut a: int = 1
-  a += 41
-  io.println(a)
-  return 0
