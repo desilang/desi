@@ -14,9 +14,9 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 	// Scrutinee must be an enum-typed expression (or Unknown while editing).
 	sk := c.kindOfExpr(m.Scrut)
 	if sk != KindEnum && sk != KindUnknown {
-		c.errors = append(c.errors,
-			TypeErrorAtf(m.Span, "match_non_enum", "DTE0045", "match expects enum scrutinee",
-				"%s: got %s", sk.String()))
+		c.errors = append(c.errors, TypeErrorAtf(
+			m.Span, "match_expected_enum", "DTE0045", "match expects enum scrutinee",
+			"%s: got %s", "match", sk))
 	}
 
 	// Try to resolve the enum name from the scrutinee expression.
@@ -45,7 +45,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 	for i := range m.Arms {
 		arm := &m.Arms[i]
 
-		// Wildcard arm: "_:" — no variant name, no binder, just check body.
+		// Wildcard arm: "_:"
 		if arm.Pat.Variant == "_" {
 			if wildcardSeen {
 				c.errors = append(c.errors, ErrDuplicateMatchArmAt(arm.Span, "_"))
@@ -59,7 +59,7 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 			continue
 		}
 
-		// Unknown enum? We still check arm bodies in a block for general errors.
+		// Unknown enum? Still check body for general errors.
 		if enumName == "" {
 			c.withBlock(func() {
 				if arm.Pat.Bind != "" && arm.Pat.Bind != "_" {
@@ -80,7 +80,6 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 		// Validate variant exists
 		if _, ok := universe[arm.Pat.Variant]; !ok {
 			c.errors = append(c.errors, ErrUnknownEnumVariantAt(arm.Span, arm.Pat.Variant, enumName))
-			// still check body
 			c.withBlock(func() {
 				for _, s := range arm.Body {
 					c.checkStmt(s)
@@ -99,24 +98,21 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 		pt := strings.TrimSpace(payloadType[arm.Pat.Variant])
 		c.withBlock(func() {
 			if !isNoneText(pt) {
-				// payloadful variant
 				if arm.Pat.Bind != "" && arm.Pat.Bind != "_" {
 					k, sname := mapTypeOrStruct(pt, c.info)
 					_ = c.scope.define(arm.Pat.Bind, &varInfo{
 						kind:       k,
-						structName: sname, // reused for struct-or-enum name
+						structName: sname,
 						mutable:    false,
 						declName:   arm.Pat.Bind,
 						written:    true,
 					})
 				}
 			} else {
-				// payloadless variant
 				if arm.Pat.Bind != "" {
 					c.errors = append(c.errors, ErrPayloadlessVariantBinderAt(arm.Span, arm.Pat.Variant, arm.Pat.Bind))
 				}
 			}
-
 			for _, s := range arm.Body {
 				c.checkStmt(s)
 			}
@@ -145,7 +141,6 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 func (c *checker) enumNameFromExprFallback(e ast.Expr) string {
 	switch v := e.(type) {
 	case *ast.CallExpr:
-		// Result.Ok(1) → Callee is FieldExpr(X=Ident(Result), Name=Ok)
 		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				if _, ok2 := c.info.Enums[id.Name]; ok2 {

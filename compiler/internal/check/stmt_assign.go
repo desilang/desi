@@ -1,6 +1,8 @@
 package check
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
@@ -35,9 +37,9 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 						continue
 					}
 					if rk != KindUnknown {
-						c.errors = append(c.errors,
-							TypeErrorAtf(lv.Span, "incompatible_struct_assign", "DTE0030", "incompatible struct assignment",
-								"%s: assignment to %q has incompatible struct value", lv.Name))
+						c.errors = append(c.errors, TypeErrorAtf(
+							lv.Span, "incompatible_struct_assign", "DTE0030", "incompatible struct value",
+							"%s: %q", "assignment to", lv.Name))
 					}
 					v.written = true
 					continue
@@ -50,16 +52,16 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 						continue
 					}
 					if rk != KindUnknown {
-						c.errors = append(c.errors,
-							TypeErrorAtf(lv.Span, "incompatible_enum_assign", "DTE0031", "incompatible enum assignment",
-								"%s: assignment to %q has incompatible enum value", lv.Name))
+						c.errors = append(c.errors, TypeErrorAtf(
+							lv.Span, "incompatible_enum_assign", "DTE0030", "incompatible enum value",
+							"%s: %q", "assignment to", lv.Name))
 					}
 					v.written = true
 					continue
 				}
 
 				if k, ok := unifyKinds(v.kind, rk); !ok {
-					c.errors = append(c.errors, ErrTypeMismatch(v.kind.String(), rk.String(), "assignment"))
+					c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", v.kind), fmt.Sprintf("%s", rk), "assignment"))
 				} else if v.kind == KindUnknown {
 					v.kind = k
 				}
@@ -124,13 +126,14 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 				want, _ := mapTypeOrStruct(ftText, c.info)
 				if want != KindUnknown {
 					if _, ok := unifyKinds(want, rk); !ok {
-						c.errors = append(c.errors, ErrTypeMismatch(want.String(), rk.String(), "field assignment"))
+						c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", want), fmt.Sprintf("%s", rk), "field assignment"))
 					}
 				}
 				bv.written = true
 
 			default:
-				c.errors = append(c.errors, ErrUnsupportedAssignmentTarget())
+				c.errors = append(c.errors, TypeErrorf(
+					"unsupported_assignment_target", "DTE0031", "unsupported assignment target", "%s"))
 			}
 		}
 		return
@@ -138,9 +141,9 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 
 	// ---- Legacy path removed ----
 	if len(st.Names) > 0 {
-		c.errors = append(c.errors,
-			TypeErrorf("internal_legacy_assign_path", "DTE9001", "internal error",
-				"%s: legacy AssignStmt.Names path is no longer supported; use LHS []Expr"))
+		c.errors = append(c.errors, TypeErrorf(
+			"internal_legacy_assign", "DTE9998", "internal compiler error",
+			"%s: legacy AssignStmt.Names path is no longer supported; use LHS []Expr", "assign"))
 	}
 }
 

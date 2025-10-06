@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -14,22 +15,18 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 
 	// Binder hygiene + forbid textual 'void' in type positions
 	for _, bd := range st.Binds {
-		// Identifier hygiene (span-carrying)
 		if isReservedIdent(bd.Name) {
 			c.errors = append(c.errors, ErrReservedIdentifierAt(bd.Span, bd.Name, "let binding"))
 		}
 		if isPreludeBuiltin(bd.Name) {
 			c.errors = append(c.errors, ErrShadowBuiltinAt(bd.Span, bd.Name, "let binding"))
 		}
-		// Conflicts with imported names in this function (from-import aliases or module aliases)
 		if _, ok := c.aliases[bd.Name]; ok {
 			c.errors = append(c.errors, ErrImportNameConflictAt(bd.Span, bd.Name, "let binding"))
 		}
 		if _, ok := c.modAliases[bd.Name]; ok {
 			c.errors = append(c.errors, ErrImportNameConflictAt(bd.Span, bd.Name, "let binding"))
 		}
-
-		// Forbid textual 'void' as a type
 		if strings.EqualFold(strings.TrimSpace(bd.Type), "void") {
 			c.errors = append(c.errors, ErrUseNoneInsteadOfVoidAt(bd.Span, "let binding type"))
 		}
@@ -53,10 +50,10 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		inferredStruct := ""
 		inferredEnum := ""
 		if rk == KindStruct {
-			// Known struct literal with a type name?
 			if sl, ok := rhs.(*ast.StructLit); ok {
 				if _, exists := c.info.Structs[sl.Name]; !exists {
-					c.errors = append(c.errors, ErrUnknownStructTypeAt(sl.Span, sl.Name))
+					// prefer diagnostic wrapper; span-less variant is OK here
+					c.errors = append(c.errors, ErrUnknownStructType(sl.Name))
 				} else {
 					inferredStruct = sl.Name
 				}
@@ -77,16 +74,16 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 				if k, ok := unifyKinds(want, rk); ok {
 					kind = k
 				} else {
-					c.errors = append(c.errors, ErrTypeMismatch(want.String(), rk.String(), "let binding"))
+					c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", want), fmt.Sprintf("%s", rk), "let binding"))
 				}
 			}
 		}
 
-		// Shadowing warning (with outer-scope check)
+		// Shadowing warning (outer-scope)
 		if _, ok := c.scope.lookupLocal(bd.Name); !ok && c.scope.existsInOuter(bd.Name) {
 			c.warnings = append(c.warnings, Warning{
-				Code: CodeShadowedVariable(),
-				Msg:  "name \"" + bd.Name + "\" shadows an outer binding",
+				Code: warnCode("warn", "shadowed_variable", "DW0002"),
+				Msg:  fmt.Sprintf("name %q shadows an outer binding", bd.Name),
 			})
 		}
 
@@ -117,8 +114,6 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 
 	// Optional group type currently unused beyond 'void' check.
 }
-
-/* ---------- small helpers for let handling ---------- */
 
 func kindIfDeclOr(current Kind, want Kind) Kind {
 	if want == KindStruct || want == KindEnum {
