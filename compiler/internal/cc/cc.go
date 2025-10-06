@@ -196,28 +196,25 @@ func constructArgs(cc, srcAbs, outAbs, rtAbs string, extra []string) []string {
 	isMSVC := strings.EqualFold(cc, "cl")
 
 	if isMSVC {
-		// cl /nologo src desi_std.c /I runtime\c /D _CRT_SECURE_NO_WARNINGS /Fe:out.exe
+		// cl /nologo src desi_std.c /I runtime\c /D_CRT_SECURE_NO_WARNINGS /Fe:out.exe
 		args := []string{
 			"/nologo",
 			srcAbs,
 			filepath.Join(rtAbs, "desi_std.c"),
 			"/I", rtAbs,
-			"/D", "_CRT_SECURE_NO_WARNINGS",
+			"/D_CRT_SECURE_NO_WARNINGS",
 			"/Fe:" + outAbs,
 		}
 		return append(args, extra...)
 	}
 
-	// gcc/clang: cc src desi_std.c -I runtime/c -o out
+	// gcc/clang: cc src desi_std.c -I runtime/c -D_CRT_SECURE_NO_WARNINGS -o out
 	args := []string{
 		srcAbs,
 		filepath.Join(rtAbs, "desi_std.c"),
 		"-I", rtAbs,
+		"-D_CRT_SECURE_NO_WARNINGS",
 		"-o", outAbs,
-	}
-	// On Windows with gcc/clang, mirror the CRT define for quieter builds.
-	if runtime.GOOS == "windows" {
-		args = append(args, "-D_CRT_SECURE_NO_WARNINGS")
 	}
 	return append(args, extra...)
 }

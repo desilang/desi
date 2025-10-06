@@ -23,10 +23,10 @@ int desi_os_exit(int code);
 
 /* ---- String / memory shims ---- */
 
-/* Returns a newly allocated string of (a + b).
+/* Concatenate a and b and return a newly allocated string (heap).
    If a or b is NULL, treats it as "".
-   On OOM, returns NULL. Callers MUST tolerate NULL (treat as empty).
-   Free only via desi_mem_free(); passing NULL is OK. */
+   On hard allocation failure, returns NULL.
+   Caller must free non-NULL with desi_mem_free(). */
 const char* desi_str_concat(const char* a, const char* b);
 
 /* Free memory returned by runtime shims (concat/read_all/from_code). NULL is ok. */
@@ -39,7 +39,8 @@ int desi_str_len(const char* s);
 int desi_str_at(const char* s, int i);
 
 /* Allocate and return a 1-character string from byte code c (clamped 0..255).
-   On OOM, returns NULL. Free only via desi_mem_free(); NULL is OK. */
+   On hard allocation failure, returns NULL.
+   Caller must free non-NULL with desi_mem_free(). */
 const char* desi_str_from_code(int c);
 
 /* ---- Minimal future/executor (M11) ---- */

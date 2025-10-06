@@ -56,15 +56,25 @@ int desi_os_exit(int code) {
 
 /* ---- String / memory shims ---- */
 
+static const char* desi_heap_empty(void) {
+  char* p = (char*)malloc(1);
+  if (!p) return NULL;
+  p[0] = '\0';
+  return (const char*)p;
+}
+
 const char* desi_str_concat(const char* a, const char* b) {
   if (!a) a = "";
   if (!b) b = "";
   size_t na = strlen(a);
   size_t nb = strlen(b);
   char* out = (char*)malloc(na + nb + 1);
-  if (!out) return NULL;               /* NULL on OOM; callers must tolerate */
-  memcpy(out, a, na);
-  memcpy(out + na, b, nb);
+  if (!out) {
+    /* best-effort: return heap-allocated empty string or NULL */
+    return desi_heap_empty();
+  }
+  if (na) memcpy(out, a, na);
+  if (nb) memcpy(out + na, b, nb);
   out[na + nb] = '\0';
   return (const char*)out;
 }
@@ -92,7 +102,10 @@ const char* desi_str_from_code(int c) {
   if (c < 0) c = 0;
   if (c > 255) c = 255;
   char* out = (char*)malloc(2);
-  if (!out) return NULL;               /* NULL on OOM; callers must tolerate */
+  if (!out) {
+    /* best-effort: heap-allocated empty string or NULL */
+    return desi_heap_empty();
+  }
   out[0] = (char)(unsigned char)c;
   out[1] = '\0';
   return (const char*)out;
