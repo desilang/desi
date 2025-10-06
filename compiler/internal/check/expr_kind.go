@@ -1,7 +1,6 @@
 package check
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -245,50 +244,70 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					switch ak {
 					case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
 					case KindVoid:
-						c.errors = append(c.errors, fmt.Errorf("io.println arg %d is void (no value)", i+1))
+						c.errors = append(c.errors,
+							TypeErrorf("println_arg_void", "DTE2001", "println",
+								"%s: arg %d is void (no value)", i+1))
 					default:
-						c.errors = append(c.errors, fmt.Errorf("io.println arg %d has unsupported kind %s", i+1, ak))
+						c.errors = append(c.errors,
+							TypeErrorf("println_arg_unsupported_kind", "DTE2002", "println",
+								"%s: arg %d has unsupported kind %s", i+1, ak.String()))
 					}
 				}
 				return KindVoid
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "fs" && fe.Name == "read_all" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, fmt.Errorf("fs.read_all: want 1 arg (path: str), got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("fs_read_all_arity", "DTE2101", "fs.read_all",
+							"%s: want 1 arg (path: str), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-					c.errors = append(c.errors, fmt.Errorf("fs.read_all: path must be str, got %s", ak))
+					c.errors = append(c.errors,
+						TypeErrorf("fs_read_all_path_type", "DTE2102", "fs.read_all",
+							"%s: path must be str, got %s", ak.String()))
 				}
 				return KindStr
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "os" && fe.Name == "exit" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, fmt.Errorf("os.exit: want 1 arg (code: int), got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("os_exit_arity", "DTE2201", "os.exit",
+							"%s: want 1 arg (code: int), got %d", len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-					c.errors = append(c.errors, fmt.Errorf("os.exit: code must be int, got %s", ak))
+					c.errors = append(c.errors,
+						TypeErrorf("os_exit_code_type", "DTE2202", "os.exit",
+							"%s: code must be int, got %s", ak.String()))
 				}
 				return KindVoid
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "mem" && fe.Name == "free" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, fmt.Errorf("mem.free: want 1 arg, got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("mem_free_arity", "DTE2301", "mem.free",
+							"%s: want 1 arg, got %d", len(v.Args)))
 				}
 				return KindVoid
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "len" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, fmt.Errorf("str.len: want 1 arg (str), got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("str_len_arity", "DTE2401", "str.len",
+							"%s: want 1 arg (str), got %d", len(v.Args)))
 				}
 				return KindInt
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "at" {
 				if len(v.Args) != 2 {
-					c.errors = append(c.errors, fmt.Errorf("str.at: want 2 args (str,int), got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("str_at_arity", "DTE2501", "str.at",
+							"%s: want 2 args (str,int), got %d", len(v.Args)))
 				}
 				return KindInt
 			}
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "from_code" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, fmt.Errorf("str.from_code: want 1 arg (int), got %d", len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorf("str_from_code_arity", "DTE2601", "str.from_code",
+							"%s: want 1 arg (int), got %d", len(v.Args)))
 				}
 				return KindStr
 			}
@@ -307,13 +326,15 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 						expect = 1
 					}
 					if len(v.Args) != expect {
-						c.errors = append(c.errors, fmt.Errorf("%s.%s expects %d arg(s), got %d", id.Name, fe.Name, expect, len(v.Args)))
+						c.errors = append(c.errors,
+							TypeErrorAtf(v.Span, "enum_ctor_arity", "DTE0044", "enum constructor arity",
+								"%s: %s.%s expects %d arg(s), got %d", id.Name, fe.Name, expect, len(v.Args)))
 					} else if expect == 1 {
 						wantK, _ := mapTypeOrStruct(vt, c.info)
 						gotK := c.kindOfExpr(v.Args[0])
 						if wantK != KindUnknown {
 							if _, ok := unifyKinds(wantK, gotK); !ok {
-								c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", wantK), fmt.Sprintf("%s", gotK), "call argument"))
+								c.errors = append(c.errors, ErrTypeMismatch(wantK.String(), gotK.String(), "call argument"))
 							}
 						}
 					}
@@ -332,14 +353,16 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 								c.errors = append(c.errors, ErrNotPublic(fe.Name, "module alias call"))
 							}
 							if len(sig.Params) != len(v.Args) {
-								c.errors = append(c.errors, fmt.Errorf("call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
+								c.errors = append(c.errors,
+									TypeErrorAtf(v.Span, "call_arity_via_alias", "DTE0050", "call arity mismatch",
+										"%s: call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
 							}
 							n := _min(len(sig.Params), len(v.Args))
 							for i := 0; i < n; i++ {
 								ak := c.kindOfExpr(v.Args[i])
 								pk := sig.Params[i]
 								if _, ok := unifyKinds(pk, ak); !ok {
-									c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+									c.errors = append(c.errors, ErrTypeMismatch(pk.String(), ak.String(), "call argument"))
 								}
 							}
 							// async functions return Future[T]
@@ -360,9 +383,13 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				switch ak {
 				case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
 				case KindVoid:
-					c.errors = append(c.errors, fmt.Errorf("print arg %d is void (no value)", i+1))
+					c.errors = append(c.errors,
+						TypeErrorf("print_arg_void", "DTE2701", "print",
+							"%s: arg %d is void (no value)", i+1))
 				default:
-					c.errors = append(c.errors, fmt.Errorf("print arg %d has unsupported kind %s", i+1, ak))
+					c.errors = append(c.errors,
+						TypeErrorf("print_arg_unsupported_kind", "DTE2702", "print",
+							"%s: arg %d has unsupported kind %s", i+1, ak.String()))
 				}
 			}
 			return KindVoid
@@ -388,14 +415,16 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				}
 
 				if len(sig.Params) != len(v.Args) {
-					c.errors = append(c.errors, fmt.Errorf("call to %s: want %d args, got %d", name, len(sig.Params), len(v.Args)))
+					c.errors = append(c.errors,
+						TypeErrorAtf(v.Span, "call_arity", "DTE0051", "call arity mismatch",
+							"%s: call to %s: want %d args, got %d", name, len(sig.Params), len(v.Args)))
 				}
 				n := _min(len(sig.Params), len(v.Args))
 				for i := 0; i < n; i++ {
 					ak := c.kindOfExpr(v.Args[i])
 					pk := sig.Params[i]
 					if _, ok := unifyKinds(pk, ak); !ok {
-						c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+						c.errors = append(c.errors, ErrTypeMismatch(pk.String(), ak.String(), "call argument"))
 					}
 				}
 				// async functions return Future[T]

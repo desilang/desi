@@ -1,7 +1,6 @@
 package check
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -57,7 +56,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 			// Known struct literal with a type name?
 			if sl, ok := rhs.(*ast.StructLit); ok {
 				if _, exists := c.info.Structs[sl.Name]; !exists {
-					c.errors = append(c.errors, fmt.Errorf("unknown struct type %q", sl.Name))
+					c.errors = append(c.errors, ErrUnknownStructTypeAt(sl.Span, sl.Name))
 				} else {
 					inferredStruct = sl.Name
 				}
@@ -78,7 +77,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 				if k, ok := unifyKinds(want, rk); ok {
 					kind = k
 				} else {
-					c.errors = append(c.errors, ErrTypeMismatch(fmt.Sprintf("%s", want), fmt.Sprintf("%s", rk), "let binding"))
+					c.errors = append(c.errors, ErrTypeMismatch(want.String(), rk.String(), "let binding"))
 				}
 			}
 		}
@@ -87,7 +86,7 @@ func (c *checker) checkLet(st *ast.LetStmt) {
 		if _, ok := c.scope.lookupLocal(bd.Name); !ok && c.scope.existsInOuter(bd.Name) {
 			c.warnings = append(c.warnings, Warning{
 				Code: CodeShadowedVariable(),
-				Msg:  fmt.Sprintf("name %q shadows an outer binding", bd.Name),
+				Msg:  "name \"" + bd.Name + "\" shadows an outer binding",
 			})
 		}
 

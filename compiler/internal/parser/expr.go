@@ -1,4 +1,3 @@
-// compiler/internal/parser/expr.go
 package parser
 
 import (

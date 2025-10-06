@@ -14,7 +14,9 @@ func (c *checker) checkMatch(m *ast.MatchStmt) {
 	// Scrutinee must be an enum-typed expression (or Unknown while editing).
 	sk := c.kindOfExpr(m.Scrut)
 	if sk != KindEnum && sk != KindUnknown {
-		c.errors = append(c.errors, fmt.Errorf("match expects an enum scrutinee, got %s", sk))
+		c.errors = append(c.errors,
+			TypeErrorAtf(m.Span, "match_non_enum", "DTE0045", "match expects enum scrutinee",
+				"%s: got %s", sk.String()))
 	}
 
 	// Try to resolve the enum name from the scrutinee expression.
