@@ -9,12 +9,18 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
+// importRef captures a single import occurrence in a file.
+type importRef struct {
+	Mod       string
+	Line, Col int // 1-based visual columns (ASCII ok for .desi paths)
+}
+
 // graph tracks module → file and file → imports, plus diagnostics and cycles.
 type graph struct {
 	roots        []string
 	fileToModule map[string]string
 	moduleToFile map[string]string
-	imports      map[string][]string // file -> imported module names (dotted)
+	imports      map[string][]importRef // file -> imported modules with positions
 
 	diags  []diag.Diagnostic
 	cycles [][]string // list of cycles as sequences of modules
@@ -25,7 +31,7 @@ func newGraph(roots []string) *graph {
 		roots:        roots,
 		fileToModule: map[string]string{},
 		moduleToFile: map[string]string{},
-		imports:      map[string][]string{},
+		imports:      map[string][]importRef{},
 	}
 }
 
@@ -62,25 +68,25 @@ func (g *graph) walk(absFile string) {
 		imods := scanImports(file)
 		g.imports[file] = imods
 
-		for _, m := range imods {
-			if mf := g.moduleToFile[m]; mf != "" {
-				// already resolved
+		for _, r := range imods {
+			// Resolved already?
+			if mf := g.moduleToFile[r.Mod]; mf != "" {
 				if inStack(mf, stack) {
-					// record cycle [ ... -> mf -> ... -> file -> ... ]
+					// cycle at this site
 					g.cycles = append(g.cycles, g.describeCycle(mf, file, stack))
-					g.diags = append(g.diags, moduleImportCycleDiag())
+					g.diags = append(g.diags, moduleImportCycleDiagAt(file, r.Line, r.Col, g.describeCycle(mf, file, stack)))
 				}
 				continue
 			}
 			// Resolve module to a file
-			cands := moduleToCandidatePaths(m, g.roots)
+			cands := moduleToCandidatePaths(r.Mod, g.roots)
 			f := firstExistingFile(cands)
 			if f == "" {
-				// not found diag
-				g.diags = append(g.diags, moduleNotFoundDiag(m, cands))
+				// not found at this site
+				g.diags = append(g.diags, moduleNotFoundDiagAt(r.Mod, file, r.Line, r.Col, cands))
 				continue
 			}
-			g.addFile(f, m)
+			g.addFile(f, r.Mod)
 			dfs(f)
 		}
 
@@ -99,8 +105,8 @@ func inStack(file string, stack []string) bool {
 	return false
 }
 
-func (g *graph) describeCycle(startFile, curFile string, stack []string) []string {
-	// Convert stack of files to modules and slice the cycle.
+func (g *graph) describeCycle(startFile, _curFile string, stack []string) []string {
+	// Convert stack of files to modules to show a readable cycle chain.
 	var mods []string
 	for _, f := range stack {
 		if m := g.fileToModule[f]; m != "" {
@@ -117,8 +123,8 @@ func (g *graph) topo() []string {
 	// Build file adjacency
 	adj := map[string][]string{}
 	for f, imods := range g.imports {
-		for _, m := range imods {
-			if mf := g.moduleToFile[m]; mf != "" {
+		for _, r := range imods {
+			if mf := g.moduleToFile[r.Mod]; mf != "" {
 				adj[f] = append(adj[f], mf)
 			}
 		}
@@ -150,41 +156,60 @@ func (g *graph) topo() []string {
 
 // --- Simple import scanning (lex-light, line oriented) ---
 
+// We capture group indices for the module spec so we can compute columns.
 var (
+	// import foo.bar
 	reImport = regexp.MustCompile(`^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b`)
-	reFrom   = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
+	// from foo.bar import X
+	reFrom = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
 )
 
-func scanImports(file string) []string {
+func scanImports(file string) []importRef {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return nil
 	}
-	var mods []string
+	var refs []importRef
 	lines := strings.Split(string(data), "\n")
-	for _, ln := range lines {
+	for i, ln := range lines {
 		// strip trailing comment
-		if i := strings.IndexRune(ln, '#'); i >= 0 {
-			ln = ln[:i]
+		if j := strings.IndexRune(ln, '#'); j >= 0 {
+			ln = ln[:j]
 		}
 		ln = strings.TrimRight(ln, " \t\r")
 		if ln == "" {
 			continue
 		}
-		if m := reImport.FindStringSubmatch(ln); len(m) == 2 {
-			mods = append(mods, m[1])
+		// Try `import X`
+		if idx := reImport.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+			// idx[2], idx[3] are start/end of the first capture group (module)
+			mod := ln[idx[2]:idx[3]]
+			col := idx[2] + 1 // 1-based
+			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
 			continue
 		}
-		if m := reFrom.FindStringSubmatch(ln); len(m) == 2 {
-			mods = append(mods, m[1])
+		// Try `from X import ...`
+		if idx := reFrom.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+			mod := ln[idx[2]:idx[3]]
+			col := idx[2] + 1
+			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
 			continue
 		}
 	}
-	return uniqStrings(mods)
+	// Deduplicate (same (mod,line,col) triples)
+	seen := map[string]struct{}{}
+	var out []importRef
+	for _, r := range refs {
+		key := r.Mod + "|" + strconvI(r.Line) + ":" + strconvI(r.Col)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, r)
+	}
+	return out
 }
 
-// firstExistingFile returns the first existing file among candidates.
-// Uses the existing fileExists helper from fsutil.go in the same package.
 func firstExistingFile(paths []string) string {
 	for _, p := range paths {
 		if fileExists(p) {
@@ -192,4 +217,20 @@ func firstExistingFile(paths []string) string {
 		}
 	}
 	return ""
+}
+
+// tiny int→string without importing strconv for 2 calls
+func strconvI(n int) string {
+	const digits = "0123456789"
+	if n == 0 {
+		return "0"
+	}
+	var b [20]byte
+	i := len(b)
+	for n > 0 {
+		i--
+		b[i] = digits[n%10]
+		n /= 10
+	}
+	return string(b[i:])
 }
