@@ -66,9 +66,7 @@ func ResolveEntry(entryPath string, opts ResolveOptions) (Plan, []diag.Diagnosti
 		// If not under a root, treat as a single-file module by basename.
 		entryMod = strings.TrimSuffix(filepath.Base(entryAbs), filepath.Ext(entryAbs))
 	}
-	if err := g.addFile(entryAbs, entryMod); err != nil {
-		return plan, diags, err
-	}
+	g.addFile(entryAbs, entryMod)
 	// Walk closure
 	g.walk(entryAbs)
 

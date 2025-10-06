@@ -40,11 +40,10 @@ func (g *graph) moduleNameForFile(abs string) string {
 	return ""
 }
 
-func (g *graph) addFile(absFile, module string) error {
+func (g *graph) addFile(absFile, module string) {
 	absFile = filepath.Clean(absFile)
 	g.fileToModule[absFile] = module
 	g.moduleToFile[module] = absFile
-	return nil
 }
 
 func (g *graph) walk(absFile string) {
@@ -75,7 +74,7 @@ func (g *graph) walk(absFile string) {
 			}
 			// Resolve module to a file
 			cands := moduleToCandidatePaths(m, g.roots)
-			f := firstExisting(cands)
+			f := firstExistingFile(cands)
 			if f == "" {
 				// not found diag
 				g.diags = append(g.diags, moduleNotFoundDiag(m, cands))
@@ -182,4 +181,15 @@ func scanImports(file string) []string {
 		}
 	}
 	return uniqStrings(mods)
+}
+
+// firstExistingFile returns the first existing file among candidates.
+// Uses the existing fileExists helper from fsutil.go in the same package.
+func firstExistingFile(paths []string) string {
+	for _, p := range paths {
+		if fileExists(p) {
+			return p
+		}
+	}
+	return ""
 }
