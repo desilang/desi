@@ -194,6 +194,7 @@ func hasCmd(name string) bool {
 
 func constructArgs(cc, srcAbs, outAbs, rtAbs string, extra []string) []string {
 	isMSVC := strings.EqualFold(cc, "cl")
+	isClang := strings.Contains(strings.ToLower(cc), "clang")
 
 	if isMSVC {
 		// cl /nologo src desi_std.c /I runtime\c /D_CRT_SECURE_NO_WARNINGS /Fe:out.exe
@@ -208,13 +209,18 @@ func constructArgs(cc, srcAbs, outAbs, rtAbs string, extra []string) []string {
 		return append(args, extra...)
 	}
 
-	// gcc/clang: cc src desi_std.c -I runtime/c -D_CRT_SECURE_NO_WARNINGS -o out
+	// gcc/clang
 	args := []string{
 		srcAbs,
 		filepath.Join(rtAbs, "desi_std.c"),
 		"-I", rtAbs,
-		"-D_CRT_SECURE_NO_WARNINGS",
 		"-o", outAbs,
 	}
+
+	// On Windows (including clang), add the CRT warning define for parity.
+	if runtime.GOOS == "windows" && (isClang || hasCmd("gcc")) {
+		args = append(args, "-D_CRT_SECURE_NO_WARNINGS")
+	}
+
 	return append(args, extra...)
 }

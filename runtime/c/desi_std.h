@@ -23,10 +23,11 @@ int desi_os_exit(int code);
 
 /* ---- String / memory shims ---- */
 
-/* Concatenate a and b and return a newly allocated string (heap).
+/* Returns a newly allocated string containing a+b.
    If a or b is NULL, treats it as "".
-   On hard allocation failure, returns NULL.
-   Caller must free non-NULL with desi_mem_free(). */
+   On allocation failure may return NULL; on best-effort paths it may return
+   a heap-allocated empty string "" (still safe to pass to desi_mem_free()).
+   Caller must free with desi_mem_free(). */
 const char* desi_str_concat(const char* a, const char* b);
 
 /* Free memory returned by runtime shims (concat/read_all/from_code). NULL is ok. */
@@ -39,13 +40,12 @@ int desi_str_len(const char* s);
 int desi_str_at(const char* s, int i);
 
 /* Allocate and return a 1-character string from byte code c (clamped 0..255).
-   On hard allocation failure, returns NULL.
-   Caller must free non-NULL with desi_mem_free(). */
+   On allocation failure may return NULL; on best-effort paths it may return
+   a heap-allocated empty string "" (still safe to pass to desi_mem_free()). */
 const char* desi_str_from_code(int c);
 
 /* ---- Minimal future/executor (M11) ---- */
 
-/* A generic single-thread future handle with small vtable. */
 typedef struct desi_future {
   int  (*poll)(void* self);              /* return 0:Pending, 1:Ready */
   void (*destroy)(void* self);           /* optional */
