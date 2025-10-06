@@ -11,8 +11,11 @@ import (
 Unified, registry-backed diagnostics for the checker.
 
 - Public functions keep the SAME names/signatures as before and still return `error`,
-  but now return `diag.Diagnostic` (which implements error) instead of a private type.
+  but now return `diag.Diagnostic` (which implements error).
 - Titles/IDs are hydrated from codes.json; fallbacks remain for resilience.
+- Duplication is minimized by two generic helpers:
+    TypeErrorf(...) and TypeErrorAtf(...)
+  Site-specific helpers are now tiny wrappers calling those.
 */
 
 func convSpan(sp ast.Span) diag.Span {
@@ -37,19 +40,38 @@ func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, strin
   return fallbackID, fallbackTitle
 }
 
-func mkType(level diag.Level, key, fallbackID, fallbackTitle string, sp *ast.Span, msg string) diag.Diagnostic {
-  id, title := lookupIDTitle("type", key, fallbackID, fallbackTitle)
+func mk(domain string, level diag.Level, key, id, message string, sp *ast.Span) diag.Diagnostic {
   out := diag.Diagnostic{
-    Domain:  "type",
+    Domain:  domain,
     Key:     key,
     Level:   level,
     Code:    id,
-    Message: msg,
+    Message: message,
   }
   if sp != nil {
     out.Span = convSpan(*sp)
   }
   return out
+}
+
+/*** Generic constructors (use these to avoid new wrappers) ***/
+
+// TypeErrorf builds a type-domain error by key, using the registry title as the
+// FIRST %s in format. Example:
+//
+//	TypeErrorf("type_mismatch","DTE0004","type mismatch",
+//	           "%s in %s: expected %s, found %s", ctx, exp, got)
+func TypeErrorf(key, fallbackID, fallbackTitle, format string, args ...any) error {
+  id, title := lookupIDTitle("type", key, fallbackID, fallbackTitle)
+  msg := fmt.Sprintf(format, append([]any{title}, args...)...)
+  return mk("type", diag.LevelError, key, id, msg, nil)
+}
+
+// TypeErrorAtf is the span-carrying variant.
+func TypeErrorAtf(sp ast.Span, key, fallbackID, fallbackTitle, format string, args ...any) error {
+  id, title := lookupIDTitle("type", key, fallbackID, fallbackTitle)
+  msg := fmt.Sprintf(format, append([]any{title}, args...)...)
+  return mk("type", diag.LevelError, key, id, msg, &sp)
 }
 
 /*** warnings (codes only, used elsewhere) ***/
@@ -66,274 +88,224 @@ func CodeShadowedVariable() string      { return warnCode("warn", "shadowed_vari
 func CodeUnreachableCode() string       { return warnCode("warn", "unreachable_code", "DW0004") }
 func CodeMissingExplicitReturn() string { return warnCode("warn", "missing_explicit_return", "DW0006") }
 
-/*** concrete error constructors (registry-backed) ***/
+/*** Back-compat helpers (thin wrappers over the generic ones) ***/
 
 // ErrTypeArityMismatch DTE0002: arity mismatch (grouped binding)
 func ErrTypeArityMismatch(context string, names, values int) error {
-  id, title := lookupIDTitle("type", "arity_mismatch", "DTE0002", "arity mismatch in grouped binding")
-  msg := fmt.Sprintf("%s in %s: names=%d, values=%d", title, context, names, values)
-  return mkType(diag.LevelError, "arity_mismatch", id, title, nil, msg)
+  return TypeErrorf("arity_mismatch", "DTE0002", "arity mismatch in grouped binding",
+    "%s in %s: names=%d, values=%d", context, names, values)
 }
 
 // ErrUndefinedName DTE0001: undefined name
 func ErrUndefinedName(name, context string) error {
-  id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "undefined_name", id, title, nil, msg)
+  return TypeErrorf("undefined_name", "DTE0001", "undefined name",
+    "%s in %s: %s", context, name)
 }
 func ErrUndefinedNameAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "undefined_name", "DTE0001", "undefined name")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "undefined_name", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "undefined_name", "DTE0001", "undefined name",
+    "%s in %s: %s", context, name)
 }
 
 // ErrRedeclaredSymbol DTE0003: redeclared symbol
 func ErrRedeclaredSymbol(name, context string) error {
-  id, title := lookupIDTitle("type", "redeclared_symbol", "DTE0003", "name already defined in this scope")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "redeclared_symbol", id, title, nil, msg)
+  return TypeErrorf("redeclared_symbol", "DTE0003", "name already defined in this scope",
+    "%s in %s: %s", context, name)
 }
 func ErrRedeclaredSymbolAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "redeclared_symbol", "DTE0003", "name already defined in this scope")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "redeclared_symbol", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "redeclared_symbol", "DTE0003", "name already defined in this scope",
+    "%s in %s: %s", context, name)
 }
 
 // ErrTypeMismatch DTE0004: type mismatch
 func ErrTypeMismatch(expected, found, context string) error {
-  id, title := lookupIDTitle("type", "type_mismatch", "DTE0004", "type mismatch")
-  msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-  return mkType(diag.LevelError, "type_mismatch", id, title, nil, msg)
+  return TypeErrorf("type_mismatch", "DTE0004", "type mismatch",
+    "%s in %s: expected %s, found %s", context, expected, found)
 }
 
 // ErrWrongReturnKind DTE0005: wrong return kind
 func ErrWrongReturnKind(expected, found, context string) error {
-  id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
-  msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-  return mkType(diag.LevelError, "wrong_return_kind", id, title, nil, msg)
+  return TypeErrorf("wrong_return_kind", "DTE0005", "return type mismatch",
+    "%s in %s: expected %s, found %s", context, expected, found)
 }
 func ErrWrongReturnKindAt(sp ast.Span, expected, found, context string) error {
-  id, title := lookupIDTitle("type", "wrong_return_kind", "DTE0005", "return type mismatch")
-  msg := fmt.Sprintf("%s in %s: expected %s, found %s", title, context, expected, found)
-  return mkType(diag.LevelError, "wrong_return_kind", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "wrong_return_kind", "DTE0005", "return type mismatch",
+    "%s in %s: expected %s, found %s", context, expected, found)
 }
 
 // ErrAssignToImmutable DTE0006: assign to immutable
 func ErrAssignToImmutable(name, context string) error {
-  id, title := lookupIDTitle("type", "assign_to_immutable", "DTE0006", "cannot assign to immutable variable")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "assign_to_immutable", id, title, nil, msg)
+  return TypeErrorf("assign_to_immutable", "DTE0006", "cannot assign to immutable variable",
+    "%s in %s: %s", context, name)
 }
 
 // ErrNotPublic DTE0010: not public
 func ErrNotPublic(name, context string) error {
-  id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "not_public", id, title, nil, msg)
+  return TypeErrorf("not_public", "DTE0010", "symbol is not public",
+    "%s in %s: %s", context, name)
 }
 func ErrNotPublicAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "not_public", "DTE0010", "symbol is not public")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "not_public", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "not_public", "DTE0010", "symbol is not public",
+    "%s in %s: %s", context, name)
 }
 
 // ErrPublicConstNotConst DTE0011: public const must be const
 func ErrPublicConstNotConst(sp ast.Span, name string) error {
-  id, title := lookupIDTitle("type", "public_const_not_const", "DTE0011", "public constant must be compile-time constant")
-  msg := fmt.Sprintf("%s: %s", title, name)
-  return mkType(diag.LevelError, "public_const_not_const", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "public_const_not_const", "DTE0011", "public constant must be compile-time constant",
+    "%s: %s", name)
 }
 
 // ErrPubLetMutForbidden DTE0012: pub let mut forbidden
 func ErrPubLetMutForbidden(sp ast.Span, name string) error {
-  id, title := lookupIDTitle("type", "pub_let_mut_forbidden", "DTE0012", "public let cannot be mutable")
-  msg := fmt.Sprintf("%s: %s", title, name)
-  return mkType(diag.LevelError, "pub_let_mut_forbidden", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "pub_let_mut_forbidden", "DTE0012", "public let cannot be mutable",
+    "%s: %s", name)
 }
 
 // ErrAwaitOutsideAsyncAt DTE1001: await outside async
 func ErrAwaitOutsideAsyncAt(sp ast.Span) error {
-  id, title := lookupIDTitle("type", "await_outside_async", "DTE1001", "`await` is only valid inside async functions")
-  msg := fmt.Sprintf("%s", title)
-  return mkType(diag.LevelError, "await_outside_async", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "await_outside_async", "DTE1001", "`await` is only valid inside async functions",
+    "%s")
 }
 
 // ErrAwaitNonFutureAt DTE1002: await non-future
 func ErrAwaitNonFutureAt(sp ast.Span, got Kind) error {
-  id, title := lookupIDTitle("type", "await_non_future", "DTE1002", "cannot await a non-future value")
-  msg := fmt.Sprintf("%s: got %s", title, got.String())
-  return mkType(diag.LevelError, "await_non_future", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "await_non_future", "DTE1002", "cannot await a non-future value",
+    "%s: got %s", got.String())
 }
 
 // ErrReservedIdentifier / friends
 func ErrReservedIdentifier(name, context string) error {
-  id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "reserved_identifier", id, title, nil, msg)
+  return TypeErrorf("reserved_identifier", "DTE0020", "reserved keyword used as an identifier",
+    "%s in %s: %s", context, name)
 }
 func ErrShadowBuiltin(name, context string) error {
-  id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "shadow_builtin", id, title, nil, msg)
+  return TypeErrorf("shadow_builtin", "DTE0021", "cannot shadow prelude builtin",
+    "%s in %s: %s", context, name)
 }
 func ErrImportNameConflict(name, context string) error {
-  id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "import_name_conflict", id, title, nil, msg)
+  return TypeErrorf("import_name_conflict", "DTE0022", "name conflicts with imported symbol",
+    "%s in %s: %s", context, name)
 }
 func ErrReservedIdentifierAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "reserved_identifier", "DTE0020", "reserved keyword used as an identifier")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "reserved_identifier", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "reserved_identifier", "DTE0020", "reserved keyword used as an identifier",
+    "%s in %s: %s", context, name)
 }
 func ErrShadowBuiltinAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "shadow_builtin", "DTE0021", "cannot shadow prelude builtin")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "shadow_builtin", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "shadow_builtin", "DTE0021", "cannot shadow prelude builtin",
+    "%s in %s: %s", context, name)
 }
 func ErrImportNameConflictAt(sp ast.Span, name, context string) error {
-  id, title := lookupIDTitle("type", "import_name_conflict", "DTE0022", "name conflicts with imported symbol")
-  msg := fmt.Sprintf("%s in %s: %s", title, context, name)
-  return mkType(diag.LevelError, "import_name_conflict", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "import_name_conflict", "DTE0022", "name conflicts with imported symbol",
+    "%s in %s: %s", context, name)
 }
 
-// ErrUseNoneInsteadOfVoid
+// ErrUseNoneInsteadOfVoid (and helper)
 func ErrUseNoneInsteadOfVoid(where string) error {
-  id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
   if where == "" {
-    return mkType(diag.LevelError, "use_none_instead_of_void", id, title, nil, title)
+    return TypeErrorf("use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s")
   }
-  msg := fmt.Sprintf("%s in %s", title, where)
-  return mkType(diag.LevelError, "use_none_instead_of_void", id, title, nil, msg)
+  return TypeErrorf("use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s in %s", where)
 }
 func ErrUseNoneInsteadOfVoidAt(sp ast.Span, where string) error {
-  id, title := lookupIDTitle("type", "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'")
   if where == "" {
-    return mkType(diag.LevelError, "use_none_instead_of_void", id, title, &sp, title)
+    return TypeErrorAtf(sp, "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s")
   }
-  msg := fmt.Sprintf("%s in %s", title, where)
-  return mkType(diag.LevelError, "use_none_instead_of_void", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "use_none_instead_of_void", "DTE0023", "'void' is not a type; use 'none'", "%s in %s", where)
 }
 
 // ErrUseNoneNotVoid (older lint)
 func ErrUseNoneNotVoid(context string) error {
-  id, title := lookupIDTitle("type", "use_none_not_void", "DTE0014", "use 'none' instead of 'void'")
   if context == "" {
-    return mkType(diag.LevelError, "use_none_not_void", id, title, nil, title)
+    return TypeErrorf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s")
   }
-  msg := fmt.Sprintf("%s in %s", title, context)
-  return mkType(diag.LevelError, "use_none_not_void", id, title, nil, msg)
+  return TypeErrorf("use_none_not_void", "DTE0014", "use 'none' instead of 'void'", "%s in %s", context)
 }
 
 // ErrUnsupportedAssignmentTarget
 func ErrUnsupportedAssignmentTarget() error {
-  id, title := lookupIDTitle("type", "unsupported_assignment_target", "DTE0031", "unsupported assignment target")
-  return mkType(diag.LevelError, "unsupported_assignment_target", id, title, nil, title)
+  return TypeErrorf("unsupported_assignment_target", "DTE0031", "unsupported assignment target", "%s")
 }
 func ErrUnsupportedAssignmentTargetAt(sp ast.Span) error {
-  id, title := lookupIDTitle("type", "unsupported_assignment_target", "DTE0031", "unsupported assignment target")
-  return mkType(diag.LevelError, "unsupported_assignment_target", id, title, &sp, title)
+  return TypeErrorAtf(sp, "unsupported_assignment_target", "DTE0031", "unsupported assignment target", "%s")
 }
 
 // ErrUnknownStructType
 func ErrUnknownStructType(name string) error {
-  id, title := lookupIDTitle("type", "unknown_struct_type", "DTE0032", "unknown struct type")
-  msg := fmt.Sprintf("%s: %s", title, name)
-  return mkType(diag.LevelError, "unknown_struct_type", id, title, nil, msg)
+  return TypeErrorf("unknown_struct_type", "DTE0032", "unknown struct type", "%s: %s", name)
 }
 func ErrUnknownStructTypeAt(sp ast.Span, name string) error {
-  id, title := lookupIDTitle("type", "unknown_struct_type", "DTE0032", "unknown struct type")
-  msg := fmt.Sprintf("%s: %s", title, name)
-  return mkType(diag.LevelError, "unknown_struct_type", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "unknown_struct_type", "DTE0032", "unknown struct type", "%s: %s", name)
 }
 
 // ErrFieldAccessOnNonStructAt
 func ErrFieldAccessOnNonStructAt(sp ast.Span, base string) error {
-  id, title := lookupIDTitle("type", "field_access_on_non_struct", "DTE0033", "field access on non-struct")
-  msg := fmt.Sprintf("%s: %q", title, base)
-  return mkType(diag.LevelError, "field_access_on_non_struct", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "field_access_on_non_struct", "DTE0033", "field access on non-struct", "%s: %q", base)
 }
 func ErrFieldOnNotStructAt(sp ast.Span, field, owner string) error {
-  id, title := lookupIDTitle("type", "field_access_on_non_struct", "DTE0033", "field access on non-struct")
-  msg := fmt.Sprintf("%s: field %q on %q is not a struct", title, field, owner)
-  return mkType(diag.LevelError, "field_access_on_non_struct", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "field_access_on_non_struct", "DTE0033", "field access on non-struct",
+    "%s: field %q on %q is not a struct", field, owner)
 }
 
 // ErrCannotAssignFieldOnNonStructAt
 func ErrCannotAssignFieldOnNonStructAt(sp ast.Span, base string) error {
-  id, title := lookupIDTitle("type", "cannot_assign_field_on_non_struct", "DTE0034", "cannot assign to field on non-struct")
-  msg := fmt.Sprintf("%s: %q", title, base)
-  return mkType(diag.LevelError, "cannot_assign_field_on_non_struct", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "cannot_assign_field_on_non_struct", "DTE0034", "cannot assign to field on non-struct", "%s: %q", base)
 }
 
 // ErrIllegalDeferPositionAt
 func ErrIllegalDeferPositionAt(sp ast.Span) error {
-  id, title := lookupIDTitle("type", "illegal_defer_position", "DTE0035", "defer is not allowed here")
-  return mkType(diag.LevelError, "illegal_defer_position", id, title, &sp, title)
+  return TypeErrorAtf(sp, "illegal_defer_position", "DTE0035", "defer is not allowed here", "%s")
 }
 
 // ErrDeferExpectsCallAt
 func ErrDeferExpectsCallAt(sp ast.Span) error {
-  id, title := lookupIDTitle("type", "defer_expects_call", "DTE0036", "defer expects a call expression")
-  return mkType(diag.LevelError, "defer_expects_call", id, title, &sp, title)
+  return TypeErrorAtf(sp, "defer_expects_call", "DTE0036", "defer expects a call expression", "%s")
 }
 
 // ErrBadConditionTypeAt
 func ErrBadConditionTypeAt(sp ast.Span, where string, got Kind) error {
-  id, title := lookupIDTitle("type", "bad_condition_type", "DTE0037", "invalid condition type")
-  msg := fmt.Sprintf("%s in %s: must be bool/int, got %s", title, where, got.String())
-  return mkType(diag.LevelError, "bad_condition_type", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "bad_condition_type", "DTE0037", "invalid condition type",
+    "%s in %s: must be bool/int, got %s", where, got.String())
 }
 
 // ErrFunctionNotValueAt / ErrTypeNotValueAt / ErrModuleAliasNotValueAt / ErrImportedFuncNotValueAt
 func ErrFunctionNotValueAt(sp ast.Span, name string) error {
-  id, title := lookupIDTitle("type", "symbol_not_value", "DTE0038", "symbol is not a value")
-  msg := fmt.Sprintf("%s: %q is a function; call it with arguments", title, name)
-  return mkType(diag.LevelError, "symbol_not_value", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+    "%s: %q is a function; call it with arguments", name)
 }
 func ErrTypeNotValueAt(sp ast.Span, name string) error {
-  id, title := lookupIDTitle("type", "symbol_not_value", "DTE0038", "symbol is not a value")
-  msg := fmt.Sprintf("%s: %q is a type; cannot be used as a value", title, name)
-  return mkType(diag.LevelError, "symbol_not_value", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+    "%s: %q is a type; cannot be used as a value", name)
 }
 func ErrModuleAliasNotValueAt(sp ast.Span, alias, modPath string) error {
-  id, title := lookupIDTitle("type", "symbol_not_value", "DTE0038", "symbol is not a value")
-  msg := fmt.Sprintf("%s: module alias %q (from %q) is not a value; use %s.<symbol>", title, alias, modPath, alias)
-  return mkType(diag.LevelError, "symbol_not_value", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+    "%s: module alias %q (from %q) is not a value; use %s.<symbol>", alias, modPath, alias)
 }
 func ErrImportedFuncNotValueAt(sp ast.Span, orig, display string) error {
-  id, title := lookupIDTitle("type", "symbol_not_value", "DTE0038", "symbol is not a value")
-  msg := fmt.Sprintf("%s: %q is a function; call it as %s(...)", title, orig, display)
-  return mkType(diag.LevelError, "symbol_not_value", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "symbol_not_value", "DTE0038", "symbol is not a value",
+    "%s: %q is a function; call it as %s(...)", orig, display)
 }
 
 // ErrUnknownSymbolInModuleAliasAt
 func ErrUnknownSymbolInModuleAliasAt(sp ast.Span, sym, alias string) error {
-  id, title := lookupIDTitle("type", "unknown_symbol_in_module_alias", "DTE0039", "unknown symbol in module alias")
-  msg := fmt.Sprintf("%s: %q in %q", title, sym, alias)
-  return mkType(diag.LevelError, "unknown_symbol_in_module_alias", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "unknown_symbol_in_module_alias", "DTE0039", "unknown symbol in module alias",
+    "%s: %q in %q", sym, alias)
 }
 
 // ErrUnknownFieldOnStructAt
 func ErrUnknownFieldOnStructAt(sp ast.Span, field, structName string) error {
-  id, title := lookupIDTitle("type", "unknown_field_on_struct", "DTE0040", "unknown field on struct")
-  msg := fmt.Sprintf("%s: %q on %q", title, field, structName)
-  return mkType(diag.LevelError, "unknown_field_on_struct", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "unknown_field_on_struct", "DTE0040", "unknown field on struct",
+    "%s: %q on %q", field, structName)
 }
 
 // Enum/match diagnostics
 func ErrUnknownEnumVariantAt(sp ast.Span, variant, enumName string) error {
-  id, title := lookupIDTitle("type", "unknown_enum_variant", "DTE0041", "unknown enum variant")
-  msg := fmt.Sprintf("%s: %q on enum %q", title, variant, enumName)
-  return mkType(diag.LevelError, "unknown_enum_variant", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "unknown_enum_variant", "DTE0041", "unknown enum variant",
+    "%s: %q on enum %q", variant, enumName)
 }
 func ErrDuplicateMatchArmAt(sp ast.Span, variant string) error {
-  id, title := lookupIDTitle("type", "duplicate_match_arm", "DTE0042", "duplicate match arm")
-  msg := fmt.Sprintf("%s: %q", title, variant)
-  return mkType(diag.LevelError, "duplicate_match_arm", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "duplicate_match_arm", "DTE0042", "duplicate match arm",
+    "%s: %q", variant)
 }
 func ErrPayloadlessVariantBinderAt(sp ast.Span, variant, binder string) error {
-  id, title := lookupIDTitle("type", "payloadless_variant_binder", "DTE0043", "payloadless variant used with a binder")
-  msg := fmt.Sprintf("%s: variant %q has no payload; binder %q is invalid", title, variant, binder)
-  return mkType(diag.LevelError, "payloadless_variant_binder", id, title, &sp, msg)
+  return TypeErrorAtf(sp, "payloadless_variant_binder", "DTE0043", "payloadless variant used with a binder",
+    "%s: variant %q has no payload; binder %q is invalid", variant, binder)
 }
