@@ -2,7 +2,6 @@ package build
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -43,11 +42,11 @@ func ResolveEntry(entryPath string, opts ResolveOptions) (Plan, []diag.Diagnosti
 	}
 	entryAbs, err := filepath.Abs(entryPath)
 	if err != nil {
-		return plan, diags, fmt.Errorf("resolve: abs entry: %w", err)
+		return plan, diags, ErrBadEntryPath(entryPath, err)
 	}
 	fi, err := os.Stat(entryAbs)
 	if err != nil || fi.IsDir() {
-		return plan, diags, fmt.Errorf("resolve: entry not found or is a directory: %s", entryAbs)
+		return plan, diags, ErrEntryNotFound(entryAbs)
 	}
 
 	roots := uniqStrings(append([]string{}, opts.Roots...))

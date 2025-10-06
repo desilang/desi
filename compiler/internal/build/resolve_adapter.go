@@ -1,7 +1,6 @@
 package build
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -26,7 +25,7 @@ on the ResolveOptions for future use.
 func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []error) {
 	plan, mdiags, rerr := ResolveEntry(entryPath, opts)
 	if rerr != nil {
-		return nil, []error{fmt.Errorf("resolve: %v", rerr)}
+		return nil, []error{ErrInternalf("resolve: %v", rerr)}
 	}
 	if len(mdiags) > 0 {
 		errs := make([]error, 0, len(mdiags))
@@ -44,13 +43,13 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	for _, u := range plan.Deps {
 		data, err := os.ReadFile(u.File)
 		if err != nil {
-			return nil, []error{fmt.Errorf("read %s: %v", u.File, err)}
+			return nil, []error{ErrIORead(u.File, err)}
 		}
 		p := parser.New(string(data))
 		f, perr := p.ParseFile()
 		if perr != nil {
 			// Parser errors are returned as plain errors; the caller renders them.
-			return nil, []error{fmt.Errorf("parse %s: %v", u.File, perr)}
+			return nil, []error{ErrParseFailed(u.File, perr)}
 		}
 		if filepath.Clean(u.File) == entryAbs {
 			entryDecls = append(entryDecls, f.Decls...)
