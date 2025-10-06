@@ -4,86 +4,56 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/build"
 	"github.com/desilang/desi/compiler/internal/parser"
 )
 
-func resolveAndParseLocal(rootDir, entryPath string) (*ast.File, []error) {
-	entryAbs, err := filepath.Abs(entryPath)
-	if err != nil {
-		return nil, []error{fmt.Errorf("abs(%s): %v", entryPath, err)}
+// resolveAndParseLocal resolves imports starting from entryPath using the unified
+// resolver, then parses the resulting plan and merges ASTs: entry first, then deps.
+// - rootDir is kept for signature compatibility; resolver discovers roots automatically.
+// - Any module-domain diagnostics (not-found, cycles) are returned as errors and abort parsing.
+func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
+	plan, mdiags, rerr := build.ResolveEntry(entryPath, build.ResolveOptions{})
+	if rerr != nil {
+		return nil, []error{fmt.Errorf("resolve: %v", rerr)}
 	}
-
-	type unit struct {
-		path string
-		file *ast.File
-	}
-	var (
-		errs   []error
-		seen   = map[string]bool{}
-		stack  []string
-		result []*unit
-	)
-
-	var load func(absPath string)
-	load = func(absPath string) {
-		if seen[absPath] {
-			return
+	if len(mdiags) > 0 {
+		errs := make([]error, 0, len(mdiags))
+		for _, d := range mdiags {
+			// diag.Diagnostic implements error; forward as-is.
+			errs = append(errs, d)
 		}
-		for _, on := range stack {
-			if on == absPath {
-				errs = append(errs, fmt.Errorf("import cycle detected involving %s", rel(rootDir, absPath)))
-				return
-			}
-		}
-		stack = append(stack, absPath)
-		defer func() { stack = stack[:len(stack)-1] }()
-
-		data, err := os.ReadFile(absPath)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("read %s: %v", rel(rootDir, absPath), err))
-			return
-		}
-		p := parser.New(string(data))
-		f, perr := p.ParseFile()
-		if perr != nil {
-			errs = append(errs, fmt.Errorf("parse %s: %v", rel(rootDir, absPath), perr))
-			return
-		}
-		for _, imp := range f.Imports {
-			path := imp.Path
-			if strings.HasPrefix(path, "std.") {
-				continue
-			}
-			relPath := strings.ReplaceAll(path, ".", string(filepath.Separator)) + ".desi"
-			target := filepath.Join(rootDir, relPath)
-			if !fileExists(target) {
-				errs = append(errs, fmt.Errorf("import %q → %s not found (from %s)",
-					path, rel(rootDir, target), rel(rootDir, absPath)))
-				continue
-			}
-			load(mustAbs(target))
-		}
-		result = append(result, &unit{path: absPath, file: f})
-		seen[absPath] = true
-	}
-	load(entryAbs)
-	if len(errs) > 0 {
 		return nil, errs
 	}
 
 	var merged ast.File
-	for _, u := range result {
-		if same(u.path, entryAbs) {
-			merged.Decls = append(merged.Decls, u.file.Decls...)
+	entryAbs := filepath.Clean(plan.Entry.File)
+
+	// Parse all units; stash entry file decls and then deps.
+	var entryDecls []ast.Decl
+	var depDecls []ast.Decl
+
+	for _, u := range plan.Deps {
+		data, err := os.ReadFile(u.File)
+		if err != nil {
+			return nil, []error{fmt.Errorf("read %s: %v", u.File, err)}
+		}
+		p := parser.New(string(data))
+		f, perr := p.ParseFile()
+		if perr != nil {
+			return nil, []error{fmt.Errorf("parse %s: %v", u.File, perr)}
+		}
+
+		if filepath.Clean(u.File) == entryAbs {
+			entryDecls = append(entryDecls, f.Decls...)
+		} else {
+			depDecls = append(depDecls, f.Decls...)
 		}
 	}
-	for _, u := range result {
-		if !same(u.path, entryAbs) {
-			merged.Decls = append(merged.Decls, u.file.Decls...)
-		}
-	}
+
+	merged.Decls = append(merged.Decls, entryDecls...)
+	merged.Decls = append(merged.Decls, depDecls...)
 	return &merged, nil
 }
