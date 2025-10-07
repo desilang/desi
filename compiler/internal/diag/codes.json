@@ -18,6 +18,10 @@
           "applicability": "machine-applicable"
         }
       ]
+    },
+    "generic_lexer_error": {
+      "id": "DLE0099",
+      "title": "lexer error"
     }
   },
   "parser": {
@@ -56,6 +60,14 @@
       "id": "DPE0005",
       "title": "invalid assignment target",
       "help": "only names, tuple patterns, or index/field targets may appear on the left of an assignment"
+    },
+    "unexpected_after_pub": {
+      "id": "DPE0100",
+      "title": "unexpected token after 'pub'"
+    },
+    "wildcard_has_payload": {
+      "id": "DPE0101",
+      "title": "wildcard '_' cannot have a payload"
     }
   },
   "type": {
@@ -203,6 +215,38 @@
       "id": "DTE1002",
       "title": "cannot await a non-future value",
       "help": "Only values of kind `future<T>` can be awaited."
+    },
+    "builtin_wrong_arity": {
+      "id": "DTE0112",
+      "title": "wrong number of arguments"
+    },
+    "builtin_arg_void": {
+      "id": "DTE0110",
+      "title": "argument is void"
+    },
+    "builtin_arg_unsupported_kind": {
+      "id": "DTE0111",
+      "title": "unsupported argument kind"
+    },
+    "call_wrong_arity": {
+      "id": "DTE0046",
+      "title": "wrong number of arguments"
+    },
+    "module_call_wrong_arity": {
+      "id": "DTE0045",
+      "title": "wrong number of arguments"
+    },
+    "enum_ctor_wrong_arity": {
+      "id": "DTE0044",
+      "title": "wrong number of arguments"
+    },
+    "incompatible_struct_assignment": {
+      "id": "DTE0030",
+      "title": "incompatible struct assignment"
+    },
+    "incompatible_enum_assignment": {
+      "id": "DTE0030",
+      "title": "incompatible enum assignment"
     }
   },
   "module": {
@@ -245,6 +289,98 @@
       "id": "DW0007",
       "title": "non-exhaustive match",
       "help": "add arms for the missing variants or a wildcard '_' arm"
+    }
+  },
+  "codegen": {
+    "c_backend_generic": {
+      "id": "DCE9000",
+      "title": "C backend error",
+      "help": "This code isn’t supported by the C backend. Consider the LLVM backend or adjust types."
+    },
+    "unsupported_return_type": {
+      "id": "DCE0001",
+      "title": "unsupported return type",
+      "help": "Use i8/i16/i32/i64/isize, u8/u16/u32/u64/usize, bool, str, f32, or f64. Otherwise use --backend=llvm."
+    },
+    "unknown_return_type": {
+      "id": "DCE0002",
+      "title": "unknown return type",
+      "help": "Define the type (struct/enum) or switch to --backend=llvm."
+    },
+    "non_async_returns_future": {
+      "id": "DCE0003",
+      "title": "non-async function returns future",
+      "help": "Mark the function 'async' or change the return type."
+    },
+    "param_none_not_allowed": {
+      "id": "DCE0010",
+      "title": "parameter cannot have type 'none'",
+      "help": "Use a concrete type for parameters."
+    },
+    "param_future_not_supported": {
+      "id": "DCE0011",
+      "title": "parameter cannot have type 'future' in C backend",
+      "help": "Pass concrete values; futures aren’t supported as parameters in the C backend."
+    },
+    "unsupported_param_type": {
+      "id": "DCE0012",
+      "title": "unsupported parameter type",
+      "help": "Use the supported scalar set or switch to --backend=llvm."
+    },
+    "unknown_param_type": {
+      "id": "DCE0013",
+      "title": "unknown parameter type",
+      "help": "Define the type or switch to --backend=llvm."
+    },
+    "field_none_not_allowed": {
+      "id": "DCE0020",
+      "title": "struct field cannot have type 'none'",
+      "help": "Use a concrete field type."
+    },
+    "field_future_not_supported": {
+      "id": "DCE0021",
+      "title": "struct field cannot have type 'future'",
+      "help": "Store a concrete value instead of a future when targeting C."
+    },
+    "unsupported_field_type": {
+      "id": "DCE0022",
+      "title": "unsupported struct field type",
+      "help": "Use the supported scalar set or switch to --backend=llvm."
+    },
+    "unknown_field_type": {
+      "id": "DCE0023",
+      "title": "unknown struct field type",
+      "help": "Define the field type or switch to --backend=llvm."
+    },
+    "enum_payload_future_not_supported": {
+      "id": "DCE0030",
+      "title": "enum payload cannot be 'future'",
+      "help": "Choose a supported payload type or use --backend=llvm."
+    },
+    "enum_payload_unsupported": {
+      "id": "DCE0031",
+      "title": "unsupported enum payload type",
+      "help": "Use supported scalars for payloads or switch to --backend=llvm."
+    },
+    "enum_payload_unknown": {
+      "id": "DCE0032",
+      "title": "unknown enum payload type",
+      "help": "Define the payload type or switch to --backend=llvm."
+    },
+    "type_alias_future_not_supported": {
+      "id": "DCE0040",
+      "title": "type alias cannot target 'future'",
+      "help": "Alias a supported type when targeting C."
+    },
+    "type_alias_unsupported": {
+      "id": "DCE0041",
+      "title": "unsupported type alias target",
+      "help": "Alias a supported scalar or use --backend=llvm."
+    },
+    "type_alias_unknown": {
+      "id": "DCE0042",
+      "title": "unknown type alias target",
+      "help": "Define the target type or switch to --backend=llvm."
     }
   }
 }
