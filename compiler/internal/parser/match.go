@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
@@ -51,7 +49,7 @@ func (p *Parser) parseMatchStmtAt(matchTok lexer.Token) (*ast.MatchStmt, error) 
 
 		// Wildcard can't carry payload.
 		if pat.Variant == "_" && p.at(lexer.TokLParen) {
-			return nil, fmt.Errorf("wildcard '_' cannot have a payload")
+			return nil, ErrWildcardHasPayload(p.tok) // '(' token
 		}
 
 		// Optional "()" or "(name)" — binder can be "_" (ignored) or any identifier.

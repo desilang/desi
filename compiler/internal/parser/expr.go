@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
@@ -13,7 +11,7 @@ func (p *Parser) parseExpr() (ast.Expr, error) {
 	// Surface lexer errors immediately inside expressions
 	if p.at(lexer.TokErr) {
 		t := p.tok
-		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+		return nil, ErrLexerError(t)
 	}
 	left, err := p.parseUnary()
 	if err != nil {
@@ -25,7 +23,7 @@ func (p *Parser) parseExpr() (ast.Expr, error) {
 func (p *Parser) parseExprWithLHS(lhs ast.Expr) (ast.Expr, error) {
 	if p.at(lexer.TokErr) {
 		t := p.tok
-		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+		return nil, ErrLexerError(t)
 	}
 	post, err := p.parsePostfix(lhs)
 	if err != nil {
@@ -38,7 +36,7 @@ func (p *Parser) parseUnary() (ast.Expr, error) {
 	// Surface lexer errors if a unary operator position contains TokErr
 	if p.at(lexer.TokErr) {
 		t := p.tok
-		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+		return nil, ErrLexerError(t)
 	}
 	switch {
 	case p.at(lexer.TokMinus):
@@ -96,7 +94,7 @@ func (p *Parser) parsePrimary() (ast.Expr, error) {
 	// Surface lexer errors at primary positions (e.g., unterminated string)
 	if p.at(lexer.TokErr) {
 		t := p.tok
-		return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+		return nil, ErrLexerError(t)
 	}
 	if p.at(lexer.TokIdent) {
 		t := p.tok
@@ -226,7 +224,7 @@ func (p *Parser) parsePostfix(base ast.Expr) (ast.Expr, error) {
 					// Allow TokErr to bubble as a cleaner message (e.g., unterminated string)
 					if p.at(lexer.TokErr) {
 						t := p.tok
-						return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+						return nil, ErrLexerError(t)
 					}
 					a, err := p.parseExpr()
 					if err != nil {

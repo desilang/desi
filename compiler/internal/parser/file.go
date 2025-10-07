@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
@@ -139,7 +137,7 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 
 			default:
 				// 'pub' not followed by a known decl keyword
-				return nil, fmt.Errorf("DPE0001: unexpected token after 'pub': %s", p.tok.Kind.String())
+				return nil, ErrAfterPubUnexpected(p.tok)
 			}
 			p.skipNewlines()
 			continue
@@ -210,7 +208,7 @@ func (p *Parser) ParseFile() (*ast.File, error) {
 			// Surface lexer errors immediately at top-level
 			if p.at(lexer.TokErr) {
 				t := p.tok
-				return nil, fmt.Errorf("%s at %d:%d", t.Lex, t.Line, t.Col)
+				return nil, ErrLexerError(t)
 			}
 			for !p.at(lexer.TokNewline) && !p.at(lexer.TokEOF) {
 				p.next()

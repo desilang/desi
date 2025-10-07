@@ -206,3 +206,31 @@ func ErrAwaitRequiresExpr(at lexer.Token) error {
 	sp := spanFromTok(at)
 	return parseError{code: id, title: title, domain: "parser", key: "await_requires_expr", span: &sp}
 }
+
+// DPE0100: unexpected token after 'pub'
+func ErrAfterPubUnexpected(got lexer.Token) error {
+	id, _ := lookupIDTitle("parser", "unexpected_after_pub", "DPE0100", "unexpected token after 'pub'")
+	title := fmt.Sprintf("unexpected token after 'pub': %s", got.Kind.String())
+	sp := spanFromTok(got)
+	return parseError{code: id, title: title, domain: "parser", key: "unexpected_after_pub", span: &sp}
+}
+
+// DPE0101: wildcard '_' cannot have a payload
+func ErrWildcardHasPayload(at lexer.Token) error {
+	id, _ := lookupIDTitle("parser", "wildcard_has_payload", "DPE0101", "wildcard '_' cannot have a payload")
+	title := "wildcard '_' cannot have a payload"
+	sp := spanFromTok(at)
+	return parseError{code: id, title: title, domain: "parser", key: "wildcard_has_payload", span: &sp}
+}
+
+func ErrLexerError(tok lexer.Token) error {
+	id, _ := lookupIDTitle("lexer", "generic_lexer_error", "DLE0001", "lexer error")
+	sp := spanFromTok(tok)
+	return parseError{
+		code:   id,
+		title:  tok.Lex, // show the concrete lexer message
+		domain: "lexer",
+		key:    "generic_lexer_error",
+		span:   &sp,
+	}
+}

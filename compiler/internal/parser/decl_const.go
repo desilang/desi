@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"fmt"
-
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
@@ -47,7 +45,8 @@ func (p *Parser) parseTopConstAt(letTok lexer.Token, pub bool) (*ast.ConstDecl, 
 		return nil, err
 	}
 	if len(values) != 1 {
-		return nil, fmt.Errorf("DPE0004: trailing or extra value in top-level const (expected 1 value)")
+		// Use a generic, but still-structured diag. Pin at the newline token.
+		return nil, ErrTrailingOrExtraToken("top-level const", nl)
 	}
 
 	return &ast.ConstDecl{
