@@ -218,35 +218,43 @@
     },
     "builtin_wrong_arity": {
       "id": "DTE0112",
-      "title": "wrong number of arguments"
+      "title": "wrong number of arguments",
+      "help": "check the function's signature and adjust the number of arguments"
     },
     "builtin_arg_void": {
       "id": "DTE0110",
-      "title": "argument is void"
+      "title": "argument is void",
+      "help": "arguments must produce a value; remove expressions of kind 'none'"
     },
     "builtin_arg_unsupported_kind": {
       "id": "DTE0111",
-      "title": "unsupported argument kind"
+      "title": "unsupported argument kind",
+      "help": "convert the expression to a supported kind (int/float/str/bool)"
     },
     "call_wrong_arity": {
       "id": "DTE0046",
-      "title": "wrong number of arguments"
+      "title": "wrong number of arguments",
+      "help": "pass exactly the required number of arguments"
     },
     "module_call_wrong_arity": {
       "id": "DTE0045",
-      "title": "wrong number of arguments"
+      "title": "wrong number of arguments",
+      "help": "verify the arity of the function exported by that module"
     },
     "enum_ctor_wrong_arity": {
       "id": "DTE0044",
-      "title": "wrong number of arguments"
+      "title": "wrong number of arguments",
+      "help": "constructors for payloadless variants take no arguments; payloadful ones take exactly one"
     },
     "incompatible_struct_assignment": {
       "id": "DTE0030",
-      "title": "incompatible struct assignment"
+      "title": "incompatible struct assignment",
+      "help": "assign a value of the same struct type"
     },
     "incompatible_enum_assignment": {
       "id": "DTE0030",
-      "title": "incompatible enum assignment"
+      "title": "incompatible enum assignment",
+      "help": "assign a value of the same enum type/variant"
     }
   },
   "module": {

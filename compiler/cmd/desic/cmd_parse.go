@@ -8,6 +8,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/build"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lexbridge"
 	"github.com/desilang/desi/compiler/internal/parsebridge"
 	"github.com/desilang/desi/compiler/internal/term"
@@ -164,14 +165,64 @@ func cmdParse(args []string) int {
 	// Otherwise: Go-lexer or Desi-lexer (Stage-1) paths.
 	f, errs := build.ResolveAndParseMaybeDesi(file, useDesiLexer, keepTmp, verbose)
 	if len(errs) > 0 {
+		errCount := 0
 		for _, e := range errs {
-			// Pretty-print lexbridge LEXERR diagnostics if present
-			if pretty := lexbridge.RenderLexbridgeErrorPretty(e, file, nil); pretty != "" {
+			// 1) Pretty-print lexbridge LEXERR diagnostics if present
+			if pretty := lexbridge.RenderLexbridgeErrorPretty(e, guessErrFile(e.Error(), file), nil); pretty != "" {
 				term.Eprintf("%s", pretty)
-			} else {
-				term.Eprintf("%v\n", e)
+				errCount++
+				continue
 			}
+
+			// 2) Structured diagnostics with code/span: render with snippet + help
+			type codedWithKey interface {
+				Code() string
+				Title() string
+				Domain() string
+				Key() string
+			}
+			type spanCarrier interface {
+				Span() (ast.Span, bool)
+				Notes() []string
+			}
+			if te, ok := e.(codedWithKey); ok && strings.TrimSpace(te.Code()) != "" {
+				if sc, ok2 := e.(spanCarrier); ok2 {
+					if sp, ok3 := sc.Span(); ok3 {
+						render := diag.Render(
+							diag.Diagnostic{
+								Domain:  te.Domain(),
+								Key:     te.Key(),
+								Code:    te.Code(),
+								Level:   diag.LevelError,
+								Message: te.Title(),
+								Span:    diag.Span{Start: diag.Pos{Line: sp.Start.Line, Col: sp.Start.Col}, End: diag.Pos{Line: sp.End.Line, Col: sp.End.Col}},
+								Notes:   sc.Notes(),
+							},
+							file,
+							makeLineGetter(file),
+						)
+						term.Eprintf("%s", render)
+						if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+							term.Eprintf("help: %s\n", h)
+						}
+						errCount++
+						continue
+					}
+				}
+				// fallback (coded but no span)
+				term.Eprintf("error[%s]: %s\n", te.Code(), te.Title())
+				if h := lookupHelp(te.Domain(), te.Key()); strings.TrimSpace(h) != "" {
+					term.Eprintf("help: %s\n", h)
+				}
+				errCount++
+				continue
+			}
+
+			// 3) Final fallback
+			term.Eprintf("error: %v\n", e)
+			errCount++
 		}
+		term.Eprintf("summary: %d error(s)\n", errCount)
 		return 1
 	}
 
