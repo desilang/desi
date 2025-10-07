@@ -37,9 +37,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 						continue
 					}
 					if rk != KindUnknown {
-						c.errors = append(c.errors, TypeErrorAtf(
-							lv.Span, "incompatible_struct_assign", "DTE0030", "incompatible struct value",
-							"%s: %q", "assignment to", lv.Name))
+						c.errors = append(c.errors, ErrIncompatibleStructAssignAt(lv.Span, lv.Name))
 					}
 					v.written = true
 					continue
@@ -52,9 +50,7 @@ func (c *checker) checkAssign(st *ast.AssignStmt) {
 						continue
 					}
 					if rk != KindUnknown {
-						c.errors = append(c.errors, TypeErrorAtf(
-							lv.Span, "incompatible_enum_assign", "DTE0030", "incompatible enum value",
-							"%s: %q", "assignment to", lv.Name))
+						c.errors = append(c.errors, ErrIncompatibleEnumAssignAt(lv.Span, lv.Name))
 					}
 					v.written = true
 					continue

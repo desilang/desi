@@ -309,3 +309,47 @@ func ErrPayloadlessVariantBinderAt(sp ast.Span, variant, binder string) error {
 	return TypeErrorAtf(sp, "payloadless_variant_binder", "DTE0043", "payloadless variant used with a binder",
 		"%s: variant %q has no payload; binder %q is invalid", variant, binder)
 }
+
+// ---- Builtin / arity helpers ----
+
+func ErrBuiltinWrongArityAt(sp ast.Span, call string, want, got int) error {
+	return TypeErrorAtf(sp, "builtin_wrong_arity", "DTE0112", "wrong number of arguments",
+		"%s in %s: want %d arg(s), got %d", call, want, got)
+}
+
+func ErrBuiltinArgVoidAt(sp ast.Span, call string, argPos int) error {
+	return TypeErrorAtf(sp, "builtin_arg_void", "DTE0110", "argument is void",
+		"%s in %s: argument %d is void (no value)", call, argPos)
+}
+
+func ErrBuiltinArgUnsupportedKindAt(sp ast.Span, call string, argPos int, got string) error {
+	return TypeErrorAtf(sp, "builtin_arg_unsupported_kind", "DTE0111", "unsupported argument kind",
+		"%s in %s: argument %d has unsupported kind %s", call, argPos, got)
+}
+
+func ErrCallWrongArityAt(sp ast.Span, name string, want, got int) error {
+	return TypeErrorAtf(sp, "call_wrong_arity", "DTE0046", "wrong number of arguments",
+		"%s in call to %s: want %d arg(s), got %d", name, want, got)
+}
+
+func ErrModuleCallWrongArityAt(sp ast.Span, alias, name string, want, got int) error {
+	return TypeErrorAtf(sp, "module_call_wrong_arity", "DTE0045", "wrong number of arguments",
+		"%s in call to %s via %s: want %d arg(s), got %d", name, alias, want, got)
+}
+
+func ErrEnumCtorWrongArityAt(sp ast.Span, enumName, variant string, want, got int) error {
+	return TypeErrorAtf(sp, "enum_ctor_wrong_arity", "DTE0044", "wrong number of arguments",
+		"%s in %s.%s: expects %d arg(s), got %d", "enum constructor", enumName, variant, want, got)
+}
+
+// ---- Assignment helpers ----
+
+func ErrIncompatibleStructAssignAt(sp ast.Span, name string) error {
+	return TypeErrorAtf(sp, "incompatible_struct_assignment", "DTE0030", "incompatible struct assignment",
+		"%s: assignment to %q has incompatible struct value", name)
+}
+
+func ErrIncompatibleEnumAssignAt(sp ast.Span, name string) error {
+	return TypeErrorAtf(sp, "incompatible_enum_assignment", "DTE0030", "incompatible enum assignment",
+		"%s: assignment to %q has incompatible enum value", name)
+}

@@ -231,13 +231,9 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					switch ak {
 					case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
 					case KindVoid:
-						c.errors = append(c.errors, TypeErrorAtf(
-							v.Span, "builtin_arg_invalid", "DTE0101", "invalid builtin argument",
-							"%s arg %d is void (no value)", "io.println", i+1))
+						c.errors = append(c.errors, ErrBuiltinArgVoidAt(v.Span, "io.println", i+1))
 					default:
-						c.errors = append(c.errors, TypeErrorAtf(
-							v.Span, "builtin_arg_invalid", "DTE0101", "invalid builtin argument",
-							"%s arg %d has unsupported kind %s", "io.println", i+1, ak))
+						c.errors = append(c.errors, ErrBuiltinArgUnsupportedKindAt(v.Span, "io.println", i+1, fmt.Sprintf("%s", ak)))
 					}
 				}
 				return KindVoid
@@ -245,62 +241,46 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			// fs.read_all(path: str) -> str
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "fs" && fe.Name == "read_all" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 1 arg (path: str), got %d", "fs.read_all", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "fs.read_all (path: str)", 1, len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arg_type", "DTE0101", "invalid builtin argument type",
-						"%s: path must be str, got %s", "fs.read_all", ak))
+					c.errors = append(c.errors, ErrTypeMismatch("str", fmt.Sprintf("%s", ak), "fs.read_all path"))
 				}
 				return KindStr
 			}
 			// os.exit(code: int) -> void
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "os" && fe.Name == "exit" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 1 arg (code: int), got %d", "os.exit", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "os.exit (code: int)", 1, len(v.Args)))
 				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arg_type", "DTE0101", "invalid builtin argument type",
-						"%s: code must be int, got %s", "os.exit", ak))
+					c.errors = append(c.errors, ErrTypeMismatch("int", fmt.Sprintf("%s", ak), "os.exit code"))
 				}
 				return KindVoid
 			}
 			// mem.free(x) -> void
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "mem" && fe.Name == "free" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 1 arg, got %d", "mem.free", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "mem.free", 1, len(v.Args)))
 				}
 				return KindVoid
 			}
 			// str.len(s) -> int
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "len" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 1 arg (str), got %d", "str.len", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.len (str)", 1, len(v.Args)))
 				}
 				return KindInt
 			}
 			// str.at(s,i) -> int
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "at" {
 				if len(v.Args) != 2 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 2 args (str,int), got %d", "str.at", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.at (str,int)", 2, len(v.Args)))
 				}
 				return KindInt
 			}
 			// str.from_code(i) -> str
 			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "from_code" {
 				if len(v.Args) != 1 {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arity", "DTE0100", "invalid builtin arity",
-						"%s: want 1 arg (int), got %d", "str.from_code", len(v.Args)))
+					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.from_code (int)", 1, len(v.Args)))
 				}
 				return KindStr
 			}
@@ -319,9 +299,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 						expect = 1
 					}
 					if len(v.Args) != expect {
-						c.errors = append(c.errors, TypeErrorAtf(
-							v.Span, "enum_ctor_arity", "DTE0044", "enum constructor arity mismatch",
-							"%s.%s expects %d arg(s), got %d", id.Name, fe.Name, expect, len(v.Args)))
+						c.errors = append(c.errors, ErrEnumCtorWrongArityAt(v.Span, id.Name, fe.Name, expect, len(v.Args)))
 					} else if expect == 1 {
 						wantK, _ := mapTypeOrStruct(vt, c.info)
 						gotK := c.kindOfExpr(v.Args[0])
@@ -346,9 +324,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 								c.errors = append(c.errors, ErrNotPublic(fe.Name, "module alias call"))
 							}
 							if len(sig.Params) != len(v.Args) {
-								c.errors = append(c.errors, TypeErrorAtf(
-									v.Span, "call_arity_mismatch", "DTE0102", "call arity mismatch",
-									"call to %s via %s: want %d args, got %d", fe.Name, id.Name, len(sig.Params), len(v.Args)))
+								c.errors = append(c.errors, ErrModuleCallWrongArityAt(v.Span, id.Name, fe.Name, len(sig.Params), len(v.Args)))
 							}
 							n := _min(len(sig.Params), len(v.Args))
 							for i := 0; i < n; i++ {
@@ -375,13 +351,9 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				switch ak {
 				case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
 				case KindVoid:
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arg_invalid", "DTE0101", "invalid builtin argument",
-						"%s arg %d is void (no value)", "print", i+1))
+					c.errors = append(c.errors, ErrBuiltinArgVoidAt(v.Span, "print", i+1))
 				default:
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "builtin_arg_invalid", "DTE0101", "invalid builtin argument",
-						"%s arg %d has unsupported kind %s", "print", i+1, ak))
+					c.errors = append(c.errors, ErrBuiltinArgUnsupportedKindAt(v.Span, "print", i+1, fmt.Sprintf("%s", ak)))
 				}
 			}
 			return KindVoid
@@ -404,9 +376,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					}
 				}
 				if len(sig.Params) != len(v.Args) {
-					c.errors = append(c.errors, TypeErrorAtf(
-						v.Span, "call_arity_mismatch", "DTE0102", "call arity mismatch",
-						"call to %s: want %d args, got %d", name, len(sig.Params), len(v.Args)))
+					c.errors = append(c.errors, ErrCallWrongArityAt(v.Span, name, len(sig.Params), len(v.Args)))
 				}
 				n := _min(len(sig.Params), len(v.Args))
 				for i := 0; i < n; i++ {
