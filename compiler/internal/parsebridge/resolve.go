@@ -22,18 +22,16 @@ func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 	if len(mdiags) > 0 {
 		errs := make([]error, 0, len(mdiags))
 		for _, d := range mdiags {
-			// diag.Diagnostic implements error; forward as-is.
 			errs = append(errs, d)
 		}
 		return nil, errs
 	}
 
-	var merged ast.File
 	entryAbs := filepath.Clean(plan.Entry.File)
-
-	// Parse all units; stash entry file decls and then deps.
-	var entryDecls []ast.Decl
-	var depDecls []ast.Decl
+	var (
+		entryDecls []ast.Decl
+		depDecls   []ast.Decl
+	)
 
 	for _, u := range plan.Deps {
 		data, err := os.ReadFile(u.File)
@@ -53,6 +51,7 @@ func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 		}
 	}
 
+	var merged ast.File
 	merged.Decls = append(merged.Decls, entryDecls...)
 	merged.Decls = append(merged.Decls, depDecls...)
 	return &merged, nil

@@ -3,6 +3,7 @@ package build
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
@@ -37,8 +38,11 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	}
 
 	entryAbs := filepath.Clean(plan.Entry.File)
-	var entryDecls []ast.Decl
-	var depDecls []ast.Decl
+	var (
+		entryDecls []ast.Decl
+		depDecls   []ast.Decl
+		diags      []error // warnings (e.g., duplicate imports)
+	)
 
 	for _, u := range plan.Deps {
 		data, err := os.ReadFile(u.File)
@@ -51,6 +55,10 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 			// Parser errors are returned as plain errors; the caller renders them.
 			return nil, []error{ErrParseFailed(u.File, perr)}
 		}
+
+		// collect duplicate-import warnings for this file
+		diags = append(diags, scanDuplicateImports(f)...)
+
 		if filepath.Clean(u.File) == entryAbs {
 			entryDecls = append(entryDecls, f.Decls...)
 		} else {
@@ -61,7 +69,33 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	var merged ast.File
 	merged.Decls = append(merged.Decls, entryDecls...)
 	merged.Decls = append(merged.Decls, depDecls...)
-	return &merged, nil
+	return &merged, diags
+}
+
+// helper: detect duplicate plain imports and from-import modules
+func scanDuplicateImports(f *ast.File) []error {
+	var out []error
+	seen := map[string]struct{}{}
+
+	add := func(p string) {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			return
+		}
+		if _, ok := seen[p]; ok {
+			out = append(out, WarnDuplicateImport(p))
+			return
+		}
+		seen[p] = struct{}{}
+	}
+
+	for _, im := range f.Imports {
+		add(im.Path)
+	}
+	for _, fm := range f.FromImports {
+		add(fm.Module)
+	}
+	return out
 }
 
 // ResolveAndParseWithParserBridge kept for CLI compatibility.

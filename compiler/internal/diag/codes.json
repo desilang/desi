@@ -68,6 +68,16 @@
     "wildcard_has_payload": {
       "id": "DPE0101",
       "title": "wildcard '_' cannot have a payload"
+    },
+    "async_before_def": {
+      "id": "DPE1001",
+      "title": "async only valid before 'def'",
+      "help": "Place 'async' immediately before 'def', or remove it."
+    },
+    "await_requires_expr": {
+      "id": "DPE1002",
+      "title": "await requires an expression",
+      "help": "Write 'await <expr>' where <expr> is a future."
     }
   },
   "type": {
@@ -272,6 +282,36 @@
       "id": "DMW0001",
       "title": "duplicate import",
       "help": "remove the repeated import; importing the same module multiple times has no effect"
+    },
+    "bad_import": {
+      "id": "DME0003",
+      "title": "invalid import path",
+      "help": "Use dotted names like 'foo.bar'; no spaces or invalid characters."
+    },
+    "io_read": {
+      "id": "DME0004",
+      "title": "failed to read file",
+      "help": "Check file permissions and path casing."
+    },
+    "parse_failed": {
+      "id": "DME0005",
+      "title": "parse failed during resolution",
+      "help": "Fix parser errors in the imported file."
+    },
+    "bad_entry": {
+      "id": "DME0006",
+      "title": "bad entry path",
+      "help": "Pass a valid .desi file; avoid directories or missing paths."
+    },
+    "entry_not_found": {
+      "id": "DME0007",
+      "title": "entry not found",
+      "help": "Make sure the entry file exists and isn’t a directory."
+    },
+    "internal": {
+      "id": "DME0099",
+      "title": "internal error",
+      "help": "This indicates a compiler bug; please report with a repro."
     }
   },
   "warn": {
