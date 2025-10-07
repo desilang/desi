@@ -3,41 +3,11 @@ package parser
 import (
 	"fmt"
 
-	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lexer"
 )
 
-/*** typed, span-carrying parse error ***/
-
-type parseError struct {
-	code   string
-	title  string
-	domain string
-	key    string
-	span   *ast.Span
-	notes  []string
-}
-
-func (e parseError) Error() string {
-	if e.code != "" {
-		return e.code + ": " + e.title
-	}
-	return e.title
-}
-func (e parseError) Code() string   { return e.code }
-func (e parseError) Title() string  { return e.title }
-func (e parseError) Domain() string { return e.domain }
-func (e parseError) Key() string    { return e.key }
-func (e parseError) Span() (ast.Span, bool) {
-	if e.span == nil {
-		return ast.Span{}, false
-	}
-	return *e.span, true
-}
-func (e parseError) Notes() []string { return e.notes }
-
-/*** catalog lookup ***/
+/*** lookup + tiny utils ***/
 
 func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, string) {
 	if info, ok := diag.LookupFull(domain, key); ok {
@@ -52,6 +22,11 @@ func lookupIDTitle(domain, key, fallbackID, fallbackTitle string) (string, strin
 		return id, title
 	}
 	return fallbackID, fallbackTitle
+}
+
+func tokSpan(t lexer.Token) diag.Span {
+	p := diag.Pos{Line: t.Line, Col: t.Col}
+	return diag.Span{Start: p, End: p}
 }
 
 /*** pretty helpers ***/
@@ -144,93 +119,89 @@ func prettyGot(tok lexer.Token) string {
 	}
 }
 
-func spanFromTok(t lexer.Token) ast.Span {
-	p := ast.Pos{Line: t.Line, Col: t.Col}
-	return ast.Span{Start: p, End: p}
+/*** generic constructor (parser domain) ***/
+
+// ParserErrorAtf builds a parser-domain error by key. The registry title becomes
+// the FIRST %s in format (same pattern as TypeErrorf/TypeErrorAtf).
+func ParserErrorAtf(at lexer.Token, key, fallbackID, fallbackTitle, format string, args ...any) error {
+	id, title := lookupIDTitle("parser", key, fallbackID, fallbackTitle)
+	msg := fmt.Sprintf(format, append([]any{title}, args...)...)
+	return diag.Diagnostic{
+		Domain:  "parser",
+		Key:     key,
+		Level:   diag.LevelError,
+		Code:    id,
+		Message: msg,
+		Span:    tokSpan(at),
+	}
 }
 
-/*** constructors (DPE...) ***/
+/*** constructors (DPE…) implemented via the helper ***/
 
 // DPE0001: unexpected token
 func ErrUnexpectedToken(context string, tok lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "unexpected_token", "DPE0001", "unexpected token")
-	title := fmt.Sprintf("unexpected token in %s: %s", context, prettyGot(tok))
-	sp := spanFromTok(tok)
-	return parseError{code: id, title: title, domain: "parser", key: "unexpected_token", span: &sp}
+	return ParserErrorAtf(tok, "unexpected_token", "DPE0001", "unexpected token",
+		"unexpected token in %s: %s", context, prettyGot(tok))
 }
 
 // DPE0002: expected a different token
 func ErrExpectedToken(context string, expected lexer.TokKind, got lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "expected_token", "DPE0002", "expected a different token")
-	title := fmt.Sprintf("expected %s, found %s", prettyKind(expected), prettyGot(got))
-	sp := spanFromTok(got)
-	return parseError{code: id, title: title, domain: "parser", key: "expected_token", span: &sp}
+	return ParserErrorAtf(got, "expected_token", "DPE0002", "expected a different token",
+		"expected %s, found %s", prettyKind(expected), prettyGot(got))
 }
 
 // DPE0003: unclosed delimiter
-func ErrUnclosedDelimiter(context string, open string, want string, atTok lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "unclosed_delimiter", "DPE0003", "unclosed delimiter")
-	title := fmt.Sprintf("unclosed %s; expected matching %s in %s", open, want, context)
-	sp := spanFromTok(atTok)
-	return parseError{code: id, title: title, domain: "parser", key: "unclosed_delimiter", span: &sp}
+func ErrUnclosedDelimiter(context, open, want string, atTok lexer.Token) error {
+	return ParserErrorAtf(atTok, "unclosed_delimiter", "DPE0003", "unclosed delimiter",
+		"unclosed %s; expected matching %s in %s", open, want, context)
 }
 
 // DPE0004: trailing or extra token
 func ErrTrailingOrExtraToken(context string, tok lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "trailing_or_extra_token", "DPE0004", "trailing or extra token")
-	title := fmt.Sprintf("trailing or extra %s in %s", prettyGot(tok), context)
-	sp := spanFromTok(tok)
-	return parseError{code: id, title: title, domain: "parser", key: "trailing_or_extra_token", span: &sp}
+	return ParserErrorAtf(tok, "trailing_or_extra_token", "DPE0004", "trailing or extra token",
+		"trailing or extra %s in %s", prettyGot(tok), context)
 }
 
 // DPE0005: invalid assignment target
 func ErrInvalidAssignmentTarget(context string, tok lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "invalid_assignment_target", "DPE0005", "invalid assignment target")
-	title := fmt.Sprintf("invalid assignment target in %s: %s", context, prettyGot(tok))
-	sp := spanFromTok(tok)
-	return parseError{code: id, title: title, domain: "parser", key: "invalid_assignment_target", span: &sp}
+	return ParserErrorAtf(tok, "invalid_assignment_target", "DPE0005", "invalid assignment target",
+		"invalid assignment target in %s: %s", context, prettyGot(tok))
 }
 
 // DPE1001: async only before 'def'
 func ErrAsyncOnlyBeforeDef(got lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "async_before_def", "DPE1001", "async only valid before 'def'")
-	title := "async is only valid immediately before 'def'"
-	sp := spanFromTok(got)
-	return parseError{code: id, title: title, domain: "parser", key: "async_before_def", span: &sp}
+	return ParserErrorAtf(got, "async_before_def", "DPE1001", "async only valid before 'def'",
+		"%s")
 }
 
 // DPE1002: await requires an expression
 func ErrAwaitRequiresExpr(at lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "await_requires_expr", "DPE1002", "await requires an expression")
-	title := "await requires an expression"
-	sp := spanFromTok(at)
-	return parseError{code: id, title: title, domain: "parser", key: "await_requires_expr", span: &sp}
+	return ParserErrorAtf(at, "await_requires_expr", "DPE1002", "await requires an expression",
+		"%s")
 }
 
 // DPE0100: unexpected token after 'pub'
 func ErrAfterPubUnexpected(got lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "unexpected_after_pub", "DPE0100", "unexpected token after 'pub'")
-	title := fmt.Sprintf("unexpected token after 'pub': %s", got.Kind.String())
-	sp := spanFromTok(got)
-	return parseError{code: id, title: title, domain: "parser", key: "unexpected_after_pub", span: &sp}
+	return ParserErrorAtf(got, "unexpected_after_pub", "DPE0100", "unexpected token after 'pub'",
+		"unexpected token after 'pub': %s", got.Kind.String())
 }
 
 // DPE0101: wildcard '_' cannot have a payload
 func ErrWildcardHasPayload(at lexer.Token) error {
-	id, _ := lookupIDTitle("parser", "wildcard_has_payload", "DPE0101", "wildcard '_' cannot have a payload")
-	title := "wildcard '_' cannot have a payload"
-	sp := spanFromTok(at)
-	return parseError{code: id, title: title, domain: "parser", key: "wildcard_has_payload", span: &sp}
+	return ParserErrorAtf(at, "wildcard_has_payload", "DPE0101", "wildcard '_' cannot have a payload",
+		"%s")
 }
+
+/*** lexer passthrough — domain=lexer; message is lexer’s own text ***/
 
 func ErrLexerError(tok lexer.Token) error {
 	id, _ := lookupIDTitle("lexer", "generic_lexer_error", "DLE0001", "lexer error")
-	sp := spanFromTok(tok)
-	return parseError{
-		code:   id,
-		title:  tok.Lex, // show the concrete lexer message
-		domain: "lexer",
-		key:    "generic_lexer_error",
-		span:   &sp,
+	return diag.Diagnostic{
+		Domain:  "lexer",
+		Key:     "generic_lexer_error",
+		Level:   diag.LevelError,
+		Code:    id,
+		Message: tok.Lex, // surface the lexer’s own message
+		Span:    tokSpan(tok),
 	}
 }
