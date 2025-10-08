@@ -312,6 +312,16 @@
       "id": "DME0099",
       "title": "internal error",
       "help": "This indicates a compiler bug; please report with a repro."
+    },
+    "import_self": {
+      "id": "DMW0002",
+      "title": "module imports itself",
+      "help": "Remove the self import; a module can reference its own symbols directly."
+    },
+    "import_alias_conflict": {
+      "id": "DMW0003",
+      "title": "import alias conflict",
+      "help": "Give different aliases (e.g., 'import foo as f1') or adjust 'from' items to avoid local name collisions."
     }
   },
   "warn": {

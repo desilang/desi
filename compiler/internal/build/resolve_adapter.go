@@ -41,7 +41,7 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	var (
 		entryDecls []ast.Decl
 		depDecls   []ast.Decl
-		diags      []error // warnings (e.g., duplicate imports)
+		diags      []error // warnings (e.g., duplicate/self/alias conflicts)
 	)
 
 	for _, u := range plan.Deps {
@@ -56,8 +56,10 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 			return nil, []error{ErrParseFailed(u.File, perr)}
 		}
 
-		// collect duplicate-import warnings for this file
+		// collect module-domain warnings for this file
 		diags = append(diags, loaderutil.ScanDuplicateImports(f)...)
+		diags = append(diags, loaderutil.ScanSelfImport(f, u.Module)...)
+		diags = append(diags, loaderutil.ScanImportAliasConflicts(f)...)
 
 		if filepath.Clean(u.File) == entryAbs {
 			entryDecls = append(entryDecls, f.Decls...)
