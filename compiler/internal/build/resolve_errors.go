@@ -9,7 +9,7 @@ import (
 )
 
 // Build module-domain diagnostics with IDs/titles hydrated from codes.json.
-// Keys assumed available: module.import_cycle (DME0001), module.missing_module (DME0002)
+// Keys assumed available: module.import_cycle (DME0001), module.not_found (DME0002)
 
 func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Diagnostic {
 	id, title := lookupIDTitle("module", "import_cycle", "DME0001", "import cycle")
@@ -30,13 +30,13 @@ func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Di
 }
 
 func moduleNotFoundDiagAt(module, file string, line, col int, lookedFor []string) diag.Diagnostic {
-	id, title := lookupIDTitle("module", "missing_module", "DME0002", "cannot find module")
+	id, title := lookupIDTitle("module", "not_found", "DME0002", "cannot find module")
 	short := filepath.Clean(file)
 	msg := fmt.Sprintf("%s: %q (import at %s:%d:%d)", title, module, short, line, col)
 
 	d := diag.Diagnostic{
 		Domain:  "module",
-		Key:     "missing_module",
+		Key:     "not_found",
 		Level:   diag.LevelError,
 		Code:    id,
 		Message: msg,

@@ -55,9 +55,9 @@ func ErrImportCycle(chain []string) error {
 
 // DME0002: module not found
 func ErrModuleNotFound(modPath, fromFile string, attempts []string) error {
-	// codes.json key = module.missing_module
+	// codes.json key = module.not_found
 	msg := fmt.Sprintf("cannot find module %q (imported from %s)", modPath, fromFile)
-	d := modMk(diag.LevelError, "missing_module", "DME0002", "cannot find module", msg)
+	d := modMk(diag.LevelError, "not_found", "DME0002", "cannot find module", msg)
 	if len(attempts) > 0 {
 		d.Notes = append(d.Notes, "looked for:")
 		for _, a := range attempts {

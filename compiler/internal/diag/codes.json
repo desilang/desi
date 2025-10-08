@@ -273,7 +273,7 @@
       "title": "import cycle",
       "help": "break the cycle by removing or refactoring one of the imports"
     },
-    "missing_module": {
+    "not_found": {
       "id": "DME0002",
       "title": "cannot find module",
       "help": "verify the dotted path and ensure the file exists under a search root (project dir or compiler/lib)"

@@ -29,19 +29,16 @@ func lookupHelp(domain, key string) string {
 
 // warnHelpFromCode resolves a warning code (DW...) back to a known key and returns help.
 func warnHelpFromCode(code string) string {
-	keys := []struct {
-		domain string
-		key    string
-	}{
-		{"warn", "unused_variable"},
-		{"warn", "shadowed_variable"},
-		{"warn", "unreachable_code"},
-		{"warn", "missing_explicit_return"},
-		{"warn", "non_exhaustive_match"},
+	// Keep this small and explicit; extend as we add warn keys.
+	keys := []string{
+		"unused_variable",
+		"shadowed_variable",
+		"unreachable_code",
+		"missing_explicit_return",
+		"non_exhaustive_match",
 	}
-	up := strings.ToUpper(strings.TrimSpace(code))
-	for _, it := range keys {
-		if info, ok := diag.LookupFull(it.domain, it.key); ok && strings.ToUpper(strings.TrimSpace(info.Entry.ID)) == up {
+	for _, k := range keys {
+		if info, ok := diag.LookupFull("warn", k); ok && info.Entry.ID == code {
 			return info.Entry.Help
 		}
 	}
