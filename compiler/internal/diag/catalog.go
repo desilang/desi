@@ -52,26 +52,36 @@ type Registry struct {
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"lexer"`
+
 	Parser map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"parser"`
+
 	Type map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"type"`
+
 	Warn map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
-	} `json:"warn"` // NEW
+	} `json:"warn"`
+
 	Module map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
-	} `json:"module"` // NEW
+	} `json:"module"`
+
+	Codegen map[string]struct { // NEW: wire the codegen domain
+		CodeEntry
+		PrimaryEnd  WhereSpec
+		Suggestions []SuggestionSpec
+	} `json:"codegen"`
 }
 
 var (
@@ -112,12 +122,16 @@ func Lookup(domain, key string) (CodeEntry, bool) {
 		if v, ok := reg.Type[key]; ok {
 			return v.CodeEntry, true
 		}
-	case "warn": // NEW
+	case "warn":
 		if v, ok := reg.Warn[key]; ok {
 			return v.CodeEntry, true
 		}
-	case "module": // NEW
+	case "module":
 		if v, ok := reg.Module[key]; ok {
+			return v.CodeEntry, true
+		}
+	case "codegen": // NEW
+		if v, ok := reg.Codegen[key]; ok {
 			return v.CodeEntry, true
 		}
 	}
@@ -149,19 +163,23 @@ func LookupFull(domain, key string) (CodeFull, bool) {
 		if v, ok := reg.Type[key]; ok {
 			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
 		}
-	case "warn": // NEW
+	case "warn":
 		if v, ok := reg.Warn[key]; ok {
 			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
 		}
-	case "module": // NEW
+	case "module":
 		if v, ok := reg.Module[key]; ok {
+			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
+		}
+	case "codegen": // NEW
+		if v, ok := reg.Codegen[key]; ok {
 			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
 		}
 	}
 	return CodeFull{}, false
 }
 
-/* Convenience helpers for domains (optional) */
+/* Convenience helpers for domains */
 
 func LookupLexer(key string) (CodeEntry, bool)     { return Lookup("lexer", key) }
 func LookupParser(key string) (CodeEntry, bool)    { return Lookup("parser", key) }
@@ -169,3 +187,11 @@ func LookupType(key string) (CodeEntry, bool)      { return Lookup("type", key) 
 func LookupFullLexer(key string) (CodeFull, bool)  { return LookupFull("lexer", key) }
 func LookupFullParser(key string) (CodeFull, bool) { return LookupFull("parser", key) }
 func LookupFullType(key string) (CodeFull, bool)   { return LookupFull("type", key) }
+
+// Optional parity helpers for new domains
+func LookupWarn(key string) (CodeEntry, bool)       { return Lookup("warn", key) }
+func LookupModule(key string) (CodeEntry, bool)     { return Lookup("module", key) }
+func LookupCodegen(key string) (CodeEntry, bool)    { return Lookup("codegen", key) }
+func LookupFullWarn(key string) (CodeFull, bool)    { return LookupFull("warn", key) }
+func LookupFullModule(key string) (CodeFull, bool)  { return LookupFull("module", key) }
+func LookupFullCodegen(key string) (CodeFull, bool) { return LookupFull("codegen", key) }
