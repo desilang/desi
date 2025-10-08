@@ -22,8 +22,7 @@ type CodeEntry struct {
 
 // WhereSpec indicates where a default suggestion or span end should be placed.
 type WhereSpec struct {
-	// "eol" | "primary_offset" | "pos" (can grow later)
-	Kind  string `json:"kind"`
+	Kind  string `json:"kind"`            // "eol" | "primary_offset" | "pos" (can grow later)
 	Delta int    `json:"delta,omitempty"` // for primary_offset
 	Line  int    `json:"line,omitempty"`  // for pos
 	Col   int    `json:"col,omitempty"`   // for pos
@@ -52,32 +51,27 @@ type Registry struct {
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"lexer"`
-
 	Parser map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"parser"`
-
 	Type map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"type"`
-
 	Warn map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"warn"`
-
 	Module map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
 	} `json:"module"`
-
-	Codegen map[string]struct { // NEW: wire the codegen domain
+	Codegen map[string]struct {
 		CodeEntry
 		PrimaryEnd  WhereSpec
 		Suggestions []SuggestionSpec
@@ -130,7 +124,7 @@ func Lookup(domain, key string) (CodeEntry, bool) {
 		if v, ok := reg.Module[key]; ok {
 			return v.CodeEntry, true
 		}
-	case "codegen": // NEW
+	case "codegen":
 		if v, ok := reg.Codegen[key]; ok {
 			return v.CodeEntry, true
 		}
@@ -171,7 +165,7 @@ func LookupFull(domain, key string) (CodeFull, bool) {
 		if v, ok := reg.Module[key]; ok {
 			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
 		}
-	case "codegen": // NEW
+	case "codegen":
 		if v, ok := reg.Codegen[key]; ok {
 			return CodeFull{Entry: v.CodeEntry, PrimaryEnd: v.PrimaryEnd, Suggestions: v.Suggestions}, true
 		}
