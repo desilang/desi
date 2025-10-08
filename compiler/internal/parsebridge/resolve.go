@@ -7,6 +7,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/build"
+	"github.com/desilang/desi/compiler/internal/loaderutil"
 	"github.com/desilang/desi/compiler/internal/parser"
 )
 
@@ -14,6 +15,7 @@ import (
 // resolver, then parses the resulting plan and merges ASTs: entry first, then deps.
 // - rootDir is kept for signature compatibility; resolver discovers roots automatically.
 // - Any module-domain diagnostics (not-found, cycles) are returned as errors and abort parsing.
+// - Module warnings (e.g., duplicate imports) are returned in the second return value.
 func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 	plan, mdiags, rerr := build.ResolveEntry(entryPath, build.ResolveOptions{})
 	if rerr != nil {
@@ -31,6 +33,7 @@ func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 	var (
 		entryDecls []ast.Decl
 		depDecls   []ast.Decl
+		diags      []error
 	)
 
 	for _, u := range plan.Deps {
@@ -44,6 +47,9 @@ func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 			return nil, []error{fmt.Errorf("parse %s: %v", u.File, perr)}
 		}
 
+		// collect duplicate-import warnings for this file
+		diags = append(diags, loaderutil.ScanDuplicateImports(f)...)
+
 		if filepath.Clean(u.File) == entryAbs {
 			entryDecls = append(entryDecls, f.Decls...)
 		} else {
@@ -54,5 +60,5 @@ func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
 	var merged ast.File
 	merged.Decls = append(merged.Decls, entryDecls...)
 	merged.Decls = append(merged.Decls, depDecls...)
-	return &merged, nil
+	return &merged, diags
 }
