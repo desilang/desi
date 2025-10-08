@@ -12,7 +12,15 @@ import (
 // Keys assumed available: module.import_cycle (DME0001), module.not_found (DME0002)
 
 func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Diagnostic {
-	id, title := lookupIDTitle("module", "import_cycle", "DME0001", "import cycle")
+	ce, _ := diag.LookupFull("module", "import_cycle")
+	code := ce.Entry.ID
+	title := ce.Entry.Title
+	if code == "" {
+		code = "DME0001"
+	}
+	if title == "" {
+		title = "import cycle detected"
+	}
 	short := filepath.Clean(file)
 	msg := fmt.Sprintf("%s (at %s:%d:%d)", title, short, line, col)
 
@@ -20,7 +28,7 @@ func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Di
 		Domain:  "module",
 		Key:     "import_cycle",
 		Level:   diag.LevelError,
-		Code:    id,
+		Code:    code,
 		Message: msg,
 	}
 	if len(chain) > 0 {
@@ -30,7 +38,15 @@ func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Di
 }
 
 func moduleNotFoundDiagAt(module, file string, line, col int, lookedFor []string) diag.Diagnostic {
-	id, title := lookupIDTitle("module", "not_found", "DME0002", "cannot find module")
+	ce, _ := diag.LookupFull("module", "not_found")
+	code := ce.Entry.ID
+	title := ce.Entry.Title
+	if code == "" {
+		code = "DME0002"
+	}
+	if title == "" {
+		title = "cannot find module"
+	}
 	short := filepath.Clean(file)
 	msg := fmt.Sprintf("%s: %q (import at %s:%d:%d)", title, module, short, line, col)
 
@@ -38,11 +54,34 @@ func moduleNotFoundDiagAt(module, file string, line, col int, lookedFor []string
 		Domain:  "module",
 		Key:     "not_found",
 		Level:   diag.LevelError,
-		Code:    id,
+		Code:    code,
 		Message: msg,
 	}
 	if len(lookedFor) > 0 {
 		d.Notes = append(d.Notes, "looked for:\n  "+strings.Join(lookedFor, "\n  "))
 	}
 	return d
+}
+
+// NEW: invalid dotted name (“bad import path”)
+func moduleBadImportDiagAt(moduleSpec, file string, line, col int) diag.Diagnostic {
+	ce, _ := diag.LookupFull("module", "bad_import")
+	code := ce.Entry.ID
+	title := ce.Entry.Title
+	if code == "" {
+		code = "DME0003"
+	}
+	if title == "" {
+		title = "invalid import path"
+	}
+	short := filepath.Clean(file)
+	msg := fmt.Sprintf("%s: %q (at %s:%d:%d)", title, moduleSpec, short, line, col)
+
+	return diag.Diagnostic{
+		Domain:  "module",
+		Key:     "bad_import",
+		Level:   diag.LevelError,
+		Code:    code,
+		Message: msg,
+	}
 }

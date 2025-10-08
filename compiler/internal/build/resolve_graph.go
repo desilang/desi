@@ -65,8 +65,14 @@ func (g *graph) walk(absFile string) {
 		stack = append(stack, file)
 
 		// Scan imports for this file
-		imods := scanImports(file)
+		imods := scanImports(file)   // valid dotted modules
+		bads := scanBadImports(file) // malformed module specs
 		g.imports[file] = imods
+
+		// Emit bad-import diagnostics directly; keep walking so users see all issues.
+		for _, r := range bads {
+			g.diags = append(g.diags, moduleBadImportDiagAt(r.Mod, file, r.Line, r.Col))
+		}
 
 		for _, r := range imods {
 			// Resolved already?
@@ -154,14 +160,23 @@ func (g *graph) topo() []string {
 	return order
 }
 
-// --- Simple import scanning (lex-light, line oriented) ---
+// --- Import scanning ---------------------------------------------------------
 
-// We capture group indices for the module spec so we can compute columns.
+// Valid dotted module: a.b.c with Python-ish identifier rules.
+var dottedModRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
+
+func isValidDottedModule(s string) bool { return dottedModRE.MatchString(strings.TrimSpace(s)) }
+
+// Narrow matchers (only valid modules) — used to build the dependency graph.
 var (
-	// import foo.bar
-	reImport = regexp.MustCompile(`^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b`)
-	// from foo.bar import X
-	reFrom = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
+	reImportValid = regexp.MustCompile(`^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b`)
+	reFromValid   = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
+)
+
+// Broad matchers (capture candidate, even if invalid) — used for diagnostics.
+var (
+	reImportAny = regexp.MustCompile(`^\s*import\s+([^\s#]+)`)
+	reFromAny   = regexp.MustCompile(`^\s*from\s+([^\s#]+)\s+import\b`)
 )
 
 func scanImports(file string) []importRef {
@@ -180,16 +195,15 @@ func scanImports(file string) []importRef {
 		if ln == "" {
 			continue
 		}
-		// Try `import X`
-		if idx := reImport.FindStringSubmatchIndex(ln); len(idx) >= 4 {
-			// idx[2], idx[3] are start/end of the first capture group (module)
+		// Try `import X` (valid only)
+		if idx := reImportValid.FindStringSubmatchIndex(ln); len(idx) >= 4 {
 			mod := ln[idx[2]:idx[3]]
 			col := idx[2] + 1 // 1-based
 			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
 			continue
 		}
-		// Try `from X import ...`
-		if idx := reFrom.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+		// Try `from X import ...` (valid only)
+		if idx := reFromValid.FindStringSubmatchIndex(ln); len(idx) >= 4 {
 			mod := ln[idx[2]:idx[3]]
 			col := idx[2] + 1
 			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
@@ -197,6 +211,54 @@ func scanImports(file string) []importRef {
 		}
 	}
 	// Deduplicate (same (mod,line,col) triples)
+	seen := map[string]struct{}{}
+	var out []importRef
+	for _, r := range refs {
+		key := r.Mod + "|" + strconvI(r.Line) + ":" + strconvI(r.Col)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, r)
+	}
+	return out
+}
+
+// scanBadImports finds import sites where the module spec is malformed.
+func scanBadImports(file string) []importRef {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	var refs []importRef
+	lines := strings.Split(string(data), "\n")
+	for i, ln := range lines {
+		// strip trailing comment
+		if j := strings.IndexRune(ln, '#'); j >= 0 {
+			ln = ln[:j]
+		}
+		ln = strings.TrimRight(ln, " \t\r")
+		if ln == "" {
+			continue
+		}
+		if idx := reImportAny.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+			cand := ln[idx[2]:idx[3]]
+			if !isValidDottedModule(cand) {
+				col := idx[2] + 1
+				refs = append(refs, importRef{Mod: cand, Line: i + 1, Col: col})
+			}
+			continue
+		}
+		if idx := reFromAny.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+			cand := ln[idx[2]:idx[3]]
+			if !isValidDottedModule(cand) {
+				col := idx[2] + 1
+				refs = append(refs, importRef{Mod: cand, Line: i + 1, Col: col})
+			}
+			continue
+		}
+	}
+	// Deduplicate
 	seen := map[string]struct{}{}
 	var out []importRef
 	for _, r := range refs {
