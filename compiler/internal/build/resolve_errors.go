@@ -11,6 +11,9 @@ import (
 // Build module-domain diagnostics with IDs/titles hydrated from codes.json.
 // Keys assumed available: module.import_cycle (DME0001), module.not_found (DME0002)
 
+// When we don't have a filename-aware renderer yet, include "at file:line:col"
+// in the message or notes to keep users oriented.
+
 func moduleImportCycleDiagAt(file string, line, col int, chain []string) diag.Diagnostic {
 	ce, _ := diag.LookupFull("module", "import_cycle")
 	code := ce.Entry.ID
@@ -63,8 +66,7 @@ func moduleNotFoundDiagAt(module, file string, line, col int, lookedFor []string
 	return d
 }
 
-// NEW: invalid dotted name (“bad import path”)
-func moduleBadImportDiagAt(moduleSpec, file string, line, col int) diag.Diagnostic {
+func moduleBadImportDiagAt(importText, file string, line, col int, why string) diag.Diagnostic {
 	ce, _ := diag.LookupFull("module", "bad_import")
 	code := ce.Entry.ID
 	title := ce.Entry.Title
@@ -75,13 +77,17 @@ func moduleBadImportDiagAt(moduleSpec, file string, line, col int) diag.Diagnost
 		title = "invalid import path"
 	}
 	short := filepath.Clean(file)
-	msg := fmt.Sprintf("%s: %q (at %s:%d:%d)", title, moduleSpec, short, line, col)
+	msg := fmt.Sprintf("%s: %q (at %s:%d:%d)", title, importText, short, line, col)
 
-	return diag.Diagnostic{
+	d := diag.Diagnostic{
 		Domain:  "module",
 		Key:     "bad_import",
 		Level:   diag.LevelError,
 		Code:    code,
 		Message: msg,
 	}
+	if strings.TrimSpace(why) != "" {
+		d.Notes = append(d.Notes, "reason: "+why)
+	}
+	return d
 }

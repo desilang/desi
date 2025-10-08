@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/diag"
@@ -27,8 +28,12 @@ type graph struct {
 }
 
 func newGraph(roots []string) *graph {
+	// Prefer the most specific root (longest path) when deriving module names.
+	rs := append([]string{}, roots...)
+	sort.SliceStable(rs, func(i, j int) bool { return len(rs[i]) > len(rs[j]) })
+
 	return &graph{
-		roots:        roots,
+		roots:        rs,
 		fileToModule: map[string]string{},
 		moduleToFile: map[string]string{},
 		imports:      map[string][]importRef{},
@@ -64,23 +69,20 @@ func (g *graph) walk(absFile string) {
 		seen[file] = true
 		stack = append(stack, file)
 
-		// Scan imports for this file
-		imods := scanImports(file)   // valid dotted modules
-		bads := scanBadImports(file) // malformed module specs
+		// Scan imports for this file (valid refs + bad-import diags).
+		imods, bads := scanImports(file)
 		g.imports[file] = imods
-
-		// Emit bad-import diagnostics directly; keep walking so users see all issues.
-		for _, r := range bads {
-			g.diags = append(g.diags, moduleBadImportDiagAt(r.Mod, file, r.Line, r.Col))
+		if len(bads) > 0 {
+			g.diags = append(g.diags, bads...)
 		}
 
 		for _, r := range imods {
 			// Resolved already?
 			if mf := g.moduleToFile[r.Mod]; mf != "" {
 				if inStack(mf, stack) {
-					// cycle at this site
-					g.cycles = append(g.cycles, g.describeCycle(mf, file, stack))
-					g.diags = append(g.diags, moduleImportCycleDiagAt(file, r.Line, r.Col, g.describeCycle(mf, file, stack)))
+					chain := g.describeCycle(mf, file, stack)
+					g.cycles = append(g.cycles, chain)
+					g.diags = append(g.diags, moduleImportCycleDiagAt(file, r.Line, r.Col, chain))
 				}
 				continue
 			}
@@ -160,34 +162,34 @@ func (g *graph) topo() []string {
 	return order
 }
 
-// --- Import scanning ---------------------------------------------------------
+// --- Simple import scanning (lex-light, line oriented) ---
 
-// Valid dotted module: a.b.c with Python-ish identifier rules.
-var dottedModRE = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*$`)
-
-func isValidDottedModule(s string) bool { return dottedModRE.MatchString(strings.TrimSpace(s)) }
-
-// Narrow matchers (only valid modules) — used to build the dependency graph.
+// Valid matchers (strict dotted identifiers)
 var (
-	reImportValid = regexp.MustCompile(`^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b`)
-	reFromValid   = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
+	// import foo.bar
+	reImport = regexp.MustCompile(`^\s*import\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\b`)
+	// from foo.bar import X
+	reFrom = regexp.MustCompile(`^\s*from\s+([A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)\s+import\b`)
 )
 
-// Broad matchers (capture candidate, even if invalid) — used for diagnostics.
+// Broad matchers to catch invalid module tokens so we can diagnose them
 var (
 	reImportAny = regexp.MustCompile(`^\s*import\s+([^\s#]+)`)
 	reFromAny   = regexp.MustCompile(`^\s*from\s+([^\s#]+)\s+import\b`)
 )
 
-func scanImports(file string) []importRef {
+func scanImports(file string) ([]importRef, []diag.Diagnostic) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	var refs []importRef
+	var diagsOut []diag.Diagnostic
+
 	lines := strings.Split(string(data), "\n")
-	for i, ln := range lines {
+	for i, raw := range lines {
 		// strip trailing comment
+		ln := raw
 		if j := strings.IndexRune(ln, '#'); j >= 0 {
 			ln = ln[:j]
 		}
@@ -195,70 +197,41 @@ func scanImports(file string) []importRef {
 		if ln == "" {
 			continue
 		}
-		// Try `import X` (valid only)
-		if idx := reImportValid.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+
+		// First: valid strict matches
+		if idx := reImport.FindStringSubmatchIndex(ln); len(idx) >= 4 {
 			mod := ln[idx[2]:idx[3]]
 			col := idx[2] + 1 // 1-based
 			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
 			continue
 		}
-		// Try `from X import ...` (valid only)
-		if idx := reFromValid.FindStringSubmatchIndex(ln); len(idx) >= 4 {
+		if idx := reFrom.FindStringSubmatchIndex(ln); len(idx) >= 4 {
 			mod := ln[idx[2]:idx[3]]
 			col := idx[2] + 1
 			refs = append(refs, importRef{Mod: mod, Line: i + 1, Col: col})
 			continue
 		}
-	}
-	// Deduplicate (same (mod,line,col) triples)
-	seen := map[string]struct{}{}
-	var out []importRef
-	for _, r := range refs {
-		key := r.Mod + "|" + strconvI(r.Line) + ":" + strconvI(r.Col)
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, r)
-	}
-	return out
-}
 
-// scanBadImports finds import sites where the module spec is malformed.
-func scanBadImports(file string) []importRef {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return nil
-	}
-	var refs []importRef
-	lines := strings.Split(string(data), "\n")
-	for i, ln := range lines {
-		// strip trailing comment
-		if j := strings.IndexRune(ln, '#'); j >= 0 {
-			ln = ln[:j]
-		}
-		ln = strings.TrimRight(ln, " \t\r")
-		if ln == "" {
-			continue
-		}
+		// Next: broad matchers to flag invalid module tokens
 		if idx := reImportAny.FindStringSubmatchIndex(ln); len(idx) >= 4 {
-			cand := ln[idx[2]:idx[3]]
-			if !isValidDottedModule(cand) {
-				col := idx[2] + 1
-				refs = append(refs, importRef{Mod: cand, Line: i + 1, Col: col})
+			mod := ln[idx[2]:idx[3]]
+			col := idx[2] + 1
+			if ok, why := isValidModulePath(mod); !ok {
+				diagsOut = append(diagsOut, moduleBadImportDiagAt(mod, file, i+1, col, why))
 			}
 			continue
 		}
 		if idx := reFromAny.FindStringSubmatchIndex(ln); len(idx) >= 4 {
-			cand := ln[idx[2]:idx[3]]
-			if !isValidDottedModule(cand) {
-				col := idx[2] + 1
-				refs = append(refs, importRef{Mod: cand, Line: i + 1, Col: col})
+			mod := ln[idx[2]:idx[3]]
+			col := idx[2] + 1
+			if ok, why := isValidModulePath(mod); !ok {
+				diagsOut = append(diagsOut, moduleBadImportDiagAt(mod, file, i+1, col, why))
 			}
 			continue
 		}
 	}
-	// Deduplicate
+
+	// Deduplicate refs (same (mod,line,col) triples)
 	seen := map[string]struct{}{}
 	var out []importRef
 	for _, r := range refs {
@@ -269,7 +242,7 @@ func scanBadImports(file string) []importRef {
 		seen[key] = struct{}{}
 		out = append(out, r)
 	}
-	return out
+	return out, diagsOut
 }
 
 func firstExistingFile(paths []string) string {
@@ -295,4 +268,35 @@ func strconvI(n int) string {
 		n /= 10
 	}
 	return string(b[i:])
+}
+
+// Validate dotted module path; return (ok, whyIfNot)
+func isValidModulePath(s string) (bool, string) {
+	if strings.TrimSpace(s) == "" {
+		return false, "empty module path"
+	}
+	if strings.HasPrefix(s, ".") || strings.HasSuffix(s, ".") {
+		return false, "path cannot start or end with '.'"
+	}
+	if strings.Contains(s, "..") {
+		return false, "empty module segment (consecutive dots)"
+	}
+	parts := strings.Split(s, ".")
+	for _, p := range parts {
+		if p == "" {
+			return false, "empty module segment"
+		}
+		// first char
+		r0 := p[0]
+		if !((r0 >= 'A' && r0 <= 'Z') || (r0 >= 'a' && r0 <= 'z') || r0 == '_') {
+			return false, "segment must start with a letter or '_'"
+		}
+		for i := 1; i < len(p); i++ {
+			r := p[i]
+			if !((r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_') {
+				return false, "invalid character in module segment"
+			}
+		}
+	}
+	return true, ""
 }
