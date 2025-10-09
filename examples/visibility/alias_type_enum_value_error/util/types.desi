@@ -1,0 +1,5 @@
+pub type ID = int
+
+pub enum Mode:
+  On: none
+  Off: none

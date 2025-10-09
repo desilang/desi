@@ -1,0 +1,6 @@
+from util.math import add
+from std.io import print
+
+def main() -> int:
+  print(add(10, 32))   # OK: pub def add
+  return 0

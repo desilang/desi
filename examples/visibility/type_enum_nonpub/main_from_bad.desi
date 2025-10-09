@@ -1,0 +1,6 @@
+from std.io import print
+from util.types import ID, Mode   # <- each should trigger "not public"
+
+def main() -> int:
+  print(0)
+  return 0

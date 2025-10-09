@@ -1,0 +1,3 @@
+# Non-public function on purpose
+def add(a: int, b: int) -> int:
+  return a + b

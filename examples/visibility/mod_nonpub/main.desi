@@ -1,0 +1,7 @@
+import util.math as m
+from std.io import print
+
+def main() -> int:
+  # Should fail: m.add is not public
+  print(m.add(2, 3))
+  return 0

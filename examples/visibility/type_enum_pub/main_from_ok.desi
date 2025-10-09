@@ -1,0 +1,9 @@
+from util.types import ID, Mode
+from std.io import print
+
+def main() -> int:
+  let x: ID = 42
+  match Mode.On:
+    _:
+      print(x)
+  return 0

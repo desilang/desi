@@ -1,0 +1,7 @@
+import util.types as T
+from std.io import print
+
+def main() -> int:
+  print(T.ID)     # <- should be an error: "type is not a value"
+  print(T.Mode)   # <- should be an error: "enum type is not a value"
+  return 0

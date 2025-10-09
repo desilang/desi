@@ -1,0 +1,6 @@
+# Intentionally kept non-public to trigger visibility errors
+type ID = int
+
+enum Mode:
+  On: none
+  Off: none

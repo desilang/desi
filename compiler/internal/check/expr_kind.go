@@ -7,6 +7,21 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
+/* ---------- small helper ---------- */
+
+// resolveModuleInfo returns symbol tables for the module behind a module alias.
+// Prefers DefaultModuleInfoProvider; falls back to c.info (single-file tests).
+func (c *checker) resolveModuleInfo(modPath string) (*Info, bool) {
+	if DefaultModuleInfoProvider != nil {
+		if src, ok := DefaultModuleInfoProvider.Lookup(modPath); ok && src != nil {
+			return src, true
+		}
+	}
+	// Fallback for unit tests that construct a single ast.File with provider+consumer:
+	// treat current file's Info as the "module".
+	return c.info, true
+}
+
 /* ---------- expressions ---------- */
 
 func (c *checker) kindOfExpr(e ast.Expr) Kind {
@@ -20,11 +35,10 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 	case *ast.BoolLit:
 		return KindBool
 	case *ast.StructLit:
-		// struct literal has a known, named struct type
 		return KindStruct
 
 	case *ast.AwaitExpr:
-		// Feature gate + context rule
+		// async gate + await operand type check
 		if !c.features.Async || !c.fnSig.Async {
 			if (v.Span != ast.Span{}) {
 				c.errors = append(c.errors, ErrAwaitOutsideAsyncAt(v.Span))
@@ -42,7 +56,6 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 			}
 			return KindUnknown
 		}
-		// try to recover the inner element kind from common shapes (calls, etc.)
 		elem := c.futureElemOfExpr(v.Expr)
 		if elem == KindUnknown {
 			return KindUnknown
@@ -50,27 +63,25 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return elem
 
 	case *ast.IdentExpr:
-		// Prefer locals first
+		// locals first
 		if vi, ok := c.scope.lookup(v.Name); ok {
 			vi.read = true
 			return vi.kind
 		}
-		// from-import binding?
+		// from-import alias used as bare value:
+		//   - if it aliases a const, allow and use const's kind (recorded in Info.Consts when local)
+		//   - if it aliases a func/type/enum, it's not a value
 		if orig, ok := c.aliases[v.Name]; ok {
 			if ci, ok := c.info.Consts[orig]; ok {
 				return ci.Kind
 			}
-			if _, ok := c.info.Funcs[orig]; ok {
-				c.errors = append(c.errors, ErrImportedFuncNotValueAt(v.Span, orig, v.Name))
-				return KindUnknown
-			}
-		}
-		// Bare module alias used as a value → error
-		if modPath, ok := c.modAliases[v.Name]; ok {
-			c.errors = append(c.errors, ErrModuleAliasNotValueAt(v.Span, v.Name, modPath))
+			c.errors = append(c.errors, ErrFunctionNotValueAt(v.Span, v.Name))
 			return KindUnknown
 		}
-		if _, isFn := c.info.Funcs[v.Name]; isFn {
+		// bare module alias as a value
+		if modPath, ok := c.modAliases[v.Name]; ok {
+			_ = modPath
+			c.errors = append(c.errors, ErrModuleAliasNotValueAt(v.Span, v.Name, modPath))
 			return KindUnknown
 		}
 		// undefined
@@ -151,28 +162,35 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindUnknown
 	}
 
-	// ---------------- existing logic preserved below ----------------
+	// ---------------- remaining cases ----------------
 
 	switch v := e.(type) {
 	case *ast.FieldExpr:
-		// Module-alias constant access: m.CONST
+		// Module-alias member access: m.CONST / m.Type / m.Enum
 		if id, ok := v.X.(*ast.IdentExpr); ok {
-			if _, isAlias := c.modAliases[id.Name]; isAlias {
-				if ci, ok := c.info.Consts[v.Name]; ok {
-					if !c.isPublicConst(v.Name) {
-						c.errors = append(c.errors, ErrNotPublic(v.Name, "module constant access"))
+			if modPath, isAlias := c.modAliases[id.Name]; isAlias {
+				if src, ok := c.resolveModuleInfo(modPath); ok && src != nil {
+					name := v.Name
+					switch {
+					case hasConst(src, name):
+						// constant access as value (enforce visibility)
+						if !src.ConstsPublic[name] {
+							c.errors = append(c.errors, ErrNotPublicAt(v.Span, name, "module constant access"))
+						}
+						return src.Consts[name].Kind
+					case hasFunc(src, name):
+						// function is not a value
+						c.errors = append(c.errors, ErrFunctionNotValueAt(v.Span, id.Name+"."+name))
+						return KindUnknown
+					case hasStruct(src, name), hasType(src, name), hasEnum(src, name):
+						// types/enums are not values
+						c.errors = append(c.errors, ErrTypeNotValueAt(v.Span, id.Name+"."+name))
+						return KindUnknown
+					default:
+						c.errors = append(c.errors, ErrUnknownSymbolInModuleAliasAt(v.Span, name, id.Name))
+						return KindUnknown
 					}
-					return ci.Kind
 				}
-				if _, ok := c.info.Funcs[v.Name]; ok {
-					c.errors = append(c.errors, ErrFunctionNotValueAt(v.Span, v.Name))
-					return KindUnknown
-				}
-				if _, ok := c.info.Structs[v.Name]; ok {
-					c.errors = append(c.errors, ErrTypeNotValueAt(v.Span, v.Name))
-					return KindUnknown
-				}
-				return KindUnknown
 			}
 		}
 
@@ -211,7 +229,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				}
 				return KindUnknown
 			}
-			// if base is a module alias, leave handling to call/const paths
+			// if base is a module alias, the earlier branch handled it
 			if _, isAlias := c.modAliases[baseName]; isAlias {
 				return KindUnknown
 			}
@@ -222,70 +240,25 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 		return KindUnknown
 
 	case *ast.CallExpr:
-		// std shims first
-		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
-			// io.println(...)
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "io" && fe.Name == "println" {
-				for i, a := range v.Args {
-					ak := c.kindOfExpr(a)
-					switch ak {
-					case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
-					case KindVoid:
-						c.errors = append(c.errors, ErrBuiltinArgVoidAt(v.Span, "io.println", i+1))
-					default:
-						c.errors = append(c.errors, ErrBuiltinArgUnsupportedKindAt(v.Span, "io.println", i+1, fmt.Sprintf("%s", ak)))
-					}
-				}
-				return KindVoid
-			}
-			// fs.read_all(path: str) -> str
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "fs" && fe.Name == "read_all" {
-				if len(v.Args) != 1 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "fs.read_all (path: str)", 1, len(v.Args)))
-				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindStr && ak != KindUnknown {
-					c.errors = append(c.errors, ErrTypeMismatch("str", fmt.Sprintf("%s", ak), "fs.read_all path"))
-				}
-				return KindStr
-			}
-			// os.exit(code: int) -> void
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "os" && fe.Name == "exit" {
-				if len(v.Args) != 1 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "os.exit (code: int)", 1, len(v.Args)))
-				} else if ak := c.kindOfExpr(v.Args[0]); ak != KindInt && ak != KindUnknown {
-					c.errors = append(c.errors, ErrTypeMismatch("int", fmt.Sprintf("%s", ak), "os.exit code"))
-				}
-				return KindVoid
-			}
-			// mem.free(x) -> void
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "mem" && fe.Name == "free" {
-				if len(v.Args) != 1 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "mem.free", 1, len(v.Args)))
-				}
-				return KindVoid
-			}
-			// str.len(s) -> int
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "len" {
-				if len(v.Args) != 1 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.len (str)", 1, len(v.Args)))
-				}
-				return KindInt
-			}
-			// str.at(s,i) -> int
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "at" {
-				if len(v.Args) != 2 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.at (str,int)", 2, len(v.Args)))
-				}
-				return KindInt
-			}
-			// str.from_code(i) -> str
-			if id, ok := fe.X.(*ast.IdentExpr); ok && id.Name == "str" && fe.Name == "from_code" {
-				if len(v.Args) != 1 {
-					c.errors = append(c.errors, ErrBuiltinWrongArityAt(v.Span, "str.from_code (int)", 1, len(v.Args)))
-				}
-				return KindStr
-			}
+		// ---------------- builtins ----------------
 
-			// enum constructors: Enum.Variant(payload?)
+		// builtin print(...)
+		if id, ok := v.Callee.(*ast.IdentExpr); ok && id.Name == "print" {
+			for i, a := range v.Args {
+				ak := c.kindOfExpr(a)
+				switch ak {
+				case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
+				case KindVoid:
+					c.errors = append(c.errors, ErrBuiltinArgVoidAt(v.Span, "print", i+1))
+				default:
+					c.errors = append(c.errors, ErrBuiltinArgUnsupportedKindAt(v.Span, "print", i+1, fmt.Sprintf("%s", ak)))
+				}
+			}
+			return KindVoid
+		}
+
+		// enum constructors: Enum.Variant(payload?)
+		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
 				if einfo, ok := c.info.Enums[id.Name]; ok {
 					vt, ok := einfo.Variants[fe.Name]
@@ -313,53 +286,58 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 					return KindEnum
 				}
 			}
+		}
 
-			// module alias call: m.add(...)
+		// ---------------- module alias calls: m.f(...) ----------------
+		if fe, ok := v.Callee.(*ast.FieldExpr); ok {
 			if id, ok := fe.X.(*ast.IdentExpr); ok {
+				// if 'id' is not a local, and is a module alias, resolve in the source module
 				if _, isLocal := c.scope.lookup(id.Name); !isLocal {
-					if _, isAlias := c.modAliases[id.Name]; isAlias {
-						if sig, ok := c.info.Funcs[fe.Name]; ok {
-							// visibility
-							if !c.isPublicFunc(fe.Name) {
-								c.errors = append(c.errors, ErrNotPublic(fe.Name, "module alias call"))
+					if modPath, isAlias := c.modAliases[id.Name]; isAlias {
+						if src, ok := c.resolveModuleInfo(modPath); ok && src != nil {
+							name := fe.Name
+
+							// types/enums/consts are not callable
+							if hasType(src, name) || hasEnum(src, name) {
+								c.errors = append(c.errors, ErrTypeNotValueAt(fe.Span, id.Name+"."+name))
+								return KindUnknown
 							}
-							if len(sig.Params) != len(v.Args) {
-								c.errors = append(c.errors, ErrModuleCallWrongArityAt(v.Span, id.Name, fe.Name, len(sig.Params), len(v.Args)))
+							if hasConst(src, name) {
+								c.errors = append(c.errors, ErrCallWrongArityAt(v.Span, id.Name+"."+name, 0, len(v.Args)))
+								return src.Consts[name].Kind
 							}
-							n := _min(len(sig.Params), len(v.Args))
-							for i := 0; i < n; i++ {
-								ak := c.kindOfExpr(v.Args[i])
-								pk := sig.Params[i]
-								if _, ok := unifyKinds(pk, ak); !ok {
-									c.errors = append(c.errors, ErrTypeMismatch(
-										fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+
+							// function: enforce visibility + arity + argument kinds
+							if sig, ok := src.Funcs[name]; ok {
+								if !src.FuncsPublic[name] {
+									// non-public under module alias
+									c.errors = append(c.errors, ErrNotPublicAt(fe.Span, name, "module-alias call"))
 								}
+								if len(sig.Params) != len(v.Args) {
+									c.errors = append(c.errors, ErrModuleCallWrongArityAt(v.Span, id.Name, name, len(sig.Params), len(v.Args)))
+								}
+								n := _min(len(sig.Params), len(v.Args))
+								for i := 0; i < n; i++ {
+									ak := c.kindOfExpr(v.Args[i])
+									pk := sig.Params[i]
+									if _, ok := unifyKinds(pk, ak); !ok && pk != KindUnknown && ak != KindUnknown {
+										c.errors = append(c.errors, ErrTypeMismatch(
+											fmt.Sprintf("%s", pk), fmt.Sprintf("%s", ak), "call argument"))
+									}
+								}
+								return sig.Ret
 							}
-							return sig.Ret
+
+							// unknown member
+							c.errors = append(c.errors, ErrUnknownSymbolInModuleAliasAt(fe.Span, name, id.Name))
+							return KindUnknown
 						}
-						c.errors = append(c.errors, ErrUnknownSymbolInModuleAliasAt(v.Span, fe.Name, id.Name))
-						return KindUnknown
 					}
 				}
 			}
 		}
 
-		// builtin print(...)
-		if id, ok := v.Callee.(*ast.IdentExpr); ok && id.Name == "print" {
-			for i, a := range v.Args {
-				ak := c.kindOfExpr(a)
-				switch ak {
-				case KindInt, KindStr, KindBool, KindFloat, KindUnknown:
-				case KindVoid:
-					c.errors = append(c.errors, ErrBuiltinArgVoidAt(v.Span, "print", i+1))
-				default:
-					c.errors = append(c.errors, ErrBuiltinArgUnsupportedKindAt(v.Span, "print", i+1, fmt.Sprintf("%s", ak)))
-				}
-			}
-			return KindVoid
-		}
-
-		// user function call (supports from-import aliasing)
+		// ---------------- user function calls (unqualified / from-import alias) ----------------
 		if id, ok := v.Callee.(*ast.IdentExpr); ok {
 			name := id.Name
 			wasAlias := false
@@ -368,6 +346,7 @@ func (c *checker) kindOfExpr(e ast.Expr) Kind {
 				wasAlias = true
 			}
 			if sig, ok := c.info.Funcs[name]; ok {
+				// If this is not a from-import and not local, it's a cross-module unqualified use
 				if !wasAlias && !c.info.FuncsLocal[name] {
 					if (id.Span != ast.Span{}) {
 						c.errors = append(c.errors, ErrNotPublicAt(id.Span, name, "unqualified cross-module use"))
