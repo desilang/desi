@@ -6,6 +6,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/lexer"
 	"github.com/desilang/desi/compiler/internal/loaderutil"
 	"github.com/desilang/desi/compiler/internal/parser"
 )
@@ -38,29 +39,40 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	}
 
 	entryAbs := filepath.Clean(plan.Entry.File)
+
 	var (
 		entryDecls []ast.Decl
 		depDecls   []ast.Decl
-		diags      []error // warnings (e.g., duplicate/self/alias conflicts)
+		warns      []error // warnings produced during per-file scans (import warnings)
 	)
 
+	// Plan.Deps includes Entry as the first element in topo order.
 	for _, u := range plan.Deps {
-		data, err := os.ReadFile(u.File)
-		if err != nil {
-			return nil, []error{ErrIORead(u.File, err)}
+		srcBytes, rerr := os.ReadFile(u.File)
+		if rerr != nil {
+			return nil, []error{ModuleErrorf("io_read", "DME0004", "failed to read file",
+				"read %s: %v", u.File, rerr)}
 		}
-		p := parser.New(string(data))
+		src := string(srcBytes)
+
+		// Parse the unit.
+		p := parser.NewFromSource(lexer.NewSource(src))
 		f, perr := p.ParseFile()
 		if perr != nil {
-			// Parser errors are returned as plain errors; the caller renders them.
-			return nil, []error{ErrParseFailed(u.File, perr)}
+			// Surface as a module.parse_failed error to match resolver behavior.
+			return nil, []error{ModuleErrorf("parse_failed", "DME0005", "parse failed during resolution",
+				"%s: %v", u.File, perr)}
 		}
 
-		// collect module-domain warnings for this file
-		diags = append(diags, loaderutil.ScanDuplicateImports(f)...)
-		diags = append(diags, loaderutil.ScanSelfImport(f, u.Module)...)
-		diags = append(diags, loaderutil.ScanImportAliasConflicts(f)...)
+		// Lightweight import warnings (unused / duplicate from-items).
+		imps := loaderutil.ExtractImportsFromSource(src)
+		idiags := loaderutil.ScanUnusedAndDuplicateImports(src, imps)
+		for _, d := range idiags {
+			// These are warnings; they implement error via diag.Diagnostic.Error().
+			warns = append(warns, d)
+		}
 
+		// Merge decls with entry first, then deps.
 		if filepath.Clean(u.File) == entryAbs {
 			entryDecls = append(entryDecls, f.Decls...)
 		} else {
@@ -71,7 +83,7 @@ func runResolveAndParse(entryPath string, opts ResolveOptions) (*ast.File, []err
 	var merged ast.File
 	merged.Decls = append(merged.Decls, entryDecls...)
 	merged.Decls = append(merged.Decls, depDecls...)
-	return &merged, diags
+	return &merged, warns
 }
 
 // ResolveAndParseWithParserBridge kept for CLI compatibility.

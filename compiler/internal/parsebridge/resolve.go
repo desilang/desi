@@ -1,65 +1,75 @@
 package parsebridge
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
+  "fmt"
+  "os"
+  "path/filepath"
 
-	"github.com/desilang/desi/compiler/internal/ast"
-	"github.com/desilang/desi/compiler/internal/build"
-	"github.com/desilang/desi/compiler/internal/loaderutil"
-	"github.com/desilang/desi/compiler/internal/parser"
+  "github.com/desilang/desi/compiler/internal/ast"
+  "github.com/desilang/desi/compiler/internal/build"
+  "github.com/desilang/desi/compiler/internal/lexer"
+  "github.com/desilang/desi/compiler/internal/loaderutil"
+  "github.com/desilang/desi/compiler/internal/parser"
 )
 
-// resolveAndParseLocal resolves imports starting from entryPath using the unified
-// resolver, then parses the resulting plan and merges ASTs: entry first, then deps.
-// - rootDir is kept for signature compatibility; resolver discovers roots automatically.
-// - Any module-domain diagnostics (not-found, cycles) are returned as errors and abort parsing.
+// resolveAndParseLocal resolves imports (entry-first order), parses all units,
+// runs lightweight import warnings (unused imports / duplicate from-items),
+// and returns a merged AST plus any warnings as []error.
+//
+// Signature matches the legacy bridge expectations: (rootDir, entryPath string).
+// The rootDir parameter is not required by the unified resolver and is ignored.
 func resolveAndParseLocal(_rootDir, entryPath string) (*ast.File, []error) {
-	plan, mdiags, rerr := build.ResolveEntry(entryPath, build.ResolveOptions{})
-	if rerr != nil {
-		return nil, []error{fmt.Errorf("resolve: %v", rerr)}
-	}
-	if len(mdiags) > 0 {
-		errs := make([]error, 0, len(mdiags))
-		for _, d := range mdiags {
-			errs = append(errs, d)
-		}
-		return nil, errs
-	}
+  plan, mdiags, rerr := build.ResolveEntry(entryPath, build.ResolveOptions{})
+  if rerr != nil {
+    return nil, []error{fmt.Errorf("resolve: %v", rerr)}
+  }
+  if len(mdiags) > 0 {
+    errs := make([]error, 0, len(mdiags))
+    for _, d := range mdiags {
+      errs = append(errs, d)
+    }
+    // Return only module-domain diags to caller; they render at the CLI level.
+    return nil, errs
+  }
 
-	entryAbs := filepath.Clean(plan.Entry.File)
-	var (
-		entryDecls []ast.Decl
-		depDecls   []ast.Decl
-		diags      []error // warnings produced during per-file scans
-	)
+  entryAbs := filepath.Clean(plan.Entry.File)
+  var (
+    entryDecls []ast.Decl
+    depDecls   []ast.Decl
+    warns      []error
+  )
 
-	for _, u := range plan.Deps {
-		data, err := os.ReadFile(u.File)
-		if err != nil {
-			return nil, []error{fmt.Errorf("read %s: %v", u.File, err)}
-		}
-		p := parser.New(string(data))
-		f, perr := p.ParseFile()
-		if perr != nil {
-			return nil, []error{fmt.Errorf("parse %s: %v", u.File, perr)}
-		}
+  for _, u := range plan.Deps {
+    srcBytes, rerr := os.ReadFile(u.File)
+    if rerr != nil {
+      return nil, []error{fmt.Errorf("read %s: %v", u.File, rerr)}
+    }
+    src := string(srcBytes)
 
-		// Same module-domain warnings as the non-bridge path:
-		diags = append(diags, loaderutil.ScanDuplicateImports(f)...)
-		diags = append(diags, loaderutil.ScanSelfImport(f, u.Module)...)
-		diags = append(diags, loaderutil.ScanImportAliasConflicts(f)...)
+    // Parse with Stage-0 lexer+parser.
+    p := parser.NewFromSource(lexer.NewSource(src))
+    f, perr := p.ParseFile()
+    if perr != nil {
+      // Keep parser errors typed; bridge caller renders them nicely.
+      return nil, []error{perr}
+    }
 
-		if filepath.Clean(u.File) == entryAbs {
-			entryDecls = append(entryDecls, f.Decls...)
-		} else {
-			depDecls = append(depDecls, f.Decls...)
-		}
-	}
+    // Import warnings on this unit (regex-based extraction for low coupling).
+    imps := loaderutil.ExtractImportsFromSource(src)
+    idiags := loaderutil.ScanUnusedAndDuplicateImports(src, imps)
+    for _, d := range idiags {
+      warns = append(warns, d)
+    }
 
-	var merged ast.File
-	merged.Decls = append(merged.Decls, entryDecls...)
-	merged.Decls = append(merged.Decls, depDecls...)
-	return &merged, diags
+    if filepath.Clean(u.File) == entryAbs {
+      entryDecls = append(entryDecls, f.Decls...)
+    } else {
+      depDecls = append(depDecls, f.Decls...)
+    }
+  }
+
+  var merged ast.File
+  merged.Decls = append(merged.Decls, entryDecls...)
+  merged.Decls = append(merged.Decls, depDecls...)
+  return &merged, warns
 }
