@@ -322,6 +322,21 @@
       "id": "DMW0003",
       "title": "import alias conflict",
       "help": "Give different aliases (e.g., 'import foo as f1') or adjust 'from' items to avoid local name collisions."
+    },
+    "unused_import": {
+      "id": "DMW0004",
+      "title": "unused import",
+      "help": "Remove the import or reference a symbol from it."
+    },
+    "unused_from_item": {
+      "id": "DMW0005",
+      "title": "unused imported name",
+      "help": "Remove the unused item from the 'from' list."
+    },
+    "duplicate_from_item": {
+      "id": "DMW0006",
+      "title": "duplicate item in from-import",
+      "help": "Remove the repeated item; listing the same name multiple times has no effect."
     }
   },
   "warn": {
