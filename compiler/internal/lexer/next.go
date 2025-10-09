@@ -49,6 +49,34 @@ func (lx *Lexer) Next() Token {
 
 	startLine, startCol := lx.line, lx.col+1
 
+	// Line continuation: a backslash immediately before a newline suppresses the newline.
+	// Treat "\\n" as whitespace and continue scanning the same logical line.
+	for {
+		ch, ok := lx.peek()
+		if !ok || ch != '\\' {
+			break
+		}
+		// Consume '\' and, if present, a following '\n'
+		if lx.match('\\') {
+			if lx.match('\n') {
+				// Do NOT set lx.bol here; continuation keeps us mid-line.
+				// After the continuation, skip any spaces/tabs on the next physical line.
+				for {
+					if ch2, ok2 := lx.peek(); ok2 && (ch2 == ' ' || ch2 == '\t') {
+						lx.advance()
+						continue
+					}
+					break
+				}
+				// Allow chaining multiple continuations
+				continue
+			}
+			// If not followed by newline, we silently ignore the backslash (language has no bare '\').
+			// Fall through to normal tokenization.
+		}
+		break
+	}
+
 	// Newline terminates a statement, emit NEWLINE and go to BOL
 	if ch, ok := lx.peek(); ok && ch == '\n' {
 		lx.advance()
