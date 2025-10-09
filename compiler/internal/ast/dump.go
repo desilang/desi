@@ -157,7 +157,7 @@ func exprString(e Expr) string {
 	case *IntLit:
 		return v.Value
 	case *StrLit:
-		return v.Value
+		return `"` + v.Value + `"`
 	case *BoolLit:
 		if v.Value {
 			return "true"

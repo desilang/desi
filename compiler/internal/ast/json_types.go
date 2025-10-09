@@ -255,3 +255,23 @@ type jAwaitExpr struct {
 	Expr any    `json:"expr"`
 	Span jSpan  `json:"span"`
 }
+
+type jFloatLit struct {
+	Kind  string `json:"kind"` // "FloatLit"
+	Value string `json:"value"`
+	Span  jSpan  `json:"span"`
+}
+
+type jStructLitField struct {
+	Kind  string `json:"kind"` // "StructLitField"
+	Name  string `json:"name"`
+	Value any    `json:"value"`
+	Span  jSpan  `json:"span"`
+}
+
+type jStructLit struct {
+	Kind   string            `json:"kind"` // "StructLit"
+	Name   string            `json:"name"`
+	Fields []jStructLitField `json:"fields"`
+	Span   jSpan             `json:"span"`
+}

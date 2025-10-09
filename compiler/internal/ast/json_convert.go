@@ -234,6 +234,24 @@ func toJExpr(e Expr) any {
 		return jBinaryExpr{Kind: "BinaryExpr", Op: v.Op, Left: toJExpr(v.Left), Right: toJExpr(v.Right), Span: spanJS(v.Span)}
 	case *AwaitExpr:
 		return jAwaitExpr{Kind: "AwaitExpr", Expr: toJExpr(v.Expr), Span: spanJS(v.Span)}
+	case *FloatLit:
+		return jFloatLit{Kind: "FloatLit", Value: v.Value, Span: spanJS(v.Span)}
+	case *StructLit:
+		fs := make([]jStructLitField, 0, len(v.Fields))
+		for _, f := range v.Fields {
+			fs = append(fs, jStructLitField{
+				Kind:  "StructLitField",
+				Name:  f.Name,
+				Value: toJExpr(f.Value),
+				Span:  spanJS(f.Span),
+			})
+		}
+		return jStructLit{
+			Kind:   "StructLit",
+			Name:   v.Name,
+			Fields: fs,
+			Span:   spanJS(v.Span),
+		}
 	default:
 		return map[string]any{"kind": "UnknownExpr"}
 	}

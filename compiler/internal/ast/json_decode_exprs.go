@@ -73,6 +73,34 @@ func fromJExpr(v any) (Expr, error) {
 			Expr: mustExpr(fromJExpr(m["expr"])),
 			Span: parseSpan(getMap(m, "span")),
 		}, nil
+	case "FloatLit":
+		return &FloatLit{
+			Value: getString(m, "value"),
+			Span:  parseSpan(getMap(m, "span")),
+		}, nil
+	case "StructLit":
+		sl := &StructLit{
+			Name: getString(m, "name"),
+			Span: parseSpan(getMap(m, "span")),
+		}
+		if arr := getSlice(m, "fields"); arr != nil {
+			for _, fv := range arr {
+				fm, ok := asMap(fv)
+				if !ok || getString(fm, "kind") != "StructLitField" {
+					continue
+				}
+				val, err := fromJExpr(fm["value"])
+				if err != nil {
+					return nil, err
+				}
+				sl.Fields = append(sl.Fields, StructLitField{
+					Name:  getString(fm, "name"),
+					Value: val,
+					Span:  parseSpan(getMap(fm, "span")),
+				})
+			}
+		}
+		return sl, nil
 	default:
 		return nil, fmt.Errorf("AST JSON: unknown expr kind %q", getString(m, "kind"))
 	}
