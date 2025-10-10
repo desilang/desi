@@ -1,0 +1,18 @@
+# std.math.sqrt — integer square root using Newton's method
+# Returns floor(sqrt(n)) for n >= 0.
+
+pub def sqrt(n: int) -> int:
+  if n < 0:
+    # TODO: once we have exceptions, raise a proper error. For now, mirror C-style libs.
+    return 0
+
+  if n == 0:
+    return 0
+
+  # Newton's method for integer sqrt
+  let mut x: int = n
+  let mut y: int = (x + 1) / 2
+  while y < x:
+    x := y
+    y := (x + n / x) / 2
+  return x

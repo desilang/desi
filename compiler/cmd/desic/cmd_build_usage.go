@@ -18,4 +18,13 @@ func usageBuild() {
 	term.Eprintln("  --cc-arg=<flag>            pass through a flag to the C compiler (repeatable)")
 	term.Eprintln("  --runtime-dir=<path>       override path to runtime/c (auto-detected otherwise)")
 	term.Eprintln("  --out=<name>               output executable name (default: entry basename)")
+	term.Eprintln("\nImports & modules:")
+	term.Eprintln("  • Builtins (print, len, …) are always in scope — not importable and not shadowable.")
+	term.Eprintln("  • Project root is discovered via desi.conf (walked upward from the entry file).")
+	term.Eprintln("    Imports resolve in this order: project → std → DESI_PATH.")
+	term.Eprintln("  • Bare std modules are available as top-level imports: e.g. 'import math', 'from time import now'.")
+	term.Eprintln("  • Module mapping accepts either a single file or a package directory:")
+	term.Eprintln("      a.b.c  →  <root>/a/b/c.desi    or   <root>/a/b/c/mod.desi")
+	term.Eprintln("    If both exist in the same root, the resolver emits an error.")
+	term.Eprintln("  • No string/path imports; only dotted identifiers are allowed (e.g., 'import util.math').")
 }

@@ -1,0 +1,7 @@
+# std.math — public surface of the math package.
+
+import math.sqrt as _sqrt
+
+# Re-export as a public symbol so callers can do: from math import sqrt
+pub def sqrt(n: int) -> int:
+  return _sqrt.sqrt(n)
