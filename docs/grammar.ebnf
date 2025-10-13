@@ -1,0 +1,270 @@
+(* ===========================================================
+   Desi Language — Grammar (Rev 6, final)
+   -----------------------------------------------------------
+   This grammar matches the Rev-6 syntax tour and the Token List.
+   Notes:
+     • Indentation-based blocks use pseudo-tokens: NL / Indent / Dedent.
+     • Some constraints are semantic (not purely syntactic):
+         - Dunder methods must be 'pub'.
+         - Top-level classes are public (cannot be private).
+         - Nested classes are private unless declared 'pub class'.
+         - No inout borrows across 'await'.
+         - Overload resolution is exact (arity/types), no widening.
+     • FFI via @extern(...): a decorated def may omit its body.
+   =========================================================== *)
+
+File              = { ImportDecl | FromImportDecl } { Decl } ;
+
+(* ----------------- Imports ----------------- *)
+ImportDecl        = "import" DottedIdent [ "as" Ident ] NL ;
+FromImportDecl    = "from" DottedIdent "import" ImportList NL ;
+ImportList        = ImportItem { "," ImportItem } [ "," ] ;
+ImportItem        = Ident [ "as" Ident ] ;
+
+(* ----------------- Declarations ----------------- *)
+Decl              = ConstDecl
+                  | TypeDecl
+                  | StructDecl
+                  | EnumDecl
+                  | ClassDecl
+                  | FuncDecl
+                  ;
+
+Decorators        = { "@" CallTarget NL } ;
+CallTarget        = DottedIdent [ "(" [ ArgList ] ")" ] ;
+
+ConstDecl         = [ "pub" ] "let" Ident [ ":" Type ] "=" Expr NL ;
+
+TypeDecl          = [ "pub" ] "type" Ident "=" Type NL ;
+
+StructDecl        = [ "pub" ] "struct" Ident ":" NL
+                    Indent { FieldDecl } Dedent ;
+FieldDecl         = Ident ":" Type NL ;
+
+EnumDecl          = [ "pub" ] "enum" Ident ":" NL
+                    Indent { EnumVariantDecl } Dedent ;
+EnumVariantDecl   = Ident ":" TypeOrNone NL ;
+TypeOrNone        = "none" | Type ;
+
+(* ----------------- Classes ----------------- *)
+(* Top-level 'class' is public by design (policy-level rule). *)
+ClassDecl         = Decorators? "class" Ident ":" NL
+                    Indent { ClassMember } Dedent ;
+
+ClassMember       = FieldDecl
+                  | NestedClassDecl
+                  | MethodDecl
+                  | ConstDecl
+                  | TypeDecl
+                  ;
+
+(* Nested classes are private by default; allow explicit 'pub class' *)
+NestedClassDecl   = [ "pub" ] "class" Ident ":" NL
+                    Indent { ClassMember } Dedent ;
+
+(* Methods: implicit 'self' is injected (not written in Params) *)
+MethodDecl        = Decorators? [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" Type ] ( ":" NL* Block | NL ) ;
+                    (* If decorated with @extern(...), the body may be omitted (extern decl). *)
+                    (* Dunder methods must be 'pub' — semantic check. *)
+
+(* ----------------- Functions ----------------- *)
+FuncDecl          = Decorators? [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" Type ] ( ":" NL* Block | NL ) ;
+Params            = Param { "," Param } [ "," ] ;
+Param             = Ident [ ":" Type ] [ "=" Expr ] ;   (* defaults allowed *)
+
+(* ----------------- Blocks & Statements ----------------- *)
+Block             = Indent { Stmt } Dedent ;
+
+Stmt              = LetStmt
+                  | AssignStmt
+                  | AugAssignStmt
+                  | ReturnStmt
+                  | IfStmt
+                  | IfStmtInline
+                  | WhileStmt
+                  | WhileStmtInline
+                  | ForStmt
+                  | ForStmtInline
+                  | UsingStmt
+                  | DeferStmt
+                  | MatchStmt
+                  | SelectStmt
+                  | DocStringStmt
+                  | ExprStmt
+                  ;
+
+DocStringStmt     = (StrLit | LongStrLit | FStrLit) NL ;
+                    (* Treated as a docstring iff it is the first stmt in a def/class block; otherwise a no-op comment stmt. *)
+
+LetStmt           = "let" [ "mut" ]
+                    ( BindList | "(" BindList ")" | "[" BindList "]" )
+                    [ ":" Type ] "=" ExprList NL ;
+BindList          = Bind { "," Bind } ;
+Bind              = Ident [ ":" Type ] ;
+
+AssignStmt        = LHSList ":=" ExprList NL ;
+AugAssignStmt     = LHS ( "+=" | "-=" | "*=" | "/=" | "%=" ) Expr NL ;
+LHSList           = LHS { "," LHS } ;
+LHS               = Ident | FieldExpr | IndexExpr ;
+
+ReturnStmt        = "return" [ Expr ] NL ;
+
+IfStmt            = "if" Expr ":" NL Block
+                    { "elif" Expr ":" NL Block }
+                    [ "else" ":" NL Block ] ;
+IfStmtInline      = "if" Expr ":" SimpleStmt NL ;
+
+WhileStmt         = "while" Expr ":" NL Block ;
+WhileStmtInline   = "while" Expr ":" SimpleStmt NL ;
+
+ForStmt           = "for" ForTarget "in" Expr ":" NL Block ;
+ForStmtInline     = "for" ForTarget "in" Expr ":" SimpleStmt NL ;
+ForTarget         = Ident
+                  | "(" BindList ")"
+                  | "[" BindList "]"
+                  ;
+
+UsingStmt         = "using" ( Ident "=" CallExpr | LHS ) ":" NL Block ;
+DeferStmt         = "defer" CallExpr NL ;
+
+MatchStmt         = "match" Expr ":" NL Indent { MatchArm } Dedent ;
+MatchArm          = Pattern ":" ( NL Block | SimpleExpr NL ) ;
+Pattern           = "_"                                     (* wildcard *)
+                  | Literal                                  (* value match *)
+                  | Ident "(" [ Binder ] ")"                 (* EnumVariant[(binder)] *)
+                  | GuardPattern                             (* general boolean guard *)
+                  ;
+Binder            = Ident | "_" ;
+GuardPattern      = Expr ;
+
+SelectStmt        = "select" ":" NL Indent { SelectArm } Dedent ;
+SelectArm         = "await" Expr ":" NL Block
+                  | "_" ":" NL Block ;
+
+ExprStmt          = Expr NL ;
+SimpleStmt        = ExprStmt | AssignStmt | AugAssignStmt | ReturnStmt ;
+
+(* ----------------- Expressions ----------------- *)
+Expr              = Disjunction ;
+Disjunction       = Conjunction { "or" Conjunction } ;
+Conjunction       = Pipeline    { "and" Pipeline } ;
+Pipeline          = Equality    { "|>" Equality } ;
+
+Equality          = Relational  { ( "==" | "!=" ) Relational } ;
+Relational        = Additive    { ( "<" | "<=" | ">" | ">=" ) Additive } ;
+Additive          = Multiplicative { ( "+" | "-" ) Multiplicative } ;
+Multiplicative    = Unary       { ( "*" | "/" | "%" ) Unary } ;
+
+Unary             = ( "-" | "!" | "not" ) Unary
+                  | "await" Unary
+                  | Postfix ;
+
+Postfix           = Primary { CallSuffix | IndexSuffix | FieldSuffix } ;
+CallSuffix        = "(" [ ArgList ] ")" ;
+IndexSuffix       = "[" Expr "]" ;
+FieldSuffix       = "." Ident ;
+
+ArgList           = Arg { "," Arg } [ "," ] ;
+Arg               = [ Ident "=" ] Expr ;                    (* named or positional *)
+
+Primary           = Literal
+                  | Ident
+                  | StructLit
+                  | MapLit
+                  | SetLit
+                  | ListLit
+                  | TupleLit
+                  | LambdaExpr
+                  | "(" Expr ")"
+                  ;
+
+(* ----------------- Literals & Collections ----------------- *)
+Literal           = IntLit | StrLit | FStrLit | LongStrLit | BoolLit | "none" ;
+
+ListLit           = "[" [ ExprList | ListComp ] "]" ;
+TupleLit          = "(" ExprList ")" ;                      (* (a,b) tuples; single-element tuple is not special in Rev 6 *)
+MapLit            = "{" [ MapPairs | DictComp ] "}" ;
+MapPairs          = MapPair { "," MapPair } [ "," ] ;
+MapPair           = Expr ":" Expr ;                         (* dict uses ':' *)
+SetLit            = "#{" [ ExprList | SetComp ] "}" ;       (* compound opener '#{' *)
+
+ExprList          = Expr { "," Expr } ;
+
+(* ----------------- Comprehensions ----------------- *)
+ListComp          = CompExpr "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+DictComp          = CompKey ":" CompVal "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+SetComp           = CompExpr "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+
+CompExpr          = Expr ;
+CompKey           = Expr ;
+CompVal           = Expr ;
+CompTarget        = Ident | "(" BindList ")" | "[" BindList "]" ;
+
+(* ----------------- Struct literals ----------------- *)
+StructLit         = Ident "{" [ StructInitList ] "}" ;
+StructInitList    = StructInit { "," StructInit } [ "," ] ;
+StructInit        = Ident ":" Expr ;
+
+(* ----------------- Lambda ----------------- *)
+LambdaExpr        = LambdaParams "=>" Expr ;
+LambdaParams      = Ident
+                  | "(" [ LambdaParamList ] ")"
+                  ;
+LambdaParamList   = LambdaParam { "," LambdaParam } ;
+LambdaParam       = Ident [ ":" Type ] ;
+
+(* ----------------- Calls as expressions ----------------- *)
+CallExpr          = Primary { FieldSuffix | IndexSuffix } CallSuffix
+                    { CallSuffix | IndexSuffix | FieldSuffix } ;
+
+(* ----------------- Types ----------------- *)
+Type              = UnionType ;
+UnionType         = IntersectType { "|" IntersectType } ;
+IntersectType     = SimpleType ;                             (* placeholder for future intersections *)
+
+SimpleType        = BuiltinType
+                  | Ident TypeArgs?
+                  | DottedIdent
+                  | ListType
+                  | DictType
+                  | SetType
+                  | TupleType
+                  ;
+
+TypeArgs          = "[" Type { "," Type } "]" ;
+ListType          = "list" "[" Type "]" | "[" Type "]" ;
+DictType          = "dict" "[" Type "," Type "]" | "{" Type ":" Type "}" ;
+SetType           = "set" "[" Type "]" ;
+TupleType         = "tuple" "[" Type { "," Type } "]" ;
+
+BuiltinType       = "bool"
+                  | "int" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
+                  | "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
+                  | "f32" | "f64"
+                  | "str" | "string"
+                  | "future"
+                  | "none"
+                  | "list" | "dict" | "set" | "tuple" ;      (* reserved in type positions *)
+
+DottedIdent       = Ident { "." Ident } ;
+
+(* ----------------- Lexical shells ----------------- *)
+Ident             = /* letter (letter | digit | "_")*; keywords excluded */ ;
+IntLit            = /* decimal digits (future: hex/bin prefixes) */ ;
+StrLit            = /* "..." with escapes */ ;
+LongStrLit        = /* """...""" (multiline) with escapes */ ;
+FStrLit           = /* f"..." with { Expr } interpolations (no nested braces inside expr) */ ;
+BoolLit           = "true" | "false" ;
+
+NL                = /* line break(s) */ ;
+Indent            = /* indentation increase */ ;
+Dedent            = /* indentation decrease */ ;
+
+(* Comments and whitespace *)
+(* Line comments start with '#' to end-of-line (unless forming '#{' set literal). *)
+
