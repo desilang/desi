@@ -6,6 +6,7 @@ import (
   "path/filepath"
 
   "github.com/desilang/desi/compiler/internal/diag"
+  "github.com/desilang/desi/compiler/internal/lex"
   "github.com/desilang/desi/compiler/internal/term"
   "github.com/desilang/desi/compiler/internal/token"
 )
@@ -14,6 +15,7 @@ var (
   flagVersion    = flag.Bool("version", false, "print version and exit")
   flagDiag       = flag.Bool("diag", false, "emit a sample diagnostic and exit")
   flagDemoTokens = flag.Bool("demo-tokens", false, "print a small token/category demo and exit")
+  flagDemoLayout = flag.Bool("demo-layout", false, "print layout tokens for a small sample and exit")
 )
 
 const Version = "0.0.1-rev6-bootstrap"
@@ -38,6 +40,12 @@ func main() {
 
   if *flagDemoTokens {
     demoTokens()
+    term.Flush()
+    return
+  }
+
+  if *flagDemoLayout {
+    demoLayout()
     term.Flush()
     return
   }
@@ -92,4 +100,22 @@ func demoDiag() error {
   // Print only the human-friendly form (no JSON payload).
   d.RenderTTY(os.Stderr, diag.Theme{Color: false})
   return nil
+}
+
+func demoLayout() {
+  sample := `
+def hello()-> int:
+  if cond:
+    return 1
+  else:
+    return 2
+
+def world()-> int:
+  0
+`
+  toks := lex.Layoutize([]byte(sample))
+  term.Println("layout events for sample:")
+  for _, t := range toks {
+    term.Printf("  %s\n", t.String())
+  }
 }
