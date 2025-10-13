@@ -60,8 +60,7 @@ func demoTokens() {
 }
 
 func demoDiag() error {
-	// (unchanged)
-	p := filepath.Join("docs", "spec", "codes.json")
+	p := filepath.Join("compiler", "internal", "diag", "codes.json")
 	f, err := os.Open(p)
 	if err != nil {
 		return err
