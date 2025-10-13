@@ -21,7 +21,6 @@ func main() {
 		os.Exit(2)
 	}
 
-	changed := false
 	for _, a := range args {
 		stat, err := os.Stat(a)
 		if err != nil {
@@ -29,37 +28,34 @@ func main() {
 			continue
 		}
 		if stat.IsDir() {
-			filepath.WalkDir(a, func(path string, d os.DirEntry, err error) error {
-				if err != nil || d.IsDir() || filepath.Ext(path) != ".desi" {
+			if err := filepath.WalkDir(a, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					// propagate filesystem errors to terminate the walk
+					return err
+				}
+				if d.IsDir() || filepath.Ext(path) != ".desi" {
 					return nil
 				}
-				ok, err := formatOne(path)
-				if err != nil {
-					term.Eprintln("desifmt:", err)
-				}
-				if !ok {
-					changed = true
-				}
-				return nil
-			})
-		} else {
-			ok, err := formatOne(a)
-			if err != nil {
-				term.Eprintln("desifmt:", err)
+				_, ferr := formatOne(path)
+				return ferr
+			}); err != nil {
+				term.Eprintln("desifmt walk:", err)
 			}
-			if !ok {
-				changed = true
+		} else {
+			if _, err := formatOne(a); err != nil {
+				term.Eprintln("desifmt:", err)
 			}
 		}
 	}
-	// On -l with no changes, be silent.
+
+	// On -l with no differences, be silent (stub never reports differences yet).
 	term.Flush()
 }
 
 func formatOne(path string) (alreadyFormatted bool, err error) {
 	// TODO: parse + pretty-print AST; for now, just simulate "already formatted".
 	if *listOnly {
-		// print path if it WOULD change; stub says nothing changes
+		// Would print the path if formatting would change; stub: nothing changes.
 		return true, nil
 	}
 	if *writeInPlace {
