@@ -1,0 +1,367 @@
+{
+  "lexer": {
+    "unterminated_string": {
+      "id": "DLE0001",
+      "title": "unterminated string",
+      "help": "did you forget a closing quote?",
+      "primary_end": {
+        "kind": "eol"
+      },
+      "suggestions": [
+        {
+          "where": {
+            "kind": "eol"
+          },
+          "label": "add this: '\"'",
+          "message": "insert closing quote",
+          "replacement": "\"",
+          "applicability": "machine-applicable"
+        }
+      ]
+    },
+    "generic_lexer_error": {
+      "id": "DLE0099",
+      "title": "lexer error"
+    }
+  },
+  "parser": {
+    "unexpected_token": {
+      "id": "DPE0001",
+      "title": "unexpected token",
+      "help": "this token is not valid here; check for a missing delimiter or keyword before it"
+    },
+    "expected_token": {
+      "id": "DPE0002",
+      "title": "expected a different token",
+      "help": "the parser expected a specific token here; verify punctuation and keywords"
+    },
+    "unclosed_delimiter": {
+      "id": "DPE0003",
+      "title": "unclosed delimiter",
+      "help": "a '(' '[' or '{' was opened but not closed on this path",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "eol"
+          },
+          "label": "add a closing delimiter",
+          "message": "insert the matching closing delimiter",
+          "replacement": ")",
+          "applicability": "machine-applicable"
+        }
+      ]
+    },
+    "trailing_or_extra_token": {
+      "id": "DPE0004",
+      "title": "trailing or extra token",
+      "help": "remove extra punctuation or a stray comma at the end of the list"
+    },
+    "invalid_assignment_target": {
+      "id": "DPE0005",
+      "title": "invalid assignment target",
+      "help": "only names, tuple patterns, or index/field targets may appear on the left of an assignment"
+    },
+    "unexpected_after_pub": {
+      "id": "DPE0100",
+      "title": "unexpected token after 'pub'"
+    },
+    "wildcard_has_payload": {
+      "id": "DPE0101",
+      "title": "wildcard '_' cannot have a payload"
+    },
+    "async_before_def": {
+      "id": "DPE1001",
+      "title": "async only valid before 'def'",
+      "help": "Place 'async' immediately before 'def', or remove it."
+    },
+    "await_requires_expr": {
+      "id": "DPE1002",
+      "title": "await requires an expression",
+      "help": "Write 'await <expr>' where <expr> is a future."
+    }
+  },
+  "type": {
+    "undefined_name": {
+      "id": "DTE0001",
+      "title": "undefined name",
+      "help": "this name is not defined in the current scope"
+    },
+    "arity_mismatch": {
+      "id": "DTE0002",
+      "title": "arity mismatch in grouped binding",
+      "help": "the number of names on the left must equal the number of values on the right"
+    },
+    "redeclared_symbol": {
+      "id": "DTE0003",
+      "title": "name already defined in this scope",
+      "help": "choose a different name or remove the earlier declaration"
+    },
+    "type_mismatch": {
+      "id": "DTE0004",
+      "title": "type mismatch",
+      "help": "the expression does not have the expected type"
+    },
+    "wrong_return_kind": {
+      "id": "DTE0005",
+      "title": "return type mismatch",
+      "help": "the returned expression does not match the function's declared return type"
+    },
+    "assign_to_immutable": {
+      "id": "DTE0006",
+      "title": "cannot assign to immutable variable",
+      "help": "declare the variable with 'mut' if you intend to reassign it"
+    },
+    "not_public": {
+      "id": "DTE0010",
+      "title": "symbol is not public",
+      "help": "symbols imported from another module must be declared with 'pub'"
+    },
+    "public_const_not_const": {
+      "id": "DTE0011",
+      "title": "public constant must be compile-time constant",
+      "help": "public constants must be literal compile-time values"
+    },
+    "pub_let_mut_forbidden": {
+      "id": "DTE0012",
+      "title": "public let cannot be mutable",
+      "help": "remove 'mut' from public top-level let declarations"
+    },
+    "use_none_not_void": {
+      "id": "DTE0014",
+      "title": "use 'none' instead of 'void'",
+      "help": "Desi does not have 'void'; use 'none' for no-value types"
+    },
+    "reserved_identifier": {
+      "id": "DTE0020",
+      "title": "reserved keyword used as an identifier",
+      "help": "choose a different name; language keywords and special names cannot be used as identifiers"
+    },
+    "shadow_builtin": {
+      "id": "DTE0021",
+      "title": "cannot shadow prelude builtin",
+      "help": "rename your binding; builtins like 'len' and 'print' cannot be redefined"
+    },
+    "import_name_conflict": {
+      "id": "DTE0022",
+      "title": "name conflicts with imported symbol",
+      "help": "rename your declaration; imported names cannot be redefined"
+    },
+    "use_none_instead_of_void": {
+      "id": "DTE0023",
+      "title": "'void' is not a type; use 'none'",
+      "help": "Desi uses 'none' to denote no value. Replace 'void' with 'none'."
+    },
+    "unsupported_assignment_target": {
+      "id": "DTE0031",
+      "title": "unsupported assignment target",
+      "help": "the left-hand side must be a name, index, or field expression"
+    },
+    "unknown_struct_type": {
+      "id": "DTE0032",
+      "title": "unknown struct type",
+      "help": "this struct type is not defined"
+    },
+    "field_access_on_non_struct": {
+      "id": "DTE0033",
+      "title": "field access on non-struct",
+      "help": "only struct values support field access"
+    },
+    "cannot_assign_field_on_non_struct": {
+      "id": "DTE0034",
+      "title": "cannot assign to field on non-struct",
+      "help": "the left-hand side must be a struct value"
+    },
+    "illegal_defer_position": {
+      "id": "DTE0035",
+      "title": "defer is not allowed here",
+      "help": "move the 'defer' to the function top level"
+    },
+    "defer_expects_call": {
+      "id": "DTE0036",
+      "title": "defer expects a call expression",
+      "help": "use 'defer some_func(...)'"
+    },
+    "bad_condition_type": {
+      "id": "DTE0037",
+      "title": "invalid condition type",
+      "help": "conditions must be bool or int"
+    },
+    "symbol_not_value": {
+      "id": "DTE0038",
+      "title": "symbol is not a value",
+      "help": "call the function or refer to a constant/type as appropriate"
+    },
+    "unknown_symbol_in_module_alias": {
+      "id": "DTE0039",
+      "title": "unknown symbol in module alias",
+      "help": "verify the symbol name exported by that module"
+    },
+    "unknown_field_on_struct": {
+      "id": "DTE0040",
+      "title": "unknown field on struct",
+      "help": "check the field name against the struct definition"
+    },
+    "unknown_enum_variant": {
+      "id": "DTE0041",
+      "title": "unknown enum variant",
+      "help": "verify the variant name declared in the enum"
+    },
+    "duplicate_match_arm": {
+      "id": "DTE0042",
+      "title": "duplicate match arm",
+      "help": "each variant should appear at most once"
+    },
+    "payloadless_variant_binder": {
+      "id": "DTE0043",
+      "title": "payloadless variant used with a binder",
+      "help": "remove the binder or use a variant that carries a payload"
+    },
+    "await_outside_async": {
+      "id": "DTE1001",
+      "title": "`await` is only valid inside async functions",
+      "help": "Mark the function `async`, or remove `await`."
+    },
+    "await_non_future": {
+      "id": "DTE1002",
+      "title": "cannot await a non-future value",
+      "help": "Only values of kind `future<T>` can be awaited."
+    },
+    "builtin_wrong_arity": {
+      "id": "DTE0112",
+      "title": "wrong number of arguments",
+      "help": "check the function's signature and adjust the number of arguments"
+    },
+    "builtin_arg_void": {
+      "id": "DTE0110",
+      "title": "argument is void",
+      "help": "arguments must produce a value; remove expressions of kind 'none'"
+    },
+    "builtin_arg_unsupported_kind": {
+      "id": "DTE0111",
+      "title": "unsupported argument kind",
+      "help": "convert the expression to a supported kind (int/float/str/bool)"
+    },
+    "call_wrong_arity": {
+      "id": "DTE0046",
+      "title": "wrong number of arguments",
+      "help": "pass exactly the required number of arguments"
+    },
+    "module_call_wrong_arity": {
+      "id": "DTE0045",
+      "title": "wrong number of arguments",
+      "help": "verify the arity of the function exported by that module"
+    },
+    "enum_ctor_wrong_arity": {
+      "id": "DTE0044",
+      "title": "wrong number of arguments",
+      "help": "constructors for payloadless variants take no arguments; payloadful ones take exactly one"
+    },
+    "incompatible_struct_assignment": {
+      "id": "DTE0030",
+      "title": "incompatible struct assignment",
+      "help": "assign a value of the same struct type"
+    },
+    "incompatible_enum_assignment": {
+      "id": "DTE0030",
+      "title": "incompatible enum assignment",
+      "help": "assign a value of the same enum type/variant"
+    }
+  },
+  "module": {
+    "import_cycle": {
+      "id": "DME0001",
+      "title": "import cycle",
+      "help": "break the cycle by removing or refactoring one of the imports"
+    },
+    "not_found": {
+      "id": "DME0002",
+      "title": "cannot find module",
+      "help": "verify the dotted path and ensure the file exists under a search root (project dir or compiler/lib)"
+    },
+    "duplicate_import": {
+      "id": "DMW0001",
+      "title": "duplicate import",
+      "help": "remove the repeated import; importing the same module multiple times has no effect"
+    },
+    "bad_import": {
+      "id": "DME0003",
+      "title": "invalid import path",
+      "help": "Use dotted names like 'foo.bar'; no spaces or invalid characters."
+    },
+    "io_read": {
+      "id": "DME0004",
+      "title": "failed to read file",
+      "help": "Check file permissions and path casing."
+    },
+    "parse_failed": {
+      "id": "DME0005",
+      "title": "parse failed during resolution",
+      "help": "Fix parser errors in the imported file."
+    },
+    "bad_entry": {
+      "id": "DME0006",
+      "title": "bad entry path",
+      "help": "Pass a valid .desi file; avoid directories or missing paths."
+    },
+    "entry_not_found": {
+      "id": "DME0007",
+      "title": "entry not found",
+      "help": "Make sure the entry file exists and isn’t a directory."
+    },
+    "internal": {
+      "id": "DME0099",
+      "title": "internal error",
+      "help": "This indicates a compiler bug; please report with a repro."
+    },
+    "import_self": {
+      "id": "DMW0002",
+      "title": "module imports itself",
+      "help": "Remove the self import; a module can reference its own symbols directly."
+    },
+    "import_alias_conflict": {
+      "id": "DMW0003",
+      "title": "import alias conflict",
+      "help": "Give different aliases (e.g., 'import foo as f1') or adjust 'from' items to avoid local name collisions."
+    },
+    "unused_import": {
+      "id": "DMW0004",
+      "title": "unused import",
+      "help": "Remove the import or reference a symbol from it."
+    },
+    "unused_from_item": {
+      "id": "DMW0005",
+      "title": "unused imported name",
+      "help": "Remove the unused item from the 'from' list."
+    },
+    "duplicate_from_item": {
+      "id": "DMW0006",
+      "title": "duplicate item in from-import",
+      "help": "Remove the repeated item; listing the same name multiple times has no effect."
+    }
+  },
+  "warn": {
+    "unused_variable": {
+      "id": "DW0001",
+      "title": "unused variable or parameter",
+      "help": "Prefix the name with '_' to silence this warning."
+    },
+    "shadowed_variable": {
+      "id": "DW0002",
+      "title": "name shadows an outer binding",
+      "help": "consider renaming to avoid confusion"
+    },
+    "unreachable_code": {
+      "id": "DW0004",
+      "title": "unreachable code: statement after return"
+    },
+    "missing_explicit_return": {
+      "id": "DW0006",
+      "title": "function may fall through without an explicit return"
+    },
+    "non_exhaustive_match": {
+      "id": "DW0007",
+      "title": "non-exhaustive match",
+      "help": "add arms for the missing variants or a wildcard '_' arm"
+    }
+  }
+}
