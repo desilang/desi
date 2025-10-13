@@ -47,7 +47,7 @@ func demoDiag() error {
   if err != nil {
     return err
   }
-  defer f.Close()
+  defer func() { _ = f.Close() }() // explicitly ignore close error
 
   cat, err := diag.LoadCatalog(f)
   if err != nil {
