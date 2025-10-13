@@ -1,0 +1,92 @@
+package token
+
+import "strconv"
+
+var tokenNames = [...]string{
+	ILLEGAL: "ILLEGAL",
+	EOF:     "EOF",
+	NL:      "NL",
+	Indent:  "Indent",
+	Dedent:  "Dedent",
+	IDENT:   "IDENT",
+	INT:     "INT",
+	FLOAT:   "FLOAT",
+	STR:     "STR",
+	LONGSTR: "LONGSTR",
+	FSTR:    "FSTR",
+
+	KW_import: "import",
+	KW_from:   "from",
+	KW_as:     "as",
+	KW_pub:    "pub",
+	KW_def:    "def",
+	KW_async:  "async",
+	KW_class:  "class",
+	KW_struct: "struct",
+	KW_enum:   "enum",
+	KW_type:   "type",
+	KW_let:    "let",
+	KW_mut:    "mut",
+	KW_return: "return",
+	KW_if:     "if",
+	KW_elif:   "elif",
+	KW_else:   "else",
+	KW_while:  "while",
+	KW_for:    "for",
+	KW_in:     "in",
+	KW_using:  "using",
+	KW_defer:  "defer",
+	KW_match:  "match",
+	KW_select: "select",
+	KW_await:  "await",
+	KW_true:   "true",
+	KW_false:  "false",
+	KW_none:   "none",
+	KW_and:    "and",
+	KW_or:     "or",
+	KW_not:    "not",
+
+	LPAREN: "(",
+	RPAREN: ")",
+	LBRACK: "[",
+	RBRACK: "]",
+	LBRACE: "{",
+	RBRACE: "}",
+	COMMA:  ",",
+	COLON:  ":",
+	DOT:    ".",
+	AT:     "@",
+	HASH:   "#",
+
+	ASSIGN:     "=",
+	DECLARE:    ":=",
+	PLUS:       "+",
+	MINUS:      "-",
+	STAR:       "*",
+	SLASH:      "/",
+	PERCENT:    "%",
+	PLUS_EQ:    "+=",
+	MINUS_EQ:   "-=",
+	STAR_EQ:    "*=",
+	SLASH_EQ:   "/=",
+	PERCENT_EQ: "%=",
+	EQEQ:       "==",
+	NEQ:        "!=",
+	LT:         "<",
+	LTE:        "<=",
+	GT:         ">=",
+	GTE:        ">=",
+	BANG:       "!",
+	PIPE:       "|",
+	PIPE_GT:    "|>",
+	ARROW:      "->",
+	FAT_ARROW:  "=>",
+}
+
+// String returns a stable, human-friendly name for the token.
+func (t Token) String() string {
+	if int(t) >= 0 && int(t) < len(tokenNames) && tokenNames[t] != "" {
+		return tokenNames[t]
+	}
+	return "Token(" + strconv.Itoa(int(t)) + ")"
+}
