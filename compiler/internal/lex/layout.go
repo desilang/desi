@@ -19,14 +19,18 @@ func Layoutize(src []byte) []token.Token {
 	sc := bufio.NewScanner(bytes.NewReader(src))
 
 	indentStack := []int{0} // baseline
-	lineIdx := 0
 
 	for sc.Scan() {
-		lineIdx++
 		line := sc.Text()
 
-		// Skip blank lines (no NL, no indent changes)
-		if strings.TrimSpace(line) == "" {
+		trim := strings.TrimSpace(line)
+		if trim == "" {
+			// blank line → ignore
+			continue
+		}
+		// comment-only lines start with '#' after trimming, but preserve set literal '#{'
+		if strings.HasPrefix(trim, "#") && !strings.HasPrefix(trim, "#{") {
+			// comment-only → ignore (no NL, no indent)
 			continue
 		}
 
@@ -40,7 +44,7 @@ func Layoutize(src []byte) []token.Token {
 			break
 		}
 
-		// Compare with current top
+		// Compare with current top and emit Indent/Dedent
 		cur := indentStack[len(indentStack)-1]
 		if indent > cur {
 			indentStack = append(indentStack, indent)
@@ -51,7 +55,7 @@ func Layoutize(src []byte) []token.Token {
 				indentStack = indentStack[:len(indentStack)-1]
 				out = append(out, token.Dedent)
 			}
-			// If not matched, we accept "ragged" indentation silently in M0.
+			// If ragged (indent not equal to a previous level), we silently accept in bootstrap.
 		}
 
 		// End of logical line
