@@ -153,47 +153,54 @@ func (s *Scanner) Next() Item {
 				r2, w2 := utf8.DecodeRune(s.src[s.i+w:])
 				switch r2 {
 				case 'x', 'X':
-					// hex int: 0x[0-9a-fA-F]+
+					// 0x[0-9a-fA-F]+
 					s.i += w + w2
 					s.col += 2
 					if s.advanceWhile(isHexDigit) == 0 {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid hex literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
-					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+					return Item{Tok: token.INT_HEX, Lexeme: lex, Line: s.line, Col: startCol}
 				case 'b', 'B':
-					// bin int: 0b[01]+
+					// 0b[01]+
 					s.i += w + w2
 					s.col += 2
 					if s.advanceWhile(isBinDigit) == 0 {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid binary literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
-					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+					return Item{Tok: token.INT_BIN, Lexeme: lex, Line: s.line, Col: startCol}
 				case 'o', 'O':
-					// oct int: 0o[0-7]+
+					// 0o[0-7]+
 					s.i += w + w2
 					s.col += 2
 					if s.advanceWhile(isOctDigit) == 0 {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid octal literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
-					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+					return Item{Tok: token.INT_OCT, Lexeme: lex, Line: s.line, Col: startCol}
 				}
 			}
 
 			// decimal: digits, optional frac, optional exponent
-			s.advanceDigits()
+			dcount := s.advanceDigits()
 			isFloat := false
+			hasFrac := false
+			hasExp := false
+
 			if s.peekIs('.') && unicode.IsDigit(s.peekRuneN(1)) {
 				isFloat = true
+				hasFrac = true
 				s.i++
 				s.col++
-				s.advanceDigits()
+				if s.advanceDigits() == 0 {
+					return Item{Tok: token.ILLEGAL, Lexeme: "invalid float fraction", Line: s.line, Col: startCol}
+				}
 			}
 			if s.peekIs('e') || s.peekIs('E') {
 				// exponent part
 				isFloat = true
+				hasExp = true
 				s.i++
 				s.col++
 				if s.peekIs('+') || s.peekIs('-') {
@@ -207,9 +214,16 @@ func (s *Scanner) Next() Item {
 
 			lex := string(s.src[start:s.i])
 			if isFloat {
+				if hasExp {
+					return Item{Tok: token.FLOAT_EXP, Lexeme: lex, Line: s.line, Col: startCol}
+				}
 				return Item{Tok: token.FLOAT, Lexeme: lex, Line: s.line, Col: startCol}
 			}
-			return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+			// plain decimal int
+			if dcount == 0 {
+				return Item{Tok: token.ILLEGAL, Lexeme: "invalid number", Line: s.line, Col: startCol}
+			}
+			return Item{Tok: token.INT_DEC, Lexeme: lex, Line: s.line, Col: startCol}
 		}
 	}
 
