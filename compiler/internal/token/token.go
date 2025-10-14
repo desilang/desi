@@ -1,6 +1,6 @@
 package token
 
-// Token is the enumeration of all lexical tokens in Desi (Rev-6).
+// Token is the enumeration of all lexical tokens in Desi (revised).
 // This package defines only names/tables/helpers (no scanning).
 type Token int
 

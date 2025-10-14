@@ -35,7 +35,7 @@ var keywords = map[string]Token{
 	"not":    KW_not,
 }
 
-// Builtin type spellings per Rev-6 grammar.
+// Builtin type spellings per revised grammar.
 var builtinTypes = map[string]struct{}{
 	"bool":   {},
 	"int":    {},
