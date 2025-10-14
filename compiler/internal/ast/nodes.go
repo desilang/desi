@@ -1,0 +1,206 @@
+package ast
+
+import "github.com/desilang/desi/compiler/internal/diag"
+
+// Every node carries a source Span.
+type Node interface{ SpanOf() diag.Span }
+
+/* ---------- Module / Decls ---------- */
+
+type Module struct {
+	File  string
+	Decls []Decl
+	Span  diag.Span
+}
+
+func (m *Module) SpanOf() diag.Span { return m.Span }
+
+type Decl interface {
+	Node
+	isDecl()
+}
+
+type FuncDecl struct {
+	Name    Ident
+	Params  []Param
+	RetType *TypeName // optional
+	Body    *Block    // nil if just a signature + NL
+	Span    diag.Span
+}
+
+func (*FuncDecl) isDecl()             {}
+func (d *FuncDecl) SpanOf() diag.Span { return d.Span }
+
+type Param struct {
+	Name    Ident
+	Type    *TypeName // optional
+	Default Expr      // optional
+	Span    diag.Span
+}
+
+/* ---------- Statements ---------- */
+
+type Stmt interface {
+	Node
+	isStmt()
+}
+
+type Block struct {
+	Stmts []Stmt
+	Span  diag.Span
+}
+
+func (b *Block) SpanOf() diag.Span { return b.Span }
+
+type LetStmt struct {
+	Mutable bool
+	Name    Ident
+	Type    *TypeName // optional
+	Value   Expr
+	Span    diag.Span
+}
+
+func (*LetStmt) isStmt()             {}
+func (s *LetStmt) SpanOf() diag.Span { return s.Span }
+
+type ReturnStmt struct {
+	Value Expr // optional
+	Span  diag.Span
+}
+
+func (*ReturnStmt) isStmt()             {}
+func (s *ReturnStmt) SpanOf() diag.Span { return s.Span }
+
+type ExprStmt struct {
+	Expr Expr
+	Span diag.Span
+}
+
+func (*ExprStmt) isStmt()             {}
+func (s *ExprStmt) SpanOf() diag.Span { return s.Span }
+
+/* ---------- Expressions ---------- */
+
+type Expr interface {
+	Node
+	isExpr()
+}
+
+type Ident struct {
+	Name string
+	Span diag.Span
+}
+
+func (*Ident) isExpr()             {}
+func (x *Ident) SpanOf() diag.Span { return x.Span }
+
+type IntLit struct {
+	Text string
+	Span diag.Span
+}
+
+func (*IntLit) isExpr()             {}
+func (x *IntLit) SpanOf() diag.Span { return x.Span }
+
+type FloatLit struct {
+	Text string
+	Span diag.Span
+}
+
+func (*FloatLit) isExpr()             {}
+func (x *FloatLit) SpanOf() diag.Span { return x.Span }
+
+type StrLit struct {
+	// We don't store content for M1; scanner already validated escapes.
+	Span diag.Span
+}
+
+func (*StrLit) isExpr()             {}
+func (x *StrLit) SpanOf() diag.Span { return x.Span }
+
+type BoolLit struct {
+	Value bool
+	Span  diag.Span
+}
+
+func (*BoolLit) isExpr()             {}
+func (x *BoolLit) SpanOf() diag.Span { return x.Span }
+
+type NoneLit struct {
+	Span diag.Span
+}
+
+func (*NoneLit) isExpr()             {}
+func (x *NoneLit) SpanOf() diag.Span { return x.Span }
+
+type UnaryExpr struct {
+	Op   string // "-", "!", "not", "await"
+	X    Expr
+	Span diag.Span
+}
+
+func (*UnaryExpr) isExpr()             {}
+func (x *UnaryExpr) SpanOf() diag.Span { return x.Span }
+
+type BinaryExpr struct {
+	Op   string // "**", "*", "/", "%", "+", "-", "^", "<", "<=", ">", ">=", "==", "!=", "|>", "and", "or"
+	Lhs  Expr
+	Rhs  Expr
+	Span diag.Span
+}
+
+func (*BinaryExpr) isExpr()             {}
+func (x *BinaryExpr) SpanOf() diag.Span { return x.Span }
+
+type CallExpr struct {
+	Callee Expr
+	Args   []Expr // positional only for M1
+	Span   diag.Span
+}
+
+func (*CallExpr) isExpr()             {}
+func (x *CallExpr) SpanOf() diag.Span { return x.Span }
+
+type IndexExpr struct {
+	X    Expr
+	Idx  Expr
+	Span diag.Span
+}
+
+func (*IndexExpr) isExpr()             {}
+func (x *IndexExpr) SpanOf() diag.Span { return x.Span }
+
+type FieldExpr struct {
+	X    Expr
+	Name Ident
+	Span diag.Span
+}
+
+func (*FieldExpr) isExpr()             {}
+func (x *FieldExpr) SpanOf() diag.Span { return x.Span }
+
+// Stub only for now (not parsed in M1 but useful to have in the type set).
+type LambdaExpr struct {
+	Span diag.Span
+}
+
+func (*LambdaExpr) isExpr()             {}
+func (x *LambdaExpr) SpanOf() diag.Span { return x.Span }
+
+/* ---------- Types (minimal) ---------- */
+
+type TypeName struct {
+	Name string // "Foo" or "a.b.C"
+	Span diag.Span
+}
+
+/* ---------- Helpers ---------- */
+
+// JoinSpan returns a Span spanning [a,b] (or a if b is zero/empty).
+func JoinSpan(a, b diag.Span) diag.Span {
+	out := a
+	if b.Start.Line != 0 {
+		out.End = b.End
+	}
+	return out
+}
