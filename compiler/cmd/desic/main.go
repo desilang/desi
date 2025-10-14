@@ -110,6 +110,10 @@ func dumpTokens(path string) error {
 		term.Printf("%-10s %-12q%s  @%d:%d\n", it.Tok.String(), it.Lexeme, tag, it.Line, it.Col)
 	}
 
+	// IMPORTANT: flush stdout before writing diagnostics to stderr,
+	// to avoid interleaved/misordered lines on the terminal.
+	term.Flush()
+
 	// Render lexer diagnostics (non-fatal) to stderr using your catalog.
 	if len(scanErrs) > 0 {
 		p := filepath.Join("compiler", "internal", "diag", "codes.json")
@@ -142,6 +146,7 @@ func dumpTokens(path string) error {
 		}
 	}
 
+	term.Flush()
 	return nil
 }
 
