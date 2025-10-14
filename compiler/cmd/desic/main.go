@@ -96,18 +96,52 @@ def world:
 }
 
 func dumpTokens(path string) error {
-	items, err := lex.ScanFile(path)
+	items, scanErrs, err := lex.ScanFileFull(path)
 	if err != nil {
 		return err
 	}
+
+	// Token dump (annotate builtin types while keeping IDENT kind).
 	for _, it := range items {
-		// Annotate builtin types even though we keep them as IDENT tokens.
 		tag := ""
 		if it.Tok == token.IDENT && it.Lexeme != "" && token.IsBuiltinType(it.Lexeme) {
 			tag = " (type)"
 		}
 		term.Printf("%-10s %-12q%s  @%d:%d\n", it.Tok.String(), it.Lexeme, tag, it.Line, it.Col)
 	}
+
+	// Render lexer diagnostics (non-fatal) to stderr using your catalog.
+	if len(scanErrs) > 0 {
+		p := filepath.Join("compiler", "internal", "diag", "codes.json")
+		f, err := os.Open(p)
+		if err == nil {
+			defer func() { _ = f.Close() }()
+			if cat, err := diag.LoadCatalog(f); err == nil {
+				b := diag.NewBuilder(cat)
+				for _, se := range scanErrs {
+					code := se.CodePath
+					if code == "" {
+						code = "lexer.generic_lexer_error"
+					}
+					d, err := b.New(code, diag.Label{
+						Span: diag.Span{
+							File:  se.File,
+							Start: diag.Pos{Line: se.Line, Col: se.Col},
+							End:   diag.Pos{Line: se.Line, Col: se.Col},
+						},
+						Text:    se.Message,
+						Primary: true,
+					})
+					if err == nil {
+						d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+					} else {
+						term.Eprintln("lexer error:", se.Message)
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
