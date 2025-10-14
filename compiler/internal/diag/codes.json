@@ -76,6 +76,11 @@
     "generic_lexer_error": {
       "id": "DLE0099",
       "title": "lexer error"
+    },
+    "tabs_only_indentation": {
+      "id": "DLE0003",
+      "title": "spaces used for indentation; tabs required",
+      "help": "Desi enforces tabs-only indentation. Configure your editor to insert tabs (not spaces) for leading whitespace."
     }
   },
   "parser": {
