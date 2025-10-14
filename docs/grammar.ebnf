@@ -9,9 +9,60 @@
      • Some constraints are semantic (not purely syntactic).
    =========================================================== *)
 
-File              = { ImportDecl | FromImportDecl } { Decl } ;
+(* ===========================================================
+   M1 SUBSET (implemented)
+   -----------------------------------------------------------
+   A minimal but real parser+AST. The full grammar that follows
+   remains the long-term target; items outside this subset are
+   not parsed yet.
+   =========================================================== *)
+
+File_m1           = { FuncDecl_m1 } ;
+
+FuncDecl_m1       = [ "async" ] "def" Ident "(" [ Params_m1 ] ")"
+                    [ "->" TypeName_m1 ] ( ":" NL Block_m1 | NL ) ;
+
+Params_m1         = Param_m1 { "," Param_m1 } [ "," ] ;
+Param_m1          = Ident [ ":" TypeName_m1 ] [ "=" Expr_m1 ] ;
+
+Block_m1          = Indent { Stmt_m1 } Dedent ;
+
+Stmt_m1           = LetStmt_m1 | ReturnStmt_m1 | ExprStmt_m1 ;
+
+LetStmt_m1        = "let" [ "mut" ] Ident [ ":" TypeName_m1 ] "=" Expr_m1 NL ;
+ReturnStmt_m1     = "return" [ Expr_m1 ] NL ;
+ExprStmt_m1       = Expr_m1 NL ;
+
+(* precedence: ** > unary > * / % > + - > ^ > < <= > >= > == != > |> > and > or *)
+Expr_m1           = Or_m1 ;
+Or_m1             = And_m1        { "or"  And_m1 } ;
+And_m1            = Pipe_m1       { "and" Pipe_m1 } ;
+Pipe_m1           = Equality_m1   { "|>"  Equality_m1 } ;
+Equality_m1       = Rel_m1        { ( "==" | "!=" ) Rel_m1 } ;
+Rel_m1            = Xor_m1        { ( "<" | "<=" | ">" | ">=" ) Xor_m1 } ;
+Xor_m1            = Add_m1        { "^" Add_m1 } ;
+Add_m1            = Mul_m1        { ( "+" | "-" ) Mul_m1 } ;
+Mul_m1            = Pow_m1        { ( "*" | "/" | "%" ) Pow_m1 } ;
+Pow_m1            = Unary_m1      { "**" Unary_m1 } ;     (* right-assoc *)
+Unary_m1          = ( "-" | "!" | "not" | "await" ) Unary_m1
+                  | Postfix_m1 ;
+Postfix_m1        = Primary_m1 { CallSuf_m1 | IndexSuf_m1 | FieldSuf_m1 } ;
+CallSuf_m1        = "(" [ ArgList_m1 ] ")" ;
+IndexSuf_m1       = "[" Expr_m1 "]" ;
+FieldSuf_m1       = "." Ident ;
+ArgList_m1        = Expr_m1 { "," Expr_m1 } [ "," ] ;
+
+Primary_m1        = Literal | Ident | "(" Expr_m1 ")" ;
+
+TypeName_m1       = DottedIdent | Ident ;
+
+(* Everything below this line is the long-term revised grammar.
+   It is NOT fully implemented in M1. *)
+(* =========================================================== *)
 
 (* ----------------- Imports ----------------- *)
+File              = { ImportDecl | FromImportDecl } { Decl } ;
+
 ImportDecl        = "import" DottedIdent [ "as" Ident ] NL ;
 
 (* Support one-line or parenthesized multi-line from-imports. *)
@@ -188,7 +239,7 @@ TupleLit          = "(" ExprList ")" ;
 MapLit            = "{" [ MapPairs | DictComp ] "}" ;
 MapPairs          = MapPair { "," MapPair } [ "," ] ;
 MapPair           = Expr ":" Expr ;
-SetLit            = "#{" [ ExprList | SetComp ] "}" ;  (* note: lexer may currently treat '#' as comment; parser work TBD *)
+SetLit            = "#{" [ ExprList | SetComp ] "}" ;  (* lexer currently treats '#' as comment; to revisit *)
 
 ExprList          = Expr { "," Expr } ;
 
@@ -217,6 +268,10 @@ LambdaParams      = Ident
                   ;
 LambdaParamList   = LambdaParam { "," LambdaParam } ;
 LambdaParam       = Ident [ ":" Type ] ;
+
+(* Async lambda (PLANNED in M8)
+AsyncLambdaExpr   = "async" "lambda" LambdaParams ":" Expr ;
+*)
 
 (* ----------------- Calls as expressions ----------------- *)
 CallExpr          = Primary { FieldSuffix | IndexSuffix } CallSuffix
@@ -253,9 +308,8 @@ BuiltinType       = "bool"
 
 DottedIdent       = Ident { "." Ident } ;
 
-(* ----------------- Lexical (what the lexer implements today) ----------------- *)
-
-Ident             = ( letter | "_" ) { letter | digit | "_" } ;  (* keywords excluded *)
+(* ----------------- Lexical implemented today ----------------- *)
+Ident             = ( letter | "_" ) { letter | digit | "_" } ;
 
 (* integers *)
 dec_digits        = digit { [ "_" ] digit } ;

@@ -1,6 +1,6 @@
 # Desi Syntax (revised bootstrap)
 
-This document describes the **lexical** rules implemented today. Parser rules come later.
+This document currently describes the **lexical** rules implemented today. Parser rules are landing milestone-by-milestone; see the grammar for full plans and the M1 subset implemented now.
 
 ## Source form
 
@@ -29,7 +29,7 @@ Blank lines and comment-only lines do not affect indentation.
 
 ```
 
-IDENT = (Letter | "*") { Letter | Digit | "*" }
+Ident = (Letter | "*") { Letter | Digit | "*" }
 
 ```
 
@@ -45,42 +45,7 @@ Unicode letters are accepted. Examples: `x`, `_tmp`, `Point2D`.
 
 ## Literals
 
-### Integer literals
-- Decimal: `0`, `123`, `1_000_000`
-- Binary: `0b1010_0101`
-- Octal: `0o755`, `0o7_55`
-- Hex: `0xDEAD_BEEF`, `0xdead_beef`
-
-**Separators:** `_` between digits only — not leading, not trailing, not doubled.
-
-### Decimal floats
-- `1.0`, `.5`, `2.`, `1_234.5_6`
-- Exponent: `1e9`, `1.25e-3`, `1.2_34e+5`
-- Underscores allowed in the significand and exponent **between digits** only.
-
-### Hexadecimal floats
-- Forms:
-  - `0x1p4`
-  - `0x1.fp3`
-  - `0x.8p+2`
-- Fractional hex without `p` is **invalid** (diagnostic `DLE0016`).
-- Exponent `p±<digits>` requires at least one digit; underscores allowed **between digits** only.
-
-### String literals
-
-- Short string: `"..."`
-- f-string placeholder form (reserved for future interpolation): `f"..."` (currently just lexed as a string)
-- Long string: `""" ... """` (may span lines). Only closes on an exact `"""`; `""` inside is fine.
-
-**Escapes supported:**
-
-```
-
-\  "  \n  \r  \t  \0  \xNN  \uXXXX  \UXXXXXXXX  {  }
-
-```
-
-Invalid escapes emit `DLE0020`. Unterminated strings/long strings emit `DLE0001`.
+(unchanged; see `docs/guides/m0-basics.md` for examples)
 
 ## Operators & punctuators (subset)
 
@@ -95,34 +60,27 @@ Greedy tokenization is used — the longest operator wins.
 - Arrows: `->` `=>`
 - Bang: `!`
 
-**Notes:**
-- `**` is power; `^` is bitwise XOR.
-- `|>` is the pipeline operator.
-- Keywords `and`, `or`, `not` are lexed as keywords (logical ops).
+**Notes (today):**
 
-## Diagnostics (lexer domain)
-
-The lexer collects non-fatal errors and continues scanning. The CLI prints tokens (stdout), flushes, then renders diagnostics (stderr).
-
-Common codes:
-- `DLE0001` `lexer.unterminated_string` — unterminated short/f/long string
-- `DLE0003` `lexer.tabs_only_indentation` — spaces used for indentation; tabs required
-- `DLE0011` `lexer.invalid_number`
-- `DLE0012` `lexer.invalid_float_fraction`
-- `DLE0013` `lexer.invalid_float_exponent`
-- `DLE0014` `lexer.invalid_hex_literal`
-- `DLE0015` `lexer.invalid_hex_fraction`
-- `DLE0016` `lexer.missing_hex_exponent` — hex fraction without `p`
-- `DLE0017` `lexer.invalid_hex_float_exponent`
-- `DLE0018` `lexer.invalid_binary_literal`
-- `DLE0019` `lexer.invalid_octal_literal`
-- `DLE0020` `lexer.invalid_escape_sequence`
-- `DLE0099` `lexer.generic_lexer_error`
+- Parser M1 supports: `**`, unary, `* / %`, `+ -`, `^`, `< <= > >=`, `== !=`, `|>`, `and/or`.
+- `|` (bitwise OR) and `**=` are **scanned** but **not parsed yet**.
 
 ## CLI
 
 - `-tokens <file>` — dump tokens and then diagnostics
 - `-demo-layout` — print layout token stream for a small sample
 - `-diag` — print a demo diagnostic
+- `-ast <file>` — parse a file and pretty-print the AST (M1 subset)
 - `-version` — version string
+
+## Preview: async lambda (planned)
+
+We plan to support async lambdas in the async milestone:
+
+```desi
+let bodies = await gather(urls |> map(async lambda u: await http.get(u)))
+```
+
+Grammar sketch (see `docs/grammar.ebnf`):
+`AsyncLambdaExpr = "async" "lambda" LambdaParams ":" Expr` (expression-only body).
 
