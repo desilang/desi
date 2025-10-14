@@ -9,9 +9,17 @@ import (
 
 func (p *Parser) parseFunc() *ast.FuncDecl {
 	start := spanPos(p.file, p.cur)
+
+	// Optional 'async' before 'def'
+	async := p.accept(token.KW_async)
 	if !p.expect(token.KW_def, "def") {
+		if async {
+			// Prefer a targeted diagnostic when 'async' isn't followed by 'def'
+			p.errAsyncBeforeDef(start)
+		}
 		return nil
 	}
+
 	if p.cur.Tok != token.IDENT {
 		p.errExpected(spanPos(p.file, p.cur), "function name")
 		return nil
@@ -44,6 +52,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	}
 
 	return &ast.FuncDecl{
+		Async:   async,
 		Name:    name,
 		Params:  params,
 		RetType: ret,

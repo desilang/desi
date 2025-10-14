@@ -33,10 +33,27 @@ func (p *Parser) parseBlock() *ast.Block {
 
 func (p *Parser) parseStmt() ast.Stmt {
 	switch p.cur.Tok {
+	case token.KW_async:
+		// Handle bogus "async" at statement start (M1 only allows it before 'def').
+		asyncSpan := spanPos(p.file, p.cur)
+		// If the very next token starts a let-stmt, emit a precise diag and parse let.
+		if p.peek.Tok == token.KW_let {
+			p.errAsyncBeforeLet(asyncSpan)
+			p.next() // consume 'async'
+			return p.parseLet()
+		}
+		// Otherwise, say "async only valid before 'def'" and recover this line.
+		p.errAsyncBeforeDef(asyncSpan)
+		p.next()     // consume 'async'
+		p.syncStmt() // drop rest of the line to avoid cascading errors
+		return nil
+
 	case token.KW_let:
 		return p.parseLet()
+
 	case token.KW_return:
 		return p.parseReturn()
+
 	default:
 		e := p.parseExpr()
 		span := lastSpan(e, spanPos(p.file, p.cur))
