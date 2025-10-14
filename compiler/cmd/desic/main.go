@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lex"
+	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/token"
 )
@@ -17,6 +19,7 @@ var (
 	flagDemoTokens = flag.Bool("demo-tokens", false, "print a small token/category demo and exit")
 	flagDemoLayout = flag.Bool("demo-layout", false, "print layout tokens for a small sample and exit")
 	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
+	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 )
 
 const Version = "0.0.1-revised-bootstrap"
@@ -61,8 +64,18 @@ func main() {
 		return
 	}
 
+	if *flagAST != "" {
+		if err := dumpAST(*flagAST); err != nil {
+			term.Eprintln("parse error:", err)
+			term.Flush()
+			os.Exit(2)
+		}
+		term.Flush()
+		return
+	}
+
 	// TODO: add subcommands: build, check, parse, tokens, etc.
-	term.Println("desic: TODO (revised bootstrap). Try -diag, -version, -demo-tokens, -demo-layout, or -tokens <file>.")
+	term.Println("desic: TODO (revised bootstrap). Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, or -ast <file>.")
 	term.Flush()
 }
 
@@ -156,6 +169,63 @@ func dumpTokens(path string) error {
 	}
 
 	term.Flush()
+	return nil
+}
+
+func dumpAST(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+
+	root, pdiags := parse.ParseFile(path, b)
+
+	// print AST to stdout
+	ast.Print(os.Stdout, root)
+	term.Flush()
+
+	// render parse diagnostics (if any), using codes.json when available
+	if len(pdiags) > 0 {
+		const max = 50
+		p := filepath.Join("compiler", "internal", "diag", "codes.json")
+		if f, err := os.Open(p); err == nil {
+			defer func() { _ = f.Close() }()
+			if cat, err := diag.LoadCatalog(f); err == nil {
+				bld := diag.NewBuilder(cat)
+				limit := len(pdiags)
+				if limit > max {
+					limit = max
+				}
+				for i := 0; i < limit; i++ {
+					d := pdiags[i]
+					// Map CodeID -> catalog path for nicer titles
+					codePath := "parser.unexpected_token"
+					switch d.CodeID {
+					case "DPE0001":
+						codePath = "parser.unexpected_token"
+					case "DPE0002":
+						codePath = "parser.expected_token"
+					case "DPE0003":
+						codePath = "parser.unclosed_delimiter"
+					case "DPE0004":
+						codePath = "parser.trailing_or_extra_token"
+					case "DPE0005":
+						codePath = "parser.invalid_assignment_target"
+					}
+					dd, err := bld.New(codePath, d.Primary, diag.WithMessage(d.Message))
+					if err == nil {
+						dd.RenderTTY(os.Stderr, diag.Theme{Color: false})
+					} else {
+						// fall back to raw rendering
+						d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+					}
+				}
+				if extra := len(pdiags) - limit; extra > 0 {
+					term.Eprintln("…", extra, "more parser errors suppressed")
+				}
+			}
+		}
+	}
 	return nil
 }
 
