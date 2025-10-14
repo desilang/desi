@@ -14,8 +14,17 @@ const (
 
 	// Identifiers & literals
 	IDENT
-	INT
-	FLOAT
+
+	// Numeric literals (distinct forms)
+	INT_DEC // e.g., 123
+	INT_HEX // 0xDEAD
+	INT_BIN // 0b1011
+	INT_OCT // 0o755
+
+	FLOAT     // 12.34, . . . (we currently require at least one digit after '.')
+	FLOAT_EXP // 1e9, 1.2e-3
+
+	// Strings
 	STR     // "..."
 	LONGSTR // """..."""
 	FSTR    // f"..."
@@ -66,31 +75,33 @@ const (
 	HASH   // # (participates in '#{' set opener)
 
 	// Operators
-	ASSIGN     // =
-	DECLARE    // := (statement assignment)
-	PLUS       // +
-	MINUS      // -
-	STAR       // *
-	SLASH      // /
-	PERCENT    // %
-	PLUS_EQ    // +=
-	MINUS_EQ   // -=
-	STAR_EQ    // *=
-	SLASH_EQ   // /=
-	PERCENT_EQ // %=
-	POW        // **  (power)
-	POW_EQ     // **=
-	EQEQ       // ==
-	NEQ        // !=
-	LT         // <
-	LTE        // <=
-	GT         // >
-	GTE        // >=
-	BANG       // !
-	PIPE       // |   (type unions)
-	PIPE_GT    // |>  (pipeline)
-	ARROW      // ->  (return type)
-	FAT_ARROW  // =>  (lambda)
+	ASSIGN   // =
+	DECLARE  // := (statement assignment)
+	PLUS     // +
+	MINUS    // -
+	STAR     // *
+	SLASH    // /
+	PERCENT  // %
+	PLUS_EQ  // +=
+	MINUS_EQ // -=
+	STAR_EQ  // *=
+	SLASH_EQ // /=
+	PERCENT_EQ
+	POW     // **  (power)
+	POW_EQ  // **=
+	XOR     // ^   (bitwise xor)
+	XOR_EQ  // ^=
+	EQEQ    // ==
+	NEQ     // !=
+	LT      // <
+	LTE     // <=
+	GT      // >
+	GTE     // >=
+	BANG    // !
+	PIPE    // |   (type unions)
+	PIPE_GT // |>  (pipeline)
+	ARROW   // ->  (return type)
+	FAT_ARROW
 )
 
 // Category labels for formatting/debug UI.
@@ -116,14 +127,14 @@ func TokenCategory(t Token) Category {
 		return CatLayout
 	case IDENT:
 		return CatIdent
-	case INT, FLOAT, STR, LONGSTR, FSTR:
+	case INT_DEC, INT_HEX, INT_BIN, INT_OCT, FLOAT, FLOAT_EXP, STR, LONGSTR, FSTR:
 		return CatLiteral
 	case KW_import, KW_from, KW_as, KW_pub, KW_def, KW_async, KW_class, KW_struct, KW_enum, KW_type,
 		KW_let, KW_mut, KW_return, KW_if, KW_elif, KW_else, KW_while, KW_for, KW_in, KW_using, KW_defer,
 		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not:
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
-		POW, POW_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
+		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
 		return CatOperator
 	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH:
 		return CatPunct
