@@ -1,0 +1,7 @@
+def f():
+  let a = 0x1p4
+  let b = 0x1.fp3
+  let c = 0x.8p+2
+  let bad1 = 0x1.f      # missing p
+  let bad2 = 0x_p1      # underscore before any digit
+  let bad3 = 0x1p+_2    # underscore right after sign
