@@ -55,3 +55,24 @@ func IsOperator(t Token) bool {
 		return false
 	}
 }
+
+// ---------- Exports for lexers ----------
+
+// OperatorLits returns operator/punctuator literals in greedy order (longest first).
+func OperatorLits() []string {
+	out := make([]string, len(operators))
+	for i, p := range operators {
+		out[i] = p.Lit
+	}
+	return out
+}
+
+// OperatorByLit returns the token for a literal (if any).
+func OperatorByLit(lit string) (Token, bool) {
+	for _, p := range operators {
+		if p.Lit == lit {
+			return p.Token, true
+		}
+	}
+	return ILLEGAL, false
+}
