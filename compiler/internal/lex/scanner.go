@@ -116,6 +116,33 @@ func (s *Scanner) Next() Item {
 		return Item{Tok: token.NL, Line: s.line, Col: 1}
 	}
 
+	// Leading-dot floats: .5, .5e+2
+	if s.peekIs('.') && unicode.IsDigit(s.peekRuneN(1)) {
+		startCol := s.col
+		start := s.i
+		// consume '.'
+		s.i++
+		s.col++
+		// must have at least one digit
+		if n, ok := s.advanceDigitsSep(); n == 0 || !ok {
+			return Item{Tok: token.ILLEGAL, Lexeme: "invalid float fraction", Line: s.line, Col: startCol}
+		}
+		// optional exponent
+		if s.peekIs('e') || s.peekIs('E') {
+			s.i++
+			s.col++
+			if s.peekIs('+') || s.peekIs('-') {
+				s.i++
+				s.col++
+			}
+			if n, ok := s.advanceDigitsSep(); n == 0 || !ok {
+				return Item{Tok: token.ILLEGAL, Lexeme: "invalid float exponent", Line: s.line, Col: startCol}
+			}
+			return Item{Tok: token.FLOAT_EXP, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
+		}
+		return Item{Tok: token.FLOAT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
+	}
+
 	// identifier / keyword
 	if s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
@@ -141,7 +168,7 @@ func (s *Scanner) Next() Item {
 		}
 	}
 
-	// numbers: int/float, supporting 0x/0b/0o and decimal exponents
+	// numbers: int/float, supporting 0x/0b/0o, decimal fractions (incl. trailing dot), and decimal exponents
 	if s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if unicode.IsDigit(r) {
@@ -153,28 +180,28 @@ func (s *Scanner) Next() Item {
 				r2, w2 := utf8.DecodeRune(s.src[s.i+w:])
 				switch r2 {
 				case 'x', 'X':
-					// 0x[0-9a-fA-F]+
+					// 0x[0-9a-fA-F][_0-9a-fA-F]*
 					s.i += w + w2
 					s.col += 2
-					if s.advanceWhile(isHexDigit) == 0 {
+					if n, ok := s.advanceWhileSep(isHexDigit); n == 0 || !ok {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid hex literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
 					return Item{Tok: token.INT_HEX, Lexeme: lex, Line: s.line, Col: startCol}
 				case 'b', 'B':
-					// 0b[01]+
+					// 0b[01][_01]*
 					s.i += w + w2
 					s.col += 2
-					if s.advanceWhile(isBinDigit) == 0 {
+					if n, ok := s.advanceWhileSep(isBinDigit); n == 0 || !ok {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid binary literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
 					return Item{Tok: token.INT_BIN, Lexeme: lex, Line: s.line, Col: startCol}
 				case 'o', 'O':
-					// 0o[0-7]+
+					// 0o[0-7][_0-7]*
 					s.i += w + w2
 					s.col += 2
-					if s.advanceWhile(isOctDigit) == 0 {
+					if n, ok := s.advanceWhileSep(isOctDigit); n == 0 || !ok {
 						return Item{Tok: token.ILLEGAL, Lexeme: "invalid octal literal", Line: s.line, Col: startCol}
 					}
 					lex := string(s.src[start:s.i])
@@ -182,17 +209,28 @@ func (s *Scanner) Next() Item {
 				}
 			}
 
-			// decimal: digits, optional frac, optional exponent
-			dcount := s.advanceDigits()
+			// decimal: digits, optional frac (including trailing '.'), optional exponent
+			dcount, ok := s.advanceDigitsSep()
+			if dcount == 0 || !ok {
+				return Item{Tok: token.ILLEGAL, Lexeme: "invalid number", Line: s.line, Col: startCol}
+			}
 			isFloat := false
 			hasExp := false
 
-			if s.peekIs('.') && unicode.IsDigit(s.peekRuneN(1)) {
-				isFloat = true
-				s.i++
-				s.col++
-				if s.advanceDigits() == 0 {
-					return Item{Tok: token.ILLEGAL, Lexeme: "invalid float fraction", Line: s.line, Col: startCol}
+			if s.peekIs('.') {
+				// If the next after '.' is a digit, consume fractional digits with separators.
+				if unicode.IsDigit(s.peekRuneN(1)) {
+					isFloat = true
+					s.i++
+					s.col++
+					if n, ok := s.advanceDigitsSep(); n == 0 || !ok {
+						return Item{Tok: token.ILLEGAL, Lexeme: "invalid float fraction", Line: s.line, Col: startCol}
+					}
+				} else {
+					// Trailing-dot float: consume a single '.' and mark as float
+					isFloat = true
+					s.i++
+					s.col++
 				}
 			}
 			if s.peekIs('e') || s.peekIs('E') {
@@ -205,7 +243,7 @@ func (s *Scanner) Next() Item {
 					s.i++
 					s.col++
 				}
-				if s.advanceDigits() == 0 {
+				if n, ok := s.advanceDigitsSep(); n == 0 || !ok {
 					return Item{Tok: token.ILLEGAL, Lexeme: "invalid float exponent", Line: s.line, Col: startCol}
 				}
 			}
@@ -216,10 +254,6 @@ func (s *Scanner) Next() Item {
 					return Item{Tok: token.FLOAT_EXP, Lexeme: lex, Line: s.line, Col: startCol}
 				}
 				return Item{Tok: token.FLOAT, Lexeme: lex, Line: s.line, Col: startCol}
-			}
-			// plain decimal int
-			if dcount == 0 {
-				return Item{Tok: token.ILLEGAL, Lexeme: "invalid number", Line: s.line, Col: startCol}
 			}
 			return Item{Tok: token.INT_DEC, Lexeme: lex, Line: s.line, Col: startCol}
 		}
@@ -296,20 +330,65 @@ func (s *Scanner) consumeToEOL() {
 	}
 }
 
-// returns count of digits consumed
-func (s *Scanner) advanceDigits() int {
+// returns count of decimal digits consumed, validating '_' separators (no leading/trailing/double '_')
+func (s *Scanner) advanceDigitsSep() (int, bool) {
 	n := 0
+	lastUnderscore := false
 	for s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if unicode.IsDigit(r) {
 			s.i += w
 			s.col++
 			n++
-		} else {
-			return n
+			lastUnderscore = false
+			continue
 		}
+		if r == '_' {
+			// reject leading '_' or doubled '__'
+			if n == 0 || lastUnderscore {
+				return 0, false
+			}
+			s.i += w
+			s.col++
+			lastUnderscore = true
+			continue
+		}
+		break
 	}
-	return n
+	if lastUnderscore {
+		return 0, false
+	}
+	return n, true
+}
+
+// base-specific digits with '_' separators allowed (no leading/trailing/double '_')
+func (s *Scanner) advanceWhileSep(pred func(rune) bool) (int, bool) {
+	n := 0
+	lastUnderscore := false
+	for s.i < len(s.src) {
+		r, w := utf8.DecodeRune(s.src[s.i:])
+		if pred(r) {
+			s.i += w
+			s.col++
+			n++
+			lastUnderscore = false
+			continue
+		}
+		if r == '_' {
+			if n == 0 || lastUnderscore {
+				return 0, false
+			}
+			s.i += w
+			s.col++
+			lastUnderscore = true
+			continue
+		}
+		break
+	}
+	if lastUnderscore {
+		return 0, false
+	}
+	return n, true
 }
 
 func isHexDigit(r rune) bool {
@@ -317,22 +396,6 @@ func isHexDigit(r rune) bool {
 }
 func isBinDigit(r rune) bool { return r == '0' || r == '1' }
 func isOctDigit(r rune) bool { return '0' <= r && r <= '7' }
-
-// returns count of digits consumed for a predicate
-func (s *Scanner) advanceWhile(pred func(rune) bool) int {
-	n := 0
-	for s.i < len(s.src) {
-		r, w := utf8.DecodeRune(s.src[s.i:])
-		if pred(r) {
-			s.i += w
-			s.col++
-			n++
-		} else {
-			return n
-		}
-	}
-	return n
-}
 
 func (s *Scanner) scanString() Item {
 	startCol := s.col
