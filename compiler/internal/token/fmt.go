@@ -74,7 +74,7 @@ var tokenNames = [...]string{
 	NEQ:        "!=",
 	LT:         "<",
 	LTE:        "<=",
-	GT:         ">=",
+	GT:         ">",
 	GTE:        ">=",
 	BANG:       "!",
 	PIPE:       "|",
