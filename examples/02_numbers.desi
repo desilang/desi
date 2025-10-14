@@ -1,0 +1,7 @@
+def n():
+  let a = 0xDEAD
+  let b = 0b1011
+  let c = 0o755
+  let d = 1e9
+  let e = 1.25e-3
+  let f = 2 ** 4

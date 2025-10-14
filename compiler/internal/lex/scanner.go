@@ -61,13 +61,11 @@ func (s *Scanner) Next() Item {
 	// Handle beginning-of-line indentation & comment-only lines.
 	if s.atBOL {
 		indent, isCommentLine := s.measureIndentAndComment()
-		// Skip comment-only lines (no NL/indent changes)
 		if isCommentLine {
 			s.consumeToEOL()
 			s.atBOL = true
 			return s.emitNL()
 		}
-		// Indent/Dedent changes
 		cur := s.indents[len(s.indents)-1]
 		if indent > cur {
 			s.indents = append(s.indents, indent)
@@ -79,7 +77,6 @@ func (s *Scanner) Next() Item {
 				return Item{Tok: token.Dedent, Line: s.line, Col: 1}
 			}
 		}
-		// fallthrough to scan content on this line
 	}
 
 	// Skip whitespace (not newlines)
@@ -88,7 +85,7 @@ func (s *Scanner) Next() Item {
 			break
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
-		if r == '\r' { // normalize CRLF
+		if r == '\r' {
 			s.i += w
 			continue
 		}
@@ -112,12 +109,11 @@ func (s *Scanner) Next() Item {
 		}
 	}
 
-	// comment starting mid-line? Only treat as comment if first non-space was '#'.
-	// Here mid-line '#' is a HASH punctuator, unless it starts '#{' (set literal).
+	// mid-line comment? keep '#' as token unless '#{' set literal; end-of-line '#' acts as comment
 	if s.peekIs('#') && !s.peek2Is("#{") {
 		s.consumeToEOL()
 		s.atBOL = true
-		return Item{Tok: token.NL, Line: s.line, Col: 1} // end-of-line comment → NL
+		return Item{Tok: token.NL, Line: s.line, Col: 1}
 	}
 
 	// identifier / keyword
@@ -145,20 +141,70 @@ func (s *Scanner) Next() Item {
 		}
 	}
 
-	// number (int/float minimal)
+	// numbers: int/float, supporting 0x/0b/0o and decimal exponents
 	if s.i < len(s.src) {
-		r, _ := utf8.DecodeRune(s.src[s.i:])
+		r, w := utf8.DecodeRune(s.src[s.i:])
 		if unicode.IsDigit(r) {
 			startCol := s.col
 			start := s.i
-			isFloat := false
+
+			// base prefixes when starting with '0'
+			if r == '0' && s.i+w < len(s.src) {
+				r2, w2 := utf8.DecodeRune(s.src[s.i+w:])
+				switch r2 {
+				case 'x', 'X':
+					// hex int: 0x[0-9a-fA-F]+
+					s.i += w + w2
+					s.col += 2
+					if s.advanceWhile(isHexDigit) == 0 {
+						return Item{Tok: token.ILLEGAL, Lexeme: "invalid hex literal", Line: s.line, Col: startCol}
+					}
+					lex := string(s.src[start:s.i])
+					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+				case 'b', 'B':
+					// bin int: 0b[01]+
+					s.i += w + w2
+					s.col += 2
+					if s.advanceWhile(isBinDigit) == 0 {
+						return Item{Tok: token.ILLEGAL, Lexeme: "invalid binary literal", Line: s.line, Col: startCol}
+					}
+					lex := string(s.src[start:s.i])
+					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+				case 'o', 'O':
+					// oct int: 0o[0-7]+
+					s.i += w + w2
+					s.col += 2
+					if s.advanceWhile(isOctDigit) == 0 {
+						return Item{Tok: token.ILLEGAL, Lexeme: "invalid octal literal", Line: s.line, Col: startCol}
+					}
+					lex := string(s.src[start:s.i])
+					return Item{Tok: token.INT, Lexeme: lex, Line: s.line, Col: startCol}
+				}
+			}
+
+			// decimal: digits, optional frac, optional exponent
 			s.advanceDigits()
+			isFloat := false
 			if s.peekIs('.') && unicode.IsDigit(s.peekRuneN(1)) {
 				isFloat = true
 				s.i++
 				s.col++
 				s.advanceDigits()
 			}
+			if s.peekIs('e') || s.peekIs('E') {
+				// exponent part
+				isFloat = true
+				s.i++
+				s.col++
+				if s.peekIs('+') || s.peekIs('-') {
+					s.i++
+					s.col++
+				}
+				if s.advanceDigits() == 0 {
+					return Item{Tok: token.ILLEGAL, Lexeme: "invalid float exponent", Line: s.line, Col: startCol}
+				}
+			}
+
 			lex := string(s.src[start:s.i])
 			if isFloat {
 				return Item{Tok: token.FLOAT, Lexeme: lex, Line: s.line, Col: startCol}
@@ -178,7 +224,7 @@ func (s *Scanner) Next() Item {
 		return s.scanString()
 	}
 
-	// operators/punctuators (greedy, using token.OperatorLits)
+	// operators/punctuators (greedy)
 	if it, ok := s.scanOperatorOrPunct(); ok {
 		return it
 	}
@@ -200,7 +246,6 @@ func (s *Scanner) emitNL() Item {
 
 func (s *Scanner) measureIndentAndComment() (indent int, isCommentLine bool) {
 	indent = 0
-	// measure spaces/tabs
 	for off := s.i; off < len(s.src); {
 		r, w := utf8.DecodeRune(s.src[off:])
 		if r == ' ' || r == '\t' {
@@ -208,23 +253,18 @@ func (s *Scanner) measureIndentAndComment() (indent int, isCommentLine bool) {
 			off += w
 			continue
 		}
-		// blank line?
 		if r == '\n' {
 			return 0, false
 		}
-		// comment-only? starts with '#' but not '#{'
 		if r == '#' {
-			// lookahead one more rune
 			r2 := s.peekRuneAt(off + w)
 			if r2 != '{' {
-				// consume leading whitespace portion now
 				s.i = off
 				s.col = indent + 1
 				s.atBOL = false
 				return indent, true
 			}
 		}
-		// not space/tab: set scanner at first non-space
 		s.i = off
 		s.col = indent + 1
 		s.atBOL = false
@@ -237,7 +277,6 @@ func (s *Scanner) consumeToEOL() {
 	for s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\n' {
-			// Do not consume newline here—Next() will see it and emit NL.
 			return
 		}
 		s.i += w
@@ -245,16 +284,42 @@ func (s *Scanner) consumeToEOL() {
 	}
 }
 
-func (s *Scanner) advanceDigits() {
+// returns count of digits consumed
+func (s *Scanner) advanceDigits() int {
+	n := 0
 	for s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if unicode.IsDigit(r) {
 			s.i += w
 			s.col++
+			n++
 		} else {
-			return
+			return n
 		}
 	}
+	return n
+}
+
+func isHexDigit(r rune) bool {
+	return ('0' <= r && r <= '9') || ('a' <= r && r <= 'f') || ('A' <= r && r <= 'F')
+}
+func isBinDigit(r rune) bool { return r == '0' || r == '1' }
+func isOctDigit(r rune) bool { return '0' <= r && r <= '7' }
+
+// returns count of digits consumed for a predicate
+func (s *Scanner) advanceWhile(pred func(rune) bool) int {
+	n := 0
+	for s.i < len(s.src) {
+		r, w := utf8.DecodeRune(s.src[s.i:])
+		if pred(r) {
+			s.i += w
+			s.col++
+			n++
+		} else {
+			return n
+		}
+	}
+	return n
 }
 
 func (s *Scanner) scanString() Item {
@@ -289,10 +354,8 @@ func (s *Scanner) scanString() Item {
 
 func (s *Scanner) scanFString() Item {
 	startCol := s.col
-	// consume leading f"
-	s.i += 2
+	s.i += 2 // f"
 	s.col += 2
-	// naive scan until closing "
 	for s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {
@@ -321,8 +384,7 @@ func (s *Scanner) scanFString() Item {
 
 func (s *Scanner) scanLongString() Item {
 	startCol := s.col
-	// consume opening """
-	s.i += 3
+	s.i += 3 // """
 	s.col += 3
 	for s.i < len(s.src) {
 		if s.peek2Is(`"""`) {
@@ -345,7 +407,6 @@ func (s *Scanner) scanLongString() Item {
 
 func (s *Scanner) scanOperatorOrPunct() (Item, bool) {
 	lits := token.OperatorLits()
-	// greedy: longest first
 	for _, lit := range lits {
 		if s.hasPrefix(lit) {
 			tok, _ := token.OperatorByLit(lit)
@@ -373,9 +434,7 @@ func (s *Scanner) peekIs(ch rune) bool {
 	return r == ch
 }
 
-func (s *Scanner) peek2Is(s2 string) bool {
-	return s.hasPrefix(s2)
-}
+func (s *Scanner) peek2Is(s2 string) bool { return s.hasPrefix(s2) }
 
 func (s *Scanner) peekRuneN(n int) rune {
 	off := s.i
@@ -408,11 +467,9 @@ func runeCount(s string) int {
 }
 
 func keywordToken(lex string) (token.Token, bool) {
-	// Reuse token.IsKeyword to decide and then map to the actual KW_* token
 	if !token.IsKeyword(lex) {
 		return token.ILLEGAL, false
 	}
-	// map once via a small switch, mirroring keywords.go (fast path)
 	switch lex {
 	case "import":
 		return token.KW_import, true
