@@ -6,12 +6,11 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/term"
+	"github.com/desilang/desi/compiler/internal/version"
 )
 
-const Version = "0.0.1-rev6-bootstrap"
-
 func main() {
-	term.Println("desirepl", Version)
+	term.Println("desirepl", version.String())
 	term.Println("Type :quit to exit.")
 	in := bufio.NewScanner(os.Stdin)
 
