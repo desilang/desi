@@ -185,12 +185,10 @@ func (s *Scanner) Next() Item {
 			// decimal: digits, optional frac, optional exponent
 			dcount := s.advanceDigits()
 			isFloat := false
-			hasFrac := false
 			hasExp := false
 
 			if s.peekIs('.') && unicode.IsDigit(s.peekRuneN(1)) {
 				isFloat = true
-				hasFrac = true
 				s.i++
 				s.col++
 				if s.advanceDigits() == 0 {
