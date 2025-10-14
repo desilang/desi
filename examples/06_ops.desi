@@ -1,0 +1,8 @@
+def ops():
+  let a = 2 **= 3
+  let b = 2 ** 3
+  let c = 1 |> f
+  let d = 1 | 2
+  let e = a >= b
+  let f = a > b
+  let g = a == b
