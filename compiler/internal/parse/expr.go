@@ -1,0 +1,227 @@
+package parse
+
+import (
+	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/token"
+)
+
+// order = ** > unary > * / % > + - > ^ > < <= > >= > == != > |> > and > or
+func (p *Parser) parseExpr() ast.Expr { return p.parseOr() }
+
+func (p *Parser) parseOr() ast.Expr {
+	e := p.parseAnd()
+	for p.cur.Tok == token.KW_or {
+		op := p.cur
+		p.next()
+		r := p.parseAnd()
+		e = &ast.BinaryExpr{Op: "or", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseAnd() ast.Expr {
+	e := p.parsePipe()
+	for p.cur.Tok == token.KW_and {
+		op := p.cur
+		p.next()
+		r := p.parsePipe()
+		e = &ast.BinaryExpr{Op: "and", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parsePipe() ast.Expr {
+	e := p.parseEq()
+	for p.cur.Tok == token.PIPE_GT {
+		op := p.cur
+		p.next()
+		r := p.parseEq()
+		e = &ast.BinaryExpr{Op: "|>", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseEq() ast.Expr {
+	e := p.parseRel()
+	for p.cur.Tok == token.EQEQ || p.cur.Tok == token.NEQ {
+		op := p.cur
+		p.next()
+		r := p.parseRel()
+		e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseRel() ast.Expr {
+	e := p.parseXor()
+	for {
+		switch p.cur.Tok {
+		case token.LT, token.LTE, token.GT, token.GTE:
+			op := p.cur
+			p.next()
+			r := p.parseXor()
+			e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+		default:
+			return e
+		}
+	}
+}
+
+func (p *Parser) parseXor() ast.Expr {
+	e := p.parseAdd()
+	for p.cur.Tok == token.XOR {
+		op := p.cur
+		p.next()
+		r := p.parseAdd()
+		e = &ast.BinaryExpr{Op: "^", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseAdd() ast.Expr {
+	e := p.parseMul()
+	for p.cur.Tok == token.PLUS || p.cur.Tok == token.MINUS {
+		op := p.cur
+		p.next()
+		r := p.parseMul()
+		e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseMul() ast.Expr {
+	e := p.parsePow()
+	for p.cur.Tok == token.STAR || p.cur.Tok == token.SLASH || p.cur.Tok == token.PERCENT {
+		op := p.cur
+		p.next()
+		r := p.parsePow()
+		e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parsePow() ast.Expr {
+	left := p.parseUnary()
+	if p.cur.Tok == token.POW {
+		op := p.cur
+		p.next()
+		right := p.parsePow() // right-assoc
+		return &ast.BinaryExpr{Op: "**", Lhs: left, Rhs: right, Span: joinTok(p.file, op, p.cur)}
+	}
+	return left
+}
+
+func (p *Parser) parseUnary() ast.Expr {
+	switch p.cur.Tok {
+	case token.MINUS:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "-", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.BANG:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "!", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.KW_not:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "not", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.KW_await:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "await", X: x, Span: joinTok(p.file, op, p.cur)}
+	default:
+		return p.parsePostfix()
+	}
+}
+
+func (p *Parser) parsePostfix() ast.Expr {
+	e := p.parsePrimary()
+	for {
+		switch p.cur.Tok {
+		case token.LPAREN:
+			callStart := spanPos(p.file, p.cur)
+			p.next()
+			var args []ast.Expr
+			if p.cur.Tok != token.RPAREN {
+				for {
+					args = append(args, p.parseExpr())
+					if !p.accept(token.COMMA) {
+						break
+					}
+					if p.cur.Tok == token.RPAREN {
+						break
+					}
+				}
+			}
+			p.expect(token.RPAREN, ")")
+			e = &ast.CallExpr{Callee: e, Args: args, Span: ast.JoinSpan(callStart, spanPos(p.file, p.cur))}
+		case token.LBRACK:
+			idxStart := spanPos(p.file, p.cur)
+			p.next()
+			idx := p.parseExpr()
+			p.expect(token.RBRACK, "]")
+			e = &ast.IndexExpr{X: e, Idx: idx, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
+		case token.DOT:
+			dotStart := spanPos(p.file, p.cur)
+			p.next()
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "field name")
+				return e
+			}
+			id := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+			p.next()
+			e = &ast.FieldExpr{X: e, Name: id, Span: ast.JoinSpan(dotStart, spanPos(p.file, p.cur))}
+		default:
+			return e
+		}
+	}
+}
+
+func (p *Parser) parsePrimary() ast.Expr {
+	switch p.cur.Tok {
+	case token.IDENT:
+		id := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return &id
+	case token.INT_DEC, token.INT_HEX, token.INT_BIN, token.INT_OCT:
+		it := &ast.IntLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return it
+	case token.FLOAT, token.FLOAT_EXP:
+		it := &ast.FloatLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return it
+	case token.STR, token.FSTR, token.LONGSTR:
+		st := &ast.StrLit{Span: spanPos(p.file, p.cur)}
+		p.next()
+		return st
+	case token.KW_true:
+		b := &ast.BoolLit{Value: true, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return b
+	case token.KW_false:
+		b := &ast.BoolLit{Value: false, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return b
+	case token.KW_none:
+		n := &ast.NoneLit{Span: spanPos(p.file, p.cur)}
+		p.next()
+		return n
+	case token.LPAREN:
+		p.next()
+		e := p.parseExpr()
+		p.expect(token.RPAREN, ")")
+		return e
+	default:
+		p.errUnexpected(spanPos(p.file, p.cur), "expression")
+		errId := &ast.Ident{Name: "<error>", Span: spanPos(p.file, p.cur)}
+		if p.cur.Tok != token.EOF {
+			p.next()
+		}
+		return errId
+	}
+}
