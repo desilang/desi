@@ -5,7 +5,10 @@ var operators = []struct {
 	Lit   string
 	Token Token
 }{
-	// 2-char and 3-char
+	// 3-char first
+	{"**=", POW_EQ},
+
+	// 2-char
 	{":=", DECLARE},
 	{"==", EQEQ},
 	{"!=", NEQ},
@@ -16,6 +19,7 @@ var operators = []struct {
 	{"*=", STAR_EQ},
 	{"/=", SLASH_EQ},
 	{"%=", PERCENT_EQ},
+	{"**", POW},
 	{"|>", PIPE_GT},
 	{"->", ARROW},
 	{"=>", FAT_ARROW},
@@ -49,6 +53,7 @@ func IsOperator(t Token) bool {
 	switch t {
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT,
 		PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
+		POW, POW_EQ,
 		EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
 		return true
 	default:

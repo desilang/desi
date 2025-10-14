@@ -70,6 +70,8 @@ var tokenNames = [...]string{
 	STAR_EQ:    "*=",
 	SLASH_EQ:   "/=",
 	PERCENT_EQ: "%=",
+	POW:        "**",
+	POW_EQ:     "**=",
 	EQEQ:       "==",
 	NEQ:        "!=",
 	LT:         "<",

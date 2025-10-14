@@ -20,7 +20,7 @@ const (
 	LONGSTR // """..."""
 	FSTR    // f"..."
 
-	// Keywords (Rev-6)
+	// Keywords (revised)
 	KW_import
 	KW_from
 	KW_as
@@ -78,6 +78,8 @@ const (
 	STAR_EQ    // *=
 	SLASH_EQ   // /=
 	PERCENT_EQ // %=
+	POW        // **  (power)
+	POW_EQ     // **=
 	EQEQ       // ==
 	NEQ        // !=
 	LT         // <
@@ -121,7 +123,7 @@ func TokenCategory(t Token) Category {
 		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not:
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
-		EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
+		POW, POW_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
 		return CatOperator
 	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH:
 		return CatPunct
