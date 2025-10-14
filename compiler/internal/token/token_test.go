@@ -18,7 +18,22 @@ func TestHelpers(t *testing.T) {
 	if TokenCategory(KW_def) != CatKeyword {
 		t.Fatalf("KW_def should be CatKeyword")
 	}
-	if GT.String() != ">" {
-		t.Fatalf("GT string wrong: %q", GT.String())
+
+	// String() is the symbolic/stable name:
+	if GT.String() != "GT" {
+		t.Fatalf("GT String wrong: %q", GT.String())
+	}
+	// Lit() is the canonical source spelling (if any):
+	if GT.Lit() != ">" {
+		t.Fatalf("GT Lit wrong: %q", GT.Lit())
+	}
+	if ARROW.Lit() != "->" {
+		t.Fatalf("ARROW Lit wrong: %q", ARROW.Lit())
+	}
+	if KW_def.Lit() != "def" {
+		t.Fatalf("keyword Lit wrong: %q", KW_def.Lit())
+	}
+	if INT_DEC.Lit() != "" {
+		t.Fatalf("INT_DEC should not have a fixed literal")
 	}
 }
