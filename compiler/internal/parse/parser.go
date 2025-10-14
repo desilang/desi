@@ -76,6 +76,16 @@ func (p *Parser) expect(t token.Token, label string) bool {
 	p.errExpected(spanPos(p.file, p.cur), label)
 	return false
 }
+
+// expectClose emits DPE0003 (unclosed delimiter) tied to the span of the opener.
+func (p *Parser) expectClose(closeTok token.Token, label string, open diag.Span) bool {
+	if p.accept(closeTok) {
+		return true
+	}
+	p.errUnclosed(open, label)
+	return false
+}
+
 func (p *Parser) skipNLs() {
 	for p.cur.Tok == token.NL {
 		p.next()

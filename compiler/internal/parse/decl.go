@@ -19,6 +19,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
+	lparen := spanPos(p.file, p.cur)
 	if !p.expect(token.LPAREN, "(") {
 		return nil
 	}
@@ -26,7 +27,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	if p.cur.Tok != token.RPAREN {
 		params = p.parseParams()
 	}
-	p.expect(token.RPAREN, ")")
+	p.expectClose(token.RPAREN, ")", lparen)
 
 	var ret *ast.TypeName
 	if p.accept(token.ARROW) {

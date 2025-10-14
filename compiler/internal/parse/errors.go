@@ -29,3 +29,18 @@ func (p *Parser) errUnexpected(sp diag.Span, ctx string) {
 		Primary: diag.Label{Span: sp, Text: "parse error", Primary: true},
 	})
 }
+
+// errUnclosed reports an unclosed delimiter with the primary span pointing at the opener.
+func (p *Parser) errUnclosed(openSpan diag.Span, delim string) {
+	msg := "unclosed delimiter"
+	if delim != "" {
+		msg = "unclosed " + delim
+	}
+	p.diags = append(p.diags, diag.Diagnostic{
+		CodeID:  "DPE0003",
+		Domain:  "parser",
+		Title:   "unclosed delimiter",
+		Message: msg,
+		Primary: diag.Label{Span: openSpan, Text: "parse error", Primary: true},
+	})
+}
