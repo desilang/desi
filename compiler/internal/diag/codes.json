@@ -19,6 +19,60 @@
         }
       ]
     },
+    "mixed_indentation": {
+      "id": "DLE0002",
+      "title": "mixed tabs and spaces in indentation",
+      "help": "use either spaces or tabs consistently; do not mix on the same line"
+    },
+    "invalid_number": {
+      "id": "DLE0011",
+      "title": "invalid number literal"
+    },
+    "invalid_float_fraction": {
+      "id": "DLE0012",
+      "title": "invalid float fraction",
+      "help": "digits must appear after the decimal point; underscores cannot lead/trail or double"
+    },
+    "invalid_float_exponent": {
+      "id": "DLE0013",
+      "title": "invalid float exponent",
+      "help": "write like '1.2e+3'; exponent must contain digits (underscores allowed between digits)"
+    },
+    "invalid_hex_literal": {
+      "id": "DLE0014",
+      "title": "invalid hex literal",
+      "help": "hex digits are 0-9 or a-f (case-insensitive); underscores cannot lead/trail or double"
+    },
+    "invalid_hex_fraction": {
+      "id": "DLE0015",
+      "title": "invalid hex fraction",
+      "help": "fractional part must contain hex digits"
+    },
+    "missing_hex_exponent": {
+      "id": "DLE0016",
+      "title": "hex float missing exponent 'p'",
+      "help": "hex floating-point literals require a 'p' exponent, e.g. 0x1.fp3"
+    },
+    "invalid_hex_float_exponent": {
+      "id": "DLE0017",
+      "title": "invalid hex float exponent",
+      "help": "use 'p±<digits>', underscores only between digits"
+    },
+    "invalid_binary_literal": {
+      "id": "DLE0018",
+      "title": "invalid binary literal",
+      "help": "binary digits are 0 or 1; underscores cannot lead/trail or double"
+    },
+    "invalid_octal_literal": {
+      "id": "DLE0019",
+      "title": "invalid octal literal",
+      "help": "octal digits are 0..7; underscores cannot lead/trail or double"
+    },
+    "invalid_escape_sequence": {
+      "id": "DLE0020",
+      "title": "invalid escape sequence",
+      "help": "supported: \\\\ \\\" \\n \\r \\t \\0 \\xNN \\uXXXX \\UXXXXXXXX"
+    },
     "generic_lexer_error": {
       "id": "DLE0099",
       "title": "lexer error"
