@@ -116,13 +116,19 @@ func dumpTokens(path string) error {
 
 	// Render lexer diagnostics (non-fatal) to stderr using your catalog.
 	if len(scanErrs) > 0 {
+		const maxLexErrs = 50
 		p := filepath.Join("compiler", "internal", "diag", "codes.json")
 		f, err := os.Open(p)
 		if err == nil {
 			defer func() { _ = f.Close() }()
 			if cat, err := diag.LoadCatalog(f); err == nil {
 				b := diag.NewBuilder(cat)
-				for _, se := range scanErrs {
+				limit := len(scanErrs)
+				if limit > maxLexErrs {
+					limit = maxLexErrs
+				}
+				for i := 0; i < limit; i++ {
+					se := scanErrs[i]
 					code := se.CodePath
 					if code == "" {
 						code = "lexer.generic_lexer_error"
@@ -141,6 +147,9 @@ func dumpTokens(path string) error {
 					} else {
 						term.Eprintln("lexer error:", se.Message)
 					}
+				}
+				if extra := len(scanErrs) - limit; extra > 0 {
+					term.Eprintln("…", extra, "more lexer errors suppressed")
 				}
 			}
 		}
