@@ -1,11 +1,9 @@
-def aug_assigns:
-  a := 1
-  a += 2
-  a **= 3
-  b, c := 10, 20
+def aug_assigns():
+	a := 1
+	a += 2
+	a **= 3
+	b, c := 10, 20
 
-  obj := thing()
-  obj.count += 1
-
-  arr := [1, 2, 3]
-  arr[0] ^= 1
+	obj := thing()
+	obj.count += 1
+	obj.items[0] ^= 1

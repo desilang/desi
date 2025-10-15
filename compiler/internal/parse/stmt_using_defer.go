@@ -5,14 +5,21 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// using Target : NL Block
-// Target can be Ident "=" CallExpr OR a general LHS (Ident|Field|Index).
-// We parse an Expr and leave shape validation to later phases.
+// using <LHS> [= <Expr>] : NL Block
+// LHS must be assignable (Ident | Field | Index).
 func (p *Parser) parseUsing() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'using'
 	p.next()                        // consume 'using'
 
-	target := p.parseExpr()
+	lhs := p.parseExpr()
+	if !isAssignableLHS(lhs) {
+		p.errInvalidAssignTarget(lhs.SpanOf())
+	}
+
+	var init ast.Expr
+	if p.accept(token.ASSIGN) { // '=' present
+		init = p.parseExpr()
+	}
 
 	if !p.expect(token.COLON, ":") {
 		p.syncStmt()
@@ -22,17 +29,17 @@ func (p *Parser) parseUsing() ast.Stmt {
 		p.syncStmt()
 		return nil
 	}
-	body := p.parseBlock()
 
+	body := p.parseBlock()
 	return &ast.UsingStmt{
-		Target: target,
-		Body:   body,
-		Span:   ast.JoinSpan(start, body.SpanOf()),
+		Bind: lhs,
+		Init: init,
+		Body: body,
+		Span: ast.JoinSpan(start, body.SpanOf()),
 	}
 }
 
 // defer CallExpr NL
-// Must be a call; otherwise error (DPE0002) and still build a stub so parsing continues.
 func (p *Parser) parseDefer() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'defer'
 	p.next()                        // consume 'defer'
@@ -45,13 +52,11 @@ func (p *Parser) parseDefer() ast.Stmt {
 		p.errDeferNeedsCall(e.SpanOf())
 	}
 
-	// Trailing NL (EOF/Dedent allowed as implicit newline)
 	if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 		p.errExpected(spanPos(p.file, p.cur), "newline")
 	}
-
 	return &ast.DeferStmt{
-		Call: call, // may be nil if not a call; checker can diagnose harder later
+		Call: call,
 		Span: ast.JoinSpan(start, e.SpanOf()),
 	}
 }
