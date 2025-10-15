@@ -1,0 +1,3 @@
+def m():
+  let a = 0
+   let b = 1  # this line starts with spaces → should trigger DLE0003
