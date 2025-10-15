@@ -1,0 +1,9 @@
+def demo_using_defer:
+	# Acquire a resource for the block lifetime.
+	using res = open_file("notes.txt"):
+		res.write("hello")
+
+	# Defer a cleanup call at end of function/block.
+	handle := connect("db://main")
+	defer handle.close()
+	handle.exec("BEGIN")
