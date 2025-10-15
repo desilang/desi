@@ -23,13 +23,14 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 	p.next() // fill peek
 
 	m := &ast.Module{File: filename, Span: spanPos(filename, p.cur)}
-	// Top-level: prefer funcs; if loose stmts exist (for examples), gather them under __top__.
+	// Top-level: handle decorators + funcs; if loose stmts exist (examples), gather them under __top__.
 	for p.cur.Tok != token.EOF {
 		p.skipNLs()
 		if p.cur.Tok == token.EOF {
 			break
 		}
-		if p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
+		// Function can start with decorators, 'async', or 'def'
+		if p.cur.Tok == token.AT || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
 			if d := p.parseFunc(); d != nil {
 				m.Decls = append(m.Decls, d)
 			}
@@ -40,9 +41,9 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			Name: ast.Ident{Name: "__top__", Span: spanPos(filename, p.cur)},
 			Body: &ast.Block{Span: spanPos(filename, p.cur)},
 		}
-		for p.cur.Tok != token.EOF && p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async {
+		for p.cur.Tok != token.EOF && p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async && p.cur.Tok != token.AT {
 			p.skipNLs()
-			if p.cur.Tok == token.EOF || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
+			if p.cur.Tok == token.EOF || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async || p.cur.Tok == token.AT {
 				break
 			}
 			if s := p.parseStmt(); s != nil {
