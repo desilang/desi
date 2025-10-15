@@ -3,14 +3,16 @@ package ast
 import "github.com/desilang/desi/compiler/internal/diag"
 
 type FieldDecl struct {
+	Pub  bool
 	Name Ident
 	Type *TypeName // optional
 	Span diag.Span
 }
 
 type ClassDecl struct {
+	Pub        bool
 	Name       Ident
-	Bases      []*TypeName // NEW: optional base classes, supports multiple
+	Bases      []*TypeName // optional base classes
 	Methods    []*FuncDecl
 	Fields     []*FieldDecl
 	Nested     []*ClassDecl

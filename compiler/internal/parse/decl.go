@@ -7,9 +7,13 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-func (p *Parser) parseFunc() *ast.FuncDecl {
-	// Optional decorators first.
-	decs := p.parseDecorators()
+func (p *Parser) parseFunc() *ast.FuncDecl { return p.parseFuncWithDecs(nil) }
+
+func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
+	// Optional decorators
+	if decs == nil {
+		decs = p.parseDecorators()
+	}
 	start := spanPos(p.file, p.cur)
 	if len(decs) > 0 {
 		start = decs[0].Span
@@ -19,7 +23,6 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 	async := p.accept(token.KW_async)
 	if !p.expect(token.KW_def, "def") {
 		if async {
-			// Prefer a targeted diagnostic when 'async' isn't followed by 'def'
 			p.errAsyncBeforeDef(start)
 		}
 		return nil
@@ -47,17 +50,23 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		ret = p.parseTypeName()
 	}
 
-	// Body: ":" NL Block | NL
+	// Body: ":" (NL Block | one-line simple stmt) | NL
 	var body *ast.Block
 	if p.accept(token.COLON) {
-		p.expect(token.NL, "newline")
-		body = p.parseBlock()
+		if p.cur.Tok == token.NL {
+			p.next()
+			body = p.parseBlock()
+		} else {
+			s := p.parseSimpleStmtInline()
+			body = &ast.Block{Stmts: []ast.Stmt{s}, Span: ast.JoinSpan(s.SpanOf(), s.SpanOf())}
+		}
 	} else {
 		p.expect(token.NL, "newline")
 	}
 
 	fn := &ast.FuncDecl{
 		Async:      async,
+		Pub:        false, // top-level functions have no pub in M3A
 		Name:       name,
 		Params:     params,
 		RetType:    ret,
@@ -66,7 +75,7 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
 
-	// Attach leading docstring ("""...""") from the body if present.
+	// Attach leading docstring if present.
 	if fn.Body != nil && len(fn.Body.Stmts) > 0 {
 		if ds, ok := fn.Body.Stmts[0].(*ast.DocStringStmt); ok && ds.Value != nil && ds.Value.Long {
 			fn.Doc = ds.Value

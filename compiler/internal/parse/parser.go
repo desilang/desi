@@ -19,31 +19,58 @@ type Parser struct {
 func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 	sc := lex.NewScannerWithFile(src, filename)
 	p := &Parser{sc: sc, file: filename}
-	p.next() // fill cur
-	p.next() // fill peek
+	p.next()
+	p.next()
 
 	m := &ast.Module{File: filename, Span: spanPos(filename, p.cur)}
-	// Top-level: handle decorators + funcs; if loose stmts exist (examples), gather them under __top__.
 	for p.cur.Tok != token.EOF {
 		p.skipNLs()
 		if p.cur.Tok == token.EOF {
 			break
 		}
-		// Function can start with decorators, 'async', or 'def'
-		if p.cur.Tok == token.AT || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
-			if d := p.parseFunc(); d != nil {
-				m.Decls = append(m.Decls, d)
+
+		switch p.cur.Tok {
+		case token.AT:
+			// Decorators may precede either a class or a function.
+			decs := p.parseDecorators()
+			p.skipNLs()
+			if p.cur.Tok == token.KW_class || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_class) {
+				if c := p.parseClassWithDecs(decs, false /*nested*/); c != nil {
+					m.Decls = append(m.Decls, c)
+				}
+			} else {
+				if f := p.parseFuncWithDecs(decs); f != nil {
+					m.Decls = append(m.Decls, f)
+				}
+			}
+			continue
+
+		case token.KW_class, token.KW_pub:
+			// Top-level class (pub optional); functions never start with 'pub' at top-level in M3A.
+			if c := p.parseClassWithDecs(nil, false /*nested*/); c != nil {
+				m.Decls = append(m.Decls, c)
+			}
+			continue
+
+		case token.KW_def, token.KW_async:
+			if f := p.parseFunc(); f != nil {
+				m.Decls = append(m.Decls, f)
 			}
 			continue
 		}
 
+		// Fallback: hoist loose stmts into __top__
 		top := &ast.FuncDecl{
 			Name: ast.Ident{Name: "__top__", Span: spanPos(filename, p.cur)},
 			Body: &ast.Block{Span: spanPos(filename, p.cur)},
 		}
-		for p.cur.Tok != token.EOF && p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async && p.cur.Tok != token.AT {
+		for p.cur.Tok != token.EOF &&
+			p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async &&
+			p.cur.Tok != token.KW_class && p.cur.Tok != token.KW_pub && p.cur.Tok != token.AT {
 			p.skipNLs()
-			if p.cur.Tok == token.EOF || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async || p.cur.Tok == token.AT {
+			if p.cur.Tok == token.EOF ||
+				p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async ||
+				p.cur.Tok == token.KW_class || p.cur.Tok == token.KW_pub || p.cur.Tok == token.AT {
 				break
 			}
 			if s := p.parseStmt(); s != nil {

@@ -95,3 +95,16 @@ Docstrings: the first triple-quoted string in a function body is attached to the
 - `-ast <file>` — parse and pretty-print AST
 - `-version` — tool version
 
+## Classes (parse-only)
+
+- `class Name(Base1, Base2):` with **Python-style base lists** (trailing comma allowed).
+- **Decorators** may precede classes and methods.
+- **Docstring**: if the first item in a class body is a triple-quoted string (`"""..."""`),
+  it attaches to the class and is removed from the body.
+- **Visibility**
+  - **Top-level classes are public by default**; nested classes are **private by default** unless `pub`.
+  - **Fields** and **methods** may be marked `pub`.
+- **Methods**: `def` or `async def`, params with defaults, optional return type.
+  One-line method bodies are supported: `def f(): "ok"`.
+
+> Semantics are deferred in M3A: we only parse and print the AST.

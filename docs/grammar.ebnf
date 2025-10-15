@@ -10,27 +10,38 @@
    =========================================================== *)
 
 (* ===========================================================
-   IMPLEMENTED SUBSET (through M2)
+   IMPLEMENTED SUBSET (through M3A)
    -----------------------------------------------------------
    This top section describes what the compiler parses today.
    The longer-term grammar follows afterward.
    =========================================================== *)
 
-File              = { FuncDecl | Stmt } ;
+File              = { ClassDecl | FuncDecl | Stmt } ;
 
 (* ---------- Declarations (implemented) ---------- *)
 
 Decorators        = { "@" DottedIdent [ "(" [ ArgList ] ")" ] NL } ;
 
 FuncDecl          = [Decorators] [ "async" ] "def" Ident "(" [ Params ] ")"
-                    [ "->" TypeName ] ( ":" NL Block | NL ) ;
+                    [ "->" TypeName ] ( ":" NL Block | ":" SimpleStmt NL | NL ) ;
+
+(* Classes (parse-only) *)
+ClassDecl         = [Decorators] [ "pub" ] "class" Ident [ "(" BaseList ")" ] ":" NL BlockClass ;
+BaseList          = TypeName { "," TypeName } [ "," ] ;
+BlockClass        = Indent { ClassMember } Dedent ;
+ClassMember       = ClassDocString | ClassField | NestedClassDecl | MethodDecl ;
+ClassDocString    = LongStrLit NL ;
+ClassField        = [ "pub" ] Ident ":" TypeName NL ;
+NestedClassDecl   = [Decorators] [ "pub" ] "class" Ident [ "(" BaseList ")" ] ":" NL BlockClass ;
+MethodDecl        = [Decorators] [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" TypeName ] ( ":" NL Block | ":" SimpleStmt NL | NL ) ;
 
 Params            = Param { "," Param } [ "," ] ;
 Param             = Ident [ ":" TypeName ] [ "=" Expr ] ;
 
 Block             = Indent { Stmt } Dedent ;
 (* If the first statement in a Block is a LongStrLit, the parser produces
-   a DocStringStmt and (for functions) attaches it to the decl, removing it
+   a DocStringStmt and attaches it to the function/method/class, removing it
    from the Block body. *)
 
 (* ---------- Statements (implemented) ---------- *)
@@ -223,8 +234,8 @@ Decl              = ConstDecl
                   | TypeDecl
                   | StructDecl
                   | EnumDecl
-                  | ClassDecl
-                  | FuncDecl
+                  | ClassDecl_full
+                  | FuncDecl_full
                   ;
 
 ConstDecl         = [ "pub" ] "let" Ident [ ":" Type ] "=" Expr NL ;
@@ -241,20 +252,20 @@ EnumVariantDecl   = Ident ":" TypeOrNone NL ;
 TypeOrNone        = "none" | Type ;
 
 (* ----------------- Classes (full) ----------------- *)
-ClassDecl         = [Decorators] "class" Ident [ "(" TypeName { "," TypeName } [ "," ] ")" ] ":" NL
-                    Indent { ClassMember } Dedent ;
+ClassDecl_full    = [Decorators] "class" Ident [ "(" TypeName { "," TypeName } [ "," ] ")" ] ":" NL
+                    Indent { ClassMember_full } Dedent ;
 
-ClassMember       = FieldDecl
+ClassMember_full  = FieldDecl
                   | NestedClassDecl
-                  | MethodDecl
+                  | MethodDecl_full
                   | ConstDecl
                   | TypeDecl
                   ;
 
 NestedClassDecl   = [ "pub" ] "class" Ident ":" NL
-                    Indent { ClassMember } Dedent ;
+                    Indent { ClassMember_full } Dedent ;
 
-MethodDecl        = [Decorators] [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+MethodDecl_full   = [Decorators] [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
                     [ "->" Type ] ( ":" NL* Block | NL ) ;
 
 (* ----------------- Functions (full) ----------------- *)
