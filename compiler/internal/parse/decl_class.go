@@ -13,7 +13,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 		start = decs[0].Span
 	}
 
-	// Optional 'pub'
+	// Optional 'pub' before 'class'
 	explicitPub := p.accept(token.KW_pub)
 
 	if !p.expect(token.KW_class, "class") {
@@ -73,7 +73,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			break
 		}
 
-		// Docstring: single leading LONGSTR attaches and is dropped
+		// Leading docstring in the body attaches to the class and is removed.
 		if doc == nil && p.cur.Tok == token.LONGSTR {
 			doc = &ast.StrLit{Long: true, Span: spanPos(p.file, p.cur)}
 			p.next()
@@ -81,12 +81,16 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			continue
 		}
 
-		// Optional decorators
+		// Zero or more decorators on the member.
 		memDecs := p.parseDecorators()
-		p.skipNLs() // IMPORTANT: stay on the header token after decorator NL
+		p.skipNLs() // ensure we're at the member header token
 
-		// Decide member kind (nested class, method, or field)
-		if p.cur.Tok == token.KW_class || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_class) {
+		// Classify member WITHOUT consuming tokens like 'pub' prematurely.
+		tok := p.cur.Tok
+		peek := p.peek.Tok
+
+		// Nested class?
+		if tok == token.KW_class || (tok == token.KW_pub && peek == token.KW_class) {
 			if c := p.parseClassWithDecs(memDecs, true /*nested*/); c != nil {
 				nested = append(nested, c)
 			}
@@ -94,16 +98,24 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 		}
 
 		// Method?
-		if p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async ||
-			(p.cur.Tok == token.KW_pub && (p.peek.Tok == token.KW_def || p.peek.Tok == token.KW_async)) {
+		if tok == token.KW_def || tok == token.KW_async ||
+			(tok == token.KW_pub && (peek == token.KW_def || peek == token.KW_async)) {
 			if m := p.parseMethodWithDecs(memDecs); m != nil {
 				methods = append(methods, m)
 			}
 			continue
 		}
 
-		// Field: ["pub"] Ident ":" TypeName NL
-		fieldPub := p.accept(token.KW_pub)
+		// Otherwise: Field = ["pub"] Ident ":" TypeName NL
+		fieldPub := false
+		if p.cur.Tok == token.KW_pub {
+			// Confirm it's a field header (pub IDENT ":" ...)
+			if p.peek.Tok == token.IDENT {
+				fieldPub = true
+				p.next() // consume 'pub' only now that we've decided it's a field
+			}
+		}
+
 		if p.cur.Tok != token.IDENT {
 			p.errExpected(spanPos(p.file, p.cur), "field name")
 			p.syncStmt()
@@ -206,13 +218,12 @@ func (p *Parser) parseMethodWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 		Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
 
-	// Attach leading docstring from the body if present.
+	// Attach leading docstring (triple-quoted) if present as the first stmt.
 	if fn.Body != nil && len(fn.Body.Stmts) > 0 {
 		if ds, ok := fn.Body.Stmts[0].(*ast.DocStringStmt); ok && ds.Value != nil && ds.Value.Long {
 			fn.Doc = ds.Value
 			fn.Body.Stmts = fn.Body.Stmts[1:]
 		}
 	}
-
 	return fn
 }
