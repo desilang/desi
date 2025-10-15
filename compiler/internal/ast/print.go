@@ -28,6 +28,22 @@ func (p pp) node(n Node, d int) {
 			p.node(dcl, d+1)
 		}
 	case *FuncDecl:
+		// Decorators (each on its own line before the signature)
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.wr("@%s", dec.Name.Name)
+			if len(dec.Args) > 0 {
+				p.wr("(")
+				for i, a := range dec.Args {
+					if i > 0 {
+						p.wr(", ")
+					}
+					p.node(a, 0)
+				}
+				p.wr(")")
+			}
+			p.wr("\n")
+		}
 		p.tabs(d)
 		p.wr("Func ")
 		if n.Async {
@@ -51,6 +67,11 @@ func (p pp) node(n Node, d int) {
 			p.wr(" -> %s", n.RetType.Name)
 		}
 		p.wr("\n")
+		// Docstring attached to the decl
+		if n.Doc != nil {
+			p.tabs(d + 1)
+			p.wr("DocString\n")
+		}
 		if n.Body != nil {
 			p.node(n.Body, d+1)
 		}

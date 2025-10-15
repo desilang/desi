@@ -8,7 +8,12 @@ import (
 )
 
 func (p *Parser) parseFunc() *ast.FuncDecl {
+	// Optional decorators first.
+	decs := p.parseDecorators()
 	start := spanPos(p.file, p.cur)
+	if len(decs) > 0 {
+		start = decs[0].Span
+	}
 
 	// Optional 'async' before 'def'
 	async := p.accept(token.KW_async)
@@ -51,14 +56,25 @@ func (p *Parser) parseFunc() *ast.FuncDecl {
 		p.expect(token.NL, "newline")
 	}
 
-	return &ast.FuncDecl{
-		Async:   async,
-		Name:    name,
-		Params:  params,
-		RetType: ret,
-		Body:    body,
-		Span:    ast.JoinSpan(start, spanPos(p.file, p.cur)),
+	fn := &ast.FuncDecl{
+		Async:      async,
+		Name:       name,
+		Params:     params,
+		RetType:    ret,
+		Body:       body,
+		Decorators: decs,
+		Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
+
+	// Attach leading docstring ("""...""") from the body if present.
+	if fn.Body != nil && len(fn.Body.Stmts) > 0 {
+		if ds, ok := fn.Body.Stmts[0].(*ast.DocStringStmt); ok && ds.Value != nil && ds.Value.Long {
+			fn.Doc = ds.Value
+			fn.Body.Stmts = fn.Body.Stmts[1:]
+		}
+	}
+
+	return fn
 }
 
 func (p *Parser) parseParams() []ast.Param {
