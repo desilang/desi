@@ -157,13 +157,13 @@ func (p *Parser) parsePostfix() ast.Expr {
 					}
 				}
 			}
-			p.expect(token.RPAREN, ")")
+			p.expectClose(token.RPAREN, ")", callStart)
 			e = &ast.CallExpr{Callee: e, Args: args, Span: ast.JoinSpan(callStart, spanPos(p.file, p.cur))}
 		case token.LBRACK:
 			idxStart := spanPos(p.file, p.cur)
 			p.next()
 			idx := p.parseExpr()
-			p.expect(token.RBRACK, "]")
+			p.expectClose(token.RBRACK, "]", idxStart)
 			e = &ast.IndexExpr{X: e, Idx: idx, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
 		case token.DOT:
 			dotStart := spanPos(p.file, p.cur)
@@ -212,9 +212,10 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return n
 	case token.LPAREN:
+		open := spanPos(p.file, p.cur)
 		p.next()
 		e := p.parseExpr()
-		p.expect(token.RPAREN, ")")
+		p.expectClose(token.RPAREN, ")", open)
 		return e
 	default:
 		p.errUnexpected(spanPos(p.file, p.cur), "expression")

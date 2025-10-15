@@ -40,7 +40,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 	default:
 		e := p.parseExpr()
 		span := lastSpan(e, spanPos(p.file, p.cur))
-		if !p.accept(token.NL) {
+		// Allow EOF/Dedent to act like a newline at statement end (EOF-as-NL nicety).
+		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 			p.errExpected(spanPos(p.file, p.cur), "newline")
 		}
 		return &ast.ExprStmt{Expr: e, Span: span}
@@ -68,7 +69,10 @@ func (p *Parser) parseLet() ast.Stmt {
 	}
 	val := p.parseExpr()
 	if !p.accept(token.NL) {
-		p.errExpected(spanPos(p.file, p.cur), "newline")
+		// Also allow EOF/Dedent as statement terminators.
+		if p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+			p.errExpected(spanPos(p.file, p.cur), "newline")
+		}
 	}
 	return &ast.LetStmt{
 		Mutable: mut, Name: name, Type: ty, Value: val,
@@ -84,7 +88,7 @@ func (p *Parser) parseReturn() ast.Stmt {
 		return &ast.ReturnStmt{Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 	}
 	e := p.parseExpr()
-	if !p.accept(token.NL) {
+	if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 		p.errExpected(spanPos(p.file, p.cur), "newline")
 	}
 	return &ast.ReturnStmt{Value: e, Span: ast.JoinSpan(start, lastSpan(e, start))}
