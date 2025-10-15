@@ -5,8 +5,23 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// precedence:
-// ** > unary > * / % > + - > ^ > | > < <= > >= > == != > |> > and > or
+// Expression precedence (highest to lowest):
+//
+//	** (right-assoc)
+//	unary (- ! not await)
+//	* / %
+//	+ -
+//	^
+//	|           <-- inserted in M2 (bitwise OR)
+//	< <= > >=
+//	== !=
+//	|>          (pipe)
+//	and
+//	or
+//
+// Notes:
+//   - Postfix chain (call/index/field) remains greedy.
+//   - StrLit.Long is set when the lexer produces LONGSTR ("""...""").
 func (p *Parser) parseExpr() ast.Expr { return p.parseOr() }
 
 func (p *Parser) parseOr() ast.Expr {

@@ -84,3 +84,16 @@ let bodies = await gather(urls |> map(async lambda u: await http.get(u)))
 Grammar sketch (see `docs/grammar.ebnf`):
 `AsyncLambdaExpr = "async" "lambda" LambdaParams ":" Expr` (expression-only body).
 
+## Decorators (M2, parse only)
+Decorators may appear immediately above a declaration (currently functions).
+Syntax:
+
+```
+
+@name
+@pkg.Deco(arg1, arg2)
+def f(): ...
+
+```
+
+They are stored on the AST and printed by `-ast`, but have no semantics yet.
