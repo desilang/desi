@@ -1,0 +1,15 @@
+@trace
+pub class Animal:
+	"""base class doc"""
+	pub species: str
+
+	@logged
+	pub def speak() -> str: "???"
+
+class Dog(Animal):
+	pub breed: str
+	def speak() -> str: "woof"
+
+	@bench
+	class Meta:
+		pub version: str

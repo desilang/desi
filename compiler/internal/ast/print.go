@@ -32,7 +32,7 @@ func (p pp) node(n Node, d int) {
 		}
 
 	case *FuncDecl:
-		// Decorators (each on its own line before the signature)
+		// Decorators above signature
 		for _, dec := range n.Decorators {
 			p.tabs(d)
 			p.wr("@%s", dec.Name.Name)
@@ -53,6 +53,9 @@ func (p pp) node(n Node, d int) {
 		if n.Async {
 			p.wr("async ")
 		}
+		if n.Pub {
+			p.wr("pub ")
+		}
 		p.wr("%s(", n.Name.Name)
 		for i, pr := range n.Params {
 			if i > 0 {
@@ -71,13 +74,72 @@ func (p pp) node(n Node, d int) {
 			p.wr(" -> %s", n.RetType.Name)
 		}
 		p.wr("\n")
-		// Docstring attached to the decl
 		if n.Doc != nil {
 			p.tabs(d + 1)
 			p.wr("DocString\n")
 		}
 		if n.Body != nil {
 			p.node(n.Body, d+1)
+		}
+
+	case *ClassDecl:
+		// decorators
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.wr("@%s", dec.Name.Name)
+			if len(dec.Args) > 0 {
+				p.wr("(")
+				for i, a := range dec.Args {
+					if i > 0 {
+						p.wr(", ")
+					}
+					p.node(a, 0)
+				}
+				p.wr(")")
+			}
+			p.wr("\n")
+		}
+		p.tabs(d)
+		p.wr("Class ")
+		if n.Pub {
+			p.wr("pub ")
+		}
+		p.wr("%s", n.Name.Name)
+		if len(n.Bases) > 0 {
+			p.wr("(")
+			for i, b := range n.Bases {
+				if i > 0 {
+					p.wr(", ")
+				}
+				p.wr("%s", b.Name)
+			}
+			p.wr(")")
+		}
+		p.wr("\n")
+		if n.Doc != nil {
+			p.tabs(d + 1)
+			p.wr("DocString\n")
+		}
+		// Fields
+		for _, f := range n.Fields {
+			p.tabs(d + 1)
+			p.wr("Field ")
+			if f.Pub {
+				p.wr("pub ")
+			}
+			p.wr("%s", f.Name.Name)
+			if f.Type != nil {
+				p.wr(": %s", f.Type.Name)
+			}
+			p.wr("\n")
+		}
+		// Nested classes
+		for _, c := range n.Nested {
+			p.node(c, d+1)
+		}
+		// Methods
+		for _, m := range n.Methods {
+			p.node(m, d+1)
 		}
 
 	case *Block:

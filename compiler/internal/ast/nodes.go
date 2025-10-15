@@ -22,6 +22,7 @@ type Decl interface {
 
 type FuncDecl struct {
 	Async   bool
+	Pub     bool
 	Name    Ident
 	Params  []Param
 	RetType *TypeName // optional
