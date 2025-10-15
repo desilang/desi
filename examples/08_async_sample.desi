@@ -1,0 +1,2 @@
+async def ping(x: int):
+	return x
