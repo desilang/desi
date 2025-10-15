@@ -5,7 +5,10 @@ import (
 	"io"
 )
 
-// Print renders a stable, tab-indented AST (no colors) for dumps/tests.
+// Print renders a stable, tab-indented AST.
+// This is intended for developer diagnostics and tests (-ast),
+// not for round-tripping source. It deliberately prints a concise form,
+// e.g. DocString as a presence line without rendering literal content.
 func Print(w io.Writer, n Node) {
 	pp{w: w}.node(n, 0)
 }
@@ -27,6 +30,7 @@ func (p pp) node(n Node, d int) {
 		for _, dcl := range n.Decls {
 			p.node(dcl, d+1)
 		}
+
 	case *FuncDecl:
 		// Decorators (each on its own line before the signature)
 		for _, dec := range n.Decorators {
@@ -75,12 +79,15 @@ func (p pp) node(n Node, d int) {
 		if n.Body != nil {
 			p.node(n.Body, d+1)
 		}
+
 	case *Block:
 		p.tabs(d)
 		p.wr("Block\n")
 		for _, s := range n.Stmts {
 			p.node(s, d+1)
 		}
+
+	// ---------- Statements ----------
 	case *LetStmt:
 		p.tabs(d)
 		p.wr("Let ")
@@ -94,6 +101,33 @@ func (p pp) node(n Node, d int) {
 		p.wr(" = ")
 		p.node(n.Value, 0)
 		p.wr("\n")
+
+	case *AssignStmt:
+		p.tabs(d)
+		// LHS list
+		for i, e := range n.LHS {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(e, 0)
+		}
+		p.wr(" := ")
+		// RHS list
+		for i, e := range n.RHS {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(e, 0)
+		}
+		p.wr("\n")
+
+	case *AugAssignStmt:
+		p.tabs(d)
+		p.node(n.Left, 0)
+		p.wr(" %s ", n.Op)
+		p.node(n.Right, 0)
+		p.wr("\n")
+
 	case *ReturnStmt:
 		p.tabs(d)
 		p.wr("Return")
@@ -102,36 +136,115 @@ func (p pp) node(n Node, d int) {
 			p.node(n.Value, 0)
 		}
 		p.wr("\n")
+
+	case *IfStmt:
+		p.tabs(d)
+		p.wr("If ")
+		p.node(n.Cond, 0)
+		p.wr("\n")
+		if n.Then != nil {
+			p.node(n.Then, d+1)
+		}
+		for _, arm := range n.Elifs {
+			p.tabs(d)
+			p.wr("Elif ")
+			p.node(arm.Cond, 0)
+			p.wr("\n")
+			p.node(arm.Body, d+1)
+		}
+		if n.Else != nil {
+			p.tabs(d)
+			p.wr("Else\n")
+			p.node(n.Else, d+1)
+		}
+
+	case *WhileStmt:
+		p.tabs(d)
+		p.wr("While ")
+		p.node(n.Cond, 0)
+		p.wr("\n")
+		if n.Body != nil {
+			p.node(n.Body, d+1)
+		}
+
+	case *ForStmt:
+		p.tabs(d)
+		p.wr("For ")
+		p.node(n.Target, 0)
+		p.wr(" in ")
+		p.node(n.Iter, 0)
+		p.wr("\n")
+		if n.Body != nil {
+			p.node(n.Body, d+1)
+		}
+
+	case *UsingStmt:
+		p.tabs(d)
+		p.wr("Using ")
+		p.node(n.Bind, 0)
+		if n.Init != nil {
+			p.wr(" = ")
+			p.node(n.Init, 0)
+		}
+		p.wr("\n")
+		if n.Body != nil {
+			p.node(n.Body, d+1)
+		}
+
+	case *DeferStmt:
+		p.tabs(d)
+		p.wr("Defer ")
+		if n.Call != nil {
+			p.node(n.Call, 0)
+		} else {
+			p.wr("<invalid>")
+		}
+		p.wr("\n")
+
+	case *DocStringStmt:
+		p.tabs(d)
+		p.wr("DocString\n")
+
+	// ---------- Expressions ----------
 	case *ExprStmt:
 		p.tabs(d)
 		p.node(n.Expr, 0)
 		p.wr("\n")
+
 	case *Ident:
 		p.wr("Ident(%s)", n.Name)
+
 	case *IntLit:
 		p.wr("Int(%s)", n.Text)
+
 	case *FloatLit:
 		p.wr("Float(%s)", n.Text)
+
 	case *StrLit:
 		p.wr("Str")
+
 	case *BoolLit:
 		if n.Value {
 			p.wr("true")
 		} else {
 			p.wr("false")
 		}
+
 	case *NoneLit:
 		p.wr("none")
+
 	case *UnaryExpr:
 		p.wr("(%s ", n.Op)
 		p.node(n.X, 0)
 		p.wr(")")
+
 	case *BinaryExpr:
 		p.wr("(")
 		p.node(n.Lhs, 0)
 		p.wr(" %s ", n.Op)
 		p.node(n.Rhs, 0)
 		p.wr(")")
+
 	case *CallExpr:
 		p.wr("Call ")
 		p.node(n.Callee, 0)
@@ -143,16 +256,19 @@ func (p pp) node(n Node, d int) {
 			p.node(a, 0)
 		}
 		p.wr(")")
+
 	case *IndexExpr:
 		p.wr("Index ")
 		p.node(n.X, 0)
 		p.wr("[")
 		p.node(n.Idx, 0)
 		p.wr("]")
+
 	case *FieldExpr:
 		p.wr("Field ")
 		p.node(n.X, 0)
 		p.wr(".%s", n.Name.Name)
+
 	default:
 		p.tabs(d)
 		p.wr("<?>%T\n", n)

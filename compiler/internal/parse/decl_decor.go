@@ -8,12 +8,17 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// parseDecorators parses zero or more lines of decorators:
+// parseDecorators parses zero or more lines of decorators that precede a
+// declaration (func/class/struct/enum). Each line has the form:
 //
 //	@name
-//	@name(arg1, arg2)
+//	@pkg.name(arg1, arg2)
 //
-// each terminated by NL. Returns the parsed decorators (possibly empty).
+// and must end in a newline. The resulting slice is attached to the next
+// declaration by the respective decl parser.
+//
+// Note: Any decorators not followed by a declaration will ultimately lead
+// to a generic unexpected-token diagnostic in the decl parser.
 func (p *Parser) parseDecorators() []*ast.Decorator {
 	var decs []*ast.Decorator
 	for p.cur.Tok == token.AT {

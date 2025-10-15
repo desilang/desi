@@ -141,7 +141,7 @@ Stmt              = LetStmt
                   | ExprStmt
                   ;
 
-DocStringStmt     = (StrLit | LongStrLit | FStrLit) NL ;
+DocStringStmt     = LongStrLit NL ;
 
 LetStmt           = "let" [ "mut" ]
                     ( BindList | "(" BindList ")" | "[" BindList "]" )

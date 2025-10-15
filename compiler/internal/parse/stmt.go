@@ -5,6 +5,10 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
+// parseBlock parses an Indent/Dedent-delimited block, then post-processes
+// the first statement: if it is a triple-quoted string literal (LONGSTR),
+// we convert it into a DocStringStmt node. Later, decl parsers (e.g., functions)
+// may *attach* that docstring to the decl metadata and remove it from the body.
 func (p *Parser) parseBlock() *ast.Block {
 	start := spanPos(p.file, p.cur)
 
@@ -40,6 +44,8 @@ func (p *Parser) parseBlock() *ast.Block {
 	return blk
 }
 
+// parseStmt dispatches statement forms. One-line forms (if/while/for) parse
+// their SimpleStmt inline without requiring Indent/Dedent.
 func (p *Parser) parseStmt() ast.Stmt {
 	switch p.cur.Tok {
 	case token.KW_if:
