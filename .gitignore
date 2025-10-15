@@ -18,3 +18,5 @@ Thumbs.db
 # keep emitted C out of the repo unless explicitly vendored
 /gen/
 /desic
+
+output.txt
