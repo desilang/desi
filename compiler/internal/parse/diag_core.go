@@ -6,6 +6,8 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
+// Core, reusable parser diagnostics (expected/unexpected/unclosed).
+
 func (p *Parser) errExpected(sp diag.Span, want string) {
 	p.diags = append(p.diags, diag.Diagnostic{
 		CodeID:  "DPE0002",
@@ -42,27 +44,5 @@ func (p *Parser) errUnclosed(openSpan diag.Span, delim string) {
 		Title:   "unclosed delimiter",
 		Message: msg,
 		Primary: diag.Label{Span: openSpan, Text: "parse error", Primary: true},
-	})
-}
-
-// Specialized diagnostic: "async" only valid immediately before 'def'.
-func (p *Parser) errAsyncBeforeDef(sp diag.Span) {
-	p.diags = append(p.diags, diag.Diagnostic{
-		CodeID:  "DPE1001",
-		Domain:  "parser",
-		Title:   "async only valid before 'def'",
-		Message: "async only valid before 'def'",
-		Primary: diag.Label{Span: sp, Text: "parse error", Primary: true},
-	})
-}
-
-// Targeted diagnostic for 'async let' misuse.
-func (p *Parser) errAsyncBeforeLet(sp diag.Span) {
-	p.diags = append(p.diags, diag.Diagnostic{
-		CodeID:  "DPE1002",
-		Domain:  "parser",
-		Title:   "async not allowed before 'let'",
-		Message: "async is not a statement modifier; remove it before 'let'",
-		Primary: diag.Label{Span: sp, Text: "parse error", Primary: true},
 	})
 }
