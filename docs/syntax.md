@@ -8,6 +8,8 @@ This doc tracks the **implemented** subset at each milestone. M2 extends M1 with
 - **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=` , `**=`, `^=`) and multi-target `:=`.
 - **Bitwise OR** `|` (now parsed, not just scanned).
 
+M3A adds **classes (parse-only)** with decorators, bases, fields, methods, nested classes, and docstrings.
+
 ## Source form
 
 - UTF-8, `\n` newlines. Shebang `#!` ignored if present top-of-file.
@@ -15,7 +17,7 @@ This doc tracks the **implemented** subset at each milestone. M2 extends M1 with
 ## Layout and indentation
 
 Desi uses layout with `NL`, `Indent`, `Dedent`.
-**Policy:** **tabs-only** at the start of a non-blank, non-comment line. Spaces at BOL emit `DLE0003`. Blank lines and comment-only lines do not affect indentation.
+**Policy:** **tabs-only** at the start of a non-blank, non-comment line. Spaces at BOL emit `DLE0003`. **Blank lines and comment-only lines do not affect indentation.**
 
 ## Comments
 
@@ -38,7 +40,7 @@ Letters/`_`/digits. Builtin types still lexed as `IDENT` (see below).
 - Integers: dec/hex/bin/oct with `_` separators.
 - Floats: decimal `1.2`, `2.`, `.5`, decimal exponents; **hex floats** `0x1.fp3`.
 - Strings: `"..."`, `f"..."`, long `"""..."""` (triple-quoted).
-  - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser converts that first statement to a `DocStringStmt` and, for function blocks, attaches it to the decl.
+  - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser converts that first statement to a `DocStringStmt` and, for **functions and classes**, attaches it to the decl.
 
 ## Operators & punctuators (implemented today)
 
@@ -59,8 +61,11 @@ Bang: `!`
 
 ** (right-assoc)
 unary: -  !  not  await
-*  /  %
-+  -
+
+* /  %
+
+- -
+
 ^
 |
 < <= > >=
@@ -68,7 +73,6 @@ unary: -  !  not  await
 |>
 and
 or
-
 
 ```
 
@@ -85,7 +89,7 @@ or
 ## Decorators & docstrings (M2)
 
 Decorators immediately precede a decl (today: `def`). They’re attached to the decl’s AST.
-Docstrings: the first triple-quoted string in a function body is attached to the function node and removed from the block.
+Docstrings: the first triple-quoted string in a function/class body is attached to the decl node and removed from the block.
 
 ## CLI
 
@@ -95,16 +99,17 @@ Docstrings: the first triple-quoted string in a function body is attached to the
 - `-ast <file>` — parse and pretty-print AST
 - `-version` — tool version
 
-## Classes (parse-only)
+## Classes (parse-only) — M3A
 
-- `class Name(Base1, Base2):` with **Python-style base lists** (trailing comma allowed).
-- **Decorators** may precede classes and methods.
-- **Docstring**: if the first item in a class body is a triple-quoted string (`"""..."""`),
-  it attaches to the class and is removed from the body.
+- **Header:** `class Name(Base1, Base2):` with **Python-style base lists** (trailing comma allowed).
+- **Decorators:** `@decorator` lines may precede **classes** and **methods**.
+- **Docstring:** if the first item in a class body is a triple-quoted string (`"""..."""`), it attaches to the class and is removed from the body.
 - **Visibility**
   - **Top-level classes are public by default**; nested classes are **private by default** unless `pub`.
-  - **Fields** and **methods** may be marked `pub`.
-- **Methods**: `def` or `async def`, params with defaults, optional return type.
-  One-line method bodies are supported: `def f(): "ok"`.
+  - **Fields** and **methods** may be marked `pub` (stored on the AST; no export logic yet).
+- **Members**
+  - **Fields:** `["pub"] name: Type`
+  - **Methods:** `def` or `async def`, params (with defaults), optional return type. One-line bodies are supported: `def f(): "ok"`.
+  - **Nested classes:** same header shape inside a class body; decorators allowed.
 
-> Semantics are deferred in M3A: we only parse and print the AST.
+> Semantics are deferred in M3A: this milestone is **parse-only** and updates the AST/printer/docs/tests accordingly.

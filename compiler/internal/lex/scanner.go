@@ -80,14 +80,36 @@ func (s *Scanner) Next() Item {
 		return Item{Tok: token.EOF, Line: s.line, Col: s.col}
 	}
 
-	// Handle beginning-of-line indentation & comment-only lines.
+	// Handle beginning-of-line indentation & comment-only/blank lines.
 	if s.atBOL {
+		// Fast path: true blank line → just emit NL without changing indent.
+		if s.i < len(s.src) {
+			r, w := utf8.DecodeRune(s.src[s.i:])
+			if r == '\n' {
+				s.i += w
+				s.line++
+				s.col = 1
+				s.atBOL = true
+				return Item{Tok: token.NL, Line: s.line - 1, Col: 1}
+			}
+		}
+
 		indent, isCommentLine := s.measureIndentAndComment()
 		if isCommentLine {
+			// Consume to end of line and the newline, then emit a single NL.
 			s.consumeToEOL()
+			if s.i < len(s.src) {
+				r, w := utf8.DecodeRune(s.src[s.i:])
+				if r == '\n' {
+					s.i += w
+					s.line++
+					s.col = 1
+				}
+			}
 			s.atBOL = true
 			return s.emitNL()
 		}
+
 		cur := s.indents[len(s.indents)-1]
 		if indent > cur {
 			s.indents = append(s.indents, indent)
@@ -396,11 +418,10 @@ func (s *Scanner) measureIndentAndComment() (indent int, isCommentLine bool) {
 		if r == '\t' {
 			indent++
 			off += w
-
 			continue
 		}
 		if r == '\n' {
-			// blank line
+			// true blank line: let caller handle it (we no longer dedent on blanks)
 			return 0, false
 		}
 		if r == '#' {
