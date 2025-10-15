@@ -1,0 +1,25 @@
+def aug_and_flow:
+	# assignment and aug-assign
+	a := 1
+	a += 2
+	a **= 3
+	b, c := 10, 20
+
+	# one-line if / while / for
+	if a > 0: a += 1
+	while a < 10: a += 1
+	for i in [1, 2, 3]: a += i
+
+	# block forms
+	if a > 5:
+		a += 10
+	elif a == 5:
+		a += 5
+	else:
+		a += 1
+
+	while a < 30:
+		a += 2
+
+	for i in [1, 2, 3]:
+		a += i
