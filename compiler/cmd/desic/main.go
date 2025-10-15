@@ -21,6 +21,15 @@ var (
 	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 )
+var parserCodeMap = map[string]string{
+	"DPE0001": "parser.unexpected_token",
+	"DPE0002": "parser.expected_token",
+	"DPE0003": "parser.unclosed_delimiter",
+	"DPE0004": "parser.trailing_or_extra_token",
+	"DPE0005": "parser.invalid_assignment_target",
+	"DPE1001": "parser.async_before_def",
+	"DPE1002": "parser.async_before_let",
+}
 
 const Version = "0.0.1-revised-bootstrap"
 
@@ -199,18 +208,9 @@ func dumpAST(path string) error {
 				for i := 0; i < limit; i++ {
 					d := pdiags[i]
 					// Map CodeID -> catalog path for nicer titles
-					codePath := "parser.unexpected_token"
-					switch d.CodeID {
-					case "DPE0001":
+					codePath := parserCodeMap[d.CodeID]
+					if codePath == "" {
 						codePath = "parser.unexpected_token"
-					case "DPE0002":
-						codePath = "parser.expected_token"
-					case "DPE0003":
-						codePath = "parser.unclosed_delimiter"
-					case "DPE0004":
-						codePath = "parser.trailing_or_extra_token"
-					case "DPE0005":
-						codePath = "parser.invalid_assignment_target"
 					}
 					dd, err := bld.New(codePath, d.Primary, diag.WithMessage(d.Message))
 					if err == nil {

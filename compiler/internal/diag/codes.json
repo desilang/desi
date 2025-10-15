@@ -133,8 +133,13 @@
       "title": "async only valid before 'def'",
       "help": "Place 'async' immediately before 'def', or remove it."
     },
-    "await_requires_expr": {
+    "async_before_let": {
       "id": "DPE1002",
+      "title": "async not allowed before 'let'",
+      "help": "async is not a statement modifier; remove it before 'let'."
+    },
+    "await_requires_expr": {
+      "id": "DPE1003",
       "title": "await requires an expression",
       "help": "Write 'await <expr>' where <expr> is a future."
     }
