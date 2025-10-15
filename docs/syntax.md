@@ -1,99 +1,97 @@
 # Desi Syntax (revised bootstrap)
 
-This document currently describes the **lexical** rules implemented today. Parser rules are landing milestone-by-milestone; see the grammar for full plans and the M1 subset implemented now.
+This doc tracks the **implemented** subset at each milestone. M2 extends M1 with:
+
+- **Decorators** on declarations (currently functions) and **docstring attachment** (first `"""..."""` in a block).
+- **Inline forms** for `if`/`while`/`for` (`if cond: stmt`, etc.).
+- **Using/Defer** statements.
+- **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=` , `**=`, `^=`) and multi-target `:=`.
+- **Bitwise OR** `|` (now parsed, not just scanned).
 
 ## Source form
 
-- **Encoding:** UTF-8
-- **Newlines:** `\n`
-- **Shebang:** a top-line `#!…` is treated as a comment and ignored.
+- UTF-8, `\n` newlines. Shebang `#!` ignored if present top-of-file.
 
 ## Layout and indentation
 
-Desi uses **layout** (off-side rule) with three tokens:
-
-- `NL` at the end of a physical line
-- `Indent` when indentation increases
-- `Dedent` when indentation decreases
-
-**Indentation policy:** **tabs-only** at the start of a line. If a non-blank, non-comment line begins with spaces, the lexer emits `DLE0003` (tabs required) and continues.
-
-Blank lines and comment-only lines do not affect indentation.
+Desi uses layout with `NL`, `Indent`, `Dedent`.
+**Policy:** **tabs-only** at the start of a non-blank, non-comment line. Spaces at BOL emit `DLE0003`. Blank lines and comment-only lines do not affect indentation.
 
 ## Comments
 
-- From `#` to end of line (unless it begins a `#{...}` set literal in future revisions; the lexer currently treats `#{` like `#` followed by `{`).
-- There are no block comments.
+`#` to end of line (except future `#{` set literal; currently treated as `#` + `{`).
 
 ## Identifiers
 
-```
+Letters/`_`/digits. Builtin types still lexed as `IDENT` (see below).
 
-Ident = (Letter | "*") { Letter | Digit | "*" }
+## Keywords
 
-```
-
-Unicode letters are accepted. Examples: `x`, `_tmp`, `Point2D`.
-
-## Keywords and builtin types
-
-**Keywords** (reserved as identifiers):
 `import from as pub def async class struct enum type let mut return if elif else while for in using defer match select await true false none and or not`
 
-**Builtin types** (not keywords; still lexed as `IDENT`):
-`bool int float str bytes list dict set tuple any none never`
+## Builtin types
+
+`bool int i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32 f64 str string future none list dict set tuple`
 
 ## Literals
 
-(unchanged; see `docs/guides/m0-basics.md` for examples)
+- Integers: dec/hex/bin/oct with `_` separators.
+- Floats: decimal `1.2`, `2.`, `.5`, decimal exponents; **hex floats** `0x1.fp3`.
+- Strings: `"..."`, `f"..."`, long `"""..."""` (triple-quoted).
+  - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser converts that first statement to a `DocStringStmt` and, for function blocks, attaches it to the decl.
 
-## Operators & punctuators (subset)
+## Operators & punctuators (implemented today)
 
-Greedy tokenization is used — the longest operator wins.
+Greedy tokenization (longest wins).
 
-- Grouping: `(` `)` `[` `]` `{` `}`
-- Delimiters: `,` `:` `.`
-- Assignment: `=` `:=` `+=` `-=` `*=` `/=` `%=` `**=` `^=`
-- Arithmetic: `+` `-` `*` `/` `%` `**`
-- Bitwise / pipeline: `^` `|` `|>`
-- Compare: `==` `!=` `<` `<=` `>` `>=`
-- Arrows: `->` `=>`
-- Bang: `!`
+Grouping: `(` `)` `[` `]` `{` `}`
+Delimiters: `,` `:` `.` `@`
+Assignment: `=` `:=` `+=` `-=` `*=` `/=` `%=` `**=` `^=`
+Arithmetic: `+` `-` `*` `/` `%` `**`
+Bitwise/pipeline: `^` `|` `|>`
+Compare: `==` `!=` `<` `<=` `>` `>=`
+Arrows: `->` `=>`
+Bang: `!`
 
-**Notes (today):**
+### Expression precedence (high → low)
 
-- Parser M1 supports: `**`, unary, `* / %`, `+ -`, `^`, `< <= > >=`, `== !=`, `|>`, `and/or`.
-- `|` (bitwise OR) and `**=` are **scanned** but **not parsed yet**.
+```
+
+** (right-assoc)
+unary: -  !  not  await
+*  /  %
++  -
+^
+|
+< <= > >=
+== !=
+|>
+and
+or
+
+
+```
+
+## M2 statements
+
+- `let [mut] name [: Type] = Expr`
+- `return [Expr]`
+- `if Expr: SimpleStmt` or block form (`:` + NL + indented block). `elif`/`else` supported in both forms.
+- `while Expr: SimpleStmt` or block form.
+- `for Target in Expr: SimpleStmt` or block form (Target is parsed-only).
+- `using Target [= Expr]: NL Block`
+- `defer CallExpr`
+
+## Decorators & docstrings (M2)
+
+Decorators immediately precede a decl (today: `def`). They’re attached to the decl’s AST.
+Docstrings: the first triple-quoted string in a function body is attached to the function node and removed from the block.
 
 ## CLI
 
-- `-tokens <file>` — dump tokens and then diagnostics
+- `-tokens <file>` — dump tokens and any lexer diagnostics
 - `-demo-layout` — print layout token stream for a small sample
-- `-diag` — print a demo diagnostic
-- `-ast <file>` — parse a file and pretty-print the AST (M1 subset)
-- `-version` — version string
+- `-diag` — render a sample diagnostic using `codes.json`
+- `-ast <file>` — parse and pretty-print AST
+- `-version` — tool version
 
-## Preview: async lambda (planned)
-
-We plan to support async lambdas in the async milestone:
-
-```desi
-let bodies = await gather(urls |> map(async lambda u: await http.get(u)))
-```
-
-Grammar sketch (see `docs/grammar.ebnf`):
-`AsyncLambdaExpr = "async" "lambda" LambdaParams ":" Expr` (expression-only body).
-
-## Decorators (M2, parse only)
-Decorators may appear immediately above a declaration (currently functions).
-Syntax:
-
-```
-
-@name
-@pkg.Deco(arg1, arg2)
-def f(): ...
-
-```
-
-They are stored on the AST and printed by `-ast`, but have no semantics yet.
