@@ -10,118 +10,30 @@
    =========================================================== *)
 
 (* ===========================================================
-   M1 SUBSET (implemented)
+   IMPLEMENTED SUBSET (through M2)
    -----------------------------------------------------------
-   A minimal but real parser+AST. The full grammar that follows
-   remains the long-term target; items outside this subset are
-   not parsed yet.
+   This top section describes what the compiler parses today.
+   The longer-term grammar follows afterward.
    =========================================================== *)
 
-File_m1           = { FuncDecl_m1 } ;
+File              = { FuncDecl | Stmt } ;
 
-FuncDecl_m1       = [ "async" ] "def" Ident "(" [ Params_m1 ] ")"
-                    [ "->" TypeName_m1 ] ( ":" NL Block_m1 | NL ) ;
+(* ---------- Declarations (implemented) ---------- *)
 
-Params_m1         = Param_m1 { "," Param_m1 } [ "," ] ;
-Param_m1          = Ident [ ":" TypeName_m1 ] [ "=" Expr_m1 ] ;
+Decorators        = { "@" DottedIdent [ "(" [ ArgList ] ")" ] NL } ;
 
-Block_m1          = Indent { Stmt_m1 } Dedent ;
+FuncDecl          = [Decorators] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" TypeName ] ( ":" NL Block | NL ) ;
 
-Stmt_m1           = LetStmt_m1 | ReturnStmt_m1 | ExprStmt_m1 ;
-
-LetStmt_m1        = "let" [ "mut" ] Ident [ ":" TypeName_m1 ] "=" Expr_m1 NL ;
-ReturnStmt_m1     = "return" [ Expr_m1 ] NL ;
-ExprStmt_m1       = Expr_m1 NL ;
-
-(* precedence: ** > unary > * / % > + - > ^ > < <= > >= > == != > |> > and > or *)
-Expr_m1           = Or_m1 ;
-Or_m1             = And_m1        { "or"  And_m1 } ;
-And_m1            = Pipe_m1       { "and" Pipe_m1 } ;
-Pipe_m1           = Equality_m1   { "|>"  Equality_m1 } ;
-Equality_m1       = Rel_m1        { ( "==" | "!=" ) Rel_m1 } ;
-Rel_m1            = Xor_m1        { ( "<" | "<=" | ">" | ">=" ) Xor_m1 } ;
-Xor_m1            = Add_m1        { "^" Add_m1 } ;
-Add_m1            = Mul_m1        { ( "+" | "-" ) Mul_m1 } ;
-Mul_m1            = Pow_m1        { ( "*" | "/" | "%" ) Pow_m1 } ;
-Pow_m1            = Unary_m1      { "**" Unary_m1 } ;     (* right-assoc *)
-Unary_m1          = ( "-" | "!" | "not" | "await" ) Unary_m1
-                  | Postfix_m1 ;
-Postfix_m1        = Primary_m1 { CallSuf_m1 | IndexSuf_m1 | FieldSuf_m1 } ;
-CallSuf_m1        = "(" [ ArgList_m1 ] ")" ;
-IndexSuf_m1       = "[" Expr_m1 "]" ;
-FieldSuf_m1       = "." Ident ;
-ArgList_m1        = Expr_m1 { "," Expr_m1 } [ "," ] ;
-
-Primary_m1        = Literal | Ident | "(" Expr_m1 ")" ;
-
-TypeName_m1       = DottedIdent | Ident ;
-
-(* Everything below this line is the long-term revised grammar.
-   It is NOT fully implemented in M1. *)
-(* =========================================================== *)
-
-(* ----------------- Imports ----------------- *)
-File              = { ImportDecl | FromImportDecl } { Decl } ;
-
-ImportDecl        = "import" DottedIdent [ "as" Ident ] NL ;
-
-(* Support one-line or parenthesized multi-line from-imports. *)
-FromImportDecl    = "from" DottedIdent "import" ( ImportList | ParenImportList ) NL ;
-
-ImportList        = ImportItem { "," ImportItem } [ "," ] ;
-ParenImportList   = "(" NL* ImportItem { "," NL* ImportItem } [ "," ] NL* ")" ;
-ImportItem        = Ident [ "as" Ident ] ;
-
-(* ----------------- Declarations ----------------- *)
-Decl              = ConstDecl
-                  | TypeDecl
-                  | StructDecl
-                  | EnumDecl
-                  | ClassDecl
-                  | FuncDecl
-                  ;
-
-Decorators        = { "@" CallTarget NL } ;
-CallTarget        = DottedIdent [ "(" [ ArgList ] ")" ] ;
-
-ConstDecl         = [ "pub" ] "let" Ident [ ":" Type ] "=" Expr NL ;
-
-TypeDecl          = [ "pub" ] "type" Ident "=" Type NL ;
-
-StructDecl        = [ "pub" ] "struct" Ident ":" NL
-                    Indent { FieldDecl } Dedent ;
-FieldDecl         = Ident ":" Type NL ;
-
-EnumDecl          = [ "pub" ] "enum" Ident ":" NL
-                    Indent { EnumVariantDecl } Dedent ;
-EnumVariantDecl   = Ident ":" TypeOrNone NL ;
-TypeOrNone        = "none" | Type ;
-
-(* ----------------- Classes ----------------- *)
-ClassDecl         = Decorators? "class" Ident ":" NL
-                    Indent { ClassMember } Dedent ;
-
-ClassMember       = FieldDecl
-                  | NestedClassDecl
-                  | MethodDecl
-                  | ConstDecl
-                  | TypeDecl
-                  ;
-
-NestedClassDecl   = [ "pub" ] "class" Ident ":" NL
-                    Indent { ClassMember } Dedent ;
-
-MethodDecl        = Decorators? [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
-                    [ "->" Type ] ( ":" NL* Block | NL ) ;
-
-(* ----------------- Functions ----------------- *)
-FuncDecl          = Decorators? [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
-                    [ "->" Type ] ( ":" NL* Block | NL ) ;
 Params            = Param { "," Param } [ "," ] ;
-Param             = Ident [ ":" Type ] [ "=" Expr ] ;
+Param             = Ident [ ":" TypeName ] [ "=" Expr ] ;
 
-(* ----------------- Blocks & Statements ----------------- *)
 Block             = Indent { Stmt } Dedent ;
+(* If the first statement in a Block is a LongStrLit, the parser produces
+   a DocStringStmt and (for functions) attaches it to the decl, removing it
+   from the Block body. *)
+
+(* ---------- Statements (implemented) ---------- *)
 
 Stmt              = LetStmt
                   | AssignStmt
@@ -135,23 +47,15 @@ Stmt              = LetStmt
                   | ForStmtInline
                   | UsingStmt
                   | DeferStmt
-                  | MatchStmt
-                  | SelectStmt
                   | DocStringStmt
                   | ExprStmt
                   ;
 
 DocStringStmt     = LongStrLit NL ;
 
-LetStmt           = "let" [ "mut" ]
-                    ( BindList | "(" BindList ")" | "[" BindList "]" )
-                    [ ":" Type ] "=" ExprList NL ;
-BindList          = Bind { "," Bind } ;
-Bind              = Ident [ ":" Type ] ;
+LetStmt           = "let" [ "mut" ] Ident [ ":" TypeName ] "=" Expr NL ;
 
 AssignStmt        = LHSList ":=" ExprList NL ;
-
-(* include **= and ^= in augmented assignment *)
 AugAssignStmt     = LHS ( "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "^=" ) Expr NL ;
 
 LHSList           = LHS { "," LHS } ;
@@ -162,6 +66,7 @@ ReturnStmt        = "return" [ Expr ] NL ;
 IfStmt            = "if" Expr ":" NL Block
                     { "elif" Expr ":" NL Block }
                     [ "else" ":" NL Block ] ;
+
 IfStmtInline      = "if" Expr ":" SimpleStmt NL ;
 
 WhileStmt         = "while" Expr ":" NL Block ;
@@ -169,44 +74,48 @@ WhileStmtInline   = "while" Expr ":" SimpleStmt NL ;
 
 ForStmt           = "for" ForTarget "in" Expr ":" NL Block ;
 ForStmtInline     = "for" ForTarget "in" Expr ":" SimpleStmt NL ;
+
 ForTarget         = Ident
                   | "(" BindList ")"
                   | "[" BindList "]"
                   ;
+BindList          = Bind { "," Bind } ;
+Bind              = Ident [ ":" TypeName ] ;
 
-UsingStmt         = "using" ( Ident "=" CallExpr | LHS ) ":" NL Block ;
+UsingStmt         = "using" LHS [ "=" Expr ] ":" NL Block ;
 DeferStmt         = "defer" CallExpr NL ;
-
-MatchStmt         = "match" Expr ":" NL Indent { MatchArm } Dedent ;
-MatchArm          = Pattern ":" ( NL Block | SimpleExpr NL ) ;
-Pattern           = "_" | Literal | Ident "(" [ Binder ] ")" | GuardPattern ;
-Binder            = Ident | "_" ;
-GuardPattern      = Expr ;
-
-SelectStmt        = "select" ":" NL Indent { SelectArm } Dedent ;
-SelectArm         = "await" Expr ":" NL Block
-                  | "_" ":" NL Block ;
 
 ExprStmt          = Expr NL ;
 SimpleStmt        = ExprStmt | AssignStmt | AugAssignStmt | ReturnStmt ;
 
-(* ----------------- Expressions ----------------- *)
+ExprList          = Expr { "," Expr } ;
+
+(* ---------- Expressions (implemented) ---------- *)
+(* precedence (high → low):
+   ** (right-assoc)
+   unary: -  !  not  await
+   *  /  %
+   +  -
+   ^
+   |
+   <  <=  >  >=
+   ==  !=
+   |>
+   and
+   or
+*)
+
 Expr              = Disjunction ;
-Disjunction       = Conjunction { "or" Conjunction } ;
+Disjunction       = Conjunction { "or"  Conjunction } ;
 Conjunction       = Pipeline    { "and" Pipeline } ;
-Pipeline          = Equality    { "|>" Equality } ;
-
+Pipeline          = Equality    { "|>"  Equality } ;
 Equality          = Relational  { ( "==" | "!=" ) Relational } ;
-Relational        = BitwiseXor  { ( "<" | "<=" | ">" | ">=" ) BitwiseXor } ;
-
-(* add xor level; '|' is reserved for types, so only '^' here *)
+Relational        = BitwiseOr   { ( "<" | "<=" | ">" | ">=" ) BitwiseOr } ;
+BitwiseOr         = BitwiseXor  { "|" BitwiseXor } ;
 BitwiseXor        = Additive    { "^" Additive } ;
-
 Additive          = Multiplicative { ( "+" | "-" ) Multiplicative } ;
-
-(* include power with higher precedence *)
 Multiplicative    = Power       { ( "*" | "/" | "%" ) Power } ;
-Power             = Unary       { "**" Unary } ;
+Power             = Unary       { "**" Unary } ;  (* right-assoc *)
 
 Unary             = ( "-" | "!" | "not" ) Unary
                   | "await" Unary
@@ -217,99 +126,22 @@ CallSuffix        = "(" [ ArgList ] ")" ;
 IndexSuffix       = "[" Expr "]" ;
 FieldSuffix       = "." Ident ;
 
-ArgList           = Arg { "," Arg } [ "," ] ;
-Arg               = [ Ident "=" ] Expr ;
+ArgList           = Expr { "," Expr } [ "," ] ;
 
 Primary           = Literal
                   | Ident
-                  | StructLit
-                  | MapLit
-                  | SetLit
-                  | ListLit
-                  | TupleLit
-                  | LambdaExpr
                   | "(" Expr ")"
                   ;
 
-(* ----------------- Literals & Collections ----------------- *)
+(* ---------- Minimal AST surface for LHS ---------- *)
+FieldExpr         = Primary "." Ident ;
+IndexExpr         = Primary "[" Expr "]" ;
+CallExpr          = Primary "(" [ ArgList ] ")" { CallSuffix | IndexSuffix | FieldSuffix } ;
+
+TypeName          = DottedIdent | Ident ;
+
+(* ---------- Literals (implemented) ---------- *)
 Literal           = IntLit | FloatLit | HexFloatLit | StrLit | FStrLit | LongStrLit | BoolLit | "none" ;
-
-ListLit           = "[" [ ExprList | ListComp ] "]" ;
-TupleLit          = "(" ExprList ")" ;
-MapLit            = "{" [ MapPairs | DictComp ] "}" ;
-MapPairs          = MapPair { "," MapPair } [ "," ] ;
-MapPair           = Expr ":" Expr ;
-SetLit            = "#{" [ ExprList | SetComp ] "}" ;  (* lexer currently treats '#' as comment; to revisit *)
-
-ExprList          = Expr { "," Expr } ;
-
-(* ----------------- Comprehensions ----------------- *)
-ListComp          = CompExpr "for" CompTarget "in" Expr
-                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
-DictComp          = CompKey ":" CompVal "for" CompTarget "in" Expr
-                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
-SetComp           = CompExpr "for" CompTarget "in" Expr
-                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
-
-CompExpr          = Expr ;
-CompKey           = Expr ;
-CompVal           = Expr ;
-CompTarget        = Ident | "(" BindList ")" | "[" BindList "]" ;
-
-(* ----------------- Struct literals ----------------- *)
-StructLit         = Ident "{" [ StructInitList ] "}" ;
-StructInitList    = StructInit { "," StructInit } [ "," ] ;
-StructInit        = Ident ":" Expr ;
-
-(* ----------------- Lambda ----------------- *)
-LambdaExpr        = LambdaParams "=>" Expr ;
-LambdaParams      = Ident
-                  | "(" [ LambdaParamList ] ")"
-                  ;
-LambdaParamList   = LambdaParam { "," LambdaParam } ;
-LambdaParam       = Ident [ ":" Type ] ;
-
-(* Async lambda (PLANNED in M8)
-AsyncLambdaExpr   = "async" "lambda" LambdaParams ":" Expr ;
-*)
-
-(* ----------------- Calls as expressions ----------------- *)
-CallExpr          = Primary { FieldSuffix | IndexSuffix } CallSuffix
-                    { CallSuffix | IndexSuffix | FieldSuffix } ;
-
-(* ----------------- Types ----------------- *)
-Type              = UnionType ;
-UnionType         = IntersectType { "|" IntersectType } ;
-IntersectType     = SimpleType ;
-
-SimpleType        = BuiltinType
-                  | Ident TypeArgs?
-                  | DottedIdent
-                  | ListType
-                  | DictType
-                  | SetType
-                  | TupleType
-                  ;
-
-TypeArgs          = "[" Type { "," Type } "]" ;
-ListType          = "list" "[" Type "]" | "[" Type "]" ;
-DictType          = "dict" "[" Type "," Type "]" | "{" Type ":" Type "}" ;
-SetType           = "set" "[" Type "]" ;
-TupleType         = "tuple" "[" Type { "," Type } "]" ;
-
-BuiltinType       = "bool"
-                  | "int" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
-                  | "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
-                  | "f32" | "f64"
-                  | "str" | "string"
-                  | "future"
-                  | "none"
-                  | "list" | "dict" | "set" | "tuple" ;
-
-DottedIdent       = Ident { "." Ident } ;
-
-(* ----------------- Lexical implemented today ----------------- *)
-Ident             = ( letter | "_" ) { letter | digit | "_" } ;
 
 (* integers *)
 dec_digits        = digit { [ "_" ] digit } ;
@@ -368,3 +200,140 @@ digit             = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
 hexdig            = digit | "a"…"f" | "A"…"F" ;
 octdig            = "0"…"7" ;
 bindig            = "0" | "1" ;
+
+(* ===========================================================
+   LONG-TERM REVISED GRAMMAR (not fully implemented yet)
+   -----------------------------------------------------------
+   The rest remains as the broader design (imports, types,
+   data decls, comprehensions, lambdas, etc.).
+   =========================================================== *)
+
+(* ----------------- Imports ----------------- *)
+File_full         = { ImportDecl | FromImportDecl } { Decl } ;
+
+ImportDecl        = "import" DottedIdent [ "as" Ident ] NL ;
+
+FromImportDecl    = "from" DottedIdent "import" ( ImportList | ParenImportList ) NL ;
+ImportList        = ImportItem { "," ImportItem } [ "," ] ;
+ParenImportList   = "(" NL* ImportItem { "," NL* ImportItem } [ "," ] NL* ")" ;
+ImportItem        = Ident [ "as" Ident ] ;
+
+(* ----------------- Declarations (full) ----------------- *)
+Decl              = ConstDecl
+                  | TypeDecl
+                  | StructDecl
+                  | EnumDecl
+                  | ClassDecl
+                  | FuncDecl
+                  ;
+
+ConstDecl         = [ "pub" ] "let" Ident [ ":" Type ] "=" Expr NL ;
+
+TypeDecl          = [ "pub" ] "type" Ident "=" Type NL ;
+
+StructDecl        = [ "pub" ] "struct" Ident ":" NL
+                    Indent { FieldDecl } Dedent ;
+FieldDecl         = Ident ":" Type NL ;
+
+EnumDecl          = [ "pub" ] "enum" Ident ":" NL
+                    Indent { EnumVariantDecl } Dedent ;
+EnumVariantDecl   = Ident ":" TypeOrNone NL ;
+TypeOrNone        = "none" | Type ;
+
+(* ----------------- Classes (full) ----------------- *)
+ClassDecl         = [Decorators] "class" Ident [ "(" TypeName { "," TypeName } [ "," ] ")" ] ":" NL
+                    Indent { ClassMember } Dedent ;
+
+ClassMember       = FieldDecl
+                  | NestedClassDecl
+                  | MethodDecl
+                  | ConstDecl
+                  | TypeDecl
+                  ;
+
+NestedClassDecl   = [ "pub" ] "class" Ident ":" NL
+                    Indent { ClassMember } Dedent ;
+
+MethodDecl        = [Decorators] [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" Type ] ( ":" NL* Block | NL ) ;
+
+(* ----------------- Functions (full) ----------------- *)
+FuncDecl_full     = [Decorators] [ "pub" ] [ "async" ] "def" Ident "(" [ Params ] ")"
+                    [ "->" Type ] ( ":" NL* Block | NL ) ;
+
+(* ----------------- Expressions/Literals/Types (full) ----------------- *)
+(* Keep the richer forms here: literals for collections, comprehensions,
+   struct/enum constructors, lambdas, richer type system, etc.           *)
+
+Primary_full      = Literal
+                  | Ident
+                  | StructLit
+                  | MapLit
+                  | SetLit
+                  | ListLit
+                  | TupleLit
+                  | LambdaExpr
+                  | "(" Expr ")"
+                  ;
+
+ListLit           = "[" [ ExprList | ListComp ] "]" ;
+TupleLit          = "(" ExprList ")" ;
+MapLit            = "{" [ MapPairs | DictComp ] "}" ;
+MapPairs          = MapPair { "," MapPair } [ "," ] ;
+MapPair           = Expr ":" Expr ;
+SetLit            = "#{" [ ExprList | SetComp ] "}" ;
+
+(* Comprehensions (parse-only in the plan) *)
+ListComp          = Expr "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+DictComp          = Expr ":" Expr "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+SetComp           = Expr "for" CompTarget "in" Expr
+                    { "for" CompTarget "in" Expr } [ "if" Expr ] ;
+CompTarget        = Ident | "(" BindList ")" | "[" BindList "]" ;
+
+(* Struct literals *)
+StructLit         = Ident "{" [ StructInitList ] "}" ;
+StructInitList    = StructInit { "," StructInit } [ "," ] ;
+StructInit        = Ident ":" Expr ;
+
+(* Lambdas *)
+LambdaExpr        = LambdaParams "=>" Expr ;
+LambdaParams      = Ident | "(" [ LambdaParamList ] ")" ;
+LambdaParamList   = LambdaParam { "," LambdaParam } ;
+LambdaParam       = Ident [ ":" Type ] ;
+
+(* Calls as expressions *)
+CallExpr_full     = Primary_full { FieldSuffix | IndexSuffix } CallSuffix
+                    { CallSuffix | IndexSuffix | FieldSuffix } ;
+
+(* Types (full) *)
+Type              = UnionType ;
+UnionType         = IntersectType { "|" IntersectType } ;
+IntersectType     = SimpleType ;
+
+SimpleType        = BuiltinType
+                  | Ident TypeArgs?
+                  | DottedIdent
+                  | ListType
+                  | DictType
+                  | SetType
+                  | TupleType
+                  ;
+
+TypeArgs          = "[" Type { "," Type } "]" ;
+ListType          = "list" "[" Type "]" | "[" Type "]" ;
+DictType          = "dict" "[" Type "," Type "]" | "{" Type ":" Type "}" ;
+SetType           = "set" "[" Type "]" ;
+TupleType         = "tuple" "[" Type { "," Type } "]" ;
+
+BuiltinType       = "bool"
+                  | "int" | "i8" | "i16" | "i32" | "i64" | "i128" | "isize"
+                  | "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
+                  | "f32" | "f64"
+                  | "str" | "string"
+                  | "future"
+                  | "none"
+                  | "list" | "dict" | "set" | "tuple" ;
+
+DottedIdent       = Ident { "." Ident } ;

@@ -1,0 +1,5 @@
+@bench
+@pkg.Deco(1, 2)
+def f(x: int) -> int:
+	"""demo doc"""
+	return x
