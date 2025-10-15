@@ -1,4 +1,4 @@
-def aug_and_flow:
+def aug_and_flow():
 	# assignment and aug-assign
 	a := 1
 	a += 2
@@ -8,7 +8,8 @@ def aug_and_flow:
 	# one-line if / while / for
 	if a > 0: a += 1
 	while a < 10: a += 1
-	for i in [1, 2, 3]: a += i
+	xs := items()
+	for i in xs: a += i
 
 	# block forms
 	if a > 5:
@@ -21,5 +22,5 @@ def aug_and_flow:
 	while a < 30:
 		a += 2
 
-	for i in [1, 2, 3]:
+	for i in xs:
 		a += i

@@ -1,4 +1,4 @@
-def demo_using_defer:
+def demo_using_defer():
 	# Acquire a resource for the block lifetime.
 	using res = open_file("notes.txt"):
 		res.write("hello")
