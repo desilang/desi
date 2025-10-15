@@ -10,6 +10,7 @@ type FieldDecl struct {
 
 type ClassDecl struct {
 	Name       Ident
+	Bases      []*TypeName // NEW: optional base classes, supports multiple
 	Methods    []*FuncDecl
 	Fields     []*FieldDecl
 	Nested     []*ClassDecl
