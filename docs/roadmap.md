@@ -35,101 +35,57 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 - `desic -tokens <file.desi>` prints a stable token stream, then diagnostics (capped).
 - `desic -demo-layout` shows layout events for a sample file.
 
-> Note: Original **M1 (Tokens & Layout Lexer)** scope was merged into M0 and is effectively **DONE**.
+---
+
+### M1 — Parser & AST (Phase 1, ✅ DONE)
+**Scope shipped**
+- **AST**: `Module`, `FuncDecl` (with `Async` flag), `Block`, `LetStmt`, `ReturnStmt`, `ExprStmt`;
+  expressions: literals/idents, unary (`- ! not await`), power `**` (right-assoc),
+  `* / %`, `+ -`, `^`, `< <= > >=`, `== !=`, pipeline `|>`, logical `and/or`.
+- **Postfix**: greedy `call()/index[]/field .` in any order.
+- **Types (minimal)**: `TypeName` as plain/dotted identifiers (no generics yet).
+- **Diagnostics (parser)**: `DPE0001` unexpected, `DPE0002` expected, `DPE0003` unclosed delimiter;
+  async-specific: `DPE1001` (async only before `def`), `DPE1002` (async not allowed before `let`).
+- **CLI**: `desic -ast <file>` pretty-prints AST, then renders diagnostics via `codes.json`.
+- **Behavioral niceties**: comment/blank lines before first block indent; EOF acts like newline.
+- **Tests**: golden AST for power+pipeline, postfix chains, async def, EOF-as-NL, comment-before-indent,
+  and DPE0003 coverage.
+
+**Acceptance**
+- `go build ./...` and `go test ./...` pass.
+- `go run ./compiler/cmd/desic -ast examples/07_ast_smoke.desi` shows the expected AST.
+- Existing examples parse; files with non-M1 ops (`|`, `**=`) show targeted parser errors.
+
+**Deferred from M1 (planned later)**
+- Bitwise `|` tier; augmented assignment `**=` (keep in lexer; parse later with assignment rules).
+- Lambdas (sync & async), comprehensions, control flow, classes, decorators, imports, etc.
 
 ---
 
-### M1 — (folded into M0) Tokens & Layout Lexer
-**Status:** ✅ Done as part of M0.
-(Kept here for history; no work remaining.)
-
----
-
-### M2 — Parser & AST (Revised grammar)
+### M2 — Parser & AST (Revised grammar, Phase 2)
 **Scope**
-- Implement full Revised EBNF:
-  - `def` / `async def`, params (defaults, named args), decorators.
-  - classes with implicit `self`, dunder rules, nested classes (visibility flags).
-  - structs, enums, `match` (guards, value arms, `_` required generally).
-  - pipelines `|>`, lambdas `=>`, comprehensions, `for in`, `using`/RAII, `defer`.
-  - multi-return annotations, one-line `if`/`while`, docstrings.
+- Extend to the revised EBNF:
+  - Decorators, classes (implicit `self`), enums/structs, `match`, comprehensions,
+    `for in`, `using`/`defer`, one-line conditionals/loops, docstrings.
+  - **Bitwise `|` tier** and **augmented assignments** (including `**=`).
+  - **Lambdas (`=>`)** – sync only in this phase.
 - AST nodes carry docstrings & decorator metadata.
 
 **Acceptance**
 - Parse `docs/syntax_tour.md` examples into AST without errors.
-- Parser emits specific `DPE*` diagnostics and locations (golden tests).
+- Parser emits specific `DPE*` diagnostics (golden tests).
 
 ---
 
-### M3 — Resolver & Imports
-**Scope**
-- Module loader (project root + std); `import` / `from import` (incl. parenthesized multi-line form).
-- Symbol tables, scopes, visibility:
-  - top-level classes public by default; nested classes private unless `pub`.
-  - **All dunders must be `pub`** (enforced).
-- Detect duplicate/unused imports (warnings), import cycles, unknown modules.
-
-**Acceptance**
-- `desic check file.desi` reports undefined symbols, visibility errors with `DME*/DTE*`.
-- Golden tests for import cycles and alias conflicts.
-
----
-
-### M4 — Types & Overload Resolution (Phase 1)
-**Scope**
-- Concrete types: scalars, `list[T]`, `dict[K,V]`, `set[T]`, `tuple[...]`, `future[T]`, `none`.
-- Function types, multi-return arity/types.
-- Exact-match overloading by arity and parameter types.
-- Basic inference for locals and call sites (no generics yet).
-- Type rules for pipelines & multi-return feeding by arity.
-
-**Acceptance**
-- Overload selection deterministically picks the exact signature or errors with `DTE/OVL`.
-- Chained comparisons type as `bool`. Pipelines type-check.
-
----
-
-### M5 — Borrow Checker (Function-local, Phase 1)
-**Scope**
-- Param kinds: `T` (move), `ref T` (shared borrow), `inout T` (unique mutable borrow).
-- Track states `{uninit, init, moved, borrowed(ro/rw)}`.
-- Rule: **no `inout` borrow across `await`**; many `ref` or one `inout`, not both.
-
-**Acceptance**
-- Errors `DESI-BOR-*` with primary + secondary labels (where borrow started).
-- Golden examples from the syntax tour compile/error as expected.
-
----
-
-### M6 — HIR Lowering & Desugaring
-**Scope**
-- Lower: `using` → `defer __close__`, one-line `if/while` → blocks, comprehensions → loops, lambdas → function literals/closures, decorators → metadata/application.
-- Normalize match guards and enforce `_` catch-all rule (where required).
-
-**Acceptance**
-- HIR dumper shows canonical form; unit tests on lowering passes.
-
----
-
-### M7 — LLVM Codegen (Tier-0)
-**Scope**
-- IRBuilder module: functions, control flow, variables, calls, returns.
-- Runtime bitcode: `__desi_print_*`, alloc/free, small string/array helpers.
-- `desirepl` uses ORC JIT to evaluate expressions/defs.
-
-**Acceptance**
-- `desic build main.desi && ./main` prints expected hello world & small demos.
-- `desirepl` can `print(1+2)` and define/run a simple function.
-
----
-
-### M8 — Async & Futures
+### M8 — Async & Futures (adds async lambda)
 **Scope**
 - Lower async funcs to state machines; `await`, `join`, `with_timeout`, `select`.
 - Enforce borrow rules at suspension points.
+- **Add `async lambda` expression** (expression-only body):
+  `async lambda x: await f(x)` (types: `AsyncFunc[A, B]` ≈ `Func[A, future[B]]`).
 
 **Acceptance**
-- Demos from Revised (`greet`, `maybe_greet`, `race_two`) work.
+- Demos from Revised run; async lambda covered by tests.
 - Reject `inout` across await with clear diagnostics.
 
 ---
