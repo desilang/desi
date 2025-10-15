@@ -5,7 +5,8 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// order = ** > unary > * / % > + - > ^ > < <= > >= > == != > |> > and > or
+// precedence:
+// ** > unary > * / % > + - > ^ > | > < <= > >= > == != > |> > and > or
 func (p *Parser) parseExpr() ast.Expr { return p.parseOr() }
 
 func (p *Parser) parseOr() ast.Expr {
@@ -53,18 +54,29 @@ func (p *Parser) parseEq() ast.Expr {
 }
 
 func (p *Parser) parseRel() ast.Expr {
-	e := p.parseXor()
+	e := p.parseBitOr()
 	for {
 		switch p.cur.Tok {
 		case token.LT, token.LTE, token.GT, token.GTE:
 			op := p.cur
 			p.next()
-			r := p.parseXor()
+			r := p.parseBitOr()
 			e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
 		default:
 			return e
 		}
 	}
+}
+
+func (p *Parser) parseBitOr() ast.Expr {
+	e := p.parseXor()
+	for p.cur.Tok == token.PIPE {
+		op := p.cur
+		p.next()
+		r := p.parseXor()
+		e = &ast.BinaryExpr{Op: "|", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
 }
 
 func (p *Parser) parseXor() ast.Expr {
@@ -196,7 +208,10 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return it
 	case token.STR, token.FSTR, token.LONGSTR:
-		st := &ast.StrLit{Span: spanPos(p.file, p.cur)}
+		st := &ast.StrLit{
+			Long: p.cur.Tok == token.LONGSTR,
+			Span: spanPos(p.file, p.cur),
+		}
 		p.next()
 		return st
 	case token.KW_true:

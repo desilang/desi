@@ -111,8 +111,9 @@ type FloatLit struct {
 func (*FloatLit) isExpr()             {}
 func (x *FloatLit) SpanOf() diag.Span { return x.Span }
 
+// StrLit now tracks whether it was a triple-quoted (long) string.
 type StrLit struct {
-	// We don't store content for M1; scanner already validated escapes.
+	Long bool // true for """...""", false for "..." or f"..."
 	Span diag.Span
 }
 
@@ -144,7 +145,7 @@ func (*UnaryExpr) isExpr()             {}
 func (x *UnaryExpr) SpanOf() diag.Span { return x.Span }
 
 type BinaryExpr struct {
-	Op   string // "**", "*", "/", "%", "+", "-", "^", "<", "<=", ">", ">=", "==", "!=", "|>", "and", "or"
+	Op   string // "**", "*", "/", "%", "+", "-", "^", "|", "<", "<=", ">", ">=", "==", "!=", "|>", "and", "or"
 	Lhs  Expr
 	Rhs  Expr
 	Span diag.Span
@@ -155,7 +156,7 @@ func (x *BinaryExpr) SpanOf() diag.Span { return x.Span }
 
 type CallExpr struct {
 	Callee Expr
-	Args   []Expr // positional only for M1
+	Args   []Expr // positional only for M1/M2
 	Span   diag.Span
 }
 
