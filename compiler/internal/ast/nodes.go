@@ -180,14 +180,6 @@ type FieldExpr struct {
 func (*FieldExpr) isExpr()             {}
 func (x *FieldExpr) SpanOf() diag.Span { return x.Span }
 
-// Stub only for now (not parsed in M1 but useful to have in the type set).
-type LambdaExpr struct {
-	Span diag.Span
-}
-
-func (*LambdaExpr) isExpr()             {}
-func (x *LambdaExpr) SpanOf() diag.Span { return x.Span }
-
 /* ---------- Types (minimal) ---------- */
 
 type TypeName struct {
