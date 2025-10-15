@@ -29,7 +29,7 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		if p.cur.Tok == token.EOF {
 			break
 		}
-		if p.cur.Tok == token.KW_def {
+		if p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
 			if d := p.parseFunc(); d != nil {
 				m.Decls = append(m.Decls, d)
 			}
@@ -40,9 +40,9 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			Name: ast.Ident{Name: "__top__", Span: spanPos(filename, p.cur)},
 			Body: &ast.Block{Span: spanPos(filename, p.cur)},
 		}
-		for p.cur.Tok != token.EOF && p.cur.Tok != token.KW_def {
+		for p.cur.Tok != token.EOF && p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async {
 			p.skipNLs()
-			if p.cur.Tok == token.EOF || p.cur.Tok == token.KW_def {
+			if p.cur.Tok == token.EOF || p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async {
 				break
 			}
 			if s := p.parseStmt(); s != nil {
