@@ -3,6 +3,7 @@ package ast
 import "github.com/desilang/desi/compiler/internal/diag"
 
 type StructDecl struct {
+	Pub        bool
 	Name       Ident
 	Fields     []*FieldDecl
 	Decorators []*Decorator

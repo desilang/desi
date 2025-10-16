@@ -9,6 +9,7 @@ type EnumVariantDecl struct {
 }
 
 type EnumDecl struct {
+	Pub        bool
 	Name       Ident
 	Variants   []*EnumVariantDecl
 	Decorators []*Decorator
