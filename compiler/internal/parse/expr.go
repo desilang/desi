@@ -211,8 +211,8 @@ func (p *Parser) parsePostfix() ast.Expr {
 func (p *Parser) parsePrimary() ast.Expr {
 	switch p.cur.Tok {
 	case token.IDENT:
-		// Lambda (single-ident) head?
-		if p.peek.Tok == token.FAT_ARROW || p.peek.Tok == token.COLON {
+		// Lambda (single-ident) only when '=>' follows immediately.
+		if p.peek.Tok == token.FAT_ARROW {
 			return p.parseLambdaFromIdent()
 		}
 		id := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
@@ -248,13 +248,17 @@ func (p *Parser) parsePrimary() ast.Expr {
 		return n
 
 	case token.LPAREN:
-		// Either "(…)=>" lambda head or classic "(expr)".
-		return p.parseParenLambdaOrExpr()
+		// Keep classic parenthesized expression behavior.
+		open := spanPos(p.file, p.cur)
+		p.next()
+		e := p.parseExpr()
+		p.expectClose(token.RPAREN, ")", open)
+		return e
 
 	case token.LBRACK:
 		open := spanPos(p.file, p.cur)
 		p.next()
-		return p.parseListComp(&ast.Ident{Name: "", Span: open}) // supply SpanOf via node
+		return p.parseListComp(&ast.Ident{Name: "", Span: open}) // Span carrier
 
 	case token.LBRACE:
 		open := spanPos(p.file, p.cur)
