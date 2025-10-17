@@ -23,7 +23,11 @@ func (p *Parser) parseLambdaFromIdent() ast.Expr {
 	}
 	body := p.parseExpr()
 
-	lp := ast.LambdaParam{Name: id, Type: ty, Span: ast.JoinSpan(id.Span, lastSpan(ty))}
+	lp := ast.LambdaParam{
+		Name: id,
+		Type: ty,
+		Span: ast.JoinSpan(id.Span, lastSpan(ty, id.Span)),
+	}
 	return &ast.LambdaExpr{
 		Params: []ast.LambdaParam{lp},
 		Body:   body,
@@ -45,7 +49,7 @@ func (p *Parser) parseParenLambdaOrExpr() ast.Expr {
 	if p.cur.Tok != token.RPAREN {
 		for {
 			if p.cur.Tok != token.IDENT {
-				tryParams = False // not a lambda param list; fall back to "(expr)"
+				tryParams = false // not a lambda param list; fall back to "(expr)"
 				break
 			}
 			name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
@@ -58,7 +62,7 @@ func (p *Parser) parseParenLambdaOrExpr() ast.Expr {
 			params = append(params, ast.LambdaParam{
 				Name: name,
 				Type: ty,
-				Span: ast.JoinSpan(name.Span, lastSpan(ty)),
+				Span: ast.JoinSpan(name.Span, lastSpan(ty, name.Span)),
 			})
 
 			if !p.accept(token.COMMA) {
@@ -87,16 +91,14 @@ func (p *Parser) parseParenLambdaOrExpr() ast.Expr {
 	}
 
 	// Not a lambda → classic parenthesized expression:
-	// Re-parse as "(Expr)". Since we've already consumed the group, we can't
-	// rewind; the safe approach is to treat the parsed "params" as a *single*
-	// identifier expression if possible (e.g., "(x)") and otherwise
-	// produce a diagnostic by parsing a dummy expression now.
+	// We can't rewind; the safe approach is to treat "(x)" as Ident(x)
+	// and otherwise produce a placeholder.
 	if len(params) == 1 && params[0].Type == nil {
 		// "(x)" → Ident(x)
 		return &params[0].Name
 	}
 
-	// Fallback: report a more helpful error and return a placeholder.
+	// Fallback: report a helpful error and return a placeholder.
 	p.errUnexpected(spanPos(p.file, p.cur), "'=>', lambda body")
 	return &ast.Ident{Name: "<error>", Span: open}
 }
