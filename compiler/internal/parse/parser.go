@@ -15,7 +15,6 @@ type Parser struct {
 	diags []diag.Diagnostic
 }
 
-// ParseFile is the public entry point.
 func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 	sc := lex.NewScannerWithFile(src, filename)
 	p := &Parser{sc: sc, file: filename}
@@ -31,26 +30,67 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 
 		switch p.cur.Tok {
 		case token.AT:
-			// Decorators may precede either a class or a function.
+			// Decorators may precede class/struct/enum/function declarations.
 			decs := p.parseDecorators()
 			p.skipNLs()
-			if p.cur.Tok == token.KW_class || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_class) {
+			switch {
+			case p.cur.Tok == token.KW_class || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_class):
 				if c := p.parseClassWithDecs(decs, false /*nested*/); c != nil {
 					m.Decls = append(m.Decls, c)
 				}
-			} else {
+			case p.cur.Tok == token.KW_struct || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_struct):
+				if s := p.parseStructWithDecs(decs); s != nil {
+					m.Decls = append(m.Decls, s)
+				}
+			case p.cur.Tok == token.KW_enum || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_enum):
+				if e := p.parseEnumWithDecs(decs); e != nil {
+					m.Decls = append(m.Decls, e)
+				}
+			default:
 				if f := p.parseFuncWithDecs(decs); f != nil {
 					m.Decls = append(m.Decls, f)
 				}
 			}
 			continue
 
-		case token.KW_class, token.KW_pub:
-			// Top-level class (pub optional); functions never start with 'pub' at top-level in M3A.
+		case token.KW_class:
 			if c := p.parseClassWithDecs(nil, false /*nested*/); c != nil {
 				m.Decls = append(m.Decls, c)
 			}
 			continue
+
+		case token.KW_struct:
+			if s := p.parseStructWithDecs(nil); s != nil {
+				m.Decls = append(m.Decls, s)
+			}
+			continue
+
+		case token.KW_enum:
+			if e := p.parseEnumWithDecs(nil); e != nil {
+				m.Decls = append(m.Decls, e)
+			}
+			continue
+
+		case token.KW_pub:
+			switch p.peek.Tok {
+			case token.KW_class:
+				if c := p.parseClassWithDecs(nil, false /*nested*/); c != nil {
+					m.Decls = append(m.Decls, c)
+				}
+				continue
+			case token.KW_struct:
+				if s := p.parseStructWithDecs(nil); s != nil {
+					m.Decls = append(m.Decls, s)
+				}
+				continue
+			case token.KW_enum:
+				if e := p.parseEnumWithDecs(nil); e != nil {
+					m.Decls = append(m.Decls, e)
+				}
+				continue
+			default:
+				// Let function parsing diagnose invalid 'pub' usage in other contexts.
+			}
 
 		case token.KW_def, token.KW_async:
 			if f := p.parseFunc(); f != nil {
@@ -59,20 +99,15 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			continue
 		}
 
-		// Fallback: hoist loose stmts into __top__
+		// Fallback: hoist loose stmts into __top__ block.
 		top := &ast.FuncDecl{
 			Name: ast.Ident{Name: "__top__", Span: spanPos(filename, p.cur)},
 			Body: &ast.Block{Span: spanPos(filename, p.cur)},
 		}
 		for p.cur.Tok != token.EOF &&
 			p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async &&
-			p.cur.Tok != token.KW_class && p.cur.Tok != token.KW_pub && p.cur.Tok != token.AT {
-			p.skipNLs()
-			if p.cur.Tok == token.EOF ||
-				p.cur.Tok == token.KW_def || p.cur.Tok == token.KW_async ||
-				p.cur.Tok == token.KW_class || p.cur.Tok == token.KW_pub || p.cur.Tok == token.AT {
-				break
-			}
+			p.cur.Tok != token.KW_class && p.cur.Tok != token.KW_struct && p.cur.Tok != token.KW_enum &&
+			p.cur.Tok != token.KW_pub && p.cur.Tok != token.AT {
 			if s := p.parseStmt(); s != nil {
 				top.Body.Stmts = append(top.Body.Stmts, s)
 			} else {
@@ -86,34 +121,33 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 	return m, p.diags
 }
 
-/* ---------- scanner glue & small helpers ---------- */
-
-func (p *Parser) next()                 { p.cur, p.peek = p.peek, p.sc.Next() }
-func (p *Parser) at(t token.Token) bool { return p.cur.Tok == t }
-func (p *Parser) accept(t token.Token) bool {
-	if p.at(t) {
+// --- small helpers (no diagnostics here; see diag_core.go) ---
+func (p *Parser) next() {
+	p.cur, p.peek = p.peek, p.sc.Next()
+}
+func (p *Parser) accept(tok token.Token) bool {
+	if p.cur.Tok == tok {
 		p.next()
 		return true
 	}
 	return false
 }
-func (p *Parser) expect(t token.Token, label string) bool {
-	if p.accept(t) {
+func (p *Parser) expect(tok token.Token, label string) bool {
+	if p.cur.Tok == tok {
+		p.next()
 		return true
 	}
 	p.errExpected(spanPos(p.file, p.cur), label)
 	return false
 }
-
-// expectClose emits DPE0003 (unclosed delimiter) tied to the span of the opener.
-func (p *Parser) expectClose(closeTok token.Token, label string, open diag.Span) bool {
-	if p.accept(closeTok) {
+func (p *Parser) expectClose(tok token.Token, label string, open diag.Span) bool {
+	if p.cur.Tok == tok {
+		p.next()
 		return true
 	}
 	p.errUnclosed(open, label)
 	return false
 }
-
 func (p *Parser) skipNLs() {
 	for p.cur.Tok == token.NL {
 		p.next()
@@ -128,8 +162,6 @@ func (p *Parser) syncStmt() {
 	}
 }
 
-/* ---------- span helpers ---------- */
-
 func spanPos(file string, it lex.Item) diag.Span {
 	return diag.Span{
 		File:  file,
@@ -137,12 +169,7 @@ func spanPos(file string, it lex.Item) diag.Span {
 		End:   diag.Pos{Line: it.Line, Col: it.Col},
 	}
 }
-func lastSpan(n ast.Node, fallback diag.Span) diag.Span {
-	if n == nil {
-		return fallback
-	}
-	return n.SpanOf()
-}
+
 func joinTok(file string, a, b lex.Item) diag.Span {
 	return diag.Span{
 		File:  file,
