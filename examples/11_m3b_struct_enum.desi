@@ -1,0 +1,11 @@
+@serde
+pub struct User:
+	"""user doc"""
+	pub id: u64
+	name: str
+
+@flags
+enum Mode:
+	"""mode doc"""
+	Auto: none
+	Manual: str
