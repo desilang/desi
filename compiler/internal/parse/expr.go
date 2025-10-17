@@ -211,9 +211,14 @@ func (p *Parser) parsePostfix() ast.Expr {
 func (p *Parser) parsePrimary() ast.Expr {
 	switch p.cur.Tok {
 	case token.IDENT:
+		// Lambda (single-ident) head?
+		if p.peek.Tok == token.FAT_ARROW || p.peek.Tok == token.COLON {
+			return p.parseLambdaFromIdent()
+		}
 		id := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 		p.next()
 		return &id
+
 	case token.INT_DEC, token.INT_HEX, token.INT_BIN, token.INT_OCT:
 		it := &ast.IntLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 		p.next()
@@ -241,12 +246,30 @@ func (p *Parser) parsePrimary() ast.Expr {
 		n := &ast.NoneLit{Span: spanPos(p.file, p.cur)}
 		p.next()
 		return n
+
 	case token.LPAREN:
+		// Either "(…)=>" lambda head or classic "(expr)".
+		return p.parseParenLambdaOrExpr()
+
+	case token.LBRACK:
 		open := spanPos(p.file, p.cur)
 		p.next()
-		e := p.parseExpr()
-		p.expectClose(token.RPAREN, ")", open)
-		return e
+		return p.parseListComp(&ast.Ident{Name: "", Span: open}) // supply SpanOf via node
+
+	case token.LBRACE:
+		open := spanPos(p.file, p.cur)
+		p.next()
+		return p.parseDictComp(&ast.Ident{Name: "", Span: open})
+
+	case token.HASH:
+		// Set comprehension starts with "#{".
+		hash := spanPos(p.file, p.cur)
+		p.next()
+		if !p.expect(token.LBRACE, "{") {
+			return &ast.Ident{Name: "<error>", Span: hash}
+		}
+		return p.parseSetComp(&ast.Ident{Name: "", Span: hash})
+
 	default:
 		p.errUnexpected(spanPos(p.file, p.cur), "expression")
 		errId := &ast.Ident{Name: "<error>", Span: spanPos(p.file, p.cur)}
