@@ -5,110 +5,27 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// parse lambda with IDENT head:  Ident [ ":" TypeName ] "=>" Expr
-// Precondition: current token is IDENT and either next is FAT_ARROW or COLON.
+// parse lambda with IDENT head:  Ident "=>" Expr
+// (Typed or multi-parameter lambdas are supported via the parenthesized form
+// in a future enhancement; this path handles the untyped single-param case.)
 func (p *Parser) parseLambdaFromIdent() ast.Expr {
 	// ident
 	id := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
-	var ty *ast.TypeName
-	if p.accept(token.COLON) {
-		ty = p.parseTypeName()
-	}
-
 	if !p.expect(token.FAT_ARROW, "=>") {
-		// Best-effort recovery: treat the ident as a plain Ident expr.
+		// Not actually a lambda; treat as a plain Ident expr.
 		return &id
 	}
 	body := p.parseExpr()
 
-	// Param span: from name to type (if any), otherwise just name.
-	end := id.Span
-	if ty != nil {
-		end = ty.Span
-	}
 	lp := ast.LambdaParam{
 		Name: id,
-		Type: ty,
-		Span: ast.JoinSpan(id.Span, end),
+		Span: id.Span,
 	}
 	return &ast.LambdaExpr{
 		Params: []ast.LambdaParam{lp},
 		Body:   body,
 		Span:   ast.JoinSpan(id.Span, body.SpanOf()),
 	}
-}
-
-// parse "(" [params] ")" "=>" Expr
-// Params = Ident [ ":" TypeName ] { "," Ident [ ":" TypeName ] } [","]
-func (p *Parser) parseParenLambdaOrExpr() ast.Expr {
-	open := spanPos(p.file, p.cur) // '('
-	p.next()
-
-	// Try to parse lambda-parameter list shape; if it doesn't look like it,
-	// fall back to the classic "( Expr )" path.
-	var params []ast.LambdaParam
-	tryParams := true
-
-	if p.cur.Tok != token.RPAREN {
-		for {
-			if p.cur.Tok != token.IDENT {
-				tryParams = false // not a lambda param list; fall back to "(expr)"
-				break
-			}
-			name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
-			p.next()
-
-			var ty *ast.TypeName
-			if p.accept(token.COLON) {
-				ty = p.parseTypeName()
-			}
-
-			end := name.Span
-			if ty != nil {
-				end = ty.Span
-			}
-			params = append(params, ast.LambdaParam{
-				Name: name,
-				Type: ty,
-				Span: ast.JoinSpan(name.Span, end),
-			})
-
-			if !p.accept(token.COMMA) {
-				break
-			}
-			if p.cur.Tok == token.RPAREN {
-				// allow trailing comma
-				break
-			}
-		}
-	}
-
-	if !p.expectClose(token.RPAREN, ")", open) {
-		// broken paren group; synthesize error expr
-		return &ast.Ident{Name: "<error>", Span: open}
-	}
-
-	if tryParams && p.accept(token.FAT_ARROW) {
-		// It's a lambda: we already consumed ") =>"
-		body := p.parseExpr()
-		return &ast.LambdaExpr{
-			Params: params,
-			Body:   body,
-			Span:   ast.JoinSpan(open, body.SpanOf()),
-		}
-	}
-
-	// Not a lambda → classic parenthesized expression:
-	// We can't rewind; the safe approach is to treat "(x)" as Ident(x)
-	// and otherwise produce a placeholder.
-	if len(params) == 1 && params[0].Type == nil {
-		// "(x)" → Ident(x)
-		return &params[0].Name
-	}
-
-	// Fallback: report a helpful error and return a placeholder.
-	p.errUnexpected(spanPos(p.file, p.cur), "'=>', lambda body")
-	return &ast.Ident{Name: "<error>", Span: open}
 }
