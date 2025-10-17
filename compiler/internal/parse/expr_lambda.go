@@ -23,10 +23,15 @@ func (p *Parser) parseLambdaFromIdent() ast.Expr {
 	}
 	body := p.parseExpr()
 
+	// Param span: from name to type (if any), otherwise just name.
+	end := id.Span
+	if ty != nil {
+		end = ty.Span
+	}
 	lp := ast.LambdaParam{
 		Name: id,
 		Type: ty,
-		Span: ast.JoinSpan(id.Span, lastSpan(ty, id.Span)),
+		Span: ast.JoinSpan(id.Span, end),
 	}
 	return &ast.LambdaExpr{
 		Params: []ast.LambdaParam{lp},
@@ -59,10 +64,15 @@ func (p *Parser) parseParenLambdaOrExpr() ast.Expr {
 			if p.accept(token.COLON) {
 				ty = p.parseTypeName()
 			}
+
+			end := name.Span
+			if ty != nil {
+				end = ty.Span
+			}
 			params = append(params, ast.LambdaParam{
 				Name: name,
 				Type: ty,
-				Span: ast.JoinSpan(name.Span, lastSpan(ty, name.Span)),
+				Span: ast.JoinSpan(name.Span, end),
 			})
 
 			if !p.accept(token.COMMA) {
