@@ -45,10 +45,12 @@ func (p *Parser) parseLambdaFromParen() ast.Expr {
 				ty = p.parseTypeName()
 			}
 
+			// Conservative span: just the identifier span. (We avoid lastSpan(ty,...)
+			// because *ast.TypeName is not an ast.Node.)
 			params = append(params, ast.LambdaParam{
 				Name: name,
 				Type: ty,
-				Span: ast.JoinSpan(start, lastSpan(ty, start)),
+				Span: start,
 			})
 
 			if !p.accept(token.COMMA) {
