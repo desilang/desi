@@ -113,3 +113,35 @@ Docstrings: the first triple-quoted string in a function/class body is attached 
   - **Nested classes:** same header shape inside a class body; decorators allowed.
 
 > Semantics are deferred in M3A: this milestone is **parse-only** and updates the AST/printer/docs/tests accordingly.
+
+## M3D — Lambdas & Comprehensions (parse-only)
+
+### Lambdas
+
+Two forms:
+
+* Single param (M3C): `x => expr`
+* **Parenthesized (M3D)**: `(x:int, y) => expr` (trailing comma allowed)
+
+Examples:
+
+```desi
+let add  = (x:int, y:int) => x + y
+let call = (x, y) => foo(x, y)
+```
+
+### Comprehensions
+
+* List: `[expr for target in iter { for target in iter } [ if expr ]]`
+* Dict: `{key: val for target in iter { ... } [ if expr ]}`
+* Set:  `#{expr for target in iter { ... } [ if expr ]}`
+
+Chaining `for` is supported, with **at most one `if` per clause**:
+
+```desi
+let pairs = [x+y for x in xs if p(x) for y in ys if q(y)]
+let pos   = {k: v for k in ks for v in vs if v > 0}
+let good  = #{f(x) for x in xs if ok(x)}
+```
+
+> Diagnostics are emitted for malformed heads (e.g., `[x]` → “expected 'for' in list comprehension”).
