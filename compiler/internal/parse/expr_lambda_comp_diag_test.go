@@ -1,6 +1,9 @@
 package parse
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestDiagnostics_LambdaHeadAndCompHead(t *testing.T) {
 	src := `
@@ -19,13 +22,13 @@ let c = #{x}               # missing 'for'
 		if d.Title == "lambda parameter list expected" {
 			lam = true
 		}
-		if d.Message == "'for' in list comprehension" {
+		if strings.Contains(d.Message, "expected 'for' in list comprehension") {
 			list = true
 		}
-		if d.Message == "'for' in dict comprehension" {
+		if strings.Contains(d.Message, "expected 'for' in dict comprehension") {
 			dict = true
 		}
-		if d.Message == "'for' in set comprehension" {
+		if strings.Contains(d.Message, "expected 'for' in set comprehension") {
 			set = true
 		}
 	}
