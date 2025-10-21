@@ -1,0 +1,4 @@
+# M3D lambda examples (parse-only)
+let add   = (x:int, y:int) => x + y
+let pair  = (x, y) => foo(x, y)
+let trail = (x:int, y:int,) => x

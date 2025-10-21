@@ -248,7 +248,12 @@ func (p *Parser) parsePrimary() ast.Expr {
 		return n
 
 	case token.LPAREN:
-		// Keep classic parenthesized expression behavior.
+		// If this '(' starts a parenthesized lambda head whose matching ')'
+		// is immediately followed by '=>', parse a lambda; otherwise fall
+		// back to classic parenthesized expression.
+		if p.parenLambdaAhead() {
+			return p.parseLambdaFromParen()
+		}
 		open := spanPos(p.file, p.cur)
 		p.next()
 		e := p.parseExpr()
