@@ -25,7 +25,7 @@ let D = {k: v for k in ks for v in vs if v>0}
 	}
 	got := renderAST3(mod)
 	wantSubs := []string{
-		"[((Ident(x) + Ident(y)) for Ident(x) in Ident(xs) if Call Ident(p)(Ident(x)) for Ident(y) in Ident(ys) if Call Ident(q)(Ident(y)))]",
+		"[(Ident(x) + Ident(y)) for Ident(x) in Ident(xs) if Call Ident(p)(Ident(x)) for Ident(y) in Ident(ys) if Call Ident(q)(Ident(y))]",
 		"#{Call Ident(f)(Ident(x)) for Ident(x) in Ident(xs) if Call Ident(ok)(Ident(x))}",
 		"{Ident(k): Ident(v) for Ident(k) in Ident(ks) for Ident(v) in Ident(vs) if (Ident(v) > Int(0))}",
 	}
