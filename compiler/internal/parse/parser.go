@@ -13,6 +13,7 @@ type Parser struct {
 	cur   lex.Item
 	peek  lex.Item
 	diags []diag.Diagnostic
+	ahead []lex.Item
 }
 
 func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
@@ -123,8 +124,15 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 
 // --- small helpers (no diagnostics here; see diag_core.go) ---
 func (p *Parser) next() {
-	p.cur, p.peek = p.peek, p.sc.Next()
+	p.cur = p.peek
+	if len(p.ahead) > 0 {
+		p.peek = p.ahead[0]
+		p.ahead = p.ahead[1:]
+	} else {
+		p.peek = p.sc.Next()
+	}
 }
+
 func (p *Parser) accept(tok token.Token) bool {
 	if p.cur.Tok == tok {
 		p.next()
