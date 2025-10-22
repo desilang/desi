@@ -95,24 +95,27 @@ func (c *checker) typ(e ast.Expr) types.T {
 }
 
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
-	lt := c.typ(x.Lhs)
-	rt := c.typ(x.Rhs)
 	op := x.Op
+
 	switch op {
 	case "+", "-", "*", "/", "%", "**":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
 		if (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) && types.Equal(lt, rt) {
 			c.info.Types[x] = lt
 			return lt
 		}
 		c.add(diagAt("DTE0004", x.Span, "invalid operand types for '"+op+"'"))
 		return nil
+
 	case "<", "<=", ">", ">=", "==", "!=":
-		// Simple rule: both sides same type (or both numeric) → bool
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
 		if types.Equal(lt, rt) {
 			c.info.Types[x] = types.Bool
 			return types.Bool
 		}
-		// allow numeric comparison if both are numeric but not equal kinds (int vs float)
+		// allow numeric comparison if both are numeric
 		if (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) &&
 			(types.Equal(rt, types.Int) || types.Equal(rt, types.Float)) {
 			c.info.Types[x] = types.Bool
@@ -120,55 +123,76 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		}
 		c.add(diagAt("DTE0004", x.Span, "invalid comparison"))
 		return nil
+
 	case "and", "or":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
 		if types.Equal(lt, types.Bool) && types.Equal(rt, types.Bool) {
 			c.info.Types[x] = types.Bool
 			return types.Bool
 		}
 		c.add(diagAt("DTE0004", x.Span, "logical operators require bool operands"))
 		return nil
+
 	case "^", "|":
-		// bitwise for int only in M4
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
 		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
 			c.info.Types[x] = types.Int
 			return types.Int
 		}
 		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
 		return nil
+
 	case "|>":
-		// pipeline: Lhs |> (Rhs must be call)
-		if call, ok := x.Rhs.(*ast.CallExpr); ok {
-			// Evaluate arg types including inserted lhs
-			args := make([]types.T, 0, len(call.Args)+1)
-			args = append(args, lt)
-			for _, a := range call.Args {
-				args = append(args, c.typ(a))
-			}
-			// Resolve callee if ident
-			if id, ok := call.Callee.(*ast.Ident); ok {
-				set := c.info.Funcs[id.Name]
-				if set == nil {
-					c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
-					return nil
-				}
-				cands := set.ResolveExact(args)
-				if len(cands) == 1 {
-					c.info.Types[x] = cands[0].Type.Ret
-					return cands[0].Type.Ret
-				}
-				if len(cands) == 0 {
-					c.add(diagAt("DTE0004", x.Span, "no matching overload for pipeline call"))
-				} else {
-					c.add(diagAt("DTE0004", x.Span, "ambiguous overload for pipeline call"))
-				}
-				return nil
-			}
-			c.add(diagAt("DTE0004", x.Span, "pipeline target must be a function call with identifier callee"))
+		// PIPELINE: do NOT type-check the RHS call first; we rewrite to a synthetic call
+		// by inserting LHS as the first argument, then resolve that call.
+		lhsT := c.typ(x.Lhs)
+
+		call, ok := x.Rhs.(*ast.CallExpr)
+		if !ok {
+			c.add(diagAt("DTE0004", x.Span, "pipeline expects a call on the right-hand side"))
 			return nil
 		}
-		c.add(diagAt("DTE0004", x.Span, "pipeline expects a call on the right-hand side"))
+		// build synthetic call: callee unchanged, args = [LHS] + original args
+		synthArgs := make([]ast.Expr, 0, len(call.Args)+1)
+		synthArgs = append(synthArgs, x.Lhs)
+		synthArgs = append(synthArgs, call.Args...)
+
+		// We still need arg types for overload resolution; type only the *arguments*, not the original call.
+		argTypes := make([]types.T, len(synthArgs))
+		for i, a := range synthArgs {
+			argTypes[i] = c.typ(a)
+		}
+		_ = lhsT // lhs is already typed via c.typ(x.Lhs); kept for clarity
+
+		// Only identifier callees in M4
+		id, ok := call.Callee.(*ast.Ident)
+		if !ok {
+			c.add(diagAt("DTE0004", x.Span, "pipeline target must be an identifier callee"))
+			return nil
+		}
+		set := c.info.Funcs[id.Name]
+		if set == nil {
+			c.add(diagAt("DTE0001", call.Span, "undefined function: "+id.Name))
+			return nil
+		}
+		cands := set.ResolveExact(argTypes)
+		if len(cands) == 1 {
+			c.info.Types[x] = cands[0].Type.Ret
+			return cands[0].Type.Ret
+		}
+		if len(cands) == 0 {
+			c.add(diagAt("DTE0004", x.Span, "no matching overload for pipeline call"))
+		} else {
+			c.add(diagAt("DTE0004", x.Span, "ambiguous overload for pipeline call"))
+		}
 		return nil
+
 	default:
+		// Unknown op in M4: type children to keep traversal consistent but return nil.
+		_ = c.typ(x.Lhs)
+		_ = c.typ(x.Rhs)
 		return nil
 	}
 }
