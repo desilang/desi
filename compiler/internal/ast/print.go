@@ -3,6 +3,8 @@ package ast
 import (
 	"fmt"
 	"io"
+	"strconv"
+	"strings"
 )
 
 // Print renders a stable, tab-indented AST suitable for -ast dumps and tests.
@@ -61,7 +63,7 @@ func (p pp) node(n Node, d int) {
 		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
-			p.node(&DocStringStmt{Text: n.Doc}, d+1)
+			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		if n.Body != nil {
 			p.node(n.Body, d+1)
@@ -95,14 +97,14 @@ func (p pp) node(n Node, d int) {
 		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
-			p.node(&DocStringStmt{Text: n.Doc}, d+1)
+			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		for _, f := range n.Fields {
 			p.tabs(d + 1)
 			if f.Pub {
 				p.wr("pub ")
 			}
-			p.wr("%s: %s\n", f.Name.Name, f.Type.Name)
+			p.wr("%s: %s\n", f.Name.Name, typeNameStr(f.Type))
 		}
 
 	case *EnumDecl:
@@ -119,7 +121,7 @@ func (p pp) node(n Node, d int) {
 		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
-			p.node(&DocStringStmt{Text: n.Doc}, d+1)
+			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		for _, v := range n.Variants {
 			p.tabs(d + 1)
@@ -144,7 +146,7 @@ func (p pp) node(n Node, d int) {
 				if i > 0 {
 					p.wr(", ")
 				}
-				p.wr("%s", b.Name)
+				p.wr("%s", typeNameStr(b))
 			}
 			p.wr(")")
 		}
@@ -157,14 +159,14 @@ func (p pp) node(n Node, d int) {
 		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
-			p.node(&DocStringStmt{Text: n.Doc}, d+1)
+			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		for _, f := range n.Fields {
 			p.tabs(d + 1)
 			if f.Pub {
 				p.wr("pub ")
 			}
-			p.wr("%s: %s\n", f.Name.Name, f.Type.Name)
+			p.wr("%s: %s\n", f.Name.Name, typeNameStr(f.Type))
 		}
 		for _, sub := range n.Nested {
 			p.node(sub, d+1)
@@ -187,10 +189,29 @@ func (p pp) node(n Node, d int) {
 	case *LetStmt:
 		p.tabs(d)
 		p.wr("Let %s = ", n.Name.Name)
-		p.node(n.Init, 0)
+		if n.Value != nil {
+			p.node(n.Value, 0)
+		}
 		p.wr("\n")
 
 	case *AssignStmt:
+		p.tabs(d)
+		for i, x := range n.LHS {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(x, 0)
+		}
+		p.wr(" := ")
+		for i, x := range n.RHS {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(x, 0)
+		}
+		p.wr("\n")
+
+	case *AugAssignStmt:
 		p.tabs(d)
 		p.node(n.Left, 0)
 		p.wr(" %s ", n.Op)
@@ -227,7 +248,7 @@ func (p pp) node(n Node, d int) {
 			p.node(n.Else, d+1)
 		}
 
-	// >>> NEW: Match <<<
+	// New in M2: parse-only Match (value arms)
 	case *MatchStmt:
 		p.tabs(d)
 		p.wr("Match ")
@@ -261,10 +282,6 @@ func (p pp) node(n Node, d int) {
 		p.node(n.Target, 0)
 		p.wr(" in ")
 		p.node(n.Iter, 0)
-		if n.Init != nil {
-			p.wr(" = ")
-			p.node(n.Init, 0)
-		}
 		p.wr("\n")
 		if n.Body != nil {
 			p.node(n.Body, d+1)
@@ -281,7 +298,13 @@ func (p pp) node(n Node, d int) {
 	case *UsingStmt:
 		p.tabs(d)
 		p.wr("Using ")
-		p.node(n.Resource, 0)
+		if n.Bind != nil {
+			p.node(n.Bind, 0)
+		}
+		if n.Init != nil {
+			p.wr(" = ")
+			p.node(n.Init, 0)
+		}
 		p.wr("\n")
 		if n.Body != nil {
 			p.node(n.Body, d+1)
@@ -289,22 +312,38 @@ func (p pp) node(n Node, d int) {
 
 	/* ---------- Exprs ---------- */
 
-	case *BinExpr:
+	case *BinaryExpr:
 		p.wr("(")
-		p.node(n.Left, 0)
+		p.node(n.Lhs, 0)
 		p.wr(" %s ", n.Op)
-		p.node(n.Right, 0)
+		p.node(n.Rhs, 0)
 		p.wr(")")
 
 	case *UnaryExpr:
 		p.wr("%s ", n.Op)
-		p.node(n.Expr, 0)
+		p.node(n.X, 0)
 
-	case Ident:
+	case *Ident:
 		p.wr("Ident(%s)", n.Name)
 
 	case *IntLit:
-		p.wr("Int(%d)", n.Value)
+		// normalize for stable prints
+		txt := strings.ReplaceAll(n.Text, "_", "")
+		val := txt
+		if strings.HasPrefix(txt, "0x") || strings.HasPrefix(txt, "0X") {
+			if u, err := strconv.ParseUint(txt[2:], 16, 64); err == nil {
+				val = strconv.FormatUint(u, 10)
+			}
+		} else if strings.HasPrefix(txt, "0b") || strings.HasPrefix(txt, "0B") {
+			if u, err := strconv.ParseUint(txt[2:], 2, 64); err == nil {
+				val = strconv.FormatUint(u, 10)
+			}
+		} else if strings.HasPrefix(txt, "0o") || strings.HasPrefix(txt, "0O") {
+			if u, err := strconv.ParseUint(txt[2:], 8, 64); err == nil {
+				val = strconv.FormatUint(u, 10)
+			}
+		}
+		p.wr("Int(%s)", val)
 
 	case *FloatLit:
 		p.wr("Float(.)")
@@ -330,14 +369,14 @@ func (p pp) node(n Node, d int) {
 
 	case *IndexExpr:
 		p.wr("Index ")
-		p.node(n.Target, 0)
+		p.node(n.X, 0)
 		p.wr("[")
-		p.node(n.Index, 0)
+		p.node(n.Idx, 0)
 		p.wr("]")
 
 	case *FieldExpr:
 		p.wr("Field ")
-		p.node(n.Target, 0)
+		p.node(n.X, 0)
 		p.wr(".%s", n.Name.Name)
 
 	case *LambdaExpr:
@@ -356,7 +395,7 @@ func (p pp) node(n Node, d int) {
 			p.node(n.Body, 0)
 		}
 
-	case *ListCompExpr:
+	case *ListComp:
 		p.wr("[")
 		p.node(n.Elem, 0)
 		for _, c := range n.Clauses {
@@ -371,11 +410,11 @@ func (p pp) node(n Node, d int) {
 		}
 		p.wr("]")
 
-	case *DictCompExpr:
+	case *DictComp:
 		p.wr("{")
 		p.node(n.Key, 0)
 		p.wr(": ")
-		p.node(n.Value, 0)
+		p.node(n.Val, 0)
 		for _, c := range n.Clauses {
 			p.wr(" for ")
 			p.node(c.Target, 0)
@@ -388,7 +427,7 @@ func (p pp) node(n Node, d int) {
 		}
 		p.wr("}")
 
-	case *SetCompExpr:
+	case *SetComp:
 		p.wr("#{")
 		p.node(n.Elem, 0)
 		for _, c := range n.Clauses {
@@ -404,7 +443,14 @@ func (p pp) node(n Node, d int) {
 		p.wr("}")
 
 	default:
-		p.wr("<?>%T", n)
-		p.wr("\n")
+		p.tabs(d)
+		p.wr("<?>%T\n", n)
 	}
+}
+
+func typeNameStr(t *TypeName) string {
+	if t == nil {
+		return ""
+	}
+	return t.Name
 }
