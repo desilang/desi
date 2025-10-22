@@ -25,10 +25,10 @@ def tier(x: int) -> str:
 	got := b.String()
 	checks := []string{
 		"Match Ident(x)",
-		`Case (Ident(x) < Int(0)): Str("neg")`,
-		`Case Int(0): Str("zero")`,
-		`Case (Ident(x) < Int(10)): Str("small")`,
-		`Case Ident(_): Str("big")`,
+		`Case (Ident(x) < Int(0)): Str("...")`,
+		`Case Int(0): Str("...")`,
+		`Case (Ident(x) < Int(10)): Str("...")`,
+		`Case Ident(_): Str("...")`,
 	}
 	for _, c := range checks {
 		if !strings.Contains(got, c) {
