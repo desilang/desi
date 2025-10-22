@@ -58,6 +58,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseUsing()
 	case token.KW_defer:
 		return p.parseDefer()
+	case token.KW_match:
+		return p.parseMatch()
 	case token.KW_let:
 		return p.parseLet()
 	case token.KW_return:
@@ -67,11 +69,7 @@ func (p *Parser) parseStmt() ast.Stmt {
 		if s := p.maybeMakeAssign(e); s != nil {
 			return s
 		}
-		span := ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))
-		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
-			p.errExpected(spanPos(p.file, p.cur), "newline")
-		}
-		return &ast.ExprStmt{Expr: e, Span: span}
+		return &ast.ExprStmt{Expr: e, Span: e.SpanOf()}
 	}
 }
 

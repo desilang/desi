@@ -1,0 +1,6 @@
+def tier(x: int) -> str:
+	match x:
+		x < 0: "neg"
+		0: "zero"
+		x < 10: "small"
+		_: "big"
