@@ -1,0 +1,16 @@
+# M4 demo: exact-match overloads + pipeline
+
+def add(x: int, y: int) -> int:
+  return x + y
+
+def add(x: float, y: float) -> float:
+  return x + y
+
+def square(n: int) -> int:
+  return n * n
+
+def main():
+  a = add(2, 3)           # 5
+  b = add(2.5, 1.5)       # 4.0
+  c = 4 |> add(5)         # 9
+  d = square(add(2, 2))   # 16
