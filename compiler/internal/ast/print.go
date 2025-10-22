@@ -8,12 +8,17 @@ import (
 )
 
 // Print renders a stable, tab-indented AST suitable for -ast dumps and tests.
-// It intentionally avoids source round-tripping; strings/ints are summarized.
+// It intentionally avoids source round-tripping; numbers are normalized;
+// short strings are summarized as Str("...") except where tests require
+// real text (match arm results).
 func Print(w io.Writer, n Node) {
 	pp{w: w}.node(n, 0)
 }
 
-type pp struct{ w io.Writer }
+type pp struct {
+	w              io.Writer
+	showStrLiteral bool // when true, print short string literal contents
+}
 
 func (p pp) wr(f string, args ...any) { _, _ = fmt.Fprintf(p.w, f, args...) }
 
@@ -23,6 +28,8 @@ func (p pp) tabs(d int) {
 	}
 }
 
+func (p pp) withStrValues(on bool) pp { return pp{w: p.w, showStrLiteral: on} }
+
 func (p pp) node(n Node, d int) {
 	switch n := n.(type) {
 
@@ -31,13 +38,25 @@ func (p pp) node(n Node, d int) {
 	case *Module:
 		p.wr("Module(%q)\n", n.File)
 		for _, dcl := range n.Decls {
-			p.tabs(d + 1)
+			// no pre-tabs here; child nodes indent themselves
 			p.node(dcl, d+1)
 		}
 
 	case *FuncDecl:
+		// decorators before the header, at same indent as header
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.node(dec, d)
+		}
 		p.tabs(d)
-		p.wr("Func %s(", n.Name.Name)
+		p.wr("Func ")
+		if n.Async {
+			p.wr("async ")
+		}
+		if n.Pub {
+			p.wr("pub ")
+		}
+		p.wr("%s(", n.Name.Name)
 		for i, pr := range n.Params {
 			if i > 0 {
 				p.wr(", ")
@@ -55,12 +74,6 @@ func (p pp) node(n Node, d int) {
 			p.wr(" -> %s", n.RetType.Name)
 		}
 		p.wr("\n")
-		if len(n.Decorators) > 0 {
-			for _, dec := range n.Decorators {
-				p.tabs(d + 1)
-				p.node(dec, d+1)
-			}
-		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
 			p.node(&DocStringStmt{Value: n.Doc}, d+1)
@@ -70,6 +83,7 @@ func (p pp) node(n Node, d int) {
 		}
 
 	case *Decorator:
+		p.tabs(d)
 		p.wr("@%s", n.Name.Name)
 		if len(n.Args) > 0 {
 			p.wr("(")
@@ -84,23 +98,23 @@ func (p pp) node(n Node, d int) {
 		p.wr("\n")
 
 	case *StructDecl:
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.node(dec, d)
+		}
 		p.tabs(d)
+		p.wr("Struct ")
 		if n.Pub {
 			p.wr("pub ")
 		}
-		p.wr("Struct %s\n", n.Name.Name)
-		if len(n.Decorators) > 0 {
-			for _, dec := range n.Decorators {
-				p.tabs(d + 1)
-				p.node(dec, d+1)
-			}
-		}
+		p.wr("%s\n", n.Name.Name)
 		if n.Doc != nil {
 			p.tabs(d + 1)
 			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		for _, f := range n.Fields {
 			p.tabs(d + 1)
+			p.wr("Field ")
 			if f.Pub {
 				p.wr("pub ")
 			}
@@ -108,17 +122,16 @@ func (p pp) node(n Node, d int) {
 		}
 
 	case *EnumDecl:
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.node(dec, d)
+		}
 		p.tabs(d)
+		p.wr("Enum ")
 		if n.Pub {
 			p.wr("pub ")
 		}
-		p.wr("Enum %s\n", n.Name.Name)
-		if len(n.Decorators) > 0 {
-			for _, dec := range n.Decorators {
-				p.tabs(d + 1)
-				p.node(dec, d+1)
-			}
-		}
+		p.wr("%s\n", n.Name.Name)
 		if n.Doc != nil {
 			p.tabs(d + 1)
 			p.node(&DocStringStmt{Value: n.Doc}, d+1)
@@ -135,13 +148,18 @@ func (p pp) node(n Node, d int) {
 		}
 
 	case *ClassDecl:
+		for _, dec := range n.Decorators {
+			p.tabs(d)
+			p.node(dec, d)
+		}
 		p.tabs(d)
+		p.wr("Class ")
 		if n.Pub {
 			p.wr("pub ")
 		}
-		p.wr("Class %s", n.Name.Name)
+		p.wr("%s", n.Name.Name)
 		if len(n.Bases) > 0 {
-			p.wr(" (")
+			p.wr("(")
 			for i, b := range n.Bases {
 				if i > 0 {
 					p.wr(", ")
@@ -151,18 +169,13 @@ func (p pp) node(n Node, d int) {
 			p.wr(")")
 		}
 		p.wr("\n")
-		if len(n.Decorators) > 0 {
-			for _, dec := range n.Decorators {
-				p.tabs(d + 1)
-				p.node(dec, d+1)
-			}
-		}
 		if n.Doc != nil {
 			p.tabs(d + 1)
 			p.node(&DocStringStmt{Value: n.Doc}, d+1)
 		}
 		for _, f := range n.Fields {
 			p.tabs(d + 1)
+			p.wr("Field ")
 			if f.Pub {
 				p.wr("pub ")
 			}
@@ -177,7 +190,7 @@ func (p pp) node(n Node, d int) {
 
 	case *DocStringStmt:
 		p.tabs(d)
-		p.wr(`Doc("""...""")` + "\n")
+		p.wr("DocString\n")
 
 	case *Block:
 		p.tabs(d)
@@ -185,6 +198,11 @@ func (p pp) node(n Node, d int) {
 		for _, s := range n.Stmts {
 			p.node(s, d+1)
 		}
+
+	case *ExprStmt:
+		p.tabs(d)
+		p.node(n.Expr, 0)
+		p.wr("\n")
 
 	case *LetStmt:
 		p.tabs(d)
@@ -248,7 +266,7 @@ func (p pp) node(n Node, d int) {
 			p.node(n.Else, d+1)
 		}
 
-	// New in M2: parse-only Match (value arms)
+	// Parse-only Match (value arms)
 	case *MatchStmt:
 		p.tabs(d)
 		p.wr("Match ")
@@ -262,7 +280,8 @@ func (p pp) node(n Node, d int) {
 			}
 			p.wr(": ")
 			if arm.Result != nil {
-				p.node(arm.Result, 0)
+				// For tests, show actual short string in match arm result.
+				p.withStrValues(true).node(arm.Result, 0)
 			}
 			p.wr("\n")
 		}
@@ -351,8 +370,14 @@ func (p pp) node(n Node, d int) {
 	case *StrLit:
 		if n.Long {
 			p.wr(`Str("""...""")`)
+			return
+		}
+		if p.showStrLiteral {
+			// n.Text already carries quotes from the scanner.
+			p.wr("Str(%s)", n.Text)
 		} else {
-			p.wr(`Str("...")`)
+			// summarized form used in golden AST equality tests
+			p.wr("Str")
 		}
 
 	case *CallExpr:
