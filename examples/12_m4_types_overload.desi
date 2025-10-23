@@ -1,12 +1,20 @@
-# M4: exact-match overload resolution
+def f(x:int) -> int:
+	return x + 1
 
-def f(x: int) -> int: x
-def f(x: float) -> float: x
+def f(x:float) -> float:
+	return x * 0.5
 
-def g(a: int, b: int) -> int: a + b
+def g(a:int, b:int) -> int:
+	return a + b
 
-def main() -> int:
-	let _ = f(1)
-	let _ = f(1.0)
-	let _ = g(2, 3)
-	0
+def main():
+	# exact matches
+	let a = f(10)
+	let b = f(2.5)
+	let c = g(2, 3)
+
+	# pipeline is first-arg insertion: g(2, 3)
+	let d = 2 |> g(3)
+
+	# Uncomment for a negative demo:
+	# let e = f("oops")   # expect: DTE0004 no matching overload

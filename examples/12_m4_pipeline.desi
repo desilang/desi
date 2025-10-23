@@ -1,0 +1,11 @@
+# M4: pipeline typing
+
+def add(a:int, b:int) -> int:
+	return a + b
+
+def main():
+	let x = 1 |> add(2)   # OK → add(1, 2)
+	let y = add(1, 2)     # same as above
+
+	# Negative example (arity):
+	# let z = 1 |> add()  # expect: DTE0046 wrong number of arguments
