@@ -4,27 +4,60 @@ import (
 	"testing"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// In M4 we require typed lambda params.
-// Ensure a let-binding of a typed lambda produces no diagnostics.
-func TestM4_Lambda_TypedParam_BindsOK(t *testing.T) {
-	lam := &ast.LambdaExpr{
+func TestM4_Lambda_TypedParams_OK(t *testing.T) {
+	l := &ast.LambdaExpr{
 		Params: []ast.LambdaParam{
-			{Name: ast.Ident{Name: "n"}, Type: &ast.TypeName{Name: "int"}},
+			{Name: ast.Ident{Name: "x"}, Type: &ast.TypeName{Name: "int"}},
 		},
-		Body: &ast.IntLit{}, // returns int
+		// Body avoids referencing param to keep M4 simple
+		Body: &ast.IntLit{},
 	}
-	let := &ast.LetStmt{
-		Name:  ast.Ident{Name: "x"},
-		Value: lam,
-	}
-
-	main := &ast.FuncDecl{
-		Name: ast.Ident{Name: "main"},
-		Body: &ast.Block{Stmts: []ast.Stmt{let}},
-	}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Value: l}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
+	diags, info := Check(mod)
+	mustNoDiags(t, diags)
+
+	got := info.Types[l]
+	want := types.FuncOf([]types.T{types.Int}, types.Int)
+	if !types.Equal(got, want) {
+		t.Fatalf("lambda type mismatch: got %v, want %v", got, want)
+	}
+}
+
+func TestM4_Lambda_UntypedParams_Error(t *testing.T) {
+	l := &ast.LambdaExpr{
+		Params: []ast.LambdaParam{
+			{Name: ast.Ident{Name: "x"}, Type: nil}, // untyped param should trigger M4 error
+		},
+		Body: &ast.IntLit{},
+	}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Value: l}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
+	diags, _ := Check(mod)
+	mustHaveSomeDiagContaining(t, diags, "lambda parameters must be typed")
+}
+
+func TestM4_Lambda_Call_Direct_OK(t *testing.T) {
+	l := &ast.LambdaExpr{
+		Params: []ast.LambdaParam{
+			{Name: ast.Ident{Name: "x"}, Type: &ast.TypeName{Name: "int"}},
+		},
+		Body: &ast.IntLit{},
+	}
+	call := &ast.ExprStmt{Expr: &ast.CallExpr{
+		Callee: l,
+		Args:   []ast.Expr{&ast.IntLit{}}, // arity=1, arg=int
+	}}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{call}}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
 	diags, _ := Check(mod)
 	mustNoDiags(t, diags)
 }

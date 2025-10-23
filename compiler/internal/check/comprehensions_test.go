@@ -4,47 +4,63 @@ import (
 	"testing"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
-func stringOrNil(t any) string {
-	if t == nil {
-		return "<nil>"
+func TestM4_Comprehensions_List_Types(t *testing.T) {
+	// let a = [x for ...] where elem is int → list[int]
+	comp := &ast.ListComp{
+		Elem: &ast.IntLit{},
 	}
-	type s interface{ String() string }
-	if v, ok := t.(s); ok {
-		return v.String()
-	}
-	return "<no String()>"
-}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "a"}, Value: comp}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
-func TestM4_Comprehension_List_Types(t *testing.T) {
-	lc := &ast.ListComp{Elem: &ast.IntLit{}}
-	fn := &ast.FuncDecl{
-		Name: ast.Ident{Name: "f"},
-		Body: &ast.Block{Stmts: []ast.Stmt{&ast.ExprStmt{Expr: lc}}},
-	}
-	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{fn}}
 	diags, info := Check(mod)
 	mustNoDiags(t, diags)
 
-	got := info.Types[lc]
-	if got == nil || got.String() != "list[int]" {
-		t.Fatalf("want list[int], got %s", stringOrNil(got))
+	got := info.Types[comp]
+	want := types.ListOf(types.Int)
+	if !types.Equal(got, want) {
+		t.Fatalf("list comp type mismatch: got %v, want %v", got, want)
 	}
 }
 
-func TestM4_Comprehension_Dict_Types(t *testing.T) {
-	dc := &ast.DictComp{Key: &ast.StrLit{}, Val: &ast.IntLit{}}
-	fn := &ast.FuncDecl{
-		Name: ast.Ident{Name: "g"},
-		Body: &ast.Block{Stmts: []ast.Stmt{&ast.ExprStmt{Expr: dc}}},
+func TestM4_Comprehensions_Set_Types(t *testing.T) {
+	// let s = {x for ...} with elem str → set[str]
+	comp := &ast.SetComp{
+		Elem: &ast.StrLit{},
 	}
-	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{fn}}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "s"}, Value: comp}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
 	diags, info := Check(mod)
 	mustNoDiags(t, diags)
 
-	got := info.Types[dc]
-	if got == nil || got.String() != "dict[str,int]" {
-		t.Fatalf("want dict[str,int], got %s", stringOrNil(got))
+	got := info.Types[comp]
+	want := types.SetOf(types.Str)
+	if !types.Equal(got, want) {
+		t.Fatalf("set comp type mismatch: got %v, want %v", got, want)
+	}
+}
+
+func TestM4_Comprehensions_Dict_Types(t *testing.T) {
+	// let d = {k:v for ...} with k=int, v=str → dict[int,str]
+	comp := &ast.DictComp{
+		Key: &ast.IntLit{},
+		Val: &ast.StrLit{},
+	}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "d"}, Value: comp}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
+	diags, info := Check(mod)
+	mustNoDiags(t, diags)
+
+	got := info.Types[comp]
+	want := types.DictOf(types.Int, types.Str)
+	if !types.Equal(got, want) {
+		t.Fatalf("dict comp type mismatch: got %v, want %v", got, want)
 	}
 }
