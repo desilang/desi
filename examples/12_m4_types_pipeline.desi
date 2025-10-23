@@ -1,8 +1,7 @@
-# M4 demo: pipeline typing
-
-def add(a: int, b: int) -> int:
-  return a + b
+def add(a:int, b:int) -> int:
+	# simple add
+	a + b
 
 def main():
-  x = 4 |> add(5)   # 9
-  y = 10 |> add(1)  # 11
+	# pipeline: insert lhs as first argument
+	1 |> add(2)
