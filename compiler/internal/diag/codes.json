@@ -320,13 +320,38 @@
       "title": "wrong number of arguments",
       "help": "constructors for payloadless variants take no arguments; payloadful ones take exactly one"
     },
+    "no_matching_overload": {
+      "id": "DTE0101",
+      "title": "no matching overload",
+      "help": "no overload matches the provided argument types"
+    },
+    "ambiguous_overload": {
+      "id": "DTE0102",
+      "title": "ambiguous overload",
+      "help": "multiple overloads match the provided argument types"
+    },
+    "bad_pipeline_feed": {
+      "id": "DTE0103",
+      "title": "bad pipeline feed",
+      "help": "pipeline requires a call on the right; the piped value becomes the first argument"
+    },
+    "invalid_operand_types": {
+      "id": "DTE0104",
+      "title": "invalid operand types",
+      "help": "operator does not support these operand types"
+    },
+    "not_callable": {
+      "id": "DTE0105",
+      "title": "value is not callable",
+      "help": "only functions can be called"
+    },
     "incompatible_struct_assignment": {
       "id": "DTE0030",
       "title": "incompatible struct assignment",
       "help": "assign a value of the same struct type"
     },
     "incompatible_enum_assignment": {
-      "id": "DTE0030",
+      "id": "DTE0047",
       "title": "incompatible enum assignment",
       "help": "assign a value of the same enum type/variant"
     }
