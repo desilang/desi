@@ -1,0 +1,11 @@
+# M4 demo: comprehension typing
+
+def main():
+	# list comp of ints -> list[int]
+	a = [x for x in range]  # illustrative; parser currently builds comp node
+
+	# set comp of strings -> set[str]
+	s = {"a" for x in range}
+
+	# dict comp -> dict[int,str]
+	d = {1: "one" for x in range}
