@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lex"
 	"github.com/desilang/desi/compiler/internal/parse"
@@ -20,6 +21,7 @@ var (
 	flagDemoLayout = flag.Bool("demo-layout", false, "print layout tokens for a small sample and exit")
 	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
+	flagCheck      = flag.String("check", "", "parse + resolve/check the given .desi file")
 )
 var parserCodeMap = map[string]string{
 	"DPE0001": "parser.unexpected_token",
@@ -35,6 +37,13 @@ const Version = "0.0.1-revised-bootstrap"
 
 func main() {
 	flag.Parse()
+
+	// Support subcommand style: `desic check <file>`
+	args := flag.Args()
+	if len(args) >= 2 && args[0] == "check" && *flagCheck == "" {
+		*flagCheck = args[1]
+	}
+
 	if *flagVersion {
 		term.Println("desic", Version)
 		term.Flush()
@@ -83,8 +92,21 @@ func main() {
 		return
 	}
 
-	// TODO: add subcommands: build, check, parse, tokens, etc.
-	term.Println("desic: TODO (revised bootstrap). Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, or -ast <file>.")
+	if *flagCheck != "" {
+		hadErrors, err := runCheck(*flagCheck)
+		term.Flush()
+		if err != nil {
+			term.Eprintln("check error:", err)
+			os.Exit(2)
+		}
+		if hadErrors {
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
+
+	// TODO: add more subcommands in later milestones.
+	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
 	term.Flush()
 }
 
@@ -195,15 +217,15 @@ func dumpAST(path string) error {
 
 	// render parse diagnostics (if any), using codes.json when available
 	if len(pdiags) > 0 {
-		const max = 50
+		const _max = 50
 		p := filepath.Join("compiler", "internal", "diag", "codes.json")
 		if f, err := os.Open(p); err == nil {
 			defer func() { _ = f.Close() }()
 			if cat, err := diag.LoadCatalog(f); err == nil {
 				bld := diag.NewBuilder(cat)
 				limit := len(pdiags)
-				if limit > max {
-					limit = max
+				if limit > _max {
+					limit = _max
 				}
 				for i := 0; i < limit; i++ {
 					d := pdiags[i]
@@ -227,6 +249,34 @@ func dumpAST(path string) error {
 		}
 	}
 	return nil
+}
+
+func runCheck(path string) (hadErrors bool, err error) {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+
+	mod, pdiags := parse.ParseFile(path, src)
+
+	// If the parser produced diagnostics, render them and stop.
+	if len(pdiags) > 0 {
+		for _, d := range pdiags {
+			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		return true, nil
+	}
+
+	// Run the resolver/type checker (M4/M5 surface).
+	diags, _ := check.Check(mod)
+	if len(diags) == 0 {
+		term.Println("ok")
+		return false, nil
+	}
+	for _, d := range diags {
+		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+	}
+	return true, nil
 }
 
 func demoDiag() error {

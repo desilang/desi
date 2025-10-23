@@ -105,7 +105,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			c.info.Types[x] = lt
 			return lt
 		}
-		c.add(diagAt("DTE0004", x.Span, "invalid operand types for '"+op+"'"))
+		c.add(diagAt("DTE0104", x.Span, "invalid operand types for '"+op+"'"))
 		return nil
 
 	case "<", "<=", ">", ">=", "==", "!=":
@@ -151,7 +151,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 
 		call, ok := x.Rhs.(*ast.CallExpr)
 		if !ok {
-			c.add(diagAt("DTE0004", x.Span, "pipeline expects a call on the right-hand side"))
+			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
 			return nil
 		}
 		// build synthetic call: callee unchanged, args = [LHS] + original args
@@ -164,12 +164,12 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		for i, a := range synthArgs {
 			argTypes[i] = c.typ(a)
 		}
-		_ = lhsT // lhs is already typed via c.typ(x.Lhs); kept for clarity
+		_ = lhsT // typed for side-effects / info map
 
 		// Only identifier callees in M4
 		id, ok := call.Callee.(*ast.Ident)
 		if !ok {
-			c.add(diagAt("DTE0004", x.Span, "pipeline target must be an identifier callee"))
+			c.add(diagAt("DTE0103", x.Span, "pipeline target must be an identifier callee"))
 			return nil
 		}
 		set := c.info.Funcs[id.Name]
@@ -183,9 +183,9 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return cands[0].Type.Ret
 		}
 		if len(cands) == 0 {
-			c.add(diagAt("DTE0004", x.Span, "no matching overload for pipeline call"))
+			c.add(diagAt("DTE0101", x.Span, "no matching overload for pipeline call"))
 		} else {
-			c.add(diagAt("DTE0004", x.Span, "ambiguous overload for pipeline call"))
+			c.add(diagAt("DTE0102", x.Span, "ambiguous overload for pipeline call"))
 		}
 		return nil
 
@@ -221,7 +221,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.info.Types[call] = fn.Ret
 			return fn.Ret
 		}
-		c.add(diagAt("DTE0004", call.Span, "expression is not callable"))
+		c.add(diagAt("DTE0105", call.Span, "expression is not callable"))
 		return nil
 	}
 
@@ -254,11 +254,11 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		if !hasSameArity {
 			c.add(diagAt("DTE0046", call.Span, "arity mismatch for call to "+id.Name))
 		} else {
-			c.add(diagAt("DTE0004", call.Span, "no matching overload for call to "+id.Name))
+			c.add(diagAt("DTE0101", call.Span, "no matching overload for call to "+id.Name))
 		}
 		return nil
 	default:
-		c.add(diagAt("DTE0004", call.Span, "ambiguous overload for call to "+id.Name))
+		c.add(diagAt("DTE0102", call.Span, "ambiguous overload for call to "+id.Name))
 		return nil
 	}
 }
