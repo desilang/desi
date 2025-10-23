@@ -1,0 +1,12 @@
+# M4: exact-match overload resolution
+
+def f(x: int) -> int: x
+def f(x: float) -> float: x
+
+def g(a: int, b: int) -> int: a + b
+
+def main() -> int:
+	let _ = f(1)
+	let _ = f(1.0)
+	let _ = g(2, 3)
+	0

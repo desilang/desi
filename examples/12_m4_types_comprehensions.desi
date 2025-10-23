@@ -1,0 +1,9 @@
+# M4: comprehension typing (element types propagate)
+
+def main() -> int:
+	# Just placeholders to type-check shapes; not executed.
+	let r = 10  # imagine range-like iterable
+	let lst = [i for i in r]
+	let st  = #{i for i in r if 1}
+	let dct = {k: k + 1 for k in r}
+	0
