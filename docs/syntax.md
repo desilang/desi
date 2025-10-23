@@ -1,14 +1,36 @@
 # Desi Syntax (revised bootstrap)
 
-This doc tracks the **implemented** subset at each milestone. M2 extends M1 with:
+This doc tracks the **implemented** subset at each milestone.
 
-- **Decorators** on declarations (currently functions) and **docstring attachment** (first `"""..."""` in a block).
-- **Inline forms** for `if`/`while`/`for` (`if cond: stmt`, etc.).
-- **Using/Defer** statements.
-- **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=` , `**=`, `^=`) and multi-target `:=`.
-- **Bitwise OR** `|` (now parsed, not just scanned).
+- **M2** extends M1 with:
+  - **Decorators** on declarations (currently functions) and **docstring attachment** (first `"""..."""` in a block).
+  - **Inline forms** for `if`/`while`/`for` (`if cond: stmt`, etc.).
+  - **Using/Defer** statements.
+  - **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=` , `**=`, `^=`) and multi-target `:=`.
+  - **Bitwise OR** `|` (now parsed, not just scanned).
+- **M3A** adds **classes (parse-only)** with decorators, bases, fields, methods, nested classes, and docstrings.
+- **M4** adds a **type-checking pass** on top of the existing grammar (**no grammar changes**). See **[M4 — Types & Overloads](./guides/m4-types.md)** for the semantic rules.
 
-M3A adds **classes (parse-only)** with decorators, bases, fields, methods, nested classes, and docstrings.
+---
+
+## Type-checking (M4 overview)
+
+M4 introduces a semantic/type pass that runs after parsing:
+
+- **Concrete types**: `int`, `float`, `bool`, `str`, `none`; constructed types `list[T]`, `set[T]`, `dict[K,V]`, `tuple[...]`, `future[T]` (future checks minimal).
+- **Inference & checks**:
+  - literals map to their scalar types; `let x = …` infers from RHS when no annotation is present.
+  - binary arithmetic on `int|float` (exact operand types); comparisons produce `bool`; logical `and/or` require `bool`.
+  - **pipeline `|>`** is checked as “insert LHS as the first argument”: `a |> f(b,c)` ≡ `f(a,b,c)`.
+  - **exact-match overloading** by **arity + parameter types**; ambiguous/missing picks report targeted diagnostics.
+  - **comprehensions** propagate element/key/value types into `list/set/dict`.
+  - **lambdas**: typed parameters are supported (tests prefer explicit param types).
+  - **multi-return** (via grouped assignment and returns): enforces **width** and element-wise compatibility.
+  - **match (parse-only surface)**: all arm results must have the **same type** in this phase.
+
+For full details and diagnostic codes, see **[M4 — Types & Overloads](./guides/m4-types.md)**.
+
+---
 
 ## Source form
 
@@ -97,6 +119,7 @@ Docstrings: the first triple-quoted string in a function/class body is attached 
 - `-demo-layout` — print layout token stream for a small sample
 - `-diag` — render a sample diagnostic using `codes.json`
 - `-ast <file>` — parse and pretty-print AST
+- `-check <file>` — parse and **type-check** the file (M4 semantics); prints diagnostics and exits non-zero on errors
 - `-version` — tool version
 
 ## Classes (parse-only) — M3A
@@ -114,7 +137,7 @@ Docstrings: the first triple-quoted string in a function/class body is attached 
 
 > Semantics are deferred in M3A: this milestone is **parse-only** and updates the AST/printer/docs/tests accordingly.
 
-## M3D — Lambdas & Comprehensions (parse-only)
+## M3D — Lambdas & Comprehensions (parse-only syntax; typed in M4)
 
 ### Lambdas
 
@@ -130,6 +153,8 @@ let add  = (x:int, y:int) => x + y
 let call = (x, y) => foo(x, y)
 ```
 
+> **M4 typing:** typed parameters are checked; untyped params may require annotations in this phase.
+
 ### Comprehensions
 
 * List: `[expr for target in iter { for target in iter } [ if expr ]]`
@@ -143,5 +168,7 @@ let pairs = [x+y for x in xs if p(x) for y in ys if q(y)]
 let pos   = {k: v for k in ks for v in vs if v > 0}
 let good  = #{f(x) for x in xs if ok(x)}
 ```
+
+> **M4 typing:** element/key/value types propagate to `list/set/dict`.
 
 > Diagnostics are emitted for malformed heads (e.g., `[x]` → “expected 'for' in list comprehension”).
