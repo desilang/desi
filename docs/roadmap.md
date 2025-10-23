@@ -57,7 +57,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M2 — Parser & AST (Revised grammar, Phase 2)
+### M2 — Parser & AST (Revised grammar, Phase 2, ✅ DONE)
 
 **Scope**
 
@@ -78,7 +78,6 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 > Implement high-value language constructs **parse-only** with AST + printer and strong diagnostics.
 
 **M3A — Classes** (✅)
-
 * Classes with optional bases, nested classes.
 * Decorators on classes/methods; docstring captured at top of class body.
 * Visibility: **top-level classes public by default**, **nested classes private by default** (unless `pub`).
@@ -86,34 +85,43 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 * Printer renders decorators, `pub`, bases, docstring, fields, nested classes, methods.
 
 **M3B — Structs & Enums** (✅)
+* **Structs**: top-level structs private by default; fields can be `pub`.
+* **Enums**: top-level enums private by default; variants `Name : TypeName | none`.
+* Printer support.
 
-* **Structs**: `["pub"] struct Ident : NL Indent { doc | ["pub"] Ident ":" TypeName NL } Dedent`.
-  Top-level structs are **private by default**; fields may be `pub` (flag only).
-* **Enums**: `["pub"] enum Ident : NL Indent { doc | Ident ":" ("none" | TypeName) NL } Dedent`.
-  Top-level enums are **private by default**; variants are `Name : TypeName | none`.
-* AST updated with `Pub` on `StructDecl`/`EnumDecl`; printer support.
-
-**M3C — Lambdas & Comprehensions (core)** (✅)
-
-* Lambdas: **single-param** `Ident "=>" Expr`.
-* Comprehensions: `ListComp`, `DictComp`, `SetComp` with chained `for … in …` and optional **one** `if` per clause.
-* Printer renders lambda and each comp kind in clean, testable form.
-
-**M3D — Nice-to-haves** (✅)
-
-* **Parenthesized & typed lambda params**: `(x:int, y) => …` with trailing comma allowed.
-* **Comprehension chains**: tests + recovery polish (multiple `for` with optional `if` per clause).
-* **Crisp diagnostics**: missing `for` in comp head; “lambda parameter list expected before `=>`”.
-* Docs/examples updated.
+**M3C/D — Lambdas & Comprehensions** (✅)
+* Lambdas: single-param + parenthesized/typed params.
+* Comprehensions: list/dict/set; multi-`for` chains with optional per-clause `if`.
+* Crisp diagnostics for missing parts.
 
 **Acceptance**
-
 * `go build ./...` and `go test ./...` pass; `-ast` shows sane trees for new examples.
 * No `<?>` placeholders in printed AST.
 
 ---
 
-### M4 — Resolver & Imports (Phase 1)
+### M4 — Types & Overload Resolution (Phase 1, ✅ DONE)
+
+**Scope**
+
+* **Concrete types**: `int`, `float`, `bool`, `str`, `none`; constructed `list[T]`, `set[T]`, `dict[K,V]`, `tuple[...]`, `future[T]` (stub ok).
+* **Functions & multi-return**: `func(...) -> T`; grouped assignment enforces **width** & element-wise type checks (multi-return tuples proper are deferred to a later phase).
+* **Exact-match overloading** by **arity + parameter types**.
+* **Basic inference** for literals, lets/assign/aug-assign, comparisons/logicals.
+* **Pipeline `|>`** typing: treat `a |> f(b, c)` as `f(a, b, c)`.
+* **Comprehensions**: element/key/value types propagate into `list/set/dict`.
+* **Lambdas**: typed params supported (tests require typed params in this phase).
+* **Match (parse-only)**: require all arm results to have the **same** type.
+
+**Acceptance**
+
+* Deterministic overload selection or precise `DTE*` errors.
+* Pipelines type-check; grouped-assign width/type rules enforced.
+* Tests cover arithmetic, overloads (ok/no-match/ambiguous/arity), pipeline, comprehensions (ok/negative), typed lambdas, grouped assignment, and match arms typing.
+
+---
+
+### M5 — Resolver & Imports (Phase 1)
 
 **Scope**
 
@@ -125,23 +133,6 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 * `desic check file.desi` reports undefined symbols / visibility errors with `DME*/DTE*`.
 * Golden tests for import cycles, alias conflicts, and prelude shadowing rules.
-
----
-
-### M5 — Types & Overload Resolution (Phase 1)
-
-**Scope**
-
-* Concrete types: scalars, `list[T]`, `dict[K,V]`, `set[T]`, `tuple[...]`, `future[T]`, `none`.
-* Function types, multi-return arity/types.
-* Exact-match overloading by arity and parameter types.
-* Basic inference for locals and call sites (no generics yet).
-* Type rules for pipelines & multi-return by arity.
-
-**Acceptance**
-
-* Deterministic overload selection or precise `DTE/OVL` errors.
-* Chained comparisons type as `bool`; pipelines type-check.
 
 ---
 
@@ -167,10 +158,14 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 * HIR passes: desugar `using`→`defer __close__`, one-line `if/while`→blocks,
   comprehensions→loops, lambdas→closures, decorators→metadata/application; normalize `match` guards.
 * **LLVM Tier-0 codegen**: IRBuilder module (funcs, control flow, vars, calls, returns); runtime bitcode for I/O & basics.
-* `desirepl` uses ORC JIT to evaluate expressions/defs.
 
 **Acceptance**
 
+* **Optimization defaults & plumbing** per `docs/dev/llvm-ir-optimization.md`:
+  * driver defaults at **`-O2`**, support `-O0/-O1/-O3/-Os/-Oz`;
+  * optional ThinLTO for release builds; CPU tuning and PGO switches available;
+  * use the new pass manager’s per-module pipeline; respect debug/`optnone`;
+  * IR/obj/asm dump flags and optimization remarks for developer builds.
 * HIR dumper shows canonical form; unit tests on lowering passes.
 * `desic build main.desi && ./main` prints hello-world & small demos.
 * REPL can `print(1+2)` and define/run a simple function.
@@ -199,7 +194,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 * Manifest-driven linking (`desi.toml`).
 * `@extern("C", link="…")` decorators.
 * `cptr[T]`, `usize/isize`, null checks, minimal `unsafe` blocks.
-* Examples: `libm` (`sin/cos`), `sqlite3`, minimal OpenSSL SHA256.
+* Examples: `libm` (`sin/cos`), `sqlite3`, minimal OpenSSL SHA256`.
 
 **Acceptance**
 
@@ -242,7 +237,6 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 * Caret/underline renderer with color; JSON diagnostics (`--error-format=json`) for IDEs.
 * Snapshot tests for error rendering.
 * **Developer ergonomics:** simple `Makefile` (`make build/test/tokens/demo-layout`; later `fmt`, `vet`, `lint`).
-* (Optional) Hook `go vet` / `staticcheck` / basic CI workflows.
 
 **Acceptance**
 
