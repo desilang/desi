@@ -185,7 +185,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				args[i] = c.typ(a)
 			}
 			if len(args) != len(fn.Params) {
-				c.add(diagAt("DTE0046", call.Span, "wrong number of arguments"))
+				c.add(diagAt("DTE0046", call.Span, "arity mismatch"))
 				return nil
 			}
 			for i := range args {
@@ -200,23 +200,39 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		c.add(diagAt("DTE0004", call.Span, "expression is not callable"))
 		return nil
 	}
+
 	set := c.info.Funcs[id.Name]
 	if set == nil {
 		c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
 		return nil
 	}
+
 	args := make([]types.T, len(call.Args))
 	for i, a := range call.Args {
 		args[i] = c.typ(a)
 	}
+
+	// Try exact match first.
 	cands := set.ResolveExact(args)
 	switch len(cands) {
-	case 0:
-		c.add(diagAt("DTE0004", call.Span, "no matching overload for call to "+id.Name))
-		return nil
 	case 1:
 		c.info.Types[call] = cands[0].Type.Ret
 		return cands[0].Type.Ret
+	case 0:
+		// No exact match—distinguish arity vs. type mismatch.
+		hasSameArity := false
+		for _, cand := range set.Cands {
+			if len(cand.Type.Params) == len(args) {
+				hasSameArity = true
+				break
+			}
+		}
+		if !hasSameArity {
+			c.add(diagAt("DTE0046", call.Span, "arity mismatch for call to "+id.Name))
+		} else {
+			c.add(diagAt("DTE0004", call.Span, "no matching overload for call to "+id.Name))
+		}
+		return nil
 	default:
 		c.add(diagAt("DTE0004", call.Span, "ambiguous overload for call to "+id.Name))
 		return nil
