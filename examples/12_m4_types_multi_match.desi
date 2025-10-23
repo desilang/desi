@@ -1,0 +1,13 @@
+# M4: grouped assignment + match arm typing
+
+def main():
+	# grouped assignment (width + element-wise types)
+	let a: int = 0
+	let b: int = 0
+	a, b = 1, 2
+
+	# parse-only match: all arm results should be same type
+	match a:
+		case 0 => 1
+		case 1 => 2
+		case _ => 3

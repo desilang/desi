@@ -1,0 +1,9 @@
+# M4: ambiguous overload demo (two identical signatures)
+
+def f(x: int) -> int: x
+def f(x: int) -> int: x  # duplicate signature
+
+def main():
+  # calling f(1) would be ambiguous under exact-match resolution
+  # f(1)
+  0
