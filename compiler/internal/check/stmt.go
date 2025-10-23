@@ -21,7 +21,14 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		} else {
 			t = rhs
 		}
-		_ = c.scope.Define(&Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st})
+		sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
+		_ = c.scope.Define(sym)
+
+		// Enrich Info: attach symbol/type to the declared name node
+		c.info.Idents[&st.Name] = sym
+		if t != nil {
+			c.info.Types[&st.Name] = t
+		}
 
 	case *ast.AssignStmt:
 		// width must match
@@ -43,6 +50,11 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			if sym == nil {
 				c.add(diagAt("DTE0001", id.Span, "undefined name: "+id.Name))
 				continue
+			}
+			// Enrich Info on LHS ident as well
+			c.info.Idents[id] = sym
+			if sym.Type != nil {
+				c.info.Types[id] = sym.Type
 			}
 			if !types.Assignable(sym.Type, valT) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to '"+sym.Type.String()+"'"))
