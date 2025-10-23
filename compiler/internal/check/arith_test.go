@@ -19,7 +19,7 @@ func TestM4_Arith_Ok(t *testing.T) {
 			},
 		},
 	}
-	mod := &ast.Module{Filename: "<mem>", Decls: []ast.Decl{fn}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{fn}}
 	diags, _ := Check(mod)
 	mustNoDiags(t, diags)
 }
@@ -35,7 +35,7 @@ func TestM4_Arith_BadMix(t *testing.T) {
 			},
 		},
 	}
-	mod := &ast.Module{Filename: "<mem>", Decls: []ast.Decl{fn}}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{fn}}
 	diags, _ := Check(mod)
 	mustHaveSomeDiagContaining(t, diags, "invalid operand")
 }
