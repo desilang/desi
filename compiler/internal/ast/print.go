@@ -3,7 +3,6 @@ package ast
 import (
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 )
 
@@ -48,24 +47,25 @@ func (p pp) node(n Node, d int) {
 			p.node(dec, d)
 		}
 		p.tabs(d)
-		p.wr("Func ")
 		if n.Async {
-			p.wr("async ")
+			p.wr("Async ")
 		}
+		p.wr("Func ")
 		if n.Pub {
 			p.wr("pub ")
 		}
 		p.wr("%s(", n.Name.Name)
-		for i, pr := range n.Params {
+		for i, p0 := range n.Params {
 			if i > 0 {
 				p.wr(", ")
 			}
-			p.wr("%s", pr.Name.Name)
-			if pr.Type != nil {
-				p.wr(": %s", pr.Type.Name)
+			p.wr("%s", p0.Name.Name)
+			if p0.Type != nil {
+				p.wr(": %s", typeNameStr(p0.Type))
 			}
-			if pr.Default != nil {
-				p.wr(" = .")
+			if p0.Default != nil {
+				p.wr(" = ")
+				p.node(p0.Default, 0)
 			}
 		}
 		p.wr(")")
@@ -74,71 +74,11 @@ func (p pp) node(n Node, d int) {
 		}
 		p.wr("\n")
 		if n.Doc != nil {
-			p.node(&DocStringStmt{Value: n.Doc}, d+1)
+			p.tabs(d + 1)
+			p.wr("DocString\n")
 		}
 		if n.Body != nil {
 			p.node(n.Body, d+1)
-		}
-
-	case *Decorator:
-		p.tabs(d)
-		p.wr("@%s", n.Name.Name)
-		if len(n.Args) > 0 {
-			p.wr("(")
-			for i, a := range n.Args {
-				if i > 0 {
-					p.wr(", ")
-				}
-				p.node(a, 0)
-			}
-			p.wr(")")
-		}
-		p.wr("\n")
-
-	case *StructDecl:
-		for _, dec := range n.Decorators {
-			p.node(dec, d)
-		}
-		p.tabs(d)
-		p.wr("Struct ")
-		if n.Pub {
-			p.wr("pub ")
-		}
-		p.wr("%s\n", n.Name.Name)
-		if n.Doc != nil {
-			p.node(&DocStringStmt{Value: n.Doc}, d+1)
-		}
-		for _, f := range n.Fields {
-			p.tabs(d + 1)
-			p.wr("Field ")
-			if f.Pub {
-				p.wr("pub ")
-			}
-			p.wr("%s: %s\n", f.Name.Name, typeNameStr(f.Type))
-		}
-
-	case *EnumDecl:
-		for _, dec := range n.Decorators {
-			p.node(dec, d)
-		}
-		p.tabs(d)
-		p.wr("Enum ")
-		if n.Pub {
-			p.wr("pub ")
-		}
-		p.wr("%s\n", n.Name.Name)
-		if n.Doc != nil {
-			p.node(&DocStringStmt{Value: n.Doc}, d+1)
-		}
-		for _, v := range n.Variants {
-			p.tabs(d + 1)
-			p.wr("%s: ", v.Name.Name)
-			if v.Type != nil {
-				p.wr("%s", v.Type.Name)
-			} else {
-				p.wr("none")
-			}
-			p.wr("\n")
 		}
 
 	case *ClassDecl:
@@ -157,32 +97,80 @@ func (p pp) node(n Node, d int) {
 				if i > 0 {
 					p.wr(", ")
 				}
-				p.wr("%s", typeNameStr(b))
+				p.node(b, 0)
 			}
 			p.wr(")")
 		}
 		p.wr("\n")
 		if n.Doc != nil {
-			p.node(&DocStringStmt{Value: n.Doc}, d+1)
+			p.tabs(d + 1)
+			p.wr("DocString\n")
 		}
 		for _, f := range n.Fields {
-			p.tabs(d + 1)
-			p.wr("Field ")
-			if f.Pub {
-				p.wr("pub ")
-			}
-			p.wr("%s: %s\n", f.Name.Name, typeNameStr(f.Type))
+			p.node(f, d+1)
 		}
-		for _, sub := range n.Nested {
-			p.node(sub, d+1)
+		for _, m0 := range n.Methods {
+			p.node(m0, d+1)
 		}
-		for _, m := range n.Methods {
-			p.node(m, d+1)
+		for _, c0 := range n.Nested {
+			p.node(c0, d+1)
 		}
 
-	case *DocStringStmt:
+	case *StructDecl:
+		for _, dec := range n.Decorators {
+			p.node(dec, d)
+		}
 		p.tabs(d)
-		p.wr("DocString\n")
+		p.wr("Struct ")
+		if n.Pub {
+			p.wr("pub ")
+		}
+		p.wr("%s", n.Name.Name)
+		p.wr("\n")
+		if n.Doc != nil {
+			p.tabs(d + 1)
+			p.wr("DocString\n")
+		}
+		for _, f := range n.Fields {
+			p.node(f, d+1)
+		}
+
+	case *EnumDecl:
+		for _, dec := range n.Decorators {
+			p.node(dec, d)
+		}
+		p.tabs(d)
+		p.wr("Enum ")
+		if n.Pub {
+			p.wr("pub ")
+		}
+		p.wr("%s", n.Name.Name)
+		p.wr("\n")
+		if n.Doc != nil {
+			p.tabs(d + 1)
+			p.wr("DocString\n")
+		}
+		for _, it := range n.Items {
+			p.node(it, d+1)
+		}
+
+	case *Decorator:
+		p.tabs(d)
+		p.wr("@%s\n", n.Path)
+
+	case *FieldDecl:
+		p.tabs(d)
+		p.wr("Field ")
+		if n.Pub {
+			p.wr("pub ")
+		}
+		p.wr("%s: %s\n", n.Name.Name, typeNameStr(n.Type))
+
+	case *EnumItem:
+		p.tabs(d)
+		p.wr("EnumItem %s\n", n.Name.Name)
+
+	/* ---------- Statements ---------- */
 
 	case *Block:
 		p.tabs(d)
@@ -191,10 +179,9 @@ func (p pp) node(n Node, d int) {
 			p.node(s, d+1)
 		}
 
-	case *ExprStmt:
+	case *DocStringStmt:
 		p.tabs(d)
-		p.node(n.Expr, 0)
-		p.wr("\n")
+		p.wr("DocString\n")
 
 	case *LetStmt:
 		p.tabs(d)
@@ -230,11 +217,15 @@ func (p pp) node(n Node, d int) {
 
 	case *ReturnStmt:
 		p.tabs(d)
-		p.wr("Return")
+		p.wr("Return ")
 		if n.Value != nil {
-			p.wr(" ")
 			p.node(n.Value, 0)
 		}
+		p.wr("\n")
+
+	case *ExprStmt:
+		p.tabs(d)
+		p.node(n.Expr, 0)
 		p.wr("\n")
 
 	case *IfStmt:
@@ -242,40 +233,11 @@ func (p pp) node(n Node, d int) {
 		p.wr("If ")
 		p.node(n.Cond, 0)
 		p.wr("\n")
-		if n.Then != nil {
-			p.node(n.Then, d+1)
-		}
-		for _, arm := range n.Elifs {
-			p.tabs(d)
-			p.wr("Elif ")
-			p.node(arm.Cond, 0)
-			p.wr("\n")
-			p.node(arm.Body, d+1)
-		}
+		p.node(n.Then, d+1)
 		if n.Else != nil {
 			p.tabs(d)
 			p.wr("Else\n")
 			p.node(n.Else, d+1)
-		}
-
-	// Parse-only Match (value arms)
-	case *MatchStmt:
-		p.tabs(d)
-		p.wr("Match ")
-		p.node(n.Scrutinee, 0)
-		p.wr("\n")
-		for _, arm := range n.Arms {
-			p.tabs(d)
-			p.wr("Case ")
-			if arm.Pattern != nil {
-				p.node(arm.Pattern, 0)
-			}
-			p.wr(": ")
-			if arm.Result != nil {
-				// For tests, show actual short string in match arm result.
-				p.withStrValues(true).node(arm.Result, 0)
-			}
-			p.wr("\n")
 		}
 
 	case *WhileStmt:
@@ -283,9 +245,7 @@ func (p pp) node(n Node, d int) {
 		p.wr("While ")
 		p.node(n.Cond, 0)
 		p.wr("\n")
-		if n.Body != nil {
-			p.node(n.Body, d+1)
-		}
+		p.node(n.Body, d+1)
 
 	case *ForStmt:
 		p.tabs(d)
@@ -294,70 +254,76 @@ func (p pp) node(n Node, d int) {
 		p.wr(" in ")
 		p.node(n.Iter, 0)
 		p.wr("\n")
-		if n.Body != nil {
-			p.node(n.Body, d+1)
-		}
-
-	case *DeferStmt:
-		p.tabs(d)
-		p.wr("Defer ")
-		if n.Call != nil {
-			p.node(n.Call, 0)
-		}
-		p.wr("\n")
+		p.node(n.Body, d+1)
 
 	case *UsingStmt:
 		p.tabs(d)
 		p.wr("Using ")
-		if n.Bind != nil {
-			p.node(n.Bind, 0)
+		p.node(n.Expr, 0)
+		p.wr("\n")
+		p.node(n.Body, d+1)
+
+	case *DeferStmt:
+		p.tabs(d)
+		p.wr("Defer ")
+		p.node(n.Call, 0)
+		p.wr("\n")
+
+	case *MatchStmt:
+		p.tabs(d)
+		p.wr("Match ")
+		p.node(n.Value, 0)
+		p.wr("\n")
+		for _, arm := range n.Arms {
+			p.node(arm, d+1)
 		}
-		if n.Init != nil {
-			p.wr(" = ")
-			p.node(n.Init, 0)
+
+	case *MatchArm:
+		p.tabs(d)
+		p.wr("Arm ")
+		p.node(n.Pat, 0)
+		if n.Guard != nil {
+			p.wr(" if ")
+			p.node(n.Guard, 0)
+		}
+		p.wr(" -> ")
+		p.withStrValues(true).node(n.Result, 0)
+		p.wr("\n")
+
+	/* ---------- IMPORTS (NEW) ---------- */
+
+	case *ImportStmt:
+		p.tabs(d)
+		p.wr("Import %s", strings.Join(n.Path, "."))
+		if n.Alias != nil {
+			p.wr(" as %s", n.Alias.Name)
 		}
 		p.wr("\n")
-		if n.Body != nil {
-			p.node(n.Body, d+1)
+
+	case *FromImportStmt:
+		p.tabs(d)
+		p.wr("From %s import ", strings.Join(n.Path, "."))
+		for i, it := range n.Items {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.wr("%s", it.Name.Name)
+			if it.Alias != nil {
+				p.wr(" as %s", it.Alias.Name)
+			}
 		}
+		p.wr("\n")
 
-	/* ---------- Exprs ---------- */
-
-	case *BinaryExpr:
-		p.wr("(")
-		p.node(n.Lhs, 0)
-		p.wr(" %s ", n.Op)
-		p.node(n.Rhs, 0)
-		p.wr(")")
-
-	case *UnaryExpr:
-		p.wr("%s ", n.Op)
-		p.node(n.X, 0)
+	/* ---------- Expressions ---------- */
 
 	case *Ident:
-		p.wr("Ident(%s)", n.Name)
+		p.wr("%s", n.Name)
 
 	case *IntLit:
-		// normalize for stable prints
-		txt := strings.ReplaceAll(n.Text, "_", "")
-		val := txt
-		if strings.HasPrefix(txt, "0x") || strings.HasPrefix(txt, "0X") {
-			if u, err := strconv.ParseUint(txt[2:], 16, 64); err == nil {
-				val = strconv.FormatUint(u, 10)
-			}
-		} else if strings.HasPrefix(txt, "0b") || strings.HasPrefix(txt, "0B") {
-			if u, err := strconv.ParseUint(txt[2:], 2, 64); err == nil {
-				val = strconv.FormatUint(u, 10)
-			}
-		} else if strings.HasPrefix(txt, "0o") || strings.HasPrefix(txt, "0O") {
-			if u, err := strconv.ParseUint(txt[2:], 8, 64); err == nil {
-				val = strconv.FormatUint(u, 10)
-			}
-		}
-		p.wr("Int(%s)", val)
+		p.wr("Int(%s)", n.Text)
 
 	case *FloatLit:
-		p.wr("Float(.)")
+		p.wr("Float(%s)", n.Text)
 
 	case *StrLit:
 		if n.Long {
@@ -365,9 +331,6 @@ func (p pp) node(n Node, d int) {
 			return
 		}
 		if p.showStrLiteral {
-			// Scanner provides the literal text including quotes.
-			// Here we just forward it for tests that care.
-			// NOTE: StrLit carries no text when summarized.
 			p.wr(`Str("...")`)
 		} else {
 			p.wr("Str")
@@ -386,67 +349,40 @@ func (p pp) node(n Node, d int) {
 		p.wr(")")
 
 	case *IndexExpr:
-		p.wr("Index ")
-		p.node(n.X, 0)
+		p.node(n.Seq, 0)
 		p.wr("[")
-		p.node(n.Idx, 0)
+		p.node(n.Index, 0)
 		p.wr("]")
 
 	case *FieldExpr:
-		p.wr("Field ")
-		p.node(n.X, 0)
+		p.node(n.Recv, 0)
 		p.wr(".%s", n.Name.Name)
+
+	case *UnaryExpr:
+		p.wr("%s ", n.Op)
+		p.node(n.Expr, 0)
+
+	case *BinaryExpr:
+		p.node(n.Left, 0)
+		p.wr(" %s ", n.Op)
+		p.node(n.Right, 0)
 
 	case *LambdaExpr:
 		p.wr("Lambda(")
-		for i, pr := range n.Params {
+		for i, a := range n.Params {
 			if i > 0 {
 				p.wr(", ")
 			}
-			p.wr("%s", pr.Name.Name)
-			if pr.Type != nil {
-				p.wr(": %s", pr.Type.Name)
+			p.wr("%s", a.Name.Name)
+			if a.Type != nil {
+				p.wr(": %s", typeNameStr(a.Type))
 			}
 		}
 		p.wr(") => ")
-		if n.Body != nil {
-			p.node(n.Body, 0)
-		}
+		p.node(n.Body, 0)
 
-	case *ListComp:
-		p.wr("[")
-		p.node(n.Elem, 0)
-		for _, c := range n.Clauses {
-			p.wr(" for ")
-			p.node(c.Target, 0)
-			p.wr(" in ")
-			p.node(c.Iter, 0)
-			if c.If != nil {
-				p.wr(" if ")
-				p.node(c.If, 0)
-			}
-		}
-		p.wr("]")
-
-	case *DictComp:
-		p.wr("{")
-		p.node(n.Key, 0)
-		p.wr(": ")
-		p.node(n.Val, 0)
-		for _, c := range n.Clauses {
-			p.wr(" for ")
-			p.node(c.Target, 0)
-			p.wr(" in ")
-			p.node(c.Iter, 0)
-			if c.If != nil {
-				p.wr(" if ")
-				p.node(c.If, 0)
-			}
-		}
-		p.wr("}")
-
-	case *SetComp:
-		p.wr("#{")
+	case *CompExpr:
+		p.wr("Comp ")
 		p.node(n.Elem, 0)
 		for _, c := range n.Clauses {
 			p.wr(" for ")
