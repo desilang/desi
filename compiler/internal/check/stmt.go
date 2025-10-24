@@ -22,6 +22,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			t = rhs
 		}
 		_ = c.scope.Define(&Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st})
+
 	case *ast.AssignStmt:
 		// width must match
 		if len(st.LHS) != len(st.RHS) {
@@ -47,6 +48,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to '"+sym.Type.String()+"'"))
 			}
 		}
+
 	case *ast.AugAssignStmt:
 		lt := c.typ(st.Left)
 		rt := c.typ(st.Right)
@@ -59,6 +61,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			// conservative mismatch message
 			c.add(diagAt("DTE0004", st.Span, "invalid augmented assignment"))
 		}
+
 	case *ast.ReturnStmt:
 		if st.Value == nil {
 			// returning none is always fine if declared none
@@ -71,8 +74,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if c.curFuncRet != nil && vt != nil && !types.Assignable(c.curFuncRet, vt) {
 			c.add(diagAt("DTE0005", st.Span, "return type mismatch: expected '"+c.curFuncRet.String()+"', found '"+vt.String()+"'"))
 		}
+
 	case *ast.ExprStmt:
 		_ = c.typ(st.Expr)
+
 	case *ast.IfStmt:
 		ct := c.typ(st.Cond)
 		if !types.Equal(ct, types.Bool) {
@@ -87,20 +92,21 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			c.checkBlock(arm.Body)
 		}
 		c.checkBlock(st.Else)
+
 	case *ast.WhileStmt:
 		ct := c.typ(st.Cond)
 		if !types.Equal(ct, types.Bool) {
 			c.add(diagAt("DTE0004", st.Cond.SpanOf(), "while condition must be bool"))
 		}
 		c.checkBlock(st.Body)
+
 	case *ast.ForStmt:
 		// Type the iterable and body; skip target checks in M4
 		_ = c.typ(st.Iter)
 		c.checkBlock(st.Body)
 
 	case *ast.MatchStmt:
-		// Scrutinee can be typed (even though we don't use it yet)
-		_ = c.typ(st.Scrutinee)
+		// M4: we only require all arm result types to match; do NOT type the scrutinee here.
 		var want types.T
 		for _, arm := range st.Arms {
 			if arm.Result == nil {

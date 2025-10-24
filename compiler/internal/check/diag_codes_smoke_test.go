@@ -2,16 +2,31 @@ package check
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
-func TestDiagCatalog_HasCheckerCodes(t *testing.T) {
-	f, err := os.Open("compiler/internal/diag/codes.json")
-	if err != nil {
-		t.Fatalf("open codes.json: %v", err)
+func openCodesJSON(t *testing.T) *os.File {
+	t.Helper()
+	// Try a few locations so this works no matter where `go test` is invoked from.
+	candidates := []string{
+		filepath.Join("..", "diag", "codes.json"),                   // from compiler/internal/check
+		filepath.Join("compiler", "internal", "diag", "codes.json"), // from repo root
+		filepath.Join(".", "codes.json"),                            // if run inside diag/ directly
 	}
+	for _, p := range candidates {
+		if f, err := os.Open(p); err == nil {
+			return f
+		}
+	}
+	t.Fatalf("open codes.json: tried %v", candidates)
+	return nil
+}
+
+func TestDiagCatalog_HasCheckerCodes(t *testing.T) {
+	f := openCodesJSON(t)
 	defer f.Close()
 
 	cat, err := diag.LoadCatalog(f)
@@ -25,6 +40,7 @@ func TestDiagCatalog_HasCheckerCodes(t *testing.T) {
 		"type.bad_pipeline_feed":     "DTE0103",
 		"type.invalid_operand_types": "DTE0104",
 		"type.not_callable":          "DTE0105",
+
 		// sanity checks for existing ones we use
 		"type.call_wrong_arity": "DTE0046",
 		"type.undefined_name":   "DTE0001",
