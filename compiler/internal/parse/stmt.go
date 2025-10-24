@@ -9,40 +9,35 @@ import (
 // initial long string expression into a DocStringStmt, and joins span from
 // first to last statement (or to current if empty).
 func (p *Parser) parseBlock() *ast.Block {
-  start := spanPos(p.file, p.cur) // we're positioned right after the NL that introduced the block
+  blk := &ast.Block{}
+
+  // tolerate blank lines / comments between header NL and the actual indent
+  p.skipNLs()
 
   if !p.expect(token.Indent, "indent") {
-    // Produce an empty block so the callers can continue.
-    return &ast.Block{Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+    return blk
   }
 
-  var stmts []ast.Stmt
+  // parse one or more statements until Dedent
   for p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
-    // Allow blank lines inside a block.
-    p.skipNLs()
+    p.skipNLs() // allow blank lines/comments *inside* the block
+
     if p.cur.Tok == token.Dedent || p.cur.Tok == token.EOF {
       break
     }
-    stmts = append(stmts, p.parseStmt())
-  }
-  _ = p.expect(token.Dedent, "dedent")
+    st := p.parseStmt()
+    if st != nil {
+      blk.Stmts = append(blk.Stmts, st)
+    }
 
-  // Convert a leading long string expression into a DocStringStmt.
-  if len(stmts) > 0 {
-    if es, ok := stmts[0].(*ast.ExprStmt); ok {
-      if s, ok := es.Expr.(*ast.StrLit); ok && s.Long {
-        stmts[0] = &ast.DocStringStmt{Value: s, Span: es.Span}
-      }
+    // statement terminator (newline) is optional if the next token is Dedent
+    if p.cur.Tok == token.NL {
+      p.next()
     }
   }
 
-  if len(stmts) == 0 {
-    return &ast.Block{Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
-  }
-  return &ast.Block{
-    Stmts: stmts,
-    Span:  ast.JoinSpan(stmts[0].SpanOf(), stmts[len(stmts)-1].SpanOf()),
-  }
+  p.expect(token.Dedent, "dedent")
+  return blk
 }
 
 // parseStmt dispatches statement forms. One-line forms (if/while/for) parse
