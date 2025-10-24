@@ -1,0 +1,12 @@
+# M4: multi-return width/type checks
+
+def pair():
+	# returns multi[int, str]
+	return (1, "a")
+
+def main():
+	let (i, s) = pair()    # OK: (int, str)
+
+	# Negative demos:
+	# let (a, b, c) = pair()   # expect: DTE0007 multi-return arity mismatch
+	# let (p, q) = (1, 2.0)    # type mismatch if p:int, q:int inferred elsewhere
