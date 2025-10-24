@@ -1,0 +1,8 @@
+# M5 demo: basic import and from-import with aliasing
+
+import std.io as io
+from util.math import add as sum
+
+def main() -> int:
+  io.println("sum(2, 3) = " + str(sum(2, 3)))
+  return 0
