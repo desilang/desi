@@ -491,16 +491,16 @@ func (p *pp) node(n Node, d int) {
 		p.wr("}")
 
 	case *SetComp:
-		p.wr("{")
+		p.wr("#{")
 		p.node(n.Elem, 0)
-		for _, c := range n.Clauses {
+		for _, cl := range n.Clauses {
 			p.wr(" for ")
-			p.node(c.Target, 0)
+			p.node(cl.Target, 0)
 			p.wr(" in ")
-			p.node(c.Iter, 0)
-			if c.If != nil {
+			p.node(cl.Iter, 0)
+			if cl.If != nil {
 				p.wr(" if ")
-				p.node(c.If, 0)
+				p.node(cl.If, 0)
 			}
 		}
 		p.wr("}")
