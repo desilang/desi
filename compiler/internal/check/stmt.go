@@ -97,17 +97,28 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Type the iterable and body; skip target checks in M4
 		_ = c.typ(st.Iter)
 		c.checkBlock(st.Body)
-	case *ast.UsingStmt:
-		// Type init and body for now
-		_ = c.typ(st.Init)
-		c.checkBlock(st.Body)
-	case *ast.DeferStmt:
-		if st.Call != nil {
-			_ = c.typCall(st.Call)
+
+	case *ast.MatchStmt:
+		// Scrutinee can be typed (even though we don't use it yet)
+		_ = c.typ(st.Scrutinee)
+		var want types.T
+		for _, arm := range st.Arms {
+			if arm.Result == nil {
+				continue // allow empty/side-effect arms for now
+			}
+			at := c.typ(arm.Result)
+			if want == nil {
+				want = at
+				continue
+			}
+			if at != nil && !types.Equal(at, want) {
+				c.add(diagAt("DTE0004", arm.Result.SpanOf(),
+					"match arm result type mismatch: expected '"+want.String()+"', found '"+at.String()+"'"))
+			}
 		}
+
 	default:
-		// unhandled statements are ignored in M4
-		_ = st
+		// no-op for other statements in M4
 	}
 }
 
