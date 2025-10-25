@@ -9,6 +9,9 @@ type FieldDecl struct {
 	Span diag.Span
 }
 
+// Make FieldDecl satisfy ast.Node (needed by the pretty-printer).
+func (f *FieldDecl) SpanOf() diag.Span { return f.Span }
+
 type ClassDecl struct {
 	Pub        bool
 	Name       Ident
