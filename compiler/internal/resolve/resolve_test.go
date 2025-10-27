@@ -56,7 +56,7 @@ from util.math import add, sub as minus
 		t.Fatalf("missing from-item binding 'minus': %#v", info.FromItems)
 	}
 
-	// Graph should include edges from "main.desi" to imported modules.
+	// Graph should include edges from "main.desi" to both targets, order-agnostic.
 	var sb strings.Builder
 	for from, tos := range info.Graph.edges {
 		_, _ = sb.WriteString(from)
@@ -69,11 +69,20 @@ from util.math import add, sub as minus
 	}
 	got := sb.String()
 
-	// NOTE: include the colon after "from" because the dumper prints "from:".
-	if !strings.Contains(got, "main.desi:->util.math") {
+	var mainLine string
+	for _, line := range strings.Split(got, "\n") {
+		if strings.HasPrefix(line, "main.desi:") {
+			mainLine = line
+			break
+		}
+	}
+	if mainLine == "" {
+		t.Fatalf("no graph line for main.desi; got:\n%s", got)
+	}
+	if !strings.Contains(mainLine, "->util.math") {
 		t.Fatalf("graph missing edge to util.math:\n%s", got)
 	}
-	if !strings.Contains(got, "main.desi:->std.io") {
+	if !strings.Contains(mainLine, "->std.io") {
 		t.Fatalf("graph missing edge to std.io:\n%s", got)
 	}
 }
