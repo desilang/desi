@@ -15,13 +15,12 @@ type checker struct {
 }
 
 // Check performs Phase-1 resolve + the existing lightweight checks.
-// API intentionally stays: ([]diag.Diagnostic, *Info).
+// API stays: ([]diag.Diagnostic, *Info).
 func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
 	c := &checker{
 		info:  NewInfo(),
 		scope: NewScope(nil),
 	}
-	c.info.Top = c.scope
 
 	// M5: resolve imports first; inject bindings to top scope.
 	rdiags, rinfo := resolve.Resolve(mod, resolve.NewMemLoader(nil))
@@ -39,6 +38,7 @@ func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
 			}
 		}
 	}
+
 	// Pass 2: check bodies.
 	for _, d := range mod.Decls {
 		switch dd := d.(type) {
@@ -50,6 +50,7 @@ func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
 			}
 		}
 	}
+
 	return c.diags, c.info
 }
 
