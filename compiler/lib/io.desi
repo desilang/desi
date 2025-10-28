@@ -1,0 +1,3 @@
+# Phase-1 stub: surface only
+def print(x):
+  0
