@@ -9,7 +9,7 @@ import (
 
 // ---------- public API ----------
 
-// Result is a structured return used by the CLI (and ok for internal callers).
+// Result is a structured return used by the CLI.
 type Result struct {
   Diags []diag.Diagnostic
   Info  *Info
@@ -17,7 +17,7 @@ type Result struct {
 
 // Check keeps the legacy/public surface that tests expect: (diags, info).
 func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
-  res = CheckWithLoader(mod, resolve.NewMemLoader(nil))
+  res := CheckWithLoader(mod, resolve.NewMemLoader(nil))
   return res.Diags, res.Info
 }
 
@@ -34,7 +34,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
   injectImports(top, rinfo)
 
   // 3) Walk module: collect functions first, then check bodies.
-  //    IMPORTANT: use the SAME Info we return, so tests see recorded types.
+  //    IMPORTANT: write into res.Info so tests see recorded types.
   c := &checker{
     info:  res.Info,
     scope: NewScope(top), // child of top so imported names are visible
