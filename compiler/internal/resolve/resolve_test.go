@@ -18,20 +18,18 @@ func mustParse(t *testing.T, name, src string) *ast.Module {
 }
 
 func TestResolve_BindsImportsAndFromItems(t *testing.T) {
+	// Stdless library: just top-level "math" and "io"
 	ldr := NewMemLoader(map[string]string{
-		// packages (every intermediate segment must have __mod.desi)
-		"util/__mod.desi":      `def id(x): return x`,
-		"util/math/__mod.desi": `def add(x,y): return x+y`,
-		"std/__mod.desi":       `# package initializer for std`,
-
-		// leaf file module allowed only as the final segment
-		"std/io.desi": `def println(x): return 0`,
+		"math/__mod.desi": `def add(x,y): return x+y
+def sub(x,y): return x-y
+`,
+		"io.desi": `def println(x): return 0`,
 	})
 
 	mainSrc := `
-import util.math
-import std.io as io
-from util.math import add, sub as minus
+import math
+import io
+from math import add, sub as minus
 `
 	main := mustParse(t, "main.desi", mainSrc)
 
@@ -40,23 +38,23 @@ from util.math import add, sub as minus
 		t.Fatalf("unexpected diags: %+v", diags)
 	}
 
-	// Imports: util.math -> local "math"; std.io as io -> local "io"
+	// Imports: math -> "math"; io -> "io"
 	if _, ok := info.Imports["math"]; !ok {
-		t.Fatalf("missing import binding 'math': %#v", info.Imports)
+		t.Fatalf("missing import binding ''math'': %#v", info.Imports)
 	}
 	if _, ok := info.Imports["io"]; !ok {
-		t.Fatalf("missing import binding 'io': %#v", info.Imports)
+		t.Fatalf("missing import binding ''io'': %#v", info.Imports)
 	}
 
 	// From-items: add, minus
 	if _, ok := info.FromItems["add"]; !ok {
-		t.Fatalf("missing from-item binding 'add': %#v", info.FromItems)
+		t.Fatalf("missing from-item binding ''add'': %#v", info.FromItems)
 	}
 	if _, ok := info.FromItems["minus"]; !ok {
-		t.Fatalf("missing from-item binding 'minus': %#v", info.FromItems)
+		t.Fatalf("missing from-item binding ''minus'': %#v", info.FromItems)
 	}
 
-	// Graph should include edges from "main.desi" to both targets, order-agnostic.
+	// Graph edges from main.desi line, order-agnostic
 	var sb strings.Builder
 	for from, tos := range info.Graph.edges {
 		_, _ = sb.WriteString(from)
@@ -68,21 +66,20 @@ from util.math import add, sub as minus
 		_, _ = sb.WriteString("\n")
 	}
 	got := sb.String()
-
 	var mainLine string
-	for _, line := range strings.Split(got, "\n") {
-		if strings.HasPrefix(line, "main.desi:") {
-			mainLine = line
+	for _, ln := range strings.Split(got, "\n") {
+		if strings.HasPrefix(ln, "main.desi:") {
+			mainLine = ln
 			break
 		}
 	}
 	if mainLine == "" {
 		t.Fatalf("no graph line for main.desi; got:\n%s", got)
 	}
-	if !strings.Contains(mainLine, "->util.math") {
-		t.Fatalf("graph missing edge to util.math:\n%s", got)
+	if !strings.Contains(mainLine, "->math") {
+		t.Fatalf("graph missing edge to math:\n%s", got)
 	}
-	if !strings.Contains(mainLine, "->std.io") {
-		t.Fatalf("graph missing edge to std.io:\n%s", got)
+	if !strings.Contains(mainLine, "->io") {
+		t.Fatalf("graph missing edge to io:\n%s", got)
 	}
 }
