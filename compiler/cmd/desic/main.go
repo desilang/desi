@@ -24,9 +24,7 @@ var (
 	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 	flagCheck      = flag.String("check", "", "parse + resolve/check the given .desi file")
-
-	// M5: module search roots (colon-separated). Example: -I "examples:compiler/lib"
-	flagI = flag.String("I", "", "colon-separated module search roots for imports (Phase-1). If empty, defaults to \"compiler/lib\" relative to CWD.")
+	flagIRoots     = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
 )
 
 var parserCodeMap = map[string]string{
@@ -99,7 +97,7 @@ func main() {
 	}
 
 	if *flagCheck != "" {
-		hadErrors, err := runCheck(*flagCheck, rootsFromFlag(*flagI))
+		hadErrors, err := runCheck(*flagCheck, *flagIRoots)
 		term.Flush()
 		if err != nil {
 			term.Eprintln("check error:", err)
@@ -111,25 +109,8 @@ func main() {
 		os.Exit(0)
 	}
 
-	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>` with optional -I roots.")
+	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
 	term.Flush()
-}
-
-func rootsFromFlag(s string) []string {
-	var roots []string
-	if s != "" {
-		for _, part := range strings.Split(s, ":") {
-			p := strings.TrimSpace(part)
-			if p != "" {
-				roots = append(roots, p)
-			}
-		}
-	}
-	// Default root: compiler/lib (stdless layout ships with compiler)
-	if len(roots) == 0 {
-		roots = []string{filepath.Join("compiler", "lib")}
-	}
-	return roots
 }
 
 func demoTokens() {
@@ -166,7 +147,6 @@ func dumpTokens(path string) error {
 	if err != nil {
 		return err
 	}
-
 	for _, it := range items {
 		tag := ""
 		if it.Tok == token.IDENT && it.Lexeme != "" && token.IsBuiltinType(it.Lexeme) {
@@ -174,7 +154,6 @@ func dumpTokens(path string) error {
 		}
 		term.Printf("%-10s %-12q%s  @%d:%d\n", it.Tok.String(), it.Lexeme, tag, it.Line, it.Col)
 	}
-
 	term.Flush()
 
 	if len(scanErrs) > 0 {
@@ -216,7 +195,6 @@ func dumpTokens(path string) error {
 			}
 		}
 	}
-
 	term.Flush()
 	return nil
 }
@@ -226,7 +204,6 @@ func dumpAST(path string) error {
 	if err != nil {
 		return err
 	}
-
 	root, pdiags := parse.ParseFile(path, b)
 
 	ast.Print(os.Stdout, root)
@@ -265,7 +242,7 @@ func dumpAST(path string) error {
 	return nil
 }
 
-func runCheck(path string, roots []string) (hadErrors bool, err error) {
+func runCheck(path, iroots string) (hadErrors bool, err error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
@@ -278,26 +255,32 @@ func runCheck(path string, roots []string) (hadErrors bool, err error) {
 		return true, nil
 	}
 
-	// M5: resolve using FS loader (stdless). Roots come from -I (or default compiler/lib).
-	ldr := resolve.NewFSLoaderMulti(roots)
-	rdiags, _ := resolve.Resolve(mod, ldr)
-	for _, d := range rdiags {
-		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
-	}
-	if len(rdiags) > 0 {
-		// keep going to checker, but return non-zero on any diags
-		hadErrors = true
+	// Build loader from -I roots (colon-separated).
+	var loader resolve.Loader
+	roots := splitRoots(iroots)
+	if len(roots) > 0 && roots[0] != "" {
+		loader = resolve.NewFSLoaderMulti(roots)
+	} else {
+		loader = resolve.NewMemLoader(nil)
 	}
 
-	// Type checker (existing).
-	diags, _ := check.Check(mod)
-	for _, d := range diags {
+	res := check.CheckWithLoader(mod, loader)
+	if len(res.Diags) == 0 {
+		term.Println("ok")
+		return false, nil
+	}
+	for _, d := range res.Diags {
 		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 	}
-	if len(diags) == 0 && !hadErrors {
-		term.Println("ok")
+	return true, nil
+}
+
+func splitRoots(s string) []string {
+	if s == "" {
+		return nil
 	}
-	return hadErrors || len(diags) > 0, nil
+	// Your CLI examples use ":" (macOS/Linux); keep it simple.
+	return strings.Split(s, ":")
 }
 
 func demoDiag() error {

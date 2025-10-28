@@ -11,18 +11,20 @@ import (
 	"github.com/desilang/desi/compiler/internal/parse"
 )
 
-// FSLoader maps dotted module names -> files under a single root (stdless).
-// Phase-1 package rules (from docs):
-//  1. Each intermediate segment MUST be a package dir containing __mod.desi
-//  2. The leaf may be either <dir>/<leaf>/__mod.desi (subpackage) OR <dir>/<leaf>.desi (leaf file module)
+// FSLoader maps dotted module names -> files under a single root.
+// Package rules (Phase-1):
+//   - Each intermediate segment MUST be a package directory containing __mod.desi
+//   - The leaf may be either <dir>/<leaf>/__mod.desi (subpackage) OR <dir>/<leaf>.desi (leaf file module)
 type FSLoader struct {
 	Root string
 }
 
+// Load implements Loader for a single root.
 func (l *FSLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error) {
 	if l == nil || l.Root == "" {
-		return nil, nil, fmt.Errorf("fs loader: empty root")
+		return nil, nil, fmt.Errorf("fs loader has empty root")
 	}
+
 	parts := strings.Split(dotted, ".")
 	cur := l.Root
 
@@ -36,9 +38,9 @@ func (l *FSLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error) {
 		}
 	}
 
+	// Leaf resolution: prefer subpackage leaf, else leaf file module.
 	leaf := parts[len(parts)-1]
-	leafDir := filepath.Join(cur, leaf)
-	leafPkg := filepath.Join(leafDir, "__mod.desi")
+	leafPkg := filepath.Join(cur, leaf, "__mod.desi")
 	leafFile := filepath.Join(cur, leaf+".desi")
 
 	var path string
@@ -54,7 +56,8 @@ func (l *FSLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	mod, pdiags := parse.ParseFile(path, src)
-	// Pass parser diags through; Resolve will map/render with catalog.
+
+	// IMPORTANT: your parser returns (mod, []diag.Diagnostic) — not []error.
+	mod, pdiags := parse.ParseFile(path, src) // see signature in your tree
 	return mod, pdiags, nil
 }
