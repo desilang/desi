@@ -94,79 +94,70 @@ func (c *checker) typ(e ast.Expr) types.T {
 	}
 }
 
-func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
-	op := x.Op
+// compiler/internal/check/expr.go — replace the entire typBinary function with this.
+func (c *checker) typBinary(be *ast.BinaryExpr) types.T {
+	lt := c.typ(be.Lhs)
+	rt := c.typ(be.Rhs)
 
-	switch op {
-	case "+", "-", "*", "/", "%", "**":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-
-		// NEW: string concatenation
-		if op == "+" && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
-			c.info.Types[x] = types.Str
-			return types.Str
-		}
-
-		// numeric same-type
-		if (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) && types.Equal(lt, rt) {
-			c.info.Types[x] = lt
-			return lt
-		}
-		c.add(diagAt("DTE0104", x.Span, "invalid operand types for '"+op+"'"))
-		return nil
-
-	case "<", "<=", ">", ">=", "==", "!=":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-		if types.Equal(lt, rt) {
-			c.info.Types[x] = types.Bool
-			return types.Bool
-		}
-		// Optionally allow int/float mixed comparisons
-		if (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) &&
-			(types.Equal(rt, types.Int) || types.Equal(rt, types.Float)) {
-			c.info.Types[x] = types.Bool
-			return types.Bool
-		}
-		c.add(diagAt("DTE0004", x.Span, "invalid comparison"))
-		return nil
-
-	case "and", "or":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-		if types.Equal(lt, types.Bool) && types.Equal(rt, types.Bool) {
-			c.info.Types[x] = types.Bool
-			return types.Bool
-		}
-		c.add(diagAt("DTE0004", x.Span, "logical operators require bool operands"))
-		return nil
-
-	case "^", "|":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
-			c.info.Types[x] = types.Int
-			return types.Int
-		}
-		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
-		return nil
-
-	case "|>":
-		// existing pipeline handling stays as-is
-		lhsT := c.typ(x.Lhs)
-		_ = lhsT
-		_, ok := x.Rhs.(*ast.CallExpr)
+	// Pipeline sugar:  a |> f(x, y)  ≡  f(a, x, y)
+	if be.Op == "|>" {
+		// RHS must be a call.
+		call, ok := be.Rhs.(*ast.CallExpr)
 		if !ok {
-			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
+			c.add(diagAt("DTE0103", be.Span, "pipeline expects a call on the right-hand side"))
 			return nil
 		}
-		// ... (keep your current pipeline logic unchanged) ...
-		// fallthrough to your existing code below this line
+		// For M4/M5, require simple identifier as callee (no dotted/field calls yet).
+		id, ok := call.Callee.(*ast.Ident)
+		if !ok {
+			c.add(diagAt("DTE0103", be.Span, "pipeline target must be an identifier"))
+			return nil
+		}
+		// Build the effective argument list: [piped] + existing args
+		args := make([]types.T, 1+len(call.Args))
+		args[0] = c.typ(be.Lhs)
+		for i, a := range call.Args {
+			args[i+1] = c.typ(a)
+		}
+
+		set := c.info.Funcs[id.Name]
+		if set == nil {
+			c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+			return nil
+		}
+		cands := set.ResolveExact(args)
+		switch len(cands) {
+		case 1:
+			ret := cands[0].Type.Ret
+			c.info.Types[be] = ret
+			return ret
+		case 0:
+			// Distinguish arity vs. type mismatch for nicer UX/tests.
+			sameArity := false
+			for _, cand := range set.Cands {
+				if len(cand.Type.Params) == len(args) {
+					sameArity = true
+					break
+				}
+			}
+			if !sameArity {
+				c.add(diagAt("DTE0046", be.Span, "arity mismatch for pipeline"))
+			} else {
+				c.add(diagAt("DTE0101", be.Span, "no matching overload for pipeline"))
+			}
+			return nil
+		default:
+			c.add(diagAt("DTE0102", be.Span, "ambiguous overload for pipeline"))
+			return nil
+		}
 	}
 
-	// default path preserved by your file
-	// (leave the remainder of typBinary unchanged if you have more cases)
+	// Non-pipeline operators: delegate to the simple table and surface invalid operand types.
+	if t, ok := beResultType(be.Op, lt, rt); ok {
+		c.info.Types[be] = t
+		return t
+	}
+	c.add(diagAt("DTE0104", be.Span, "invalid operand types for '"+be.Op+"'"))
 	return nil
 }
 
