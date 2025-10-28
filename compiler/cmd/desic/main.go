@@ -299,12 +299,12 @@ func demoDiag() error {
 			Start: diag.Pos{Line: 4, Col: 17, Byte: 0},
 			End:   diag.Pos{Line: 4, Col: 24, Byte: 0},
 		},
-		Text:    "expected `int`, found `str`",
+		Text:    "expected int, found str",
 		Primary: true,
 	}
 
 	d, err := b.New("type.type_mismatch", primary,
-		diag.WithNotes("expected type `int`", "found type `str`"),
+		diag.WithNotes("expected type int", "found type str"),
 	)
 	if err != nil {
 		return err
