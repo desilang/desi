@@ -24,6 +24,10 @@ type multiLoader struct {
 	inners []*FSLoader
 }
 
+func NewFSLoader(root string) *FSLoader {
+	return &FSLoader{Root: root}
+}
+
 // NewFSLoaderMulti accepts colon- or OS-ListPath-like roots. Use this for CLI.
 func NewFSLoaderMulti(roots []string) Loader {
 	ml := &multiLoader{}
