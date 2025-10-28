@@ -21,41 +21,59 @@ func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
 	return res.Diags, res.Info
 }
 
-// CheckWithLoader runs resolve + type checking using a provided loader.
+// CheckWithLoader resolves + checks using the provided loader (used by the CLI).
 func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	res := &Result{Info: NewInfo()}
 
-	// Resolve imports for this module with the provided loader.
+	// 1) Resolve imports up-front (Phase-1).
 	rdiags, rinfo := resolve.Resolve(mod, ldr)
 	res.Diags = append(res.Diags, rdiags...)
 
-	// Bring resolved imports/aliases into the top scope.
-	if res.Info.top == nil {
-		res.Info.top = NewTopScope()
-	}
-	res.Diags = append(res.Diags, injectImports(res.Info.top, rinfo)...)
+	// 2) Create the top scope and inject resolver-provided bindings there.
+	top := NewScope(nil)
+	injectImports(top, rinfo)
 
-	// Ensure from-import aliases are recognized as callables to avoid DTE0001.
-	// (We don't know their types yet in Phase-1; this prevents "undefined function: <alias>".)
-	for _, fi := range rinfo.FromItems {
-		name := fi.Alias
-		if name == "" {
-			name = fi.Name
-		}
-		if _, ok := res.Info.Funcs[name]; !ok {
-			res.Info.Funcs[name] = &OverloadSet{Name: name}
+	// 2b) Ensure from-import aliases are recognized as callables to avoid DTE0001.
+	// We don't have cross-module signatures in Phase-1, so register empty sets.
+	for local := range rinfo.FromItems {
+		if _, ok := res.Info.Funcs[local]; !ok {
+			res.Info.Funcs[local] = &OverloadSet{Name: local}
 		}
 	}
 
-	// Run the checker.
+	// 3) Walk module: collect functions first, then check bodies.
+	//    IMPORTANT: write into res.Info so tests see recorded types.
 	c := &checker{
-		info:       res.Info,
-		diags:      &res.Diags,
-		scope:      res.Info.top,
-		curFuncRet: nil,
+		info:  res.Info,
+		scope: NewScope(top), // child of top so imported names are visible
 	}
-	c.checkModule(mod)
 
+	// Pass 1: collect functions for overload sets.
+	for _, d := range mod.Decls {
+		switch dd := d.(type) {
+		case *ast.FuncDecl:
+			c.collectFunc(dd)
+		case *ast.ClassDecl:
+			for _, m := range dd.Methods {
+				c.collectFunc(m)
+			}
+		}
+	}
+
+	// Pass 2: check bodies.
+	for _, d := range mod.Decls {
+		switch dd := d.(type) {
+		case *ast.FuncDecl:
+			c.checkFunc(dd)
+		case *ast.ClassDecl:
+			for _, m := range dd.Methods {
+				c.checkFunc(m)
+			}
+		}
+	}
+
+	// Merge checker diagnostics.
+	res.Diags = append(res.Diags, c.diags...)
 	return res
 }
 
