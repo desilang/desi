@@ -140,17 +140,72 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	}
 }
 
-// beResultType returns the expected result type of a binary op under our simple rules.
-func beResultType(lt, rt types.T, op string) types.T {
+// beResultType returns (resultType, ok) for a binary operator applied to (lt, rt).
+// Keep phase-1 simple: exact same-type combos only, with a special-case for str+str.
+func beResultType(op string, lt, rt types.T) (types.T, bool) {
 	switch op {
-	case "+", "-", "*", "/", "%", "**":
-		if types.Equal(lt, rt) && (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) {
-			return lt
-		}
-	case "^", "|":
+	case "+": // addition OR string concatenation
+		// numeric + numeric (same type)
 		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
-			return types.Int
+			return types.Int, true
 		}
+		if types.Equal(lt, types.Float) && types.Equal(rt, types.Float) {
+			return types.Float, true
+		}
+		// NEW: string + string -> string
+		if types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
+			return types.Str, true
+		}
+		return nil, false
+
+	case "-", "*", "/", "%":
+		// numeric only; same-type
+		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
+			return types.Int, true
+		}
+		if types.Equal(lt, types.Float) && types.Equal(rt, types.Float) {
+			return types.Float, true
+		}
+		return nil, false
+
+	case "|", "&", "^":
+		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
+			return types.Int, true
+		}
+		return nil, false
+
+	case "<<", ">>":
+		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
+			return types.Int, true
+		}
+		return nil, false
+
+	case "==", "!=":
+		// Equality on same types (except None/Func kinds)
+		if types.Equal(lt, rt) && !types.IsNone(lt) && !types.IsFunc(lt) {
+			return types.Bool, true
+		}
+		return nil, false
+
+	case "<", "<=", ">", ">=":
+		// Numeric comparisons only
+		if (types.Equal(lt, types.Int) && types.Equal(rt, types.Int)) ||
+			(types.Equal(lt, types.Float) && types.Equal(rt, types.Float)) {
+			return types.Bool, true
+		}
+		return nil, false
+
+	case "and", "or":
+		if types.Equal(lt, types.Bool) && types.Equal(rt, types.Bool) {
+			return types.Bool, true
+		}
+		return nil, false
+
+	case "|>":
+		// Pipeline typed elsewhere; this returns unknown
+		return nil, false
+
+	default:
+		return nil, false
 	}
-	return nil
 }
