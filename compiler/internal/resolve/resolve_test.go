@@ -19,10 +19,12 @@ func mustParse(t *testing.T, name, src string) *ast.Module {
 
 func TestResolve_BindsImportsAndFromItems(t *testing.T) {
 	ldr := NewMemLoader(map[string]string{
-		// packages
+		// packages (every intermediate segment must have __mod.desi)
 		"util/__mod.desi":      `def id(x): return x`,
 		"util/math/__mod.desi": `def add(x,y): return x+y`,
-		// leaf file module as final segment
+		"std/__mod.desi":       `# package initializer for std`,
+
+		// leaf file module allowed only as the final segment
 		"std/io.desi": `def println(x): return 0`,
 	})
 
@@ -54,7 +56,7 @@ from util.math import add, sub as minus
 		t.Fatalf("missing from-item binding 'minus': %#v", info.FromItems)
 	}
 
-	// Graph should at least have edges to imported modules.
+	// Graph should include edges to imported modules.
 	var sb strings.Builder
 	for from, tos := range info.Graph.edges {
 		_, _ = sb.WriteString(from)
