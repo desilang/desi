@@ -4,12 +4,14 @@ import (
 	"flag"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lex"
 	"github.com/desilang/desi/compiler/internal/parse"
+	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/token"
 )
@@ -22,7 +24,11 @@ var (
 	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 	flagCheck      = flag.String("check", "", "parse + resolve/check the given .desi file")
+
+	// M5: module search roots (colon-separated). Example: -I "examples:compiler/lib"
+	flagI = flag.String("I", "", "colon-separated module search roots for imports (Phase-1). If empty, defaults to \"compiler/lib\" relative to CWD.")
 )
+
 var parserCodeMap = map[string]string{
 	"DPE0001": "parser.unexpected_token",
 	"DPE0002": "parser.expected_token",
@@ -93,7 +99,7 @@ func main() {
 	}
 
 	if *flagCheck != "" {
-		hadErrors, err := runCheck(*flagCheck)
+		hadErrors, err := runCheck(*flagCheck, rootsFromFlag(*flagI))
 		term.Flush()
 		if err != nil {
 			term.Eprintln("check error:", err)
@@ -105,9 +111,25 @@ func main() {
 		os.Exit(0)
 	}
 
-	// TODO: add more subcommands in later milestones.
-	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
+	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>` with optional -I roots.")
 	term.Flush()
+}
+
+func rootsFromFlag(s string) []string {
+	var roots []string
+	if s != "" {
+		for _, part := range strings.Split(s, ":") {
+			p := strings.TrimSpace(part)
+			if p != "" {
+				roots = append(roots, p)
+			}
+		}
+	}
+	// Default root: compiler/lib (stdless layout ships with compiler)
+	if len(roots) == 0 {
+		roots = []string{filepath.Join("compiler", "lib")}
+	}
+	return roots
 }
 
 func demoTokens() {
@@ -145,7 +167,6 @@ func dumpTokens(path string) error {
 		return err
 	}
 
-	// Token dump (annotate builtin types while keeping IDENT kind).
 	for _, it := range items {
 		tag := ""
 		if it.Tok == token.IDENT && it.Lexeme != "" && token.IsBuiltinType(it.Lexeme) {
@@ -154,11 +175,8 @@ func dumpTokens(path string) error {
 		term.Printf("%-10s %-12q%s  @%d:%d\n", it.Tok.String(), it.Lexeme, tag, it.Line, it.Col)
 	}
 
-	// IMPORTANT: flush stdout before writing diagnostics to stderr,
-	// to avoid interleaved/misordered lines on the terminal.
 	term.Flush()
 
-	// Render lexer diagnostics (non-fatal) to stderr using your catalog.
 	if len(scanErrs) > 0 {
 		const maxLexErrs = 50
 		p := filepath.Join("compiler", "internal", "diag", "codes.json")
@@ -211,11 +229,9 @@ func dumpAST(path string) error {
 
 	root, pdiags := parse.ParseFile(path, b)
 
-	// print AST to stdout
 	ast.Print(os.Stdout, root)
 	term.Flush()
 
-	// render parse diagnostics (if any), using codes.json when available
 	if len(pdiags) > 0 {
 		const _max = 50
 		p := filepath.Join("compiler", "internal", "diag", "codes.json")
@@ -229,7 +245,6 @@ func dumpAST(path string) error {
 				}
 				for i := 0; i < limit; i++ {
 					d := pdiags[i]
-					// Map CodeID -> catalog path for nicer titles
 					codePath := parserCodeMap[d.CodeID]
 					if codePath == "" {
 						codePath = "parser.unexpected_token"
@@ -238,7 +253,6 @@ func dumpAST(path string) error {
 					if err == nil {
 						dd.RenderTTY(os.Stderr, diag.Theme{Color: false})
 					} else {
-						// fall back to raw rendering
 						d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 					}
 				}
@@ -251,15 +265,12 @@ func dumpAST(path string) error {
 	return nil
 }
 
-func runCheck(path string) (hadErrors bool, err error) {
+func runCheck(path string, roots []string) (hadErrors bool, err error) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
-
 	mod, pdiags := parse.ParseFile(path, src)
-
-	// If the parser produced diagnostics, render them and stop.
 	if len(pdiags) > 0 {
 		for _, d := range pdiags {
 			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
@@ -267,16 +278,26 @@ func runCheck(path string) (hadErrors bool, err error) {
 		return true, nil
 	}
 
-	// Run the resolver/type checker (M4/M5 surface).
-	diags, _ := check.Check(mod)
-	if len(diags) == 0 {
-		term.Println("ok")
-		return false, nil
+	// M5: resolve using FS loader (stdless). Roots come from -I (or default compiler/lib).
+	ldr := resolve.NewFSLoaderMulti(roots)
+	rdiags, _ := resolve.Resolve(mod, ldr)
+	for _, d := range rdiags {
+		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 	}
+	if len(rdiags) > 0 {
+		// keep going to checker, but return non-zero on any diags
+		hadErrors = true
+	}
+
+	// Type checker (existing).
+	diags, _ := check.Check(mod)
 	for _, d := range diags {
 		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 	}
-	return true, nil
+	if len(diags) == 0 && !hadErrors {
+		term.Println("ok")
+	}
+	return hadErrors || len(diags) > 0, nil
 }
 
 func demoDiag() error {
