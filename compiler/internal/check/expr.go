@@ -196,14 +196,25 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 func (c *checker) typCall(call *ast.CallExpr) types.T {
 	// Identifier callee path
 	if id, ok := call.Callee.(*ast.Ident); ok {
-		// 1) Scope check first: unknown name -> undefined function (tests expect this wording).
+		set, hasSet := c.info.Funcs[id.Name]
+
+		// Resolve scope symbol if any.
 		sym := c.scope.Lookup(id.Name)
-		if sym == nil {
-			c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
-			return nil
-		}
-		// If the symbol exists but isn't a function, it's not callable.
-		if sym.Kind != SymFunc {
+		isCallableSym := sym != nil && sym.Kind == SymFunc
+
+		// Determine callability:
+		// - A true function symbol is callable.
+		// - Builtins may not have a symbol bound in scope; allow calling if we have overloads in Info.Funcs.
+		// - From-import aliases are allowed if there is an Info.Funcs entry (even empty), to enable Phase-1 fallback.
+		callable := isCallableSym || (hasSet && (set != nil))
+
+		if !callable {
+			// Prefer "undefined function" if there's no symbol and no prelude/alias record.
+			if sym == nil {
+				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+				return nil
+			}
+			// Symbol exists but is not a function and no callable record -> not callable.
 			c.add(diagAt("DTE0045", id.Span, "object is not callable"))
 			return nil
 		}
@@ -214,11 +225,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			args[i] = c.typ(a)
 		}
 
-		// 3) Overload resolution (or Phase-1 permissive fallback for from-import aliases).
-		set := c.info.Funcs[id.Name]
+		// 3) Overload resolution (or Phase-1 permissive fallback for alias/bare names).
+		// If we have no candidate signatures, use permissive same-primitive passthrough.
 		if set == nil || len(set.Cands) == 0 {
-			// Phase-1: be permissive for imported aliases with no attached signature.
-			// If all args share the same primitive type, return that; else unknown.
 			if len(args) == 0 {
 				c.info.Types[call] = types.None
 				return types.None
