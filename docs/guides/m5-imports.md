@@ -61,18 +61,18 @@ from time import now
 
 1. **Loader** abstracts where modules come from:
 
-  * FS loader: reads `.desi` files from disk using the **multi-root** search order.
-  * In-memory loader: test fixture map `path → source`.
+* FS loader: reads `.desi` files from disk using the **multi-root** search order.
+* In-memory loader: test fixture map `path → source`.
 
 2. **Module graph** is built (DFS) from the importing module:
 
-  * Detect **cycles** (`a ↔ b`, etc.).
-  * Emit diags for unknown modules, duplicates, alias conflicts.
-  * Compute bindings for:
+* Detect **cycles** (`a ↔ b`, etc.).
+* Emit diags for unknown modules, duplicates, alias conflicts.
+* Compute bindings for:
 
-    * `import a.b [as x]` → local `x` (or `b` if no alias)
-    * `from a.b import y [as z]` → local `z` (or `y`)
-  * Track **unused import / unused from-item** for Phase-1 lints (usage marked by the checker).
+  * `import a.b [as x]` → local `x` (or `b` if no alias)
+  * `from a.b import y [as z]` → local `z` (or `y`)
+* Track **unused import / unused from-item** for Phase-1 lints (usage marked by the checker).
 
 3. **Checker bridge** injects these bindings into the top scope before type checking so imported names don’t cause unknown-identifier errors.
 
@@ -80,7 +80,24 @@ from time import now
 
 ## Prelude builtins (no import)
 
-Prelude identifiers (e.g., `print`) are injected into the top scope by the checker and are always available without import. (Implementation details and codegen/intrinsics are out of scope for M5.)
+Prelude identifiers (e.g., `print`, `str`) are injected into the top scope by the checker and are always available without import. (Implementation details and codegen/intrinsics are out of scope for M5.)
+
+---
+
+## CLI behavior (Phase-1)
+
+* **Exit codes**
+
+  * `0` — success (`ok`)
+  * `1` — diagnostics were emitted (parse/resolve/type)
+  * `2` — I/O or argument errors (printed as `check error: …`)
+
+* **Verbose**
+  `-v` prints the normalized entry path and the active `-I` roots.
+
+* **Flag ordering**
+  Subcommand form accepts flags in any order:
+  `desic check -I ROOTS -v FILE`, `desic check FILE -I ROOTS`, or `-I ROOTS -check FILE`.
 
 ---
 
@@ -107,6 +124,12 @@ Prelude identifiers (e.g., `print`) are injected into the top scope by the check
 * No package-level visibility checks (`pub`) across packages
 * Subpackages must have `__mod.desi` to be considered packages
 * Leaf file modules are allowed only as the **final** segment
+
+---
+
+## Phase-1 callable aliases (note)
+
+For `from a.b import foo as bar`, the checker treats `bar` as a callable name in Phase-1 even if the target module’s exact signature hasn’t been imported yet. This avoids spurious `undefined function` errors during early integration; exact cross-module signatures land in Phase-2.
 
 ---
 
