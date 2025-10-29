@@ -60,27 +60,21 @@ func addPreludeBuiltins(info *Info) {
 		return
 	}
 
-	// print: (int|float|bool|str) -> none
-	{
-		set := &OverloadSet{Name: "print"}
-		set.Cands = append(set.Cands,
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Int}, types.None)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Float}, types.None)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Bool}, types.None)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Str}, types.None)},
-		)
-		info.Funcs["print"] = set
+	addOverloads := func(name string, params []types.T, ret types.T) {
+		set := info.Funcs[name]
+		if set == nil {
+			set = &OverloadSet{Name: name}
+			info.Funcs[name] = set
+		}
+		for _, p := range params {
+			set.Cands = append(set.Cands, &FuncCand{
+				Decl: nil,
+				Type: types.FuncOf([]types.T{p}, ret),
+			})
+		}
 	}
 
-	// str: (int|float|bool|str) -> str
-	{
-		set := &OverloadSet{Name: "str"}
-		set.Cands = append(set.Cands,
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Int}, types.Str)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Float}, types.Str)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Bool}, types.Str)},
-			&FuncCand{Decl: nil, Type: types.FuncOf([]types.T{types.Str}, types.Str)}, // identity
-		)
-		info.Funcs["str"] = set
-	}
+	core := []types.T{types.Int, types.Float, types.Bool, types.Str}
+	addOverloads("print", core, types.None)
+	addOverloads("str", core, types.Str)
 }
