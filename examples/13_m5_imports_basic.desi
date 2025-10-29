@@ -1,6 +1,8 @@
-import math
-from io import println as print
+# M5 demo: basic import and from-import with aliasing (std-less)
 
-def main():
-  x = math.add(2, 3)
-  print("sum is", x)
+import io          # compiler/lib/io.desi
+from math import add as sum   # compiler/lib/math/__mod.desi
+
+def main() -> int:
+	print("sum(2, 3) = " + str(sum(2, 3)))
+	return 0

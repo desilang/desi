@@ -7,27 +7,34 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-type checker struct {
-	info       *Info
-	diags      []diag.Diagnostic
-	scope      *Scope
-	curFuncRet types.T
+// ---------- public API ----------
+
+type Result struct {
+	Diags []diag.Diagnostic
+	Info  *Info
 }
 
-// Check performs Phase-1 resolve + the existing lightweight checks.
-// API stays: ([]diag.Diagnostic, *Info).
-func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
+// CheckWithLoader resolves + checks using the provided module loader.
+func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
+	res := &Result{Info: NewInfo()}
+
+	// 1) Resolve imports up-front (Phase-1).
+	rdiags, rinfo := resolve.Resolve(mod, ldr)
+	res.Diags = append(res.Diags, rdiags...)
+
+	// 2) Create a real top scope and inject resolver-provided bindings.
+	top := NewScope(nil)
+	injectImports(top, rinfo)
+
+	// 3) Walk module for simple checks (M4/M5 level).
 	c := &checker{
-		info:  NewInfo(),
-		scope: NewScope(nil),
+		info:  res.Info,
+		diags: nil,
+		// Child of top so imported names are visible but we keep our own defs tidy.
+		scope: NewScope(top),
 	}
 
-	// M5: resolve imports first; inject bindings to top scope.
-	rdiags, rinfo := resolve.Resolve(mod, resolve.NewMemLoader(nil))
-	c.diags = append(c.diags, rdiags...)
-	injectImports(c.scope, rinfo)
-
-	// Pass 1: collect function declarations for overload resolution.
+	// Pass 1: collect function declarations (for exact-match overloading).
 	for _, d := range mod.Decls {
 		switch dd := d.(type) {
 		case *ast.FuncDecl:
@@ -51,14 +58,28 @@ func Check(mod *ast.Module) ([]diag.Diagnostic, *Info) {
 		}
 	}
 
-	return c.diags, c.info
+	// Merge checker diagnostics
+	res.Diags = append(res.Diags, c.diags...)
+	return res
+}
+
+// Check keeps old behavior (mem loader) for tests that don’t care about FS roots.
+func Check(mod *ast.Module) *Result { return CheckWithLoader(mod, resolve.NewMemLoader(nil)) }
+
+// ---------- internals ----------
+
+type checker struct {
+	info       *Info
+	diags      []diag.Diagnostic
+	scope      *Scope
+	curFuncRet types.T
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
 
 func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	name := fd.Name.Name
-	// Build function type from parameter annotations (basic names only for M4).
+	// Build function type from parameter annotations (basic names only for M4/5).
 	params := make([]types.T, len(fd.Params))
 	for i, p := range fd.Params {
 		if p.Type != nil {
@@ -82,7 +103,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	}
 	set.Add(&FuncCand{Decl: fd, Type: sig})
 
-	// Also bind the function name in the top-level scope for callee-id resolution.
+	// Also bind the function name in the current scope for id resolution.
 	_ = c.scope.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
 
@@ -99,13 +120,12 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		if p.Type != nil {
 			pt, _ = types.FromName(p.Type.Name)
 		}
-		// Attach the symbol to the param's identifier node.
 		_ = c.scope.Define(&Symbol{
 			Name: p.Name.Name, Kind: SymParam, Type: pt, Node: &fd.Params[i].Name,
 		})
 	}
 
-	// Declared return type
+	// Declared return type (if any)
 	c.curFuncRet = types.None
 	if fd.RetType != nil {
 		if t, ok := types.FromName(fd.RetType.Name); ok {
@@ -113,7 +133,7 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		}
 	}
 
-	// Check body (if present)
+	// Body
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
 	}
