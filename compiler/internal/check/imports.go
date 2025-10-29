@@ -10,12 +10,14 @@ func injectImports(top *Scope, info *resolve.Info) {
 	if info == nil || top == nil {
 		return
 	}
-	// import a.b [as x] -> x (or b)
+	// `import a.b [as x]`  -> bind local name as a value (module handle); not callable.
 	for local := range info.Imports {
 		top.Define(&Symbol{Name: local, Kind: SymVar})
 	}
-	// from a.b import y [as z] -> z (or y)
+	// `from a.b import y [as z]` -> bind local name as a callable alias in Phase-1.
+	// We don't yet have cross-module signatures, but marking it SymFunc lets typCall
+	// take the Phase-1 permissive path (same-primitive passthrough).
 	for local := range info.FromItems {
-		top.Define(&Symbol{Name: local, Kind: SymVar})
+		top.Define(&Symbol{Name: local, Kind: SymFunc})
 	}
 }
