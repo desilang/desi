@@ -1,0 +1,6 @@
+# Phase-1 stub math — enough for imports demo
+def add(x: int, y: int) -> int:
+  return x + y
+
+def sub(x: int, y: int) -> int:
+  return x - y
