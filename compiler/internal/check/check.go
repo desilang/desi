@@ -29,8 +29,11 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	rdiags, rinfo := resolve.Resolve(mod, ldr)
 	res.Diags = append(res.Diags, rdiags...)
 
-	// 2) Create the top scope and inject resolver-provided bindings there.
+	// 2) Create the top scope and inject bindings.
 	top := NewScope(nil)
+	// Make prelude callables visible as identifiers in the top scope (avoid DTE0001).
+	injectPreludeIntoScope(top, res.Info)
+	// Resolver-provided imports (modules and from-items) become top-scope names.
 	injectImports(top, rinfo)
 
 	// 2b) Ensure from-import aliases are recognized as callables to avoid DTE0001.
@@ -45,7 +48,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	//    IMPORTANT: write into res.Info so tests see recorded types.
 	c := &checker{
 		info:  res.Info,
-		scope: NewScope(top), // child of top so imported names are visible
+		scope: NewScope(top), // child of top so imported names & prelude are visible
 	}
 
 	// Pass 1: collect functions for overload sets.
