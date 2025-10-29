@@ -59,7 +59,6 @@ func addPreludeBuiltins(info *Info) {
 	if info == nil {
 		return
 	}
-
 	addOverloads := func(name string, params []types.T, ret types.T) {
 		set := info.Funcs[name]
 		if set == nil {
@@ -73,8 +72,7 @@ func addPreludeBuiltins(info *Info) {
 			})
 		}
 	}
-
 	core := []types.T{types.Int, types.Float, types.Bool, types.Str}
-	addOverloads("print", core, types.None)
-	addOverloads("str", core, types.Str)
+	addOverloads("print", core, types.None) // print(x) -> none
+	addOverloads("str", core, types.Str)    // str(x) -> str
 }
