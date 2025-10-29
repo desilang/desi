@@ -1,3 +1,4 @@
+// compiler/internal/resolve/resolve_test.go
 package resolve
 
 import (
@@ -18,10 +19,14 @@ func mustParse(t *testing.T, name, src string) *ast.Module {
 }
 
 func TestResolve_BindsImportsAndFromItems(t *testing.T) {
-	// Stdless library: just top-level "math" and "io"
+	// Std-less library: top-level "math" (typed) and "io"
 	ldr := NewMemLoader(map[string]string{
-		"math/__mod.desi": `def add(x,y): return x+y
-def sub(x,y): return x-y
+		"math/__mod.desi": `
+def add(x: int, y: int) -> int:
+  return x + y
+
+def sub(x: int, y: int) -> int:
+  return x - y
 `,
 		"io.desi": `def println(x): return 0`,
 	})
