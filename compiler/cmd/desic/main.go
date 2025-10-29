@@ -2,6 +2,7 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,7 @@ var (
 	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 	flagCheck      = flag.String("check", "", "parse + resolve/check the given .desi file")
 	flagIRoots     = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
+	flagVerbose    = flag.Bool("v", false, "verbose output")
 )
 
 var parserCodeMap = map[string]string{
@@ -40,9 +42,47 @@ var parserCodeMap = map[string]string{
 const Version = "0.0.1-revised-bootstrap"
 
 func main() {
+	// If user used the subcommand form, handle it with our own permissive parser
+	// so flags can be before OR after the filename.
+	if len(os.Args) >= 2 && os.Args[1] == "check" {
+		file, roots, verbose, err := parseCheckArgs(os.Args[2:])
+		if err != nil {
+			term.Eprintln("check error:", err)
+			term.Flush()
+			os.Exit(2)
+		}
+
+		if verbose {
+			if abs, err := filepath.Abs(file); err == nil {
+				term.Eprintln("check:", abs)
+			} else {
+				term.Eprintln("check:", file)
+			}
+			if roots == "" {
+				term.Eprintln("roots: (none)")
+			} else {
+				term.Eprintln("roots:", roots)
+			}
+		}
+
+		hadErrors, runErr := runCheck(file, roots)
+		if runErr != nil {
+			term.Eprintln("check error:", runErr)
+			term.Flush()
+			os.Exit(2)
+		}
+		if hadErrors {
+			term.Flush()
+			os.Exit(1)
+		}
+		term.Flush()
+		os.Exit(0)
+	}
+
+	// Otherwise, use the global flags (supports: desic -I ROOTS -check FILE)
 	flag.Parse()
 
-	// Support subcommand style: `desic check <file>`
+	// Also support: desic -I ROOTS check FILE  (global flags parse -I; leftover args carry "check FILE")
 	args := flag.Args()
 	if len(args) >= 2 && args[0] == "check" && *flagCheck == "" {
 		*flagCheck = args[1]
@@ -97,20 +137,78 @@ func main() {
 	}
 
 	if *flagCheck != "" {
+		if *flagVerbose {
+			if abs, err := filepath.Abs(*flagCheck); err == nil {
+				term.Eprintln("check:", abs)
+			} else {
+				term.Eprintln("check:", *flagCheck)
+			}
+			if *flagIRoots == "" {
+				term.Eprintln("roots: (none)")
+			} else {
+				term.Eprintln("roots:", *flagIRoots)
+			}
+		}
+
 		hadErrors, err := runCheck(*flagCheck, *flagIRoots)
-		term.Flush()
 		if err != nil {
 			term.Eprintln("check error:", err)
+			term.Flush()
 			os.Exit(2)
 		}
 		if hadErrors {
+			term.Flush()
 			os.Exit(1)
 		}
+		term.Flush()
 		os.Exit(0)
 	}
 
 	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
 	term.Flush()
+}
+
+// parseCheckArgs accepts flags in any order after `check` and returns (file, roots, verbose).
+// Supports: -I ROOTS, -I=ROOTS, -v, and "--" to end flags.
+func parseCheckArgs(argv []string) (string, string, bool, error) {
+	var file string
+	var roots string
+	var verbose bool
+
+	sawSep := false
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		if a == "--" {
+			sawSep = true
+			continue
+		}
+		if !sawSep && strings.HasPrefix(a, "-") {
+			switch {
+			case a == "-v":
+				verbose = true
+			case a == "-I":
+				if i+1 >= len(argv) {
+					return "", "", false, fmt.Errorf("missing value for -I")
+				}
+				roots = argv[i+1]
+				i++
+			case strings.HasPrefix(a, "-I="):
+				roots = strings.TrimPrefix(a, "-I=")
+			default:
+				return "", "", false, fmt.Errorf("unknown flag %q", a)
+			}
+			continue
+		}
+		// positional
+		if file == "" {
+			file = a
+		}
+	}
+
+	if file == "" {
+		return "", "", false, fmt.Errorf("missing <file> for `desic check`")
+	}
+	return file, roots, verbose, nil
 }
 
 func demoTokens() {
