@@ -193,64 +193,73 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	return nil
 }
 
-// REPLACE the entire typCall function with this version.
 func (c *checker) typCall(call *ast.CallExpr) types.T {
-	// Handle non-ident callees: first-class function values
+	// Identifier callee path
 	if id, ok := call.Callee.(*ast.Ident); ok {
-		// Known identifier name
-		set := c.info.Funcs[id.Name]
+		// 1) Scope check first: unknown name -> undefined function (tests expect this wording).
+		sym := c.scope.Lookup(id.Name)
+		if sym == nil {
+			c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+			return nil
+		}
+		// If the symbol exists but isn't a function, it's not callable.
+		if sym.Kind != SymFunc {
+			c.add(diagAt("DTE0045", id.Span, "object is not callable"))
+			return nil
+		}
 
-		// Type arguments
+		// 2) Gather arg types.
 		args := make([]types.T, len(call.Args))
 		for i, a := range call.Args {
 			args[i] = c.typ(a)
 		}
 
-		// If we have no information about this function (e.g., from-import alias with no signature),
-		// be permissive in Phase-1: assume the call is valid and the return type equals the first
-		// argument's type when all args share the same primitive type; otherwise leave unknown.
+		// 3) Overload resolution (or Phase-1 permissive fallback for from-import aliases).
+		set := c.info.Funcs[id.Name]
 		if set == nil || len(set.Cands) == 0 {
+			// Phase-1: be permissive for imported aliases with no attached signature.
+			// If all args share the same primitive type, return that; else unknown.
 			if len(args) == 0 {
-				// unknown arity; pretend it returns none
+				c.info.Types[call] = types.None
 				return types.None
 			}
-			// Check if all args share the same primitive type (int/float/bool/str)
-			same := true
 			base := args[0]
-			if !(types.Equal(base, types.Int) || types.Equal(base, types.Float) || types.Equal(base, types.Bool) || types.Equal(base, types.Str)) {
-				same = false
-			} else {
+			isPrim := types.Equal(base, types.Int) || types.Equal(base, types.Float) ||
+				types.Equal(base, types.Bool) || types.Equal(base, types.Str)
+			if isPrim {
+				allSame := true
 				for i := 1; i < len(args); i++ {
 					if !types.Equal(args[i], base) {
-						same = false
+						allSame = false
 						break
 					}
 				}
+				if allSame {
+					c.info.Types[call] = base
+					return base
+				}
 			}
-			if same {
-				c.info.Types[call] = base
-				return base
-			}
-			// If we can't infer, don't error loudly in Phase-1; return nil (unknown)
+			// Can't infer safely; leave unknown (no extra diag here).
 			return nil
 		}
 
-		// Try exact match first.
+		// 4) Exact-match resolution against known candidates.
 		cands := set.ResolveExact(args)
 		switch len(cands) {
 		case 1:
-			c.info.Types[call] = cands[0].Type.Ret
-			return cands[0].Type.Ret
+			ret := cands[0].Type.Ret
+			c.info.Types[call] = ret
+			return ret
 		case 0:
-			// No exact match—distinguish arity vs. type mismatch.
-			hasSameArity := false
+			// Distinguish arity vs type mismatch for clearer errors.
+			sameArity := false
 			for _, cand := range set.Cands {
 				if len(cand.Type.Params) == len(args) {
-					hasSameArity = true
+					sameArity = true
 					break
 				}
 			}
-			if !hasSameArity {
+			if !sameArity {
 				c.add(diagAt("DTE0046", call.Span, "arity mismatch for call to "+id.Name))
 			} else {
 				c.add(diagAt("DTE0101", call.Span, "no matching overload for call to "+id.Name))
@@ -262,7 +271,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 	}
 
-	// Callee is not an identifier: attempt to type it as a first-class function value.
+	// Non-identifier callee: first-class function value?
 	ct := c.typ(call.Callee)
 	if fn, ok := ct.(*types.Func); ok {
 		args := make([]types.T, len(call.Args))
@@ -283,7 +292,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		return fn.Ret
 	}
 
-	// Not callable
+	// Not callable at all.
 	c.add(diagAt("DTE0045", call.Span, "object is not callable"))
 	return nil
 }
