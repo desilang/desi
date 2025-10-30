@@ -8,14 +8,17 @@ import (
 
 func TestCollectExports_TypedOnly(t *testing.T) {
 	src := `
-def add(a: int, b: int) -> int:
+pub def add(a: int, b: int) -> int:
   return a + b
 
 def bad(a):
   return a
 
-def area(r: float) -> float:
+pub def area(r: float) -> float:
   return r
+
+def priv(a: int) -> int:
+  return a
 `
 	mod, diags := parse.ParseFile("m.desi", []byte(src))
 	if len(diags) != 0 {
@@ -40,6 +43,9 @@ def area(r: float) -> float:
 		t.Fatalf("area candidate mismatch: got %q", got)
 	}
 	if _, ok := exp.Funcs["bad"]; ok {
-		t.Fatalf("bad should not be exported")
+		t.Fatalf("bad should not be exported (untyped param)")
+	}
+	if _, ok := exp.Funcs["priv"]; ok {
+		t.Fatalf("priv should not be exported (not pub)")
 	}
 }
