@@ -189,9 +189,42 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.LBRACK:
 			idxStart := spanPos(p.file, p.cur)
 			p.next()
-			idx := p.parseExpr()
+
+			// Detect slice forms by watching for ':' separators.
+			// Grammar (all parts optional where shown):
+			//   [i]              -> IndexExpr
+			//   [i:j] [i:j:k] [:j] [i:] [:] [::k] [:j:k] [i::k]
+			var i1, i2, i3 ast.Expr
+			isSlice := false
+
+			// First part (may be empty for [:...])
+			if p.cur.Tok != token.COLON && p.cur.Tok != token.RBRACK {
+				i1 = p.parseExpr()
+			}
+			// If we see a colon, it's a slice.
+			if p.cur.Tok == token.COLON {
+				isSlice = true
+				p.next() // consume first ':'
+				// Second part (stop) optional if next is ':' or ']'
+				if p.cur.Tok != token.COLON && p.cur.Tok != token.RBRACK {
+					i2 = p.parseExpr()
+				}
+				// Optional step
+				if p.cur.Tok == token.COLON {
+					p.next()
+					if p.cur.Tok != token.RBRACK {
+						i3 = p.parseExpr()
+					}
+				}
+			}
+
 			p.expectClose(token.RBRACK, "]", idxStart)
-			e = &ast.IndexExpr{X: e, Idx: idx, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
+			if isSlice {
+				e = &ast.SliceExpr{X: e, I: i1, J: i2, K: i3, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
+			} else {
+				// Simple index
+				e = &ast.IndexExpr{X: e, Idx: i1, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
+			}
 		case token.DOT:
 			dotStart := spanPos(p.file, p.cur)
 			p.next()
