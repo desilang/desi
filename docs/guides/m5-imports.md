@@ -1,6 +1,6 @@
-# M5 — Imports & Resolver (Phase 1)
+# M5 — Imports & Resolver (Phases 1–2)
 
-**Goal:** Introduce `import` / `from … import …` syntax, define how modules are found, and document resolver behavior for Phase-1. This describes compiler rules, not a user tutorial.
+**Scope:** Compiler behavior (not a user tutorial). Phase-1 introduced the syntax, loader, and graph. **Phase-2 adds real cross-module function signatures, `pub` export rules, and unused-import lints**—without changing CLI flags or adding new diagnostic IDs.
 
 ---
 
@@ -10,13 +10,12 @@
 import math
 import io as I
 
-from math import sqrt, hypot as hyp
+from math import add, hypot as hyp
 ```
 
 * `import dotted.name [as alias]` binds the **leaf** name (or `alias`) in the importing module’s local scope.
 * `from dotted.name import a [as x], b, ...` binds each listed item into the local scope.
-
-No relative imports, no `*`, no re-exports in Phase-1.
+* No relative imports, no `*`, no re-exports (yet).
 
 ---
 
@@ -24,84 +23,58 @@ No relative imports, no `*`, no re-exports in Phase-1.
 
 **`__mod.desi` is an optional package initializer** (analogous to Python’s `__init__.py`).
 
-* A directory is a **package iff** it contains `__mod.desi`. If it’s missing, the directory is **not** a package in Phase-1.
+* A directory is a **package iff** it contains `__mod.desi`. If it’s missing, the directory is **not** a package.
 * Resolution for `import a.b` walks:
 
   1. `a/__mod.desi` (must exist — `a` is a package)
   2. then either `a/b/__mod.desi` (subpackage) **or** `a/b.desi` (leaf file module)
+* `from a import x` allows:
 
-`from a import x` allows:
+  * `x` exported by `a/__mod.desi`, **or**
+  * direct submodule `a/x/__mod.desi` or `a/x.desi`.
 
-* `x` as a name **exported by** `a/__mod.desi`, **or**
-* direct submodule `a/x/__mod.desi` or `a/x.desi`.
-
-**Phase-1 visibility:** treat all names defined in `__mod.desi` as exportable. No `pub` enforcement across packages yet.
+**Leaf file modules** are allowed only for the **final** segment.
 
 ---
 
-## Search roots (stdless standard library)
+## Search roots (std-less standard library)
 
-The resolver searches **multiple roots in order**; the first match wins:
+Multi-root search (first match wins):
 
-1. The **project root** (user code)
-2. The **standard library root**: `compiler/lib/`
+1. Project root (user code)
+2. Standard library root: `compiler/lib/`
 
-Dotted names are mapped to paths under a root using the rules above.
-There is **no `std.` prefix**. Standard modules are imported as short names:
+Dotted names map under a root with the rules above. There is **no `std.` prefix**; std modules import directly:
 
 ```desi
-import math       # resolves to compiler/lib/math/__mod.desi
-import io         # resolves to compiler/lib/io.desi or compiler/lib/io/__mod.desi
+import math        # -> compiler/lib/math/__mod.desi
+import io          # -> compiler/lib/io.desi or io/__mod.desi
 from time import now
 ```
 
 ---
 
-## Resolver model
+## Phase-1 (recap)
 
-1. **Loader** abstracts where modules come from:
+**Resolver model**
 
-* FS loader: reads `.desi` files from disk using the **multi-root** search order.
-* In-memory loader: test fixture map `path → source`.
+1. Loader abstraction (FS + in-memory maps for tests).
+2. Module graph built from the entry:
 
-2. **Module graph** is built (DFS) from the importing module:
+  * Detect **cycles**; diags for unknown modules, duplicates, alias conflicts.
+  * Compute local bindings for `import …` and `from … import …`.
+3. **Checker bridge** injects these bindings + prelude builtins into the top scope to avoid unknown-identifier errors.
 
-* Detect **cycles** (`a ↔ b`, etc.).
-* Emit diags for unknown modules, duplicates, alias conflicts.
-* Compute bindings for:
+**Prelude (no import)**
+`print`, `str`, etc. are injected by the checker.
 
-  * `import a.b [as x]` → local `x` (or `b` if no alias)
-  * `from a.b import y [as z]` → local `z` (or `y`)
-* Track **unused import / unused from-item** for Phase-1 lints (usage marked by the checker).
+**CLI behavior**
 
-3. **Checker bridge** injects these bindings into the top scope before type checking so imported names don’t cause unknown-identifier errors.
+* Exit codes: `0` ok, `1` had diagnostics, `2` arg/I/O error.
+* `-v` prints normalized entry + active `-I` roots.
+* Flags are order-independent.
 
----
-
-## Prelude builtins (no import)
-
-Prelude identifiers (e.g., `print`, `str`) are injected into the top scope by the checker and are always available without import. (Implementation details and codegen/intrinsics are out of scope for M5.)
-
----
-
-## CLI behavior (Phase-1)
-
-* **Exit codes**
-
-  * `0` — success (`ok`)
-  * `1` — diagnostics were emitted (parse/resolve/type)
-  * `2` — I/O or argument errors (printed as `check error: …`)
-
-* **Verbose**
-  `-v` prints the normalized entry path and the active `-I` roots.
-
-* **Flag ordering**
-  Subcommand form accepts flags in any order:
-  `desic check -I ROOTS -v FILE`, `desic check FILE -I ROOTS`, or `-I ROOTS -check FILE`.
-
----
-
-## Diagnostics (Phase-1, use existing IDs)
+**Diagnostics (Phase-1 IDs used)**
 
 | Situation                 | Code                                       |
 | ------------------------- | ------------------------------------------ |
@@ -113,46 +86,135 @@ Prelude identifiers (e.g., `print`, `str`) are injected into the top scope by th
 | Unused import             | `DMW0004` (`module.unused_import`)         |
 | Unused from-item          | `DMW0005` (`module.unused_from_item`)      |
 
-**Type side remains unchanged:** unknown identifiers → `DTE0001`.
+**Limits**
+
+* No relative imports.
+* No `from x import *`.
+* Subpackages require `__mod.desi`.
+* Leaf modules only at final segment.
 
 ---
 
-## Limits in Phase-1
+## Phase-2 (this update)
 
-* No relative imports (`.` / `..`)
-* No re-exports (`from x import *`)
-* No package-level visibility checks (`pub`) across packages
-* Subpackages must have `__mod.desi` to be considered packages
-* Leaf file modules are allowed only as the **final** segment
+### 1) Real cross-module function signatures
 
----
+The resolver now computes an **Exports** table per imported module (functions only), and the checker **consumes exact typed overloads** for `from … import …` aliases.
 
-## Phase-1 callable aliases (note)
+**Export rules (functions)**
 
-For `from a.b import foo as bar`, the checker treats `bar` as a callable name in Phase-1 even if the target module’s exact signature hasn’t been imported yet. This avoids spurious `undefined function` errors during early integration; exact cross-module signatures land in Phase-2.
+* Only **`pub def`** are exported.
+* Function must be **fully typed**: every parameter and the return type annotated.
+* Top-level functions only (methods / nested functions are not exported).
+* Overloads: multiple `pub def` with the same name are exported as an overload set.
+* If a module defines both typed and untyped overloads, **only the typed ones** are exported.
 
----
+**Checker behavior**
 
-## Suggested layouts (stdless)
+* For `from a.b import foo as bar`, `bar`’s overload set is filled with the **exact** exported signatures from `a.b`.
+* When real signatures exist, the Phase-1 “permissive fallback” for calls is **not** used; calls resolve against those real candidates.
+* If no exported typed signature exists for a requested item, see **DME0003** below.
 
+**Example (stdlib stub)**
+
+```desi
+# compiler/lib/math/__mod.desi
+pub def add(x: int, y: int) -> int:
+  return x + y
 ```
-<project-root>/
-  app/
-    __mod.desi
-    main.desi
 
-compiler/
-  lib/
-    math/
-      __mod.desi
-    io.desi
-    time/
-      __mod.desi
+```desi
+# user module
+from math import add as sum
+sum(2, 3)   # checked as (int, int) -> int
 ```
 
-Examples:
+### 2) Import validation (no new codes)
 
-* `import math` → binds `math` from `compiler/lib/math/__mod.desi`
-* `import io as I` → binds `I` from `compiler/lib/io.desi` (or `io/__mod.desi`)
-* `from math import sqrt as root` → binds `root`
-* `from time import now` → binds `now`
+* `from a import x` where `x` is **not exported** by `a` → **`DME0003 module.bad_import`**, message:
+  `a has no exported 'x'`.
+* “Not exported” includes: missing name, **not `pub`**, or missing type annotations.
+
+### 3) Unused import lints (now emitted)
+
+* **`DMW0004`**: `import mod` bound but never referenced.
+* **`DMW0005`**: `from mod import name` bound but never referenced.
+* Using a module **as a qualifier** (e.g., `io.println(…)`) counts as usage of `io`.
+
+---
+
+## Visibility policy (what is enforced now)
+
+* **Functions:** `pub def` required for cross-module export (enforced in Phase-2).
+* **Classes/types/consts:** not exported/validated across modules in Phase-2.
+  (Top-level classes default public; nested classes default private — enforcement across modules is planned for a later phase.)
+
+---
+
+## Migration tips
+
+* If a previous Phase-1 `from a import f` now yields `DME0003`, make sure the provider declares:
+
+  ```desi
+  pub def f(...typed...) -> ReturnType: ...
+  ```
+* Update stdlib stubs to `pub def` with full types (e.g., `math.add`, `math.sub`).
+* Keep using leaf file modules only at the final path segment; prefer `__mod.desi` for packages.
+
+---
+
+## Examples
+
+**Good: typed + pub**
+
+```desi
+# a/__mod.desi
+pub def area(r: float) -> float:
+  return 3.14 * r * r
+```
+
+```desi
+from a import area
+area(2.0)  # ok
+```
+
+**Bad: private or untyped**
+
+```desi
+# a/__mod.desi
+def helper(x: int) -> int:   # not pub
+  return x
+
+pub def bad(x):              # untyped param
+  return x
+```
+
+```desi
+from a import helper   # DME0003: a has no exported 'helper'
+from a import bad      # DME0003: a has no exported 'bad'
+```
+
+**Unused**
+
+```desi
+import io              # DMW0004: unused import 'io'
+from math import add   # DMW0005: unused imported name 'add'
+```
+
+---
+
+## CLI (unchanged)
+
+* Exit codes: `0/1/2` unchanged.
+* `-v` still prints entry + roots.
+* `-I` multi-root search unchanged.
+
+---
+
+## Future work (post M5)
+
+* Re-exports and `*`
+* Relative imports
+* Cross-module exports for classes/types/consts
+* Qualified member resolution with visibility on types
+
