@@ -1,15 +1,21 @@
 # Desi Syntax (revised bootstrap)
 
-This doc tracks the **implemented** subset at each milestone.
+This doc tracks the **implemented** subset at each milestone and calls out “what actually works today.” See the guides under `docs/guides/` for deeper details per milestone.
 
 - **M2** extends M1 with:
   - **Decorators** on declarations (currently functions) and **docstring attachment** (first `"""..."""` in a block).
   - **Inline forms** for `if`/`while`/`for` (`if cond: stmt`, etc.).
   - **Using/Defer** statements.
-  - **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=` , `**=`, `^=`) and multi-target `:=`.
+  - **Augmented assignment** (`+=`, `-=`, `*=`, `/=`, `%=`, `**=`, `^=`) and multi-target `:=`.
   - **Bitwise OR** `|` (now parsed, not just scanned).
 - **M3A** adds **classes (parse-only)** with decorators, bases, fields, methods, nested classes, and docstrings.
-- **M4** adds a **type-checking pass** on top of the existing grammar (**no grammar changes**). See **[M4 — Types & Overloads](./guides/m4-types.md)** for the semantic rules.
+- **M4** adds a **type-checking pass** on top of the existing grammar. See **[M4 — Types & Overloads](./guides/m4-types.md)** for the semantic rules.
+- **M5** adds:
+  - (Phase-1/2) **Imports** (`import` / `from … import …`), a loader with **multi-root** search, and a resolver that builds per-module **Exports** (functions only; **only** `pub def` with full types).
+  - (Phase-3) **Module-qualified calls:** `import math; math.add(…)` resolves using the same exported signatures as `from math import add`. Non-exported member → **`DME0003`** (`"<mod> has no exported '<name>'"`).
+  - (Phase-4) **Ergonomics v1:**
+    **(4a)** `a + b` yields `str` if either side is `str` (coerces `int`/`float`/`bool`),
+    **(4d)** Slice steps `s[i:j:k]` and short forms (`s[i:j]`, `s[:j]`, `s[:]`, `s[::k]`, `s[2::]`, …). In M5, **string slices type to `str`**; other containers will be typed later.
 
 ---
 
@@ -17,11 +23,11 @@ This doc tracks the **implemented** subset at each milestone.
 
 M4 introduces a semantic/type pass that runs after parsing:
 
-- **Concrete types**: `int`, `float`, `bool`, `str`, `none`; constructed types `list[T]`, `set[T]`, `dict[K,V]`, `tuple[...]`, `future[T]` (future checks minimal).
+- **Concrete types**: `int`, `float`, `bool`, `str`, `none`; container shapes recognized in syntax (`list[T]`, `dict[K,V]`, `set[T]`, `tuple[...]`, `future[T]`) though checks vary by milestone.
 - **Inference & checks**:
   - literals map to their scalar types; `let x = …` infers from RHS when no annotation is present.
   - binary arithmetic on `int|float` (exact operand types); comparisons produce `bool`; logical `and/or` require `bool`.
-  - **pipeline `|>`** is checked as “insert LHS as the first argument”: `a |> f(b,c)` ≡ `f(a,b,c)`.
+  - **pipeline `|>`** is checked as “insert LHS as the first argument”: `a |> f(b,c)` ≡ `f(a,b,c)`. Pipeline diagnostics mention “pipeline …” in messages for clarity.
   - **exact-match overloading** by **arity + parameter types**; ambiguous/missing picks report targeted diagnostics.
   - **comprehensions** propagate element/key/value types into `list/set/dict`.
   - **lambdas**: typed parameters are supported (tests prefer explicit param types).
@@ -39,15 +45,10 @@ For full details and diagnostic codes, see **[M4 — Types & Overloads](./guides
 ## Layout and indentation
 
 Desi uses layout with `NL`, `Indent`, `Dedent`.
-**Policy:** **tabs-only** at the start of a non-blank, non-comment line. Spaces at BOL emit `DLE0003`. **Blank lines and comment-only lines do not affect indentation.**
+**Policy:** **tabs-only** at the start of a non-blank, non-comment line (spaces after the first token are fine).
+*Blank lines and comment-only lines do not affect indentation.*
 
-## Comments
-
-`#` to end of line (except future `#{` set literal; currently treated as `#` + `{`).
-
-## Identifiers
-
-Letters/`_`/digits. Builtin types still lexed as `IDENT` (see below).
+---
 
 ## Keywords
 
@@ -62,34 +63,36 @@ Letters/`_`/digits. Builtin types still lexed as `IDENT` (see below).
 - Integers: dec/hex/bin/oct with `_` separators.
 - Floats: decimal `1.2`, `2.`, `.5`, decimal exponents; **hex floats** `0x1.fp3`.
 - Strings: `"..."`, `f"..."`, long `"""..."""` (triple-quoted).
-  - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser converts that first statement to a `DocStringStmt` and, for **functions and classes**, attaches it to the decl.
+  - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser emits a `StmtDocString` and, for **functions and classes**, attaches it to the decl.
+  - **f-strings (stage 1):** treated as plain `str` at type-time; hole parsing/desugaring is deferred.
 
 ## Operators & punctuators (implemented today)
 
 Greedy tokenization (longest wins).
 
-Grouping: `(` `)` `[` `]` `{` `}`
-Delimiters: `,` `:` `.` `@`
-Assignment: `=` `:=` `+=` `-=` `*=` `/=` `%=` `**=` `^=`
-Arithmetic: `+` `-` `*` `/` `%` `**`
-Bitwise/pipeline: `^` `|` `|>`
-Compare: `==` `!=` `<` `<=` `>` `>=`
-Arrows: `->` `=>`
-Bang: `!`
+- Grouping: `(` `)` `[` `]` `{` `}`
+- Delimiters: `,` `:` `.` `@`
+- Assignment: `=` `:=` `+=` `-=` `*=` `/=` `%=` `**=` `^=`
+- Arithmetic: `+` `-` `*` `/` `%` `**`
+- Bitwise/pipeline: `^` `|` `|>`
+- Compare: `==` `!=` `<` `<=` `>` `>=`
+- Arrows: `->` `=>`
+- Bang: `!`
 
 ### Expression precedence (high → low)
 
 ```
 
-** (right-assoc)
-unary: -  !  not  await
+primary/index/call/field
+unary
+**                         # right-assoc
 
-* /  %
+* / %
 
 - -
 
-^
-|
+<< >>
+& ^ |
 < <= > >=
 == !=
 |>
@@ -98,77 +101,51 @@ or
 
 ```
 
+---
+
+## Indexing & Slicing
+
+- **Indexing:** `x[i]`
+- **Slicing with steps (M5-4d):** `x[i:j:k]` supports any part omitted:
+  - `x[i:j]`, `x[:j]`, `x[:]`, `x[::k]`, `x[2::]`, `x[1:5:2]`, etc.
+- **Typing in M5:** if `x` is `str`, then `x[...]` is `str`. Other container slice typing will be added in a later milestone.
+
+---
+
 ## M2 statements
 
 - `let [mut] name [: Type] = Expr`
 - `return [Expr]`
 - `if Expr: SimpleStmt` or block form (`:` + NL + indented block). `elif`/`else` supported in both forms.
 - `while Expr: SimpleStmt` or block form.
-- `for Target in Expr: SimpleStmt` or block form (Target is parsed-only).
-- `using Target [= Expr]: NL Block`
-- `defer CallExpr`
+- `for Target in Expr: SimpleStmt` or block form.
+- `using Expr: Block`
+- `defer SimpleStmt` (executes at scope-exit)
+- `match Expr: Block` with guarded arms (parse surface in M4; more checks later)
 
-## Decorators & docstrings (M2)
+## Declarations
 
-Decorators immediately precede a decl (today: `def`). They’re attached to the decl’s AST.
-Docstrings: the first triple-quoted string in a function/class body is attached to the decl node and removed from the block.
+- `def name(params…) [-> Type]: Block` (decorators + docstrings supported; implicit `self` for class methods)
+- `class Name [ (Base, …) ]: Block` (parse-only checks in M3A; visibility policy in policy doc)
+- `struct Name: Fields…`
+- `enum Name: Variants…`
+- `type Name = T`
 
-## CLI
+---
 
-- `-tokens <file>` — dump tokens and any lexer diagnostics
-- `-demo-layout` — print layout token stream for a small sample
-- `-diag` — render a sample diagnostic using `codes.json`
-- `-ast <file>` — parse and pretty-print AST
-- `-check <file>` — parse and **type-check** the file (M4 semantics); prints diagnostics and exits non-zero on errors
-- `-version` — tool version
+## Imports (M5)
 
-## Classes (parse-only) — M3A
+- `import dotted.name [as alias]` binds the **leaf** or `alias` as a **module binding** in the local scope.
+- `from dotted.name import f [as g], …` binds selected items (**functions only**, if exported) directly in the local scope.
+- **Packages:** a directory is a package iff it contains `__mod.desi` (leaf files may stand alone as modules).
+- **Module-qualified calls (Phase-3):** `import math; math.add(2,3)` resolves via resolver **Exports**. Non-exported member → **`DME0003`**.
+- **Lints:** `DMW0004` unused module import; `DMW0005` unused from-item. Using a qualifier (`math.add`) counts as usage.
 
-- **Header:** `class Name(Base1, Base2):` with **Python-style base lists** (trailing comma allowed).
-- **Decorators:** `@decorator` lines may precede **classes** and **methods**.
-- **Docstring:** if the first item in a class body is a triple-quoted string (`"""..."""`), it attaches to the class and is removed from the body.
-- **Visibility**
-  - **Top-level classes are public by default**; nested classes are **private by default** unless `pub`.
-  - **Fields** and **methods** may be marked `pub` (stored on the AST; no export logic yet).
-- **Members**
-  - **Fields:** `["pub"] name: Type`
-  - **Methods:** `def` or `async def`, params (with defaults), optional return type. One-line bodies are supported: `def f(): "ok"`.
-  - **Nested classes:** same header shape inside a class body; decorators allowed.
+---
 
-> Semantics are deferred in M3A: this milestone is **parse-only** and updates the AST/printer/docs/tests accordingly.
+## CLI notes
 
-## M3D — Lambdas & Comprehensions (parse-only syntax; typed in M4)
+- `desic check` exit codes: `0` ok, `1` had diagnostics, `2` arg/I/O error.
+- `-I` supports **multi-root import search** (e.g., `-I "examples:compiler/lib"`).
+- Diagnostic output is capped to a small number in the CLI with a suppression summary (keeps the console readable for very error-y files).
 
-### Lambdas
-
-Two forms:
-
-* Single param (M3C): `x => expr`
-* **Parenthesized (M3D)**: `(x:int, y) => expr` (trailing comma allowed)
-
-Examples:
-
-```desi
-let add  = (x:int, y:int) => x + y
-let call = (x, y) => foo(x, y)
-```
-
-> **M4 typing:** typed parameters are checked; untyped params may require annotations in this phase.
-
-### Comprehensions
-
-* List: `[expr for target in iter { for target in iter } [ if expr ]]`
-* Dict: `{key: val for target in iter { ... } [ if expr ]}`
-* Set:  `#{expr for target in iter { ... } [ if expr ]}`
-
-Chaining `for` is supported, with **at most one `if` per clause**:
-
-```desi
-let pairs = [x+y for x in xs if p(x) for y in ys if q(y)]
-let pos   = {k: v for k in ks for v in vs if v > 0}
-let good  = #{f(x) for x in xs if ok(x)}
-```
-
-> **M4 typing:** element/key/value types propagate to `list/set/dict`.
-
-> Diagnostics are emitted for malformed heads (e.g., `[x]` → “expected 'for' in list comprehension”).
