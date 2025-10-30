@@ -121,18 +121,20 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M5 — Resolver & Imports (Phase 1)
+### M5 — Resolver & Imports (Phase 1–4)
 
-**Scope**
+**Phase-1 (DONE ✅):** Syntax, loader with `__mod.desi`, multi-root search, graph/cycles, prelude injection, basic diags.
 
-* Module loader (project root + std); `import` / `from … import …`.
-* Symbol tables & scopes; visibility enforcement at module boundaries.
-* Detect duplicate/unused imports (warnings), import cycles, unknown modules.
+**Phase-2 (DONE ✅):** Real cross-module function signatures via resolver **Exports**; only **`pub def` + fully typed** are exported. Checker consumes exact overloads for `from … import …`. `DME0003` on missing export. **Unused-import lints** (`DMW0004/5`) implemented.
 
-**Acceptance**
+**Phase-3 (Module-qualified calls):**
+Allow `import math; math.add(…)` to resolve using `math`’s exported signatures. If the target name isn’t exported: `DME0003`. No parser changes.
 
-* `desic check file.desi` reports undefined symbols / visibility errors with `DME*/DTE*`.
-* Golden tests for import cycles, alias conflicts, and prelude shadowing rules.
+**Phase-4 (Pythonic niceties, Ergonomics v1):**
+- **4a:** Implicit `str` on `+` when one side is `str` (lower to `str(_)`).
+- **4b:** **f-strings (stage 1)** — `f"hello {name}"` desugars to concatenation + `str`. No format specs yet.
+- **4c:** Tuple unpacking & destructuring assignment; optional destructuring in `for`.
+- **4d:** Slice steps `s[i:j:k]` (parser + basic typing).
 
 ---
 
