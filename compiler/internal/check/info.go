@@ -2,6 +2,7 @@ package check
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -15,7 +16,7 @@ const (
 	SymType // class/struct/enum/type names (placeholder in M4/M5)
 )
 
-// Symbol is a bound name with an optional static type and source association.
+// Symbol represents a bound identifier.
 type Symbol struct {
 	Name string
 	Kind SymbolKind
@@ -23,38 +24,43 @@ type Symbol struct {
 	Node ast.Node
 }
 
-// OverloadSet groups same-named functions for exact-match resolution.
-type OverloadSet struct {
-	Name  string
-	Cands []*FuncCand
+// Info is the checker's public info surface (types, idents, overloads).
+type Info struct {
+	Types  map[ast.Node]types.T    // inferred types for important nodes
+	Idents map[*ast.Ident]*Symbol  // bound identifiers
+	Funcs  map[string]*OverloadSet // function overload sets by name
+
+	// M5 Phase-3: bridge to resolver + local-import map for qualified calls.
+	ImportPaths map[string]string // local import binding -> dotted module path (e.g., math -> "math")
+	R           *resolve.Info     // resolver results (exports table, etc.)
 }
 
-// FuncCand represents one concrete function candidate (builtin or user-declared).
+// FuncCand represents a single callable candidate.
 type FuncCand struct {
 	Decl *ast.FuncDecl // may be nil (e.g., builtins)
 	Type *types.Func   // canonical function type (params + ret)
 }
 
-// Info stores inference results and binding maps for a module.
-type Info struct {
-	Types  map[ast.Node]types.T    // inferred types for important nodes
-	Idents map[*ast.Ident]*Symbol  // bound identifiers
-	Funcs  map[string]*OverloadSet // function overload sets by name
+// OverloadSet groups candidate functions by name.
+type OverloadSet struct {
+	Name  string
+	Cands []*FuncCand
 }
 
-// NewInfo returns a fresh Info and injects prelude builtins.
+// NewInfo allocates a fresh Info and pre-populates prelude builtins.
 func NewInfo() *Info {
 	info := &Info{
-		Types:  make(map[ast.Node]types.T),
-		Idents: make(map[*ast.Ident]*Symbol),
-		Funcs:  make(map[string]*OverloadSet),
+		Types:       make(map[ast.Node]types.T),
+		Idents:      make(map[*ast.Ident]*Symbol),
+		Funcs:       make(map[string]*OverloadSet),
+		ImportPaths: make(map[string]string),
+		R:           nil,
 	}
 	addPreludeBuiltins(info)
 	return info
 }
 
-// addPreludeBuiltins installs small, exact-match overload sets for phase M4/M5.
-// Keep this tiny: no variadics, no formatting, just simple exact signatures.
+// addPreludeBuiltins seeds overloads for a few core builtins used in tests.
 func addPreludeBuiltins(info *Info) {
 	if info == nil {
 		return
