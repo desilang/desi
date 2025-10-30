@@ -11,7 +11,7 @@ import (
 func TestPopulateImportedFuncSigs_Basic(t *testing.T) {
 	ldr := resolve.NewMemLoader(map[string]string{
 		"math/__mod.desi": `
-def add(a: int, b: int) -> int:
+pub def add(a: int, b: int) -> int:
   return a + b
 `,
 	})

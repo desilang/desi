@@ -32,7 +32,7 @@ func TestUnusedImport_WarnsDMW0004(t *testing.T) {
 func TestUnusedFromItem_WarnsDMW0005(t *testing.T) {
 	ldr := resolve.NewMemLoader(map[string]string{
 		"math/__mod.desi": `
-def add(a: int, b: int) -> int:
+pub def add(a: int, b: int) -> int:
   return a + b
 `,
 	})
