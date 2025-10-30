@@ -19,8 +19,11 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 		start = decs[0].Span
 	}
 
+	// NEW: optional 'pub' before function headers (top-level + decorated)
+	pub := p.accept(token.KW_pub)
 	// Optional 'async' before 'def'
 	async := p.accept(token.KW_async)
+
 	if !p.expect(token.KW_def, "def") {
 		if async {
 			p.errAsyncBeforeDef(start)
@@ -39,6 +42,7 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 	if !p.expect(token.LPAREN, "(") {
 		return nil
 	}
+
 	var params []ast.Param
 	if p.cur.Tok != token.RPAREN {
 		params = p.parseParams()
@@ -66,7 +70,7 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 
 	fn := &ast.FuncDecl{
 		Async:      async,
-		Pub:        false, // top-level functions have no pub in M3A
+		Pub:        pub, // NEW: top-level pub now supported
 		Name:       name,
 		Params:     params,
 		RetType:    ret,
@@ -82,7 +86,6 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 			fn.Body.Stmts = fn.Body.Stmts[1:]
 		}
 	}
-
 	return fn
 }
 

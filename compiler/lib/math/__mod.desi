@@ -1,6 +1,6 @@
-# Phase-1 stub math — enough for imports demo
-def add(x: int, y: int) -> int:
+# Phase-2 stub math — exported typed functions are pub
+pub def add(x: int, y: int) -> int:
   return x + y
 
-def sub(x: int, y: int) -> int:
+pub def sub(x: int, y: int) -> int:
   return x - y

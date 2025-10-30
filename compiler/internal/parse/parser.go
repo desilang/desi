@@ -73,6 +73,7 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			continue
 
 		case token.KW_pub:
+			// NEW: allow 'pub def' (and 'pub async def') at top-level
 			switch p.peek.Tok {
 			case token.KW_class:
 				if c := p.parseClassWithDecs(nil, false /*nested*/); c != nil {
@@ -89,8 +90,13 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 					m.Decls = append(m.Decls, e)
 				}
 				continue
+			case token.KW_def, token.KW_async:
+				if f := p.parseFuncWithDecs(nil); f != nil {
+					m.Decls = append(m.Decls, f)
+				}
+				continue
 			default:
-				// Let function parsing diagnose invalid 'pub' usage in other contexts.
+				// let function parsing diagnose invalid pub usage elsewhere
 			}
 
 		case token.KW_def, token.KW_async:
@@ -104,6 +110,7 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		top := &ast.FuncDecl{
 			Name: ast.Ident{Name: "__top__", Span: spanPos(filename, p.cur)},
 			Body: &ast.Block{Span: spanPos(filename, p.cur)},
+			Span: spanPos(filename, p.cur),
 		}
 		for p.cur.Tok != token.EOF &&
 			p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async &&
@@ -148,6 +155,7 @@ func (p *Parser) expect(tok token.Token, label string) bool {
 	p.errExpected(spanPos(p.file, p.cur), label)
 	return false
 }
+
 func (p *Parser) expectClose(tok token.Token, label string, open diag.Span) bool {
 	if p.cur.Tok == tok {
 		p.next()
@@ -156,11 +164,13 @@ func (p *Parser) expectClose(tok token.Token, label string, open diag.Span) bool
 	p.errUnclosed(open, label)
 	return false
 }
+
 func (p *Parser) skipNLs() {
 	for p.cur.Tok == token.NL {
 		p.next()
 	}
 }
+
 func (p *Parser) syncStmt() {
 	for p.cur.Tok != token.NL && p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
 		p.next()
