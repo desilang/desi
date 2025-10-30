@@ -452,5 +452,12 @@
       "title": "non-exhaustive match",
       "help": "add arms for the missing variants or a wildcard '_' arm"
     }
+  },
+  "borrow": {
+    "async_inout": {
+      "id": "DBR0001",
+      "title": "cannot hold 'inout' borrow across 'await'",
+      "help": "Move the 'await' earlier or avoid 'inout' in async callees. Phase-2 will refine this with data-flow for narrower borrows."
+    }
   }
 }

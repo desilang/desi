@@ -156,6 +156,9 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		}
 	}
 
+	// M6-C: callee-side borrow rule on async functions.
+	c.checkAsyncInoutAwait(fd)
+
 	// Body.
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
