@@ -194,6 +194,49 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 }
 
 func (c *checker) typCall(call *ast.CallExpr) types.T {
+
+	// Module-qualified callee: e.g., math.add(...)
+	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
+		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
+			// 1) Gather arg types.
+			args := make([]types.T, len(call.Args))
+			for i, a := range call.Args {
+				args[i] = c.typ(a)
+			}
+			// 2) If no exported candidates, it's a bad import member.
+			if set == nil || len(set.Cands) == 0 {
+				c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
+				return nil
+			}
+			// 3) Exact-match overload resolution.
+			cands := set.ResolveExact(args)
+			switch len(cands) {
+			case 1:
+				ret := cands[0].Type.Ret
+				c.info.Types[call] = ret
+				return ret
+			case 0:
+				// Distinguish arity vs type mismatch for clearer errors.
+				sameArity := false
+				for _, cand := range set.Cands {
+					if len(cand.Type.Params) == len(args) {
+						sameArity = true
+						break
+					}
+				}
+				if !sameArity {
+					c.add(diagAt("DTE0046", call.Span, "arity mismatch for call to "+fe.Name.Name))
+				} else {
+					c.add(diagAt("DTE0101", call.Span, "no matching overload for call to "+fe.Name.Name))
+				}
+				return nil
+			default:
+				c.add(diagAt("DTE0102", call.Span, "ambiguous overload for call to "+fe.Name.Name))
+				return nil
+			}
+		}
+	}
+
 	// Identifier callee path
 	if id, ok := call.Callee.(*ast.Ident); ok {
 		set, hasSet := c.info.Funcs[id.Name]
@@ -252,7 +295,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			return nil
 		}
 
-		// 4) Exact-match resolution against known candidates.
+		// Resolve exact-match overload.
 		cands := set.ResolveExact(args)
 		switch len(cands) {
 		case 1:
@@ -287,7 +330,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		for i, a := range call.Args {
 			args[i] = c.typ(a)
 		}
-		if len(args) != len(fn.Params) {
+		if len(fn.Params) != len(args) {
 			c.add(diagAt("DTE0046", call.Span, "arity mismatch"))
 			return nil
 		}
