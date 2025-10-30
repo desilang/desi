@@ -1,9 +1,10 @@
 def main() -> int:
   # Parser acceptance for slice steps (typing is placeholder for now)
-  s := "abcdef"
-  _ = s[1:4]
-  _ = s[:5]
-  _ = s[::2]
-  _ = s[2::]
-  _ = s[1:5:2]
+  let s: str = "abcdef"
+  let mut _s: str = ""
+  _s := s[1:4]
+  _s := s[:5]
+  _s := s[::2]
+  _s := s[2::]
+  _s := s[1:5:2]
   return 0
