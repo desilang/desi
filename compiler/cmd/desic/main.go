@@ -341,14 +341,25 @@ func dumpAST(path string) error {
 }
 
 func runCheck(path, iroots string) (hadErrors bool, err error) {
+	const maxCheckDiags = 15
+
 	src, err := os.ReadFile(path)
 	if err != nil {
 		return false, err
 	}
 	mod, pdiags := parse.ParseFile(path, src)
+
+	// If parsing produced diagnostics, show up to maxCheckDiags and suppress the rest.
 	if len(pdiags) > 0 {
-		for _, d := range pdiags {
-			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		limit := len(pdiags)
+		if limit > maxCheckDiags {
+			limit = maxCheckDiags
+		}
+		for i := 0; i < limit; i++ {
+			pdiags[i].RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		if extra := len(pdiags) - limit; extra > 0 {
+			term.Eprintln("…", extra, "more errors suppressed")
 		}
 		return true, nil
 	}
@@ -367,8 +378,17 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		term.Println("ok")
 		return false, nil
 	}
-	for _, d := range res.Diags {
-		d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+
+	// Show up to maxCheckDiags checker diagnostics; suppress the rest.
+	limit := len(res.Diags)
+	if limit > maxCheckDiags {
+		limit = maxCheckDiags
+	}
+	for i := 0; i < limit; i++ {
+		res.Diags[i].RenderTTY(os.Stderr, diag.Theme{Color: false})
+	}
+	if extra := len(res.Diags) - limit; extra > 0 {
+		term.Eprintln("…", extra, "more errors suppressed")
 	}
 	return true, nil
 }

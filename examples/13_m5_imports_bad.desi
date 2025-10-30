@@ -1,0 +1,4 @@
+import math
+def main() -> int:
+  print(math.sqrt(9))
+  return 0
