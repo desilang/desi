@@ -32,6 +32,10 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	rdiags, rinfo := resolve.Resolve(mod, ldr)
 	res.Diags = append(res.Diags, rdiags...)
 
+	// Bridge resolver info and pre-computed import-name -> module-path map for qualified calls.
+	res.Info.R = rinfo
+	res.Info.ImportPaths = computeImportPaths(mod)
+
 	// 2) Create the top scope and inject bindings.
 	top := NewScope(nil)
 	// Make prelude callables visible as identifiers in the top scope (avoid DTE0001).
@@ -39,7 +43,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Resolver-provided imports (modules and from-items) become top-scope names.
 	injectImports(top, rinfo)
 
-	// 2b) Bridge real signatures for from-import aliases (Phase-2).
+	// Phase-2: build exact signatures for 'from … import …' into Info.Funcs.
 	PopulateImportedFuncSigs(mod, res.Info, rinfo)
 
 	// 3) Walk module: collect functions first, then check bodies.
