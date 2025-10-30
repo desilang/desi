@@ -42,6 +42,7 @@ type Param struct {
 	Name    Ident
 	Type    *TypeName // optional
 	Default Expr      // optional
+	Mode    ParamMode // default is ParamMove (zero value)
 	Span    diag.Span
 }
 
