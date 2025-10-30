@@ -78,6 +78,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// 4) After we know which identifiers resolved to which symbols,
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)
+	ut.countUsesFromTypes(res.Info)
 	res.Diags = append(res.Diags, ut.emitUnusedDiags()...)
 
 	return res

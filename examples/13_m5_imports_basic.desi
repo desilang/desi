@@ -1,6 +1,5 @@
 # M5 demo: basic import and from-import with aliasing (std-less)
 
-import io          # compiler/lib/io.desi
 from math import add as sum   # compiler/lib/math/__mod.desi
 
 def main() -> int:

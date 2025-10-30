@@ -6,10 +6,11 @@ import (
 )
 
 // usageTracker collects binding locations for import/from-item names and
-// computes usage counts by inspecting the checker's final Idents map.
+// computes usage counts using both the checker's resolved Idents map and
+// the set of typed expressions (so call-site and qualifier uses are seen).
 type usageTracker struct {
-	importLoc  map[string]diag.Span // local name -> span (for "import")
-	fromLoc    map[string]diag.Span // local name -> span (for "from ... import ...")
+	importLoc  map[string]diag.Span // local name -> span (for "import …")
+	fromLoc    map[string]diag.Span // local name -> span (for "from … import …")
 	usedImport map[string]int
 	usedFrom   map[string]int
 }
@@ -41,7 +42,6 @@ func newUsageTracker(mod *ast.Module) *usageTracker {
 	for _, st := range top.Body.Stmts {
 		switch s := st.(type) {
 		case *ast.ImportStmt:
-			// Local binding name: alias if present, else last path segment.
 			local := ""
 			if s.Alias != nil {
 				local = s.Alias.Name
@@ -74,20 +74,50 @@ func newUsageTracker(mod *ast.Module) *usageTracker {
 }
 
 // countUsesFromIdents increments usage counters based on resolved identifiers.
-// We only count when a resolved symbol KIND matches the binding table:
-//
-//	SymVar  -> import bindings
-//	SymFunc -> from-item bindings
+// We intentionally match by identifier NAME against the recorded binding tables.
+// (Some call paths don't store the callee ident in Info.Idents.)
 func (u *usageTracker) countUsesFromIdents(idmap map[*ast.Ident]*Symbol) {
-	for id, sym := range idmap {
-		switch sym.Kind {
-		case SymVar:
-			if _, ok := u.importLoc[id.Name]; ok {
-				u.usedImport[id.Name]++
+	for id := range idmap {
+		if _, ok := u.importLoc[id.Name]; ok {
+			u.usedImport[id.Name]++
+		}
+		if _, ok := u.fromLoc[id.Name]; ok {
+			u.usedFrom[id.Name]++
+		}
+	}
+}
+
+// countUsesFromTypes scans typed expressions so we see:
+//   - bare callee names:    sum(…)
+//   - module qualifiers:    io.println(…)
+func (u *usageTracker) countUsesFromTypes(info *Info) {
+	for expr := range info.Types {
+		// Calls: look at callee
+		if call, ok := expr.(*ast.CallExpr); ok {
+			switch cal := call.Callee.(type) {
+			case *ast.Ident:
+				if _, ok := u.fromLoc[cal.Name]; ok {
+					u.usedFrom[cal.Name]++
+				}
+				if _, ok := u.importLoc[cal.Name]; ok {
+					u.usedImport[cal.Name]++
+				}
+			case *ast.FieldExpr:
+				// io.println(...) -> mark 'io' as used if it is an import
+				if recv, ok := cal.X.(*ast.Ident); ok {
+					if _, ok := u.importLoc[recv.Name]; ok {
+						u.usedImport[recv.Name]++
+					}
+				}
 			}
-		case SymFunc:
-			if _, ok := u.fromLoc[id.Name]; ok {
-				u.usedFrom[id.Name]++
+			continue
+		}
+		// Standalone selectors also count as using the qualifier.
+		if sel, ok := expr.(*ast.FieldExpr); ok {
+			if recv, ok := sel.X.(*ast.Ident); ok {
+				if _, ok := u.importLoc[recv.Name]; ok {
+					u.usedImport[recv.Name]++
+				}
 			}
 		}
 	}
