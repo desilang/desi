@@ -1,0 +1,9 @@
+def main() -> int:
+  # Parser acceptance for slice steps (typing is placeholder for now)
+  s := "abcdef"
+  _ = s[1:4]
+  _ = s[:5]
+  _ = s[::2]
+  _ = s[2::]
+  _ = s[1:5:2]
+  return 0
