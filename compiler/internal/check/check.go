@@ -141,6 +141,11 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	c.scope = NewScope(c.scope)
 	defer func() { c.scope = saved }()
 
+	// Reset per-function move-tracking state
+	if c.info != nil {
+		c.info.Moved = make(map[string]diag.Span)
+	}
+
 	// Bind params.
 	for i := range fd.Params {
 		p := fd.Params[i]
