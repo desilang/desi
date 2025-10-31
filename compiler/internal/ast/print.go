@@ -42,6 +42,13 @@ func (p *pp) printParams(params []Param) {
 		if i > 0 {
 			p.wr(", ")
 		}
+		// Print parameter mode prefix if present.
+		switch prm.Mode {
+		case ParamRef:
+			p.wr("ref ")
+		case ParamInout:
+			p.wr("inout ")
+		}
 		p.wr("%s", prm.Name.Name)
 		if prm.Type != nil {
 			p.wr(": %s", typeNameStr(prm.Type))
