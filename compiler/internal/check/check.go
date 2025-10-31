@@ -124,7 +124,12 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		set = &OverloadSet{Name: name}
 		c.info.Funcs[name] = set
 	}
-	set.Add(&FuncCand{Decl: fd, Type: sig})
+	// Collect param modes from the declaration.
+	modes := make([]ast.ParamMode, len(fd.Params))
+	for i := range fd.Params {
+		modes[i] = fd.Params[i].Mode
+	}
+	set.Add(&FuncCand{Decl: fd, Type: sig, Modes: modes})
 
 	// Bind the function name in the current scope for call resolution.
 	_ = c.scope.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
