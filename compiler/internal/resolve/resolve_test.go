@@ -1,4 +1,3 @@
-// compiler/internal/resolve/resolve_test.go
 package resolve
 
 import (

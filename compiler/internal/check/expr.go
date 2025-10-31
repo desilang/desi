@@ -70,16 +70,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return types.None
 
 	case *ast.Ident:
-		// DBR0004: use after move (if previously marked)
-		if sp, ok := c.moved.movedAt(x.Name); ok {
-			c.issueUseAfterMove(x.Span, sp)
-		}
-		// If we have a symbol/type for this name, return it.
-		if sym := c.scope.Lookup(x.Name); sym != nil {
-			c.info.Types[e] = sym.Type
-			return sym.Type
-		}
-		return nil
+		return c.typIdent(x)
 
 	case *ast.UnaryExpr:
 		t := c.typ(x.X)
@@ -136,7 +127,23 @@ func (c *checker) typ(e ast.Expr) types.T {
 	}
 }
 
-// compiler/internal/check/expr.go — replace the entire typBinary function with this.
+// typIdent handles identifier expressions, including DBR0004 (use after move).
+func (c *checker) typIdent(x *ast.Ident) types.T {
+	// If this name was previously moved, emit DBR0004 with a note.
+	if sp, ok := c.moved.movedAt(x.Name); ok {
+		c.issueUseAfterMove(x.Span, sp)
+	}
+
+	// If it's bound in the current scope, use the symbol's type.
+	if sym := c.scope.Lookup(x.Name); sym != nil {
+		c.info.Types[x] = sym.Type
+		return sym.Type
+	}
+
+	// Otherwise fall back (undefined names are handled elsewhere if needed).
+	return nil
+}
+
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	op := x.Op
 
@@ -250,7 +257,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 
 		switch len(exact) {
 		case 1:
-			// NEW: record moves for local decls (default 'move' params)
 			c.markMovesFromCall(exact[0], call, args)
 
 			ret := exact[0].Type.Ret
