@@ -8,7 +8,24 @@ import (
 func (c *checker) typ(e ast.Expr) types.T {
 	switch x := e.(type) {
 	case *ast.SliceExpr:
-		// Not modeled in M5; type left unknown (future: infer same container type)
+		// M5 P4d: basic typing for slice steps.
+		// Evaluate base and indices; if base is str, result is str.
+		bt := c.typ(x.X)
+		if x.I != nil {
+			_ = c.typ(x.I)
+		}
+		if x.J != nil {
+			_ = c.typ(x.J)
+		}
+		if x.K != nil {
+			_ = c.typ(x.K)
+		}
+
+		if types.Equal(bt, types.Str) {
+			c.info.Types[x] = types.Str
+			return types.Str
+		}
+		// Future: list/bytes/etc. For now, unknown type (no extra diag).
 		return nil
 	case *ast.IntLit:
 		c.info.Types[e] = types.Int
