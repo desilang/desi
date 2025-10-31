@@ -2,6 +2,7 @@ package check
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -30,9 +31,12 @@ type Info struct {
 	Idents map[*ast.Ident]*Symbol  // bound identifiers
 	Funcs  map[string]*OverloadSet // function overload sets by name
 
-	// M5 Phase-3: bridge to resolver + local-import map for qualified calls.
-	ImportPaths map[string]string // local import binding -> dotted module path (e.g., math -> "math")
+	// M5: imports bridge
+	ImportPaths map[string]string // local import binding -> dotted module path (e.g., "math" -> "math")
 	R           *resolve.Info     // resolver results (exports table, etc.)
+
+	// M6-P2-B: per-function move tracking for identifiers.
+	Moved map[string]diag.Span
 }
 
 // FuncCand represents a single callable candidate.
@@ -56,6 +60,7 @@ func NewInfo() *Info {
 		Funcs:       make(map[string]*OverloadSet),
 		ImportPaths: make(map[string]string),
 		R:           nil,
+		Moved:       make(map[string]diag.Span),
 	}
 	addPreludeBuiltins(info)
 	return info
