@@ -1,46 +1,72 @@
 package check
 
 import (
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// isCopyType reports whether a type is treated as Copy (not moved) by the checker.
-// Current policy: primitives are Copy (int, float, bool, str).
-func isCopyType(t types.T) bool {
-	return types.Equal(t, types.Int) ||
-		types.Equal(t, types.Float) ||
-		types.Equal(t, types.Bool) ||
-		types.Equal(t, types.Str)
+// MoveSet tracks identifiers that were moved, keyed by base name.
+type MoveSet struct {
+	m map[string]diag.Span
 }
 
-// MoveSet tracks identifiers that have been moved, mapping name -> move site.
-type MoveSet map[string]diag.Span
-
-// Mark records that 'name' was moved at 'at'.
-func (ms MoveSet) Mark(name string, at diag.Span) {
-	if ms == nil {
-		return
+func (ms *MoveSet) mark(name string, at diag.Span) {
+	if ms.m == nil {
+		ms.m = make(map[string]diag.Span)
 	}
-	ms[name] = at
+	ms.m[name] = at
 }
 
-// IsMoved reports whether 'name' has been previously moved and returns the move site.
-func (ms MoveSet) IsMoved(name string) (diag.Span, bool) {
-	if ms == nil {
+func (ms *MoveSet) movedAt(name string) (diag.Span, bool) {
+	if ms == nil || ms.m == nil {
 		return diag.Span{}, false
 	}
-	sp, ok := ms[name]
+	sp, ok := ms.m[name]
 	return sp, ok
 }
 
-// makeUseAfterMoveDiag builds DBR0004 with a secondary label at the move site.
-func makeUseAfterMoveDiag(useSpan, movedAt diag.Span) diag.Diagnostic {
-	return diag.Diagnostic{
-		CodeID:  "DBR0004",
-		Domain:  "borrow",
-		Message: "value was moved earlier and cannot be used again",
-		Primary: diag.Label{Span: useSpan, Primary: true},
-		Labels:  []diag.Label{{Span: movedAt, Text: "moved here"}},
+// isCopyType: conservative for now (everything moves). We'll flip primitives to Copy later.
+func isCopyType(t types.T) bool {
+	return false
+}
+
+// markMovesFromCall marks identifiers passed to "move" params of a local function.
+func (c *checker) markMovesFromCall(chosen *FuncCand, call *ast.CallExpr, args []types.T) {
+	// Only for in-module functions (we can read modes from the Decl).
+	if chosen == nil || chosen.Decl == nil {
+		return
 	}
+	fd := chosen.Decl
+	n := len(fd.Params)
+	if n > len(call.Args) {
+		n = len(call.Args)
+	}
+	for i := 0; i < n; i++ {
+		mode := fd.Params[i].Mode
+		if mode == ast.ParamRef || mode == ast.ParamInout {
+			continue // not a move
+		}
+		// (mode == default move)
+		arg := call.Args[i]
+		name, ok := c.baseLvalue(arg) // uses the existing baseLvalue in borrow_call.go
+		if !ok {
+			continue // moving a temporary is fine; only track named bases
+		}
+		if i < len(args) && isCopyType(args[i]) {
+			continue // when we flip primitives to Copy, this will skip them
+		}
+		c.moved.mark(name, arg.SpanOf())
+	}
+}
+
+// issueUseAfterMove emits DBR0004 with a secondary "moved here" label.
+func (c *checker) issueUseAfterMove(useSpan diag.Span, moveSpan diag.Span) {
+	d := diagAt("DBR0004", useSpan, "value was moved earlier and cannot be used again")
+	d.Labels = append(d.Labels, diag.Label{
+		Span:    moveSpan,
+		Text:    "moved here",
+		Primary: false,
+	})
+	c.add(d)
 }

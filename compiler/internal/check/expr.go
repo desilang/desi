@@ -70,21 +70,16 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return types.None
 
 	case *ast.Ident:
-		// Scope lookup
-		sym := c.scope.Lookup(x.Name)
-		if sym == nil {
-			c.add(diagAt("DTE0001", x.Span, "undefined name: "+x.Name))
-			return nil
+		// DBR0004: use after move (if previously marked)
+		if sp, ok := c.moved.movedAt(x.Name); ok {
+			c.issueUseAfterMove(x.Span, sp)
 		}
-		// M6-P2-B: use-after-move
-		if c.info != nil && c.info.Moved != nil {
-			if _, moved := c.info.Moved[x.Name]; moved {
-				c.add(diagAt("DBR0004", x.Span, "value was moved earlier and cannot be used again"))
-			}
+		// If we have a symbol/type for this name, return it.
+		if sym := c.scope.Lookup(x.Name); sym != nil {
+			c.info.Types[e] = sym.Type
+			return sym.Type
 		}
-		c.info.Idents[x] = sym
-		c.info.Types[e] = sym.Type
-		return sym.Type
+		return nil
 
 	case *ast.UnaryExpr:
 		t := c.typ(x.X)
@@ -151,12 +146,10 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		rt := c.typ(x.Rhs)
 
 		// --- Ergonomics 4a: implicit str on + ---
-		// str + str -> str
 		if op == "+" && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
 		}
-		// str + T or T + str -> str (allow core primitives)
 		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
 			other := rt
 			if types.Equal(lt, types.Str) {
@@ -169,7 +162,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 				c.info.Types[x] = types.Str
 				return types.Str
 			}
-			// otherwise fall through to numeric rules (will error)
 		}
 
 		// numeric same-type
@@ -177,7 +169,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			c.info.Types[x] = lt
 			return lt
 		}
-		// mixed numeric: int + float or float + int -> float
+		// mixed numeric: int+float or float+int -> float
 		if (types.Equal(lt, types.Int) && types.Equal(rt, types.Float)) ||
 			(types.Equal(lt, types.Float) && types.Equal(rt, types.Int)) {
 			c.info.Types[x] = types.Float
@@ -186,7 +178,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
 		return nil
 
-	case "|", "&", "^": // bitwise (XOR is "^")
+	case "|", "&", "^":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
@@ -213,15 +205,12 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
 			return nil
 		}
-		// Callee must be an identifier for pipeline friendliness.
 		id, ok := call.Callee.(*ast.Ident)
 		if !ok || id == nil {
 			c.add(diagAt("DTE0103", x.Span, "pipeline target must be an identifier"))
 			return nil
 		}
 
-		// Resolve pipeline against the identifier's overload set, but
-		// produce pipeline-specific messages.
 		lhsT := c.typ(x.Lhs)
 		args := make([]types.T, 0, 1+len(call.Args))
 		args = append(args, lhsT)
@@ -231,12 +220,11 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 
 		set := c.info.Funcs[id.Name]
 		if set == nil || len(set.Cands) == 0 {
-			// No callable candidates known for this name.
 			c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
 			return nil
 		}
 
-		// Filter candidates by arity first.
+		// Filter by arity.
 		var arityCands []*FuncCand
 		for _, cand := range set.Cands {
 			if len(cand.Type.Params) == len(args) {
@@ -262,6 +250,9 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 
 		switch len(exact) {
 		case 1:
+			// NEW: record moves for local decls (default 'move' params)
+			c.markMovesFromCall(exact[0], call, args)
+
 			ret := exact[0].Type.Ret
 			c.info.Types[x] = ret
 			return ret
@@ -276,7 +267,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	case "<", "<=", ">", ">=", "==", "!=":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
-		// basic comparability (same-type primitives or both numbers)
 		numL := types.Equal(lt, types.Int) || types.Equal(lt, types.Float)
 		numR := types.Equal(rt, types.Int) || types.Equal(rt, types.Float)
 		if (numL && numR) || types.Equal(lt, rt) {
