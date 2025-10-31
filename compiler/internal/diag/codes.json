@@ -458,6 +458,21 @@
       "id": "DBR0001",
       "title": "cannot hold 'inout' borrow across 'await'",
       "help": "Move the 'await' earlier or avoid 'inout' in async callees. Phase-2 will refine this with data-flow for narrower borrows."
+    },
+    "inout_requires_lvalue": {
+      "id": "DBR0002",
+      "title": "inout argument must be a mutable lvalue",
+      "help": "Pass a mutable lvalue such as an identifier, field access, or index expression."
+    },
+    "inout_aliasing": {
+      "id": "DBR0003",
+      "title": "inout cannot alias with other arguments",
+      "help": "Pass distinct base variables/receivers, or avoid combining inout with ref to the same base in a single call."
+    },
+    "use_after_move": {
+      "id": "DBR0004",
+      "title": "use after move",
+      "help": "Bind to a new name or avoid moving the value before using it again."
     }
   }
 }
