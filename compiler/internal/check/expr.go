@@ -9,7 +9,6 @@ func (c *checker) typ(e ast.Expr) types.T {
 	switch x := e.(type) {
 	case *ast.SliceExpr:
 		// M5 P4d: basic typing for slice steps.
-		// Evaluate base and indices; if base is str, result is str.
 		bt := c.typ(x.X)
 		if x.I != nil {
 			_ = c.typ(x.I)
@@ -20,13 +19,40 @@ func (c *checker) typ(e ast.Expr) types.T {
 		if x.K != nil {
 			_ = c.typ(x.K)
 		}
-
 		if types.Equal(bt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
 		}
-		// Future: list/bytes/etc. For now, unknown type (no extra diag).
 		return nil
+
+	case *ast.ListComp:
+		et := c.typ(x.Elem)
+		if et != nil {
+			t := types.ListOf(et)
+			c.info.Types[x] = t
+			return t
+		}
+		return nil
+
+	case *ast.SetComp:
+		et := c.typ(x.Elem)
+		if et != nil {
+			t := types.SetOf(et)
+			c.info.Types[x] = t
+			return t
+		}
+		return nil
+
+	case *ast.DictComp:
+		kt := c.typ(x.Key)
+		vt := c.typ(x.Val)
+		if kt != nil && vt != nil {
+			t := types.DictOf(kt, vt)
+			c.info.Types[x] = t
+			return t
+		}
+		return nil
+
 	case *ast.IntLit:
 		c.info.Types[e] = types.Int
 		return types.Int
@@ -42,14 +68,15 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.NoneLit:
 		c.info.Types[e] = types.None
 		return types.None
+
 	case *ast.Ident:
-		// Lookup in scope
+		// Scope lookup
 		sym := c.scope.Lookup(x.Name)
 		if sym == nil {
 			c.add(diagAt("DTE0001", x.Span, "undefined name: "+x.Name))
 			return nil
 		}
-		// M6-P2-B: use-after-move check
+		// M6-P2-B: use-after-move
 		if c.info != nil && c.info.Moved != nil {
 			if _, moved := c.info.Moved[x.Name]; moved {
 				c.add(diagAt("DBR0004", x.Span, "value was moved earlier and cannot be used again"))
@@ -58,8 +85,8 @@ func (c *checker) typ(e ast.Expr) types.T {
 		c.info.Idents[x] = sym
 		c.info.Types[e] = sym.Type
 		return sym.Type
+
 	case *ast.UnaryExpr:
-		// Only support '-' on numeric and '!'/'not' on bool
 		t := c.typ(x.X)
 		if x.Op == "-" {
 			if types.Equal(t, types.Int) || types.Equal(t, types.Float) {
@@ -75,16 +102,20 @@ func (c *checker) typ(e ast.Expr) types.T {
 		}
 		c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"'"))
 		return nil
+
 	case *ast.BinaryExpr:
 		return c.typBinary(x)
+
 	case *ast.CallExpr:
 		return c.typCall(x)
+
 	case *ast.FieldExpr:
-		// Not modeled in M4; leave unknown
+		// Not modeled yet
 		return nil
 	case *ast.IndexExpr:
-		// Not modeled in M4; leave unknown
+		// Not modeled yet
 		return nil
+
 	case *ast.LambdaExpr:
 		// require typed params in M4
 		params := make([]types.T, len(x.Params))
@@ -100,12 +131,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 				return nil
 			}
 		}
-		// Infer body type.
 		bt := c.typ(x.Body)
 		c.info.Types[e] = types.FuncOf(params, bt)
 		return c.info.Types[e]
+
 	default:
-		// Not modeled in M4; leave unknown
+		// Unknown or unmodeled node
 		return nil
 	}
 }
