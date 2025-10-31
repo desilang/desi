@@ -127,14 +127,14 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 **Phase-2 (DONE ✅):** Real cross-module function signatures via resolver **Exports**; only **`pub def` + fully typed** are exported. Checker consumes exact overloads for `from … import …`. `DME0003` on missing export. **Unused-import lints** (`DMW0004/5`) implemented.
 
-**Phase-3 (Module-qualified calls):**
-Allow `import math; math.add(…)` to resolve using `math`’s exported signatures. If the target name isn’t exported: `DME0003`. No parser changes.
+**Phase-3 (DONE ✅ — Module-qualified calls):**
+Allow `import math; math.add(…)` to resolve using `math`’s exported signatures. If the target name isn’t exported: `DME0003`. No parser changes. Qualifier use counts toward the unused-import lint.
 
-**Phase-4 (Pythonic niceties, Ergonomics v1):**
-- **4a:** Implicit `str` on `+` when one side is `str` (lower to `str(_)`).
-- **4b:** **f-strings (stage 1)** — `f"hello {name}"` desugars to concatenation + `str`. No format specs yet.
-- **4c:** Tuple unpacking & destructuring assignment; optional destructuring in `for`.
-- **4d:** Slice steps `s[i:j:k]` (parser + basic typing).
+**Phase-4 (DONE ✅ — Ergonomics v1, scoped):**
+- **4a:** Implicit `str` on `+` when one side is `str` (type-check rule that accepts core primitives on the other side).
+- **4b:** **f-strings (stage 1)** — recognized as `str` literals in this phase; **hole parsing/desugaring is deferred** (no format specs yet).
+- **4c:** Tuple unpacking via multi-LHS already works; **`for`-target destructuring is deferred**.
+- **4d:** Slice steps `s[i:j:k]` + short forms parsed; **string slices type to `str`** (other containers to be typed later).
 
 ---
 
