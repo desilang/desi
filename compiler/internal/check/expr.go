@@ -49,6 +49,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 			c.add(diagAt("DTE0001", x.Span, "undefined name: "+x.Name))
 			return nil
 		}
+		// M6-P2-B: use-after-move check
+		if c.info != nil && c.info.Moved != nil {
+			if _, moved := c.info.Moved[x.Name]; moved {
+				c.add(diagAt("DBR0004", x.Span, "value was moved earlier and cannot be used again"))
+			}
+		}
 		c.info.Idents[x] = sym
 		c.info.Types[e] = sym.Type
 		return sym.Type
@@ -60,13 +66,14 @@ func (c *checker) typ(e ast.Expr) types.T {
 				c.info.Types[e] = t
 				return t
 			}
-		} else if x.Op == "!" || x.Op == "not" {
+		}
+		if x.Op == "!" || x.Op == "not" {
 			if types.Equal(t, types.Bool) {
 				c.info.Types[e] = types.Bool
 				return types.Bool
 			}
 		}
-		c.add(diagAt("DTE0004", x.Span, "invalid operand for unary operator '"+x.Op+"'"))
+		c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"'"))
 		return nil
 	case *ast.BinaryExpr:
 		return c.typBinary(x)
@@ -86,30 +93,19 @@ func (c *checker) typ(e ast.Expr) types.T {
 				c.add(diagAt("DTE0004", x.Span, "lambda parameters must be typed in M4"))
 				return nil
 			}
-			pt, _ := types.FromName(p.Type.Name)
-			params[i] = pt
+			if t, ok := types.FromName(p.Type.Name); ok {
+				params[i] = t
+			} else {
+				c.add(diagAt("DTE0004", x.Span, "unknown lambda param type: "+p.Type.Name))
+				return nil
+			}
 		}
-		ret := c.typ(x.Body)
-		ft := types.FuncOf(params, ret)
-		c.info.Types[e] = ft
-		return ft
-	case *ast.ListComp:
-		et := c.typ(x.Elem)
-		lt := types.ListOf(et)
-		c.info.Types[e] = lt
-		return lt
-	case *ast.SetComp:
-		et := c.typ(x.Elem)
-		st := types.SetOf(et)
-		c.info.Types[e] = st
-		return st
-	case *ast.DictComp:
-		kt := c.typ(x.Key)
-		vt := c.typ(x.Val)
-		dt := types.DictOf(kt, vt)
-		c.info.Types[e] = dt
-		return dt
+		// Infer body type.
+		bt := c.typ(x.Body)
+		c.info.Types[e] = types.FuncOf(params, bt)
+		return c.info.Types[e]
 	default:
+		// Not modeled in M4; leave unknown
 		return nil
 	}
 }
@@ -293,6 +289,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			cands := set.ResolveExact(args)
 			switch len(cands) {
 			case 1:
+				c.enforceCallModes(call, cands[0])
 				ret := cands[0].Type.Ret
 				c.info.Types[call] = ret
 				return ret
@@ -380,6 +377,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		cands := set.ResolveExact(args)
 		switch len(cands) {
 		case 1:
+			c.enforceCallModes(call, cands[0])
 			ret := cands[0].Type.Ret
 			c.info.Types[call] = ret
 			return ret
