@@ -795,6 +795,10 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_or, true
 	case "not":
 		return token.KW_not, true
+	case "ref":
+		return token.KW_ref, true
+	case "inout":
+		return token.KW_inout, true
 	default:
 		return token.ILLEGAL, false
 	}

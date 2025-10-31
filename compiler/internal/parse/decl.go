@@ -96,8 +96,9 @@ func (p *Parser) parseParams() []ast.Param {
 		paramMode := ast.ParamMove
 		paramStart := spanPos(p.file, p.cur)
 
-		if p.cur.Tok == token.IDENT && (p.cur.Lexeme == "ref" || p.cur.Lexeme == "inout") {
-			if p.cur.Lexeme == "ref" {
+		if p.cur.Tok == token.KW_ref || p.cur.Tok == token.KW_inout ||
+			(p.cur.Tok == token.IDENT && (p.cur.Lexeme == "ref" || p.cur.Lexeme == "inout")) {
+			if p.cur.Tok == token.KW_ref || p.cur.Lexeme == "ref" {
 				paramMode = ast.ParamRef
 			} else {
 				paramMode = ast.ParamInout

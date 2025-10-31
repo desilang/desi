@@ -33,6 +33,8 @@ var keywords = map[string]Token{
 	"and":    KW_and,
 	"or":     KW_or,
 	"not":    KW_not,
+	"ref":    KW_ref,
+	"inout":  KW_inout,
 }
 
 // Builtin type spellings per revised grammar.
