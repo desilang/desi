@@ -60,6 +60,8 @@ const (
 	KW_and
 	KW_or
 	KW_not
+	KW_ref
+	KW_inout
 
 	// Delimiters / punctuators
 	LPAREN // (
@@ -131,7 +133,7 @@ func TokenCategory(t Token) Category {
 		return CatLiteral
 	case KW_import, KW_from, KW_as, KW_pub, KW_def, KW_async, KW_class, KW_struct, KW_enum, KW_type,
 		KW_let, KW_mut, KW_return, KW_if, KW_elif, KW_else, KW_while, KW_for, KW_in, KW_using, KW_defer,
-		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not:
+		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not, KW_ref, KW_inout:
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
 		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
