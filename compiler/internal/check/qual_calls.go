@@ -14,28 +14,24 @@ func computeImportPaths(mod *ast.Module) map[string]string {
 		return m
 	}
 	for _, d := range mod.Decls {
-		fd, ok := d.(*ast.FuncDecl)
-		if !ok || fd == nil || fd.Body == nil {
-			continue
-		}
-		if fd.Name.Name != "__top__" {
-			continue
-		}
-		for _, s := range fd.Body.Stmts {
-			if imp, ok := s.(*ast.ImportStmt); ok && imp != nil {
-				local := ""
-				if imp.Alias != nil {
-					local = imp.Alias.Name
-				} else if n := len(imp.Path); n > 0 {
-					local = imp.Path[n-1]
-				}
-				if local != "" {
-					mpath := strings.Join(imp.Path, ".")
-					m[local] = mpath
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "__top__" {
+			if fn.Body == nil {
+				return m
+			}
+			for _, st := range fn.Body.Stmts {
+				if im, ok := st.(*ast.ImportStmt); ok {
+					local := ""
+					if im.Alias != nil {
+						local = im.Alias.Name
+					} else if len(im.Path) > 0 {
+						local = im.Path[len(im.Path)-1]
+					}
+					if local != "" {
+						m[local] = strings.Join(im.Path, ".")
+					}
 				}
 			}
 		}
-		break // only one __top__ is expected
 	}
 	return m
 }
@@ -64,9 +60,20 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 		return &OverloadSet{Name: fe.Name.Name}, id, true
 	}
 	cands := ex.Funcs[fe.Name.Name]
+	modesTab := ex.FuncModes[fe.Name.Name]
 	set = &OverloadSet{Name: fe.Name.Name}
-	for _, ft := range cands {
-		set.Add(&FuncCand{Decl: nil, Type: ft})
+	for i, ft := range cands {
+		var modes []ast.ParamMode
+		if i < len(modesTab) {
+			modes = modesTab[i]
+		}
+		if modes == nil {
+			modes = make([]ast.ParamMode, len(ft.Params))
+			for j := range modes {
+				modes[j] = ast.ParamMove
+			}
+		}
+		set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes})
 	}
 	return set, id, true
 }

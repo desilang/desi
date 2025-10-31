@@ -16,6 +16,14 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 	if mod == nil || info == nil || rinfo == nil {
 		return
 	}
+	setFor := func(local string) *OverloadSet {
+		set := info.Funcs[local]
+		if set == nil {
+			set = &OverloadSet{Name: local}
+			info.Funcs[local] = set
+		}
+		return set
+	}
 	// find synthetic __top__ function
 	var top *ast.FuncDecl
 	for _, d := range mod.Decls {
@@ -45,20 +53,26 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 			if local == "" {
 				continue
 			}
-			// Ensure a set exists
-			set, ok := info.Funcs[local]
-			if !ok || set == nil {
-				set = &OverloadSet{Name: local}
-				info.Funcs[local] = set
-			}
+			set := setFor(local)
+
 			// Append exported candidates, if any
 			if ex != nil {
 				name := it.Name.Name
 				if name != "" {
-					if cands, ok := ex.Funcs[name]; ok {
-						for _, ft := range cands {
-							set.Add(&FuncCand{Decl: nil, Type: types.FuncOf(ft.Params, ft.Ret)})
+					cands := ex.Funcs[name]
+					modesTab := ex.FuncModes[name]
+					for i, ft := range cands {
+						var modes []ast.ParamMode
+						if i < len(modesTab) {
+							modes = modesTab[i]
 						}
+						if modes == nil {
+							modes = make([]ast.ParamMode, len(ft.Params))
+							for j := range modes {
+								modes[j] = ast.ParamMove
+							}
+						}
+						set.Add(&FuncCand{Decl: nil, Type: types.FuncOf(ft.Params, ft.Ret), Modes: modes})
 					}
 				}
 			}

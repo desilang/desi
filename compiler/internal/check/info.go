@@ -16,15 +16,15 @@ const (
 	SymType // class/struct/enum/type names (placeholder in M4/M5)
 )
 
-// Symbol represents a bound identifier.
+// Symbol represents a bound identifier in a scope.
 type Symbol struct {
 	Name string
 	Kind SymbolKind
-	Type types.T // optional for funcs until inferred/annotated
+	Type types.T
 	Node ast.Node
 }
 
-// Info is the checker's public info surface (types, idents, overloads).
+// Info carries type facts, bindings, and overload sets discovered by the checker.
 type Info struct {
 	Types  map[ast.Node]types.T    // inferred types for important nodes
 	Idents map[*ast.Ident]*Symbol  // bound identifiers
@@ -37,8 +37,9 @@ type Info struct {
 
 // FuncCand represents a single callable candidate.
 type FuncCand struct {
-	Decl *ast.FuncDecl // may be nil (e.g., builtins)
-	Type *types.Func   // canonical function type (params + ret)
+	Decl  *ast.FuncDecl   // may be nil (e.g., builtins)
+	Type  *types.Func     // canonical function type (params + ret)
+	Modes []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
 }
 
 // OverloadSet groups candidate functions by name.
@@ -65,6 +66,7 @@ func addPreludeBuiltins(info *Info) {
 	if info == nil {
 		return
 	}
+	// Helper: add a family of 1-arg overloads name(T) -> ret for T in params.
 	addOverloads := func(name string, params []types.T, ret types.T) {
 		set := info.Funcs[name]
 		if set == nil {
@@ -73,8 +75,9 @@ func addPreludeBuiltins(info *Info) {
 		}
 		for _, p := range params {
 			set.Cands = append(set.Cands, &FuncCand{
-				Decl: nil,
-				Type: types.FuncOf([]types.T{p}, ret),
+				Decl:  nil,
+				Type:  types.FuncOf([]types.T{p}, ret),
+				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
 			})
 		}
 	}

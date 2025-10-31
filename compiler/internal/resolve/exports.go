@@ -11,6 +11,10 @@ type Exports struct {
 	// Funcs maps a function name to its typed overloads.
 	// Only overloads with fully annotated params and return type are included.
 	Funcs map[string][]*types.Func
+
+	// FuncModes is index-aligned with Funcs[name]: one []ParamMode per overload.
+	// This carries the callee-declared parameter passing modes for each exported function.
+	FuncModes map[string][][]ast.ParamMode
 }
 
 // CollectExports walks a parsed module and returns its exported function signatures.
@@ -21,7 +25,7 @@ type Exports struct {
 //     resolvable via types.FromName AND the return type is explicitly annotated.
 //   - Visibility: only `pub def` are exported.
 func CollectExports(mod *ast.Module) *Exports {
-	out := &Exports{Funcs: map[string][]*types.Func{}}
+	out := &Exports{Funcs: map[string][]*types.Func{}, FuncModes: map[string][][]ast.ParamMode{}}
 	if mod == nil {
 		return out
 	}
@@ -31,7 +35,7 @@ func CollectExports(mod *ast.Module) *Exports {
 			continue // not a function
 		}
 		if !fn.Pub {
-			continue // NEW: export gate requires pub
+			continue // export gate requires pub
 		}
 
 		// All params must be annotated and resolvable.
@@ -42,17 +46,16 @@ func CollectExports(mod *ast.Module) *Exports {
 				okTypes = false
 				break
 			}
-			pt, ok := types.FromName(p.Type.Name)
-			if !ok {
+			if t, ok := types.FromName(p.Type.Name); ok {
+				params[i] = t
+			} else {
 				okTypes = false
 				break
 			}
-			params[i] = pt
 		}
 		if !okTypes {
 			continue
 		}
-
 		// Return type must be annotated and resolvable.
 		if fn.RetType == nil {
 			continue
@@ -64,6 +67,13 @@ func CollectExports(mod *ast.Module) *Exports {
 		ft := types.FuncOf(params, rt)
 		name := fn.Name.Name
 		out.Funcs[name] = append(out.Funcs[name], ft)
+
+		// Collect parameter modes aligned with this overload.
+		modes := make([]ast.ParamMode, len(fn.Params))
+		for i := range fn.Params {
+			modes[i] = fn.Params[i].Mode
+		}
+		out.FuncModes[name] = append(out.FuncModes[name], modes)
 	}
 	return out
 }
