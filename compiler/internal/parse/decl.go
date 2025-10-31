@@ -92,29 +92,49 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 func (p *Parser) parseParams() []ast.Param {
 	var out []ast.Param
 	for {
+		// Optional leading parameter mode: 'ref' | 'inout' (soft keywords).
+		paramMode := ast.ParamMove
+		paramStart := spanPos(p.file, p.cur)
+
+		if p.cur.Tok == token.IDENT && (p.cur.Lexeme == "ref" || p.cur.Lexeme == "inout") {
+			if p.cur.Lexeme == "ref" {
+				paramMode = ast.ParamRef
+			} else {
+				paramMode = ast.ParamInout
+			}
+			paramStart = spanPos(p.file, p.cur)
+			p.next()
+		}
+
+		// Name is required.
 		if p.cur.Tok != token.IDENT {
 			p.errUnexpected(spanPos(p.file, p.cur), "parameter")
 			break
 		}
-		start := spanPos(p.file, p.cur)
-		name := ast.Ident{Name: p.cur.Lexeme, Span: start}
+		name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 		p.next()
 
+		// Optional ": Type"
 		var ty *ast.TypeName
 		if p.accept(token.COLON) {
 			ty = p.parseTypeName()
 		}
 
+		// Optional "= defaultExpr"
 		var def ast.Expr
 		if p.accept(token.ASSIGN) {
 			def = p.parseExpr()
 		}
 
 		out = append(out, ast.Param{
-			Name: name, Type: ty, Default: def,
-			Span: ast.JoinSpan(start, lastSpan(def, name.Span)),
+			Name:    name,
+			Type:    ty,
+			Default: def,
+			Mode:    paramMode, // new in M6
+			Span:    ast.JoinSpan(paramStart, lastSpan(def, name.Span)),
 		})
 
+		// Comma or end.
 		if !p.accept(token.COMMA) {
 			break
 		}
