@@ -95,6 +95,7 @@ type checker struct {
 	diags      []diag.Diagnostic
 	scope      *Scope
 	curFuncRet types.T
+	moved      MoveSet
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
@@ -141,7 +142,10 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	c.scope = NewScope(c.scope)
 	defer func() { c.scope = saved }()
 
-	// Reset per-function move-tracking state
+	// Reset per-function move-tracking state (our local tracker)
+	c.moved = MoveSet{}
+
+	// If you also keep a public record in info, leave this if you want it.
 	if c.info != nil {
 		c.info.Moved = make(map[string]diag.Span)
 	}
