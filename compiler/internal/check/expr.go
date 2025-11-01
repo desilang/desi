@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -8,7 +10,6 @@ import (
 func (c *checker) typ(e ast.Expr) types.T {
 	switch x := e.(type) {
 	case *ast.SliceExpr:
-		// M5 P4d: basic typing for slice steps.
 		bt := c.typ(x.X)
 		if x.I != nil {
 			_ = c.typ(x.I)
@@ -122,7 +123,6 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return c.info.Types[e]
 
 	default:
-		// Unknown or unmodeled node
 		return nil
 	}
 }
@@ -147,7 +147,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
-		// --- Ergonomics 4a: implicit str on + ---
+		// Ergonomics 4a: implicit str on +
 		if op == "+" && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
@@ -226,7 +226,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return nil
 		}
 
-		// Filter by arity.
 		var arityCands []*FuncCand
 		for _, cand := range set.Cands {
 			if len(cand.Type.Params) == len(args) {
@@ -238,7 +237,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return nil
 		}
 
-		// Exact type match among arity-matching candidates.
 		var exact []*FuncCand
 	ArgLoop:
 		for _, cand := range arityCands {
@@ -253,6 +251,8 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		switch len(exact) {
 		case 1:
 			c.markMovesFromCall(exact[0], call, args)
+			// Also enforce caller-side borrow rules on the chosen candidate.
+			c.enforceCallsiteBorrow(exact[0], call)
 
 			ret := exact[0].Type.Ret
 			c.info.Types[x] = ret
@@ -317,7 +317,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 			if len(arityCands) == 0 {
 				// Module-qualified arity mismatch
-				c.add(diagAt("DTE0045", fe.Name.Span, "wrong number of arguments"))
+				c.add(diagAt("DTE0045", fe.Name.Span, "arity mismatch: wrong number of arguments"))
 				return nil
 			}
 			// Exact matches by type
@@ -337,6 +337,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				chosen := exact[0]
 				// Mark moves for local decls (Decl!=nil). Cross-module exports have Decl==nil.
 				c.markMovesFromCall(chosen, call, args)
+				// Enforce caller-side borrow rules.
+				c.enforceCallsiteBorrow(chosen, call)
+
 				ret := chosen.Type.Ret
 				c.info.Types[call] = ret
 				return ret
@@ -350,8 +353,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 		// If it wasn't an import-qualified callee, fall through and type the pieces.
 		_ = c.typ(fe.X)
-		// NOTE: fe.Name is a token-like field identifier (ast.Ident value), not an ast.Expr.
-		// Do not call c.typ on it.
+		// NOTE: fe.Name is an ast.Ident value (token-like), not an ast.Expr; don't call c.typ on it.
 		return nil
 	}
 
@@ -366,12 +368,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		// Callable if it's a real function symbol OR we have an overload set
 		callable := isCallableSym || (hasSet && set != nil)
 		if !callable {
-			// Prefer "undefined function" if nothing known at all
 			if sym == nil {
 				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
 				return nil
 			}
-			// Something bound but not callable
 			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
 			return nil
 		}
@@ -396,7 +396,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 		}
 		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0046", id.Span, "wrong number of arguments"))
+			c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
 			return nil
 		}
 
@@ -417,6 +417,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			chosen := exact[0]
 			// Mark moves so later ident reads can trigger DBR0004.
 			c.markMovesFromCall(chosen, call, args)
+			// Enforce caller-side borrow rules (inout lvalue + aliasing).
+			c.enforceCallsiteBorrow(chosen, call)
 
 			ret := chosen.Type.Ret
 			c.info.Types[call] = ret
@@ -430,11 +432,80 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 	}
 
-	// Fallback: type subexpressions to keep traversal consistent.
+	// Fallback: callee is not an identifier or import-qualified field.
 	_ = c.typ(call.Callee)
 	for _, a := range call.Args {
 		_ = c.typ(a)
 	}
-	// Unknown callable in this phase.
+	// Report "not callable" on odd callees like (1)().
+	c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
 	return nil
+}
+
+// --- Borrow callsite enforcement (inout requires lvalue + aliasing) ---
+
+func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
+	if chosen == nil || call == nil {
+		return
+	}
+
+	// Gather effective modes for the chosen overload.
+	// Prefer local Decl param modes; fall back to chosen.Modes for cross-module exports.
+	var modes []ast.ParamMode
+	if chosen.Decl != nil {
+		fd := chosen.Decl
+		n := min(len(fd.Params), len(call.Args))
+		modes = make([]ast.ParamMode, n)
+		for i := 0; i < n; i++ {
+			modes[i] = fd.Params[i].Mode
+		}
+	} else if len(chosen.Modes) > 0 {
+		n := min(len(chosen.Modes), len(call.Args))
+		modes = make([]ast.ParamMode, n)
+		copy(modes, chosen.Modes[:n])
+	} else {
+		// No mode info available; nothing to enforce.
+		return
+	}
+
+	// 1) inout requires lvalue
+	bases := make([]string, len(modes))
+	for i, mode := range modes {
+		if mode == ast.ParamInout {
+			if name, ok := c.baseLvalue(call.Args[i]); ok {
+				bases[i] = name
+			} else {
+				c.add(diagAt("DBR0002", call.Args[i].SpanOf(), "inout argument must be a mutable lvalue"))
+			}
+		} else {
+			// still collect base if present; used for aliasing when mixed with inout/ref
+			if name, ok := c.baseLvalue(call.Args[i]); ok {
+				bases[i] = name
+			}
+		}
+	}
+
+	// 2) aliasing: any two args share same base where at least one is inout (or inout with ref)
+	for i := 0; i < len(modes); i++ {
+		if bases[i] == "" {
+			continue
+		}
+		for j := i + 1; j < len(modes); j++ {
+			if bases[j] == "" {
+				continue
+			}
+			if bases[i] == bases[j] {
+				if modes[i] == ast.ParamInout || modes[j] == ast.ParamInout {
+					// make a small names list for message
+					names := []string{}
+					if bases[i] != "" {
+						names = append(names, bases[i])
+					}
+					// include both if distinct positions but same name prints once—fine.
+					msg := "inout cannot alias with " + strings.Join(names, ", ") + " in the same call"
+					c.add(diagAt("DBR0003", call.Args[j].SpanOf(), msg))
+				}
+			}
+		}
+	}
 }
