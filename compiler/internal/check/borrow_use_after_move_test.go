@@ -38,5 +38,6 @@ func TestM6P2_UseAfterMove_LocalCall(t *testing.T) {
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{take, main}}
 
 	diags, _ := Check(mod)
-	mustHaveSomeDiagContaining(t, diags, "moved earlier")
+	// primitives are copy; no "moved earlier" DBR0004 expected
+	mustNotContain(t, diags, "moved earlier")
 }

@@ -26,9 +26,16 @@ func (ms *MoveSet) movedAt(name string) (diag.Span, bool) {
 	return sp, ok
 }
 
-// isCopyType: conservative for now (everything moves). We'll flip primitives to Copy later.
+// isCopyType returns true for core primitives that should behave like copies.
+// M6 polish: int/float/bool/str are copy; everything else moves.
 func isCopyType(t types.T) bool {
-	return false
+	if t == nil {
+		return false
+	}
+	return types.Equal(t, types.Int) ||
+		types.Equal(t, types.Float) ||
+		types.Equal(t, types.Bool) ||
+		types.Equal(t, types.Str)
 }
 
 // markMovesFromCall marks identifiers passed to "move" params of a local function.
@@ -54,19 +61,8 @@ func (c *checker) markMovesFromCall(chosen *FuncCand, call *ast.CallExpr, args [
 			continue // moving a temporary is fine; only track named bases
 		}
 		if i < len(args) && isCopyType(args[i]) {
-			continue // when we flip primitives to Copy, this will skip them
+			continue // primitives are copies; do not mark as moved
 		}
 		c.moved.mark(name, arg.SpanOf())
 	}
-}
-
-// issueUseAfterMove emits DBR0004 with a secondary "moved here" label.
-func (c *checker) issueUseAfterMove(useSpan diag.Span, moveSpan diag.Span) {
-	d := diagAt("DBR0004", useSpan, "value was moved earlier and cannot be used again")
-	d.Labels = append(d.Labels, diag.Label{
-		Span:    moveSpan,
-		Text:    "moved here",
-		Primary: false,
-	})
-	c.add(d)
 }
