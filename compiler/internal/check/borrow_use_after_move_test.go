@@ -7,7 +7,7 @@ import (
 )
 
 func TestM6P2_UseAfterMove_LocalCall(t *testing.T) {
-	// def take(y:int) -> none: return none
+	// def take(y:int) -> none: pass
 	take := &ast.FuncDecl{
 		Name: ast.Ident{Name: "take"},
 		Params: []ast.Param{
@@ -39,5 +39,5 @@ func TestM6P2_UseAfterMove_LocalCall(t *testing.T) {
 
 	diags, _ := Check(mod)
 	// primitives are copy; no "moved earlier" DBR0004 expected
-	mustNotContain(t, diags, "moved earlier")
+	mustNoDiags(t, diags)
 }
