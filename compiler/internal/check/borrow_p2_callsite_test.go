@@ -17,7 +17,12 @@ func TestM6P2_Inout_Requires_Lvalue(t *testing.T) {
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "g"}, Args: []ast.Expr{&ast.IntLit{}}}},
+			&ast.ExprStmt{
+				Expr: &ast.CallExpr{
+					Callee: &ast.Ident{Name: "g"},
+					Args:   []ast.Expr{&ast.IntLit{}}, // rvalue, should fail for inout
+				},
+			},
 		}},
 	}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{g, main}}
@@ -41,7 +46,12 @@ func TestM6P2_Inout_Aliasing(t *testing.T) {
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
 			&ast.LetStmt{Name: ast.Ident{Name: "x"}, Value: &ast.IntLit{}},
-			&ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "g"}, Args: []ast.Expr{&ast.Ident{Name: "x"}, &ast.Ident{Name: "x"}}}},
+			&ast.ExprStmt{
+				Expr: &ast.CallExpr{
+					Callee: &ast.Ident{Name: "g"},
+					Args:   []ast.Expr{&ast.Ident{Name: "x"}, &ast.Ident{Name: "x"}},
+				},
+			},
 		}},
 	}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{g, main}}
@@ -52,6 +62,7 @@ func TestM6P2_Inout_Aliasing(t *testing.T) {
 
 func TestM6P2_Use_After_Move(t *testing.T) {
 	// pub def g(y:int) -> none; def main(): let t=1; g(t); t
+	// After Task 1, primitives (int/float/bool/str) are copy, so NO move occurs.
 	g := &ast.FuncDecl{
 		Pub:     true,
 		Name:    ast.Ident{Name: "g"},
@@ -63,11 +74,11 @@ func TestM6P2_Use_After_Move(t *testing.T) {
 		Body: &ast.Block{Stmts: []ast.Stmt{
 			&ast.LetStmt{Name: ast.Ident{Name: "t"}, Value: &ast.IntLit{}},
 			&ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "g"}, Args: []ast.Expr{&ast.Ident{Name: "t"}}}},
-			&ast.ExprStmt{Expr: &ast.Ident{Name: "t"}}, // use after move
+			&ast.ExprStmt{Expr: &ast.Ident{Name: "t"}}, // previously "use after move"; now allowed (copy)
 		}},
 	}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{g, main}}
 
 	diags, _ := Check(mod)
-	mustHaveSomeDiagContaining(t, diags, "moved earlier")
+	mustNoDiags(t, diags)
 }
