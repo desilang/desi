@@ -24,6 +24,8 @@ type Module struct {
 	strLits   map[string]string // text-key -> global name
 	strOrder  []string          // deterministic order
 	needPuts  bool
+	needRcDec bool
+	needArena bool
 	wroteGlob bool
 	tempID    int
 }
@@ -87,6 +89,12 @@ func (m *Module) writeGlobals() {
 	if m.needPuts {
 		wprintf(&m.globals, "declare i32 @puts(i8*)\n")
 	}
+	if m.needRcDec {
+		wprintf(&m.globals, "declare void @__rc_dec(ptr)\n")
+	}
+	if m.needArena {
+		wprintf(&m.globals, "declare void @__arena_destroy(ptr)\n")
+	}
 }
 
 func (m *Module) IR() string {
@@ -106,6 +114,7 @@ func escapeForCString(s string) string {
 }
 
 // EmitFunc: Tier-0 subset—calls, returns, conservative lifetimes for locals.
+// Note: plain Drop is a no-op in Tier-0; DecRef/DestroyArena become libcalls.
 func (m *Module) EmitFunc(fn *hir.Func) {
 	wprintf(&m.funcs, "define i32 @%s() {\n", fn.Name)
 	for bi, b := range fn.Blocks {
@@ -137,10 +146,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			case *hir.Call:
 				m.emitCall(x)
 
+			case *hir.DecRef:
+				// Only Var is expected here in M7; temps wouldn't be pointers.
+				if v, ok := x.Val.(hir.Var); ok {
+					wprintf(&m.funcs, "  call void @__rc_dec(ptr %%%s)\n", v.Name)
+					m.needRcDec = true
+				}
+
+			case *hir.DestroyArena:
+				if v, ok := x.Arena.(hir.Var); ok {
+					wprintf(&m.funcs, "  call void @__arena_destroy(ptr %%%s)\n", v.Name)
+					m.needArena = true
+				}
+
+			case *hir.Drop:
+				// no-op for plain values in Tier-0
+				// (arena-backed values are covered by DestroyArena; rc/arc by DecRef)
 			case *hir.Ret:
 				m.emitRet(x)
-
-				// Tier-0: Drop/DecRef/DestroyArena are handled at codegen sites; no-op here
 			}
 		}
 		// Close lifetimes at block end (Tier-0: whole-function bracketing).
