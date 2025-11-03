@@ -26,6 +26,11 @@
 
 > This eliminates most memory safety classes at compile time.
 
+#### M6 polish (Batch-2)
+- **Primitives are copy:** `int`, `float`, `bool`, `str` are treated as **copy types**. Passing them by value does **not** move the source; `DBR0004` (“moved earlier…”) should not fire for these.
+- **`ref` requires an lvalue:** Calls passing a `ref` argument must use an lvalue (identifier/field/index with a named base). Non-lvalues/temporaries trigger **`DBR0005: ref argument must be an lvalue`**.
+- **Alias diagnostics improved:** When `inout` aliases with another argument, **`DBR0003`** now includes a **secondary label** pointing at the *other* conflicting argument (“aliases with this argument”).
+
 ### 1.2 Deterministic Destruction (post-M6 lowering)
 - The compiler will insert **drop** calls at scope exits (RAII).
 - Resources (files, sockets) close promptly; FFI stays predictable (no “eventual finalizers”).
