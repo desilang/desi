@@ -6,33 +6,30 @@ import (
 )
 
 // baseLvalue returns the base storage name if e is an lvalue we track.
-// Accepted lvalues for M6-P2-B: Ident, FieldExpr(base, .name), IndexExpr(base, [idx]).
-// For Field/Index we return the base's name (recursive).
+//
+// Accepted lvalues for M6: Ident, FieldExpr(base, .name), IndexExpr(base, [idx]).
+// For Field/Index we recursively walk down to the base; if the base resolves
+// to an identifier, we return that name. Otherwise we return ("", false).
 func (c *checker) baseLvalue(e ast.Expr) (string, bool) {
 	switch v := e.(type) {
 	case *ast.Ident:
 		return v.Name, true
 	case *ast.FieldExpr:
-		return c.baseLvalueExpr(v.X)
+		// field base must itself be an lvalue base
+		return c.baseLvalue(v.X)
 	case *ast.IndexExpr:
-		return c.baseLvalueExpr(v.X)
+		// index base must itself be an lvalue base
+		return c.baseLvalue(v.X)
 	default:
 		return "", false
 	}
 }
 
-// helper to recurse; separated to share with both Field and Index branches.
+// Deprecated: baseLvalueExpr exists only to prevent drift and ease callers that
+// might still reference it. It delegates to baseLvalue so there is exactly one
+// source of truth for the lvalue shape rules.
 func (c *checker) baseLvalueExpr(e ast.Expr) (string, bool) {
-	switch v := e.(type) {
-	case *ast.Ident:
-		return v.Name, true
-	case *ast.FieldExpr:
-		return c.baseLvalueExpr(v.X)
-	case *ast.IndexExpr:
-		return c.baseLvalueExpr(v.X)
-	default:
-		return "", false
-	}
+	return c.baseLvalue(e)
 }
 
 // enforceCallModes applies caller-side borrow/move rules given the chosen overload.
