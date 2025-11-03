@@ -38,8 +38,9 @@ Decl              = FuncDecl
 
 FuncDecl          = { Decorator } ["pub"] "def" Ident "(" [ ParamList ] ")" [ "->" Type ] ":" NL Indent Block Dedent ;
 
-ParamList         = Param { "," Param } [ "," ] ;
-Param             = Ident [ ":" Type ] [ "=" Expr ] ;
+ParamList         = "(" [Param { "," Param }] ")" ;
+Param             = [ ParamMode ] Ident [ ":" Type ] [ "=" Expr ] ;
+ParamMode         = "ref" | "inout" ;
 
 Decorator         = "@" Ident [ "(" [ ArgList ] ")" ] NL ;
 
