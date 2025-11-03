@@ -238,12 +238,31 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
-	// Track async helper references for declarations (wrapper wiring).
-	switch c.Fn {
-	case "__future_register_poll":
-		m.ensureDecl("declare void @__future_register_poll(ptr, ptr, ptr)")
-	case "__future_poll":
-		m.ensureDecl("declare i1 @__future_poll(ptr)")
+	// Special-case: __future_register_poll(fut, fnptr, frame)
+	if c.Fn == "__future_register_poll" {
+		// Make sure its declaration exists once.
+		glob := m.globals.String()
+		if !strings.Contains(glob, "declare void @__future_register_poll(") {
+			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
+		}
+		// fut operand
+		futOp := "ptr null"
+		if len(c.Args) > 0 {
+			futOp = m.ptrOperand(c.Args[0])
+		}
+		// fnptr operand: allow Var with "&name" to denote a function symbol
+		fnOp := "ptr null"
+		if len(c.Args) > 1 {
+			if v, ok := c.Args[1].(hir.Var); ok && strings.HasPrefix(v.Name, "&") {
+				fnOp = "ptr @" + v.Name[1:]
+			} else {
+				fnOp = m.ptrOperand(c.Args[1])
+			}
+		}
+		// frame operand (Tier-0: we don't model frame addresses → null)
+		frameOp := "ptr null"
+		wprintf(&m.funcs, "  call void @__future_register_poll(%s, %s, %s)\n", futOp, fnOp, frameOp)
+		return
 	}
 
 	// Fallback: call external by name, drop args (Tier-0)

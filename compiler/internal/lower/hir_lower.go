@@ -252,6 +252,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.ConstStr{Text: ""}
 	case *ast.Ident:
 		return hir.Var{Name: e.Name}
+
+	case *ast.UnaryExpr:
+		if e.Op == "await" {
+			f := ls.lowerExpr(e.X)
+			dst := ls.b.FreshTemp("t")
+			ls.b.Emit(&hir.Await{Fut: f, Dst: dst})
+			return dst
+		}
+		// other unary ops are not materialized in Tier-0
+		return hir.Var{Name: "<unary>"}
+
 	case *ast.CallExpr:
 		// M7C: detect arena.alloc(...) and emit ArenaAlloc
 		if fe, ok := e.Callee.(*ast.FieldExpr); ok && fe.Name.Name == "alloc" {
