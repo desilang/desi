@@ -1,9 +1,8 @@
 package check
 
 import (
-	"strings"
-
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -475,7 +474,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 	return nil
 }
 
-// --- Borrow callsite enforcement (inout/ref lvalue + aliasing) ---
+// --- Borrow callsite enforcement (inout/ref lvalue + aliasing with secondary label) ---
 func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	if chosen == nil || call == nil {
 		return
@@ -486,57 +485,50 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	var modes []ast.ParamMode
 	if chosen.Decl != nil {
 		fd := chosen.Decl
-		n := len(fd.Params)
-		if n > len(call.Args) {
-			n = len(call.Args)
-		}
+		n := min(len(fd.Params), len(call.Args))
 		modes = make([]ast.ParamMode, n)
 		for i := 0; i < n; i++ {
 			modes[i] = fd.Params[i].Mode
 		}
 	} else if len(chosen.Modes) > 0 {
-		n := len(chosen.Modes)
-		if n > len(call.Args) {
-			n = len(call.Args)
-		}
+		n := min(len(chosen.Modes), len(call.Args))
 		modes = make([]ast.ParamMode, n)
 		copy(modes, chosen.Modes[:n])
 	} else {
-		// No mode information — nothing to enforce.
+		// No mode info available; nothing to enforce.
 		return
 	}
 
-	// Collect lvalue bases for aliasing and enforce lvalue requirements.
+	// 1) enforce lvalue requirements and collect bases/spans for aliasing
 	bases := make([]string, len(modes))
-	for i := 0; i < len(modes); i++ {
-		arg := call.Args[i]
-		name, isLval := c.baseLvalue(arg)
+	argSpans := make([]diag.Span, len(modes))
+	for i, mode := range modes {
+		name, isLval := c.baseLvalue(call.Args[i])
 
-		switch modes[i] {
+		switch mode {
 		case ast.ParamInout:
-			// Existing rule: inout requires a mutable lvalue
 			if !isLval {
-				c.add(diagAt("DBR0002", arg.SpanOf(), "inout argument must be a mutable lvalue"))
-				// still record empty base to avoid spurious alias flags
+				c.add(diagAt("DBR0002", call.Args[i].SpanOf(), "inout argument must be a mutable lvalue"))
 				continue
 			}
 			bases[i] = name
+			argSpans[i] = call.Args[i].SpanOf()
 
 		case ast.ParamRef:
-			// NEW rule (Task 2): ref requires an lvalue
+			// Task 2 rule: ref requires an lvalue.
 			if !isLval {
-				c.add(diagAt("DBR0005", arg.SpanOf(), "ref argument must be an lvalue"))
+				c.add(diagAt("DBR0005", call.Args[i].SpanOf(), "ref argument must be an lvalue"))
 				continue
 			}
-			// shared borrows can participate in alias tests when combined with inout
 			bases[i] = name
+			argSpans[i] = call.Args[i].SpanOf()
 
 		default:
-			// move param: lvalue-ness not required for callsite; no base tracking needed for aliasing
+			// move param: lvalue-ness not required; we don't need its base for aliasing checks
 		}
 	}
 
-	// Aliasing: any two args share same base where at least one is inout.
+	// 2) aliasing: same base used twice where at least one is inout -> DBR0003
 	for i := 0; i < len(modes); i++ {
 		if bases[i] == "" {
 			continue
@@ -545,16 +537,17 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 			if bases[j] == "" {
 				continue
 			}
-			if bases[i] == bases[j] {
-				if modes[i] == ast.ParamInout || modes[j] == ast.ParamInout {
-					// Keep existing wording so tests that look for "alias" keep passing.
-					names := []string{}
-					if bases[i] != "" {
-						names = append(names, bases[i])
-					}
-					msg := "inout cannot alias with " + strings.Join(names, ", ") + " in the same call"
-					c.add(diagAt("DBR0003", call.Args[j].SpanOf(), msg))
-				}
+			if bases[i] == bases[j] && (modes[i] == ast.ParamInout || modes[j] == ast.ParamInout) {
+				// Keep message stable so tests that look for "alias" continue to pass.
+				msg := "inout cannot alias with another argument in the same call"
+				d := diagAt("DBR0003", call.Args[j].SpanOf(), msg)
+				// NEW: add a secondary label on the earlier conflicting arg.
+				sec := d.Primary // reuse the same type as a template (no extra imports)
+				sec.Span = argSpans[i]
+				sec.Text = "aliases with this argument"
+				sec.Primary = false
+				d.Labels = append(d.Labels, sec)
+				c.add(d)
 			}
 		}
 	}
