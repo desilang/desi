@@ -154,8 +154,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
 			other := rt
 			if types.Equal(lt, types.Str) {
-				other = rt
-			} else {
 				other = lt
 			}
 			if types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
@@ -225,28 +223,14 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return nil
 		}
 
-		var arityCands []*FuncCand
-		for _, cand := range set.Cands {
-			if len(cand.Type.Params) == len(args) {
-				arityCands = append(arityCands, cand)
-			}
-		}
+		arityCands := filterByArity(set.Cands, len(args))
 		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch: wrong number of arguments"))
+			// Keep the "pipeline" substring for existing tests.
+			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch for call to "+id.Name))
 			return nil
 		}
 
-		var exact []*FuncCand
-	ArgLoop:
-		for _, cand := range arityCands {
-			for i := range args {
-				if !types.Equal(args[i], cand.Type.Params[i]) {
-					continue ArgLoop
-				}
-			}
-			exact = append(exact, cand)
-		}
-
+		exact := filterExactByTypes(arityCands, args)
 		switch len(exact) {
 		case 1:
 			c.markMovesFromCall(exact[0], call, args)
@@ -307,13 +291,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 		// Per-arg type check against lambda's declared param types
 		for i := range l.Params {
-			var pt types.T // <-- FIX: declare as interface, not = types.None
+			var pt types.T
 			if l.Params[i].Type != nil {
 				if t, ok := types.FromName(l.Params[i].Type.Name); ok {
 					pt = t
-				} else {
-					// Unknown param type already diagnosed in typ(lambda); just continue.
-					pt = nil
 				}
 			}
 			at := c.typ(call.Args[i])
@@ -342,29 +323,13 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
 				return nil
 			}
-			// Filter by arity
-			var arityCands []*FuncCand
-			for _, cand := range set.Cands {
-				if len(cand.Type.Params) == len(args) {
-					arityCands = append(arityCands, cand)
-				}
-			}
+			// Filter by arity then exact types
+			arityCands := filterByArity(set.Cands, len(args))
 			if len(arityCands) == 0 {
 				c.add(diagAt("DTE0045", fe.Name.Span, "arity mismatch: wrong number of arguments"))
 				return nil
 			}
-			// Exact matches by type
-			var exact []*FuncCand
-		ArgQLoop:
-			for _, cand := range arityCands {
-				ps := cand.Type.Params
-				for i := range args {
-					if !types.Equal(args[i], ps[i]) {
-						continue ArgQLoop
-					}
-				}
-				exact = append(exact, cand)
-			}
+			exact := filterExactByTypes(arityCands, args)
 			switch len(exact) {
 			case 1:
 				chosen := exact[0]
@@ -421,30 +386,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			return nil
 		}
 
-		// Filter candidates by arity
-		var arityCands []*FuncCand
-		for _, cand := range set.Cands {
-			if len(cand.Type.Params) == len(args) {
-				arityCands = append(arityCands, cand)
-			}
-		}
+		// Filter candidates by arity then exact match
+		arityCands := filterByArity(set.Cands, len(args))
 		if len(arityCands) == 0 {
 			c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
 			return nil
 		}
+		exact := filterExactByTypes(arityCands, args)
 
-		// Exact match
-		var exact []*FuncCand
-	ArgLoop:
-		for _, cand := range arityCands {
-			ps := cand.Type.Params
-			for i := range args {
-				if !types.Equal(args[i], ps[i]) {
-					continue ArgLoop
-				}
-			}
-			exact = append(exact, cand)
-		}
 		switch len(exact) {
 		case 1:
 			chosen := exact[0]
@@ -551,4 +500,36 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 			}
 		}
 	}
+}
+
+// filterByArity returns candidates whose arity equals n.
+func filterByArity(cands []*FuncCand, n int) []*FuncCand {
+	out := make([]*FuncCand, 0, len(cands))
+	for _, cand := range cands {
+		if len(cand.Type.Params) == n {
+			out = append(out, cand)
+		}
+	}
+	return out
+}
+
+// filterExactByTypes returns candidates whose parameter types exactly match args.
+func filterExactByTypes(cands []*FuncCand, args []types.T) []*FuncCand {
+	out := make([]*FuncCand, 0, len(cands))
+	for _, cand := range cands {
+		if len(cand.Type.Params) != len(args) {
+			continue
+		}
+		ok := true
+		for i := range args {
+			if !types.Equal(args[i], cand.Type.Params[i]) {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			out = append(out, cand)
+		}
+	}
+	return out
 }
