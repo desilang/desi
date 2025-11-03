@@ -475,8 +475,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 	return nil
 }
 
-// --- Borrow callsite enforcement (inout requires lvalue + aliasing) ---
-
+// --- Borrow callsite enforcement (inout/ref lvalue + aliasing) ---
 func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	if chosen == nil || call == nil {
 		return
@@ -487,38 +486,57 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	var modes []ast.ParamMode
 	if chosen.Decl != nil {
 		fd := chosen.Decl
-		n := min(len(fd.Params), len(call.Args))
+		n := len(fd.Params)
+		if n > len(call.Args) {
+			n = len(call.Args)
+		}
 		modes = make([]ast.ParamMode, n)
 		for i := 0; i < n; i++ {
 			modes[i] = fd.Params[i].Mode
 		}
 	} else if len(chosen.Modes) > 0 {
-		n := min(len(chosen.Modes), len(call.Args))
+		n := len(chosen.Modes)
+		if n > len(call.Args) {
+			n = len(call.Args)
+		}
 		modes = make([]ast.ParamMode, n)
 		copy(modes, chosen.Modes[:n])
 	} else {
-		// No mode info available; nothing to enforce.
+		// No mode information — nothing to enforce.
 		return
 	}
 
-	// 1) inout requires lvalue
+	// Collect lvalue bases for aliasing and enforce lvalue requirements.
 	bases := make([]string, len(modes))
-	for i, mode := range modes {
-		if mode == ast.ParamInout {
-			if name, ok := c.baseLvalue(call.Args[i]); ok {
-				bases[i] = name
-			} else {
-				c.add(diagAt("DBR0002", call.Args[i].SpanOf(), "inout argument must be a mutable lvalue"))
+	for i := 0; i < len(modes); i++ {
+		arg := call.Args[i]
+		name, isLval := c.baseLvalue(arg)
+
+		switch modes[i] {
+		case ast.ParamInout:
+			// Existing rule: inout requires a mutable lvalue
+			if !isLval {
+				c.add(diagAt("DBR0002", arg.SpanOf(), "inout argument must be a mutable lvalue"))
+				// still record empty base to avoid spurious alias flags
+				continue
 			}
-		} else {
-			// still collect base if present; used for aliasing when mixed with inout/ref
-			if name, ok := c.baseLvalue(call.Args[i]); ok {
-				bases[i] = name
+			bases[i] = name
+
+		case ast.ParamRef:
+			// NEW rule (Task 2): ref requires an lvalue
+			if !isLval {
+				c.add(diagAt("DBR0005", arg.SpanOf(), "ref argument must be an lvalue"))
+				continue
 			}
+			// shared borrows can participate in alias tests when combined with inout
+			bases[i] = name
+
+		default:
+			// move param: lvalue-ness not required for callsite; no base tracking needed for aliasing
 		}
 	}
 
-	// 2) aliasing: any two args share same base where at least one is inout (or inout with ref)
+	// Aliasing: any two args share same base where at least one is inout.
 	for i := 0; i < len(modes); i++ {
 		if bases[i] == "" {
 			continue
@@ -529,12 +547,11 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 			}
 			if bases[i] == bases[j] {
 				if modes[i] == ast.ParamInout || modes[j] == ast.ParamInout {
-					// make a small names list for message
+					// Keep existing wording so tests that look for "alias" keep passing.
 					names := []string{}
 					if bases[i] != "" {
 						names = append(names, bases[i])
 					}
-					// include both if distinct positions but same name prints once—fine.
 					msg := "inout cannot alias with " + strings.Join(names, ", ") + " in the same call"
 					c.add(diagAt("DBR0003", call.Args[j].SpanOf(), msg))
 				}

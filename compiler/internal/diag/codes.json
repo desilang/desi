@@ -473,6 +473,11 @@
       "id": "DBR0004",
       "title": "use after move",
       "help": "Bind to a new name or avoid moving the value before using it again."
+    },
+    "ref_requires_lvalue": {
+      "id": "DBR0005",
+      "title": "ref argument must be an lvalue",
+      "help": "Pass an lvalue such as an identifier, field access, or index expression."
     }
   }
 }
