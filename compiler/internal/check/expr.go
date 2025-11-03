@@ -232,7 +232,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0046", x.Span, "arity mismatch: wrong number of arguments"))
+			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch: wrong number of arguments"))
 			return nil
 		}
 
