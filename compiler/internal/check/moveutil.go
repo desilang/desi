@@ -26,8 +26,9 @@ func (ms *MoveSet) movedAt(name string) (diag.Span, bool) {
 	return sp, ok
 }
 
-// isCopyType returns true for core primitives that should behave like copies.
-// M6 polish: int/float/bool/str are copy; everything else moves.
+// isCopyType returns true for value types that do NOT "move" on pass-by-value.
+// M6 polish: primitives are copy types: int, float, bool, str.
+// Everything else remains move-by-default for now.
 func isCopyType(t types.T) bool {
 	if t == nil {
 		return false
@@ -39,9 +40,14 @@ func isCopyType(t types.T) bool {
 }
 
 // markMovesFromCall marks identifiers passed to "move" params of a local function.
+//
+// We only mark moves when:
+//   - The chosen candidate is a local decl (cand.Decl != nil), so we know true param modes.
+//   - The argument is an lvalue name (we don't bother tracking temporaries).
+//   - The argument type is NOT a copy type (copy types are ignored).
 func (c *checker) markMovesFromCall(chosen *FuncCand, call *ast.CallExpr, args []types.T) {
 	// Only for in-module functions (we can read modes from the Decl).
-	if chosen == nil || chosen.Decl == nil {
+	if chosen == nil || chosen.Decl == nil || call == nil {
 		return
 	}
 	fd := chosen.Decl
@@ -52,17 +58,30 @@ func (c *checker) markMovesFromCall(chosen *FuncCand, call *ast.CallExpr, args [
 	for i := 0; i < n; i++ {
 		mode := fd.Params[i].Mode
 		if mode == ast.ParamRef || mode == ast.ParamInout {
-			continue // not a move
+			continue // borrows do not move
 		}
-		// (mode == default move)
+		// Default mode == "move".
 		arg := call.Args[i]
-		name, ok := c.baseLvalue(arg) // uses the existing baseLvalue in borrow_call.go
+		name, ok := c.baseLvalue(arg)
 		if !ok {
-			continue // moving a temporary is fine; only track named bases
+			// Moving a temporary is allowed and we don't track it.
+			continue
 		}
+		// Skip marking for copy types (int/float/bool/str).
 		if i < len(args) && isCopyType(args[i]) {
-			continue // primitives are copies; do not mark as moved
+			continue
 		}
 		c.moved.mark(name, arg.SpanOf())
 	}
+}
+
+// issueUseAfterMove emits DBR0004 with a secondary "moved here" label.
+func (c *checker) issueUseAfterMove(useSpan diag.Span, moveSpan diag.Span) {
+	d := diagAt("DBR0004", useSpan, "value was moved earlier and cannot be used again")
+	d.Labels = append(d.Labels, diag.Label{
+		Span:    moveSpan,
+		Text:    "moved here",
+		Primary: false,
+	})
+	c.add(d)
 }

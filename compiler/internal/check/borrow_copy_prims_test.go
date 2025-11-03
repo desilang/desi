@@ -6,7 +6,10 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
-// Helper to build: def take(x:<T>) -> none; def main(): let t=<lit>; take(t); t
+// buildCopyPrimModule builds:
+//
+//	def take(x:<T>) -> none: pass
+//	def main(): let t=<lit>; take(t); t
 func buildCopyPrimModule(paramType string, lit ast.Expr) *ast.Module {
 	take := &ast.FuncDecl{
 		Name: ast.Ident{Name: "take"},
@@ -47,13 +50,14 @@ func TestM6_Copy_Prim_Float_NoUseAfterMove(t *testing.T) {
 }
 
 func TestM6_Copy_Prim_Bool_NoUseAfterMove(t *testing.T) {
-	mod := buildCopyPrimModule("bool", &ast.BoolLit{Text: "true"})
+	mod := buildCopyPrimModule("bool", &ast.BoolLit{Value: true})
 	diags, _ := Check(mod)
 	mustNoDiags(t, diags)
 }
 
 func TestM6_Copy_Prim_Str_NoUseAfterMove(t *testing.T) {
-	mod := buildCopyPrimModule("str", &ast.StrLit{Text: "\"s\""})
+	// StrLit carries only (Long, Span); presence is enough for typing to str.
+	mod := buildCopyPrimModule("str", &ast.StrLit{})
 	diags, _ := Check(mod)
 	mustNoDiags(t, diags)
 }
