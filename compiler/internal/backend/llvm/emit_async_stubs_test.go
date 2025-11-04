@@ -37,6 +37,7 @@ func TestEmit_AsyncStubs_SyncAwait(t *testing.T) {
 		t.Fatalf("missing call to __future_new:\n%s", ir)
 	}
 	if !strings.Contains(ir, " = call i32 @__await_blocking(ptr %f)") {
-		t.Fatalf("missing call to __await_blocking(ptr %f):\n%s", ir)
+		// Escape % so the literal `%f` appears in the failure message.
+		t.Fatalf("missing call to __await_blocking(ptr %%f):\n%s", ir)
 	}
 }
