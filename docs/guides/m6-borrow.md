@@ -11,6 +11,21 @@
   two actuals must not refer to the **same base storage**; also reject `inout` + `ref` of the same base.
 - **Use-after-move:** passing an identifier to a `move` param consumes it;
   subsequent uses error (`DBR0004`).
+- **`ref` requires an lvalue** — passing a temporary/rvalue to `ref` is an error (**DBR0005**).
+
+```desi
+# Bad: temporary/rvalue to `ref`
+def view(ref x: int) -> int:
+  0
+def main():
+  view(1)          # DBR0005: ref argument must be an lvalue
+
+# Good: lvalue (identifier/field/index)
+let a = 1
+view(a)            # ok
+view(p.f)          # ok if p is a named lvalue
+view(arr[i])       # ok if arr is a named lvalue
+```
 
 **Callee-side rule (Phase-2 refinement)**
 - In `async def`, `await` is only illegal **before** the **last use** of any `inout` param.
