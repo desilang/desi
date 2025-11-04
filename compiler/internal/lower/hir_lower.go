@@ -25,6 +25,23 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 		info:       info,
 		// M7C: track temps that came from ArenaAlloc so we can mark their binders as arena-owned.
 		tempsFromArenaAlloc: map[string]bool{},
+		// src: nil here (no literal materialization)
+	}
+	ls.lowerBlock(blk)
+	return b.Func()
+}
+
+// LowerBlockFromSource behaves like LowerBlock but can materialize string literals
+// by slicing the original source using Spans on *ast.StrLit.
+func LowerBlockFromSource(name string, blk *ast.Block, src []byte) *hir.Func {
+	b := hir.NewFunc(name)
+	ls := &lowerState{
+		b:                   b,
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		terminated:          false,
+		info:                nil,
+		src:                 src,
+		tempsFromArenaAlloc: map[string]bool{},
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
@@ -35,6 +52,7 @@ type lowerState struct {
 	scopes     []*scope // stack
 	terminated bool     // set once a return is emitted
 	info       *check.Info
+	src        []byte // optional: original source for literal materialization
 
 	tempsFromArenaAlloc map[string]bool // temp.Name -> true if produced by ArenaAlloc
 }
@@ -222,6 +240,11 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: e.Value}
 	case *ast.StrLit:
+		// Materialize from source if available; else empty (sufficient for tests).
+		if ls.src != nil && e.Span.End.Byte > e.Span.Start.Byte && e.Span.End.Byte <= len(ls.src) {
+			raw := string(ls.src[e.Span.Start.Byte:e.Span.End.Byte])
+			return hir.ConstStr{Text: unquoteStr(raw, e.Long)}
+		}
 		return hir.ConstStr{Text: ""}
 	case *ast.Ident:
 		return hir.Var{Name: e.Name}
@@ -259,6 +282,29 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ast.Print(&buf, e)
 		return hir.Var{Name: buf.String()}
 	}
+}
+
+func unquoteStr(raw string, long bool) string {
+	if long {
+		if len(raw) >= 6 && stringsHasPrefix(raw, `"""`) && stringsHasSuffix(raw, `"""`) {
+			return raw[3 : len(raw)-3]
+		}
+	}
+	if len(raw) >= 2 {
+		q := raw[0]
+		if (q == '"' || q == '\'') && raw[len(raw)-1] == q {
+			return raw[1 : len(raw)-1]
+		}
+	}
+	return raw
+}
+
+// we avoid importing strings to keep deps stable; small helpers:
+func stringsHasPrefix(s, p string) bool {
+	return len(s) >= len(p) && s[:len(p)] == p
+}
+func stringsHasSuffix(s, suf string) bool {
+	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
 }
 
 func (ls *lowerState) lowerLValue(e ast.Expr) string {
