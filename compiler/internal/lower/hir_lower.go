@@ -2,6 +2,7 @@ package lower
 
 import (
 	"bytes"
+	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
@@ -19,20 +20,19 @@ func LowerBlock(name string, blk *ast.Block) *hir.Func {
 func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func {
 	b := hir.NewFunc(name)
 	ls := &lowerState{
-		b:          b,
-		scopes:     []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
-		terminated: false,
-		info:       info,
-		// M7C: track temps that came from ArenaAlloc so we can mark their binders as arena-owned.
+		b:                   b,
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		terminated:          false,
+		info:                info,
+		src:                 nil,
 		tempsFromArenaAlloc: map[string]bool{},
-		// src: nil here (no literal materialization)
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
 }
 
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
-// by slicing the original source using Spans on *ast.StrLit.
+// by scanning the original source using (line,col) from StrLit.Span.
 func LowerBlockFromSource(name string, blk *ast.Block, src []byte) *hir.Func {
 	b := hir.NewFunc(name)
 	ls := &lowerState{
@@ -240,10 +240,11 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: e.Value}
 	case *ast.StrLit:
-		// Materialize from source if available; else empty (sufficient for tests).
-		if ls.src != nil && e.Span.End.Byte > e.Span.Start.Byte && e.Span.End.Byte <= len(ls.src) {
-			raw := string(ls.src[e.Span.Start.Byte:e.Span.End.Byte])
-			return hir.ConstStr{Text: unquoteStr(raw, e.Long)}
+		// Materialize by scanning the original source using (line,col).
+		if ls.src != nil {
+			if s, ok := scanStringLiteral(ls.src, e.Span.Start.Line, e.Span.Start.Col, e.Long); ok {
+				return hir.ConstStr{Text: s}
+			}
 		}
 		return hir.ConstStr{Text: ""}
 	case *ast.Ident:
@@ -284,27 +285,99 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	}
 }
 
-func unquoteStr(raw string, long bool) string {
-	if long {
-		if len(raw) >= 6 && stringsHasPrefix(raw, `"""`) && stringsHasSuffix(raw, `"""`) {
-			return raw[3 : len(raw)-3]
-		}
+// Map (1-based line,col) to byte index; returns -1 if out-of-range.
+func byteOffsetFromLineCol(src []byte, line, col int) int {
+	if line < 1 || col < 1 {
+		return -1
 	}
-	if len(raw) >= 2 {
-		q := raw[0]
-		if (q == '"' || q == '\'') && raw[len(raw)-1] == q {
-			return raw[1 : len(raw)-1]
+	ln := 1
+	i := 0
+	// advance to the target line
+	for i < len(src) && ln < line {
+		if src[i] == '\n' {
+			ln++
 		}
+		i++
 	}
-	return raw
+	if ln != line {
+		return -1
+	}
+	// now at start of the target line; advance col-1 runes
+	c := 1
+	for i < len(src) && src[i] != '\n' && c < col {
+		_, w := utf8.DecodeRune(src[i:])
+		if w == 0 {
+			return -1
+		}
+		i += w
+		c++
+	}
+	if c != col {
+		return -1
+	}
+	return i
 }
 
-// we avoid importing strings to keep deps stable; small helpers:
-func stringsHasPrefix(s, p string) bool {
-	return len(s) >= len(p) && s[:len(p)] == p
-}
-func stringsHasSuffix(s, suf string) bool {
-	return len(s) >= len(suf) && s[len(s)-len(suf):] == suf
+// scanStringLiteral expects src at the opening quote (or opening """ if long)
+// and returns the raw (unescaped) contents between quotes.
+// It tolerates backslash-escaped quotes by skipping the backslash.
+func scanStringLiteral(src []byte, line, col int, long bool) (string, bool) {
+	i := byteOffsetFromLineCol(src, line, col)
+	if i < 0 || i >= len(src) {
+		return "", false
+	}
+	if long {
+		// expect """
+		if i+3 > len(src) || !(src[i] == '"' && src[i+1] == '"' && src[i+2] == '"') {
+			return "", false
+		}
+		i += 3
+		start := i
+		for i < len(src) {
+			// close only on exact """
+			if i+3 <= len(src) && src[i] == '"' && src[i+1] == '"' && src[i+2] == '"' {
+				return string(src[start:i]), true
+			}
+			// skip escapes minimally
+			if src[i] == '\\' && i+1 < len(src) {
+				i += 2
+				continue
+			}
+			_, w := utf8.DecodeRune(src[i:])
+			if w == 0 {
+				break
+			}
+			i += w
+		}
+		return "", false
+	}
+
+	// short string: expect "
+	if src[i] != '"' {
+		return "", false
+	}
+	i++ // after opening "
+	start := i
+	for i < len(src) {
+		// closing quote not escaped
+		if src[i] == '"' {
+			return string(src[start:i]), true
+		}
+		// handle simple escapes so we don't wrongly stop at \".
+		if src[i] == '\\' && i+1 < len(src) {
+			i += 2
+			continue
+		}
+		if src[i] == '\n' {
+			break
+		}
+		_, w := utf8.DecodeRune(src[i:])
+		if w == 0 {
+			break
+		}
+		i += w
+	}
+	return "", false
 }
 
 func (ls *lowerState) lowerLValue(e ast.Expr) string {
