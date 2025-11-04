@@ -105,7 +105,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 **Scope**
 
 * **Concrete types**: `int`, `float`, `bool`, `str`, `none`; constructed `list[T]`, `set[T]`, `dict[K,V]`, `tuple[...]`, `future[T]` (stub ok).
-* **Functions & multi-return**: `func(...) -> T`; grouped assignment enforces **width** & element-wise type checks (multi-return tuples proper are deferred to a later phase).
+* **Functions & multi-return**: `func(...) -> T`; grouped assignment enforces **width** & element-wise type checks.
 * **Exact-match overloading** by **arity + parameter types**.
 * **Basic inference** for literals, lets/assign/aug-assign, comparisons/logicals.
 * **Pipeline `|>`** typing: treat `a |> f(b, c)` as `f(a, b, c)`.
@@ -121,56 +121,61 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M5 — Resolver & Imports (Phase 1–4)
+### M5 — Resolver & Imports (Phase 1–4, ✅ DONE)
 
-**Phase-1 (DONE ✅):** Syntax, loader with `__mod.desi`, multi-root search, graph/cycles, prelude injection, basic diags.
-
-**Phase-2 (DONE ✅):** Real cross-module function signatures via resolver **Exports**; only **`pub def` + fully typed** are exported. Checker consumes exact overloads for `from … import …`. `DME0003` on missing export. **Unused-import lints** (`DMW0004/5`) implemented.
-
-**Phase-3 (DONE ✅ — Module-qualified calls):**
-Allow `import math; math.add(…)` to resolve using `math`’s exported signatures. If the target name isn’t exported: `DME0003`. No parser changes. Qualifier use counts toward the unused-import lint.
-
-**Phase-4 (DONE ✅ — Ergonomics v1, scoped):**
-- **4a:** Implicit `str` on `+` when one side is `str` (type-check rule that accepts core primitives on the other side).
-- **4b:** **f-strings (stage 1)** — recognized as `str` literals in this phase; **hole parsing/desugaring is deferred** (no format specs yet).
-- **4c:** Tuple unpacking via multi-LHS already works; **`for`-target destructuring is deferred**.
-- **4d:** Slice steps `s[i:j:k]` + short forms parsed; **string slices type to `str`** (other containers to be typed later).
+**Phase-1 (✅)**: Syntax, loader with `__mod.desi`, multi-root search, graph/cycles, prelude injection, basic diags.
+**Phase-2 (✅)**: Real cross-module function signatures via resolver **Exports**; only **`pub def` + fully typed** are exported. Checker consumes exact overloads for `from … import …`. `DME0003` on missing export. **Unused-import lints** (`DMW0004/5`) implemented.
+**Phase-3 (✅ — Module-qualified calls):** `import math; math.add(…)` resolves using `math` exports; non-export → `DME0003`. Qualifier use counts for unused-import lint.
+**Phase-4 (✅ — Ergonomics v1):**
+- **4a:** Implicit `str` on `+` when one side is `str` (primitive-friendly rule).
+- **4b:** **f-strings (stage 1)** — recognized as `str` literals; interpolation deferred.
+- **4c:** Tuple unpacking via multi-LHS already works; `for`-target destructuring deferred.
+- **4d:** Slice steps `s[i:j:k]` + short forms parsed; **string slices type to `str`**.
 
 ---
 
-### M6 — Borrow Checker (Function-local, Phase 1)
+### M6 — Borrow Checker (Function-local, Phase 1, ✅ DONE)
 
 **Scope**
 
 * Param kinds: `T` (move), `ref T` (shared), `inout T` (unique mutable).
 * Track states `{uninit, init, moved, borrowed(ro/rw)}`.
 * Rule: **no `inout` borrow across `await`**; many `ref` or one `inout`, not both.
+* Ergonomics/diags: aliasing diagnostics carry **secondary labels** to the conflicting argument/site; primitives (`int/float/bool/str`) are **copy** and don’t trigger DBR on by-value pass; `ref` requires lvalue.
 
 **Acceptance**
 
-* Errors `DESI-BOR-*` with primary + secondary labels (where borrow started).
-* Golden examples from the tour compile/error as expected.
+* `DBR0001–DBR0005` cataloged; golden borrow/move tests green.
 
 ---
 
-### M7 — HIR Lowering & LLVM Codegen (Tier-0)
+### M7 — HIR Lowering & LLVM Codegen (Tier-0, ✅ DONE)
 
-**Scope**
+**What shipped**
 
-* HIR passes: desugar `using`→`defer __close__`, one-line `if/while`→blocks,
-  comprehensions→loops, lambdas→closures, decorators→metadata/application; normalize `match` guards.
-* **LLVM Tier-0 codegen**: IRBuilder module (funcs, control flow, vars, calls, returns); runtime bitcode for I/O & basics.
+* **HIR skeleton** with **named temporaries** and a pretty-printer:
+  * `Module/Func/Block`, `Let`, `Assign`, `Call`, `Ret`, `If`, `While`, `Drop`.
+  * Resource ops: `DecRef{val}`, `ArenaAlloc{arena,…,dst}`, `DestroyArena{arena}`.
+* **Deterministic drops (RAII)**:
+  * Block-local liveness + scope exit handling; shadowing drops old binding.
+  * `using arena:` lowers to a single `DestroyArena` at scope end (and on early return).
+  * For `rc/arc[T]` shapes, `Drop` lowers to **`DecRef`**.
+* **CLI emitter**: `desic emit-ir <file.desi>`
+  * Parse → find `def main()` → **AST→HIR** (source-aware string literals) → **emit textual LLVM IR**.
+  * Built-in `print("…")` lowers to `puts` with private `@.str.N` globals.
+  * Emits conservative `llvm.lifetime.start/end` for stack locals.
+  * Emits declarations **on demand** when `DecRef`/`DestroyArena` are used:
+    * `declare void @__rc_dec(ptr)`
+    * `declare void @__arena_destroy(ptr)`
 
 **Acceptance**
 
-* **Optimization defaults & plumbing** per `docs/dev/llvm-ir-optimization.md`:
-  * driver defaults at **`-O2`**, support `-O0/-O1/-O3/-Os/-Oz`;
-  * optional ThinLTO for release builds; CPU tuning and PGO switches available;
-  * use the new pass manager’s per-module pipeline; respect debug/`optnone`;
-  * IR/obj/asm dump flags and optimization remarks for developer builds.
-* HIR dumper shows canonical form; unit tests on lowering passes.
-* `desic build main.desi && ./main` prints hello-world & small demos.
-* REPL can `print(1+2)` and define/run a simple function.
+* `go build ./... && go test ./...` green, including:
+  * Lowering tests for deterministic **Drop**/`DecRef` placement and `using arena` epilogue.
+  * Backend tests for **lifetime intrinsics**, **puts/string globals**, and **DecRef/DestroyArena** stubs.
+* Running `desic emit-ir examples/14_m7_main.desi` produces valid `.ll` for a minimal `main`:
+  * string global + `puts` call + `ret i32 0`.
+* **Note:** Tier-0 ships **textual IR emission** only. Object/exec build or JIT is deferred to later milestones.
 
 ---
 
