@@ -37,8 +37,10 @@ const (
 	// Variadic result (multi-return) kind
 	MultiKind
 
-	// Extra kinds to avoid collisions with unknown wrappers (internal)
+	// M9A new kind
 	CPtrKind
+
+	// Extra kinds to avoid collisions with other wrappers (internal)
 	ArenaKind
 	RcKind
 	ArcKind
@@ -56,7 +58,9 @@ func (b *basic) isType()        {}
 func (b *basic) String() string { return b.name }
 func (b *basic) Kind() Kind     { return b.kind }
 
-func Basic(name string, k Kind) *basic { return &basic{kind: k, name: name} }
+// NOTE: Return exported interface T (not *basic) to avoid IDE warnings about
+// “exported function with unexported return type”.
+func Basic(name string, k Kind) T { return &basic{kind: k, name: name} }
 
 var (
 	Int   = &basic{kind: IntKind, name: "int"}
@@ -65,9 +69,7 @@ var (
 	Str   = &basic{kind: StrKind, name: "str"}
 	None  = &basic{kind: NoneKind, name: "none"}
 
-	// M9A: size-specific integers (Tier-0: equal to the int family for arithmetic)
-	// They share IntKind so arithmetic rules treat them like 'int' today,
-	// but they stringify distinctly as "usize"/"isize".
+	// M9A: size-specific integers (Tier-0: treated as part of the int family)
 	USize = &basic{kind: IntKind, name: "usize"}
 	ISize = &basic{kind: IntKind, name: "isize"}
 )
