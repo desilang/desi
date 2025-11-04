@@ -142,6 +142,20 @@
       "id": "DPE1003",
       "title": "await requires an expression",
       "help": "Write 'await <expr>' where <expr> is a future."
+    },
+    "missing_let_before_decl": {
+      "id": "DPE0110",
+      "title": "missing 'let' before variable declaration",
+      "help": "Write 'let name = …' to declare a variable; plain '=' is not a statement operator.",
+      "suggestions": [
+        {
+          "where": { "kind": "at", "role": "primary" },
+          "label": "insert 'let '",
+          "message": "Add 'let ' before the name.",
+          "replacement": "let ",
+          "applicability": "machine-applicable"
+        }
+      ]
     }
   },
   "type": {
