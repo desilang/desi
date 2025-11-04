@@ -8,10 +8,10 @@ async def add1(x: int) -> int:
 
 def main() -> int:
     # Calling an async function returns a future handle (wrapper path).
-    fut = add1(41)
+    let fut = add1(41)
 
     # In a synchronous function, `await` becomes a blocking runtime call.
-    n = await fut
+    let n = await fut
 
     print("ok")   # textual IR uses puts("ok\n")
     0
