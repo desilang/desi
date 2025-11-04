@@ -19,6 +19,10 @@ func LowerModuleFromSource(mod *ast.Module, src []byte) *hir.Module {
 		}
 		if fd.Async {
 			w, p := LowerAsyncFunc(fd, src, nil)
+			if w == nil || p == nil {
+				// Barrier or other early-abort: skip this function, continue module.
+				continue
+			}
 			out.Funcs = append(out.Funcs, w, p)
 			continue
 		}
