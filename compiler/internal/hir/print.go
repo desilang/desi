@@ -31,7 +31,6 @@ func Print(w io.Writer, n interface{}) {
 			case *Assign:
 				fmt.Fprintf(w, "    %s = %s\n", s.LHS, s.RHS.String())
 			case *Call:
-				// print like: %dst = call fn(arg1, arg2)
 				if s.Dst.Name != "" {
 					fmt.Fprintf(w, "    %s = call %s(", s.Dst.String(), s.Fn)
 				} else {
@@ -53,21 +52,15 @@ func Print(w io.Writer, n interface{}) {
 			case *Drop:
 				fmt.Fprintf(w, "    drop %s\n", s.Val.String())
 			case *If:
-				fmt.Fprintf(w, "    if %s {\n", s.Cond.String())
-				Print(w, s.Then)
-				fmt.Fprintf(w, "    }")
+				// Do not recursively print blocks to avoid duplication;
+				// just reference block names. Blocks themselves are printed separately.
 				if s.Else != nil {
-					fmt.Fprintln(w)
-					fmt.Fprintln(w, "    else {")
-					Print(w, s.Else)
-					fmt.Fprintln(w, "    }")
+					fmt.Fprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
 				} else {
-					fmt.Fprintln(w)
+					fmt.Fprintf(w, "    if %s then %s\n", s.Cond.String(), s.Then.Name)
 				}
 			case *While:
-				fmt.Fprintf(w, "    while %s {\n", s.Cond.String())
-				Print(w, s.Body)
-				fmt.Fprintf(w, "    }\n")
+				fmt.Fprintf(w, "    while %s do %s\n", s.Cond.String(), s.Body.Name)
 			}
 		}
 	default:

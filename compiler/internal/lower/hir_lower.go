@@ -72,7 +72,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 	case *ast.ExprStmt:
-		_ = ls.lowerExpr(s.Expr) // materialize for side effects if needed
+		_ = ls.lowerExpr(s.Expr) // materialize side effects if needed
 
 	case *ast.ReturnStmt:
 		// Before returning, run defers and drop locals from all open scopes (inner→outer).
@@ -85,18 +85,18 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.IfStmt:
 		cond := ls.lowerExpr(s.Cond)
-		thenBlk := hir.NewBlock("then")
-		elseBlk := (*hir.Block)(nil)
-		// Lower bodies in isolated lowering states sharing the same builder,
-		// but with pushed scopes so drops are contained.
-		ls.push()
+
+		thenBlk := ls.b.NewBlock("then")
 		oldCur := ls.b.Block()
+		ls.push()
 		ls.b.SetBlock(thenBlk)
 		ls.lowerBlock(s.Then)
-		ls.emitScopeDrops(ls.pop()) // finalize then-scope
-		ls.b.SetBlock(oldCur)       // restore
+		ls.emitScopeDrops(ls.pop())
+		ls.b.SetBlock(oldCur)
+
+		var elseBlk *hir.Block
 		if s.Else != nil {
-			elseBlk = hir.NewBlock("else")
+			elseBlk = ls.b.NewBlock("else")
 			ls.push()
 			ls.b.SetBlock(elseBlk)
 			ls.lowerBlock(s.Else)
@@ -107,9 +107,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.WhileStmt:
 		cond := ls.lowerExpr(s.Cond)
-		bodyBlk := hir.NewBlock("while")
-		ls.push()
+		bodyBlk := ls.b.NewBlock("while")
 		oldCur := ls.b.Block()
+		ls.push()
 		ls.b.SetBlock(bodyBlk)
 		ls.lowerBlock(s.Body)
 		ls.emitScopeDrops(ls.pop())
@@ -140,7 +140,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		// For M7A, capture a generic "defer drop <target>" if shape is simple.
 		if ce := s.Call; ce != nil {
 			// naive: if call is "__close(x)" treat as drop x
-			if id, ok := ce.Func.(*ast.Ident); ok && id.Name == "__close" && len(ce.Args) == 1 {
+			if id, ok := ce.Callee.(*ast.Ident); ok && id.Name == "__close" && len(ce.Args) == 1 {
 				if v := ls.valueOf(ce.Args[0]); v != nil {
 					ls.cur().defers = append(ls.cur().defers, v)
 				}
@@ -158,11 +158,12 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: e.Value}
 	case *ast.StrLit:
-		return hir.ConstStr{Text: e.Value}
+		// For dumps only; backend will treat str as opaque for now.
+		return hir.ConstStr{Text: ""} // avoid printing long literals in dumps
 	case *ast.Ident:
 		return hir.Var{Name: e.Name}
 	case *ast.CallExpr:
-		fnName := ls.calleeName(e.Func)
+		fnName := ls.calleeName(e.Callee)
 		args := make([]hir.Value, 0, len(e.Args))
 		for _, a := range e.Args {
 			args = append(args, ls.lowerExpr(a))
@@ -199,6 +200,19 @@ func (ls *lowerState) nameOf(e ast.Expr) string {
 	return ""
 }
 
+func (ls *lowerState) calleeName(e ast.Expr) string {
+	switch x := e.(type) {
+	case *ast.Ident:
+		return x.Name
+	case *ast.FieldExpr:
+		return ls.fieldName(x)
+	default:
+		var buf bytes.Buffer
+		ast.Print(&buf, x)
+		return buf.String()
+	}
+}
+
 func (ls *lowerState) fieldName(e *ast.FieldExpr) string {
 	// flatten a.b.c into "a.b.c"
 	names := []string{}
@@ -227,13 +241,11 @@ func stringsJoin(ss []string, sep string) string {
 	return out
 }
 
-// emit drops for one scope (LIFO over locals, then defers LIFO)
+// emit drops for one scope (locals in reverse declaration order, then defers LIFO)
 func (ls *lowerState) emitScopeDrops(sc *scope) {
-	// First drop locals in reverse declaration order.
 	for i := len(sc.locals) - 1; i >= 0; i-- {
 		ls.b.Emit(&hir.Drop{Val: hir.Var{Name: sc.locals[i]}})
 	}
-	// Then run defers in LIFO order.
 	for i := len(sc.defers) - 1; i >= 0; i-- {
 		ls.b.Emit(&hir.Drop{Val: sc.defers[i]})
 	}
