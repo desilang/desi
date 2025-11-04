@@ -16,18 +16,33 @@ type Kind int
 
 const (
 	InvalidKind Kind = iota
+
+	// Basic kinds
 	IntKind
 	FloatKind
 	BoolKind
 	StrKind
 	NoneKind
+
+	// Container kinds
 	ListKind
 	SetKind
 	DictKind
 	TupleKind
+
+	// Async/fn kinds
 	FutureKind
 	FuncKind
+
+	// Variadic result (multi-return) kind
 	MultiKind
+
+	// Extra kinds to avoid collisions with unknown wrappers (internal)
+	CPtrKind
+	ArenaKind
+	RcKind
+	ArcKind
+	WeakKind
 )
 
 // ----- Basic types (singletons) -----
@@ -37,38 +52,54 @@ type basic struct {
 	name string
 }
 
-func (b *basic) isType() {}
-
+func (b *basic) isType()        {}
 func (b *basic) String() string { return b.name }
+func (b *basic) Kind() Kind     { return b.kind }
+
+func Basic(name string, k Kind) *basic { return &basic{kind: k, name: name} }
 
 var (
-	Int   = &basic{IntKind, "int"}
-	Float = &basic{FloatKind, "float"}
-	Bool  = &basic{BoolKind, "bool"}
-	Str   = &basic{StrKind, "str"}
-	None  = &basic{NoneKind, "none"}
+	Int   = &basic{kind: IntKind, name: "int"}
+	Float = &basic{kind: FloatKind, name: "float"}
+	Bool  = &basic{kind: BoolKind, name: "bool"}
+	Str   = &basic{kind: StrKind, name: "str"}
+	None  = &basic{kind: NoneKind, name: "none"}
+
+	// M9A: size-specific integers (Tier-0: equal to the int family for arithmetic)
+	// They share IntKind so arithmetic rules treat them like 'int' today,
+	// but they stringify distinctly as "usize"/"isize".
+	USize = &basic{kind: IntKind, name: "usize"}
+	ISize = &basic{kind: IntKind, name: "isize"}
 )
 
-// ----- Constructed types -----
+// ----- Parameterized/container types -----
 
 type List struct{ Elem T }
-
-func (*List) isType()          {}
-func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
-
 type Set struct{ Elem T }
-
-func (*Set) isType()          {}
-func (t *Set) String() string { return "set[" + t.Elem.String() + "]" }
-
 type Dict struct{ Key, Val T }
-
-func (*Dict) isType()          {}
-func (t *Dict) String() string { return "dict[" + t.Key.String() + "," + t.Val.String() + "]" }
-
 type Tuple struct{ Elems []T }
+type Future struct{ Elem T }
+type Func struct {
+	Params []T
+	Ret    T
+}
+type Multi struct{ Elems []T }
 
-func (*Tuple) isType() {}
+// M9A: C-ABI pointer type cptr[T]
+type CPtr struct{ Elem T }
+
+func (*List) isType()   {}
+func (*Set) isType()    {}
+func (*Dict) isType()   {}
+func (*Tuple) isType()  {}
+func (*Future) isType() {}
+func (*Func) isType()   {}
+func (*Multi) isType()  {}
+func (*CPtr) isType()   {}
+
+func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
+func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
+func (t *Dict) String() string { return "dict[" + t.Key.String() + ", " + t.Val.String() + "]" }
 func (t *Tuple) String() string {
 	parts := make([]string, len(t.Elems))
 	for i, e := range t.Elems {
@@ -76,18 +107,7 @@ func (t *Tuple) String() string {
 	}
 	return "tuple[" + strings.Join(parts, ", ") + "]"
 }
-
-type Future struct{ Elem T }
-
-func (*Future) isType()          {}
 func (t *Future) String() string { return "future[" + t.Elem.String() + "]" }
-
-type Func struct {
-	Params []T
-	Ret    T
-}
-
-func (*Func) isType() {}
 func (t *Func) String() string {
 	ps := make([]string, len(t.Params))
 	for i, p := range t.Params {
@@ -95,10 +115,6 @@ func (t *Func) String() string {
 	}
 	return "func(" + strings.Join(ps, ", ") + ") -> " + t.Ret.String()
 }
-
-type Multi struct{ Elems []T }
-
-func (*Multi) isType() {}
 func (t *Multi) String() string {
 	parts := make([]string, len(t.Elems))
 	for i, e := range t.Elems {
@@ -106,6 +122,7 @@ func (t *Multi) String() string {
 	}
 	return "multi[" + strings.Join(parts, ", ") + "]"
 }
+func (t *CPtr) String() string { return "cptr[" + t.Elem.String() + "]" }
 
 // ----- Constructors -----
 
@@ -128,6 +145,7 @@ func MultiOf(elems ...T) *Multi {
 	copy(cp, elems)
 	return &Multi{Elems: cp}
 }
+func CPtrOf(elem T) *CPtr { return &CPtr{Elem: elem} }
 
 // ----- Equality & assignability (structural, phase-1) -----
 
@@ -149,6 +167,18 @@ func kindOf(t T) Kind {
 		return FuncKind
 	case *Multi:
 		return MultiKind
+	case *CPtr:
+		return CPtrKind
+	// Avoid collisions with other wrappers in this package.
+	// Returning distinct pseudo-kinds keeps Equal safe (no bad type assertions).
+	case *Arena:
+		return ArenaKind
+	case *Rc:
+		return RcKind
+	case *Arc:
+		return ArcKind
+	case *Weak:
+		return WeakKind
 	default:
 		return InvalidKind
 	}
@@ -207,6 +237,8 @@ func Equal(a, b T) bool {
 			}
 		}
 		return true
+	case *CPtr:
+		return Equal(x.Elem, b.(*CPtr).Elem)
 	default:
 		return false
 	}
@@ -223,7 +255,7 @@ func Assignable(dst, src T) bool {
 	return Equal(dst, src)
 }
 
-// Debug helper to quickly build basic types from string names in tests.
+// FromName looks up builtin named types by their canonical surface spelling.
 func FromName(name string) (T, bool) {
 	switch name {
 	case "int":
@@ -236,12 +268,16 @@ func FromName(name string) (T, bool) {
 		return Str, true
 	case "none":
 		return None, true
+	case "usize":
+		return USize, true
+	case "isize":
+		return ISize, true
 	default:
 		return nil, false
 	}
 }
 
-// Must panics in tests if err != nil; small convenience.
+// Must panics in tests if ok == false; small convenience.
 func Must[T any](v T, ok bool) T {
 	if !ok {
 		panic(fmt.Sprintf("unexpected false ok in types.Must for %T", v))
