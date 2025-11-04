@@ -74,6 +74,14 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.UnaryExpr:
 		t := c.typ(x.X)
+		if x.Op == "await" {
+			if ft, ok := t.(*types.Future); ok {
+				c.info.Types[e] = ft.Elem
+				return ft.Elem
+			}
+			c.add(diagAt("DTE0004", x.Span, "invalid unary 'await'"))
+			return nil
+		}
 		if x.Op == "-" {
 			if types.Equal(t, types.Int) || types.Equal(t, types.Float) {
 				c.info.Types[e] = t
@@ -107,7 +115,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		params := make([]types.T, len(x.Params))
 		for i, p := range x.Params {
 			if p.Type == nil {
-				c.add(diagAt("DTE0004", x.Span, "lambda parameters must be typed in M4"))
+				c.add(diagAt("DTE0004", x.Span, "lambda parameters must be typed"))
 				return nil
 			}
 			if t, ok := types.FromName(p.Type.Name); ok {
@@ -298,16 +306,17 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				}
 			}
 			at := c.typ(call.Args[i])
-			if pt != nil && !types.Equal(at, pt) {
-				c.add(diagAt("DTE0101", call.Args[i].SpanOf(), "no matching overload")) // reuse wording
+			if pt == nil || at == nil || !types.Equal(pt, at) {
+				c.add(diagAt("DTE0104", call.Span, "argument type mismatch"))
 				return nil
 			}
 		}
-
-		// Result type is the lambda body's type.
-		ret := c.typ(l.Body)
-		c.info.Types[call] = ret
-		return ret
+		// Lambda call result is the lambda's body type (already computed)
+		if ft, ok := c.info.Types[l].(*types.Func); ok {
+			c.info.Types[call] = ft.Ret
+			return ft.Ret
+		}
+		return nil
 	}
 
 	// --- Case 1: module-qualified call  e.g.  mod.fn(...)
@@ -339,6 +348,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.enforceCallsiteBorrow(chosen, call)
 
 				ret := chosen.Type.Ret
+				// If callee is async, calls return a future[T].
+				if chosen.Decl != nil && chosen.Decl.Async {
+					ret = types.FutureOf(ret)
+				}
 				c.info.Types[call] = ret
 				return ret
 			case 0:
@@ -403,6 +416,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.enforceCallsiteBorrow(chosen, call)
 
 			ret := chosen.Type.Ret
+			// If callee is async, calls return a future[T].
+			if chosen.Decl != nil && chosen.Decl.Async {
+				ret = types.FutureOf(ret)
+			}
 			c.info.Types[call] = ret
 			return ret
 		case 0:
