@@ -26,11 +26,14 @@ type Suggestion struct {
 }
 
 // Entry represents an individual diagnostic entry in the catalog.
+// Some entries (e.g., lexer unterminated string) also include a top-level
+// "primary_end" hint, which we must accept to keep json.DisallowUnknownFields happy.
 type Entry struct {
-	ID          string       `json:"id"`
-	Title       string       `json:"title,omitempty"`
-	Help        string       `json:"help,omitempty"`
-	Suggestions []Suggestion `json:"suggestions,omitempty"`
+	ID          string           `json:"id"`
+	Title       string           `json:"title,omitempty"`
+	Help        string           `json:"help,omitempty"`
+	Suggestions []Suggestion     `json:"suggestions,omitempty"`
+	PrimaryEnd  *SuggestionWhere `json:"primary_end,omitempty"`
 }
 
 // Catalog mirrors the hierarchical JSON structure: lexer/parser/type/module/warn/...
@@ -118,10 +121,7 @@ func Known(id string) bool {
 // Note: we intentionally do NOT copy suggestions here; the renderer will
 // read them from the catalog so we don't duplicate data into the Diagnostic.
 func FillFromCatalog(d *Diagnostic) {
-	if d == nil {
-		return
-	}
-	if d.CodeID == "" {
+	if d == nil || d.CodeID == "" {
 		return
 	}
 	entry, ok := Lookup(d.CodeID)
