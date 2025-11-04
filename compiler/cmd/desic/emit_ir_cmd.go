@@ -8,6 +8,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/backend/llvm"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/lower"
 	"github.com/desilang/desi/compiler/internal/parse"
@@ -39,7 +40,8 @@ func init() {
 	mod, diags := parse.ParseFile(file, src)
 	if len(diags) > 0 {
 		for _, d := range diags {
-			term.Eprintln(d.RenderTTY(src))
+			// Render directly to stderr with a default (zero-value) theme.
+			d.RenderTTY(os.Stderr, diag.Theme{})
 		}
 		term.Flush()
 		os.Exit(2)
