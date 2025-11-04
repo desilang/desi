@@ -1,7 +1,8 @@
 package hir
 
 // Minimal HIR nodes for Tier-0 backend: structured control, explicit Drop/DecRef,
-// arena helpers, and async surface ops (in async_nodes.go).
+// arena helpers, async surface ops live in async_nodes.go.
+// Task H adds: function Params and frame.set/get sugar ops.
 
 // ----- simple types (used mostly for pretty-printing/types in Tier-0) -----
 
@@ -89,12 +90,12 @@ func (*Assign) isStmt() {}
 type Call struct {
 	Fn   string
 	Args []Value
-	Dst  Temp
+	Dst  Temp // optional; empty Name => no result bound
 }
 
 func (*Call) isStmt() {}
 
-type Ret struct{ Val Value }
+type Ret struct{ Val Value } // nil => void ret
 
 func (*Ret) isStmt() {}
 
@@ -102,7 +103,7 @@ type Drop struct{ Val Value }
 
 func (*Drop) isStmt() {}
 
-// Refcount ops (M7B)
+// Refcount ops
 type IncRef struct{ Val Value }
 
 func (*IncRef) isStmt() {}
@@ -111,7 +112,7 @@ type DecRef struct{ Val Value }
 
 func (*DecRef) isStmt() {}
 
-// Arena ops (M7C)
+// Arena ops
 type ArenaAlloc struct {
 	Arena Value   // e.g., %arena
 	Args  []Value // payload (type/size/initializer placeholder)
@@ -128,7 +129,7 @@ func (*DestroyArena) isStmt() {}
 type If struct {
 	Cond Value
 	Then *Block
-	Else *Block
+	Else *Block // optional
 }
 
 func (*If) isStmt() {}
@@ -140,7 +141,7 @@ type While struct {
 
 func (*While) isStmt() {}
 
-// ----- M8H sugar for frame save/restore -----
+// ----- Task H: function params + frame sugar -----
 
 // Param is a minimal function parameter (Tier-0 only needs the name).
 type Param struct{ Name string }
@@ -164,6 +165,7 @@ func (*FrameGet) isStmt() {}
 // ----- module/function/block containers -----
 
 type Module struct {
+	Name  string
 	Funcs []*Func
 }
 
