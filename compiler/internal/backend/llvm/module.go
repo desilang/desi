@@ -31,7 +31,7 @@ type Module struct {
 	tempID        int
 	asyncWrappers map[string]bool      // symbols that return ptr future handles
 	curRetIsPtr   bool                 // set per function during EmitFunc
-	ssa           map[string]hir.Value // simple name -> value alias (for lets/assigns)
+	ssa           map[string]hir.Value // simple name -> value alias (for lets/assigns and frame slots)
 }
 
 func NewModule(name string) *Module {
@@ -51,12 +51,13 @@ func (m *Module) nextStrName() string {
 	return fmt.Sprintf("@.str.%d", len(m.strOrder))
 }
 
+// keep original pooling semantics: include the NUL in the count and key it deterministically
 func (m *Module) ensureCStringGlobal(text string, withNewline bool) (gname string, count int) {
 	payload := text
 	if withNewline && !strings.HasSuffix(payload, "\n") {
 		payload += "\n"
 	}
-	count = len(payload) + 1
+	count = len(payload) + 1 // +1 for NUL
 	key := fmt.Sprintf("%d:%s", count, payload)
 	if name, ok := m.strLits[key]; ok {
 		return name, count
@@ -137,7 +138,20 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	if m.curRetIsPtr {
 		retTy = "ptr"
 	}
-	wprintf(&m.funcs, "define %s @%s() {\n", retTy, fn.Name)
+
+	// Task-H: support function params (Tier-0: all params are lowered as `ptr`).
+	if len(fn.Params) == 0 {
+		wprintf(&m.funcs, "define %s @%s() {\n", retTy, fn.Name)
+	} else {
+		wprintf(&m.funcs, "define %s @%s(", retTy, fn.Name)
+		for i, p := range fn.Params {
+			if i > 0 {
+				wprintf(&m.funcs, ", ")
+			}
+			wprintf(&m.funcs, "ptr %%%s", p.Name)
+		}
+		wprintf(&m.funcs, ") {\n")
+	}
 
 	type localInfo struct {
 		name string
@@ -218,10 +232,21 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needRcDec = true
 				}
 
+			// ------- M8H frame sugar (SSA-only aliases) -------
+			case *hir.FrameSet:
+				m.ssa[x.Slot] = x.Val
+			case *hir.FrameGet:
+				if v, ok := m.ssa[x.Slot]; ok {
+					m.ssa[x.Dst.Name] = v
+				} else {
+					m.ssa[x.Dst.Name] = hir.ConstInt{Text: "0"}
+				}
+
 			// ------- arena helpers -------
 			case *hir.ArenaAlloc:
 				if v, ok := x.Arena.(hir.Var); ok {
 					wprintf(&m.funcs, "  %%t%d = call ptr @__arena_alloc(ptr %%%s)\n", m.tempID, v.Name)
+					m.ensureDecl("declare ptr @__arena_alloc(ptr)")
 					m.tempID++
 				}
 			case *hir.DestroyArena:
@@ -272,9 +297,7 @@ func (m *Module) emitCall(c *hir.Call) {
 
 	// __future_register_poll(fut, &name$poll, frame)
 	if c.Fn == "__future_register_poll" {
-		if !strings.Contains(m.globals.String(), "declare void @__future_register_poll(") {
-			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
-		}
+		m.ensureDecl("declare void @__future_register_poll(ptr, ptr, ptr)")
 		futOp := "ptr null"
 		if len(c.Args) > 0 {
 			futOp = m.ptrOperand(c.Args[0])
@@ -293,6 +316,9 @@ func (m *Module) emitCall(c *hir.Call) {
 			}
 		}
 		frameOp := "ptr null"
+		if len(c.Args) > 2 {
+			frameOp = m.ptrOperand(c.Args[2])
+		}
 		wprintf(&m.funcs, "  call void @__future_register_poll(%s, %s, %s)\n", futOp, fnOp, frameOp)
 		return
 	}
@@ -306,7 +332,6 @@ func (m *Module) emitCall(c *hir.Call) {
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
 		wprintf(&m.funcs, "  %s = call %s @%s()\n", dst, ret, c.Fn)
-
 		// If dst looks like %tNN, advance tempID to avoid collisions.
 		if strings.HasPrefix(dst, "%t") {
 			if n, err := strconv.Atoi(dst[2:]); err == nil {

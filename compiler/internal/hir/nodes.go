@@ -1,7 +1,9 @@
 package hir
 
-// Minimal HIR nodes (M7A/B/C): structured control, explicit Drop, DecRef,
-// and arena-specific ops.
+// Minimal HIR nodes for Tier-0 backend: structured control, explicit Drop/DecRef,
+// arena helpers, and async surface ops (in async_nodes.go).
+
+// ----- simple types (used mostly for pretty-printing/types in Tier-0) -----
 
 type Type int
 
@@ -122,6 +124,7 @@ type DestroyArena struct{ Arena Value }
 
 func (*DestroyArena) isStmt() {}
 
+// Structured control (printed by name; lowered in backend)
 type If struct {
 	Cond Value
 	Then *Block
@@ -137,15 +140,36 @@ type While struct {
 
 func (*While) isStmt() {}
 
-// ----- module/func/block -----
+// ----- M8H sugar for frame save/restore -----
+
+// Param is a minimal function parameter (Tier-0 only needs the name).
+type Param struct{ Name string }
+
+// FrameSet: conceptual store to a logical frame slot (e.g., "frame.x").
+type FrameSet struct {
+	Slot string
+	Val  Value
+}
+
+func (*FrameSet) isStmt() {}
+
+// FrameGet: conceptual load from a logical frame slot into a temp.
+type FrameGet struct {
+	Slot string
+	Dst  Temp
+}
+
+func (*FrameGet) isStmt() {}
+
+// ----- module/function/block containers -----
 
 type Module struct {
-	Name  string
 	Funcs []*Func
 }
 
 type Func struct {
 	Name   string
+	Params []Param
 	Blocks []*Block
 }
 
