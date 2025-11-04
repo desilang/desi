@@ -58,9 +58,12 @@ func Print(w io.Writer, n interface{}) {
 				}
 			case *Drop:
 				wprintf(w, "    drop %s\n", s.Val.String())
+			case *IncRef:
+				wprintf(w, "    incref %s\n", s.Val.String())
+			case *DecRef:
+				wprintf(w, "    decref %s\n", s.Val.String())
 			case *If:
-				// Do not recursively print blocks to avoid duplication;
-				// just reference block names. Blocks themselves are printed separately.
+				// Reference block names; blocks themselves are printed separately.
 				if s.Else != nil {
 					wprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
 				} else {

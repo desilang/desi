@@ -1,6 +1,7 @@
 package hir
 
-// Minimal HIR nodes for M7A: not SSA, structured control, with explicit Drop.
+// Minimal HIR nodes for M7A/B: not SSA, structured control, with explicit Drop.
+// M7B: add IncRef/DecRef to model refcount operations.
 
 type Type int
 
@@ -92,12 +93,20 @@ type Call struct {
 func (*Call) isStmt() {}
 
 type Ret struct{ Val Value } // nil for bare return
-
-func (*Ret) isStmt() {}
+func (*Ret) isStmt()         {}
 
 type Drop struct{ Val Value }
 
 func (*Drop) isStmt() {}
+
+// M7B: explicit refcount ops
+type IncRef struct{ Val Value }
+
+func (*IncRef) isStmt() {}
+
+type DecRef struct{ Val Value }
+
+func (*DecRef) isStmt() {}
 
 type If struct {
 	Cond Value
