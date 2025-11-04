@@ -12,16 +12,18 @@ import (
 func LowerBlock(name string, blk *ast.Block) *hir.Func {
 	b := hir.NewFunc(name)
 	ls := &lowerState{
-		b:      b,
-		scopes: []*scope{{}}, // push root scope
+		b:          b,
+		scopes:     []*scope{{}}, // push root scope
+		terminated: false,
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
 }
 
 type lowerState struct {
-	b      *hir.Builder
-	scopes []*scope // stack
+	b          *hir.Builder
+	scopes     []*scope // stack
+	terminated bool     // set once a return is emitted
 }
 
 type scope struct {
@@ -41,10 +43,13 @@ func (ls *lowerState) cur() *scope { return ls.scopes[len(ls.scopes)-1] }
 
 func (ls *lowerState) lowerBlock(blk *ast.Block) {
 	for _, st := range blk.Stmts {
+		if ls.terminated {
+			break
+		}
 		ls.lowerStmt(st)
 	}
-	// End-of-root-block finalization (only for outermost scope).
-	if len(ls.scopes) == 1 {
+	// End-of-root-block finalization (only for outermost scope and not after return).
+	if len(ls.scopes) == 1 && !ls.terminated {
 		ls.emitScopeDrops(ls.cur())
 	}
 }
@@ -82,6 +87,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			v = ls.lowerExpr(s.Value)
 		}
 		ls.b.Emit(&hir.Ret{Val: v})
+		ls.terminated = true
 
 	case *ast.IfStmt:
 		cond := ls.lowerExpr(s.Cond)
@@ -91,16 +97,24 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.push()
 		ls.b.SetBlock(thenBlk)
 		ls.lowerBlock(s.Then)
-		ls.emitScopeDrops(ls.pop())
+		scThen := ls.pop()
+		if !ls.terminated {
+			ls.emitScopeDrops(scThen)
+		}
 		ls.b.SetBlock(oldCur)
 
 		var elseBlk *hir.Block
+		// Note: if terminated in then-branch we still lower else for structure,
+		// but its emitted code won't run; that's fine for M7A textual HIR.
 		if s.Else != nil {
 			elseBlk = ls.b.NewBlock("else")
 			ls.push()
 			ls.b.SetBlock(elseBlk)
 			ls.lowerBlock(s.Else)
-			ls.emitScopeDrops(ls.pop())
+			scElse := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scElse)
+			}
 			ls.b.SetBlock(oldCur)
 		}
 		ls.b.Emit(&hir.If{Cond: cond, Then: thenBlk, Else: elseBlk})
@@ -112,7 +126,10 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.push()
 		ls.b.SetBlock(bodyBlk)
 		ls.lowerBlock(s.Body)
-		ls.emitScopeDrops(ls.pop())
+		scWhile := ls.pop()
+		if !ls.terminated {
+			ls.emitScopeDrops(scWhile)
+		}
 		ls.b.SetBlock(oldCur)
 		ls.b.Emit(&hir.While{Cond: cond, Body: bodyBlk})
 
@@ -121,20 +138,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.push()
 		ident := ls.nameOf(s.Bind)
 		if ident != "" {
-			// introduce the handle in the scope so it participates in end-of-scope drops
-			ls.cur().locals = append(ls.cur().locals, ident)
+			// Bind the handle but do NOT register it as a "local" for scope-drops.
+			// We model a single destroy via defers to avoid double-drops.
 			if s.Init != nil {
 				init := ls.lowerExpr(s.Init)
 				ls.b.Emit(&hir.Let{Name: ident, Init: init})
 			} else {
 				ls.b.Emit(&hir.Let{Name: ident})
 			}
-			// M7A: model as a single Drop(handle) defer
+			// Single destroy at scope end (or return) via defer.
 			ls.cur().defers = append(ls.cur().defers, hir.Var{Name: ident})
 		}
 		ls.lowerBlock(s.Body)
 		sc := ls.pop()
-		ls.emitScopeDrops(sc)
+		if !ls.terminated {
+			ls.emitScopeDrops(sc)
+		}
 
 	case *ast.DeferStmt:
 		// For M7A, capture a generic "defer drop <target>" if shape is simple.
