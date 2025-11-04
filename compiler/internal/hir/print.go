@@ -16,7 +16,10 @@ func wprintf(w io.Writer, format string, a ...any) {
 func Print(w io.Writer, n interface{}) {
 	switch x := n.(type) {
 	case *Module:
-		wprintf(w, "Module %s\n", x.Name)
+		if x == nil {
+			wprintf(w, "<nil>\n")
+			return
+		}
 		for _, f := range x.Funcs {
 			Print(w, f)
 		}
@@ -27,8 +30,10 @@ func Print(w io.Writer, n interface{}) {
 		}
 	case *Block:
 		wprintf(w, "  block %s\n", x.Name)
-		for _, s := range x.Stmts {
-			switch s := s.(type) {
+		for _, st := range x.Stmts {
+			switch s := st.(type) {
+
+			// ------- core statements -------
 			case *Let:
 				if s.Init != nil {
 					wprintf(w, "    let %s = %s\n", s.Name, s.Init.String())
@@ -62,6 +67,8 @@ func Print(w io.Writer, n interface{}) {
 				wprintf(w, "    incref %s\n", s.Val.String())
 			case *DecRef:
 				wprintf(w, "    decref %s\n", s.Val.String())
+
+			// ------- arena/refcount helpers -------
 			case *ArenaAlloc:
 				wprintf(w, "    %s = arena.alloc(", s.Dst.String())
 				wprintf(w, "%s", s.Arena.String())
@@ -71,6 +78,8 @@ func Print(w io.Writer, n interface{}) {
 				wprintf(w, ")\n")
 			case *DestroyArena:
 				wprintf(w, "    destroy_arena %s\n", s.Arena.String())
+
+			// ------- control flow -------
 			case *If:
 				if s.Else != nil {
 					wprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
@@ -79,6 +88,14 @@ func Print(w io.Writer, n interface{}) {
 				}
 			case *While:
 				wprintf(w, "    while %s do %s\n", s.Cond.String(), s.Body.Name)
+
+			// ------- M8A async/futures surface -------
+			case *FutureNew:
+				wprintf(w, "    %s = future.new\n", s.Dst.String())
+			case *Await:
+				wprintf(w, "    await %s -> %s\n", s.Fut.String(), s.Dst.String())
+			case *FutureComplete:
+				wprintf(w, "    future.complete %s, %s\n", s.Fut.String(), s.Val.String())
 			}
 		}
 	default:
