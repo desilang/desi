@@ -246,6 +246,5 @@ func makeBarrierDiag(primaryWhere diag.Span, awaitWhere diag.Span, name string) 
 	if name != "" {
 		d.Notes = append(d.Notes, "borrowed parameter: "+name)
 	}
-	d.FillFromCatalog()
 	return d
 }
