@@ -8,20 +8,16 @@ import (
 	"github.com/desilang/desi/compiler/internal/hir"
 )
 
-func TestM8H_Emit_PollParamSignature(t *testing.T) {
-	f := &hir.Func{
+func TestEmit_PollHasFrameParam(t *testing.T) {
+	m := llvm.NewModule("m")
+	fn := &hir.Func{
 		Name:   "foo$poll",
 		Params: []hir.Param{{Name: "frame"}},
-		Blocks: []*hir.Block{
-			{Name: "entry"},
-		},
+		Blocks: []*hir.Block{{Name: "entry"}},
 	}
-
-	m := llvm.NewModule("test")
-	m.EmitFunc(f)
+	m.EmitFunc(fn)
 	ir := m.IR()
-
 	if !strings.Contains(ir, "define i32 @foo$poll(ptr %frame)") {
-		t.Fatalf("missing poll param in LLVM signature:\n%s", ir)
+		t.Fatalf("expected poll param in LLVM define, got:\n%s", ir)
 	}
 }

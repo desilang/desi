@@ -15,20 +15,18 @@ func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
 	//   a = await A(n)
 	//   b = await B(a)
 	fd := &ast.FuncDecl{
-		Name:  &ast.Ident{Name: "foo"},
+		Name:  ast.Ident{Name: "foo"},
 		Async: true,
-		Body: &ast.Block{
-			Stmts: []ast.Stmt{
-				&ast.AssignStmt{ // a := await A(n)
-					LHS: []ast.Expr{&ast.Ident{Name: "a"}},
-					RHS: []ast.Expr{&ast.UnaryExpr{Op: "await", X: &ast.CallExpr{Callee: &ast.Ident{Name: "A"}}}},
-				},
-				&ast.AssignStmt{ // b := await B(a)
-					LHS: []ast.Expr{&ast.Ident{Name: "b"}},
-					RHS: []ast.Expr{&ast.UnaryExpr{Op: "await", X: &ast.CallExpr{Callee: &ast.Ident{Name: "B"}}}},
-				},
+		Body: &ast.Block{Stmts: []ast.Stmt{
+			&ast.AssignStmt{ // a := await A(n)
+				LHS: []ast.Expr{&ast.Ident{Name: "a"}},
+				RHS: []ast.Expr{&ast.UnaryExpr{Op: "await", X: &ast.CallExpr{Callee: &ast.Ident{Name: "A"}}}},
 			},
-		},
+			&ast.AssignStmt{ // b := await B(a)
+				LHS: []ast.Expr{&ast.Ident{Name: "b"}},
+				RHS: []ast.Expr{&ast.UnaryExpr{Op: "await", X: &ast.CallExpr{Callee: &ast.Ident{Name: "B"}, Args: []ast.Expr{&ast.Ident{Name: "a"}}}}},
+			},
+		}},
 	}
 
 	w, p := lower.LowerAsyncFunc(fd, nil, nil)
@@ -36,7 +34,6 @@ func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
 	// Pretty-print poll HIR
 	var pout bytes.Buffer
 	hir.Print(&pout, p)
-
 	out := pout.String()
 
 	// Poll signature carries a frame param.
@@ -44,7 +41,7 @@ func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
 		t.Fatalf("poll missing frame param in header:\n%s", out)
 	}
 
-	// We save before suspending (Tier-0: at least fut).
+	// We save before suspending (Tier-0: at least fut via frame slot).
 	if !strings.Contains(out, "frame.set frame.fut") {
 		t.Fatalf("expected frame.set before suspend; got:\n%s", out)
 	}

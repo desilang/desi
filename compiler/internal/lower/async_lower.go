@@ -49,10 +49,10 @@ func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Fun
 	wb.Emit(&hir.Let{Name: "frame.state"})
 	wb.Emit(&hir.Assign{LHS: "frame.state", RHS: hir.ConstInt{Text: "0"}})
 
-	// call __future_register_poll(%fut, &f$poll, frame)
+	// call __future_register_poll(%fut, &f$poll)  -- Tier-0: pass null frame (backend adds 3rd arg as null)
 	wb.Emit(&hir.Call{
 		Fn:   "__future_register_poll",
-		Args: []hir.Value{fut, hir.Var{Name: "&" + name + "$poll"}, hir.Var{Name: "frame"}},
+		Args: []hir.Value{fut, hir.Var{Name: "&" + name + "$poll"}},
 	})
 
 	// ret %fut
@@ -78,7 +78,6 @@ func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Fun
 	pb.Func().Blocks = append(pb.Func().Blocks, cmps...)
 
 	// entry: nested comparisons: if state==0 -> state0 else cmp1; cmp1: if state==1 -> state1 else cmp2; ... else state{awCnt}
-	// Start emitting in the builder's current block ("entry").
 	for i := 0; i < awCnt; i++ {
 		// %ti = __eq_i32(frame.state, i)
 		ti := pb.FreshTemp("t")
@@ -95,26 +94,25 @@ func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Fun
 			elseBlk = states[awCnt]
 		}
 		pb.Emit(&hir.If{Cond: ti, Then: states[i], Else: elseBlk})
-		// fallthrough into next cmp block automatically by block order
 		if i+1 < awCnt {
-			pb.SetBlock(elseBlk)
+			pb.SetBlock(cmps[i])
 		}
 	}
 
 	// For each non-entry state k>=1, restore commonly used frame slots (Tier-0: restore fut).
 	for k := 1; k < len(states); k++ {
 		pb.SetBlock(states[k])
-		// %tf = frame.get frame.fut
+		// %tf = frame.get frame.fut  (SSA-only; used for shape in tests)
 		tf := pb.FreshTemp("t")
 		pb.Emit(&hir.FrameGet{Slot: "frame.fut", Dst: tf})
-		_ = tf // restored but not used further at Tier-0
+		_ = tf
 	}
 
 	// Each await state i (0..awCnt-1): save locals and suspend: frame.state=i+1; ret false
 	for i := 0; i < awCnt; i++ {
 		pb.SetBlock(states[i])
-		// Save a minimal live set (Tier-0): fut
-		pb.Emit(&hir.FrameSet{Slot: "frame.fut", Val: hir.Var{Name: "frame.fut"}})
+		// Save a minimal live set (Tier-0): fut (store a placeholder to avoid self-alias loops)
+		pb.Emit(&hir.FrameSet{Slot: "frame.fut", Val: hir.ConstInt{Text: "0"}})
 		pb.Emit(&hir.Assign{LHS: "frame.state", RHS: hir.ConstInt{Text: strconv.Itoa(i + 1)}})
 		pb.Emit(&hir.Ret{Val: hir.ConstBool{Value: false}})
 	}
