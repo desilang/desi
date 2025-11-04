@@ -20,9 +20,11 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:          b,
-		scopes:     []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}}}, // root
+		scopes:     []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
 		terminated: false,
 		info:       info,
+		// M7C: track temps that came from ArenaAlloc so we can mark their binders as arena-owned.
+		tempsFromArenaAlloc: map[string]bool{},
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
@@ -33,20 +35,27 @@ type lowerState struct {
 	scopes     []*scope // stack
 	terminated bool     // set once a return is emitted
 	info       *check.Info
+
+	tempsFromArenaAlloc map[string]bool // temp.Name -> true if produced by ArenaAlloc
 }
 
 type scope struct {
-	locals []string        // in declaration order
-	rcLike map[string]bool // locals that are rc/arc
-	moved  map[string]bool // locals that have been moved out; skip drop
-	defers []hir.Value
+	locals     []string        // in declaration order
+	rcLike     map[string]bool // locals that are rc/arc
+	moved      map[string]bool // locals moved-from; skip drop
+	defers     []hir.Value
+	arenas     map[string]bool // names that are arena handles in this scope
+	arenaOwned map[string]bool // locals whose storage originates from arena.alloc
 }
 
 func (ls *lowerState) push() {
 	ls.scopes = append(ls.scopes, &scope{
-		locals: []string{},
-		rcLike: map[string]bool{},
-		moved:  map[string]bool{},
+		locals:     []string{},
+		rcLike:     map[string]bool{},
+		moved:      map[string]bool{},
+		defers:     []hir.Value{},
+		arenas:     map[string]bool{},
+		arenaOwned: map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -101,6 +110,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 		}
 		ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: init})
+
+		// M7C: if init was a temp that came from ArenaAlloc, mark this local as arena-owned.
+		if t, ok := init.(hir.Temp); ok && ls.tempsFromArenaAlloc[t.Name] {
+			ls.cur().arenaOwned[s.Name.Name] = true
+		}
 
 	case *ast.AssignStmt:
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {
@@ -165,18 +179,20 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.b.Emit(&hir.While{Cond: cond, Body: bodyBlk})
 
 	case *ast.UsingStmt:
-		// using X [= init]: body
+		// using X [= init]: body  → bind handle + defer destroy_arena(X)
 		ls.push()
 		ident := ls.nameOf(s.Bind)
 		if ident != "" {
-			// Bind the handle but do NOT register it as a "local" for scope-drops.
+			// Don't register as "local" (avoid ordinary drop); we destroy via defer.
 			if s.Init != nil {
 				init := ls.lowerExpr(s.Init)
 				ls.b.Emit(&hir.Let{Name: ident, Init: init})
 			} else {
 				ls.b.Emit(&hir.Let{Name: ident})
 			}
-			// Single destroy at scope end (or return) via defer.
+			// Mark this name as an arena handle in the current scope.
+			ls.cur().arenas[ident] = true
+			// One destroy at scope end (or return) via defer.
 			ls.cur().defers = append(ls.cur().defers, hir.Var{Name: ident})
 		}
 		ls.lowerBlock(s.Body)
@@ -186,9 +202,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 	case *ast.DeferStmt:
-		// For M7A/B, capture a generic "defer drop <target>" if shape is simple.
+		// Keep the basic "__close(x)" → drop/decref path from M7A/B.
 		if ce := s.Call; ce != nil {
-			// if call is "__close(x)" treat as drop x
 			if id, ok := ce.Callee.(*ast.Ident); ok && id.Name == "__close" && len(ce.Args) == 1 {
 				if v := ls.valueOf(ce.Args[0]); v != nil {
 					ls.cur().defers = append(ls.cur().defers, v)
@@ -211,6 +226,24 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.Ident:
 		return hir.Var{Name: e.Name}
 	case *ast.CallExpr:
+		// M7C: detect arena.alloc(...) and emit ArenaAlloc
+		if fe, ok := e.Callee.(*ast.FieldExpr); ok && fe.Name.Name == "alloc" {
+			if id, ok := fe.X.(*ast.Ident); ok && ls.hasArena(id.Name) {
+				args := make([]hir.Value, 0, len(e.Args))
+				for _, a := range e.Args {
+					args = append(args, ls.lowerExpr(a))
+				}
+				dst := ls.b.FreshTemp("t")
+				ls.b.Emit(&hir.ArenaAlloc{
+					Arena: hir.Var{Name: id.Name},
+					Args:  args,
+					Dst:   dst,
+				})
+				ls.tempsFromArenaAlloc[dst.Name] = true
+				return dst
+			}
+		}
+		// fallback: normal call
 		fnName := ls.calleeName(e.Callee)
 		args := make([]hir.Value, 0, len(e.Args))
 		for _, a := range e.Args {
@@ -295,16 +328,24 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if sc.moved[name] {
 			continue // skip moved-from owner
 		}
+		if sc.arenaOwned[name] {
+			continue // arena-backed values are freed by destroy_arena only
+		}
 		if sc.rcLike[name] {
 			ls.b.Emit(&hir.DecRef{Val: hir.Var{Name: name}})
 		} else {
 			ls.b.Emit(&hir.Drop{Val: hir.Var{Name: name}})
 		}
 	}
-	// defers (modeled as drops of values)
+	// defers
 	for i := len(sc.defers) - 1; i >= 0; i-- {
 		v := sc.defers[i]
-		// If the deferred target is an rc-like variable, decref; otherwise drop.
+		// Arena handle?
+		if varName, ok := v.(hir.Var); ok && sc.arenas[varName.Name] {
+			ls.b.Emit(&hir.DestroyArena{Arena: v})
+			continue
+		}
+		// rc-like target?
 		if varName, ok := v.(hir.Var); ok && sc.rcLike[varName.Name] {
 			ls.b.Emit(&hir.DecRef{Val: v})
 		} else {
@@ -329,6 +370,14 @@ func (ls *lowerState) hasLocal(name string) bool {
 	}
 	return false
 }
+func (ls *lowerState) hasArena(name string) bool {
+	for i := len(ls.scopes) - 1; i >= 0; i-- {
+		if ls.scopes[i].arenas[name] {
+			return true
+		}
+	}
+	return false
+}
 
 func (ls *lowerState) removeLocal(name string) {
 	sc := ls.cur()
@@ -338,6 +387,7 @@ func (ls *lowerState) removeLocal(name string) {
 			sc.locals = sc.locals[:len(sc.locals)-1]
 			delete(sc.rcLike, name)
 			delete(sc.moved, name)
+			delete(sc.arenaOwned, name)
 			return
 		}
 	}
@@ -346,6 +396,10 @@ func (ls *lowerState) removeLocal(name string) {
 // dropLocalByName emits an immediate drop/decref for a local (used on shadowing).
 func (ls *lowerState) dropLocalByName(name string) {
 	sc := ls.cur()
+	if sc.arenaOwned[name] {
+		// arena-backed locals are not individually dropped
+		return
+	}
 	if sc.rcLike[name] {
 		ls.b.Emit(&hir.DecRef{Val: hir.Var{Name: name}})
 	} else {

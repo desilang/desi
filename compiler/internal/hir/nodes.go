@@ -1,7 +1,7 @@
 package hir
 
-// Minimal HIR nodes for M7A/B: not SSA, structured control, with explicit Drop.
-// M7B: add IncRef/DecRef to model refcount operations.
+// Minimal HIR nodes (M7A/B/C): structured control, explicit Drop, DecRef,
+// and arena-specific ops.
 
 type Type int
 
@@ -87,19 +87,20 @@ func (*Assign) isStmt() {}
 type Call struct {
 	Fn   string
 	Args []Value
-	Dst  Temp // destination temp (optional: Name blank means ignored)
+	Dst  Temp
 }
 
 func (*Call) isStmt() {}
 
-type Ret struct{ Val Value } // nil for bare return
-func (*Ret) isStmt()         {}
+type Ret struct{ Val Value }
+
+func (*Ret) isStmt() {}
 
 type Drop struct{ Val Value }
 
 func (*Drop) isStmt() {}
 
-// M7B: explicit refcount ops
+// Refcount ops (M7B)
 type IncRef struct{ Val Value }
 
 func (*IncRef) isStmt() {}
@@ -108,10 +109,23 @@ type DecRef struct{ Val Value }
 
 func (*DecRef) isStmt() {}
 
+// Arena ops (M7C)
+type ArenaAlloc struct {
+	Arena Value   // e.g., %arena
+	Args  []Value // payload (type/size/initializer placeholder)
+	Dst   Temp
+}
+
+func (*ArenaAlloc) isStmt() {}
+
+type DestroyArena struct{ Arena Value }
+
+func (*DestroyArena) isStmt() {}
+
 type If struct {
 	Cond Value
 	Then *Block
-	Else *Block // optional
+	Else *Block
 }
 
 func (*If) isStmt() {}

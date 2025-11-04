@@ -62,8 +62,16 @@ func Print(w io.Writer, n interface{}) {
 				wprintf(w, "    incref %s\n", s.Val.String())
 			case *DecRef:
 				wprintf(w, "    decref %s\n", s.Val.String())
+			case *ArenaAlloc:
+				wprintf(w, "    %s = arena.alloc(", s.Dst.String())
+				wprintf(w, "%s", s.Arena.String())
+				for _, a := range s.Args {
+					wprintf(w, ", %s", a.String())
+				}
+				wprintf(w, ")\n")
+			case *DestroyArena:
+				wprintf(w, "    destroy_arena %s\n", s.Arena.String())
 			case *If:
-				// Reference block names; blocks themselves are printed separately.
 				if s.Else != nil {
 					wprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
 				} else {
