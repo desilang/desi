@@ -8,7 +8,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/hir"
 )
 
-func TestM8E_Emit_RegisterPoll(void *testing.T) {
+func TestM8E_Emit_RegisterPoll(t *testing.T) {
 	f := &hir.Func{
 		Name: "main",
 		Blocks: []*hir.Block{
