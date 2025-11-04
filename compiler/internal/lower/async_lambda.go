@@ -13,7 +13,7 @@ import (
 // expression with an Ident("__lam$N") at the callsite.
 //
 // The synthesized function body is a single `return <lambda-body>`; Params are
-// copied verbatim from the lambda. Names are made unique within the module.
+// copied (converted) from the lambda. Names are made unique within the module.
 func DesugarAsyncLambdas(mod *ast.Module) {
 	if mod == nil {
 		return
@@ -120,6 +120,12 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 		if !x.Async {
 			return x
 		}
+		// Convert lambda params -> function params
+		params := make([]ast.Param, len(x.Params))
+		for i, lp := range x.Params {
+			params[i] = ast.Param{Name: lp.Name, Type: lp.Type}
+		}
+
 		// Synthesize: async def __lam$N(params): return <body>
 		name := fmt.Sprintf("__lam$%d", *next)
 		*next++
@@ -127,7 +133,7 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 		fn := &ast.FuncDecl{
 			Async:  true,
 			Name:   ast.Ident{Name: name},
-			Params: x.Params, // copy as-is (Tier-0)
+			Params: params,
 			Body: &ast.Block{
 				Stmts: []ast.Stmt{
 					&ast.ReturnStmt{Value: x.Body},

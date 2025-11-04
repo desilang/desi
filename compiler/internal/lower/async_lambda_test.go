@@ -13,7 +13,7 @@ func TestAsyncLambda_DesugarsToHiddenAsyncFunc(t *testing.T) {
 	call := &ast.CallExpr{
 		Callee: &ast.LambdaExpr{
 			Async:  true,
-			Params: []ast.Param{{Name: ast.Ident{Name: "x"}}},
+			Params: []ast.LambdaParam{{Name: ast.Ident{Name: "x"}}},
 			Body: &ast.UnaryExpr{
 				Op: "await",
 				X: &ast.CallExpr{

@@ -10,6 +10,7 @@ type LambdaParam struct {
 }
 
 type LambdaExpr struct {
+	Async  bool
 	Params []LambdaParam
 	Body   Expr
 	Span   diag.Span
