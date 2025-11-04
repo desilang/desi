@@ -68,10 +68,27 @@ func (p *Parser) parseStmt() ast.Stmt {
 	case token.KW_from: // M5
 		return p.parseFromImport()
 	default:
+		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()
+
+		// Friendly error for Python-style "name = expr" at statement start.
+		// We only trigger this when the head expression is an identifier and
+		// the very next token's lexeme is exactly "=" (which is not a token in Desi).
+		if id, ok := e.(*ast.Ident); ok && p.cur.Lexeme == "=" && id != nil {
+			// Point at the identifier span; then sync to end-of-statement.
+			p.errMissingLetBeforeDecl(e.SpanOf())
+			p.syncStmt()
+			// Return a benign ExprStmt so the parser can continue.
+			return &ast.ExprStmt{
+				Expr: e,
+				Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur)),
+			}
+		}
+
 		if s := p.maybeMakeAssign(e); s != nil {
 			return s
 		}
+
 		// Expression statement: require newline (tolerate EOF/Dedent).
 		span := ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))
 		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {

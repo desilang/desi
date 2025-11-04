@@ -137,6 +137,17 @@ func (p *Parser) parseSimpleStmtInline() ast.Stmt {
 		return p.parseReturn()
 	default:
 		e := p.parseExpr()
+
+		// Same friendly error for one-line simple statements (e.g., "if x: a = 1").
+		if id, ok := e.(*ast.Ident); ok && p.cur.Lexeme == "=" && id != nil {
+			p.errMissingLetBeforeDecl(e.SpanOf())
+			p.syncStmt()
+			return &ast.ExprStmt{
+				Expr: e,
+				Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur)),
+			}
+		}
+
 		if s := p.maybeMakeAssign(e); s != nil {
 			return s
 		}
