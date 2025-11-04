@@ -92,9 +92,12 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 		}
 		ls.lowerStmt(st)
 	}
-	// End-of-root-block finalization (only for outermost scope and not after return).
+	// End-of-root-block finalization (only for outermost scope).
 	if len(ls.scopes) == 1 && !ls.terminated {
 		ls.emitScopeDrops(ls.cur())
+		// If no explicit return ran, emit a default one (Tier-0: i32 0).
+		ls.b.Emit(&hir.Ret{Val: nil})
+		ls.terminated = true
 	}
 }
 
