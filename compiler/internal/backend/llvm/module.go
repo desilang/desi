@@ -270,7 +270,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
-	// Track async helper references for declarations (wrapper wiring).
+	// __future_register_poll(fut, &name$poll, frame)
 	if c.Fn == "__future_register_poll" {
 		if !strings.Contains(m.globals.String(), "declare void @__future_register_poll(") {
 			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
@@ -303,15 +303,24 @@ func (m *Module) emitCall(c *hir.Call) {
 		ret = "ptr"
 	}
 
-	// If the HIR provided a destination temp, use it; else mint a fresh %tN.
-	dst := ""
 	if c.Dst.Name != "" {
-		dst = c.Dst.String()
+		dst := c.Dst.String()
 		wprintf(&m.funcs, "  %s = call %s @%s()\n", dst, ret, c.Fn)
-	} else {
-		wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
-		m.tempID++
+
+		// If dst looks like %tNN, advance tempID to avoid collisions.
+		if strings.HasPrefix(dst, "%t") {
+			if n, err := strconv.Atoi(dst[2:]); err == nil {
+				if n >= m.tempID {
+					m.tempID = n + 1
+				}
+			}
+		}
+		return
 	}
+
+	// No destination provided: mint a fresh temp.
+	wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
+	m.tempID++
 }
 
 func (m *Module) emitRet(r *hir.Ret) {
