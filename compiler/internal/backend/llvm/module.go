@@ -271,8 +271,7 @@ func (m *Module) emitCall(c *hir.Call) {
 	}
 
 	// Track async helper references for declarations (wrapper wiring).
-	switch c.Fn {
-	case "__future_register_poll":
+	if c.Fn == "__future_register_poll" {
 		if !strings.Contains(m.globals.String(), "declare void @__future_register_poll(") {
 			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
 		}
@@ -298,13 +297,21 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	// Fallback: call external by name; choose return type based on async wrapper table.
+	// Fallback: external call — choose return type AND honor c.Dst if provided.
 	ret := "i32"
 	if m.asyncWrappers[c.Fn] {
 		ret = "ptr"
 	}
-	wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
-	m.tempID++
+
+	// If the HIR provided a destination temp, use it; else mint a fresh %tN.
+	dst := ""
+	if c.Dst.Name != "" {
+		dst = c.Dst.String()
+		wprintf(&m.funcs, "  %s = call %s @%s()\n", dst, ret, c.Fn)
+	} else {
+		wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
+		m.tempID++
+	}
 }
 
 func (m *Module) emitRet(r *hir.Ret) {
