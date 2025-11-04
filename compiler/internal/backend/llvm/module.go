@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/backend/llvm/intrin"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/term"
 )
@@ -117,6 +118,11 @@ func escapeForCString(s string) string {
 // Note: plain Drop is a no-op in Tier-0; DecRef/DestroyArena become libcalls.
 func (m *Module) EmitFunc(fn *hir.Func) {
 	wprintf(&m.funcs, "define i32 @%s() {\n", fn.Name)
+
+	type localInfo struct {
+		name string
+		size int
+	}
 	for bi, b := range fn.Blocks {
 		label := b.Name
 		if bi == 0 && (label == "" || label == "entry") {
@@ -124,7 +130,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		}
 		wprintf(&m.funcs, "%s:\n", label)
 
-		var locals []string
+		var locals []localInfo
 		for _, s := range b.Stmts {
 			switch x := s.(type) {
 			case *hir.Let:
@@ -140,14 +146,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					llvmTy, size = "i32", 4
 				}
 				wprintf(&m.funcs, "  %%%s = alloca %s\n", x.Name, llvmTy)
-				wprintf(&m.funcs, "  call void @llvm.lifetime.start.p0(i64 %d, ptr %%%s)\n", size, x.Name)
-				locals = append(locals, x.Name)
+				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
+				locals = append(locals, localInfo{name: x.Name, size: size})
 
 			case *hir.Call:
 				m.emitCall(x)
 
 			case *hir.DecRef:
-				// Only Var is expected here in M7; temps wouldn't be pointers.
 				if v, ok := x.Val.(hir.Var); ok {
 					wprintf(&m.funcs, "  call void @__rc_dec(ptr %%%s)\n", v.Name)
 					m.needRcDec = true
@@ -160,16 +165,15 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 
 			case *hir.Drop:
-				// no-op for plain values in Tier-0
-				// (arena-backed values are covered by DestroyArena; rc/arc by DecRef)
+				// no-op at Tier-0
 			case *hir.Ret:
 				m.emitRet(x)
 			}
 		}
 		// Close lifetimes at block end (Tier-0: whole-function bracketing).
 		for i := len(locals) - 1; i >= 0; i-- {
-			name := locals[i]
-			wprintf(&m.funcs, "  call void @llvm.lifetime.end.p0(i64 4, ptr %%%s)\n", name)
+			li := locals[i]
+			wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
 		}
 	}
 	wprintf(&m.funcs, "}\n")
