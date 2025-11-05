@@ -102,19 +102,19 @@ func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
 func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	name := fd.Name.Name
 
-	// Build function type from parameter annotations (basic names only for M4/M5).
+	// Build function type from parameter annotations (surface forms allowed).
 	params := make([]types.T, len(fd.Params))
 	for i, p := range fd.Params {
 		if p.Type != nil {
-			if t, ok := types.FromName(p.Type.Name); ok {
-				params[i] = t
+			if tt := surfaceToType(p.Type.Name); tt != nil {
+				params[i] = tt
 			}
 		}
 	}
 	var ret types.T = types.None
 	if fd.RetType != nil {
-		if t, ok := types.FromName(fd.RetType.Name); ok {
-			ret = t
+		if tt := surfaceToType(fd.RetType.Name); tt != nil {
+			ret = tt
 		}
 	}
 	sig := types.FuncOf(params, ret)
@@ -129,44 +129,56 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	for i := range fd.Params {
 		modes[i] = fd.Params[i].Mode
 	}
-	set.Add(&FuncCand{Decl: fd, Type: sig, Modes: modes, Extern: isExternDecl(fd)})
+	set.Add(&FuncCand{
+		Decl:   fd,
+		Type:   sig,
+		Modes:  modes,
+		Extern: isExternDecl(fd), // <-- critical: mark local @extern functions
+	})
 
 	// Bind the function name in the current scope for call resolution.
 	_ = c.scope.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
 
 func (c *checker) checkFunc(fd *ast.FuncDecl) {
-	if fd == nil {
-		return
-	}
-	// record the declared return type (if any) for return-checking
-	if fd.RetType != nil {
-		if t, ok := types.FromName(fd.RetType.Name); ok {
-			c.curFuncRet = t
-		}
+	// New scope for parameters and locals.
+	saved := c.scope
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = saved }()
+
+	// Reset per-function move-tracking state (our local tracker)
+	c.moved = MoveSet{}
+	if c.info != nil {
+		c.info.Moved = make(map[string]diag.Span)
 	}
 
-	// New block scope per function.
-	old := c.scope
-	c.scope = NewScope(old)
-
-	// Params are declared as variables
-	for _, p := range fd.Params {
+	// Bind params.
+	for i := range fd.Params {
+		p := fd.Params[i]
 		var pt types.T
 		if p.Type != nil {
-			pt, _ = types.FromName(p.Type.Name)
+			pt = surfaceToType(p.Type.Name)
 		}
-		_ = c.scope.Define(&Symbol{Name: p.Name.Name, Kind: SymParam, Type: pt, Node: fd})
+		_ = c.scope.Define(&Symbol{
+			Name: p.Name.Name, Kind: SymParam, Type: pt, Node: &fd.Params[i].Name,
+		})
 	}
+
+	// Declared return type (if any).
+	c.curFuncRet = types.None
+	if fd.RetType != nil {
+		if tt := surfaceToType(fd.RetType.Name); tt != nil {
+			c.curFuncRet = tt
+		}
+	}
+
+	// M6-C: callee-side borrow rule on async functions.
+	c.checkAsyncInoutAwait(fd)
 
 	// Body.
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
 	}
-
-	// restore scope and function return
-	c.scope = old
-	c.curFuncRet = nil
 }
 
 func (c *checker) checkBlock(b *ast.Block) {
