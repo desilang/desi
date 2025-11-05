@@ -1,0 +1,11 @@
+# M8 — async lambda demo
+# A tiny example showing that async lambdas are desugared into hidden async defs.
+
+async def inc(x: int) -> int:
+	# pretend to do async work, return x+1
+	x + 1
+
+def main() -> int:
+	let fut = (async lambda x: await inc(x))(41)
+	print("async lambda desugared")
+	0

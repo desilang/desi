@@ -11,6 +11,9 @@ import (
 //
 // 'src' is used for literal materialization (strings).
 func LowerModuleFromSource(mod *ast.Module, src []byte) *hir.Module {
+	// Task J: rewrite async lambdas into hidden async functions before lowering.
+	DesugarAsyncLambdas(mod)
+
 	out := &hir.Module{Name: mod.File}
 	for _, d := range mod.Decls {
 		fd, ok := d.(*ast.FuncDecl)
