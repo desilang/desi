@@ -13,7 +13,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/term"
 )
 
-// wprintf writes formatted text to any io.Writer while ignoring write errors.
+// wprintf writes formatted text while ignoring write errors.
 func wprintf(w io.Writer, format string, a ...any) {
 	term.Write(w, []byte(fmt.Sprintf(format, a...)))
 }
@@ -29,7 +29,9 @@ type Module struct {
 	needArena     bool
 	wroteGlob     bool
 	tempID        int
-	asyncWrappers map[string]bool // symbol names that return ptr future handles
+	asyncWrappers map[string]bool      // symbols that return ptr future handles
+	curRetIsPtr   bool                 // set per function during EmitFunc
+	ssa           map[string]hir.Value // simple name -> value alias (for lets/assigns)
 }
 
 func NewModule(name string) *Module {
@@ -49,8 +51,6 @@ func (m *Module) nextStrName() string {
 	return fmt.Sprintf("@.str.%d", len(m.strOrder))
 }
 
-// ensureCStringGlobal(text) creates/reuses a private unnamed_addr constant.
-// If withNewline is true and text lacks '\n', we append one; we always add the NUL.
 func (m *Module) ensureCStringGlobal(text string, withNewline bool) (gname string, count int) {
 	payload := text
 	if withNewline && !strings.HasSuffix(payload, "\n") {
@@ -67,7 +67,6 @@ func (m *Module) ensureCStringGlobal(text string, withNewline bool) (gname strin
 	return name, count
 }
 
-// ensureDecl appends a one-line 'declare ...' to the globals buffer exactly once.
 func (m *Module) ensureDecl(line string) {
 	if strings.Contains(m.globals.String(), line) {
 		return
@@ -129,9 +128,16 @@ func escapeForCString(s string) string {
 }
 
 // EmitFunc: Tier-0 subset—calls, returns, conservative lifetimes for locals.
-// Note: plain Drop is a no-op in Tier-0; DecRef/DestroyArena become libcalls.
 func (m *Module) EmitFunc(fn *hir.Func) {
-	wprintf(&m.funcs, "define i32 @%s() {\n", fn.Name)
+	// Reset per-function state.
+	m.ssa = make(map[string]hir.Value)
+	m.curRetIsPtr = m.asyncWrappers[fn.Name]
+
+	retTy := "i32"
+	if m.curRetIsPtr {
+		retTy = "ptr"
+	}
+	wprintf(&m.funcs, "define %s @%s() {\n", retTy, fn.Name)
 
 	type localInfo struct {
 		name string
@@ -159,14 +165,23 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 						llvmTy, size = "ptr", 8
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
+					case hir.Temp:
+						// leave as i32-sized for Tier-0; alias takes care of uses
+						llvmTy, size = "i32", 4
 					}
 				}
 				wprintf(&m.funcs, "  %%%s = alloca %s\n", x.Name, llvmTy)
 				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
 				locals = append(locals, localInfo{name: x.Name, size: size})
 
+				// SSA alias: if there was an initializer, remember it.
+				if x.Init != nil {
+					m.ssa[x.Name] = x.Init
+				}
+
 			case *hir.Assign:
-				// Tier-0: skip loads/stores modeling
+				// Track simple SSA alias for later uses.
+				m.ssa[x.LHS] = x.RHS
 
 			case *hir.Call:
 				m.emitCall(x)
@@ -198,17 +213,16 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needArena = true
 				}
 
-			// ------- control flow (not exercised heavily yet) -------
+			// ------- control flow (elided in Tier-0) -------
 			case *hir.If:
-				// elided
 			case *hir.While:
-				// elided
 
 			// ------- M8 async/futures -------
 			case *hir.FutureNew:
 				wprintf(&m.funcs, "  %s = call ptr @__future_new()\n", x.Dst.String())
 				m.ensureDecl("declare ptr @__future_new()")
 			case *hir.Await:
+				// Resolve possible SSA alias on the future variable.
 				wprintf(&m.funcs, "  %s = call i32 @__await_blocking(%s)\n", x.Dst.String(), m.ptrOperand(x.Fut))
 				m.ensureDecl("declare i32 @__await_blocking(ptr)")
 			case *hir.FutureComplete:
@@ -226,7 +240,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 }
 
 func (m *Module) emitCall(c *hir.Call) {
-	// Built-in print → puts
+	// Built-in print: print("…") → puts("…\n")
 	if c.Fn == "print" && len(c.Args) == 1 {
 		if s, ok := c.Args[0].(hir.ConstStr); ok {
 			g, n := m.ensureCStringGlobal(s.Text, true)
@@ -239,8 +253,9 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
-	// __future_register_poll(fut, &name$poll, frame)
-	if c.Fn == "__future_register_poll" {
+	// Track async helper references for declarations (wrapper wiring).
+	switch c.Fn {
+	case "__future_register_poll":
 		if !strings.Contains(m.globals.String(), "declare void @__future_register_poll(") {
 			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
 		}
@@ -252,7 +267,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		if len(c.Args) > 1 {
 			if v, ok := c.Args[1].(hir.Var); ok && strings.HasPrefix(v.Name, "&") {
 				fnOp = "ptr @" + v.Name[1:]
-				// Mark the wrapper as async (strip $poll suffix)
+				// Mark the wrapper (strip $poll) so calls to @name use ptr return.
 				if strings.HasSuffix(v.Name, "$poll") {
 					base := strings.TrimSuffix(v.Name[1:], "$poll")
 					m.MarkAsyncWrapper(base)
@@ -266,7 +281,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	// Fallback: external call — choose return type
+	// Fallback: call external by name; choose return type based on async wrapper table.
 	ret := "i32"
 	if m.asyncWrappers[c.Fn] {
 		ret = "ptr"
@@ -276,6 +291,35 @@ func (m *Module) emitCall(c *hir.Call) {
 }
 
 func (m *Module) emitRet(r *hir.Ret) {
+	// Pointer-returning wrapper?
+	if m.curRetIsPtr {
+		if r.Val == nil {
+			wprintf(&m.funcs, "  ret ptr null\n")
+			return
+		}
+		// Respect SSA aliases on returns too.
+		switch v := r.Val.(type) {
+		case hir.Temp:
+			wprintf(&m.funcs, "  ret ptr %s\n", v.String())
+		case hir.Var:
+			// Resolve alias if present
+			if ali, ok := m.ssa[v.Name]; ok {
+				switch a := ali.(type) {
+				case hir.Temp:
+					wprintf(&m.funcs, "  ret ptr %s\n", a.String())
+					return
+				default:
+					// fallback
+				}
+			}
+			wprintf(&m.funcs, "  ret ptr %%%s\n", v.Name)
+		default:
+			wprintf(&m.funcs, "  ret ptr null\n")
+		}
+		return
+	}
+
+	// Default i32 return path.
 	if r.Val == nil {
 		wprintf(&m.funcs, "  ret i32 0\n")
 		return
@@ -283,22 +327,30 @@ func (m *Module) emitRet(r *hir.Ret) {
 	switch v := r.Val.(type) {
 	case hir.ConstInt:
 		wprintf(&m.funcs, "  ret i32 %s\n", v.Text)
+	case hir.Temp:
+		wprintf(&m.funcs, "  ret i32 %s\n", v.String())
 	default:
 		wprintf(&m.funcs, "  ret i32 0\n")
 	}
 }
 
+// ptrOperand renders a pointer-typed operand, honoring SSA aliases for vars.
 func (m *Module) ptrOperand(v hir.Value) string {
 	switch t := v.(type) {
 	case hir.Temp:
 		return fmt.Sprintf("ptr %s", t.Name)
 	case hir.Var:
+		// SSA alias?
+		if ali, ok := m.ssa[t.Name]; ok {
+			return m.ptrOperand(ali)
+		}
 		return fmt.Sprintf("ptr %%%s", t.Name)
 	default:
 		return "ptr null"
 	}
 }
 
+// i32Operand renders an i32 operand, honoring SSA aliases for vars.
 func (m *Module) i32Operand(v hir.Value) string {
 	switch t := v.(type) {
 	case hir.ConstInt:
@@ -306,6 +358,9 @@ func (m *Module) i32Operand(v hir.Value) string {
 	case hir.Temp:
 		return fmt.Sprintf("i32 %s", t.Name)
 	case hir.Var:
+		if ali, ok := m.ssa[t.Name]; ok {
+			return m.i32Operand(ali)
+		}
 		return fmt.Sprintf("i32 %%%s", t.Name)
 	default:
 		return "i32 0"
