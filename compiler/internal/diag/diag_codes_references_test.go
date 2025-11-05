@@ -2,6 +2,7 @@ package diag
 
 import (
 	"io/fs"
+	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -16,7 +17,7 @@ func findRepoRoot(t *testing.T) string {
 	dir := filepath.Dir(thisFile)
 	for i := 0; i < 10; i++ {
 		mod := filepath.Join(dir, "go.mod")
-		if fi, err := fs.Stat(fs.OS, mod); err == nil && !fi.IsDir() {
+		if fi, err := os.Stat(mod); err == nil && !fi.IsDir() {
 			return dir
 		}
 		dir = filepath.Dir(dir)
@@ -27,19 +28,23 @@ func findRepoRoot(t *testing.T) string {
 
 func Test_AllGoEmittedCodesExistInCatalog(t *testing.T) {
 	root := findRepoRoot(t)
+	target := filepath.Join(root, "compiler", "internal")
+
+	// Match CodeID: "D??dddd" (e.g., DPE0110, DMW0004)
 	codeRE := regexp.MustCompile(`CodeID:\s*"(?P<id>D[A-Z]{2,3}\d{4})"`)
 
-	// Scan only compiler/internal/*.go
-	target := filepath.Join(root, "compiler", "internal")
 	err := filepath.WalkDir(target, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !strings.HasSuffix(path, ".go") {
+		if d.IsDir() {
+			return nil
+		}
+		if !strings.HasSuffix(path, ".go") {
 			return nil
 		}
 		// Read file contents
-		b, rerr := fs.ReadFile(fs.OS, path)
+		b, rerr := os.ReadFile(path)
 		if rerr != nil {
 			return rerr
 		}
