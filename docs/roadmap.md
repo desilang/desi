@@ -179,18 +179,38 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M8 — Async & Futures
+### M8 — Async & Futures (✅ DONE)
 
-**Scope**
+**What shipped**
 
-* Lower async funcs to state machines; `await`, `join`, `with_timeout`, `select`.
-* Enforce borrow rules at suspension points.
-* **Async lambda** expression form (expression-only body): `async lambda x: await f(x)`.
+* **Async lowering to state machines** with a **wrapper** (`@name` returning a future handle) and a **poll** function (`@name$poll`) that now **threads a real frame parameter**.
+  * HIR gained **function parameters** (`Func.Params`) and **frame sugar ops**: `frame.set` / `frame.get` for saving/restoring locals across suspension points.
+  * The async lowerer saves live locals before `await`, sets a state, returns `false`, and **restores** on resume using `frame.get`.
+* **`await` = suspension barrier** is enforced at lowering time:
+  * Attempting to hold an **`inout` (unique)** borrow **across `await`** produces a clear **DBR0001** diagnostic wired to the catalog.
+* **Async lambda** support end-to-end:
+  * `async lambda ...` **desugars** to a hidden `async def __lam$N(...)` and then lowers through the same wrapper+poll pipeline.
+* **Backend / IR polish**
+  * LLVM emitter prints params (Tier-0 all as `ptr`) and recognizes async wrappers (return **`ptr`**).
+  * `__future_register_poll(fut, &name$poll, frame)` now passes the **frame** argument.
+  * Stable SSA aliasing for simple lets **and** frame slots; temp counter monotonicity fixed.
+  * **Lifetime placement:** `llvm.lifetime.end` is emitted **immediately before `ret`** and **never after** it.
+* **Tier-0 runtime stubs** remain textual:
+  * `await` in synchronous contexts lowers to a blocking stub (`__await_blocking`).
+  * Futures use `__future_new`, `__future_complete`, and `__future_register_poll`.
+
+**Tests / examples**
+
+* Lowering: `async_lower_two_awaits_test.go`, `async_lower_frame_test.go` (save/restore locals), `await_barrier_test.go` (DBR0001), `async_lambda_test.go`.
+* Backend: `emit_async_stubs_test.go`, `emit_register_poll_test.go`, lifetime intrinsic tests.
+* Examples: `examples/15_m8_async_basic.desi`, `examples/16_m8_async_lambda.desi`.
 
 **Acceptance**
 
-* Demos run; async lambda covered by tests.
-* Reject `inout` across `await` with clear diagnostics.
+* `go build ./... && go test ./...` green.
+* HIR shows **`poll(%frame)`** and `frame.set/get` around each `await`; two-await case restores locals correctly.
+* Async lambdas compile via desugaring; **`inout` across `await`** is rejected with a clear diagnostic.
+* Tier-0 IR is cleaner (pointer-return wrappers, stable temps, and **no lifetime.end after ret**).
 
 ---
 
