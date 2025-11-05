@@ -24,19 +24,19 @@ func Print(w io.Writer, n interface{}) {
 			Print(w, f)
 		}
 	case *Func:
-		wprintf(w, "func %s", x.Name)
-		if len(x.Params) > 0 {
-			wprintf(w, "(")
+		// header with optional params
+		if len(x.Params) == 0 {
+			wprintf(w, "func %s\n", x.Name)
+		} else {
+			wprintf(w, "func %s(", x.Name)
 			for i, p := range x.Params {
 				if i > 0 {
 					wprintf(w, ", ")
 				}
-				// Print with % to mirror SSA look.
 				wprintf(w, "%%%s", p.Name)
 			}
-			wprintf(w, ")")
+			wprintf(w, ")\n")
 		}
-		wprintf(w, "\n")
 		for _, b := range x.Blocks {
 			Print(w, b)
 		}
@@ -89,9 +89,9 @@ func Print(w io.Writer, n interface{}) {
 				}
 				wprintf(w, ")\n")
 			case *DestroyArena:
-				wprintf(w, "    destroy.arena %s\n", s.Arena.String())
+				wprintf(w, "    destroy_arena %s\n", s.Arena.String())
 
-			// ------- structured control -------
+			// ------- control flow -------
 			case *If:
 				if s.Else != nil {
 					wprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
