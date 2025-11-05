@@ -8,8 +8,8 @@ import (
 // ExternMeta carries per-overload extern metadata aligned with Exports.Funcs[name][i].
 type ExternMeta struct {
 	Extern bool   // true if this overload is declared @extern(...)
-	ABI    string // e.g., "C"
-	Link   string // optional link hint (e.g., "m")
+	ABI    string // e.g., "C" (Tier-0: assume C if a string is present)
+	Link   string // optional link hint presence (non-empty means provided)
 	Symbol string // optional symbol override (reserved for future use)
 }
 
@@ -35,7 +35,8 @@ type Exports struct {
 //   - Include only functions where every parameter has an explicit type annotation
 //     resolvable via types.FromName AND the return type is explicitly annotated.
 //   - Visibility: only `pub def` are exported.
-//   - FFI: detect @extern("C"[, "linklib"]) decorator and record metadata aligned to overloads.
+//   - FFI: detect @extern(<string>[, <string>]) decorator and record metadata aligned to overloads.
+//     Tier-0: ABI is set to "C" if the first arg is any string literal; link is marked as present if a second string exists.
 func CollectExports(mod *ast.Module) *Exports {
 	out := &Exports{
 		Funcs:      map[string][]*types.Func{},
@@ -98,22 +99,20 @@ func CollectExports(mod *ast.Module) *Exports {
 			if dec.Name.Name != "extern" {
 				continue
 			}
-			// Expect @extern("C") or @extern("C", "m")
+			// Tier-0: if first arg is a string literal, assume ABI "C" and mark extern.
 			if len(dec.Args) >= 1 {
-				if s, ok := dec.Args[0].(*ast.StrLit); ok {
-					meta.ABI = s.Value
-					if meta.ABI == "C" {
-						meta.Extern = true
-					}
+				if _, ok := dec.Args[0].(*ast.StrLit); ok {
+					meta.ABI = "C"
+					meta.Extern = true
 				}
 			}
+			// If second arg is a string literal, mark link hint as present with a placeholder.
 			if len(dec.Args) >= 2 {
-				if s, ok := dec.Args[1].(*ast.StrLit); ok {
-					meta.Link = s.Value
+				if _, ok := dec.Args[1].(*ast.StrLit); ok {
+					meta.Link = "__present__" // placeholder: presence-only in M9B
 				}
 			}
-			// Additional arguments (symbol override, etc.) can be added later.
-			// For M9B, we keep it simple and ignore unexpected arg shapes.
+			// Stop after the first extern decorator, if multiple.
 			break
 		}
 		out.FuncExtern[name] = append(out.FuncExtern[name], meta)
