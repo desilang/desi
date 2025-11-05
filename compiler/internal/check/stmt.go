@@ -44,7 +44,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			// Only support identifier targets in M4
 			id, ok := lt.(*ast.Ident)
 			if !ok {
-				c.add(diagAt("DTE0031", st.Span, "unsupported assignment target"))
+				_ = c.typ(lt)
+				_ = c.typ(rt)
 				continue
 			}
 			valT := c.typ(rt)
@@ -53,7 +54,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.add(diagAt("DTE0001", id.Span, "undefined name: "+id.Name))
 				continue
 			}
-			// Enrich Info on LHS ident as well
 			c.info.Idents[id] = sym
 			if sym.Type != nil {
 				c.info.Types[id] = sym.Type
@@ -86,40 +86,28 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 			return
 		}
-		vt := c.typ(st.Value)
-		if c.curFuncRet != nil && vt != nil && !types.Assignable(c.curFuncRet, vt) {
-			c.add(diagAt("DTE0005", st.Span, "return type mismatch: expected '"+c.curFuncRet.String()+"', found '"+vt.String()+"'"))
+		rt := c.typ(st.Value)
+		if c.curFuncRet != nil && !types.Equal(rt, c.curFuncRet) {
+			c.add(diagAt("DTE0004", st.Span, "wrong return type: expected "+c.curFuncRet.String()))
 		}
 
 	case *ast.ExprStmt:
 		_ = c.typ(st.Expr)
 
 	case *ast.IfStmt:
-		ct := c.typ(st.Cond)
-		if !types.Equal(ct, types.Bool) {
-			c.add(diagAt("DTE0004", st.Cond.SpanOf(), "if condition must be bool"))
+		_ = c.typ(st.Cond)
+		if st.Then != nil {
+			c.checkBlock(st.Then)
 		}
-		c.checkBlock(st.Then)
 		for _, arm := range st.Elifs {
-			ct := c.typ(arm.Cond)
-			if !types.Equal(ct, types.Bool) {
-				c.add(diagAt("DTE0004", arm.Cond.SpanOf(), "elif condition must be bool"))
+			_ = c.typ(arm.Cond)
+			if arm.Body != nil {
+				c.checkBlock(arm.Body)
 			}
-			c.checkBlock(arm.Body)
 		}
-		c.checkBlock(st.Else)
-
-	case *ast.WhileStmt:
-		ct := c.typ(st.Cond)
-		if !types.Equal(ct, types.Bool) {
-			c.add(diagAt("DTE0004", st.Cond.SpanOf(), "while condition must be bool"))
+		if st.Else != nil {
+			c.checkBlock(st.Else)
 		}
-		c.checkBlock(st.Body)
-
-	case *ast.ForStmt:
-		// Type the iterable and body; skip target checks in M4
-		_ = c.typ(st.Iter)
-		c.checkBlock(st.Body)
 
 	case *ast.MatchStmt:
 		// M4: we only require all arm result types to match; do NOT type the scrutinee here.
@@ -135,12 +123,51 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 			if at != nil && !types.Equal(at, want) {
 				c.add(diagAt("DTE0004", arm.Result.SpanOf(),
-					"match arm result type mismatch: expected '"+want.String()+"', found '"+at.String()+"'"))
+					"match arm type mismatch"))
 			}
 		}
 
-	default:
-		// no-op for other statements in M4
+	case *ast.WhileStmt:
+		_ = c.typ(st.Cond)
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
+
+	case *ast.ForStmt:
+		_ = c.typ(st.Iter)
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
+
+	case *ast.DeferStmt:
+		if st.Call != nil {
+			_ = c.typ(st.Call)
+		}
+
+	case *ast.UsingStmt:
+		if st.Bind != nil {
+			_ = c.typ(st.Bind)
+		}
+		if st.Init != nil {
+			_ = c.typ(st.Init)
+		}
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
+
+	case *ast.UnsafeBlock:
+		// Enter unsafe context for the duration of the block.
+		c.unsafeDepth++
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
+		c.unsafeDepth--
+
+	// NEW (M5): imports
+	case *ast.ImportStmt:
+		// nothing to type; resolver handles validity; lints post-check
+	case *ast.FromImportStmt:
+		// nothing to type; resolver handles validity; lints post-check
 	}
 }
 

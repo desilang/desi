@@ -14,7 +14,6 @@ const (
 	SymVar SymbolKind = iota
 	SymParam
 	SymFunc
-	SymType // class/struct/enum/type names (placeholder in M4/M5)
 )
 
 // Symbol represents a bound identifier in a scope.
@@ -41,9 +40,10 @@ type Info struct {
 
 // FuncCand represents a single callable candidate.
 type FuncCand struct {
-	Decl  *ast.FuncDecl   // may be nil (e.g., builtins)
-	Type  *types.Func     // canonical function type (params + ret)
-	Modes []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
+	Decl   *ast.FuncDecl   // may be nil (e.g., builtins or cross-module exports)
+	Type   *types.Func     // canonical function type (params + ret)
+	Modes  []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
+	Extern bool            // true if this candidate represents an @extern declaration
 }
 
 // OverloadSet groups candidate functions by name.
@@ -83,6 +83,7 @@ func addPreludeBuiltins(info *Info) {
 				Decl:  nil,
 				Type:  types.FuncOf([]types.T{p}, ret),
 				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
+				// Extern: false (builtins are internal)
 			})
 		}
 	}
