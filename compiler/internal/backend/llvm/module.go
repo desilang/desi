@@ -129,7 +129,9 @@ func escapeForCString(s string) string {
 }
 
 // EmitFunc: Tier-0 subset—calls, returns, lifetimes for locals.
-// Task K (part): Do NOT emit lifetime.end after an unconditional 'ret' in the block.
+// Task K refinement:
+//   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
+//   - Do NOT emit lifetime.end *after* the 'ret'.
 func (m *Module) EmitFunc(fn *hir.Func) {
 	// Reset per-function state.
 	m.ssa = make(map[string]hir.Value)
@@ -181,7 +183,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		}
 
 		var locals []localInfo
-		sawRet := false
+		lifetimesClosed := false // once we end-lifetime (e.g., before ret), don't do it again at block end
 
 		for _, st := range b.Stmts {
 			switch x := st.(type) {
@@ -215,8 +217,15 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				m.emitCall(x)
 
 			case *hir.Ret:
+				// Emit lifetime.end for all locals *before* the ret (once).
+				if !lifetimesClosed {
+					for i := len(locals) - 1; i >= 0; i-- {
+						li := locals[i]
+						wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
+					}
+					lifetimesClosed = true
+				}
 				m.emitRet(x)
-				sawRet = true
 
 			case *hir.Drop:
 				// Tier-0 no-op
@@ -251,7 +260,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needArena = true
 				}
 
-			// ------- control flow (elided) -------
+				// ------- control flow (elided) -------
 			case *hir.If:
 			case *hir.While:
 
@@ -268,8 +277,8 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 
-		// Task K: never emit lifetime.end after a ret in this block.
-		if !sawRet {
+		// If we didn't already close lifetimes (i.e., no ret), close them now.
+		if !lifetimesClosed {
 			for i := len(locals) - 1; i >= 0; i-- {
 				li := locals[i]
 				wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
