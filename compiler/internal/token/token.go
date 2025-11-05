@@ -21,15 +21,15 @@ const (
 	INT_BIN // 0b1011
 	INT_OCT // 0o755
 
-	FLOAT     // 12.34, . . . (we currently require at least one digit after '.')
-	FLOAT_EXP // 1e9, 1.2e-3
+	FLOAT     // 12.34, 2., .5
+	FLOAT_EXP // 1e9, 3.14e-2
 
 	// Strings
 	STR     // "..."
 	LONGSTR // """..."""
 	FSTR    // f"..."
 
-	// Keywords (revised)
+	// Keywords
 	KW_import
 	KW_from
 	KW_as
@@ -62,6 +62,9 @@ const (
 	KW_not
 	KW_ref
 	KW_inout
+	KW_unsafe
+	KW_break
+	KW_continue
 
 	// Delimiters / punctuators
 	LPAREN // (
@@ -77,36 +80,41 @@ const (
 	HASH   // # (participates in '#{' set opener)
 
 	// Operators
-	ASSIGN   // =
-	DECLARE  // := (statement assignment)
-	PLUS     // +
-	MINUS    // -
-	STAR     // *
-	SLASH    // /
-	PERCENT  // %
-	PLUS_EQ  // +=
-	MINUS_EQ // -=
-	STAR_EQ  // *=
-	SLASH_EQ // /=
-	PERCENT_EQ
-	POW     // **  (power)
-	POW_EQ  // **=
-	XOR     // ^   (bitwise xor)
-	XOR_EQ  // ^=
-	EQEQ    // ==
-	NEQ     // !=
-	LT      // <
-	LTE     // <=
-	GT      // >
-	GTE     // >=
+	ASSIGN  // =
+	DECLARE // :=
+	PLUS    // +
+	MINUS   // -
+	STAR    // *
+	SLASH   // /
+	PERCENT // %
+
+	PLUS_EQ    // +=
+	MINUS_EQ   // -=
+	STAR_EQ    // *=
+	SLASH_EQ   // /=
+	PERCENT_EQ // %=
+
+	POW    // **
+	POW_EQ // **=
+	XOR    // ^
+	XOR_EQ // ^=
+
+	EQEQ // ==
+	NEQ  // !=
+	LT   // <
+	LTE  // <=
+	GT   // >
+	GTE  // >=
+
 	BANG    // !
-	PIPE    // |   (type unions)
-	PIPE_GT // |>  (pipeline)
-	ARROW   // ->  (return type)
-	FAT_ARROW
+	PIPE    // |
+	PIPE_GT // |>
+
+	ARROW     // ->
+	FAT_ARROW // =>
 )
 
-// Category labels for formatting/debug UI.
+// Category classifies tokens into broad kinds (for scanning/parsing/pretty dumps).
 type Category int
 
 const (
@@ -115,12 +123,11 @@ const (
 	CatIdent
 	CatLiteral
 	CatKeyword
-	CatBuiltinType
 	CatOperator
 	CatPunct
 )
 
-// TokenCategory provides a coarse grouping useful in dumps/formatters.
+// TokenCategory returns a coarse category for t.
 func TokenCategory(t Token) Category {
 	switch t {
 	case ILLEGAL, EOF:
@@ -133,7 +140,8 @@ func TokenCategory(t Token) Category {
 		return CatLiteral
 	case KW_import, KW_from, KW_as, KW_pub, KW_def, KW_async, KW_class, KW_struct, KW_enum, KW_type,
 		KW_let, KW_mut, KW_return, KW_if, KW_elif, KW_else, KW_while, KW_for, KW_in, KW_using, KW_defer,
-		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not, KW_ref, KW_inout:
+		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not, KW_ref, KW_inout,
+		KW_unsafe, KW_break, KW_continue:
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
 		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
