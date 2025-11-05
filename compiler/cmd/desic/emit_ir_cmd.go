@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/backend/llvm"
@@ -27,33 +28,40 @@ func init() {
 		os.Exit(2)
 	}
 
-	// Read + parse
 	src, err := os.ReadFile(file)
 	if err != nil {
-		term.Eprintln("emit-ir read error:", err)
-		term.Flush()
-		os.Exit(2)
-	}
-	mod, pdiags := parse.ParseFile(file, src)
-	if len(pdiags) > 0 {
-		term.Eprintln("emit-ir: parse produced", len(pdiags), "diagnostic(s); continuing may fail")
-	}
-
-	// Find def main() with a body
-	fnDecl := findMainFunc(mod)
-	if fnDecl == nil || fnDecl.Body == nil {
-		term.Eprintln("emit-ir:", filepath.Base(file)+": def main() not found or has no body")
+		term.Eprintln("emit-ir:", err)
 		term.Flush()
 		os.Exit(2)
 	}
 
-	// Lower to HIR (now passing source so string literals materialize)
-	hf := lower.LowerBlockFromSource("main", fnDecl.Body, src)
+	// Parse (no resolve/check here; emit-ir is a Tier-0 demo tool)
+	mod, diags := parse.ParseFile(file, src)
+	if len(diags) > 0 {
+		for _, d := range diags {
+			term.Eprintln(d.RenderTTY(src))
+		}
+		term.Flush()
+		os.Exit(2)
+	}
 
-	// Emit textual LLVM IR
-	m := llvm.NewModule("main")
-	m.EmitFunc(hf)
-	fmt.Print(m.IR())
+	// Lower the entire module to HIR (sync: 1 fn; async: wrapper+poll)
+	hm := lower.LowerModuleFromSource(mod, src)
+	if hm == nil || len(hm.Funcs) == 0 {
+		term.Eprintln("emit-ir:", filepath.Base(file)+": no functions to lower")
+		term.Flush()
+		os.Exit(2)
+	}
+
+	// Build textual LLVM module. Mark async wrapper names if their poll exists.
+	lm := llvm.NewModule(filepath.Base(file))
+	markAsyncWrappers(lm, hm)
+
+	// Emit every lowered function (order as lowered is fine for Tier-0)
+	for _, f := range hm.Funcs {
+		lm.EmitFunc(f)
+	}
+	fmt.Print(lm.IR())
 	term.Flush()
 	os.Exit(0)
 }
@@ -83,6 +91,19 @@ func findMainFunc(m *ast.Module) *ast.FuncDecl {
 	return nil
 }
 
-// Ensure imports are not trimmed by the compiler when building this file.
-// (hir is used via lower; keep an explicit reference to avoid tooling warnings.)
-var _ = hir.TypeInt
+// markAsyncWrappers scans HIR for pairs "<name>" and "<name>$poll" and marks "<name>"
+// as an async wrapper in the LLVM module so calls to it are emitted as 'call ptr'.
+func markAsyncWrappers(lm *llvm.Module, hm *hir.Module) {
+	seenPoll := map[string]bool{}
+	for _, f := range hm.Funcs {
+		if strings.HasSuffix(f.Name, "$poll") {
+			base := strings.TrimSuffix(f.Name, "$poll")
+			seenPoll[base] = true
+		}
+	}
+	for _, f := range hm.Funcs {
+		if seenPoll[f.Name] {
+			lm.MarkAsyncWrapper(f.Name)
+		}
+	}
+}

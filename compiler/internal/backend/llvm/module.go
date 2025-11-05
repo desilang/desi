@@ -19,23 +19,30 @@ func wprintf(w io.Writer, format string, a ...any) {
 }
 
 type Module struct {
-	name      string
-	globals   bytes.Buffer
-	funcs     bytes.Buffer
-	strLits   map[string]string // text-key -> global name
-	strOrder  []string          // deterministic order
-	needPuts  bool
-	needRcDec bool
-	needArena bool
-	wroteGlob bool
-	tempID    int
+	name          string
+	globals       bytes.Buffer
+	funcs         bytes.Buffer
+	strLits       map[string]string // text-key -> global name
+	strOrder      []string          // deterministic order
+	needPuts      bool
+	needRcDec     bool
+	needArena     bool
+	wroteGlob     bool
+	tempID        int
+	asyncWrappers map[string]bool // symbol names that return ptr future handles
 }
 
 func NewModule(name string) *Module {
 	return &Module{
-		name:    name,
-		strLits: make(map[string]string),
+		name:          name,
+		strLits:       make(map[string]string),
+		asyncWrappers: make(map[string]bool),
 	}
+}
+
+// MarkAsyncWrapper records that calls to 'name' return a ptr (future handle).
+func (m *Module) MarkAsyncWrapper(name string) {
+	m.asyncWrappers[name] = true
 }
 
 func (m *Module) nextStrName() string {
@@ -44,7 +51,6 @@ func (m *Module) nextStrName() string {
 
 // ensureCStringGlobal(text) creates/reuses a private unnamed_addr constant.
 // If withNewline is true and text lacks '\n', we append one; we always add the NUL.
-// Returns the global name and element count (array length).
 func (m *Module) ensureCStringGlobal(text string, withNewline bool) (gname string, count int) {
 	payload := text
 	if withNewline && !strings.HasSuffix(payload, "\n") {
@@ -84,7 +90,7 @@ func (m *Module) writeGlobals() {
 	sort.Slice(items, func(i, j int) bool { return items[i].key < items[j].key })
 
 	for _, it := range items {
-		s := it.key[strings.Index(it.key, ":")+1:] // strip index
+		s := it.key[strings.Index(it.key, ":")+1:]
 		parts := strings.SplitN(s, ":", 2)
 		if len(parts) != 2 {
 			continue
@@ -144,7 +150,6 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- core statements -------
 			case *hir.Let:
-				// Infer a crude type from initializer for sizing the lifetime region.
 				llvmTy, size := "i32", 4
 				if x.Init != nil {
 					switch x.Init.(type) {
@@ -161,7 +166,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				locals = append(locals, localInfo{name: x.Name, size: size})
 
 			case *hir.Assign:
-				// Tier-0: assignments are not materialized (no loads/stores modelled), skip.
+				// Tier-0: skip loads/stores modeling
 
 			case *hir.Call:
 				m.emitCall(x)
@@ -173,7 +178,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// no-op at Tier-0
 
 			case *hir.IncRef:
-				// Tier-0 doesn't model incref explicitly
+				// no-op at Tier-0
 
 			case *hir.DecRef:
 				if v, ok := x.Val.(hir.Var); ok {
@@ -184,10 +189,8 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			// ------- arena helpers -------
 			case *hir.ArenaAlloc:
 				if v, ok := x.Arena.(hir.Var); ok {
-					// Tier-0: model as a call returning a ptr into a temp
 					wprintf(&m.funcs, "  %%t%d = call ptr @__arena_alloc(ptr %%%s)\n", m.tempID, v.Name)
 					m.tempID++
-					// (We could add a declaration later if we start testing this helper.)
 				}
 			case *hir.DestroyArena:
 				if v, ok := x.Arena.(hir.Var); ok {
@@ -195,18 +198,17 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needArena = true
 				}
 
-			// ------- control flow (minimal printing for tests) -------
+			// ------- control flow (not exercised heavily yet) -------
 			case *hir.If:
-				// Not exercised by current Tier-0 tests; elide.
+				// elided
 			case *hir.While:
-				// Not exercised by current Tier-0 tests; elide.
+				// elided
 
-			// ------- M8C async/futures stubs -------
+			// ------- M8 async/futures -------
 			case *hir.FutureNew:
 				wprintf(&m.funcs, "  %s = call ptr @__future_new()\n", x.Dst.String())
 				m.ensureDecl("declare ptr @__future_new()")
 			case *hir.Await:
-				// In sync contexts, Await remains and becomes a blocking runtime call.
 				wprintf(&m.funcs, "  %s = call i32 @__await_blocking(%s)\n", x.Dst.String(), m.ptrOperand(x.Fut))
 				m.ensureDecl("declare i32 @__await_blocking(ptr)")
 			case *hir.FutureComplete:
@@ -215,7 +217,6 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 
-		// Close lifetimes at block end (Tier-0: end-of-block conservative)
 		for i := len(locals) - 1; i >= 0; i-- {
 			li := locals[i]
 			wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
@@ -225,7 +226,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 }
 
 func (m *Module) emitCall(c *hir.Call) {
-	// Built-in print: print("…") → puts("…\n")
+	// Built-in print → puts
 	if c.Fn == "print" && len(c.Args) == 1 {
 		if s, ok := c.Args[0].(hir.ConstStr); ok {
 			g, n := m.ensureCStringGlobal(s.Text, true)
@@ -238,35 +239,39 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
-	// Special-case: __future_register_poll(fut, fnptr, frame)
+	// __future_register_poll(fut, &name$poll, frame)
 	if c.Fn == "__future_register_poll" {
-		// Make sure its declaration exists once.
-		glob := m.globals.String()
-		if !strings.Contains(glob, "declare void @__future_register_poll(") {
+		if !strings.Contains(m.globals.String(), "declare void @__future_register_poll(") {
 			wprintf(&m.globals, "declare void @__future_register_poll(ptr, ptr, ptr)\n")
 		}
-		// fut operand
 		futOp := "ptr null"
 		if len(c.Args) > 0 {
 			futOp = m.ptrOperand(c.Args[0])
 		}
-		// fnptr operand: allow Var with "&name" to denote a function symbol
 		fnOp := "ptr null"
 		if len(c.Args) > 1 {
 			if v, ok := c.Args[1].(hir.Var); ok && strings.HasPrefix(v.Name, "&") {
 				fnOp = "ptr @" + v.Name[1:]
+				// Mark the wrapper as async (strip $poll suffix)
+				if strings.HasSuffix(v.Name, "$poll") {
+					base := strings.TrimSuffix(v.Name[1:], "$poll")
+					m.MarkAsyncWrapper(base)
+				}
 			} else {
 				fnOp = m.ptrOperand(c.Args[1])
 			}
 		}
-		// frame operand (Tier-0: we don't model frame addresses → null)
 		frameOp := "ptr null"
 		wprintf(&m.funcs, "  call void @__future_register_poll(%s, %s, %s)\n", futOp, fnOp, frameOp)
 		return
 	}
 
-	// Fallback: call external by name, drop args (Tier-0)
-	wprintf(&m.funcs, "  %%t%d = call i32 @%s()\n", m.tempID, c.Fn)
+	// Fallback: external call — choose return type
+	ret := "i32"
+	if m.asyncWrappers[c.Fn] {
+		ret = "ptr"
+	}
+	wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
 	m.tempID++
 }
 
@@ -283,7 +288,6 @@ func (m *Module) emitRet(r *hir.Ret) {
 	}
 }
 
-// ptrOperand renders a pointer-typed operand.
 func (m *Module) ptrOperand(v hir.Value) string {
 	switch t := v.(type) {
 	case hir.Temp:
@@ -295,7 +299,6 @@ func (m *Module) ptrOperand(v hir.Value) string {
 	}
 }
 
-// i32Operand renders an i32 operand.
 func (m *Module) i32Operand(v hir.Value) string {
 	switch t := v.(type) {
 	case hir.ConstInt:
