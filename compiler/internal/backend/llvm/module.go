@@ -129,6 +129,9 @@ func escapeForCString(s string) string {
 }
 
 // EmitFunc: Tier-0 subset—calls, returns, conservative lifetimes for locals.
+// Task K tweaks:
+//   - Skip alloca/lifetime for trivially SSA-only lets (those with an initializer).
+//   - Do NOT emit lifetime.end after an unconditional 'ret' in the block.
 func (m *Module) EmitFunc(fn *hir.Func) {
 	// Reset per-function state.
 	m.ssa = make(map[string]hir.Value)
@@ -183,12 +186,22 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		// -----------------------------------------------------------------------
 
 		var locals []localInfo
+		sawRet := false // Task K: suppress lifetime.end if a ret occurs in this block
+
 		for _, st := range b.Stmts {
 			switch x := st.(type) {
 
 			// ------- core statements -------
 			case *hir.Let:
+				// Task K: SSA-only lets — if there is an initializer, skip alloca/lifetime.
+				if x.Init != nil {
+					// record SSA alias; no stack slot
+					m.ssa[x.Name] = x.Init
+					break
+				}
+				// fallback: allocate a slot for address-taken or non-SSA locals
 				llvmTy, size := "i32", 4
+				// size heuristic for lifetimes if we ever load/store different types
 				if x.Init != nil {
 					switch x.Init.(type) {
 					case hir.ConstBool:
@@ -205,11 +218,6 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
 				locals = append(locals, localInfo{name: x.Name, size: size})
 
-				// SSA alias if initializer present.
-				if x.Init != nil {
-					m.ssa[x.Name] = x.Init
-				}
-
 			case *hir.Assign:
 				// Track simple SSA alias for later uses.
 				m.ssa[x.LHS] = x.RHS
@@ -219,6 +227,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			case *hir.Ret:
 				m.emitRet(x)
+				sawRet = true
 
 			case *hir.Drop:
 				// no-op at Tier-0
@@ -273,9 +282,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 
-		for i := len(locals) - 1; i >= 0; i-- {
-			li := locals[i]
-			wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
+		// Task K: don't emit lifetime.end after a ret in this block.
+		if !sawRet {
+			for i := len(locals) - 1; i >= 0; i-- {
+				li := locals[i]
+				wprintf(&m.funcs, "%s", intrin.LifetimeEnd(li.size, li.name))
+			}
 		}
 	}
 	wprintf(&m.funcs, "}\n")
@@ -387,6 +399,8 @@ func (m *Module) emitRet(r *hir.Ret) {
 		wprintf(&m.funcs, "  ret i32 %s\n", v.Text)
 	case hir.Temp:
 		wprintf(&m.funcs, "  ret i32 %s\n", v.String())
+	case hir.Var:
+		wprintf(&m.funcs, "  ret %s\n", m.i32Operand(v))
 	default:
 		wprintf(&m.funcs, "  ret i32 0\n")
 	}
