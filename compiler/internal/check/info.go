@@ -14,17 +14,18 @@ const (
 	SymVar SymbolKind = iota
 	SymParam
 	SymFunc
+	SymType // class/struct/enum/type names (placeholder in M4/M5)
 )
 
-// Symbol represents a bound identifier.
+// Symbol represents a bound identifier in a scope.
 type Symbol struct {
 	Name string
 	Kind SymbolKind
-	Type *types.Func // optional, only used for function symbols in some checks
+	Type types.T
 	Node ast.Node
 }
 
-// Info holds checker state and cross-phase bridges.
+// Info carries type facts, bindings, and overload sets discovered by the checker.
 type Info struct {
 	Types  map[ast.Node]types.T    // inferred types for important nodes
 	Idents map[*ast.Ident]*Symbol  // bound identifiers
@@ -36,17 +37,13 @@ type Info struct {
 
 	// M6-P2-B: per-function move tracking for identifiers.
 	Moved map[string]diag.Span
-
-	// M9C: current unsafe nesting depth while walking.
-	UnsafeDepth int
 }
 
 // FuncCand represents a single callable candidate.
 type FuncCand struct {
-	Decl   *ast.FuncDecl   // may be nil (e.g., builtins or cross-module exports)
-	Type   *types.Func     // canonical function type (params + ret)
-	Modes  []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
-	Extern bool            // M9C: whether this candidate is an extern (@extern) declaration
+	Decl  *ast.FuncDecl   // may be nil (e.g., builtins)
+	Type  *types.Func     // canonical function type (params + ret)
+	Modes []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
 }
 
 // OverloadSet groups candidate functions by name.
@@ -74,18 +71,18 @@ func addPreludeBuiltins(info *Info) {
 	if info == nil {
 		return
 	}
+	// Helper: add a family of 1-arg overloads name(T) -> ret for T in params.
 	addOverloads := func(name string, params []types.T, ret types.T) {
-		set, ok := info.Funcs[name]
-		if !ok || set == nil {
+		set := info.Funcs[name]
+		if set == nil {
 			set = &OverloadSet{Name: name}
 			info.Funcs[name] = set
 		}
 		for _, p := range params {
 			set.Cands = append(set.Cands, &FuncCand{
-				Decl:   nil,
-				Type:   types.FuncOf([]types.T{p}, ret),
-				Modes:  []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
-				Extern: false,
+				Decl:  nil,
+				Type:  types.FuncOf([]types.T{p}, ret),
+				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
 			})
 		}
 	}

@@ -46,11 +46,6 @@ func (p *Parser) parseBlock() *ast.Block {
 // parseStmt dispatches statement forms. One-line forms (if/while/for) parse
 // their SimpleStmt inline without requiring Indent/Dedent.
 func (p *Parser) parseStmt() ast.Stmt {
-	// Support `unsafe:` without a dedicated keyword token (M9C).
-	if p.cur.Tok == token.IDENT && p.cur.Lexeme == "unsafe" && p.peek.Tok == token.COLON {
-		return p.parseUnsafe()
-	}
-
 	switch p.cur.Tok {
 	case token.KW_let:
 		return p.parseLet()
@@ -66,14 +61,22 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseUsing()
 	case token.KW_defer:
 		return p.parseDefer()
-	case token.KW_break:
-		return p.parseBreak()
-	case token.KW_continue:
-		return p.parseContinue()
+	case token.KW_match:
+		return p.parseMatch()
+	case token.KW_import: // M5
+		return p.parseImport()
+	case token.KW_from: // M5
+		return p.parseFromImport()
 	default:
-		// Parse an expression statement (with assignment support).
+		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()
-		if e == nil {
+
+		// Friendly error for Python-style "name = expr" at statement start.
+		// We only trigger this when the head expression is an identifier and
+		// the very next token's lexeme is exactly "=" (which is not a token in Desi).
+		if id, ok := e.(*ast.Ident); ok && p.cur.Lexeme == "=" && id != nil {
+			// Point at the identifier span; then sync to end-of-statement.
+			p.errMissingLetBeforeDecl(e.SpanOf())
 			p.syncStmt()
 			// Return a benign ExprStmt so the parser can continue.
 			return &ast.ExprStmt{
