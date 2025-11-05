@@ -5,7 +5,6 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/resolve"
-	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // PopulateImportedFuncSigs scans top-level from-imports in 'mod' and, for each local name,
@@ -16,66 +15,73 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 	if mod == nil || info == nil || rinfo == nil {
 		return
 	}
-	setFor := func(local string) *OverloadSet {
-		set := info.Funcs[local]
-		if set == nil {
-			set = &OverloadSet{Name: local}
-			info.Funcs[local] = set
-		}
-		return set
-	}
-	// find synthetic __top__ function
-	var top *ast.FuncDecl
+	// Only care about 'from ... import ...' here.
 	for _, d := range mod.Decls {
-		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "__top__" {
-			top = fn
-			break
-		}
-	}
-	if top == nil || top.Body == nil {
-		return
-	}
-	dotted := func(segs []string) string { return strings.Join(segs, ".") }
-
-	for _, st := range top.Body.Stmts {
-		fi, ok := st.(*ast.FromImportStmt)
+		fimp, ok := d.(*ast.FromImportStmt)
 		if !ok {
 			continue
 		}
-		mpath := dotted(fi.Path)
-		ex := rinfo.ModuleExports[mpath]
-		for _, it := range fi.Items {
-			// Determine the local binding name
-			local := it.Name.Name
+		mpath := dotted(fimp.Path)
+		ex, ok := rinfo.ModuleExports[mpath]
+		if !ok {
+			// ensure empty set so resolution still works (Phase-1 permissive path)
+			for _, it := range fimp.Items {
+				local := it.Name.Name
+				if it.Alias != nil {
+					local = it.Alias.Name
+				}
+				if strings.TrimSpace(local) == "" {
+					continue
+				}
+				if _, ok2 := info.Funcs[local]; !ok2 {
+					info.Funcs[local] = &OverloadSet{Name: local}
+				}
+			}
+			continue
+		}
+		for _, it := range fimp.Items {
+			name := it.Name.Name
+			local := name
 			if it.Alias != nil {
 				local = it.Alias.Name
 			}
-			if local == "" {
+			if strings.TrimSpace(local) == "" {
 				continue
 			}
-			set := setFor(local)
-
-			// Append exported candidates, if any
-			if ex != nil {
-				name := it.Name.Name
-				if name != "" {
-					cands := ex.Funcs[name]
-					modesTab := ex.FuncModes[name]
-					for i, ft := range cands {
-						var modes []ast.ParamMode
-						if i < len(modesTab) {
-							modes = modesTab[i]
-						}
-						if modes == nil {
-							modes = make([]ast.ParamMode, len(ft.Params))
-							for j := range modes {
-								modes[j] = ast.ParamMove
-							}
-						}
-						set.Add(&FuncCand{Decl: nil, Type: types.FuncOf(ft.Params, ft.Ret), Modes: modes})
+			set, ok2 := info.Funcs[local]
+			if !ok2 || set == nil {
+				set = &OverloadSet{Name: local}
+				info.Funcs[local] = set
+			}
+			cands := ex.Funcs[name]
+			modesTab := ex.FuncModes[name]
+			metaTab := ex.FuncExtern[name]
+			for i, ft := range cands {
+				var modes []ast.ParamMode
+				if i < len(modesTab) {
+					modes = modesTab[i]
+				}
+				if modes == nil {
+					modes = make([]ast.ParamMode, len(ft.Params))
+					for j := range modes {
+						modes[j] = ast.ParamMove
 					}
 				}
+				extern := false
+				if i < len(metaTab) {
+					extern = metaTab[i].Extern
+				}
+				set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes, Extern: extern})
 			}
 		}
 	}
+}
+
+// dotted joins ident path segments with '.'
+func dotted(xs []*ast.Ident) string {
+	parts := make([]string, len(xs))
+	for i, id := range xs {
+		parts[i] = id.Name
+	}
+	return strings.Join(parts, ".")
 }

@@ -120,17 +120,25 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	}
 	sig := types.FuncOf(params, ret)
 
-	set := c.info.Funcs[name]
-	if set == nil {
+	// Register into overload set.
+	set, ok := c.info.Funcs[name]
+	if !ok || set == nil {
 		set = &OverloadSet{Name: name}
 		c.info.Funcs[name] = set
 	}
-	// Collect param modes from the declaration.
 	modes := make([]ast.ParamMode, len(fd.Params))
 	for i := range fd.Params {
 		modes[i] = fd.Params[i].Mode
 	}
-	set.Add(&FuncCand{Decl: fd, Type: sig, Modes: modes})
+	// Detect extern decorator
+	extern := false
+	for _, dec := range fd.Decorators {
+		if dec.Name.Name == "extern" {
+			extern = true
+			break
+		}
+	}
+	set.Add(&FuncCand{Decl: fd, Type: sig, Modes: modes, Extern: extern})
 
 	// Bind the function name in the current scope for call resolution.
 	_ = c.scope.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
@@ -184,6 +192,13 @@ func (c *checker) checkBlock(b *ast.Block) {
 		return
 	}
 	for _, s := range b.Stmts {
+		if ub, ok := s.(*ast.UnsafeBlock); ok {
+			// Enter unsafe context for the nested block
+			c.info.UnsafeDepth++
+			c.checkBlock(ub.Body)
+			c.info.UnsafeDepth--
+			continue
+		}
 		c.checkStmt(s)
 	}
 }
