@@ -150,6 +150,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		}
 		wprintf(&m.funcs, "%s:\n", label)
 
+		// -------- Pre-pass: seed SSA aliases for simple Let+Assign pairs --------
+		// Pattern:   let x;  x = <value>
+		// This makes aliases available before an early 'await x'.
+		pre := make(map[string]hir.Value)
+		for i := 0; i+1 < len(b.Stmts); i++ {
+			lt, ok := b.Stmts[i].(*hir.Let)
+			if !ok || lt.Init != nil {
+				continue
+			}
+			if as, ok2 := b.Stmts[i+1].(*hir.Assign); ok2 && as.LHS == lt.Name {
+				pre[lt.Name] = as.RHS
+			}
+		}
+		for k, v := range pre {
+			m.ssa[k] = v
+		}
+		// -----------------------------------------------------------------------
+
 		var locals []localInfo
 		for _, st := range b.Stmts {
 			switch x := st.(type) {
@@ -166,7 +184,6 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
 					case hir.Temp:
-						// leave as i32-sized for Tier-0; alias takes care of uses
 						llvmTy, size = "i32", 4
 					}
 				}
@@ -174,7 +191,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
 				locals = append(locals, localInfo{name: x.Name, size: size})
 
-				// SSA alias: if there was an initializer, remember it.
+				// SSA alias if initializer present.
 				if x.Init != nil {
 					m.ssa[x.Name] = x.Init
 				}
