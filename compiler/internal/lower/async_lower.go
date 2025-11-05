@@ -23,9 +23,13 @@ import (
 // - Borrow barrier across `await` is enforced by the checker (M6).
 // - Frame is a lightweight symbol space via "frame.*" names; no struct layout yet.
 func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Func, poll *hir.Func) {
-	name := fd.Name.Name
+	// Task I: enforce barrier before producing HIR.
+	if ds := CheckAwaitBorrowBarrier(fd); len(ds) > 0 {
+		// Abort lowering for this function; caller should skip adding nils.
+		return nil, nil
+	}
 
-	// Count awaits in the function body (recursively through exprs/statements).
+	name := fd.Name.Name
 	awCnt := 0
 	if fd.Body != nil {
 		for _, s := range fd.Body.Stmts {
@@ -33,63 +37,48 @@ func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Fun
 		}
 	}
 
-	// --- Wrapper: f(args) -> future[T] ---
+	// --- Wrapper ---
 	wb := hir.NewFunc(name)
-
-	// %fut = future.new
 	fut := wb.FreshTemp("t")
 	wb.Emit(&hir.FutureNew{Dst: fut})
 
-	// Seed the lightweight frame space with fields we use.
-	// frame.fut = %fut
 	wb.Emit(&hir.Let{Name: "frame.fut"})
 	wb.Emit(&hir.Assign{LHS: "frame.fut", RHS: fut})
-
-	// frame.state = 0
 	wb.Emit(&hir.Let{Name: "frame.state"})
 	wb.Emit(&hir.Assign{LHS: "frame.state", RHS: hir.ConstInt{Text: "0"}})
 
-	// call __future_register_poll(%fut, &f$poll)  -- Tier-0: pass null frame (backend adds 3rd arg as null)
 	wb.Emit(&hir.Call{
 		Fn:   "__future_register_poll",
 		Args: []hir.Value{fut, hir.Var{Name: "&" + name + "$poll"}},
 	})
-
-	// ret %fut
 	wb.Emit(&hir.Ret{Val: fut})
 
-	// --- Poll: f$poll(frame*) -> i1 ---
+	// --- Poll ---
 	pb := hir.NewFunc(name + "$poll")
-	// Thread a conceptual frame parameter through HIR.
 	pb.Func().Params = []hir.Param{{Name: "frame"}}
 
-	// Create state blocks: state0..state{awCnt}, where the last is completion.
 	states := make([]*hir.Block, awCnt+1)
 	for i := 0; i <= awCnt; i++ {
 		states[i] = hir.NewBlock("state" + strconv.Itoa(i))
 	}
 	pb.Func().Blocks = append(pb.Func().Blocks, states...)
 
-	// Also create comparison chain blocks for entry (cmp1..cmp{awCnt-1}), to nest the dispatch.
 	cmps := make([]*hir.Block, 0, awCnt)
 	for i := 1; i < awCnt; i++ {
 		cmps = append(cmps, hir.NewBlock("cmp"+strconv.Itoa(i)))
 	}
 	pb.Func().Blocks = append(pb.Func().Blocks, cmps...)
 
-	// entry: nested comparisons: if state==0 -> state0 else cmp1; cmp1: if state==1 -> state1 else cmp2; ... else state{awCnt}
 	for i := 0; i < awCnt; i++ {
-		// %ti = __eq_i32(frame.state, i)
 		ti := pb.FreshTemp("t")
 		pb.Emit(&hir.Call{
 			Dst:  ti,
 			Fn:   "__eq_i32",
 			Args: []hir.Value{hir.Var{Name: "frame.state"}, hir.ConstInt{Text: strconv.Itoa(i)}},
 		})
-		// if %ti then state{i} else (next cmp block or final state)
 		var elseBlk *hir.Block
 		if i+1 < awCnt {
-			elseBlk = cmps[i] // cmp1 for i=0, cmp2 for i=1, ...
+			elseBlk = cmps[i]
 		} else {
 			elseBlk = states[awCnt]
 		}
@@ -99,29 +88,24 @@ func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Fun
 		}
 	}
 
-	// For each non-entry state k>=1, restore commonly used frame slots (Tier-0: restore fut).
 	for k := 1; k < len(states); k++ {
 		pb.SetBlock(states[k])
-		// %tf = frame.get frame.fut  (SSA-only; used for shape in tests)
 		tf := pb.FreshTemp("t")
 		pb.Emit(&hir.FrameGet{Slot: "frame.fut", Dst: tf})
 		_ = tf
 	}
 
-	// Each await state i (0..awCnt-1): save locals and suspend: frame.state=i+1; ret false
 	for i := 0; i < awCnt; i++ {
 		pb.SetBlock(states[i])
-		// Save a minimal live set (Tier-0): fut (store a placeholder to avoid self-alias loops)
 		pb.Emit(&hir.FrameSet{Slot: "frame.fut", Val: hir.ConstInt{Text: "0"}})
 		pb.Emit(&hir.Assign{LHS: "frame.state", RHS: hir.ConstInt{Text: strconv.Itoa(i + 1)}})
 		pb.Emit(&hir.Ret{Val: hir.ConstBool{Value: false}})
 	}
 
-	// Final state: complete and return true (Done)
 	pb.SetBlock(states[awCnt])
 	pb.Emit(&hir.FutureComplete{
 		Fut: hir.Var{Name: "frame.fut"},
-		Val: hir.ConstInt{Text: "0"}, // Tier-0: constant payload for tests
+		Val: hir.ConstInt{Text: "0"},
 	})
 	pb.Emit(&hir.Ret{Val: hir.ConstBool{Value: true}})
 
