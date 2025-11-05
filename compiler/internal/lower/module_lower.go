@@ -10,26 +10,32 @@ import (
 // - Async def:       2 HIR funcs: wrapper "<name>" and poll "<name>$poll"
 //
 // 'src' is used for literal materialization (strings).
+// NOTE: For M9B, we also skip functions decorated with @extern(...), even if a body is present.
 func LowerModuleFromSource(mod *ast.Module, src []byte) *hir.Module {
-	// Task J: rewrite async lambdas into hidden async functions before lowering.
+	// Async lambdas desugar into hidden __lam$N funcs before normal lowering.
 	DesugarAsyncLambdas(mod)
 
 	out := &hir.Module{Name: mod.File}
+
 	for _, d := range mod.Decls {
 		fd, ok := d.(*ast.FuncDecl)
-		if !ok || fd.Body == nil {
+		if !ok {
 			continue
 		}
-		if fd.Async {
-			w, p := LowerAsyncFunc(fd, src, nil)
-			if w == nil || p == nil {
-				// Barrier or other early-abort: skip this function, continue module.
-				continue
-			}
-			out.Funcs = append(out.Funcs, w, p)
+		// Skip extern-decorated declarations (prototypes) OR body-less declarations.
+		if isExternDecorated(fd) || fd.Body == nil {
 			continue
 		}
-		out.Funcs = append(out.Funcs, LowerBlockFromSource(fd.Name.Name, fd.Body, src))
+		lowerFuncDecl(out, fd)
 	}
 	return out
+}
+
+func isExternDecorated(fd *ast.FuncDecl) bool {
+	for _, dec := range fd.Decorators {
+		if dec.Name.Name == "extern" {
+			return true
+		}
+	}
+	return false
 }
