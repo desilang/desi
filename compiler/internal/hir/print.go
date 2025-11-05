@@ -24,7 +24,19 @@ func Print(w io.Writer, n interface{}) {
 			Print(w, f)
 		}
 	case *Func:
-		wprintf(w, "func %s\n", x.Name)
+		wprintf(w, "func %s", x.Name)
+		if len(x.Params) > 0 {
+			wprintf(w, "(")
+			for i, p := range x.Params {
+				if i > 0 {
+					wprintf(w, ", ")
+				}
+				// Print with % to mirror SSA look.
+				wprintf(w, "%%%s", p.Name)
+			}
+			wprintf(w, ")")
+		}
+		wprintf(w, "\n")
 		for _, b := range x.Blocks {
 			Print(w, b)
 		}
@@ -77,9 +89,9 @@ func Print(w io.Writer, n interface{}) {
 				}
 				wprintf(w, ")\n")
 			case *DestroyArena:
-				wprintf(w, "    destroy_arena %s\n", s.Arena.String())
+				wprintf(w, "    destroy.arena %s\n", s.Arena.String())
 
-			// ------- control flow -------
+			// ------- structured control -------
 			case *If:
 				if s.Else != nil {
 					wprintf(w, "    if %s then %s else %s\n", s.Cond.String(), s.Then.Name, s.Else.Name)
@@ -96,6 +108,12 @@ func Print(w io.Writer, n interface{}) {
 				wprintf(w, "    await %s -> %s\n", s.Fut.String(), s.Dst.String())
 			case *FutureComplete:
 				wprintf(w, "    future.complete %s, %s\n", s.Fut.String(), s.Val.String())
+
+			// ------- M8H frame sugar -------
+			case *FrameSet:
+				wprintf(w, "    frame.set %s, %s\n", s.Slot, s.Val.String())
+			case *FrameGet:
+				wprintf(w, "    %s = frame.get %s\n", s.Dst.String(), s.Slot)
 			}
 		}
 	default:
