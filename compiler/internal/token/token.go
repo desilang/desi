@@ -106,6 +106,8 @@ const (
 	GT   // >
 	GTE  // >=
 
+	IN // 'in' (membership operator in expressions)
+
 	BANG    // !
 	PIPE    // |
 	PIPE_GT // |>
@@ -144,7 +146,7 @@ func TokenCategory(t Token) Category {
 		KW_unsafe, KW_break, KW_continue:
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
-		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
+		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, IN, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
 		return CatOperator
 	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH:
 		return CatPunct

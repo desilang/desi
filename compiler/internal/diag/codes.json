@@ -569,6 +569,21 @@
           "message": "convert the value to a string (e.g., str(x)) or use an appropriate container."
         }
       ]
+    },
+    "unsupported_membership": {
+      "id": "DCO0002",
+      "title": "unsupported membership",
+      "help": "The 'in' operator is defined for strings (substring membership) in this phase. In M10, it will also support list/set (by element) and dict (by key).",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
+          "label": "use string membership",
+          "message": "ensure both operands are strings, e.g., \"a\" in \"abc\"."
+        }
+      ]
     }
   }
 }
