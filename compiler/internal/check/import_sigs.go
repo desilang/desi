@@ -16,14 +16,16 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 	if mod == nil || info == nil || rinfo == nil {
 		return
 	}
-	setFor := func(local string) *OverloadSet {
-		set := info.Funcs[local]
+
+	setFor := func(name string) *OverloadSet {
+		set := info.Funcs[name]
 		if set == nil {
-			set = &OverloadSet{Name: local}
-			info.Funcs[local] = set
+			set = &OverloadSet{Name: name}
+			info.Funcs[name] = set
 		}
 		return set
 	}
+
 	// find synthetic __top__ function
 	var top *ast.FuncDecl
 	for _, d := range mod.Decls {
@@ -72,7 +74,13 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 								modes[j] = ast.ParamMove
 							}
 						}
-						set.Add(&FuncCand{Decl: nil, Type: types.FuncOf(ft.Params, ft.Ret), Modes: modes})
+						ext := false
+						if metas, ok := ex.FuncExtern[name]; ok {
+							if i < len(metas) {
+								ext = metas[i].Extern
+							}
+						}
+						set.Add(&FuncCand{Decl: nil, Type: types.FuncOf(ft.Params, ft.Ret), Modes: modes, Extern: ext})
 					}
 				}
 			}

@@ -342,6 +342,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			switch len(exact) {
 			case 1:
 				chosen := exact[0]
+				// Require unsafe for extern FFI calls.
+				if chosen.Extern && c.unsafeDepth == 0 {
+					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+				}
 				// Mark moves for local decls (Decl!=nil). Cross-module exports have Decl==nil.
 				c.markMovesFromCall(chosen, call, args)
 				// Enforce caller-side borrow rules.
@@ -364,7 +368,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 		// If it wasn't an import-qualified callee, fall through and type the pieces.
 		_ = c.typ(fe.X)
-		// NOTE: fe.Name is an ast.Ident value (token-like), not an ast.Expr; don't call c.typ on it.
+		// NOTE: fe.Name is an ast.Ident value; don't call c.typ on it.
 		return nil
 	}
 
@@ -395,21 +399,28 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 		// If we have no overload set at all, bail as not callable
 		if set == nil || len(set.Cands) == 0 {
-			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
+			_ = c.typ(call.Callee)
+			for _, a := range call.Args {
+				_ = c.typ(a)
+			}
+			c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
 			return nil
 		}
 
-		// Filter candidates by arity then exact match
+		// Filter by arity then exact types
 		arityCands := filterByArity(set.Cands, len(args))
 		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
+			c.add(diagAt("DTE0045", id.Span, "arity mismatch: wrong number of arguments"))
 			return nil
 		}
 		exact := filterExactByTypes(arityCands, args)
-
 		switch len(exact) {
 		case 1:
 			chosen := exact[0]
+			// Require unsafe for extern FFI calls.
+			if chosen.Extern && c.unsafeDepth == 0 {
+				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+			}
 			// Mark moves so later ident reads can trigger DBR0004.
 			c.markMovesFromCall(chosen, call, args)
 			// Enforce caller-side borrow rules (inout lvalue + aliasing).

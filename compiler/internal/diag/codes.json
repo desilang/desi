@@ -149,7 +149,10 @@
       "help": "Write 'let name = …' to declare a variable; plain '=' is not a statement operator.",
       "suggestions": [
         {
-          "where": { "kind": "at", "role": "primary" },
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
           "label": "insert 'let '",
           "message": "Add 'let ' before the name.",
           "replacement": "let ",
@@ -492,6 +495,33 @@
       "id": "DBR0005",
       "title": "ref argument must be an lvalue",
       "help": "Pass an lvalue such as an identifier, field access, or index expression."
+    }
+  },
+  "ffi": {
+    "invalid_extern_args": {
+      "id": "DFI0001",
+      "title": "invalid @extern decorator arguments",
+      "help": "Use @extern(\"C\"[, \"lib\"]). The first argument must be a string specifying the ABI; an optional second string may specify the link hint."
+    },
+    "extern_pub_required": {
+      "id": "DFI0002",
+      "title": "@extern only allowed on public functions",
+      "help": "Place @extern on 'pub def' so external users can link against it."
+    },
+    "unsafe_call": {
+      "id": "DFI0003",
+      "title": "extern call in safe context",
+      "help": "Calls to @extern functions must occur inside an 'unsafe:' block.",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
+          "label": "wrap in 'unsafe:'",
+          "message": "Surround the call with an 'unsafe:' block to acknowledge the FFI boundary."
+        }
+      ]
     }
   }
 }
