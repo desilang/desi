@@ -1,0 +1,6 @@
+def main() -> int:
+  let a: u8 = 1
+  let b: u8 = 2
+  let c: u8 = a + b
+  print("u8 ok")
+  0
