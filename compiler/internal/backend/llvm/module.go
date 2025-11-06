@@ -335,6 +335,10 @@ func (m *Module) emitCall(c *hir.Call) {
 		ret = "ptr"
 	}
 
+	// NEW (M9D): ensure we have exactly one declare stub for the target symbol.
+	// We keep the signature minimal at Tier-0 (no params here); type mapping will evolve later.
+	m.ensureDecl(fmt.Sprintf("declare %s @%s()", ret, c.Fn))
+
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
 		wprintf(&m.funcs, "  %s = call %s @%s()\n", dst, ret, c.Fn)

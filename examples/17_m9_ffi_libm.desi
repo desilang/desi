@@ -1,0 +1,8 @@
+@extern("C","m")
+pub def sin(x: float) -> float
+
+def main() -> int:
+  unsafe:
+    let y = sin(0.5)
+  print("ffi sin ok")
+  0
