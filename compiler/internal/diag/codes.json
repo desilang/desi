@@ -368,21 +368,6 @@
       "id": "DTE0047",
       "title": "incompatible enum assignment",
       "help": "assign a value of the same enum type/variant"
-    },
-    "ffi_extern_requires_unsafe": {
-      "id": "DFI0003",
-      "title": "extern call in safe context",
-      "help": "Calls to @extern functions must occur inside an `unsafe:` block.",
-      "suggestions": [
-        {
-          "where": {
-            "kind": "at",
-            "role": "primary"
-          },
-          "label": "wrap in unsafe",
-          "message": "Surround this call with:\nunsafe:\n    # ...\n    <call>"
-        }
-      ]
     }
   },
   "module": {

@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
@@ -12,45 +14,54 @@ func computeImportPaths(mod *ast.Module) map[string]string {
 		return m
 	}
 	for _, d := range mod.Decls {
-		if im, ok := d.(*ast.ImportStmt); ok {
-			mpath := dotted(im.Path)
-			local := ""
-			if im.Alias != nil {
-				local = im.Alias.Name
-			} else if len(im.Path) > 0 {
-				local = im.Path[len(im.Path)-1]
+		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "__top__" {
+			if fn.Body == nil {
+				return m
 			}
-			if local != "" {
-				m[local] = mpath
+			for _, st := range fn.Body.Stmts {
+				if im, ok := st.(*ast.ImportStmt); ok {
+					local := ""
+					if im.Alias != nil {
+						local = im.Alias.Name
+					} else if len(im.Path) > 0 {
+						local = im.Path[len(im.Path)-1]
+					}
+					if local != "" {
+						m[local] = strings.Join(im.Path, ".")
+					}
+				}
 			}
 		}
 	}
 	return m
 }
 
-// moduleQualifiedOverloadSet returns exported overloads for a call of the
-// form 'mod.fn(...)' where 'mod' is a local import binding.
-func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (*OverloadSet, *ast.Ident, bool) {
+// moduleQualifiedOverloadSet returns an overload set for a callee of the form "mod.fn".
+func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSet, base *ast.Ident, isImport bool) {
+	if fe == nil || c == nil || c.info == nil {
+		return nil, nil, false
+	}
 	id, ok := fe.X.(*ast.Ident)
 	if !ok || id == nil {
 		return nil, nil, false
 	}
-	// Map local import binding to its module path
-	if c.info == nil || c.info.R == nil {
-		return nil, nil, false
+	// Recognize only if 'id' is a local import binding we recorded.
+	mpath, ok := c.info.ImportPaths[id.Name]
+	if !ok || mpath == "" || c.info.R == nil {
+		return nil, id, false
 	}
-	mpath := c.info.ImportPaths[id.Name]
-	if mpath == "" {
-		return nil, nil, false
+	// Mark the qualifier ident as resolved so unused-import lint sees a use.
+	if sym := c.scope.Lookup(id.Name); sym != nil {
+		c.info.Idents[id] = sym
 	}
+	// Pull candidates from resolver exports.
 	ex := c.info.R.ModuleExports[mpath]
-	set := &OverloadSet{Name: fe.Name.Name}
 	if ex == nil {
-		return set, id, true
+		return &OverloadSet{Name: fe.Name.Name}, id, true
 	}
 	cands := ex.Funcs[fe.Name.Name]
 	modesTab := ex.FuncModes[fe.Name.Name]
-	metaTab := ex.FuncExtern[fe.Name.Name]
+	set = &OverloadSet{Name: fe.Name.Name}
 	for i, ft := range cands {
 		var modes []ast.ParamMode
 		if i < len(modesTab) {
@@ -62,11 +73,7 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (*OverloadSet, *
 				modes[j] = ast.ParamMove
 			}
 		}
-		extern := false
-		if i < len(metaTab) {
-			extern = metaTab[i].Extern
-		}
-		set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes, Extern: extern})
+		set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes})
 	}
 	return set, id, true
 }

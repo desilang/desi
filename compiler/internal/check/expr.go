@@ -446,22 +446,6 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 		return
 	}
 
-	// M9C: extern calls require unsafe context.
-	isExtern := false
-	if chosen.Decl != nil {
-		for _, dec := range chosen.Decl.Decorators {
-			if dec.Name.Name == "extern" {
-				isExtern = true
-				break
-			}
-		}
-	} else if chosen.Extern {
-		isExtern = true
-	}
-	if isExtern && c.info != nil && c.info.UnsafeDepth == 0 {
-		c.add(diagAt("DFI0003", call.Span, "calling extern function requires an unsafe block"))
-	}
-
 	// Gather effective modes for the chosen overload.
 	// Prefer local Decl param modes; fall back to chosen.Modes for cross-module exports.
 	var modes []ast.ParamMode
@@ -495,27 +479,40 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 			}
 			bases[i] = name
 			argSpans[i] = call.Args[i].SpanOf()
-		case ast.ParamMove:
-			// move: fine; we do not require lvalue
-		case ast.ParamBorrow:
-			// Phase-1: read-only borrow doesn't need lvalue in this simplified checker
+
+		case ast.ParamRef:
+			// Task 2 rule: ref requires an lvalue.
+			if !isLval {
+				c.add(diagAt("DBR0005", call.Args[i].SpanOf(), "ref argument must be an lvalue"))
+				continue
+			}
+			bases[i] = name
+			argSpans[i] = call.Args[i].SpanOf()
+
+		default:
+			// move param: lvalue-ness not required; we don't need its base for aliasing checks
 		}
 	}
 
-	// 2) basic aliasing rule: any two inout bases must be distinct
-	for i := 0; i < len(bases); i++ {
+	// 2) aliasing: same base used twice where at least one is inout -> DBR0003
+	for i := 0; i < len(modes); i++ {
 		if bases[i] == "" {
 			continue
 		}
-		for j := i + 1; j < len(bases); j++ {
-			if bases[i] != "" && bases[i] == bases[j] {
-				spi := argSpans[i]
-				spj := argSpans[j]
-				d := diagAt("DBR0003", call.Span, "cannot pass the same lvalue to multiple inout parameters")
-				d.Labels = append(d.Labels,
-					diag.Label{Span: spi, Text: "first inout here"},
-					diag.Label{Span: spj, Text: "second inout here"},
-				)
+		for j := i + 1; j < len(modes); j++ {
+			if bases[j] == "" {
+				continue
+			}
+			if bases[i] == bases[j] && (modes[i] == ast.ParamInout || modes[j] == ast.ParamInout) {
+				// Keep message stable so tests that look for "alias" continue to pass.
+				msg := "inout cannot alias with another argument in the same call"
+				d := diagAt("DBR0003", call.Args[j].SpanOf(), msg)
+				// NEW: add a secondary label on the earlier conflicting arg.
+				sec := d.Primary // reuse the same type as a template (no extra imports)
+				sec.Span = argSpans[i]
+				sec.Text = "aliases with this argument"
+				sec.Primary = false
+				d.Labels = append(d.Labels, sec)
 				c.add(d)
 			}
 		}
