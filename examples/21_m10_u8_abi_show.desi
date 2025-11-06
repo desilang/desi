@@ -1,0 +1,8 @@
+@extern("C")
+def sink_u8(x: u8) -> none
+
+def main() -> int:
+  let a: u8 = 42
+  unsafe:
+    sink_u8(a)
+  0
