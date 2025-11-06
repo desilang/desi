@@ -134,7 +134,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M6 — Borrow Checker (Function-local, Phase 1, ✅ DONE)
+### M6 — Borrow Checker (Function-local, ✅ DONE)
 
 **Scope**
 
@@ -214,19 +214,45 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M9 — FFI v1 (C ABI)
+### M9 — FFI v1 (C ABI, ✅ DONE)
 
-**Scope**
+**What shipped**
 
-* Manifest-driven linking (`desi.toml`).
-* `@extern("C", link="…")` decorators.
-* `cptr[T]`, `usize/isize`, null checks, minimal `unsafe` blocks.
-* Examples: `libm` (`sin/cos`), `sqlite3`, minimal OpenSSL SHA256`.
+* **Types (Tier-0)**: `usize`, `isize` (lower to **`i64`**), **`cptr[T]`** (lower to **`ptr`**; `T` ignored at ABI layer).
+  * Pretty-printing and basic arithmetic sanity for `usize`/`isize`.
+  * `cptr[T]` comparable to `none` for null checks.
+* **`unsafe` blocks**:
+  * New statement `unsafe:` (AST + parser + printer).
+  * **Checker** requires unsafe context to call **extern** fns:
+    * **`DFI0003`** “Extern call in safe context” with help/suggestion to wrap in `unsafe:`.
+  * Reserved/added diag codes: **`DFI0001`** (invalid `@extern` args), **`DFI0002`** (`@extern` must be on `pub def`) — enforcement can ship later.
+* **Extern functions**:
+  * **Decorator** `@extern("C"[,"lib"])` on **`pub def`**.
+  * **Resolver** records per-overload extern metadata `{Extern:true, ABI:"C", Link:optional}`.
+  * **Lowerer** skips HIR bodies for extern prototypes.
+  * **Backend (LLVM)** emits **exactly one `declare`** per referenced extern symbol, before `define`s; no duplicates.
+* **Imports & re-exports**:
+  * **Package re-exports** supported: `math/__mod.desi` can `from math.add import add`, and consumers can `from math import add`.
+    * Resolver merges re-exports into the package’s **typed** export surface (overloads & extern metadata copied through).
+  * (Relative imports remain out-of-scope; absolute imports only.)
+* **Library stubs (import-driven FFI)**:
+  * `compiler/lib/sqlite3/__mod.desi`, `compiler/lib/crypto/__mod.desi` provide extern prototypes for demos.
+* **Examples / tests**:
+  * `examples/17_m9_ffi_libm.desi` — `sin` via `@extern`, guarded by `unsafe:`.
+  * `examples/18_m9_ffi_sqlite.desi` — import-driven sqlite demo (compile-only).
+  * Backend tests:
+    * `ffi_decl_test.go` (single `declare` per extern),
+    * `types_lower_test.go` (Tier-0 mappings),
+  * Resolver test: `reexports_test.go`.
+  * Checker test: `ffi_unsafe_calls_test.go` (DFI0003).
 
 **Acceptance**
 
-* `unit_circle` & sqlite demos run.
-* Type mismatches produce `DESI-FFI-*` with helpful help text.
+* `go build ./... && go test ./...` **green**.
+* Externs in user code must be called inside `unsafe:`; violations produce **DFI0003**.
+* IR contains **one `declare` per extern symbol** that is actually referenced.
+* `examples/17_m9_ffi_libm.desi` and `examples/18_m9_ffi_sqlite.desi` **parse, resolve, type-check, and emit IR** (link/run is out-of-scope for Tier-0).
+* **Deferred to M10+**: manifest-driven linking (tooling), relative imports, decorator named args like `link="…"`, `symbol="…"`.
 
 ---
 
