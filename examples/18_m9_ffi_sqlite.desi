@@ -1,0 +1,8 @@
+from sqlite3 import db_open, db_exec, db_errmsg
+
+def demo_sqlite_cleaner() -> none:
+  unsafe:
+    let db = db_open(":memory:")
+    _ = db_exec(db, "CREATE TABLE t(x)")
+    _ = db_exec(db, "INSERT INTO t VALUES(42)")
+  print("ffi sqlite demo (compile-only)")

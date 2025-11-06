@@ -1,0 +1,11 @@
+# Minimal OpenSSL-style FFI surface for demos (Tier-0 ABI).
+# Use usize for 64-bit codes; cptr[int] for opaque buffers.
+
+@extern("C","crypto")
+pub def SHA256(data: cptr[int], n: usize, out: cptr[int]) -> cptr[int]
+
+@extern("C","crypto")
+pub def ERR_get_error() -> usize
+
+@extern("C","crypto")
+pub def ERR_error_string(code: usize, buf: cptr[int]) -> cptr[int]

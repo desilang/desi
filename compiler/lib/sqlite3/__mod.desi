@@ -1,0 +1,11 @@
+# Minimal sqlite3 FFI surface for demos (Tier-0 ABI).
+# Types are conservative: cptr[int] is used for opaque C pointers (pointee ignored at ABI).
+
+@extern("C","sqlite3")
+pub def db_open(path: str) -> cptr[int]
+
+@extern("C","sqlite3")
+pub def db_exec(db: cptr[int], sql: str) -> int
+
+@extern("C","sqlite3")
+pub def db_errmsg(err: cptr[int]) -> str
