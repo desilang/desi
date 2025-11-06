@@ -521,8 +521,8 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		if x.Op == "await" {
 			// await <expr>
 			dst := ls.b.FreshTemp("await")
-			val := ls.lowerExpr(x.X)
-			ls.b.Emit(&hir.Await{Dst: dst, Fut: val})
+			fut := ls.lowerExpr(x.X)
+			ls.b.Emit(&hir.Await{Dst: dst, Fut: fut})
 			return dst
 		}
 		// Unknown unary: just print-through for now.
