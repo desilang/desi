@@ -87,7 +87,7 @@ func addPreludeBuiltins(info *Info) {
 		}
 	}
 
-	// Helper: add a single overload with explicit param modes.
+	// Helper: add one explicit overload with param modes.
 	addWithModes := func(name string, params []types.T, modes []ast.ParamMode, ret types.T) {
 		set := info.Funcs[name]
 		if set == nil {
@@ -101,32 +101,43 @@ func addPreludeBuiltins(info *Info) {
 		})
 	}
 
-	// Canonical “kinds” only to avoid ambiguity across sized numerics.
+	// Canonical kinds to avoid ambiguity.
 	coreKinds := []types.T{types.Int, types.Float, types.Bool, types.Str}
 
-	// Existing builtins from Task A:
+	// Task A builtins:
 	addOverloads("print", coreKinds, types.None)
 	addOverloads("str", coreKinds, types.Str)
 	addOverloads("bool", coreKinds, types.Bool)
 	addOverloads("len", []types.T{types.Str}, types.USize)
 
-	// ---- Task D: minimal collection ops (compile-only stubs) ----
-	// We don’t declare concrete collection types yet; the first param type
-	// is left as nil to act as “any collection” placeholder. This keeps
-	// overload resolution simple (single candidate) while enforcing inout.
+	// Task D stubs (compile-only):
 	addWithModes("list_push",
 		[]types.T{nil, types.Int},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
 		types.None)
-
 	addWithModes("set_add",
 		[]types.T{nil, types.Str},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
 		types.None)
-
 	addWithModes("dict_set",
 		[]types.T{nil, types.Str, types.Int},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove, ast.ParamMove},
 		types.None)
-	// -------------------------------------------------------------
+
+	// ---- Task E: range(...) surface (typed params; opaque return for now) ----
+	// Signatures: range(stop:int), range(start:int, stop:int), range(start:int, stop:int, step:int=1)
+	// We return an opaque (nil) type placeholder for v1 until collection types land.
+	addWithModes("range",
+		[]types.T{types.Int},
+		[]ast.ParamMode{ast.ParamMove},
+		nil)
+	addWithModes("range",
+		[]types.T{types.Int, types.Int},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		nil)
+	addWithModes("range",
+		[]types.T{types.Int, types.Int, types.Int},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+		nil)
+	// -------------------------------------------------------------------------
 }
