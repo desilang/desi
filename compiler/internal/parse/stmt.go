@@ -67,6 +67,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseImport()
 	case token.KW_from: // M5
 		return p.parseFromImport()
+	case token.KW_unsafe: // M9C
+		return p.parseUnsafe()
 	default:
 		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()

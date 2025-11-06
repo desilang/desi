@@ -356,6 +356,14 @@ func (p *pp) node(n Node, d int) {
 			p.node(n.Body, d+1)
 		}
 
+	// NEW (M9C): unsafe block
+	case *UnsafeBlock:
+		p.tabs(d)
+		p.wr("Unsafe\n")
+		if n.Body != nil {
+			p.node(n.Body, d+1)
+		}
+
 	// NEW (M5): imports
 	case *ImportStmt:
 		p.tabs(d)
