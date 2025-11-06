@@ -1,0 +1,10 @@
+# Memory helpers — placeholders for M10 proper runtime work.
+
+@extern("C")
+def zeroed(n: usize) -> cptr[u8]
+
+@extern("C")
+def as_ptr(p: cptr[u8]) -> cptr[u8]
+
+@extern("C")
+def as_mut_ptr(p: cptr[u8]) -> cptr[u8]

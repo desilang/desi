@@ -1,0 +1,14 @@
+# Prelude export hub
+# Re-exports are intentionally explicit so "from prelude import X" works.
+
+from prelude.io import println as println
+
+# Numeric conversion surfaces (runtime shims for now; see numeric.desi)
+from prelude.numeric import to_u8 as to_u8
+from prelude.numeric import to_f32 as to_f32
+from prelude.numeric import to_f64 as to_f64
+
+# Memory helpers (skeletal, to grow later)
+from prelude.memory import as_ptr as as_ptr
+from prelude.memory import as_mut_ptr as as_mut_ptr
+from prelude.memory import zeroed as zeroed
