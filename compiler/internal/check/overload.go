@@ -2,7 +2,8 @@ package check
 
 import "github.com/desilang/desi/compiler/internal/types"
 
-// Add registers a candidate into the set.
+// Add registers a candidate into the set without de-duping. Ambiguity is a
+// call-site concern and tests rely on being able to construct ambiguous sets.
 func (s *OverloadSet) Add(c *FuncCand) {
 	if s.Cands == nil {
 		s.Cands = make([]*FuncCand, 0, 4)

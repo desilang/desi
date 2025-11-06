@@ -13,3 +13,17 @@ func injectPreludeIntoScope(top *Scope, info *Info) {
 		_ = top.Define(&Symbol{Name: name, Kind: SymFunc})
 	}
 }
+
+// preludeBuiltinNames enumerates builtin callables that cannot be shadowed at module scope.
+var preludeBuiltinNames = map[string]struct{}{
+	"print": {},
+	"str":   {},
+	"len":   {},
+	"bool":  {},
+}
+
+// isPreludeBuiltinName reports whether 'name' is one of the always-available builtins.
+func isPreludeBuiltinName(name string) bool {
+	_, ok := preludeBuiltinNames[name]
+	return ok
+}

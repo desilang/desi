@@ -535,5 +535,23 @@
       "title": "signed/unsigned mismatch",
       "help": "Use matching signedness or convert explicitly; implicit signed/unsigned mixing is not allowed."
     }
+  },
+  "prelude": {
+    "shadow_builtin": {
+      "id": "DPL0001",
+      "title": "cannot shadow builtin",
+      "help": "builtins like print, len, str, and bool are always available; use a different name.",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
+          "label": "rename",
+          "message": "choose a different name (e.g., print_)",
+          "replacement": "/* rename */"
+        }
+      ]
+    }
   }
 }
