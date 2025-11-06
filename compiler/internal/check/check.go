@@ -81,6 +81,10 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Merge checker diagnostics.
 	res.Diags = append(res.Diags, c.diags...)
 
+	// ---- Task B hook: nicer len() error when type has no length (DCO0001) ----
+	res.Diags = append(res.Diags, collectLenNoLengthDiags(mod, res.Info)...)
+	// --------------------------------------------------------------------------
+
 	// 4) After we know which identifiers resolved to which symbols,
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)
@@ -218,4 +222,55 @@ func (c *checker) forbidBuiltinShadowing(name string, sp diag.Span) {
 	if c.scope == c.moduleScope && isPreludeBuiltinName(name) {
 		c.add(diagAt("DPL0001", sp, "cannot shadow builtin: "+name))
 	}
+}
+
+// collectLenNoLengthDiags appends DCO0001 for len(x) where type(x) has no length.
+// Phase-1 allow-list: str only. (Collections get added later in M10.)
+func collectLenNoLengthDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
+	var out []diag.Diagnostic
+	if mod == nil || info == nil {
+		return out
+	}
+	walkFunc := func(fd *ast.FuncDecl) {
+		if fd == nil || fd.Body == nil {
+			return
+		}
+		for _, s := range fd.Body.Stmts {
+			es, ok := s.(*ast.ExprStmt)
+			if !ok {
+				continue
+			}
+			call, ok := es.Expr.(*ast.CallExpr)
+			if !ok || call == nil {
+				continue
+			}
+			id, ok := call.Callee.(*ast.Ident)
+			if !ok || id == nil || id.Name != "len" {
+				continue
+			}
+			if len(call.Args) != 1 {
+				continue
+			}
+			arg := call.Args[0]
+			t := info.Types[arg]
+			if t == nil {
+				continue
+			}
+			// Allow only str in this phase. Later: list[T], dict[K,V], set[T], tuple[...]
+			if !types.Equal(t, types.Str) {
+				out = append(out, diagAt("DCO0001", id.Span, "type has no length"))
+			}
+		}
+	}
+	for _, d := range mod.Decls {
+		switch dd := d.(type) {
+		case *ast.FuncDecl:
+			walkFunc(dd)
+		case *ast.ClassDecl:
+			for _, m := range dd.Methods {
+				walkFunc(m)
+			}
+		}
+	}
+	return out
 }

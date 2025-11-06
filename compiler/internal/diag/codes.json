@@ -553,5 +553,22 @@
         }
       ]
     }
+  },
+  "collections": {
+    "no_length": {
+      "id": "DCO0001",
+      "title": "type has no length",
+      "help": "len(x) is defined for strings (and, in M10, for list/dict/set/tuple). Use a supported type or convert appropriately.",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
+          "label": "use a supported type",
+          "message": "convert the value to a string (e.g., str(x)) or use an appropriate container."
+        }
+      ]
+    }
   }
 }
