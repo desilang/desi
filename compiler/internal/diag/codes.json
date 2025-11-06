@@ -523,5 +523,25 @@
         }
       ]
     }
+  },
+  "numeric": {
+    "width_mismatch": {
+      "id": "DNT0001",
+      "title": "mismatched numeric widths",
+      "help": "Use the same-sized types or insert an explicit cast.",
+      "suggestions": [
+        "Change one side to {T}",
+        "Introduce a helper to convert values explicitly"
+      ]
+    },
+    "signedness_mismatch": {
+      "id": "DNT0002",
+      "title": "signed/unsigned mismatch",
+      "help": "Use matching signedness or convert explicitly.",
+      "suggestions": [
+        "Change one side to {T}",
+        "Use a well-defined conversion function"
+      ]
+    }
   }
 }
