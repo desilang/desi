@@ -32,6 +32,11 @@ type Module struct {
 	asyncWrappers map[string]bool      // symbols that return ptr future handles
 	curRetIsPtr   bool                 // set per function during EmitFunc
 	ssa           map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
+
+	funcSigs map[string]struct {
+		ret    string
+		params []string
+	}
 }
 
 func NewModule(name string) *Module {
@@ -39,7 +44,22 @@ func NewModule(name string) *Module {
 		name:          name,
 		strLits:       make(map[string]string),
 		asyncWrappers: make(map[string]bool),
+		funcSigs: make(map[string]struct {
+			ret    string
+			params []string
+		}),
 	}
+}
+
+// SetFuncSig lets callers override the textual LLVM types for a function.
+// Pass ret="", params[i]="" to leave defaults in place for that slot.
+func (m *Module) SetFuncSig(name, ret string, params []string) {
+	cp := make([]string, len(params))
+	copy(cp, params)
+	m.funcSigs[name] = struct {
+		ret    string
+		params []string
+	}{ret: ret, params: cp}
 }
 
 // MarkAsyncWrapper records that calls to 'name' return a ptr (future handle).
@@ -128,7 +148,7 @@ func escapeForCString(s string) string {
 	return s
 }
 
-// EmitFunc: Tier-0 subset—calls, returns, lifetimes for locals.
+// EmitFunc : Tier-0 subset—calls, returns, lifetimes for locals.
 // Task K refinement:
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
@@ -137,24 +157,30 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	m.ssa = make(map[string]hir.Value)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
 
+	// --- header types (now typed-aware) ---
+	// Default ret: i32 (Tier-0), but async wrappers return ptr (future handle).
 	retTy := "i32"
 	if m.curRetIsPtr {
 		retTy = "ptr"
 	}
-
-	// Params (Tier-0): lower all params as ptr.
-	if len(fn.Params) == 0 {
-		wprintf(&m.funcs, "define %s @%s() {\n", retTy, fn.Name)
-	} else {
-		wprintf(&m.funcs, "define %s @%s(", retTy, fn.Name)
-		for i, p := range fn.Params {
-			if i > 0 {
-				wprintf(&m.funcs, ", ")
-			}
-			wprintf(&m.funcs, "ptr %%%s", p.Name)
-		}
-		wprintf(&m.funcs, ") {\n")
+	// Override from registered signature, unless this define is an async wrapper.
+	if sig, ok := getFuncSig(fn.Name); ok && !m.curRetIsPtr && sig.ret != "" {
+		retTy = sig.ret
 	}
+
+	// Emit function header with per-param overrides (default ptr).
+	wprintf(&m.funcs, "define %s @%s(", retTy, fn.Name)
+	for i, p := range fn.Params {
+		if i > 0 {
+			wprintf(&m.funcs, ", ")
+		}
+		pty := "ptr"
+		if sig, ok := getFuncSig(fn.Name); ok && i < len(sig.params) && sig.params[i] != "" {
+			pty = sig.params[i]
+		}
+		wprintf(&m.funcs, "%s %%%s", pty, p.Name)
+	}
+	wprintf(&m.funcs, ") {\n")
 
 	type localInfo struct {
 		name string
@@ -260,7 +286,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needArena = true
 				}
 
-				// ------- control flow (elided) -------
+			// ------- control flow (elided) -------
 			case *hir.If:
 			case *hir.While:
 
@@ -277,7 +303,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 
-		// If we didn't already close lifetimes (i.e., no ret), close them now.
+		// Close lifetimes for locals at end of block if we didn't just emit an early 'ret'.
 		if !lifetimesClosed {
 			for i := len(locals) - 1; i >= 0; i-- {
 				li := locals[i]

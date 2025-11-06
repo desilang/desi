@@ -59,6 +59,9 @@ func init() {
 	lm := llvm.NewModule(filepath.Base(file))
 	markAsyncWrappers(lm, hm)
 
+	// NEW: inject param/ret textual types from surface annotations.
+	injectUserFuncSigs(mod)
+
 	// Emit every lowered function (order as lowered is fine for Tier-0)
 	for _, f := range hm.Funcs {
 		lm.EmitFunc(f)
@@ -107,5 +110,68 @@ func markAsyncWrappers(lm *llvm.Module, hm *hir.Module) {
 		if seenPoll[f.Name] {
 			lm.MarkAsyncWrapper(f.Name)
 		}
+	}
+}
+
+// injectUserFuncSigs scans the AST for fn params/ret and registers textual LLVM types.
+// Unrecognized/omitted types fall back to existing Tier-0 defaults (ptr/i32).
+func injectUserFuncSigs(mod *ast.Module) {
+	if mod == nil {
+		return
+	}
+	for _, d := range mod.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		params := make([]string, len(fd.Params))
+		for i := range fd.Params {
+			if fd.Params[i].Type == nil {
+				params[i] = "" // keep default (ptr)
+				continue
+			}
+			params[i] = llvmTypeFromSurface(fd.Params[i].Type.Name)
+		}
+		ret := ""
+		if fd.RetType != nil {
+			ret = llvmTypeFromSurface(fd.RetType.Name)
+		}
+		// Package-level override (no Module struct changes needed).
+		llvm.SetFuncSig(fd.Name.Name, ret, params)
+	}
+}
+
+// Minimal surface->LLVM textual type mapping for Tier-0:
+// - ints: i8..i128 → i8..i128
+// - uints: u8..u128 → i8..i128 (2C ABI tier-0)
+// - bool → i1
+// - f32 → float; f64/float → double
+// - usize/isize → i64 (Tier-0)
+func llvmTypeFromSurface(name string) string {
+	switch name {
+	case "bool":
+		return "i1"
+	case "f32":
+		return "float"
+	case "f64", "float":
+		return "double"
+	case "usize", "isize":
+		return "i64"
+	case "str":
+		return "ptr"
+	case "i8", "i16", "i32", "i64", "i128":
+		return name
+	case "u8":
+		return "i8"
+	case "u16":
+		return "i16"
+	case "u32":
+		return "i32"
+	case "u64":
+		return "i64"
+	case "u128":
+		return "i128"
+	default:
+		return "" // unknown → leave default
 	}
 }
