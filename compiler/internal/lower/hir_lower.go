@@ -529,39 +529,40 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
 	case *ast.CallExpr:
-		// Special-case arena helpers used by async lowering demos/tests.
-		if id, ok := x.Callee.(*ast.Ident); ok {
-			switch id.Name {
-			case "arena.alloc":
-				// %t = call arena.alloc()
-				dst := ls.b.FreshTemp("alloc")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "arena.alloc"})
-				return dst
-			case "arena.register_poll":
-				// call arena.register_poll(frame)
-				arg := ls.lowerExpr(x.Args[0])
-				ls.b.Emit(&hir.Call{Fn: "arena.register_poll", Args: []hir.Value{arg}})
-				return nil
-			}
-		}
-		// Generic call: emit `%t = call name(args...)` when we need a value.
-		dst := ls.b.FreshTemp("call")
+		// Determine a printable callee name for Ident or FieldExpr.
+		callee := ls.calleeName(x.Callee)
+
+		// Lower arguments first.
 		var args []hir.Value
 		for _, a := range x.Args {
 			args = append(args, ls.lowerExpr(a))
 		}
-		callee := "<call>"
-		if id, ok := x.Callee.(*ast.Ident); ok {
-			callee = id.Name
+
+		// Special-cases for arena helpers (support Ident("arena.alloc") or FieldExpr arena.alloc).
+		switch callee {
+		case "arena.alloc":
+			dst := ls.b.FreshTemp("alloc")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "arena.alloc", Args: args})
+			// Mark temp as coming from arena.alloc so let-binding flags arenaOwned.
+			ls.tempsFromArenaAlloc[dst.Name] = true
+			return dst
+		case "arena.register_poll":
+			ls.b.Emit(&hir.Call{Fn: "arena.register_poll", Args: args})
+			return nil
+		}
+
+		// Generic call: emit `%t = call <callee>(args...)` if value needed.
+		dst := ls.b.FreshTemp("call")
+		if callee == "" {
+			callee = "<call>"
 		}
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
 		return dst
 
 	case *ast.FieldExpr:
-		// Support the async demo helper: arena.register_poll(field)
+		// For expressions used as values, represent field access via a helper call.
 		base := ls.lowerExpr(x.X)
 		name := x.Name.Name
-		// Represent as a call that returns a temp (purely for Tier-0 demos).
 		dst := ls.b.FreshTemp("field")
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})
 		return dst
