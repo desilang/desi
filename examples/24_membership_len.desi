@@ -1,0 +1,5 @@
+def main() -> int:
+  print("a" in "abc")
+  print(len("abc"))
+  # negative (reference): DCO0001 if len(1) were enabled here
+  0

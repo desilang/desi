@@ -1,0 +1,11 @@
+def id(x):
+  x
+
+def is_even(n: int) -> bool:
+  (n % 2) == 0
+
+def main() -> int:
+  map(range(0, 5), id)
+  filter(range(0, 5), is_even)
+  print("ok")
+  0

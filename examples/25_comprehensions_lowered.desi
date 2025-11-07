@@ -1,0 +1,4 @@
+def main() -> int:
+  [x for x in range(0, 3) if bool(x)]
+  print("done")
+  0
