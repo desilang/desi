@@ -149,6 +149,61 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	op := x.Op
 
+	// Small helpers for numeric families.
+	intInfo := func(t types.T) (signed bool, width int, name string, ok bool) {
+		if t == nil {
+			return false, 0, "", false
+		}
+		s := t.String()
+		switch s {
+		// Unsized/sized pointers
+		case "int":
+			return true, 0, s, true // width 0 == unsized "int"
+		case "isize":
+			return true, 64, s, true
+		case "usize":
+			return false, 64, s, true
+		// Signed
+		case "i8":
+			return true, 8, s, true
+		case "i16":
+			return true, 16, s, true
+		case "i32":
+			return true, 32, s, true
+		case "i64":
+			return true, 64, s, true
+		case "i128":
+			return true, 128, s, true
+		// Unsigned
+		case "u8":
+			return false, 8, s, true
+		case "u16":
+			return false, 16, s, true
+		case "u32":
+			return false, 32, s, true
+		case "u64":
+			return false, 64, s, true
+		case "u128":
+			return false, 128, s, true
+		default:
+			return false, 0, "", false
+		}
+	}
+	floatInfo := func(t types.T) (width int, name string, ok bool) {
+		if t == nil {
+			return 0, "", false
+		}
+		s := t.String()
+		switch s {
+		case "f32":
+			return 32, s, true
+		case "float": // includes f64 alias at type level
+			return 64, s, true
+		default:
+			return 0, "", false
+		}
+	}
+
 	switch op {
 	case "+", "-", "*", "/", "%", "**":
 		lt := c.typ(x.Lhs)
@@ -171,17 +226,40 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
-		// numeric same-type
-		if (types.Equal(lt, types.Int) || types.Equal(lt, types.Float)) && types.Equal(lt, rt) {
-			c.info.Types[x] = lt
-			return lt
+		// Integers: require same signedness and same width (unsized "int" must pair with itself)
+		if ls, lw, _, lok := intInfo(lt); lok {
+			if rs, rw, _, rok := intInfo(rt); rok {
+				if ls != rs {
+					c.add(diagAt("DNT0002", x.Span, ""))
+					return nil
+				}
+				// For unsized "int", width==0. Only equal if both are unsized (0==0).
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				c.info.Types[x] = lt
+				return lt
+			}
 		}
-		// mixed numeric: int+float or float+int -> float
-		if (types.Equal(lt, types.Int) && types.Equal(rt, types.Float)) ||
-			(types.Equal(lt, types.Float) && types.Equal(rt, types.Int)) {
-			c.info.Types[x] = types.Float
-			return types.Float
+
+		// Floats: require same width
+		if lw, _, lok := floatInfo(lt); lok {
+			if rw, _, rok := floatInfo(rt); rok {
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				// width 32 => f32, 64 => float (f64 alias)
+				if lw == 32 {
+					c.info.Types[x] = types.F32
+					return types.F32
+				}
+				c.info.Types[x] = types.Float
+				return types.Float
+			}
 		}
+
 		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
 		return nil
 
@@ -219,32 +297,30 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		}
 
 		lhsT := c.typ(x.Lhs)
-		args := make([]types.T, 0, 1+len(call.Args))
+		set, id, ok := c.resolveCallSet(id)
+		if !ok {
+			return nil
+		}
+		args := make([]types.T, 0, len(call.Args)+1)
 		args = append(args, lhsT)
 		for _, a := range call.Args {
 			args = append(args, c.typ(a))
 		}
-
-		set := c.info.Funcs[id.Name]
-		if set == nil || len(set.Cands) == 0 {
-			c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
-			return nil
-		}
-
 		arityCands := filterByArity(set.Cands, len(args))
 		if len(arityCands) == 0 {
-			// Keep the "pipeline" substring for existing tests.
-			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch for call to "+id.Name))
+			c.add(diagAt("DTE0045", id.Span, "arity mismatch: wrong number of arguments"))
 			return nil
 		}
-
 		exact := filterExactByTypes(arityCands, args)
 		switch len(exact) {
 		case 1:
+			// Enforce unsafe on extern
+			if exact[0].Extern && c.unsafeDepth == 0 {
+				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+			}
+			// Mark moves and enforce caller-side borrows.
 			c.markMovesFromCall(exact[0], call, args)
-			// Also enforce caller-side borrow rules on the chosen candidate.
 			c.enforceCallsiteBorrow(exact[0], call)
-
 			ret := exact[0].Type.Ret
 			c.info.Types[x] = ret
 			return ret
@@ -259,9 +335,35 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	case "<", "<=", ">", ">=", "==", "!=":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
-		numL := types.Equal(lt, types.Int) || types.Equal(lt, types.Float)
-		numR := types.Equal(rt, types.Int) || types.Equal(rt, types.Float)
-		if (numL && numR) || types.Equal(lt, rt) {
+
+		// Numeric families: apply same width/signedness rules as arithmetic.
+		if ls, lw, _, lok := intInfo(lt); lok {
+			if rs, rw, _, rok := intInfo(rt); rok {
+				if ls != rs {
+					c.add(diagAt("DNT0002", x.Span, ""))
+					return nil
+				}
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				c.info.Types[x] = types.Bool
+				return types.Bool
+			}
+		}
+		if lw, _, lok := floatInfo(lt); lok {
+			if rw, _, rok := floatInfo(rt); rok {
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				c.info.Types[x] = types.Bool
+				return types.Bool
+			}
+		}
+
+		// Fallback: identical types are comparable (str, bool, etc.)
+		if types.Equal(lt, rt) {
 			c.info.Types[x] = types.Bool
 			return types.Bool
 		}
@@ -279,6 +381,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		return nil
 
 	default:
+		c.add(diagAt("DTE0004", x.Span, "unknown operator '"+op+"'"))
 		return nil
 	}
 }
