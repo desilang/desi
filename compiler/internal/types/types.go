@@ -258,22 +258,57 @@ func Assignable(dst, src T) bool {
 }
 
 // FromName looks up builtin named types by their canonical surface spelling.
+// Note: "float" is an alias of f64 (F64 == Float).
 func FromName(name string) (T, bool) {
 	switch name {
+	// Legacy/unsized
 	case "int":
 		return Int, true
-	case "float":
-		return Float, true
+	case "float", "f64":
+		return F64, true
+
+	// Basic builtins
 	case "bool":
 		return Bool, true
-	case "str":
+	case "str", "string":
 		return Str, true
 	case "none":
 		return None, true
+
+	// Pointer-sized ints (Tier-0: still IntKind)
 	case "usize":
 		return USize, true
 	case "isize":
 		return ISize, true
+
+	// Sized signed ints
+	case "i8":
+		return I8, true
+	case "i16":
+		return I16, true
+	case "i32":
+		return I32, true
+	case "i64":
+		return I64, true
+	case "i128":
+		return I128, true
+
+	// Sized unsigned ints
+	case "u8":
+		return U8, true
+	case "u16":
+		return U16, true
+	case "u32":
+		return U32, true
+	case "u64":
+		return U64, true
+	case "u128":
+		return U128, true
+
+	// Floats
+	case "f32":
+		return F32, true
+
 	default:
 		return nil, false
 	}
