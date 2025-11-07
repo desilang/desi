@@ -1,5 +1,8 @@
+def mem() -> bool:
+  "a" in "abc"
+
 def main() -> int:
-  print("a" in "abc")
+  print(mem())
   print(len("abc"))
   # negative (reference): DCO0001 if len(1) were enabled here
   0
