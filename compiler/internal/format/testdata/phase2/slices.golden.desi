@@ -1,4 +1,4 @@
 def slice_demo() -> int:
-	let s = [1, 2, 3, 4, 5, 6]
+	let s = "abcdef"
 	s[1:4:2]
 	0
