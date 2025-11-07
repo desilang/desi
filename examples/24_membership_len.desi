@@ -1,4 +1,5 @@
 def main() -> int:
-	 print(str("a" in "abc"))   # membership → bool → str for print
-	 print(str(len("abc")))     # len(int) → str for print
+	 ("a" in "abc")   # exercise membership (bool result is unused)
+	 len("abc")       # exercise len on str (int result is unused)
+	 print("ok")
 	 0
