@@ -1,11 +1,11 @@
 def id(n: int) -> int:
-  n
+	 n
 
 def is_even(n: int) -> bool:
-  (n % 2) == 0
+	 (n % 2) == 0
 
 def main() -> int:
-  let a = map(range(0, 5), id)
-  let b = filter(range(0, 5), is_even)
-  print("ok")
-  0
+	 let a = map(range(0, 5), id)
+	 let b = filter(range(0, 5), is_even)
+	 print("ok")
+	 0
