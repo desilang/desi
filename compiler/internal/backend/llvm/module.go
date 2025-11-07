@@ -32,12 +32,7 @@ type Module struct {
 	asyncWrappers map[string]bool      // symbols that return ptr future handles
 	curRetIsPtr   bool                 // set per function during EmitFunc
 	ssa           map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
-	curFuncRetTy  string
-
-	funcSigs map[string]struct {
-		ret    string
-		params []string
-	}
+	curFuncRetTy  string               // textual LLVM return type for the function being emitted
 }
 
 func NewModule(name string) *Module {
@@ -45,22 +40,7 @@ func NewModule(name string) *Module {
 		name:          name,
 		strLits:       make(map[string]string),
 		asyncWrappers: make(map[string]bool),
-		funcSigs: make(map[string]struct {
-			ret    string
-			params []string
-		}),
 	}
-}
-
-// SetFuncSig lets callers override the textual LLVM types for a function.
-// Pass ret="", params[i]="" to leave defaults in place for that slot.
-func (m *Module) SetFuncSig(name, ret string, params []string) {
-	cp := make([]string, len(params))
-	copy(cp, params)
-	m.funcSigs[name] = struct {
-		ret    string
-		params []string
-	}{ret: ret, params: cp}
 }
 
 // MarkAsyncWrapper records that calls to 'name' return a ptr (future handle).
@@ -150,7 +130,6 @@ func escapeForCString(s string) string {
 }
 
 // EmitFunc : Tier-0 subset—calls, returns, lifetimes for locals.
-// Task K refinement:
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
 func (m *Module) EmitFunc(fn *hir.Func) {
@@ -449,6 +428,10 @@ func (m *Module) i32Operand(v hir.Value) string {
 	}
 }
 
+// callRetType returns the textual LLVM return type for calls to 'name':
+//   - async wrappers => ptr
+//   - override via getFuncSig (if present)
+//   - default i32 (Tier-0)
 func (m *Module) callRetType(name string) string {
 	if m.asyncWrappers[name] {
 		return "ptr"
