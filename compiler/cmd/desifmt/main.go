@@ -2,9 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
+	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/format"
 	"github.com/desilang/desi/compiler/internal/term"
 )
 
@@ -17,56 +21,117 @@ func main() {
 	flag.Parse()
 	args := flag.Args()
 	if len(args) == 0 {
-		term.Eprintln("usage: desifmt [-w|-l] <files or dirs>")
+		usage()
 		os.Exit(2)
 	}
 
+	ok := true
 	for _, a := range args {
+		if a == "-" {
+			ok = formatStdin() && ok
+			continue
+		}
 		stat, err := os.Stat(a)
 		if err != nil {
 			term.Eprintln("desifmt:", err)
+			ok = false
 			continue
 		}
 		if stat.IsDir() {
-			if err := filepath.WalkDir(a, func(path string, d os.DirEntry, err error) error {
+			err := filepath.WalkDir(a, func(path string, d fs.DirEntry, err error) error {
 				if err != nil {
-					// propagate filesystem errors to terminate the walk
 					return err
 				}
 				if d.IsDir() || filepath.Ext(path) != ".desi" {
 					return nil
 				}
-				_, ferr := formatOne(path)
-				return ferr
-			}); err != nil {
+				if ok2 := formatFile(path); !ok2 {
+					ok = false
+				}
+				return nil
+			})
+			if err != nil {
 				term.Eprintln("desifmt walk:", err)
+				ok = false
 			}
 		} else {
-			if _, err := formatOne(a); err != nil {
-				term.Eprintln("desifmt:", err)
+			if ok2 := formatFile(a); !ok2 {
+				ok = false
 			}
 		}
 	}
-
-	// On -l with no differences, be silent (stub never reports differences yet).
-	term.Flush()
+	if !ok {
+		os.Exit(1)
+	}
 }
 
-func formatOne(path string) (alreadyFormatted bool, err error) {
-	// TODO: parse + pretty-print AST; for now, just simulate "already formatted".
-	if *listOnly {
-		// Would print the path if formatting would change; stub: nothing changes.
-		return true, nil
+func usage() {
+	fmt.Fprintln(os.Stderr, "usage: desifmt [-w|-l] <file|dir|-> [...]")
+}
+
+func formatStdin() bool {
+	src, err := os.ReadFile("/dev/stdin")
+	if err != nil {
+		term.Eprintln("desifmt:", err)
+		return false
+	}
+	out, diags := format.FormatBytes(src)
+	if len(diags) > 0 {
+		for _, d := range diags {
+			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		return false
 	}
 	if *writeInPlace {
-		// stub: no changes written
-		return true, nil
+		// not meaningful for stdin
+		return true
 	}
-	// print original to stdout as a placeholder
-	b, err := os.ReadFile(path)
+	term.Write(os.Stdout, out)
+	return true
+}
+
+func formatFile(path string) bool {
+	src, err := os.ReadFile(path)
 	if err != nil {
-		return true, err
+		term.Eprintln("desifmt:", err)
+		return false
 	}
-	term.Write(os.Stdout, b)
-	return true, nil
+	out, diags := format.FormatBytes(src)
+	if len(diags) > 0 {
+		for _, d := range diags {
+			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		return false
+	}
+	if *listOnly {
+		if !bytesEqual(src, out) {
+			term.Eprintln(path)
+		}
+		return true
+	}
+	if *writeInPlace {
+		if !bytesEqual(src, out) {
+			if err := os.WriteFile(path, out, 0644); err != nil {
+				term.Eprintln("desifmt:", err)
+				return false
+			}
+			term.Eprintln("wrote", path)
+		}
+		return true
+	}
+	// default: print to stdout
+	term.Write(os.Stdout, out)
+	return true
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
