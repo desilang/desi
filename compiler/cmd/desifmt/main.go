@@ -2,7 +2,7 @@ package main
 
 import (
 	"flag"
-	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -84,11 +84,12 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: desifmt [-w|-l|-q] <file|dir|-> [...]")
+	// Avoid fmt.Fprintln unhandled error warning; use our terminal helper (cross-platform).
+	term.Eprintln("usage: desifmt [-w|-l|-q] <file|dir|-> [...]")
 }
 
 func formatStdin() (bool, []diag.Diagnostic) {
-	src, err := os.ReadFile("/dev/stdin")
+	src, err := io.ReadAll(os.Stdin) // cross-OS safe (no /dev/stdin)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
 		return false, nil
