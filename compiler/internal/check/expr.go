@@ -149,58 +149,53 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	op := x.Op
 
-	// Small helpers for numeric families.
-	intInfo := func(t types.T) (signed bool, width int, name string, ok bool) {
+	// Helpers: classify numeric families via canonical String() spellings.
+	intInfo := func(t types.T) (signed bool, width int, ok bool) {
 		if t == nil {
-			return false, 0, "", false
+			return false, 0, false
 		}
-		s := t.String()
-		switch s {
-		// Unsized/sized pointers
+		switch t.String() {
 		case "int":
-			return true, 0, s, true // width 0 == unsized "int"
+			return true, 0, true // width==0 marks unsized 'int'
 		case "isize":
-			return true, 64, s, true
+			return true, 64, true
 		case "usize":
-			return false, 64, s, true
-		// Signed
+			return false, 64, true
 		case "i8":
-			return true, 8, s, true
+			return true, 8, true
 		case "i16":
-			return true, 16, s, true
+			return true, 16, true
 		case "i32":
-			return true, 32, s, true
+			return true, 32, true
 		case "i64":
-			return true, 64, s, true
+			return true, 64, true
 		case "i128":
-			return true, 128, s, true
-		// Unsigned
+			return true, 128, true
 		case "u8":
-			return false, 8, s, true
+			return false, 8, true
 		case "u16":
-			return false, 16, s, true
+			return false, 16, true
 		case "u32":
-			return false, 32, s, true
+			return false, 32, true
 		case "u64":
-			return false, 64, s, true
+			return false, 64, true
 		case "u128":
-			return false, 128, s, true
+			return false, 128, true
 		default:
-			return false, 0, "", false
+			return false, 0, false
 		}
 	}
-	floatInfo := func(t types.T) (width int, name string, ok bool) {
+	floatInfo := func(t types.T) (width int, ok bool) {
 		if t == nil {
-			return 0, "", false
+			return 0, false
 		}
-		s := t.String()
-		switch s {
+		switch t.String() {
 		case "f32":
-			return 32, s, true
-		case "float": // includes f64 alias at type level
-			return 64, s, true
+			return 32, true
+		case "float", "f64": // 'float' is our f64 alias
+			return 64, true
 		default:
-			return 0, "", false
+			return 0, false
 		}
 	}
 
@@ -209,7 +204,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
-		// Ergonomics 4a: implicit str on +
+		// Existing ergonomics: string + stringy => string
 		if op == "+" && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
@@ -217,6 +212,8 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
 			other := rt
 			if types.Equal(lt, types.Str) {
+				other = rt
+			} else {
 				other = lt
 			}
 			if types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
@@ -226,46 +223,59 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
-		// Integers: require same signedness and same width (unsized "int" must pair with itself)
-		if ls, lw, _, lok := intInfo(lt); lok {
-			if rs, rw, _, rok := intInfo(rt); rok {
-				if ls != rs {
-					c.add(diagAt("DNT0002", x.Span, ""))
-					return nil
+		// Integers: same signedness & same width, with one exception:
+		//   M9 allowance: (isize|usize) with unsized int ==> OK, result keeps pointer-sized type.
+		if ls, lw, lok := intInfo(lt); lok {
+			if rs, rw, rok := intInfo(rt); rok {
+				allowIntPtrMix := (lw == 0 && (rw == 64)) || (rw == 0 && (lw == 64))
+				if !allowIntPtrMix {
+					if ls != rs {
+						c.add(diagAt("DNT0002", x.Span, "")) // signed/unsigned mismatch
+						return nil
+					}
+					if lw != rw {
+						c.add(diagAt("DNT0001", x.Span, "")) // width mismatch
+						return nil
+					}
+					c.info.Types[x] = lt
+					return lt
 				}
-				// For unsized "int", width==0. Only equal if both are unsized (0==0).
-				if lw != rw {
-					c.add(diagAt("DNT0001", x.Span, ""))
-					return nil
+				// allow int <op> (isize|usize)
+				if lw == 0 && rw == 64 {
+					c.info.Types[x] = rt
+					return rt
 				}
-				c.info.Types[x] = lt
-				return lt
+				if rw == 0 && lw == 64 {
+					c.info.Types[x] = lt
+					return lt
+				}
 			}
 		}
 
-		// Floats: require same width
-		if lw, _, lok := floatInfo(lt); lok {
-			if rw, _, rok := floatInfo(rt); rok {
+		// Floats: require same width (f32 with f32; f64/float with f64/float)
+		if lw, lok := floatInfo(lt); lok {
+			if rw, rok := floatInfo(rt); rok {
 				if lw != rw {
 					c.add(diagAt("DNT0001", x.Span, ""))
 					return nil
 				}
-				// width 32 => f32, 64 => float (f64 alias)
 				if lw == 32 {
 					c.info.Types[x] = types.F32
 					return types.F32
 				}
-				c.info.Types[x] = types.Float
+				c.info.Types[x] = types.Float // f64 alias
 				return types.Float
 			}
 		}
 
+		// Any other combination is invalid for now.
 		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
 		return nil
 
 	case "|", "&", "^":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
+		// Keep legacy behavior: bitwise ops require plain 'int'
 		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
 			c.info.Types[x] = types.Int
 			return types.Int
@@ -276,6 +286,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	case "<<", ">>":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
+		// Keep legacy behavior: shifts require plain 'int'
 		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
 			c.info.Types[x] = types.Int
 			return types.Int
@@ -297,31 +308,33 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		}
 
 		lhsT := c.typ(x.Lhs)
-		set, id, ok := c.resolveCallSet(id)
-		if !ok {
-			return nil
-		}
-		args := make([]types.T, 0, len(call.Args)+1)
+		args := make([]types.T, 0, 1+len(call.Args))
 		args = append(args, lhsT)
 		for _, a := range call.Args {
 			args = append(args, c.typ(a))
 		}
+
+		set := c.info.Funcs[id.Name]
+		if set == nil || len(set.Cands) == 0 {
+			c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
+			return nil
+		}
+
 		arityCands := filterByArity(set.Cands, len(args))
 		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0045", id.Span, "arity mismatch: wrong number of arguments"))
+			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch"))
 			return nil
 		}
 		exact := filterExactByTypes(arityCands, args)
 		switch len(exact) {
 		case 1:
-			// Enforce unsafe on extern
-			if exact[0].Extern && c.unsafeDepth == 0 {
+			chosen := exact[0]
+			if chosen.Extern && c.unsafeDepth == 0 {
 				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
 			}
-			// Mark moves and enforce caller-side borrows.
-			c.markMovesFromCall(exact[0], call, args)
-			c.enforceCallsiteBorrow(exact[0], call)
-			ret := exact[0].Type.Ret
+			c.markMovesFromCall(chosen, call, args)
+			c.enforceCallsiteBorrow(chosen, call)
+			ret := chosen.Type.Ret
 			c.info.Types[x] = ret
 			return ret
 		case 0:
@@ -336,23 +349,30 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
-		// Numeric families: apply same width/signedness rules as arithmetic.
-		if ls, lw, _, lok := intInfo(lt); lok {
-			if rs, rw, _, rok := intInfo(rt); rok {
-				if ls != rs {
-					c.add(diagAt("DNT0002", x.Span, ""))
-					return nil
-				}
-				if lw != rw {
-					c.add(diagAt("DNT0001", x.Span, ""))
-					return nil
+		// Integers: same signedness & width, with the same M9 exception as above.
+		if ls, lw, lok := intInfo(lt); lok {
+			if rs, rw, rok := intInfo(rt); rok {
+				allowIntPtrMix := (lw == 0 && (rw == 64)) || (rw == 0 && (lw == 64))
+				if !allowIntPtrMix {
+					if ls != rs {
+						c.add(diagAt("DNT0002", x.Span, ""))
+						return nil
+					}
+					if lw != rw {
+						c.add(diagAt("DNT0001", x.Span, ""))
+						return nil
+					}
+					c.info.Types[x] = types.Bool
+					return types.Bool
 				}
 				c.info.Types[x] = types.Bool
 				return types.Bool
 			}
 		}
-		if lw, _, lok := floatInfo(lt); lok {
-			if rw, _, rok := floatInfo(rt); rok {
+
+		// Floats: same width
+		if lw, lok := floatInfo(lt); lok {
+			if rw, rok := floatInfo(rt); rok {
 				if lw != rw {
 					c.add(diagAt("DNT0001", x.Span, ""))
 					return nil
@@ -362,7 +382,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
-		// Fallback: identical types are comparable (str, bool, etc.)
+		// Fallback: identical non-numeric types comparable
 		if types.Equal(lt, rt) {
 			c.info.Types[x] = types.Bool
 			return types.Bool
@@ -381,7 +401,6 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		return nil
 
 	default:
-		c.add(diagAt("DTE0004", x.Span, "unknown operator '"+op+"'"))
 		return nil
 	}
 }

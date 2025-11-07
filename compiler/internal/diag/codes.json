@@ -528,20 +528,12 @@
     "width_mismatch": {
       "id": "DNT0001",
       "title": "mismatched numeric widths",
-      "help": "Use the same-sized types or insert an explicit cast.",
-      "suggestions": [
-        "Change one side to {T}",
-        "Introduce a helper to convert values explicitly"
-      ]
+      "help": "Use the same-sized types or convert explicitly; mixing widths is not allowed yet."
     },
     "signedness_mismatch": {
       "id": "DNT0002",
       "title": "signed/unsigned mismatch",
-      "help": "Use matching signedness or convert explicitly.",
-      "suggestions": [
-        "Change one side to {T}",
-        "Use a well-defined conversion function"
-      ]
+      "help": "Use matching signedness or convert explicitly; implicit signed/unsigned mixing is not allowed."
     }
   }
 }
