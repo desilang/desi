@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/parse"
 )
 
 func TestDesugar_Map_ToListComp(t *testing.T) {
@@ -129,5 +130,53 @@ func TestDesugar_Filter_ToListComp(t *testing.T) {
 	eid, ok := lc.Elem.(*ast.Ident)
 	if !ok || eid.Name != "__x" {
 		t.Fatalf("elem = %T (%v), want Ident __x", lc.Elem, lc.Elem)
+	}
+}
+
+// NEW: wrong-arity calls should NOT rewrite (remain a CallExpr)
+func TestDesugar_Map_WrongArity_NoRewrite(t *testing.T) {
+	call := &ast.CallExpr{
+		Callee: &ast.Ident{Name: "map"},
+		Args:   []ast.Expr{&ast.Ident{Name: "xs"}}, // only 1 arg
+	}
+	main := &ast.FuncDecl{
+		Name: ast.Ident{Name: "main"},
+		Body: &ast.Block{Stmts: []ast.Stmt{&ast.ExprStmt{Expr: call}}},
+	}
+	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
+
+	desugarMapFilter(mod)
+
+	es := main.Body.Stmts[0].(*ast.ExprStmt)
+	if _, ok := es.Expr.(*ast.ListComp); ok {
+		t.Fatalf("unexpected rewrite for wrong-arity map(): got ListComp, want CallExpr")
+	}
+	if _, ok := es.Expr.(*ast.CallExpr); !ok {
+		t.Fatalf("expr is %T; want CallExpr", es.Expr)
+	}
+}
+
+// NEW: tolerate extra parentheses around arguments
+func TestDesugar_Map_Filter_ParensVariants(t *testing.T) {
+	src := `
+def main() -> int:
+  map((xs), str)
+  filter(xs, (bool))
+  0
+`
+	mod, diags := parse.ParseFile("<mem>", []byte(src))
+	if len(diags) != 0 {
+		t.Fatalf("parse diags: %v", diags)
+	}
+	desugarMapFilter(mod)
+
+	fn := mod.Decls[0].(*ast.FuncDecl)
+	// stmt 0: map(...) → ListComp
+	if _, ok := fn.Body.Stmts[0].(*ast.ExprStmt).Expr.(*ast.ListComp); !ok {
+		t.Fatalf("stmt[0] not rewritten to ListComp (parens variant)")
+	}
+	// stmt 1: filter(...) → ListComp
+	if _, ok := fn.Body.Stmts[1].(*ast.ExprStmt).Expr.(*ast.ListComp); !ok {
+		t.Fatalf("stmt[1] not rewritten to ListComp (parens variant)")
 	}
 }

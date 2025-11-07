@@ -79,75 +79,63 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		}
 		x.Callee, x.Args = callee, args
 
-		// Then, check for map/filter shapes.
+		// Then, check for map/filter shapes (2-arg only).
 		if id, ok := x.Callee.(*ast.Ident); ok && len(x.Args) == 2 {
 			switch id.Name {
 			case "map":
-				return buildMapComp(args[0], args[1])
+				lc := buildMapComp(args[0], args[1]).(*ast.ListComp)
+				// Preserve the outer call's span so diagnostics point to the call.
+				lc.Span = x.SpanOf()
+				return lc
 			case "filter":
-				return buildFilterComp(args[0], args[1])
+				lc := buildFilterComp(args[0], args[1]).(*ast.ListComp)
+				lc.Span = x.SpanOf()
+				return lc
 			}
 		}
 		return x
 
-	case *ast.UnaryExpr:
-		x.X = desugarExpr(x.X)
-		return x
-	case *ast.BinaryExpr:
-		x.Lhs = desugarExpr(x.Lhs)
-		x.Rhs = desugarExpr(x.Rhs)
-		return x
-	case *ast.IndexExpr:
-		x.X = desugarExpr(x.X)
-		x.Idx = desugarExpr(x.Idx)
-		return x
-	case *ast.FieldExpr:
-		x.X = desugarExpr(x.X)
-		return x
 	case *ast.ListComp:
-		// Recurse into list comp pieces.
+		// Recurse into comprehension parts
 		x.Elem = desugarExpr(x.Elem)
 		for i := range x.Clauses {
-			x.Clauses[i].Target = desugarExpr(x.Clauses[i].Target)
-			x.Clauses[i].Iter = desugarExpr(x.Clauses[i].Iter)
-			if x.Clauses[i].If != nil {
-				x.Clauses[i].If = desugarExpr(x.Clauses[i].If)
+			cl := &x.Clauses[i]
+			cl.Iter = desugarExpr(cl.Iter)
+			if cl.If != nil {
+				cl.If = desugarExpr(cl.If)
 			}
 		}
 		return x
+
 	case *ast.DictComp:
 		x.Key = desugarExpr(x.Key)
 		x.Val = desugarExpr(x.Val)
 		for i := range x.Clauses {
-			x.Clauses[i].Target = desugarExpr(x.Clauses[i].Target)
-			x.Clauses[i].Iter = desugarExpr(x.Clauses[i].Iter)
-			if x.Clauses[i].If != nil {
-				x.Clauses[i].If = desugarExpr(x.Clauses[i].If)
+			cl := &x.Clauses[i]
+			cl.Iter = desugarExpr(cl.Iter)
+			if cl.If != nil {
+				cl.If = desugarExpr(cl.If)
 			}
 		}
 		return x
-	case *ast.SetComp:
-		x.Elem = desugarExpr(x.Elem)
-		for i := range x.Clauses {
-			x.Clauses[i].Target = desugarExpr(x.Clauses[i].Target)
-			x.Clauses[i].Iter = desugarExpr(x.Clauses[i].Iter)
-			if x.Clauses[i].If != nil {
-				x.Clauses[i].If = desugarExpr(x.Clauses[i].If)
-			}
-		}
+
+	case *ast.FieldExpr:
+		x.X = desugarExpr(x.X)
 		return x
+
 	default:
 		return x
 	}
 }
 
 func buildMapComp(xs ast.Expr, f ast.Expr) ast.Expr {
-	it := &ast.Ident{Name: "__x"}
-	call := &ast.CallExpr{Callee: f, Args: []ast.Expr{&ast.Ident{Name: it.Name}}}
+	// [ f(__x) for __x in xs ]
+	xvar := &ast.Ident{Name: "__x"}
+	call := &ast.CallExpr{Callee: f, Args: []ast.Expr{xvar}}
 	return &ast.ListComp{
 		Elem: call,
 		Clauses: []ast.CompClause{{
-			Target: it,
+			Target: xvar,
 			Iter:   xs,
 			If:     nil,
 		}},
@@ -155,14 +143,15 @@ func buildMapComp(xs ast.Expr, f ast.Expr) ast.Expr {
 }
 
 func buildFilterComp(xs ast.Expr, p ast.Expr) ast.Expr {
-	it := &ast.Ident{Name: "__x"}
-	cond := &ast.CallExpr{Callee: p, Args: []ast.Expr{&ast.Ident{Name: it.Name}}}
+	// [ __x for __x in xs if p(__x) ]
+	xvar := &ast.Ident{Name: "__x"}
+	pred := &ast.CallExpr{Callee: p, Args: []ast.Expr{xvar}}
 	return &ast.ListComp{
-		Elem: it,
+		Elem: xvar,
 		Clauses: []ast.CompClause{{
-			Target: it,
+			Target: xvar,
 			Iter:   xs,
-			If:     cond,
+			If:     pred,
 		}},
 	}
 }
