@@ -1,5 +1,5 @@
-def sum_list(xs: list[int]) -> int:
-	let s = 0
-	for x in xs:
-		s = s + x
+def sum_first_n(n: int) -> int:
+	let mut s = 0
+	for x in range(n):
+		s := s + x
 	s
