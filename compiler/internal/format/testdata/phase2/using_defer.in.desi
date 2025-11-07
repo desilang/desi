@@ -1,4 +1,0 @@
-def use_defer() -> int:
-	using h = open()
-	defer close(h)
-	0
