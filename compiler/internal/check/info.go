@@ -83,25 +83,50 @@ func addPreludeBuiltins(info *Info) {
 				Decl:  nil,
 				Type:  types.FuncOf([]types.T{p}, ret),
 				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
-				// Extern: false (builtins are internal)
 			})
 		}
 	}
 
-	// Use only canonical kinds to avoid ambiguity:
-	// - IntKind covers all ints (i8..i128, usize/isize) via types.Equal
-	// - FloatKind covers f32/f64 (float)
+	// Helper: add a single overload with explicit param modes.
+	addWithModes := func(name string, params []types.T, modes []ast.ParamMode, ret types.T) {
+		set := info.Funcs[name]
+		if set == nil {
+			set = &OverloadSet{Name: name}
+			info.Funcs[name] = set
+		}
+		set.Add(&FuncCand{
+			Decl:  nil,
+			Type:  types.FuncOf(params, ret),
+			Modes: modes,
+		})
+	}
+
+	// Canonical “kinds” only to avoid ambiguity across sized numerics.
 	coreKinds := []types.T{types.Int, types.Float, types.Bool, types.Str}
 
-	// print(x) -> none
+	// Existing builtins from Task A:
 	addOverloads("print", coreKinds, types.None)
-
-	// str(x) -> str
 	addOverloads("str", coreKinds, types.Str)
-
-	// bool(x) -> bool
 	addOverloads("bool", coreKinds, types.Bool)
-
-	// len(x) -> usize  (Phase-1: only str; collections added in Task B)
 	addOverloads("len", []types.T{types.Str}, types.USize)
+
+	// ---- Task D: minimal collection ops (compile-only stubs) ----
+	// We don’t declare concrete collection types yet; the first param type
+	// is left as nil to act as “any collection” placeholder. This keeps
+	// overload resolution simple (single candidate) while enforcing inout.
+	addWithModes("list_push",
+		[]types.T{nil, types.Int},
+		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
+		types.None)
+
+	addWithModes("set_add",
+		[]types.T{nil, types.Str},
+		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
+		types.None)
+
+	addWithModes("dict_set",
+		[]types.T{nil, types.Str, types.Int},
+		[]ast.ParamMode{ast.ParamInout, ast.ParamMove, ast.ParamMove},
+		types.None)
+	// -------------------------------------------------------------
 }
