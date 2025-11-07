@@ -29,3 +29,16 @@ def f():
 		t.Fatalf("want BinaryExpr(op==\"in\"), got %#v", es.Expr)
 	}
 }
+
+func TestParse_Membership_In_OK(t *testing.T) {
+	src := "def f():\n\t\"a\" in \"abc\"\n"
+	mod, diags := ParseFile("<mem>", []byte(src))
+	if len(diags) != 0 {
+		t.Fatalf("unexpected parse diags: %+v", diags)
+	}
+	fd := mod.Decls[0].(*ast.FuncDecl)
+	es := fd.Body.Stmts[0].(*ast.ExprStmt)
+	if be, ok := es.Expr.(*ast.BinaryExpr); !ok || be.Op != "in" {
+		t.Fatalf("want BinaryExpr(op==\"in\"), got %#v", es.Expr)
+	}
+}
