@@ -1,0 +1,8 @@
+def id_u8(x: u8) -> u8:
+  x
+
+def main() -> int:
+  let a: u8 = 42
+  let b: u8 = id_u8(a)
+  print("u8 param ok")
+  0

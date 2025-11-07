@@ -1,0 +1,8 @@
+def id_f32(x: f32) -> f32:
+  x
+
+def main() -> int:
+  let a: f32 = 3.5
+  let b: f32 = id_f32(a)
+  print("f32 param ok")
+  0
