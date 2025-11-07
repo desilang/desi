@@ -1,0 +1,12 @@
+# Numeric conversions — Tier-0 runtime shims.
+# These are declared extern for now; calls require `unsafe:` like any FFI.
+# We will replace with safe, in-language versions once explicit casts/range checks land.
+
+@extern("C")
+def to_u8(x: int) -> u8
+
+@extern("C")
+def to_f32(x: f64) -> f32
+
+@extern("C")
+def to_f64(x: f32) -> f64
