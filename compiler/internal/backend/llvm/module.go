@@ -32,6 +32,7 @@ type Module struct {
 	asyncWrappers map[string]bool      // symbols that return ptr future handles
 	curRetIsPtr   bool                 // set per function during EmitFunc
 	ssa           map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
+	curFuncRetTy  string
 
 	funcSigs map[string]struct {
 		ret    string
@@ -167,6 +168,8 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	if sig, ok := getFuncSig(fn.Name); ok && !m.curRetIsPtr && sig.ret != "" {
 		retTy = sig.ret
 	}
+
+	m.curFuncRetTy = retTy
 
 	// Emit function header with per-param overrides (default ptr).
 	wprintf(&m.funcs, "define %s @%s(", retTy, fn.Name)
@@ -311,6 +314,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 	}
+	m.curFuncRetTy = ""
 	wprintf(&m.funcs, "}\n")
 }
 
@@ -380,44 +384,37 @@ func (m *Module) emitCall(c *hir.Call) {
 }
 
 func (m *Module) emitRet(r *hir.Ret) {
-	// Pointer-returning wrapper?
-	if m.curRetIsPtr {
-		if r.Val == nil {
+	if r == nil {
+		return
+	}
+	// If there's no explicit value, return a typed zero consistent with the current function header.
+	if r.Val == nil {
+		switch m.curFuncRetTy {
+		case "ptr":
 			wprintf(&m.funcs, "  ret ptr null\n")
-			return
-		}
-		switch v := r.Val.(type) {
-		case hir.Temp:
-			wprintf(&m.funcs, "  ret ptr %s\n", v.String())
-		case hir.Var:
-			if ali, ok := m.ssa[v.Name]; ok {
-				if a, ok2 := ali.(hir.Temp); ok2 {
-					wprintf(&m.funcs, "  ret ptr %s\n", a.String())
-					return
-				}
-			}
-			wprintf(&m.funcs, "  ret ptr %%%s\n", v.Name)
+		case "float":
+			wprintf(&m.funcs, "  ret float 0.0\n")
+		case "double":
+			wprintf(&m.funcs, "  ret double 0.0\n")
+		case "i1":
+			wprintf(&m.funcs, "  ret i1 0\n")
+		case "":
+			// No override registered → Tier-0 default.
+			wprintf(&m.funcs, "  ret i32 0\n")
 		default:
-			wprintf(&m.funcs, "  ret ptr null\n")
+			// Any integer width: i8/i16/i32/i64/i128, usize/isize lowered earlier.
+			wprintf(&m.funcs, "  ret %s 0\n", m.curFuncRetTy)
 		}
 		return
 	}
 
-	// Default i32 path.
-	if r.Val == nil {
-		wprintf(&m.funcs, "  ret i32 0\n")
+	// Non-nil return: keep Tier-0 behavior; if current func is a ptr-returner (async wrapper),
+	// format as a pointer; otherwise use the i32-operand path to keep existing tests stable.
+	if m.curRetIsPtr {
+		wprintf(&m.funcs, "  ret %s\n", m.ptrOperand(r.Val))
 		return
 	}
-	switch v := r.Val.(type) {
-	case hir.ConstInt:
-		wprintf(&m.funcs, "  ret i32 %s\n", v.Text)
-	case hir.Temp:
-		wprintf(&m.funcs, "  ret i32 %s\n", v.String())
-	case hir.Var:
-		wprintf(&m.funcs, "  ret %s\n", m.i32Operand(v))
-	default:
-		wprintf(&m.funcs, "  ret i32 0\n")
-	}
+	wprintf(&m.funcs, "  ret %s\n", m.i32Operand(r.Val))
 }
 
 // ptrOperand renders a pointer-typed operand, honoring SSA aliases for vars.
