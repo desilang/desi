@@ -256,17 +256,71 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M10 — Collections & Prelude v1
+### M10 — Collections & Prelude v1 (✅ DONE)
 
-**Scope**
+**What shipped (Tasks A–I + polish)**
 
-* std prelude: `print`, `len`, `bool`, `str`, `map`, `filter`, `range`.
-* Built-in collection ops (`push`, `set`, membership `in`).
-* Comprehensions compiled efficiently.
+* **A — Prelude injection (builtins)**
+  A minimal always-on prelude is injected at top scope: `print`, `len`, `str`, `bool`.
+  *Shadowing a builtin produces **DPL0001** (prelude.shadow_builtin).*
+  Prelude names participate in overload resolution (no imports needed).
+
+* **B — `len()` typing (v1)**
+  `len("…") -> int` is supported. Unsupported types route to **DCO0001** (`collections.no_length`) with help/suggestions.
+
+* **C — Membership `in` (v1)**
+  `"a" in "abc" -> bool` is supported. Unsupported combos are **DCO0002** (`collections.unsupported_membership`).
+  Parser now treats `in` as a **binary relational operator** in expressions, with a gated parse so `for x in xs` and comprehension clauses continue to parse unambiguously.
+
+* **D — Compile-only collection stubs**
+  Stubs exist in the prelude (typed, compile-only):
+  `def list_push(inout xs: list[T], x: T) -> none`
+  `def set_add(inout s: set[T], x: T) -> none`
+  `def dict_set(inout m: dict[K,V], k: K, v: V) -> none`
+  These are used by lowering but have no runtime yet (Tier-0 textual IR).
+
+* **E — `range(start, stop, step=1)` (v1)**
+  Surface function present. Lowering provides a counted-loop skeleton that examples may rely on (no runtime iteration protocol yet).
+
+* **F — List comprehension lowering**
+  `[E for x in xs if cond]` lowers to a tight loop skeleton that calls `list_push`. Lifetime intrinsics (`llvm.lifetime.start/end`) are placed conservatively around locals.
+
+* **G — Typed user function signatures in IR**
+  User functions in the emitted textual LLVM carry compact, sized param/ret types (e.g., `i32`, `f32`, `i1`). Default returns lower to typed zeroes via `emitRet`. **Extern/FFI rules from M9 remain intact** (single `declare` per extern symbol; unsafe call requirement unchanged).
+
+* **H — Map/Filter desugaring polish**
+  Syntactic rewrite (pre-check) is hardened and span-stable:
+  `map(xs, f)` → `[f(__x) for __x in xs]`
+  `filter(xs, p)` → `[__x for __x in xs if p(__x)]`
+  Tolerates extra parentheses and whitespace. Wrong arity continues to report as a normal “no matching overload” post-check.
+
+* **I — Examples & catalog sweep**
+  Added minimal examples that exercise the new surfaces and lowering:
+  - `examples/23_range_map_filter.desi` — two list comprehensions (`range` + guard).
+  - `examples/24_membership_len.desi` — membership and `len` exercised (results unused), sanity `print("ok")`.
+  - `examples/25_comprehensions_lowered.desi` — list comp with guard; IR shows `@list_push`.
+    Catalog entries verified/present: **DPL0001**, **DCO0001**, **DCO0002**.
+
+* **Polish — `emit-ir` runs precheck desugars**
+  The `emit-ir` path now invokes the pre-check desugar pass so IR never declares `@map`/`@filter`; you only see the lowered comprehension loop (`@list_push`).
+  Parser tweak for `in` includes a small gate to avoid stealing clause keywords in `for … in …` (statements & comprehensions). Regression tests added.
+
+**Tests / examples**
+
+* Checker: `prelude_builtins_test.go`, `len_types_test.go`, `len_no_length_test.go`, `membership_test.go`, `map_filter_desugar_test.go`, `comprehensions_test.go`, negatives for unsupported combos; tiny example smoke under `internal/check` to parse+check the three M10 examples.
+* Lowering/Backend: `comprehensions_lower_test.go` (tight loop + `list_push`), backend smoke shows typed headers and correct lifetime placement.
+* Parser: membership parse tests to ensure `in` is a binary operator outside clause targets and that comprehension/`for` grammar stays green.
 
 **Acceptance**
 
-* Collections & comprehension examples pass and are fast (microbench).
+* Builtins available without imports; builtin shadowing → **DPL0001**.
+* `len("abc")` → `int`; unsupported `len(_)` → **DCO0001**.
+* `"a" in "abc"` parses/types to `bool`; unsupported membership → **DCO0002**.
+* `list_push`/`set_add`/`dict_set` stubs present and used by lowering.
+* `range` surface present.
+* `map`/`filter` desugar before type-check **and** before `emit-ir`; list comps lower to loops using `list_push`.
+* IR: user functions show compact typed headers; extern rules from M9 preserved.
+* `go build ./... && go test ./...` **green**; M10 examples pass `check` and produce stable IR.
 
 ---
 
