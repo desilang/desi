@@ -284,6 +284,24 @@ func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 	if mod == nil || info == nil {
 		return out
 	}
+
+	// local helper: if the checker didn't record a type (e.g., because it
+	// didn't walk this BinaryExpr), infer the obvious literal kinds.
+	litOrInfoType := func(e ast.Expr) types.T {
+		if t := info.Types[e]; t != nil {
+			return t
+		}
+		switch e.(type) {
+		case *ast.StrLit:
+			return types.Str
+		case *ast.IntLit:
+			return types.Int
+		case *ast.FloatLit:
+			return types.Float
+		}
+		return nil
+	}
+
 	walkFunc := func(fd *ast.FuncDecl) {
 		if fd == nil || fd.Body == nil {
 			return
@@ -297,16 +315,21 @@ func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 			if !ok || be == nil {
 				continue
 			}
+
+			// Op is a string in our AST; check for "in".
 			if be.Op != "in" {
 				continue
 			}
-			lt := info.Types[be.Lhs]
-			rt := info.Types[be.Rhs]
+
+			lt := litOrInfoType(be.Lhs)
+			rt := litOrInfoType(be.Rhs)
+
 			// Phase-1 rule: str in str -> bool
 			if lt != nil && rt != nil && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 				info.Types[be] = types.Bool
 				continue
 			}
+
 			out = append(out, diagAt("DCO0002", be.Span, "unsupported membership"))
 			// Best-effort type to keep downstream happy.
 			info.Types[be] = types.Bool
