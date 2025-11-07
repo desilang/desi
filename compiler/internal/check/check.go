@@ -81,8 +81,11 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Merge checker diagnostics.
 	res.Diags = append(res.Diags, c.diags...)
 
-	// ---- Task B hook: nicer len() error when type has no length (DCO0001) ----
+	// ---- Task B hook: len() nicer error when type has no length (DCO0001) ----
 	res.Diags = append(res.Diags, collectLenNoLengthDiags(mod, res.Info)...)
+
+	// ---- Task C hook: membership 'in' (string-only for now) -------------------
+	res.Diags = append(res.Diags, collectMembershipDiags(mod, res.Info)...)
 	// --------------------------------------------------------------------------
 
 	// 4) After we know which identifiers resolved to which symbols,
@@ -260,6 +263,53 @@ func collectLenNoLengthDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 			if !types.Equal(t, types.Str) {
 				out = append(out, diagAt("DCO0001", id.Span, "type has no length"))
 			}
+		}
+	}
+	for _, d := range mod.Decls {
+		switch dd := d.(type) {
+		case *ast.FuncDecl:
+			walkFunc(dd)
+		case *ast.ClassDecl:
+			for _, m := range dd.Methods {
+				walkFunc(m)
+			}
+		}
+	}
+	return out
+}
+
+// collectMembershipDiags handles 'in' operator typing/diags (Phase-1: str in str).
+func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
+	var out []diag.Diagnostic
+	if mod == nil || info == nil {
+		return out
+	}
+	walkFunc := func(fd *ast.FuncDecl) {
+		if fd == nil || fd.Body == nil {
+			return
+		}
+		for _, s := range fd.Body.Stmts {
+			es, ok := s.(*ast.ExprStmt)
+			if !ok {
+				continue
+			}
+			be, ok := es.Expr.(*ast.BinaryExpr)
+			if !ok || be == nil {
+				continue
+			}
+			if be.Op != "in" {
+				continue
+			}
+			lt := info.Types[be.Lhs]
+			rt := info.Types[be.Rhs]
+			// Phase-1 rule: str in str -> bool
+			if lt != nil && rt != nil && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
+				info.Types[be] = types.Bool
+				continue
+			}
+			out = append(out, diagAt("DCO0002", be.Span, "unsupported membership"))
+			// Best-effort type to keep downstream happy.
+			info.Types[be] = types.Bool
 		}
 	}
 	for _, d := range mod.Decls {
