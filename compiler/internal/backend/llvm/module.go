@@ -355,14 +355,11 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	// Fallback: external call — choose return type, honor c.Dst if provided.
-	ret := "i32"
-	if m.asyncWrappers[c.Fn] {
-		ret = "ptr"
-	}
+	// Fallback: external call — choose return type via overrides/async, honor c.Dst if provided.
+	ret := m.callRetType(c.Fn)
 
-	// NEW (M9D): ensure we have exactly one declare stub for the target symbol.
-	// We keep the signature minimal at Tier-0 (no params here); type mapping will evolve later.
+	// Ensure we have exactly one declare stub for the target symbol (typed).
+	// We keep the signature minimal at Tier-0 (no params here).
 	m.ensureDecl(fmt.Sprintf("declare %s @%s()", ret, c.Fn))
 
 	if c.Dst.Name != "" {
@@ -453,4 +450,14 @@ func (m *Module) i32Operand(v hir.Value) string {
 	default:
 		return "i32 0"
 	}
+}
+
+func (m *Module) callRetType(name string) string {
+	if m.asyncWrappers[name] {
+		return "ptr"
+	}
+	if sig, ok := getFuncSig(name); ok && sig.ret != "" {
+		return sig.ret
+	}
+	return "i32"
 }
