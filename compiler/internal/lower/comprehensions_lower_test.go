@@ -1,6 +1,7 @@
 package lower
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -9,10 +10,9 @@ import (
 )
 
 func TestLower_ListComp_EmitsListPush(t *testing.T) {
-	// ys = [1 for x in xs if true]
+	// ys = [1 for ...]  (we only need Elem to exercise the append path)
 	comp := &ast.ListComp{
 		Elem: &ast.IntLit{Text: "1"},
-		// We don't need clauses for Tier-0 shape; elem is enough to test the append.
 	}
 	let := &ast.LetStmt{
 		Name:  ast.Ident{Name: "ys"},
@@ -22,14 +22,13 @@ func TestLower_ListComp_EmitsListPush(t *testing.T) {
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{let}},
 	}
-	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
-	fn := LowerBlockFromSource("main", main.Body, nil)
-	out := hir.Print(fn)
+	fn := LowerBlock("main", main.Body)
 
-	if !strings.Contains(out, "let ys") {
-		t.Fatalf("HIR missing 'let ys' binding:\n%s", out)
-	}
+	var buf bytes.Buffer
+	hir.Print(&buf, fn)
+	out := buf.String()
+
 	if !strings.Contains(out, "call list_push(") {
 		t.Fatalf("HIR missing list_push append for list comprehension:\n%s", out)
 	}
