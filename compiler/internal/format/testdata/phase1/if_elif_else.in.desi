@@ -1,0 +1,7 @@
+def sign(x: int) -> int:
+	if x < 0:
+		-1
+	elif x > 0:
+		1
+	else:
+		0

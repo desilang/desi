@@ -1,0 +1,4 @@
+@memoize
+def add(x: int, y: int) -> int:
+	"""add two numbers"""
+	x + y
