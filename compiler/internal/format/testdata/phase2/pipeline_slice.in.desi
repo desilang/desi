@@ -1,0 +1,3 @@
+def f(x: int) -> int:
+	let y = x |> id
+	return y
