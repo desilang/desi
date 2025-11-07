@@ -51,6 +51,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		info:  res.Info,
 		scope: NewScope(top), // child of top so imported names & prelude are visible
 	}
+	// Remember the module (file-level) scope for anti-shadowing checks.
+	c.moduleScope = c.scope
 
 	// Pass 1: collect functions for overload sets.
 	for _, d := range mod.Decls {
@@ -92,6 +94,7 @@ type checker struct {
 	info        *Info
 	diags       []diag.Diagnostic
 	scope       *Scope
+	moduleScope *Scope
 	curFuncRet  types.T
 	moved       MoveSet
 	unsafeDepth int
@@ -101,6 +104,9 @@ func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
 
 func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	name := fd.Name.Name
+
+	// Top-level shadowing of builtin names is not allowed.
+	c.forbidBuiltinShadowing(name, fd.Name.Span)
 
 	// Build function type from parameter annotations (surface forms allowed).
 	params := make([]types.T, len(fd.Params))
@@ -201,4 +207,15 @@ func isExternDecl(fd *ast.FuncDecl) bool {
 		}
 	}
 	return false
+}
+
+// forbidBuiltinShadowing emits DPL0001 if a top-level binding redefines a builtin.
+func (c *checker) forbidBuiltinShadowing(name string, sp diag.Span) {
+	if c == nil || c.scope == nil {
+		return
+	}
+	// Only enforce at module scope (top-level bindings).
+	if c.scope == c.moduleScope && isPreludeBuiltinName(name) {
+		c.add(diagAt("DPL0001", sp, "cannot shadow builtin: "+name))
+	}
 }

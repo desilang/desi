@@ -79,7 +79,7 @@ func addPreludeBuiltins(info *Info) {
 			info.Funcs[name] = set
 		}
 		for _, p := range params {
-			set.Cands = append(set.Cands, &FuncCand{
+			set.Add(&FuncCand{
 				Decl:  nil,
 				Type:  types.FuncOf([]types.T{p}, ret),
 				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
@@ -87,7 +87,21 @@ func addPreludeBuiltins(info *Info) {
 			})
 		}
 	}
-	core := []types.T{types.Int, types.Float, types.Bool, types.Str}
-	addOverloads("print", core, types.None) // print(x) -> none
-	addOverloads("str", core, types.Str)    // str(x) -> str
+
+	// Use only canonical kinds to avoid ambiguity:
+	// - IntKind covers all ints (i8..i128, usize/isize) via types.Equal
+	// - FloatKind covers f32/f64 (float)
+	coreKinds := []types.T{types.Int, types.Float, types.Bool, types.Str}
+
+	// print(x) -> none
+	addOverloads("print", coreKinds, types.None)
+
+	// str(x) -> str
+	addOverloads("str", coreKinds, types.Str)
+
+	// bool(x) -> bool
+	addOverloads("bool", coreKinds, types.Bool)
+
+	// len(x) -> usize  (Phase-1: only str; collections added in Task B)
+	addOverloads("len", []types.T{types.Str}, types.USize)
 }
