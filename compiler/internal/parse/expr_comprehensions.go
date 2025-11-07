@@ -97,29 +97,48 @@ func (p *Parser) parseSetComp(openSpan ast.Node) ast.Expr {
 // starting with the *current* token positioned *after* the initial 'for'.
 func (p *Parser) parseCompClausesAfterFor() []ast.CompClause {
 	var clauses []ast.CompClause
+
 	for {
-		// target
-		target := p.parseExpr()
+		// Parse <target> with membership disabled so KW_in is not eaten as a
+		// binary operator here.
+		var target ast.Expr
+		withInAsOperator(false, func() {
+			target = p.parseExpr()
+		})
+
 		if !p.expect(token.KW_in, "in") {
-			break
+			// Bail out; caller will already be in an error-recovery path.
+			return clauses
 		}
+
+		// Parse <iter> with normal membership behavior.
 		iter := p.parseExpr()
 
-		var cond ast.Expr
-		if p.accept(token.KW_if) {
-			cond = p.parseExpr()
+		// Optional chain of `if <cond>`; combine multiple guards with `and`
+		// so we keep a single If expression in the AST clause shape.
+		var guard ast.Expr
+		for p.cur.Tok == token.KW_if {
+			p.next()
+			g := p.parseExpr()
+			if guard == nil {
+				guard = g
+			} else {
+				guard = &ast.BinaryExpr{Op: "and", Lhs: guard, Rhs: g, Span: g.SpanOf()}
+			}
 		}
 
 		clauses = append(clauses, ast.CompClause{
 			Target: target,
 			Iter:   iter,
-			If:     cond,
+			If:     guard,
 		})
 
-		if p.accept(token.KW_for) {
-			continue
+		// Support chained comprehensions: `... for ... in ... if ... for ...`
+		if p.cur.Tok != token.KW_for {
+			break
 		}
-		break
+		p.next() // consume the next `for` and loop again
 	}
+
 	return clauses
 }
