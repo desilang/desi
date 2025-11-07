@@ -1,7 +1,7 @@
 # Prelude export hub
-# Re-exports are intentionally explicit so "from prelude import X" works.
 
-from prelude.io import println as println
+# Re-export the existing 'print' surface from the root io module.
+from io import print as print
 
 # Numeric conversion surfaces (runtime shims for now; see numeric.desi)
 from prelude.numeric import to_u8 as to_u8

@@ -1,5 +1,0 @@
-# Minimal I/O helpers.
-
-def println(s: str) -> none:
-  # Builtin 'print' already lowers to puts(...)
-  print(s)
