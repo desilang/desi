@@ -1,0 +1,5 @@
+def pipe_and_add(x: int) -> int:
+	let mut y = x
+	y += 1
+	let z = y |> id
+	z

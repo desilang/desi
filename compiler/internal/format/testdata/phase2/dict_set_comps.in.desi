@@ -1,0 +1,4 @@
+def comps(n: int) -> int:
+	let d = {i: i * i for i in range(n) if i % 2 == 0}
+	let s = #{i for i in range(n) if i % 2 == 1}
+	len(d)
