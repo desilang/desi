@@ -16,6 +16,7 @@ This doc tracks the **implemented** subset at each milestone and calls out “wh
   - (Phase-4) **Ergonomics v1:**
     **(4a)** `a + b` yields `str` if either side is `str` (coerces `int`/`float`/`bool`),
     **(4d)** Slice steps `s[i:j:k]` and short forms (`s[i:j]`, `s[:j]`, `s[:]`, `s[::k]`, `s[2::]`, …). In M5, **string slices type to `str`**; other containers will be typed later.
+- **M10** adds **Prelude v1 + Collections surface** (see **Prelude & collections (M10)** below).
 
 ---
 
@@ -54,6 +55,30 @@ Desi uses layout with `NL`, `Indent`, `Dedent`.
 
 `import from as pub def async class struct enum type let mut return if elif else while for in using defer match select await true false none and or not`
 
+> `in` is used both as the **membership operator** (see below) and as the clause keyword in `for … in …` and comprehensions.
+
+---
+
+## Prelude & collections (M10)
+
+**Always-on prelude (no import needed):** `print`, `len`, `str`, `bool`, `range`, `map`, `filter`.
+
+- **Shadowing guard:** defining a name that shadows a builtin yields **DPL0001** (prelude.shadow_builtin).
+- **`len(x)` (v1):** `len("abc") -> int`. Unsupported types produce **DCO0001** with help/suggestions.
+- **Membership `in` (v1):** `"a" in "abc" -> bool`. Other combos are **DCO0002** (unsupported membership).
+  - Parser treats `in` as a binary operator at the **comparison** level **except** when parsing the *target* of `for … in …` or a comprehension clause (where `in` remains a keyword).
+- **`range(start, stop, step=1)` (v1):** available for counted loops/comprehensions (lowered to a loop skeleton; no runtime protocol).
+- **`map(xs,f)` / `filter(xs,p)` (v1):** surface sugar that **desugars to list comprehensions** before type-check **and** before `emit-ir`:
+  - `map(xs,f)` → `[f(__x) for __x in xs]`
+  - `filter(xs,p)` → `[__x for __x in xs if p(__x)]`
+- **Collection stubs (compile-only):**
+  - `list_push(inout list[T], T) -> none`
+  - `set_add(inout set[T], T) -> none`
+  - `dict_set(inout dict[K,V], K, V) -> none`
+  These are used by lowering (Tier-0 textual IR) and have no runtime yet.
+
+---
+
 ## Builtin types
 
 `bool int i8 i16 i32 i64 i128 isize u8 u16 u32 u64 u128 usize f32 f64 str string future none list dict set tuple`
@@ -75,7 +100,7 @@ Greedy tokenization (longest wins).
 - Assignment: `=` `:=` `+=` `-=` `*=` `/=` `%=` `**=` `^=`
 - Arithmetic: `+` `-` `*` `/` `%` `**`
 - Bitwise/pipeline: `^` `|` `|>`
-- Compare: `==` `!=` `<` `<=` `>` `>=`
+- Compare: `==` `!=` `<` `<=` `>` `>=` `in`
 - Arrows: `->` `=>`
 - Bang: `!`
 
@@ -93,13 +118,15 @@ unary
 
 << >>
 & ^ |
-< <= > >=
+< <= > >= in
 == !=
 |>
 and
 or
 
 ```
+
+> Membership `in` binds at the **comparison** tier. In clause contexts (`for X in Y`, or comprehension `... for X in Y ...`), `in` is a **clause keyword**, not an operator.
 
 ---
 
@@ -119,6 +146,7 @@ or
 - `if Expr: SimpleStmt` or block form (`:` + NL + indented block). `elif`/`else` supported in both forms.
 - `while Expr: SimpleStmt` or block form.
 - `for Target in Expr: SimpleStmt` or block form.
+  *Note:* the **Target** is parsed with `in` reserved for the clause (membership operator is disabled in that position).
 - `using Expr: Block`
 - `defer SimpleStmt` (executes at scope-exit)
 - `match Expr: Block` with guarded arms (parse surface in M4; more checks later)
@@ -148,4 +176,3 @@ or
 - `desic check` exit codes: `0` ok, `1` had diagnostics, `2` arg/I/O error.
 - `-I` supports **multi-root import search** (e.g., `-I "examples:compiler/lib"`).
 - Diagnostic output is capped to a small number in the CLI with a suppression summary (keeps the console readable for very error-y files).
-
