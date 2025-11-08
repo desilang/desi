@@ -84,12 +84,11 @@ func main() {
 }
 
 func usage() {
-	// Avoid fmt.Fprintln unhandled error warning; use our terminal helper (cross-platform).
 	term.Eprintln("usage: desifmt [-w|-l|-q] <file|dir|-> [...]")
 }
 
 func formatStdin() (bool, []diag.Diagnostic) {
-	src, err := io.ReadAll(os.Stdin) // cross-OS safe (no /dev/stdin)
+	src, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
 		return false, nil
@@ -130,7 +129,7 @@ func formatFile(path string) (bool, []diag.Diagnostic) {
 	}
 	if *writeInPlace {
 		if !bytesEqual(src, out) {
-			if err := os.WriteFile(path, out, 0644); err != nil {
+			if err := os.WriteFile(path, out, 0o644); err != nil {
 				term.Eprintln("desifmt:", err)
 				return false, nil
 			}
