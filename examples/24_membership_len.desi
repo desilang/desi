@@ -1,4 +1,4 @@
 def main() -> int:
-	print("a" in "abc")
-	print(len("abc"))
-	0
+	 print(str("a" in "abc"))   # membership → bool → str for print
+	 print(str(len("abc")))     # len(int) → str for print
+	 0

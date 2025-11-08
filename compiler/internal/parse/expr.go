@@ -72,16 +72,22 @@ func (p *Parser) parseRel() ast.Expr {
 	e := p.parseBitOr()
 	for {
 		switch p.cur.Tok {
-		case token.LT, token.LTE, token.GT, token.GTE, token.KW_in:
+		case token.LT, token.LTE, token.GT, token.GTE:
 			op := p.cur
-			p.next() // consume operator
+			p.next()
 			r := p.parseBitOr()
-			e = &ast.BinaryExpr{
-				Op:   op.Lexeme, // "<" "<=" ">" ">=" or "in"
-				Lhs:  e,
-				Rhs:  r,
-				Span: joinTok(p.file, op, p.cur), // preserve a sensible span
+			e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+
+		case token.KW_in:
+			// Membership: only when enabled (NOT inside a `for … in …` target).
+			if !inAsOperator {
+				return e
 			}
+			op := p.cur
+			p.next()
+			r := p.parseBitOr()
+			e = &ast.BinaryExpr{Op: "in", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+
 		default:
 			return e
 		}

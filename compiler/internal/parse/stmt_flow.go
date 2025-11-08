@@ -101,16 +101,24 @@ func (p *Parser) parseWhile() ast.Stmt {
 func (p *Parser) parseFor() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'for'
 	p.next()
-	target := p.parseExpr()
+
+	// Parse <target> with "in as operator" disabled.
+	var target ast.Expr
+	withInAsOperator(false, func() {
+		target = p.parseExpr()
+	})
+
 	if !p.expect(token.KW_in, "in") {
 		p.syncStmt()
 		return nil
 	}
 	iter := p.parseExpr()
+
 	if !p.expect(token.COLON, ":") {
 		p.syncStmt()
 		return nil
 	}
+
 	var body *ast.Block
 	if p.cur.Tok == token.NL {
 		p.next()
