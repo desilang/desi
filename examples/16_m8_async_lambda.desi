@@ -6,6 +6,6 @@ async def inc(x: int) -> int:
 	x + 1
 
 def main() -> int:
-	let fut = (async lambda x: await inc(x))(41)
+	let fut = (async (x: int) => await inc(x))(41)
 	print("async lambda desugared")
 	0

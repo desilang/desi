@@ -267,10 +267,12 @@ func (p *Parser) parsePrimary() ast.Expr {
 		it := &ast.IntLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 		p.next()
 		return it
+
 	case token.FLOAT, token.FLOAT_EXP:
 		it := &ast.FloatLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 		p.next()
 		return it
+
 	case token.STR, token.FSTR, token.LONGSTR:
 		st := &ast.StrLit{
 			Long: p.cur.Tok == token.LONGSTR,
@@ -278,18 +280,51 @@ func (p *Parser) parsePrimary() ast.Expr {
 		}
 		p.next()
 		return st
+
 	case token.KW_true:
 		b := &ast.BoolLit{Value: true, Span: spanPos(p.file, p.cur)}
 		p.next()
 		return b
+
 	case token.KW_false:
 		b := &ast.BoolLit{Value: false, Span: spanPos(p.file, p.cur)}
 		p.next()
 		return b
+
 	case token.KW_none:
 		n := &ast.NoneLit{Span: spanPos(p.file, p.cur)}
 		p.next()
 		return n
+
+	case token.KW_async:
+		// Allow: async (x, y) => expr   |   async x => expr
+		as := spanPos(p.file, p.cur)
+		p.next() // consume 'async'
+
+		// Parenthesized lambda head: ( ... ) => ...
+		if p.cur.Tok == token.LPAREN && p.parenLambdaAhead() {
+			e := p.parseLambdaFromParen()
+			if lam, ok := e.(*ast.LambdaExpr); ok {
+				lam.Async = true
+				lam.Span = ast.JoinSpan(as, lam.Span)
+			}
+			return e
+		}
+
+		// Single-ident lambda head: ident => expr
+		if p.cur.Tok == token.IDENT && p.peek.Tok == token.FAT_ARROW {
+			e := p.parseLambdaFromIdent()
+			if lam, ok := e.(*ast.LambdaExpr); ok {
+				lam.Async = true
+				lam.Span = ast.JoinSpan(as, lam.Span)
+			}
+			return e
+		}
+
+		// Otherwise, 'async' isn't valid in expression position here.
+		p.errUnexpected(as, "expression")
+		errId := &ast.Ident{Name: "<error>", Span: as}
+		return errId
 
 	case token.LPAREN:
 		// If this '(' starts a parenthesized lambda head whose matching ')'
