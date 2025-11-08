@@ -15,6 +15,7 @@ import (
 var (
 	writeInPlace = flag.Bool("w", false, "write result to (source) files instead of stdout")
 	listOnly     = flag.Bool("l", false, "list files whose formatting differs")
+	quiet        = flag.Bool("q", false, "quiet (suppress \"wrote ...\" messages with -w)")
 )
 
 func main() {
@@ -25,16 +26,23 @@ func main() {
 		os.Exit(2)
 	}
 
-	ok := true
+	hadDiag := false
+	hadArgErr := false
+
 	for _, a := range args {
 		if a == "-" {
-			ok = formatStdin() && ok
+			ok, diags := formatStdin()
+			if !ok && len(diags) > 0 {
+				hadDiag = true
+			} else if !ok {
+				hadArgErr = true
+			}
 			continue
 		}
 		stat, err := os.Stat(a)
 		if err != nil {
 			term.Eprintln("desifmt:", err)
-			ok = false
+			hadArgErr = true
 			continue
 		}
 		if stat.IsDir() {
@@ -45,83 +53,94 @@ func main() {
 				if d.IsDir() || filepath.Ext(path) != ".desi" {
 					return nil
 				}
-				if ok2 := formatFile(path); !ok2 {
-					ok = false
+				ok, diags := formatFile(path)
+				if !ok && len(diags) > 0 {
+					hadDiag = true
+				} else if !ok {
+					hadArgErr = true
 				}
 				return nil
 			})
 			if err != nil {
 				term.Eprintln("desifmt walk:", err)
-				ok = false
+				hadArgErr = true
 			}
 		} else {
-			if ok2 := formatFile(a); !ok2 {
-				ok = false
+			ok, diags := formatFile(a)
+			if !ok && len(diags) > 0 {
+				hadDiag = true
+			} else if !ok {
+				hadArgErr = true
 			}
 		}
 	}
-	if !ok {
+
+	if hadArgErr {
+		os.Exit(2)
+	}
+	if hadDiag {
 		os.Exit(1)
 	}
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: desifmt [-w|-l] <file|dir|-> [...]")
+	fmt.Fprintln(os.Stderr, "usage: desifmt [-w|-l|-q] <file|dir|-> [...]")
 }
 
-func formatStdin() bool {
+func formatStdin() (bool, []diag.Diagnostic) {
 	src, err := os.ReadFile("/dev/stdin")
 	if err != nil {
 		term.Eprintln("desifmt:", err)
-		return false
+		return false, nil
 	}
 	out, diags := format.FormatBytes(src)
 	if len(diags) > 0 {
 		for _, d := range diags {
 			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 		}
-		return false
+		return false, diags
 	}
 	if *writeInPlace {
 		// not meaningful for stdin
-		return true
+		return true, nil
 	}
 	term.Write(os.Stdout, out)
-	return true
+	return true, nil
 }
 
-func formatFile(path string) bool {
+func formatFile(path string) (bool, []diag.Diagnostic) {
 	src, err := os.ReadFile(path)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
-		return false
+		return false, nil
 	}
 	out, diags := format.FormatBytes(src)
 	if len(diags) > 0 {
 		for _, d := range diags {
 			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 		}
-		return false
+		return false, diags
 	}
 	if *listOnly {
 		if !bytesEqual(src, out) {
 			term.Eprintln(path)
 		}
-		return true
+		return true, nil
 	}
 	if *writeInPlace {
 		if !bytesEqual(src, out) {
 			if err := os.WriteFile(path, out, 0644); err != nil {
 				term.Eprintln("desifmt:", err)
-				return false
+				return false, nil
 			}
-			term.Eprintln("wrote", path)
+			if !*quiet {
+				term.Eprintln("wrote", path)
+			}
 		}
-		return true
+		return true, nil
 	}
-	// default: print to stdout
 	term.Write(os.Stdout, out)
-	return true
+	return true, nil
 }
 
 func bytesEqual(a, b []byte) bool {
