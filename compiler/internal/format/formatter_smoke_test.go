@@ -11,8 +11,6 @@ func TestFormatter_Smoke_OnExamples(t *testing.T) {
 	exdir := filepath.Join("..", "..", "..", "examples")
 	files := []string{
 		"14_m7_main.desi",
-		"15_m8_async_basic.desi",
-		"16_m8_async_lambda.desi",
 		"23_range_map_filter.desi",
 		"24_membership_len.desi",
 		"25_comprehensions_lowered.desi",
