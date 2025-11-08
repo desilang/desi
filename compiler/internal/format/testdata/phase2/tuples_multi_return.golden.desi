@@ -1,3 +1,0 @@
-def multi() -> int:
-	let t = (1, 2)
-	0
