@@ -22,11 +22,9 @@ func FormatModule(_ *ast.Module) ([]byte, error) {
 // re-scans tokens to rewrite ONLY whitespace/trivia deterministically.
 // Idempotent by construction. Tabs-only at BOL. No trailing spaces. Trailing NL.
 func FormatBytes(src []byte) ([]byte, []diag.Diagnostic) {
-	// 1) Parse to collect proper diagnostics. If parse fails, return diags.
 	if _, diags := parse.ParseFile("<stdin>", src); len(diags) > 0 {
 		return nil, diags
 	}
-	// 2) Token pass: scan + rewrite spacing/indent using layout tokens.
 	out := rewrite(src)
 	return out, nil
 }
@@ -88,7 +86,7 @@ func rewrite(src []byte) []byte {
 
 	// Build 1-based line-start table for (line,col)->byte offset mapping.
 	lineStarts := make([]int, 0, 64)
-	lineStarts = append(lineStarts, 0) // dummy for 0 index (unused)
+	lineStarts = append(lineStarts, 0) // dummy (unused)
 	lineStarts = append(lineStarts, 0) // line 1 starts at 0
 	for i := 0; i < len(src); {
 		r, sz := utf8.DecodeRune(src[i:])
@@ -141,7 +139,6 @@ func rewrite(src []byte) []byte {
 		cur = it.Tok
 		switch cur {
 		case token.EOF:
-			// Always end with exactly one newline.
 			if !w.atBOL {
 				w.nl()
 			}
@@ -149,7 +146,6 @@ func rewrite(src []byte) []byte {
 
 		case token.NL:
 			// collapse to single logical newline; layout (Indent/Dedent) handles depth
-			// We still write a single NL (blank lines are okay, but never trailing spaces).
 			w.nl()
 
 		case token.Indent:
@@ -176,10 +172,13 @@ func rewrite(src []byte) []byte {
 				if it.Lexeme != "" {
 					w.tok(it.Lexeme)
 				} else {
-					// Reconstruct original literal from source slice:
-					// from (it.Line,it.Col) to start of next item (or EOF).
-					nxt := peekItem()
+					// Reconstruct original literal from source slice.
+					// IMPORTANT: bound to end-of-line to avoid swallowing the next stmt/header.
 					start := byteIndex(it.Line, it.Col)
+
+					// Prefer the next token's start (handles multi-line strings),
+					// but never extend past the first newline after 'start'.
+					nxt := peekItem()
 					end := len(src)
 					if nxt.Tok != token.EOF {
 						end = byteIndex(nxt.Line, nxt.Col)
@@ -189,6 +188,9 @@ func rewrite(src []byte) []byte {
 					}
 					if end < start || end > len(src) {
 						end = len(src)
+					}
+					if nl := bytes.IndexByte(src[start:], '\n'); nl >= 0 && start+nl < end {
+						end = start + nl
 					}
 					w.tok(string(src[start:end]))
 				}
