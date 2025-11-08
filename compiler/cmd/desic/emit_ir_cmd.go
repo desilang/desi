@@ -8,6 +8,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/backend/llvm"
+	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/lower"
@@ -46,6 +47,10 @@ func init() {
 		term.Flush()
 		os.Exit(2)
 	}
+
+	// NEW: run pre-check desugars so map/filter become list-comps
+	// before lowering, which ensures compact IR without declare @map/filter.
+	check.DesugarPrecheck(mod)
 
 	// Lower the entire module to HIR (sync: 1 fn; async: wrapper+poll)
 	hm := lower.LowerModuleFromSource(mod, src)
