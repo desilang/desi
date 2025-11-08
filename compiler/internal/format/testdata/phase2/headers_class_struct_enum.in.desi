@@ -1,0 +1,8 @@
+class Box(int):
+	"""class doc"""
+
+struct Point:
+	"""struct doc"""
+
+enum Color:
+	"""enum doc"""
