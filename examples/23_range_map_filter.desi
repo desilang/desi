@@ -1,11 +1,5 @@
-def id(n: int) -> int:
-	 n
-
-def is_even(n: int) -> bool:
-	 (n % 2) == 0
-
 def main() -> int:
-	 let a = [id(x) for x in range(0, 5)]
-	 let b = [x for x in range(0, 5) if is_even(x)]
+	 let a = [x for x in range(0, 5)]
+	 let b = [x for x in range(0, 5) if ((x % 2) == 0)]
 	 print("ok")
 	 0
