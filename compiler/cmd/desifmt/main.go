@@ -100,10 +100,7 @@ func formatStdin() (bool, []diag.Diagnostic) {
 		}
 		return false, diags
 	}
-	if *writeInPlace {
-		// not meaningful for stdin
-		return true, nil
-	}
+	// -w and -l are meaningless for stdin; always write to stdout
 	term.Write(os.Stdout, out)
 	return true, nil
 }
