@@ -217,7 +217,7 @@ func rewrite(src []byte) []byte {
 			}
 			// If we just attached an EOL comment, coalesce any immediately
 			// following NL tokens (scanner/layout artifacts) into ONE newline.
-			// Otherwise, DO NOT coalesce — preserve blank lines (e.g., after docstrings).
+			// Otherwise, DO NOT coalesce — preserve intentional blank lines.
 			if hadEOLComment {
 				for {
 					nxt := peekItem()
@@ -259,33 +259,27 @@ func rewrite(src []byte) []byte {
 					w.lineKind = _lineCode
 					w.lastCodeLine = it.Line
 				} else {
-					// Reconstruct original literal from source slice.
-					// IMPORTANT: bound to end-of-line to avoid swallowing the next stmt/header.
+					// Reconstruct original STRING literal exactly.
 					start := byteIndex(it.Line, it.Col)
-
-					// Prefer the next token's start (handles multi-line strings),
-					// but never extend past the first newline after 'start'.
 					nxt := peekItem()
-					end := len(src)
+					nextStart := len(src)
 					if nxt.Tok != token.EOF {
-						end = byteIndex(nxt.Line, nxt.Col)
+						nextStart = byteIndex(nxt.Line, nxt.Col)
 					}
 					if start < 0 {
 						start = 0
 					}
-					if end < start || end > len(src) {
-						end = len(src)
+					if nextStart < start || nextStart > len(src) {
+						nextStart = len(src)
 					}
-					if nl := bytes.IndexByte(src[start:], '\n'); nl >= 0 && start+nl < end {
-						end = start + nl
-					}
-					w.tok(string(src[start:end]))
+					lit := reconstructStringLiteral(src, start, nextStart)
+					w.tok(string(lit))
 
-					// Empty-lexeme literal here is a string (STR/FSTR/LONGSTR) by design.
+					// Empty-lexeme literal here is a string by design.
 					if w.lineKind == _lineUnknown {
 						w.lineKind = _lineStringOnly
 					}
-					// Do NOT update lastCodeLine here when lineKind is still stringOnly.
+					// Do NOT update lastCodeLine when the line is string-only.
 				}
 
 			case token.CatKeyword, token.CatOperator, token.CatPunct:
@@ -551,4 +545,83 @@ func findEOLCommentSuffix(line []byte) []byte {
 		i++
 	}
 	return nil
+}
+
+// reconstructStringLiteral returns the exact bytes of a STRING literal that
+// starts at byte offset 'start'. It never crosses 'nextStart' and stops right
+// after the literal's closing delimiter (", """ or their f-prefixed forms).
+func reconstructStringLiteral(src []byte, start, nextStart int) []byte {
+	if start >= len(src) {
+		return nil
+	}
+	s := src[start:nextStart] // do not scan beyond next token
+	// f"""..."""
+	if bytes.HasPrefix(s, []byte(`f"""`)) || bytes.HasPrefix(s, []byte(`F"""`)) {
+		i := 4
+		if k := indexTripleQuote(s[i:]); k >= 0 {
+			end := start + i + k + 3
+			if end <= nextStart {
+				return src[start:end]
+			}
+		}
+		return src[start:nextStart]
+	}
+	// """..."""
+	if bytes.HasPrefix(s, []byte(`"""`)) {
+		i := 3
+		if k := indexTripleQuote(s[i:]); k >= 0 {
+			end := start + i + k + 3
+			if end <= nextStart {
+				return src[start:end]
+			}
+		}
+		return src[start:nextStart]
+	}
+	// f"..." / F"..."
+	if bytes.HasPrefix(s, []byte(`f"`)) || bytes.HasPrefix(s, []byte(`F"`)) {
+		i := 2
+		if k := indexClosingQuote(s[i:]); k >= 0 {
+			end := start + i + k + 1
+			if end <= nextStart {
+				return src[start:end]
+			}
+		}
+		return src[start:nextStart]
+	}
+	// "..."
+	if bytes.HasPrefix(s, []byte(`"`)) {
+		i := 1
+		if k := indexClosingQuote(s[i:]); k >= 0 {
+			end := start + i + k + 1
+			if end <= nextStart {
+				return src[start:end]
+			}
+		}
+	}
+	// Fallback: conservative clamp.
+	return src[start:nextStart]
+}
+
+// find the next occurrence of """ (no escape handling needed for """ docstrings)
+func indexTripleQuote(b []byte) int {
+	for i := 0; i+2 < len(b); i++ {
+		if b[i] == '"' && b[i+1] == '"' && b[i+2] == '"' {
+			return i
+		}
+	}
+	return -1
+}
+
+// scan to the next unescaped " (handles \" escapes)
+func indexClosingQuote(b []byte) int {
+	for i := 0; i < len(b); i++ {
+		if b[i] == '\\' {
+			i++ // skip escaped char
+			continue
+		}
+		if b[i] == '"' {
+			return i
+		}
+	}
+	return -1
 }
