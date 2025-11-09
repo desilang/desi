@@ -1,0 +1,16 @@
+class Box(int):
+	"""class line 1
+	class line 2"""
+
+struct Point:
+	"""struct line 1
+	struct line 2"""
+
+enum Color:
+	"""enum line 1
+	enum line 2"""
+
+def f() -> int:
+	"""f line 1
+	f line 2"""
+	0
