@@ -42,9 +42,22 @@ type writer struct {
 	parenDepth int
 	brackDepth int
 	braceDepth int
+
+	// lineKind tracks what kind of content we emitted since the last NL.
+	// 0=unknown, 1=code (idents/ops/nums/etc), 2=stringOnly (only STR/FSTR/LONGSTR so far)
+	lineKind int
+
+	// Track the physical source line of the last token that counts as "code".
+	lastCodeLine int
 }
 
-func newWriter() *writer { return &writer{atBOL: true} }
+const (
+	_lineUnknown    = 0
+	_lineCode       = 1
+	_lineStringOnly = 2
+)
+
+func newWriter() *writer { return &writer{atBOL: true, lineKind: _lineUnknown} }
 
 func (w *writer) writeIndent() {
 	for i := 0; i < w.indentTabs; i++ {
@@ -57,6 +70,8 @@ func (w *writer) nl() {
 	_ = w.buf.WriteByte('\n')
 	w.atBOL = true
 	w.lineHasContent = false
+	w.lineKind = _lineUnknown
+	w.lastCodeLine = 0
 }
 
 func (w *writer) space() {
@@ -76,6 +91,7 @@ func (w *writer) tok(s string) {
 	}
 	_, _ = w.buf.WriteString(s)
 	w.lineHasContent = true
+	// lineKind is set by caller based on token type.
 }
 
 // ---- token rewriting ----
@@ -113,6 +129,45 @@ func rewrite(src []byte) []byte {
 		return off
 	}
 
+	// Helper: get raw line (without trailing '\n' or '\r') for a 1-based line number.
+	getLineBytes := func(line int) []byte {
+		if line < 1 {
+			return nil
+		}
+		start := 0
+		if line < len(lineStarts) {
+			start = lineStarts[line]
+		} else {
+			// beyond known lines -> last known start
+			start = lineStarts[len(lineStarts)-1]
+		}
+		end := len(src)
+		// find next newline after start
+		if line+1 < len(lineStarts) {
+			end = lineStarts[line+1]
+		} else {
+			// no precomputed next line; scan to next '\n' if any
+			if idx := bytes.IndexByte(src[start:], '\n'); idx >= 0 {
+				end = start + idx + 1
+			}
+		}
+		// trim trailing '\n'
+		if end > start && src[end-1] == '\n' {
+			end--
+		}
+		// trim trailing '\r' (CRLF safety)
+		if end > start && src[end-1] == '\r' {
+			end--
+		}
+		if start < 0 {
+			start = 0
+		}
+		if end < start {
+			end = start
+		}
+		return src[start:end]
+	}
+
 	var it lex.Item
 	var cur token.Token
 	var next lex.Item
@@ -145,11 +200,39 @@ func rewrite(src []byte) []byte {
 			return w.buf.Bytes()
 
 		case token.NL:
-			// collapse to single logical newline; layout (Indent/Dedent) handles depth
+			// Attach trailing EOL comment (if any) ONLY for lines with code.
+			hadEOLComment := false
+			if w.lineHasContent && w.lineKind == _lineCode && w.lastCodeLine > 0 {
+				raw := getLineBytes(w.lastCodeLine)
+				// extra safety if CR sneaks in
+				if n := len(raw); n > 0 && raw[n-1] == '\r' {
+					raw = raw[:n-1]
+				}
+				if suf := findEOLCommentSuffix(raw); len(suf) > 0 {
+					// Append suffix EXACTLY as it appears in the source line,
+					// including its own leading spaces/tabs before '#'.
+					_, _ = w.buf.Write(suf)
+					hadEOLComment = true
+				}
+			}
+			// If we just attached an EOL comment, coalesce any immediately
+			// following NL tokens (scanner/layout artifacts) into ONE newline.
+			// Otherwise, DO NOT coalesce — preserve blank lines (e.g., after docstrings).
+			if hadEOLComment {
+				for {
+					nxt := peekItem()
+					if nxt.Tok != token.NL {
+						break
+					}
+					_ = advance() // consume extra NL
+				}
+			}
+			// Emit the single logical newline; layout controls indent depth.
 			w.nl()
 
 		case token.Indent:
 			w.indentTabs++
+
 		case token.Dedent:
 			if w.indentTabs > 0 {
 				w.indentTabs--
@@ -166,11 +249,15 @@ func rewrite(src []byte) []byte {
 			switch cat {
 			case token.CatIdent:
 				w.tok(it.Lexeme)
+				w.lineKind = _lineCode
+				w.lastCodeLine = it.Line
 
 			case token.CatLiteral:
 				// Numbers usually carry lexeme; STR/FSTR/LONGSTR are empty by design.
 				if it.Lexeme != "" {
 					w.tok(it.Lexeme)
+					w.lineKind = _lineCode
+					w.lastCodeLine = it.Line
 				} else {
 					// Reconstruct original literal from source slice.
 					// IMPORTANT: bound to end-of-line to avoid swallowing the next stmt/header.
@@ -193,6 +280,12 @@ func rewrite(src []byte) []byte {
 						end = start + nl
 					}
 					w.tok(string(src[start:end]))
+
+					// Empty-lexeme literal here is a string (STR/FSTR/LONGSTR) by design.
+					if w.lineKind == _lineUnknown {
+						w.lineKind = _lineStringOnly
+					}
+					// Do NOT update lastCodeLine here when lineKind is still stringOnly.
 				}
 
 			case token.CatKeyword, token.CatOperator, token.CatPunct:
@@ -202,6 +295,8 @@ func rewrite(src []byte) []byte {
 				}
 				if lit != "" {
 					w.tok(lit)
+					w.lineKind = _lineCode
+					w.lastCodeLine = it.Line
 				}
 
 			default:
@@ -228,6 +323,8 @@ func rewrite(src []byte) []byte {
 				if w.braceDepth > 0 {
 					w.braceDepth--
 				}
+			default:
+				// no-op
 			}
 
 			// advance prev tokens (non-layout only)
@@ -250,6 +347,8 @@ func shouldSpaceBefore(w *writer, cur lex.Item, lookahead token.Token) bool {
 	switch t {
 	case token.RPAREN, token.RBRACK, token.RBRACE, token.COMMA, token.COLON, token.DOT:
 		return false
+	default:
+		// fall through
 	}
 
 	// 2) No space before call/index openers when they follow identifiers/literals/closers.
@@ -301,6 +400,8 @@ func shouldSpaceBefore(w *writer, cur lex.Item, lookahead token.Token) bool {
 		switch w.prevTok {
 		case token.RPAREN, token.RBRACK, token.RBRACE:
 			return true
+		default:
+			// no-op
 		}
 	}
 
@@ -379,4 +480,75 @@ var isPrefixKeyword = map[token.Token]bool{
 	token.KW_await:  true,
 	token.KW_as:     true,
 	token.KW_from:   true,
+}
+
+// ---- EOL comment detection (local to formatter) ----
+
+// findEOLCommentSuffix returns the trailing whitespace (if any) + "#…"
+// slice from a single physical line, or nil if none should be preserved.
+// Ignores '#{' and any '#' inside "..." or """...""".
+func findEOLCommentSuffix(line []byte) []byte {
+	if len(line) == 0 {
+		return nil
+	}
+	// trim trailing CR if present (CRLF safety)
+	if line[len(line)-1] == '\r' {
+		line = line[:len(line)-1]
+	}
+	i := 0
+	inStr := false
+	inTriple := false
+	for i < len(line) {
+		if line[i] == '#' && !inStr && !inTriple {
+			// skip set literal opener '#{'
+			if i+1 < len(line) && line[i+1] == '{' {
+				i += 2
+				continue
+			}
+			// include preceding horizontal whitespace exactly as-is
+			j := i
+			for j > 0 && (line[j-1] == ' ' || line[j-1] == '\t') {
+				j--
+			}
+			suf := line[j:]
+			// ensure we never return a trailing CR by accident
+			if len(suf) > 0 && suf[len(suf)-1] == '\r' {
+				suf = suf[:len(suf)-1]
+			}
+			return suf
+		}
+		// string open/close handling
+		if !inStr && !inTriple && line[i] == '"' {
+			if i+2 < len(line) && line[i+1] == '"' && line[i+2] == '"' {
+				inTriple = true
+				i += 3
+				continue
+			}
+			inStr = true
+			i++
+			continue
+		}
+		if inStr {
+			if line[i] == '\\' {
+				i += 2
+				continue
+			}
+			if line[i] == '"' {
+				inStr = false
+			}
+			i++
+			continue
+		}
+		if inTriple {
+			if i+2 < len(line) && line[i] == '"' && line[i+1] == '"' && line[i+2] == '"' {
+				inTriple = false
+				i += 3
+				continue
+			}
+			i++
+			continue
+		}
+		i++
+	}
+	return nil
 }
