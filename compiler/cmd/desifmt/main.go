@@ -20,6 +20,8 @@ var (
 
 func main() {
 	flag.Parse()
+	defer term.Flush()
+
 	args := flag.Args()
 	if len(args) == 0 {
 		usage()
@@ -39,6 +41,7 @@ func main() {
 			}
 			continue
 		}
+
 		stat, err := os.Stat(a)
 		if err != nil {
 			term.Eprintln("desifmt:", err)
@@ -65,13 +68,14 @@ func main() {
 				term.Eprintln("desifmt walk:", err)
 				hadArgErr = true
 			}
-		} else {
-			ok, diags := formatFile(a)
-			if !ok && len(diags) > 0 {
-				hadDiag = true
-			} else if !ok {
-				hadArgErr = true
-			}
+			continue
+		}
+
+		ok, diags := formatFile(a)
+		if !ok && len(diags) > 0 {
+			hadDiag = true
+		} else if !ok {
+			hadArgErr = true
 		}
 	}
 
@@ -88,6 +92,7 @@ func usage() {
 }
 
 func formatStdin() (bool, []diag.Diagnostic) {
+	// With '-', ignore -w and -l; always print to stdout.
 	src, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
@@ -98,9 +103,9 @@ func formatStdin() (bool, []diag.Diagnostic) {
 		for _, d := range diags {
 			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 		}
+		// Still return false so caller sets exit=1.
 		return false, diags
 	}
-	// -w and -l are meaningless for stdin; always write to stdout
 	term.Write(os.Stdout, out)
 	return true, nil
 }
@@ -118,12 +123,15 @@ func formatFile(path string) (bool, []diag.Diagnostic) {
 		}
 		return false, diags
 	}
+
 	if *listOnly {
 		if !bytesEqual(src, out) {
-			term.Eprintln(path)
+			// Listing is non-error info → stdout.
+			term.Println(path)
 		}
 		return true, nil
 	}
+
 	if *writeInPlace {
 		if !bytesEqual(src, out) {
 			if err := os.WriteFile(path, out, 0o644); err != nil {
@@ -136,6 +144,8 @@ func formatFile(path string) (bool, []diag.Diagnostic) {
 		}
 		return true, nil
 	}
+
+	// Default: write formatted bytes to stdout.
 	term.Write(os.Stdout, out)
 	return true, nil
 }
