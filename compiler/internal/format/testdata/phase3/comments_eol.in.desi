@@ -1,11 +1,6 @@
 def main() -> int:
-    let x=1+2   #sum
-    let s = "a # b"   # keep
-    # comment-only should not move
-    if x>0:   #cond on header
-        x    # inside block
-        x=x+1   #inc
-    let st = #{1,2,3}   # set literal after #{ opener
-    let y = 10
-    y  # trailing on expr
-    0
+	("a" in "abc")   # membership eol kept
+	len("abc")       # len on str eol kept
+	print("a#notcomment")  # string with '#', not a comment
+	print("ok")
+	0
