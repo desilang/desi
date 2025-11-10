@@ -126,11 +126,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 **Phase-1 (✅)**: Syntax, loader with `__mod.desi`, multi-root search, graph/cycles, prelude injection, basic diags.
 **Phase-2 (✅)**: Real cross-module function signatures via resolver **Exports**; only **`pub def` + fully typed** are exported. Checker consumes exact overloads for `from … import …`. `DME0003` on missing export. **Unused-import lints** (`DMW0004/5`) implemented.
 **Phase-3 (✅ — Module-qualified calls):** `import math; math.add(…)` resolves using `math` exports; non-export → `DME0003`. Qualifier use counts for unused-import lint.
-**Phase-4 (✅ — Ergonomics v1):**
-- **4a:** Implicit `str` on `+` when one side is `str` (primitive-friendly rule).
-- **4b:** **f-strings (stage 1)** — recognized as `str` literals; interpolation deferred.
-- **4c:** Tuple unpacking via multi-LHS already works; `for`-target destructuring deferred.
-- **4d:** Slice steps `s[i:j:k]` + short forms parsed; **string slices type to `str`**.
+**Phase-4 (✅ — Ergonomics v1):** implicit `str` on `+` with `str` operands; **f-strings (stage 1)** recognized as `str` literals; tuple unpacking multi-LHS; slice steps parsed; **string slices type to `str`**.
 
 ---
 
@@ -153,29 +149,15 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 **What shipped**
 
-* **HIR skeleton** with **named temporaries** and a pretty-printer:
-  * `Module/Func/Block`, `Let`, `Assign`, `Call`, `Ret`, `If`, `While`, `Drop`.
-  * Resource ops: `DecRef{val}`, `ArenaAlloc{arena,…,dst}`, `DestroyArena{arena}`.
-* **Deterministic drops (RAII)**:
-  * Block-local liveness + scope exit handling; shadowing drops old binding.
-  * `using arena:` lowers to a single `DestroyArena` at scope end (and on early return).
-  * For `rc/arc[T]` shapes, `Drop` lowers to **`DecRef`**.
-* **CLI emitter**: `desic emit-ir <file.desi>`
-  * Parse → find `def main()` → **AST→HIR** (source-aware string literals) → **emit textual LLVM IR**.
+* **HIR skeleton** with **named temporaries** and a pretty-printer.
+* **Deterministic drops (RAII)**; `using arena:` → single epilogue destroy; `Drop` → `DecRef` for rc/arc.
+* **CLI emitter**: `desic emit-ir <file.desi>`: AST→HIR→**textual LLVM IR**.
   * Built-in `print("…")` lowers to `puts` with private `@.str.N` globals.
-  * Emits conservative `llvm.lifetime.start/end` for stack locals.
-  * Emits declarations **on demand** when `DecRef`/`DestroyArena` are used:
-    * `declare void @__rc_dec(ptr)`
-    * `declare void @__arena_destroy(ptr)`
+  * Conservative `llvm.lifetime.start/end` for locals.
+  * Demand-driven declarations for `__rc_dec` / `__arena_destroy`.
 
 **Acceptance**
-
-* `go build ./... && go test ./...` green, including:
-  * Lowering tests for deterministic **Drop**/`DecRef` placement and `using arena` epilogue.
-  * Backend tests for **lifetime intrinsics**, **puts/string globals**, and **DecRef/DestroyArena** stubs.
-* Running `desic emit-ir examples/14_m7_main.desi` produces valid `.ll` for a minimal `main`:
-  * string global + `puts` call + `ret i32 0`.
-* **Note:** Tier-0 ships **textual IR emission** only. Object/exec build or JIT is deferred to later milestones.
+* Tests for drops/arenas/async stubs; `examples/14_m7_main.desi` emits valid `.ll`.
 
 ---
 
@@ -183,34 +165,13 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 **What shipped**
 
-* **Async lowering to state machines** with a **wrapper** (`@name` returning a future handle) and a **poll** function (`@name$poll`) that now **threads a real frame parameter**.
-  * HIR gained **function parameters** (`Func.Params`) and **frame sugar ops**: `frame.set` / `frame.get` for saving/restoring locals across suspension points.
-  * The async lowerer saves live locals before `await`, sets a state, returns `false`, and **restores** on resume using `frame.get`.
-* **`await` = suspension barrier** is enforced at lowering time:
-  * Attempting to hold an **`inout` (unique)** borrow **across `await`** produces a clear **DBR0001** diagnostic wired to the catalog.
-* **Async lambda** support end-to-end:
-  * `async lambda ...` **desugars** to a hidden `async def __lam$N(...)` and then lowers through the same wrapper+poll pipeline.
-* **Backend / IR polish**
-  * LLVM emitter prints params (Tier-0 all as `ptr`) and recognizes async wrappers (return **`ptr`**).
-  * `__future_register_poll(fut, &name$poll, frame)` now passes the **frame** argument.
-  * Stable SSA aliasing for simple lets **and** frame slots; temp counter monotonicity fixed.
-  * **Lifetime placement:** `llvm.lifetime.end` is emitted **immediately before `ret`** and **never after** it.
-* **Tier-0 runtime stubs** remain textual:
-  * `await` in synchronous contexts lowers to a blocking stub (`__await_blocking`).
-  * Futures use `__future_new`, `__future_complete`, and `__future_register_poll`.
-
-**Tests / examples**
-
-* Lowering: `async_lower_two_awaits_test.go`, `async_lower_frame_test.go` (save/restore locals), `await_barrier_test.go` (DBR0001), `async_lambda_test.go`.
-* Backend: `emit_async_stubs_test.go`, `emit_register_poll_test.go`, lifetime intrinsic tests.
-* Examples: `examples/15_m8_async_basic.desi`, `examples/16_m8_async_lambda.desi`.
+* **Async** lowering to wrapper + `poll(%frame)`; `frame.set/get` around each `await`.
+* Enforce **DBR0001** for `inout` across `await`.
+* **Async lambdas** via desugaring to hidden async functions.
+* Backend polish: pointer-return wrappers, typed headers, correct lifetime placement.
 
 **Acceptance**
-
-* `go build ./... && go test ./...` green.
-* HIR shows **`poll(%frame)`** and `frame.set/get` around each `await`; two-await case restores locals correctly.
-* Async lambdas compile via desugaring; **`inout` across `await`** is rejected with a clear diagnostic.
-* Tier-0 IR is cleaner (pointer-return wrappers, stable temps, and **no lifetime.end after ret**).
+* Comprehensive lowering/backend tests; examples compile and emit expected IR.
 
 ---
 
@@ -218,126 +179,65 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 **What shipped**
 
-* **Types (Tier-0)**: `usize`, `isize` (lower to **`i64`**), **`cptr[T]`** (lower to **`ptr`**; `T` ignored at ABI layer).
-  * Pretty-printing and basic arithmetic sanity for `usize`/`isize`.
-  * `cptr[T]` comparable to `none` for null checks.
-* **`unsafe` blocks**:
-  * New statement `unsafe:` (AST + parser + printer).
-  * **Checker** requires unsafe context to call **extern** fns:
-    * **`DFI0003`** “Extern call in safe context” with help/suggestion to wrap in `unsafe:`.
-  * Reserved/added diag codes: **`DFI0001`** (invalid `@extern` args), **`DFI0002`** (`@extern` must be on `pub def`) — enforcement can ship later.
-* **Extern functions**:
-  * **Decorator** `@extern("C"[,"lib"])` on **`pub def`**.
-  * **Resolver** records per-overload extern metadata `{Extern:true, ABI:"C", Link:optional}`.
-  * **Lowerer** skips HIR bodies for extern prototypes.
-  * **Backend (LLVM)** emits **exactly one `declare`** per referenced extern symbol, before `define`s; no duplicates.
-* **Imports & re-exports**:
-  * **Package re-exports** supported: `math/__mod.desi` can `from math.add import add`, and consumers can `from math import add`.
-    * Resolver merges re-exports into the package’s **typed** export surface (overloads & extern metadata copied through).
-  * (Relative imports remain out-of-scope; absolute imports only.)
-* **Library stubs (import-driven FFI)**:
-  * `compiler/lib/sqlite3/__mod.desi`, `compiler/lib/crypto/__mod.desi` provide extern prototypes for demos.
-* **Examples / tests**:
-  * `examples/17_m9_ffi_libm.desi` — `sin` via `@extern`, guarded by `unsafe:`.
-  * `examples/18_m9_ffi_sqlite.desi` — import-driven sqlite demo (compile-only).
-  * Backend tests:
-    * `ffi_decl_test.go` (single `declare` per extern),
-    * `types_lower_test.go` (Tier-0 mappings),
-  * Resolver test: `reexports_test.go`.
-  * Checker test: `ffi_unsafe_calls_test.go` (DFI0003).
+* Types: `usize/isize` (→ `i64`), `cptr[T]` (→ `ptr`); null comparable.
+* **unsafe:** blocks for extern calls; **DFI0003** in safe context.
+* `@extern("C"[,"lib"])` on `pub def`; resolver carries extern metadata; backend emits **one** `declare` per referenced symbol.
+* Re-exports supported through package mod; library stubs under `compiler/lib/*`.
 
 **Acceptance**
-
-* `go build ./... && go test ./...` **green**.
-* Externs in user code must be called inside `unsafe:`; violations produce **DFI0003**.
-* IR contains **one `declare` per extern symbol** that is actually referenced.
-* `examples/17_m9_ffi_libm.desi` and `examples/18_m9_ffi_sqlite.desi` **parse, resolve, type-check, and emit IR** (link/run is out-of-scope for Tier-0).
-* **Deferred to M10+**: manifest-driven linking (tooling), relative imports, decorator named args like `link="…"`, `symbol="…"`.
+* Externs require `unsafe:`; single `declare` emitted; examples parse/check/emit IR.
 
 ---
 
 ### M10 — Collections & Prelude v1 (✅ DONE)
 
-**What shipped (Tasks A–I + polish)**
+**What shipped**
 
-* **A — Prelude injection (builtins)**
-  A minimal always-on prelude is injected at top scope: `print`, `len`, `str`, `bool`.
-  *Shadowing a builtin produces **DPL0001** (prelude.shadow_builtin).*
-  Prelude names participate in overload resolution (no imports needed).
-
-* **B — `len()` typing (v1)**
-  `len("…") -> int` is supported. Unsupported types route to **DCO0001** (`collections.no_length`) with help/suggestions.
-
-* **C — Membership `in` (v1)**
-  `"a" in "abc" -> bool` is supported. Unsupported combos are **DCO0002** (`collections.unsupported_membership`).
-  Parser now treats `in` as a **binary relational operator** in expressions, with a gated parse so `for x in xs` and comprehension clauses continue to parse unambiguously.
-
-* **D — Compile-only collection stubs**
-  Stubs exist in the prelude (typed, compile-only):
-  `def list_push(inout xs: list[T], x: T) -> none`
-  `def set_add(inout s: set[T], x: T) -> none`
-  `def dict_set(inout m: dict[K,V], k: K, v: V) -> none`
-  These are used by lowering but have no runtime yet (Tier-0 textual IR).
-
-* **E — `range(start, stop, step=1)` (v1)**
-  Surface function present. Lowering provides a counted-loop skeleton that examples may rely on (no runtime iteration protocol yet).
-
-* **F — List comprehension lowering**
-  `[E for x in xs if cond]` lowers to a tight loop skeleton that calls `list_push`. Lifetime intrinsics (`llvm.lifetime.start/end`) are placed conservatively around locals.
-
-* **G — Typed user function signatures in IR**
-  User functions in the emitted textual LLVM carry compact, sized param/ret types (e.g., `i32`, `f32`, `i1`). Default returns lower to typed zeroes via `emitRet`. **Extern/FFI rules from M9 remain intact** (single `declare` per extern symbol; unsafe call requirement unchanged).
-
-* **H — Map/Filter desugaring polish**
-  Syntactic rewrite (pre-check) is hardened and span-stable:
-  `map(xs, f)` → `[f(__x) for __x in xs]`
-  `filter(xs, p)` → `[__x for __x in xs if p(__x)]`
-  Tolerates extra parentheses and whitespace. Wrong arity continues to report as a normal “no matching overload” post-check.
-
-* **I — Examples & catalog sweep**
-  Added minimal examples that exercise the new surfaces and lowering:
-  - `examples/23_range_map_filter.desi` — two list comprehensions (`range` + guard).
-  - `examples/24_membership_len.desi` — membership and `len` exercised (results unused), sanity `print("ok")`.
-  - `examples/25_comprehensions_lowered.desi` — list comp with guard; IR shows `@list_push`.
-    Catalog entries verified/present: **DPL0001**, **DCO0001**, **DCO0002**.
-
-* **Polish — `emit-ir` runs precheck desugars**
-  The `emit-ir` path now invokes the pre-check desugar pass so IR never declares `@map`/`@filter`; you only see the lowered comprehension loop (`@list_push`).
-  Parser tweak for `in` includes a small gate to avoid stealing clause keywords in `for … in …` (statements & comprehensions). Regression tests added.
-
-**Tests / examples**
-
-* Checker: `prelude_builtins_test.go`, `len_types_test.go`, `len_no_length_test.go`, `membership_test.go`, `map_filter_desugar_test.go`, `comprehensions_test.go`, negatives for unsupported combos; tiny example smoke under `internal/check` to parse+check the three M10 examples.
-* Lowering/Backend: `comprehensions_lower_test.go` (tight loop + `list_push`), backend smoke shows typed headers and correct lifetime placement.
-* Parser: membership parse tests to ensure `in` is a binary operator outside clause targets and that comprehension/`for` grammar stays green.
+* Prelude injects `print/len/str/bool` (shadow → **DPL0001**).
+* `len("…")->int` (others → **DCO0001**); `"a" in "abc"->bool` (unsupported → **DCO0002**).
+* Compile-only stubs: `list_push/set_add/dict_set`.
+* `range()` surface; list comps lower to tight loops using `list_push`.
+* `map/filter` desugar before type-check **and** before `emit-ir`.
+* **Typed LLVM headers** for user functions; lifetime placement polished.
 
 **Acceptance**
-
-* Builtins available without imports; builtin shadowing → **DPL0001**.
-* `len("abc")` → `int`; unsupported `len(_)` → **DCO0001**.
-* `"a" in "abc"` parses/types to `bool`; unsupported membership → **DCO0002**.
-* `list_push`/`set_add`/`dict_set` stubs present and used by lowering.
-* `range` surface present.
-* `map`/`filter` desugar before type-check **and** before `emit-ir`; list comps lower to loops using `list_push`.
-* IR: user functions show compact typed headers; extern rules from M9 preserved.
-* `go build ./... && go test ./...` **green**; M10 examples pass `check` and produce stable IR.
+* Examples and tests cover all paths; repo stays green.
 
 ---
 
-### M11 — Formatter v1 (AST pretty-printer)
+### M11 — Formatter (✅ DONE)
 
-**Scope**
+> **Status:** Shipped as a **token-rewrite formatter** (`internal/format`), plus a small polish release (**M11.1**) for EOL comments & docstrings. An AST pretty-printer is deferred to **M11.2** (see below).
 
-* Idempotent; no options initially; respects docstrings/decorators/import grouping.
-* Enforce single-line/multiline rules, spacing, indentation.
+**What shipped (Formatter v1)**
+* Deterministic **token rewriter**:
+  * Rewrites **whitespace/trivia only**; does **not** change tokens.
+  * **Tabs-only** at BOL; **no trailing spaces**; single trailing newline.
+  * Spacing rules: around binary ops/assign/pipe; tight field `.`; no space before call/index; `:` spaced except inside slices.
+* **String literal reconstruction** for empty-lexeme string tokens; long strings bounded so they **never duplicate**.
+* **CLI** `desifmt`:
+  * Reads stdin on `-` (uses `os.Stdin`/`os.Stdout`), prints to stdout by default; `-w` writes in place; `-l` lists changed files; `-q` quiet.
+  * Exit codes: `0` success, `1` on parse diags, `2` for I/O/arg errors.
+* **Tests**
+  * Golden Phase-1/2 and idempotence tests; smoke tests; repo-wide smoke on examples.
+
+**M11.1 — Comments & Docstrings polish (✅ DONE)**
+* Preserve **end-of-line `#` comments** that trail real code (ignore `#{` set-literal openers; never move comment-only lines).
+* Hardened **multi-line docstring** reconstruction (no duplication, no spill across tokens).
+* Added Phase-3 goldens and idempotence; improved test harness output.
 
 **Acceptance**
+* Running `desifmt` is **idempotent**; EOL comments are preserved; long docstrings appear **exactly once**; all Phase-1/2/3 tests green.
 
-* Golden format tests: input → expected output → reformat = no diff.
+**M11.2 — Formatter v2 (AST pretty-printer, Deferred)**
+* **Goal:** full AST-backed pretty-printer (import grouping, line-wrapping, break rules).
+* **Why deferred:** no comment/trivia model attached to AST; grammar edges (tuples/lists/comps) still settling; high churn risk.
+* **Prereqs:** comment/trivia attachment plan; finalized wrap rules; tuple/list grammar cleanups.
+* **Scheduling:** revisit **after M12** (diagnostics polish) once parser/style stabilize.
 
 ---
 
-### M12 — Diagnostics Polish & Tooling
+### M12 — Diagnostics Polish & Tooling (NEXT)
 
 **Scope**
 
