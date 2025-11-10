@@ -232,10 +232,18 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 **M11.2 — Formatter v2 (AST pretty-printer, Deferred)**
 * **Goal:** full AST-backed pretty-printer (import grouping, line-wrapping, break rules).
 * **Why deferred:** no comment/trivia model attached to AST; grammar edges (tuples/lists/comps) still settling; high churn risk.
-* **Prereqs:** comment/trivia attachment plan; finalized wrap rules; tuple/list grammar cleanups.
-* **Scheduling:** revisit **after M12** (diagnostics polish) once parser/style stabilize.
+* **Prereqs:**
+  - Comment/trivia attachment plan (design + implementation).
+  - Finalize wrap/break rules (width, hanging indent, call-arg wrapping).
+  - Tuple/list/comprehension grammar cleanups (ambiguity/precedence).
+* **Queued (not part of M11.2 itself):**
+  - Tuple syntax rework & tuple-return pattern disambiguation.
+  - Bare list literal vs. comprehension parser sharp edges.
+  - Block comment model (if we ever add it).
+  - F-string interpolation semantics beyond stage-1 (currently plain strings).
+  - Any AST/IR redesign — kept out of formatter milestones.
+* **Scheduling:** revisit **after M12** once diagnostics and parser/style are stable; no downstream blockers.
 
----
 
 ### M12 — Diagnostics Polish & Tooling (NEXT)
 
