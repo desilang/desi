@@ -547,79 +547,251 @@ func findEOLCommentSuffix(line []byte) []byte {
 	return nil
 }
 
-// reconstructStringLiteral returns the exact bytes of a STRING literal that
-// starts at byte offset 'start'. It never crosses 'nextStart' and stops right
-// after the literal's closing delimiter (", """ or their f-prefixed forms).
+// reconstructStringLiteral returns the exact bytes of a string literal.
+// Strategy:
+//  1. Detect a local opener adjacent to `start` (prefer """ / f""").
+//  2. If triple: scan forward to the next """ and slice [open:end].
+//  3. If single: scan forward char-by-char handling escapes to the next unescaped ".
+//  4. If we can’t find an adjacent opener, search a small window backward for the
+//     nearest opener (prefer triple), then do (2)/(3).
+//  5. Final fallback: conservative slice to EOL to avoid generating bad syntax.
 func reconstructStringLiteral(src []byte, start, nextStart int) []byte {
-	if start >= len(src) {
-		return nil
+	// Clamp bounds.
+	if start < 0 {
+		start = 0
 	}
-	s := src[start:nextStart] // do not scan beyond next token
-	// f"""..."""
-	if bytes.HasPrefix(s, []byte(`f"""`)) || bytes.HasPrefix(s, []byte(`F"""`)) {
-		i := 4
-		if k := indexTripleQuote(s[i:]); k >= 0 {
-			end := start + i + k + 3
-			if end <= nextStart {
-				return src[start:end]
+	if start > len(src) {
+		start = len(src)
+	}
+	if nextStart < 0 {
+		nextStart = 0
+	}
+	if nextStart > len(src) {
+		nextStart = len(src)
+	}
+
+	type openInfo struct {
+		open   int  // index of first byte of opener (including optional f/F)
+		triple bool // """ if true, otherwise single-quoted
+	}
+
+	adjacentOpen := func() (openInfo, bool) {
+		// Content-start right after f"""/"""?
+		if start >= 4 && (src[start-4] == 'f' || src[start-4] == 'F') &&
+			start-1 < len(src) && start-3 >= 0 &&
+			src[start-3] == '"' && src[start-2] == '"' && src[start-1] == '"' {
+			return openInfo{open: start - 4, triple: true}, true
+		}
+		if start >= 3 &&
+			src[start-3] == '"' && src[start-2] == '"' && src[start-1] == '"' {
+			return openInfo{open: start - 3, triple: true}, true
+		}
+		// Content-start right after f" / " ?
+		if start >= 2 && (src[start-2] == 'f' || src[start-2] == 'F') && src[start-1] == '"' {
+			return openInfo{open: start - 2, triple: false}, true
+		}
+		if start >= 1 && src[start-1] == '"' {
+			return openInfo{open: start - 1, triple: false}, true
+		}
+		// Token might be positioned on the opener itself.
+		if start+2 < len(src) && src[start] == '"' && src[start+1] == '"' && src[start+2] == '"' {
+			// f/F prefix directly before opener?
+			if start-1 >= 0 && (src[start-1] == 'f' || src[start-1] == 'F') {
+				return openInfo{open: start - 1, triple: true}, true
+			}
+			return openInfo{open: start, triple: true}, true
+		}
+		if start < len(src) && src[start] == '"' {
+			// f/F prefix directly before opener?
+			if start-1 >= 0 && (src[start-1] == 'f' || src[start-1] == 'F') {
+				return openInfo{open: start - 1, triple: false}, true
+			}
+			return openInfo{open: start, triple: false}, true
+		}
+		return openInfo{}, false
+	}
+
+	searchBackwardOpen := func() (openInfo, bool) {
+		const backWindow = 256
+		ws := start - backWindow
+		if ws < 0 {
+			ws = 0
+		}
+		win := src[ws:start]
+
+		// Prefer the nearest triple opener before start.
+		if i := bytes.LastIndex(win, []byte(`"""`)); i >= 0 {
+			open := ws + i
+			// Optional f/F just before the triple.
+			if open-1 >= 0 && (src[open-1] == 'f' || src[open-1] == 'F') {
+				open--
+			}
+			return openInfo{open: open, triple: true}, true
+		}
+		// Otherwise the nearest single-quote opener not part of a triple.
+		for i := len(win) - 1; i >= 0; i-- {
+			if win[i] != '"' {
+				continue
+			}
+			abs := ws + i
+			// Skip if part of a """ opener.
+			if abs-1 >= 0 && src[abs-1] == '"' && abs-2 >= 0 && src[abs-2] == '"' {
+				continue
+			}
+			// Optional f/F prefix.
+			if abs-1 >= 0 && (src[abs-1] == 'f' || src[abs-1] == 'F') {
+				return openInfo{open: abs - 1, triple: false}, true
+			}
+			return openInfo{open: abs, triple: false}, true
+		}
+		return openInfo{}, false
+	}
+
+	emitTriple := func(open int) []byte {
+		// Skip f + """ (4) or """ (3).
+		search := open + 3
+		if open < len(src) && src[open] == 'f' || (open < len(src) && src[open] == 'F') {
+			search = open + 4
+		}
+		if search < 0 {
+			search = 0
+		}
+		if search > len(src) {
+			search = len(src)
+		}
+		// First closing """ after opener.
+		if k := bytes.Index(src[search:], []byte(`"""`)); k >= 0 {
+			end := search + k + 3
+			if end > len(src) {
+				end = len(src)
+			}
+			return src[open:end]
+		}
+		// Fallback: clamp to nextStart or EOF.
+		end := nextStart
+		if end <= open || end > len(src) {
+			end = len(src)
+		}
+		return src[open:end]
+	}
+
+	emitSingle := func(open int) []byte {
+		// Skip f" (2) or " (1).
+		search := open + 1
+		if open < len(src) && (src[open] == 'f' || src[open] == 'F') {
+			search = open + 2
+		}
+		if search < 0 {
+			search = 0
+		}
+		// Scan forward handling escapes, stop at first unescaped '"'.
+		for j := search; j < len(src); j++ {
+			if src[j] == '\\' {
+				j++ // skip escaped char
+				continue
+			}
+			if src[j] == '"' {
+				end := j + 1
+				if end > len(src) {
+					end = len(src)
+				}
+				return src[open:end]
+			}
+			// Single-quoted strings should not cross physical lines.
+			if src[j] == '\n' {
+				break
 			}
 		}
-		return src[start:nextStart]
-	}
-	// """..."""
-	if bytes.HasPrefix(s, []byte(`"""`)) {
-		i := 3
-		if k := indexTripleQuote(s[i:]); k >= 0 {
-			end := start + i + k + 3
-			if end <= nextStart {
-				return src[start:end]
-			}
+		// Fallback: clamp to nextStart or EOL.
+		end := nextStart
+		if end <= open || end > len(src) {
+			end = len(src)
 		}
-		return src[start:nextStart]
-	}
-	// f"..." / F"..."
-	if bytes.HasPrefix(s, []byte(`f"`)) || bytes.HasPrefix(s, []byte(`F"`)) {
-		i := 2
-		if k := indexClosingQuote(s[i:]); k >= 0 {
-			end := start + i + k + 1
-			if end <= nextStart {
-				return src[start:end]
-			}
+		if nl := bytes.IndexByte(src[open:end], '\n'); nl >= 0 {
+			end = open + nl
 		}
-		return src[start:nextStart]
+		return src[open:end]
 	}
-	// "..."
-	if bytes.HasPrefix(s, []byte(`"`)) {
-		i := 1
-		if k := indexClosingQuote(s[i:]); k >= 0 {
-			end := start + i + k + 1
-			if end <= nextStart {
-				return src[start:end]
-			}
+
+	if oi, ok := adjacentOpen(); ok {
+		if oi.triple {
+			return emitTriple(oi.open)
+		}
+		return emitSingle(oi.open)
+	}
+	if oi, ok := searchBackwardOpen(); ok {
+		if oi.triple {
+			return emitTriple(oi.open)
+		}
+		return emitSingle(oi.open)
+	}
+
+	// Final fallback: conservative slice to EOL so we never produce broken syntax.
+	beg := start
+	if beg > 0 && src[beg-1] == '"' {
+		beg--
+	} else if beg > 1 && (src[beg-2] == 'f' || src[beg-2] == 'F') && src[beg-1] == '"' {
+		beg -= 2
+	} else if beg > 3 && src[beg-3] == '"' && src[beg-2] == '"' && src[beg-1] == '"' {
+		beg -= 3
+		if beg > 0 && (src[beg-1] == 'f' || src[beg-1] == 'F') {
+			beg--
 		}
 	}
-	// Fallback: conservative clamp.
-	return src[start:nextStart]
+	end := nextStart
+	if end <= beg || end > len(src) {
+		end = len(src)
+	}
+	if nl := bytes.IndexByte(src[beg:end], '\n'); nl >= 0 {
+		end = beg + nl
+	}
+	return src[beg:end]
 }
 
-// find the next occurrence of """ (no escape handling needed for """ docstrings)
-func indexTripleQuote(b []byte) int {
-	for i := 0; i+2 < len(b); i++ {
-		if b[i] == '"' && b[i+1] == '"' && b[i+2] == '"' {
+// lastUnescapedQuoteBefore returns the index of the last unescaped `"`
+// strictly before limit, or -1 if none is found.
+func lastUnescapedQuoteBefore(src []byte, limit int) int {
+	for i := limit - 1; i >= 0; i-- {
+		if src[i] != '"' {
+			continue
+		}
+		// Count preceding backslashes to decide if this `"` is escaped.
+		backslashes := 0
+		for j := i - 1; j >= 0 && src[j] == '\\'; j-- {
+			backslashes++
+		}
+		if backslashes%2 == 0 {
 			return i
 		}
 	}
 	return -1
 }
 
-// scan to the next unescaped " (handles \" escapes)
-func indexClosingQuote(b []byte) int {
-	for i := 0; i < len(b); i++ {
-		if b[i] == '\\' {
-			i++ // skip escaped char
+// lastTripleOpenBefore finds the last occurrence of `"""` whose third quote
+// index is <= atOrBefore, returning the index of the FIRST quote in that trio,
+// or -1 if not found.
+func lastTripleOpenBefore(src []byte, atOrBefore int) int {
+	for i := atOrBefore; i-2 >= 0; i-- {
+		if src[i-2] == '"' && src[i-1] == '"' && src[i] == '"' {
+			return i - 2
+		}
+	}
+	return -1
+}
+
+// prevUnescapedQuoteBefore scans backward from (idx-1) to find the previous
+// unescaped `"`, returning its index or -1.
+func prevUnescapedQuoteBefore(src []byte, idx int) int {
+	for i := idx - 1; i >= 0; i-- {
+		if src[i] != '"' {
 			continue
 		}
-		if b[i] == '"' {
+		// Unescaped?
+		backslashes := 0
+		for j := i - 1; j >= 0 && src[j] == '\\'; j-- {
+			backslashes++
+		}
+		if backslashes%2 == 0 {
 			return i
 		}
 	}
