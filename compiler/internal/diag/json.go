@@ -99,6 +99,7 @@ func EncodeJSON(w io.Writer, diags []Diagnostic) error {
 		arr = append(arr, toJSON(d))
 	}
 	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false) // keep "<stdin>" readable
 	enc.SetIndent("", "  ")
 	return enc.Encode(arr)
 }
