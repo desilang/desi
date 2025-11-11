@@ -1,0 +1,24 @@
+[
+  {
+    "code": "DPE0001",
+    "domain": "parser",
+    "title": "unexpected token",
+    "message": "unexpected token while parsing expression",
+    "severity": "error",
+    "primary": {
+      "file": "<stdin>",
+      "start": {
+        "line": 1,
+        "col": 1,
+        "byte": 0
+      },
+      "end": {
+        "line": 1,
+        "col": 1,
+        "byte": 0
+      },
+      "text": "parse error"
+    },
+    "help": "this token is not valid here; check for a missing delimiter or keyword before it"
+  }
+]

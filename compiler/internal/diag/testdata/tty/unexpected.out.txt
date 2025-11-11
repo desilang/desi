@@ -1,0 +1,4 @@
+<stdin>:1:1: error[DPE0001] parser: unexpected token
+  )
+  ^
+  = help: this token is not valid here; check for a missing delimiter or keyword before it
