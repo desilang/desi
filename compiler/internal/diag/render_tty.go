@@ -70,10 +70,15 @@ func (osSource) File(path string) ([]byte, bool) {
 }
 
 // RenderTTY prints a diagnostic; legacy entry point with Theme.
-// If JSON mode is requested globally, we emit one JSON object here.
+// If JSON mode is requested globally, either capture it (for array flush) or stream a single object.
 func (d Diagnostic) RenderTTY(w io.Writer, theme Theme) {
 	if globalFormat == "json" {
+		if jsonCaptureEnabled() {
+			captureAdd(d)
+			return
+		}
 		enc := json.NewEncoder(w)
+		enc.SetEscapeHTML(false)
 		_ = enc.Encode(toJSON(d))
 		return
 	}
