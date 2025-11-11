@@ -1,7 +1,7 @@
 # Desi Compiler Roadmap (Revised, LLVM-first)
 
 **Goals**
-Pythonic surface • Rust-like safety/diagnostics • Elixir-style async • C/Rust/Java-class performance.
+Pythonic surface • Rust-like safety/diagnostics • Elixir-style async/futures • C/Rust/Java-class performance.
 We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-style with codes.
 
 ## Branching & releases
@@ -244,19 +244,36 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
   - Any AST/IR redesign — kept out of formatter milestones.
 * **Scheduling:** revisit **after M12** once diagnostics and parser/style are stable; no downstream blockers.
 
+---
 
-### M12 — Diagnostics Polish & Tooling (NEXT)
+### M12 — Diagnostics Polish & Tooling (✅ DONE)
 
-**Scope**
+**What shipped**
 
-* Caret/underline renderer with color; JSON diagnostics (`--error-format=json`) for IDEs.
-* Snapshot tests for error rendering.
-* **Developer ergonomics:** simple `Makefile` (`make build/test/tokens/demo-layout`; later `fmt`, `vet`, `lint`).
+* **TTY renderer v1** (`internal/diag/render`):
+  * Rust-style header: `file:line:col: error[CODE] domain: title`.
+  * **Caret/underline** with tab-aware placement (tabs expand to 8; original tabs preserved in source line).
+  * **Multi-label** support: primary vs secondary labels; optional trailing label text; Unicode rune counting for alignment.
+  * **Color policy** `--color=auto|always|never`; **auto enables on TTY**, and color **disables** when `NO_COLOR` is set or output is not a TTY.
+* **JSON diagnostics** (`--error-format=json`):
+  * Stable schema (`code/domain/title/message/severity/primary/labels/notes/help`), no HTML escaping (keeps `"<stdin>"` readable).
+  * **Atomic emission**: CLIs buffer all diagnostics and emit **a single JSON array to stderr** per run.
+* **CLI plumbing**:
+  * Both `desic` and `desifmt` honor `--error-format` and `--color` globally.
+  * Subcommand UX: `desic check --error-format=json …` works (render flags stripped before `parseCheckArgs`).
+  * No `/dev/stdin` tricks; uses `os.Stdin`/`os.Stdout`/`os.Stderr`.
+* **Snapshot tests**:
+  * Deterministic TTY/JSON snapshots under `compiler/internal/diag/testdata/*` with CRLF normalization and fixed width.
+  * Tests use external package (`diag_test`) to avoid import cycles, cover parser-generated errors and renderer alignment.
+* **Makefile** (top level):
+  * `build`, `test`, `tokens`, `demo-layout`, `fmt`, `repl` targets; `fmt` guards empty file lists via `git ls-files`.
 
 **Acceptance**
 
-* Matches Rust-like output style; IDE plugin PoC consumes JSON.
-* `make test` green; helper targets work locally and in CI.
+* `go build ./... && go test ./...` **green**.
+* `desic --error-format=json …` and `desifmt --error-format=json …` emit **one JSON array** to **stderr**; human mode unchanged with color policy.
+* Snapshot tests for **TTY** and **JSON** pass across platforms.
+* Makefile targets work locally (and suitable for CI).
 
 ---
 
