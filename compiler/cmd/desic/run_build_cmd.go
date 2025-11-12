@@ -39,66 +39,126 @@ func init() {
 // --------------------- init ---------------------
 
 func initCmd(argv []string) int {
-	// desic init [PATH] [--force|-f]
+	// Syntax:
+	//   desic init [NAME] [-p PATH|--path PATH] [-v VERSION|--version VERSION] [-e EDITION|--edition EDITION] [--force|-f]
+	//
+	// Behavior:
+	// - If PATH provided: create there; package name = NAME if provided, else basename(PATH) (or CWD basename if PATH=".").
+	// - If PATH not provided and NAME provided: create ./NAME; package name = NAME.
+	// - If neither provided: target="."; package name = basename(CWD).
 	force := false
-	path := "."
-	for _, a := range argv {
+	var name string
+	var pathOpt string
+	version := "0.1.0"
+	edition := "2025"
+
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
 		switch a {
-		case "--force", "-f":
+		case "-f", "--force":
 			force = true
+		case "-p", "--path":
+			if i+1 >= len(argv) {
+				term.Eprintln("init: missing value for", a)
+				return 2
+			}
+			pathOpt = argv[i+1]
+			i++
+		case "-v", "--version":
+			if i+1 >= len(argv) {
+				term.Eprintln("init: missing value for", a)
+				return 2
+			}
+			version = argv[i+1]
+			i++
+		case "-e", "--edition":
+			if i+1 >= len(argv) {
+				term.Eprintln("init: missing value for", a)
+				return 2
+			}
+			edition = argv[i+1]
+			i++
 		default:
-			if !strings.HasPrefix(a, "-") {
-				path = a
+			// first non-flag token is NAME
+			if strings.HasPrefix(a, "-") {
+				term.Eprintln("init: unknown flag:", a)
+				return 2
+			}
+			if name == "" {
+				name = a
+			} else {
+				term.Eprintln("init: unexpected extra argument:", a)
+				return 2
 			}
 		}
 	}
-	if err := os.MkdirAll(path, 0o755); err != nil {
+
+	// Resolve target directory and package name
+	var target string
+	var pkgName string
+	cwd, _ := os.Getwd()
+
+	switch {
+	case pathOpt != "":
+		target = pathOpt
+		if name != "" {
+			pkgName = name
+		} else {
+			if target == "." {
+				pkgName = filepath.Base(cwd)
+			} else {
+				pkgName = filepath.Base(target)
+			}
+		}
+	case name != "":
+		target = filepath.Join(cwd, name)
+		pkgName = name
+	default:
+		target = "."
+		pkgName = filepath.Base(cwd)
+	}
+
+	if err := os.MkdirAll(target, 0o755); err != nil {
 		term.Eprintln("init:", err)
 		return 2
 	}
-	mp := filepath.Join(path, "desi.mod")
+	mp := filepath.Join(target, "desi.mod")
 	if _, err := os.Stat(mp); err == nil && !force {
 		term.Eprintln("init: desi.mod already exists (use --force to overwrite)")
 		return 2
 	}
 
 	// Write desi.mod
-	mod := `[package]
-name    = "hello-desi"
-version = "0.1.0"
-edition = "2025"
-entry   = "src/main.desi"
-roots   = ["src"]
-
-[build]
-mode    = "debug"
-out_dir = "build"
-
-[target]
-triple  = "native"
-
-[diagnostics]
-error_format = "human"
-color        = "auto"
-max_errors   = "100"
-
-[ffi]
-libs   = []
-search = []
-`
+	mod := "[package]\n" +
+		"name    = " + quote(pkgName) + "\n" +
+		"version = " + quote(version) + "\n" +
+		"edition = " + quote(edition) + "\n" +
+		"entry   = \"src/main.desi\"\n" +
+		"roots   = [\"src\"]\n\n" +
+		"[build]\n" +
+		"mode    = \"debug\"\n" +
+		"out_dir = \"build\"\n\n" +
+		"[target]\n" +
+		"triple  = \"native\"\n\n" +
+		"[diagnostics]\n" +
+		"error_format = \"human\"\n" +
+		"color        = \"auto\"\n" +
+		"max_errors   = \"100\"\n\n" +
+		"[ffi]\n" +
+		"libs   = []\n" +
+		"search = []\n"
 	if err := os.WriteFile(mp, []byte(mod), 0o644); err != nil {
 		term.Eprintln("init:", err)
 		return 2
 	}
 
-	// Write src/main.desi
-	srcDir := filepath.Join(path, "src")
+	// Write src/main.desi (no explicit prelude import; print is in prelude)
+	srcDir := filepath.Join(target, "src")
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		term.Eprintln("init:", err)
 		return 2
 	}
-	mainDesi := "from prelude import print\n" +
-		"def main() -> int:\n" +
+	mainDesi := "def main() -> int:\n" +
 		"  print(\"Hello, Desi!\")\n" +
 		"  0\n"
 	if err := os.WriteFile(filepath.Join(srcDir, "main.desi"), []byte(mainDesi), 0o644); err != nil {
@@ -107,12 +167,12 @@ search = []
 	}
 
 	// Create tests/ dir
-	if err := os.MkdirAll(filepath.Join(path, "tests"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(target, "tests"), 0o755); err != nil {
 		term.Eprintln("init:", err)
 		return 2
 	}
 
-	term.Println("initialized desi project at", path)
+	term.Println("initialized desi project at", target)
 	return 0
 }
 
@@ -160,16 +220,12 @@ func buildCmd(argv []string) int {
 		term.Eprintln("build:", err)
 		return 2
 	}
-	iroots := pickIRoots(argv, m)
 
-	// Call self: `desic emit-ir ENTRY ...`
+	// Call self: `desic emit-ir ENTRY` (do NOT pass -I; emit-ir path doesn’t honor it)
 	exe, _ := os.Executable()
 	args := []string{"emit-ir"}
 	// Renderer flags pass-through (useful for diag consistency if the path errors)
 	args = append(args, forwardRenderFlags(argv)...)
-	if iroots != "" {
-		args = append(args, "-I", iroots)
-	}
 	args = append(args, entry)
 
 	var buf bytes.Buffer
@@ -312,4 +368,12 @@ func safePkgName(name string) string {
 			return '_'
 		}
 	}, name)
+}
+
+func quote(s string) string {
+	// Minimal quoting for manifest strings
+	if !strings.ContainsAny(s, " \t\"") {
+		return `"` + s + `"` // still quote for consistency
+	}
+	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
