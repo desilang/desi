@@ -149,9 +149,152 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	op := x.Op
 
-	// helpers intInfo/floatInfo elided for brevity — keep your existing body
+	// Helpers: classify numeric families via canonical String() spellings.
+	intInfo := func(t types.T) (signed bool, width int, ok bool) {
+		if t == nil {
+			return false, 0, false
+		}
+		switch t.String() {
+		case "int":
+			return true, 0, true // width==0 marks unsized 'int'
+		case "isize":
+			return true, 64, true
+		case "usize":
+			return false, 64, true
+		case "i8":
+			return true, 8, true
+		case "i16":
+			return true, 16, true
+		case "i32":
+			return true, 32, true
+		case "i64":
+			return true, 64, true
+		case "i128":
+			return true, 128, true
+		case "u8":
+			return false, 8, true
+		case "u16":
+			return false, 16, true
+		case "u32":
+			return false, 32, true
+		case "u64":
+			return false, 64, true
+		case "u128":
+			return false, 128, true
+		default:
+			return false, 0, false
+		}
+	}
+	floatInfo := func(t types.T) (width int, ok bool) {
+		if t == nil {
+			return 0, false
+		}
+		switch t.String() {
+		case "f32":
+			return 32, true
+		case "float", "f64": // 'float' is our f64 alias
+			return 64, true
+		default:
+			return 0, false
+		}
+	}
 
 	switch op {
+	case "+", "-", "*", "/", "%", "**":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+
+		// String ergonomics: allow str + (int|float|bool|str) => str
+		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
+			if types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
+				c.info.Types[x] = types.Str
+				return types.Str
+			}
+			other := rt
+			if types.Equal(lt, types.Str) {
+				other = rt
+			} else {
+				other = lt
+			}
+			if types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
+				types.Equal(other, types.Bool) || types.Equal(other, types.Str) {
+				c.info.Types[x] = types.Str
+				return types.Str
+			}
+		}
+
+		// Integers: same signedness & same width, with one exception:
+		//   M9 allowance: (isize|usize) with unsized int ==> OK, result keeps pointer-sized type.
+		if ls, lw, lok := intInfo(lt); lok {
+			if rs, rw, rok := intInfo(rt); rok {
+				allowIntPtrMix := (lw == 0 && (rw == 64)) || (rw == 0 && (lw == 64))
+				if !allowIntPtrMix {
+					if ls != rs {
+						c.add(diagAt("DNT0002", x.Span, "")) // signed/unsigned mismatch
+						return nil
+					}
+					if lw != rw {
+						c.add(diagAt("DNT0001", x.Span, "")) // width mismatch
+						return nil
+					}
+					// OK: same family — result type is the left (equal to right)
+					c.info.Types[x] = lt
+					return lt
+				}
+				// allow int <op> (isize|usize)
+				if lw == 0 && rw == 64 {
+					c.info.Types[x] = rt
+					return rt
+				}
+				if rw == 0 && lw == 64 {
+					c.info.Types[x] = lt
+					return lt
+				}
+			}
+		}
+
+		// Floats: require same width (f32 with f32; f64/float with f64/float)
+		if lw, lok := floatInfo(lt); lok {
+			if rw, rok := floatInfo(rt); rok {
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				if lw == 32 {
+					c.info.Types[x] = types.F32
+					return types.F32
+				}
+				c.info.Types[x] = types.Float // f64 alias
+				return types.Float
+			}
+		}
+
+		// Any other combination is invalid for now.
+		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
+		return nil
+
+	case "|", "&", "^":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+		// Keep legacy behavior: bitwise ops require plain 'int'
+		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
+			c.info.Types[x] = types.Int
+			return types.Int
+		}
+		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
+		return nil
+
+	case "<<", ">>":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+		// Keep legacy behavior: shifts require plain 'int'
+		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
+			c.info.Types[x] = types.Int
+			return types.Int
+		}
+		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
+		return nil
+
 	case "|>":
 		// pipeline: lhs |> f(a,b)  ==>  f(lhs, a, b)
 		call, ok := x.Rhs.(*ast.CallExpr)
@@ -247,10 +390,55 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
 			return nil
 		}
-	}
 
-	// keep the remainder of your original function body intact
-	return nil
+	case "<", "<=", ">", ">=",
+		"==", "!=":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+
+		// Integers: same signedness & width, with the same M9 exception as above.
+		if ls, lw, lok := intInfo(lt); lok {
+			if rs, rw, rok := intInfo(rt); rok {
+				allowIntPtrMix := (lw == 0 && (rw == 64)) || (rw == 0 && (lw == 64))
+				if !allowIntPtrMix {
+					if ls != rs {
+						c.add(diagAt("DNT0002", x.Span, ""))
+						return nil
+					}
+					if lw != rw {
+						c.add(diagAt("DNT0001", x.Span, ""))
+						return nil
+					}
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+				c.info.Types[x] = types.Bool
+				return types.Bool
+			}
+		}
+
+		// Floats: same width
+		if lw, lok := floatInfo(lt); lok {
+			if rw, rok := floatInfo(rt); rok {
+				if lw != rw {
+					c.add(diagAt("DNT0001", x.Span, ""))
+					return nil
+				}
+				c.info.Types[x] = types.Bool
+				return types.Bool
+			}
+		}
+
+		// Fallback: identical non-numeric types comparable
+		if types.Equal(lt, rt) {
+			c.info.Types[x] = types.Bool
+			return types.Bool
+		}
+		c.add(diagAt("DTE0004", x.Span, "incomparable operands for '"+op+"'"))
+		return nil
+	default:
+		return nil
+	}
 }
 
 // typCall performs overload resolution for calls and wires move tracking.
