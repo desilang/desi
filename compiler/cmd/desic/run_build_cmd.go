@@ -190,7 +190,7 @@ func runCmd(argv []string) int {
 	if err := cmd.Run(); err != nil {
 		return exitCode(err)
 	}
-	// No extra "ok" — let the subcommand be the only output on success.
+	// Success: child printed any messages; we stay quiet.
 	return 0
 }
 
@@ -230,6 +230,15 @@ func buildCmd(argv []string) int {
 		return 2
 	}
 	term.Println("wrote", out)
+
+	// Optional: verify with llvm-as if requested and available
+	if hasFlag(argv, "--verify-llvm") {
+		if err := verifyWithLLVMAs(buf.Bytes(), filepath.Dir(mp)); err != nil {
+			term.Eprintln("verify-llvm:", err.Error())
+			return 2
+		}
+	}
+
 	return 0
 }
 
@@ -316,6 +325,38 @@ func forwardRenderFlags(argv []string) []string {
 		}
 	}
 	return out
+}
+
+func hasFlag(argv []string, flag string) bool {
+	for _, a := range argv {
+		if a == flag {
+			return true
+		}
+	}
+	return false
+}
+
+func verifyWithLLVMAs(ir []byte, workdir string) error {
+	// Try to run `llvm-as -o <devnull>` with IR on stdin.
+	as, err := exec.LookPath("llvm-as")
+	if err != nil {
+		term.Eprintln("verify-llvm: llvm-as not found on PATH — skipping verification")
+		return nil
+	}
+	devnull := "/dev/null"
+	if runtime.GOOS == "windows" {
+		devnull = "NUL"
+	}
+	cmd := exec.Command(as, "-o", devnull)
+	cmd.Stdin = bytes.NewReader(ir)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = workdir
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	term.Println("verify-llvm: OK")
+	return nil
 }
 
 func exitCode(err error) int {
