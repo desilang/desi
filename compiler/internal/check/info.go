@@ -72,73 +72,102 @@ func addPreludeBuiltins(info *Info) {
 	if info == nil {
 		return
 	}
-	// Helper: add a family of 1-arg overloads name(T) -> ret for T in params.
-	addOverloads := func(name string, params []types.T, ret types.T) {
-		set := info.Funcs[name]
-		if set == nil {
-			set = &OverloadSet{Name: name}
-			info.Funcs[name] = set
-		}
-		for _, p := range params {
-			set.Add(&FuncCand{
-				Decl:  nil,
-				Type:  types.FuncOf([]types.T{p}, ret),
-				Modes: []ast.ParamMode{ast.ParamMove}, // builtins: treat as move-by-value
-			})
-		}
-	}
 
-	// Helper: add one explicit overload with param modes.
-	addWithModes := func(name string, params []types.T, modes []ast.ParamMode, ret types.T) {
+	// Helpers that attach ParamNames so named-args work on builtins.
+	makeNames := func(n int, names ...string) []string {
+		out := make([]string, n)
+		copy(out, names)
+		return out
+	}
+	add1 := func(name string, param types.T, ret types.T, pname string, mode ast.ParamMode) {
 		set := info.Funcs[name]
 		if set == nil {
 			set = &OverloadSet{Name: name}
 			info.Funcs[name] = set
 		}
 		set.Add(&FuncCand{
-			Decl:  nil,
-			Type:  types.FuncOf(params, ret),
-			Modes: modes,
+			Decl:       nil,
+			Type:       types.FuncOf([]types.T{param}, ret),
+			Modes:      []ast.ParamMode{mode},
+			ParamNames: makeNames(1, pname),
+		})
+	}
+	addN := func(name string, params []types.T, modes []ast.ParamMode, ret types.T, pnames []string) {
+		set := info.Funcs[name]
+		if set == nil {
+			set = &OverloadSet{Name: name}
+			info.Funcs[name] = set
+		}
+		set.Add(&FuncCand{
+			Decl:       nil,
+			Type:       types.FuncOf(params, ret),
+			Modes:      modes,
+			ParamNames: makeNames(len(params), pnames...),
 		})
 	}
 
 	// Canonical kinds to avoid ambiguity.
 	coreKinds := []types.T{types.Int, types.Float, types.Bool, types.Str}
 
-	// Task A builtins:
-	addOverloads("print", coreKinds, types.None)
-	addOverloads("str", coreKinds, types.Str)
-	addOverloads("bool", coreKinds, types.Bool)
-	addOverloads("len", []types.T{types.Str}, types.USize)
+	// --- Task A builtins (unary) ---
+	// print(value: T) -> none
+	for _, k := range coreKinds {
+		add1("print", k, types.None, "value", ast.ParamMove)
+	}
+	// str(value: T) -> str
+	for _, k := range coreKinds {
+		add1("str", k, types.Str, "value", ast.ParamMove)
+	}
+	// bool(value: T) -> bool
+	for _, k := range coreKinds {
+		add1("bool", k, types.Bool, "value", ast.ParamMove)
+	}
+	// len(s: str) -> usize
+	add1("len", types.Str, types.USize, "s", ast.ParamMove)
 
-	// Task D stubs (compile-only):
-	addWithModes("list_push",
+	// --- Task D stubs (compile-only, with explicit names) ---
+	// list_push(list: _, value: int) -> none
+	addN("list_push",
 		[]types.T{nil, types.Int},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
-		types.None)
-	addWithModes("set_add",
+		types.None,
+		[]string{"list", "value"},
+	)
+	// set_add(set: _, value: str) -> none
+	addN("set_add",
 		[]types.T{nil, types.Str},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove},
-		types.None)
-	addWithModes("dict_set",
+		types.None,
+		[]string{"set", "value"},
+	)
+	// dict_set(dict: _, key: str, value: int) -> none
+	addN("dict_set",
 		[]types.T{nil, types.Str, types.Int},
 		[]ast.ParamMode{ast.ParamInout, ast.ParamMove, ast.ParamMove},
-		types.None)
+		types.None,
+		[]string{"dict", "key", "value"},
+	)
 
-	// ---- Task E: range(...) surface (typed params; opaque return for now) ----
-	// Signatures: range(stop:int), range(start:int, stop:int), range(start:int, stop:int, step:int=1)
-	// We return an opaque (nil) type placeholder for v1 until collection types land.
-	addWithModes("range",
+	// --- Task E: range surface (typed params; opaque return for now) ---
+	// range(stop: int) -> _
+	addN("range",
 		[]types.T{types.Int},
 		[]ast.ParamMode{ast.ParamMove},
-		nil)
-	addWithModes("range",
+		nil,
+		[]string{"stop"},
+	)
+	// range(start: int, stop: int) -> _
+	addN("range",
 		[]types.T{types.Int, types.Int},
 		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
-		nil)
-	addWithModes("range",
+		nil,
+		[]string{"start", "stop"},
+	)
+	// range(start: int, stop: int, step: int) -> _
+	addN("range",
 		[]types.T{types.Int, types.Int, types.Int},
 		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
-		nil)
-	// -------------------------------------------------------------------------
+		nil,
+		[]string{"start", "stop", "step"},
+	)
 }
