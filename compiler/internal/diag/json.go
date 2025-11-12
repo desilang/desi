@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// JSON encoder for diagnostics.
+// ---------- JSON encoding (stable schema) ----------
 
 type jsonPos struct {
 	Line int `json:"line"`
@@ -18,7 +18,7 @@ type jsonSpan struct {
 	File  string  `json:"file"`
 	Start jsonPos `json:"start"`
 	End   jsonPos `json:"end"`
-	Text  string  `json:"text,omitempty"` // used for primary
+	Text  string  `json:"text,omitempty"` // used for primary (when provided)
 }
 
 type jsonLabel struct {
@@ -41,7 +41,6 @@ type jsonDiagnostic struct {
 }
 
 func toJSON(d Diagnostic) jsonDiagnostic {
-	// Title/help from diagnostic or catalog fallback.
 	title := strings.TrimSpace(d.Title)
 	if title == "" {
 		if e, ok := Lookup(d.CodeID); ok && e.Title != "" {
@@ -58,6 +57,7 @@ func toJSON(d Diagnostic) jsonDiagnostic {
 	if msg == "" {
 		msg = title
 	}
+
 	jd := jsonDiagnostic{
 		Code:     d.CodeID,
 		Domain:   d.Domain,
@@ -102,4 +102,37 @@ func EncodeJSON(w io.Writer, diags []Diagnostic) error {
 	enc.SetEscapeHTML(false) // keep "<stdin>" readable
 	enc.SetIndent("", "  ")
 	return enc.Encode(arr)
+}
+
+// ---------- JSON capture (for CLI atomic arrays) ----------
+
+var jsonCapActive bool
+var jsonCapDiags []Diagnostic
+
+// BeginJSONCapture enables capture mode. RenderTTY will buffer diagnostics instead of streaming.
+func BeginJSONCapture() {
+	jsonCapActive = true
+	jsonCapDiags = jsonCapDiags[:0]
+}
+
+// EndJSONCapture disables capture and, if any diagnostics were captured, emits a single JSON array to w.
+func EndJSONCapture(w io.Writer) error {
+	if !jsonCapActive {
+		return nil
+	}
+	jsonCapActive = false
+	if len(jsonCapDiags) == 0 {
+		return nil
+	}
+	return EncodeJSON(w, jsonCapDiags)
+}
+
+// jsonCaptureEnabled reports whether capture is active.
+func jsonCaptureEnabled() bool { return jsonCapActive }
+
+// captureAdd appends a diagnostic to the capture buffer (no-op when capture is off).
+func captureAdd(d Diagnostic) {
+	if jsonCapActive {
+		jsonCapDiags = append(jsonCapDiags, d)
+	}
 }

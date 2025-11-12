@@ -37,11 +37,22 @@ func main() {
 	default:
 		cm = diag.Auto
 	}
-	diag.SetGlobalRender(strings.ToLower(*errorFormat), cm)
+	ef := strings.ToLower(*errorFormat)
+	diag.SetGlobalRender(ef, cm)
+	jsonMode := ef == "json"
+	if jsonMode {
+		diag.BeginJSONCapture()
+	}
 
 	args := flag.Args()
 	if len(args) == 0 {
 		usage()
+		term.Flush()
+		if jsonMode {
+			if err := diag.EndJSONCapture(os.Stderr); err != nil {
+				term.Eprintln("desifmt: json flush:", err)
+			}
+		}
 		os.Exit(2)
 	}
 
@@ -97,12 +108,18 @@ func main() {
 	}
 
 	term.Flush()
+	if jsonMode {
+		if err := diag.EndJSONCapture(os.Stderr); err != nil {
+			term.Eprintln("desifmt: json flush:", err)
+		}
+	}
 	if hadArgErr {
 		os.Exit(2)
 	}
 	if hadDiag {
 		os.Exit(1)
 	}
+	os.Exit(0)
 }
 
 func usage() {

@@ -44,9 +44,7 @@ var parserCodeMap = map[string]string{
 const Version = "0.0.1-revised-bootstrap"
 
 func main() {
-	// --- Pre-scan for render flags so the `check` subcommand path also honors them ---
-	// Supports: --error-format=json|human  and  --color=auto|always|never
-	// Also supports space-separated forms: --error-format json, --color never
+	// --- Pre-scan render flags so 'check' subcommand also honors them ---
 	ef := "human"
 	colStr := "auto"
 	if len(os.Args) > 1 {
@@ -78,13 +76,24 @@ func main() {
 	}
 	diag.SetGlobalRender(ef, cm)
 
-	// If user used the subcommand form, handle it with our own permissive parser
-	// so flags can be before OR after the filename.
+	exitCode := 0
+
+	// Subcommand path: desic check ...
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
+		jsonMode := ef == "json"
+		if jsonMode {
+			diag.BeginJSONCapture()
+		}
+
 		file, roots, verbose, err := parseCheckArgs(stripRenderFlags(os.Args[2:]))
 		if err != nil {
 			term.Eprintln("check error:", err)
 			term.Flush()
+			if jsonMode {
+				if flushErr := diag.EndJSONCapture(os.Stderr); flushErr != nil {
+					term.Eprintln("desic: json flush:", flushErr)
+				}
+			}
 			os.Exit(2)
 		}
 
@@ -104,27 +113,32 @@ func main() {
 		hadErrors, runErr := runCheck(file, roots)
 		if runErr != nil {
 			term.Eprintln("check error:", runErr)
-			term.Flush()
-			os.Exit(2)
+			exitCode = 2
+		} else if hadErrors {
+			exitCode = 1
+		} else {
+			exitCode = 0
 		}
-		if hadErrors {
-			term.Flush()
-			os.Exit(1)
-		}
+
 		term.Flush()
-		os.Exit(0)
+		if jsonMode {
+			if flushErr := diag.EndJSONCapture(os.Stderr); flushErr != nil {
+				term.Eprintln("desic: json flush:", flushErr)
+			}
+		}
+		os.Exit(exitCode)
 	}
 
-	// Otherwise, use the global flags (supports: desic -I ROOTS -check FILE)
+	// Global flags path
 	flag.Parse()
 
-	// Also support: desic -I ROOTS check FILE  (global flags parse -I; leftover args carry "check FILE")
+	// Also support: desic -I ROOTS check FILE
 	args := flag.Args()
 	if len(args) >= 2 && args[0] == "check" && *flagCheck == "" {
 		*flagCheck = args[1]
 	}
 
-	// Apply global diagnostics render preferences again, now that flags are parsed.
+	// Re-apply render prefs from parsed flags
 	var cm2 diag.ColorMode
 	switch strings.ToLower(*flagColor) {
 	case "always":
@@ -134,54 +148,60 @@ func main() {
 	default:
 		cm2 = diag.Auto
 	}
-	diag.SetGlobalRender(strings.ToLower(*flagErrorFormat), cm2)
+	ef = strings.ToLower(*flagErrorFormat)
+	diag.SetGlobalRender(ef, cm2)
+	jsonMode := ef == "json"
+	if jsonMode {
+		diag.BeginJSONCapture()
+	}
 
+	// Commands
 	if *flagVersion {
 		term.Println("desic", Version)
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagDiag {
 		if err := demoDiag(); err != nil {
 			term.Eprintln("diag error:", err)
-			term.Flush()
-			os.Exit(2)
+			exitCode = 2
+			goto END
 		}
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagDemoTokens {
 		demoTokens()
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagDemoLayout {
 		demoLayout()
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagTokens != "" {
 		if err := dumpTokens(*flagTokens); err != nil {
 			term.Eprintln("scan error:", err)
-			term.Flush()
-			os.Exit(2)
+			exitCode = 2
+			goto END
 		}
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagAST != "" {
 		if err := dumpAST(*flagAST); err != nil {
 			term.Eprintln("parse error:", err)
-			term.Flush()
-			os.Exit(2)
+			exitCode = 2
+			goto END
 		}
-		term.Flush()
-		return
+		exitCode = 0
+		goto END
 	}
 
 	if *flagCheck != "" {
@@ -201,19 +221,28 @@ func main() {
 		hadErrors, err := runCheck(*flagCheck, *flagIRoots)
 		if err != nil {
 			term.Eprintln("check error:", err)
-			term.Flush()
-			os.Exit(2)
+			exitCode = 2
+			goto END
 		}
 		if hadErrors {
-			term.Flush()
-			os.Exit(1)
+			exitCode = 1
+		} else {
+			exitCode = 0
 		}
-		term.Flush()
-		os.Exit(0)
+		goto END
 	}
 
 	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
+	exitCode = 0
+
+END:
 	term.Flush()
+	if jsonMode {
+		if err := diag.EndJSONCapture(os.Stderr); err != nil {
+			term.Eprintln("desic: json flush:", err)
+		}
+	}
+	os.Exit(exitCode)
 }
 
 // parseCheckArgs accepts flags in any order after `check` and returns (file, roots, verbose).
