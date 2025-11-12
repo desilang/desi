@@ -6,10 +6,17 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/format"
 	"github.com/desilang/desi/compiler/internal/term"
+)
+
+var (
+	// NEW:
+	errorFormat = flag.String("error-format", "human", "error format: human|json")
+	colorFlag   = flag.String("color", "auto", "color: auto|always|never")
 )
 
 var (
@@ -20,7 +27,17 @@ var (
 
 func main() {
 	flag.Parse()
-	defer term.Flush()
+	// Apply global diagnostics render preferences
+	var cm diag.ColorMode
+	switch strings.ToLower(*colorFlag) {
+	case "always":
+		cm = diag.Always
+	case "never":
+		cm = diag.Never
+	default:
+		cm = diag.Auto
+	}
+	diag.SetGlobalRender(strings.ToLower(*errorFormat), cm)
 
 	args := flag.Args()
 	if len(args) == 0 {
@@ -65,7 +82,7 @@ func main() {
 				return nil
 			})
 			if err != nil {
-				term.Eprintln("desifmt walk:", err)
+				term.Eprintln("desifmt:", err)
 				hadArgErr = true
 			}
 			continue
@@ -79,6 +96,7 @@ func main() {
 		}
 	}
 
+	term.Flush()
 	if hadArgErr {
 		os.Exit(2)
 	}
@@ -88,38 +106,60 @@ func main() {
 }
 
 func usage() {
-	term.Eprintln("usage: desifmt [-w|-l|-q] <file|dir|-> [...]")
+	term.Println("usage: desifmt [flags] path-or-'-' ...")
+	flag.PrintDefaults()
 }
 
+// formatStdin / formatFile remain unchanged except RenderTTY honors global mode.
+
 func formatStdin() (bool, []diag.Diagnostic) {
-	// With '-', ignore -w and -l; always print to stdout.
 	src, err := io.ReadAll(os.Stdin)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
 		return false, nil
 	}
+
 	out, diags := format.FormatBytes(src)
 	if len(diags) > 0 {
 		for _, d := range diags {
-			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+			d.RenderTTY(os.Stderr, diag.Theme{})
 		}
-		// Still return false so caller sets exit=1.
 		return false, diags
 	}
+
+	if *listOnly {
+		// Listing is non-error info → stdout.
+		term.Println("<stdin>")
+		return true, nil
+	}
+
+	if *writeInPlace {
+		term.Eprintln("desifmt: -w ignored on stdin")
+		return false, nil
+	}
+
 	term.Write(os.Stdout, out)
 	return true, nil
 }
 
 func formatFile(path string) (bool, []diag.Diagnostic) {
-	src, err := os.ReadFile(path)
+	f, err := os.Open(path)
 	if err != nil {
 		term.Eprintln("desifmt:", err)
 		return false, nil
 	}
+	defer func() { _ = f.Close() }()
+
+	src, err := io.ReadAll(f)
+	if err != nil {
+		term.Eprintln("desifmt:", err)
+		return false, nil
+	}
+
 	out, diags := format.FormatBytes(src)
 	if len(diags) > 0 {
 		for _, d := range diags {
-			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+			d.RenderTTY(os.Stderr, diag.Theme{})
 		}
 		return false, diags
 	}
@@ -133,19 +173,22 @@ func formatFile(path string) (bool, []diag.Diagnostic) {
 	}
 
 	if *writeInPlace {
-		if !bytesEqual(src, out) {
-			if err := os.WriteFile(path, out, 0o644); err != nil {
-				term.Eprintln("desifmt:", err)
-				return false, nil
-			}
+		if bytesEqual(src, out) {
 			if !*quiet {
-				term.Eprintln("wrote", path)
+				term.Println("formatted:", path, "(no changes)")
 			}
+			return true, nil
+		}
+		if err := os.WriteFile(path, out, 0644); err != nil {
+			term.Eprintln("desifmt:", err)
+			return false, nil
+		}
+		if !*quiet {
+			term.Println("wrote:", path)
 		}
 		return true, nil
 	}
 
-	// Default: write formatted bytes to stdout.
 	term.Write(os.Stdout, out)
 	return true, nil
 }

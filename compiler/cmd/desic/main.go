@@ -18,15 +18,17 @@ import (
 )
 
 var (
-	flagVersion    = flag.Bool("version", false, "print version and exit")
-	flagDiag       = flag.Bool("diag", false, "emit a sample diagnostic and exit")
-	flagDemoTokens = flag.Bool("demo-tokens", false, "print a small token/category demo and exit")
-	flagDemoLayout = flag.Bool("demo-layout", false, "print layout tokens for a small sample and exit")
-	flagTokens     = flag.String("tokens", "", "scan the given .desi file and print tokens")
-	flagAST        = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
-	flagCheck      = flag.String("check", "", "parse + resolve/check the given .desi file")
-	flagIRoots     = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
-	flagVerbose    = flag.Bool("v", false, "verbose output")
+	flagVersion     = flag.Bool("version", false, "print version and exit")
+	flagDiag        = flag.Bool("diag", false, "emit a sample diagnostic and exit")
+	flagDemoTokens  = flag.Bool("demo-tokens", false, "print a small token/category demo and exit")
+	flagDemoLayout  = flag.Bool("demo-layout", false, "print layout tokens for a small sample and exit")
+	flagTokens      = flag.String("tokens", "", "scan the given .desi file and print tokens")
+	flagAST         = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
+	flagCheck       = flag.String("check", "", "parse + resolve/check the given .desi file")
+	flagIRoots      = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
+	flagVerbose     = flag.Bool("v", false, "verbose output")
+	flagErrorFormat = flag.String("error-format", "human", "error format: human|json")
+	flagColor       = flag.String("color", "auto", "color: auto|always|never")
 )
 
 var parserCodeMap = map[string]string{
@@ -42,6 +44,40 @@ var parserCodeMap = map[string]string{
 const Version = "0.0.1-revised-bootstrap"
 
 func main() {
+	// --- Pre-scan for render flags so the `check` subcommand path also honors them ---
+	// Supports: --error-format=json|human  and  --color=auto|always|never
+	// Also supports space-separated forms: --error-format json, --color never
+	ef := "human"
+	colStr := "auto"
+	if len(os.Args) > 1 {
+		args := os.Args[1:]
+		for i := 0; i < len(args); i++ {
+			a := args[i]
+			switch {
+			case strings.HasPrefix(a, "--error-format="):
+				ef = strings.ToLower(strings.TrimPrefix(a, "--error-format="))
+			case a == "--error-format" && i+1 < len(args):
+				i++
+				ef = strings.ToLower(args[i])
+			case strings.HasPrefix(a, "--color="):
+				colStr = strings.ToLower(strings.TrimPrefix(a, "--color="))
+			case a == "--color" && i+1 < len(args):
+				i++
+				colStr = strings.ToLower(args[i])
+			}
+		}
+	}
+	var cm diag.ColorMode
+	switch colStr {
+	case "always":
+		cm = diag.Always
+	case "never":
+		cm = diag.Never
+	default:
+		cm = diag.Auto
+	}
+	diag.SetGlobalRender(ef, cm)
+
 	// If user used the subcommand form, handle it with our own permissive parser
 	// so flags can be before OR after the filename.
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
@@ -87,6 +123,18 @@ func main() {
 	if len(args) >= 2 && args[0] == "check" && *flagCheck == "" {
 		*flagCheck = args[1]
 	}
+
+	// Apply global diagnostics render preferences again, now that flags are parsed.
+	var cm2 diag.ColorMode
+	switch strings.ToLower(*flagColor) {
+	case "always":
+		cm2 = diag.Always
+	case "never":
+		cm2 = diag.Never
+	default:
+		cm2 = diag.Auto
+	}
+	diag.SetGlobalRender(strings.ToLower(*flagErrorFormat), cm2)
 
 	if *flagVersion {
 		term.Println("desic", Version)
