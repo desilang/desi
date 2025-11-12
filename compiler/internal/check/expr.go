@@ -295,7 +295,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		return nil
 
 	case "|>":
-		// pipeline: lhs |> f(a,b)  ==>  f(lhs, a, b)
+		// pipeline: lhs |> f(...)  ==>  f(lhs, ...)
 		call, ok := x.Rhs.(*ast.CallExpr)
 		if !ok {
 			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
@@ -307,43 +307,24 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return nil
 		}
 
-		lhsT := c.typ(x.Lhs)
-		args := make([]types.T, 0, 1+len(call.Args))
-		args = append(args, lhsT)
-		for _, a := range call.Args {
-			args = append(args, c.typ(a))
-		}
-
 		set := c.info.Funcs[id.Name]
 		if set == nil || len(set.Cands) == 0 {
 			c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
 			return nil
 		}
 
-		arityCands := filterByArity(set.Cands, len(args))
-		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch"))
-			return nil
+		// Build a synthetic call arg list: lhs as the first positional + original call.ArgNodes
+		synth := &ast.CallExpr{
+			Callee: call.Callee,
+			Span:   call.Span,
+			Args:   nil, // legacy field unused for mapping
 		}
-		exact := filterExactByTypes(arityCands, args)
-		switch len(exact) {
-		case 1:
-			chosen := exact[0]
-			if chosen.Extern && c.unsafeDepth == 0 {
-				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-			}
-			c.markMovesFromCall(chosen, call, args)
-			c.enforceCallsiteBorrow(chosen, call)
-			ret := chosen.Type.Ret
-			c.info.Types[x] = ret
-			return ret
-		case 0:
-			c.add(diagAt("DTE0101", x.Span, "pipeline has no matching overload for call to "+id.Name))
-			return nil
-		default:
-			c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
-			return nil
-		}
+		// copy original ArgNodes and prepend one positional for lhs
+		synth.ArgNodes = make([]ast.CallArg, 0, 1+len(call.ArgNodes))
+		synth.ArgNodes = append(synth.ArgNodes, ast.CallArg{Name: nil, Expr: x.Lhs})
+		synth.ArgNodes = append(synth.ArgNodes, call.ArgNodes...)
+
+		return c.resolveCallAgainstSet(synth, set, id.Span, call.Callee.SpanOf())
 
 	case "<", "<=", ">", ">=", "==", "!=":
 		lt := c.typ(x.Lhs)
@@ -405,104 +386,22 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	}
 }
 
-// typCall performs overload resolution for calls and wires move tracking so
-// later identifier reads can trigger DBR0004 via typIdent.
+// typCall performs overload resolution for calls with named-arg canonicalization.
 func (c *checker) typCall(call *ast.CallExpr) types.T {
-	// --- Case 0: direct call of a lambda:  (lambda ...)(args)
-	if l, ok := call.Callee.(*ast.LambdaExpr); ok {
-		// Type the lambda first (enforces "typed params in M4" and sets its func type).
-		_ = c.typ(l)
-
-		// Arity check
-		if len(call.Args) != len(l.Params) {
-			c.add(diagAt("DTE0046", l.Span, "arity mismatch: wrong number of arguments"))
-			return nil
-		}
-
-		// Per-arg type check against lambda's declared param types
-		for i := range l.Params {
-			var pt types.T
-			if l.Params[i].Type != nil {
-				if t, ok := types.FromName(l.Params[i].Type.Name); ok {
-					pt = t
-				}
-			}
-			at := c.typ(call.Args[i])
-			if pt == nil || at == nil || !types.Equal(pt, at) {
-				c.add(diagAt("DTE0104", call.Span, "argument type mismatch"))
-				return nil
-			}
-		}
-		// Lambda call result is the lambda's body type (already computed)
-		if ft, ok := c.info.Types[l].(*types.Func); ok {
-			c.info.Types[call] = ft.Ret
-			return ft.Ret
-		}
-		return nil
-	}
-
-	// --- Case 1: module-qualified call  e.g.  mod.fn(...)
+	// module-qualified call: mod.fn(...)
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
-			// Arg types
-			args := make([]types.T, len(call.Args))
-			for i, a := range call.Args {
-				args[i] = c.typ(a)
-			}
-			// No exported candidates
-			if set == nil || len(set.Cands) == 0 {
-				c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
-				return nil
-			}
-			// Filter by arity then exact types
-			arityCands := filterByArity(set.Cands, len(args))
-			if len(arityCands) == 0 {
-				c.add(diagAt("DTE0045", fe.Name.Span, "arity mismatch: wrong number of arguments"))
-				return nil
-			}
-			exact := filterExactByTypes(arityCands, args)
-			switch len(exact) {
-			case 1:
-				chosen := exact[0]
-				// Require unsafe for extern FFI calls.
-				if chosen.Extern && c.unsafeDepth == 0 {
-					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-				}
-				// Mark moves for local decls (Decl!=nil). Cross-module exports have Decl==nil.
-				c.markMovesFromCall(chosen, call, args)
-				// Enforce caller-side borrow rules.
-				c.enforceCallsiteBorrow(chosen, call)
-
-				ret := chosen.Type.Ret
-				// If callee is async, calls return a future[T].
-				if chosen.Decl != nil && chosen.Decl.Async {
-					ret = types.FutureOf(ret)
-				}
-				c.info.Types[call] = ret
-				return ret
-			case 0:
-				c.add(diagAt("DTE0101", fe.Name.Span, "no matching overload"))
-				return nil
-			default:
-				c.add(diagAt("DTE0102", fe.Name.Span, "ambiguous overload"))
-				return nil
-			}
+			return c.resolveCallAgainstSet(call, set, fe.Name.Span, base.Span)
 		}
-		// If it wasn't an import-qualified callee, fall through and type the pieces.
 		_ = c.typ(fe.X)
-		// NOTE: fe.Name is an ast.Ident value; don't call c.typ on it.
 		return nil
 	}
 
-	// --- Case 2: plain identifier call  e.g.  f(...)
+	// plain identifier call: f(...)
 	if id, ok := call.Callee.(*ast.Ident); ok {
 		set, hasSet := c.info.Funcs[id.Name]
-
-		// Is there a function symbol in scope?
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc
-
-		// Callable if it's a real function symbol OR we have an overload set
 		callable := isCallableSym || (hasSet && set != nil)
 		if !callable {
 			if sym == nil {
@@ -512,65 +411,235 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
 			return nil
 		}
-
-		// Arg types
-		args := make([]types.T, len(call.Args))
-		for i, a := range call.Args {
-			args[i] = c.typ(a)
-		}
-
-		// If we have no overload set at all, bail as not callable
 		if set == nil || len(set.Cands) == 0 {
 			_ = c.typ(call.Callee)
-			for _, a := range call.Args {
-				_ = c.typ(a)
+			for _, a := range call.ArgNodes {
+				_ = c.typ(a.Expr)
 			}
 			c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
 			return nil
 		}
-
-		// Filter by arity then exact types
-		arityCands := filterByArity(set.Cands, len(args))
-		if len(arityCands) == 0 {
-			c.add(diagAt("DTE0045", id.Span, "arity mismatch: wrong number of arguments"))
-			return nil
-		}
-		exact := filterExactByTypes(arityCands, args)
-		switch len(exact) {
-		case 1:
-			chosen := exact[0]
-			// Require unsafe for extern FFI calls.
-			if chosen.Extern && c.unsafeDepth == 0 {
-				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-			}
-			// Mark moves so later ident reads can trigger DBR0004.
-			c.markMovesFromCall(chosen, call, args)
-			// Enforce caller-side borrow rules (inout lvalue + aliasing).
-			c.enforceCallsiteBorrow(chosen, call)
-
-			ret := chosen.Type.Ret
-			// If callee is async, calls return a future[T].
-			if chosen.Decl != nil && chosen.Decl.Async {
-				ret = types.FutureOf(ret)
-			}
-			c.info.Types[call] = ret
-			return ret
-		case 0:
-			c.add(diagAt("DTE0101", id.Span, "no matching overload"))
-			return nil
-		default:
-			c.add(diagAt("DTE0102", id.Span, "ambiguous overload"))
-			return nil
-		}
+		return c.resolveCallAgainstSet(call, set, id.Span, call.Callee.SpanOf())
 	}
 
-	// --- Fallback: callee is some other expression (e.g., (1)()).
+	// fallback
 	_ = c.typ(call.Callee)
-	for _, a := range call.Args {
-		_ = c.typ(a)
+	for _, a := range call.ArgNodes {
+		_ = c.typ(a.Expr)
 	}
 	c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
 	return nil
+}
+
+/* ----------------------------- named args core ---------------------------- */
+
+func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, nameSpan, calleeSpan diag.Span) types.T {
+	// DCA0003: positional after named (call-site rule, independent of overload).
+	seenNamed := false
+	for _, a := range call.ArgNodes {
+		isNamed := a.Name != nil
+		if isNamed {
+			seenNamed = true
+		} else if seenNamed {
+			c.add(diagAt("DCA0003", a.Expr.SpanOf(), "positional argument after named arguments"))
+			return nil
+		}
+	}
+
+	// Try candidates: map names to indices per-candidate, then reuse your existing machinery.
+	type mapped struct {
+		cand    *FuncCand
+		vecExpr []ast.Expr
+		vecType []types.T
+	}
+	var okMapped []mapped
+	var firstUnknown *ast.Ident // for DCA0001 if every candidate fails due to unknown names
+
+	for _, cand := range set.Cands {
+		pnames := c.paramNamesForCand(cand)
+		n := len(cand.Type.Params)
+		vecE := make([]ast.Expr, n)
+		fill := 0
+
+		// Track duplicates per candidate.
+		seen := map[string]bool{}
+
+		// Merge leading unnamed (positional) until we see first named.
+		pos := 0
+		i := 0
+		for i < len(call.ArgNodes) && call.ArgNodes[i].Name == nil {
+			if pos >= n {
+				// too many args for this candidate — let existing arity filtering handle it later
+				break
+			}
+			vecE[pos] = call.ArgNodes[i].Expr
+			fill++
+			pos++
+			i++
+		}
+		// Named section
+		valid := true
+		for ; i < len(call.ArgNodes); i++ {
+			an := call.ArgNodes[i]
+			if an.Name == nil {
+				// shouldn't happen due to DCA0003 earlier, but guard anyway
+				valid = false
+				break
+			}
+			name := an.Name.Name
+			if seen[name] {
+				c.add(diagAt("DCA0002", an.Name.Span, "duplicate named argument: "+name))
+				valid = false
+				break
+			}
+			idx := indexOfName(pnames, name)
+			if idx < 0 {
+				// remember one unknown to possibly report later
+				if firstUnknown == nil {
+					firstUnknown = an.Name
+				}
+				valid = false
+				break
+			}
+			if vecE[idx] != nil {
+				// same param filled twice via name/position — treat as duplicate
+				c.add(diagAt("DCA0002", an.Name.Span, "duplicate named argument: "+name))
+				valid = false
+				break
+			}
+			seen[name] = true
+			vecE[idx] = an.Expr
+			fill++
+		}
+		if !valid {
+			continue
+		}
+		// Ensure vector is fully populated for this candidate.
+		if fill != n {
+			// let existing arity/type machinery handle this; skip for now
+			continue
+		}
+		// Compute types vector
+		vecT := make([]types.T, n)
+		for j := 0; j < n; j++ {
+			vecT[j] = c.typ(vecE[j])
+		}
+		okMapped = append(okMapped, mapped{cand: cand, vecExpr: vecE, vecType: vecT})
+	}
+
+	// If no candidate mapped, decide the best diagnostic.
+	if len(okMapped) == 0 {
+		if firstUnknown != nil {
+			c.add(diagAt("DCA0001", firstUnknown.Span, "unknown named argument: "+firstUnknown.Name))
+			return nil
+		}
+		// Otherwise fall back to a generic arity/overload error (reuse legacy paths).
+		// Build plain arg types to drive legacy filters.
+		rawArgs := make([]types.T, len(call.ArgNodes))
+		for i, a := range call.ArgNodes {
+			rawArgs[i] = c.typ(a.Expr)
+		}
+		arityCands := filterByArity(set.Cands, len(rawArgs))
+		if len(arityCands) == 0 {
+			c.add(diagAt("DTE0046", nameSpan, "arity mismatch: wrong number of arguments"))
+			return nil
+		}
+		exact := filterExactByTypes(arityCands, rawArgs)
+		if len(exact) == 0 {
+			c.add(diagAt("DTE0101", nameSpan, "no matching overload"))
+			return nil
+		}
+		c.add(diagAt("DTE0102", nameSpan, "ambiguous overload"))
+		return nil
+	}
+
+	// Now run exact-type matching across mapped candidates.
+	best := make([]*FuncCand, 0, len(okMapped))
+	idxOf := func(c *FuncCand) int {
+		for i, m := range okMapped {
+			if m.cand == c {
+				return i
+			}
+		}
+		return -1
+	}
+	for _, m := range okMapped {
+		if typesMatchExactly(m.cand.Type.Params, m.vecType) {
+			best = append(best, m.cand)
+		}
+	}
+	switch len(best) {
+	case 0:
+		c.add(diagAt("DTE0101", nameSpan, "no matching overload"))
+		return nil
+	case 1:
+		chosen := best[0]
+		mi := idxOf(chosen)
+		vecE := okMapped[mi].vecExpr
+		vecT := okMapped[mi].vecType
+
+		// Synthetic call to reuse borrow/move logic that expects CallExpr.Args
+		tmp := *call
+		tmp.Args = make([]ast.Expr, len(vecE))
+		copy(tmp.Args, vecE)
+
+		// unsafe gate for extern
+		if chosen.Extern && c.unsafeDepth == 0 {
+			c.add(diagAt("DFI0003", calleeSpan, ""))
+		}
+		// moves + borrow enforcement use the positional vector
+		c.markMovesFromCall(chosen, &tmp, vecT)
+		c.enforceCallsiteBorrow(chosen, &tmp)
+
+		ret := chosen.Type.Ret
+		if chosen.Decl != nil && chosen.Decl.Async {
+			ret = types.FutureOf(ret)
+		}
+		c.info.Types[call] = ret
+		return ret
+	default:
+		c.add(diagAt("DTE0102", nameSpan, "ambiguous overload"))
+		return nil
+	}
+}
+
+func (c *checker) paramNamesForCand(cand *FuncCand) []string {
+	// Prefer source names from local decl; else use recorded ParamNames (imports/builtins)
+	if cand.Decl != nil {
+		out := make([]string, len(cand.Decl.Params))
+		for i := range cand.Decl.Params {
+			out[i] = cand.Decl.Params[i].Name.Name
+		}
+		return out
+	}
+	if len(cand.ParamNames) > 0 {
+		cp := make([]string, len(cand.ParamNames))
+		copy(cp, cand.ParamNames)
+		return cp
+	}
+	// no names available; fall back to empty strings
+	return make([]string, len(cand.Type.Params))
+}
+
+func indexOfName(names []string, want string) int {
+	for i, n := range names {
+		if n == want {
+			return i
+		}
+	}
+	return -1
+}
+
+func typesMatchExactly(params []types.T, args []types.T) bool {
+	if len(params) != len(args) {
+		return false
+	}
+	for i := range params {
+		if !types.Equal(params[i], args[i]) {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Borrow callsite enforcement (inout/ref lvalue + aliasing with secondary label) ---

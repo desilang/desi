@@ -40,10 +40,11 @@ type Info struct {
 
 // FuncCand represents a single callable candidate.
 type FuncCand struct {
-	Decl   *ast.FuncDecl   // may be nil (e.g., builtins or cross-module exports)
-	Type   *types.Func     // canonical function type (params + ret)
-	Modes  []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
-	Extern bool            // true if this candidate represents an @extern declaration
+	Decl       *ast.FuncDecl   // may be nil (e.g., builtins or cross-module exports)
+	Type       *types.Func     // canonical function type (params + ret)
+	Modes      []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
+	Extern     bool            // true if this candidate represents an @extern declaration
+	ParamNames []string        // NEW (E-2): parameter names (index-aligned with Type.Params; may be empty)
 }
 
 // OverloadSet groups candidate functions by name.
