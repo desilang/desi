@@ -162,10 +162,19 @@ type BinaryExpr struct {
 func (*BinaryExpr) isExpr()             {}
 func (x *BinaryExpr) SpanOf() diag.Span { return x.Span }
 
+// CallArg represents a single argument in a call.
+// Name == nil for positional args. Star marks a future '*expr' expansion (wired in F).
+type CallArg struct {
+	Name *Ident // nil for positional
+	Expr Expr
+	Star bool
+}
+
 type CallExpr struct {
-	Callee Expr
-	Args   []Expr // positional only for M1/M2
-	Span   diag.Span
+	Callee   Expr
+	Args     []Expr    // legacy positional-only list (kept for back-compat)
+	ArgNodes []CallArg // canonical argument list with names
+	Span     diag.Span
 }
 
 func (*CallExpr) isExpr()             {}

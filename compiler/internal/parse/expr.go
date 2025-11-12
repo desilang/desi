@@ -183,20 +183,28 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.LPAREN:
 			callStart := spanPos(p.file, p.cur)
 			p.next()
-			var args []ast.Expr
+
+			var args []ast.Expr        // legacy vector
+			var argNodes []ast.CallArg // canonical vector (with names)
+
 			if p.cur.Tok != token.RPAREN {
 				for {
-					// Stage-1 named-arg acceptance:
-					// If we see IDENT '=' Expr, consume the name and '=',
-					// and parse only the value expression. Names are ignored
-					// in this stage; checker wiring follows in E-2.
+					// Named argument: IDENT '=' Expr  → CallArg{Name:&Ident, Expr:Expr}
 					if p.cur.Tok == token.IDENT && p.peek.Tok == token.ASSIGN {
+						nameTok := p.cur
+						nameIdent := &ast.Ident{Name: nameTok.Lexeme, Span: spanPos(p.file, nameTok)}
 						p.next()                        // name
-						_ = p.expect(token.ASSIGN, "=") // tolerate error recovery
-						args = append(args, p.parseExpr())
+						_ = p.expect(token.ASSIGN, "=") // consume '=' (with recovery)
+						val := p.parseExpr()
+						argNodes = append(argNodes, ast.CallArg{Name: nameIdent, Expr: val, Star: false})
+						args = append(args, val) // keep legacy positional for now
 					} else {
-						args = append(args, p.parseExpr())
+						// Plain positional
+						val := p.parseExpr()
+						argNodes = append(argNodes, ast.CallArg{Name: nil, Expr: val, Star: false})
+						args = append(args, val)
 					}
+
 					if !p.accept(token.COMMA) {
 						break
 					}
@@ -206,7 +214,13 @@ func (p *Parser) parsePostfix() ast.Expr {
 				}
 			}
 			p.expectClose(token.RPAREN, ")", callStart)
-			e = &ast.CallExpr{Callee: e, Args: args, Span: ast.JoinSpan(callStart, spanPos(p.file, p.cur))}
+			e = &ast.CallExpr{
+				Callee:   e,
+				Args:     args,
+				ArgNodes: argNodes,
+				Span:     ast.JoinSpan(callStart, spanPos(p.file, p.cur)),
+			}
+
 		case token.LBRACK:
 			idxStart := spanPos(p.file, p.cur)
 			p.next()
