@@ -585,5 +585,35 @@
         }
       ]
     }
+  },
+  "project": {
+    "invalid_key_or_section": {
+      "id": "DPM0001",
+      "title": "invalid key/section in manifest"
+    },
+    "bad_type": {
+      "id": "DPM0002",
+      "title": "invalid value type in manifest"
+    },
+    "missing_entry": {
+      "id": "DPM0003",
+      "title": "missing entry point in manifest"
+    },
+    "bad_root": {
+      "id": "DPM0004",
+      "title": "invalid or non-existent root directory"
+    },
+    "bad_diag_value": {
+      "id": "DPM0005",
+      "title": "invalid diagnostics value"
+    },
+    "entry_not_found": {
+      "id": "DPM0006",
+      "title": "entry file not found"
+    },
+    "io_error": {
+      "id": "DPM9999",
+      "title": "manifest I/O error"
+    }
   }
 }
