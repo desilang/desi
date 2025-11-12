@@ -84,13 +84,31 @@ func (d Diagnostic) RenderTTY(w io.Writer, theme Theme) {
 	_ = RenderTTYWith(w, d, osSource{}, opt)
 }
 
+// isTTYWriter reports whether w is a terminal (best-effort, no external deps).
+func isTTYWriter(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	if !ok {
+		return false
+	}
+	st, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	// Char device + sane TERM is a good proxy for a TTY without extra deps.
+	if (st.Mode() & os.ModeCharDevice) == 0 {
+		return false
+	}
+	_term := os.Getenv("TERM")
+	return _term != "" && strings.ToLower(_term) != "dumb"
+}
+
 // RenderTTYWith renders a diagnostic to w using a SourceProvider and Options.
 func RenderTTYWith(w io.Writer, d Diagnostic, src SourceProvider, opt Options) error {
 	if opt.ExpandTabs <= 0 {
 		opt.ExpandTabs = 8
 	}
 
-	// Resolve color mode. In Auto, stay conservative (no color) unless explicitly forced.
+	// Determine color usage.
 	useColor := false
 	switch opt.Color {
 	case Always:
@@ -98,10 +116,12 @@ func RenderTTYWith(w io.Writer, d Diagnostic, src SourceProvider, opt Options) e
 	case Never:
 		useColor = false
 	case Auto:
+		// Honor NO_COLOR first.
 		if _, ok := os.LookupEnv("NO_COLOR"); ok {
 			useColor = false
 		} else {
-			useColor = false
+			// Enable when writing to an actual TTY.
+			useColor = isTTYWriter(w)
 		}
 	}
 
