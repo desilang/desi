@@ -81,7 +81,7 @@ func main() {
 	// If user used the subcommand form, handle it with our own permissive parser
 	// so flags can be before OR after the filename.
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
-		file, roots, verbose, err := parseCheckArgs(os.Args[2:])
+		file, roots, verbose, err := parseCheckArgs(stripRenderFlags(os.Args[2:]))
 		if err != nil {
 			term.Eprintln("check error:", err)
 			term.Flush()
@@ -482,4 +482,35 @@ func demoDiag() error {
 
 	d.RenderTTY(os.Stderr, diag.Theme{Color: false})
 	return nil
+}
+
+// stripRenderFlags removes --error-format[=v] and --color[=v] (and their
+// space-separated forms) from args. It lets `desic check --error-format=json ...` work.
+func stripRenderFlags(args []string) []string {
+	out := make([]string, 0, len(args))
+	skipNext := false
+	for i := 0; i < len(args); i++ {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		a := args[i]
+		switch {
+		case strings.HasPrefix(a, "--error-format="),
+			a == "--error-format",
+			strings.HasPrefix(a, "--color="),
+			a == "--color":
+			if a == "--error-format" || a == "--color" {
+				// consume the next token as its value if present
+				if i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+					skipNext = true
+				}
+			}
+			// swallow this flag
+			continue
+		default:
+			out = append(out, a)
+		}
+	}
+	return out
 }
