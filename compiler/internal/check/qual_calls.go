@@ -101,3 +101,6 @@ func cloneNames(in []string) []string {
 	copy(out, in)
 	return out
 }
+
+// hasCands reports whether an overload set is non-nil and non-empty.
+func hasCands(s *OverloadSet) bool { return s != nil && len(s.Cands) > 0 }
