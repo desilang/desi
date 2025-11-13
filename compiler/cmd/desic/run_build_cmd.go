@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/term"
 )
@@ -211,8 +212,7 @@ func loadManifestOrFail(verb string) (project.Manifest, string, bool) {
 	}
 	m, diags := project.Load(mp)
 	for _, d := range diags {
-		// We don’t switch to JSON here; renderer defaults are handled by main/D.
-		d.RenderTTY(os.Stderr, nil)
+		d.RenderTTY(os.Stderr, diag.Theme{})
 	}
 	if len(diags) > 0 {
 		return project.Manifest{}, "", false
