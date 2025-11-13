@@ -39,13 +39,7 @@ func init() {
 // --------------------- init ---------------------
 
 func initCmd(argv []string) int {
-	// Syntax:
-	//   desic init [NAME] [-p PATH|--path PATH] [-v VERSION|--version VERSION] [-e EDITION|--edition EDITION] [--force|-f]
-	//
-	// Behavior:
-	// - If PATH provided: create there; package name = NAME if provided, else basename(PATH) (or CWD basename if PATH=".").
-	// - If PATH not provided and NAME provided: create ./NAME; package name = NAME.
-	// - If neither provided: target="."; package name = basename(CWD).
+	// desic init [NAME] [-p PATH|--path PATH] [-v VERSION|--version VERSION] [-e EDITION|--edition EDITION] [--force|-f]
 	force := false
 	var name string
 	var pathOpt string
@@ -79,7 +73,6 @@ func initCmd(argv []string) int {
 			edition = argv[i+1]
 			i++
 		default:
-			// first non-flag token is NAME
 			if strings.HasPrefix(a, "-") {
 				term.Eprintln("init: unknown flag:", a)
 				return 2
@@ -93,22 +86,18 @@ func initCmd(argv []string) int {
 		}
 	}
 
-	// Resolve target directory and package name
-	var target string
-	var pkgName string
+	// Resolve target dir & package name
+	var target, pkgName string
 	cwd, _ := os.Getwd()
-
 	switch {
 	case pathOpt != "":
 		target = pathOpt
 		if name != "" {
 			pkgName = name
+		} else if target == "." {
+			pkgName = filepath.Base(cwd)
 		} else {
-			if target == "." {
-				pkgName = filepath.Base(cwd)
-			} else {
-				pkgName = filepath.Base(target)
-			}
+			pkgName = filepath.Base(target)
 		}
 	case name != "":
 		target = filepath.Join(cwd, name)
@@ -152,7 +141,7 @@ func initCmd(argv []string) int {
 		return 2
 	}
 
-	// Write src/main.desi (no explicit prelude import; print is in prelude)
+	// Write src/main.desi (no prelude import; print is in prelude)
 	srcDir := filepath.Join(target, "src")
 	if err := os.MkdirAll(srcDir, 0o755); err != nil {
 		term.Eprintln("init:", err)
@@ -188,7 +177,6 @@ func runCmd(argv []string) int {
 
 	exe, _ := os.Executable()
 	args := []string{"check"}
-	// Preserve renderer flags and pass through explicitly.
 	args = append(args, forwardRenderFlags(argv)...)
 	if iroots != "" {
 		args = append(args, "-I", iroots)
@@ -202,7 +190,7 @@ func runCmd(argv []string) int {
 	if err := cmd.Run(); err != nil {
 		return exitCode(err)
 	}
-	term.Println("ok")
+	// No extra "ok" — let the subcommand be the only output on success.
 	return 0
 }
 
@@ -221,10 +209,9 @@ func buildCmd(argv []string) int {
 		return 2
 	}
 
-	// Call self: `desic emit-ir ENTRY` (do NOT pass -I; emit-ir path doesn’t honor it)
+	// Call self: desic emit-ir ENTRY  (do NOT pass -I; emit-ir doesn’t accept it)
 	exe, _ := os.Executable()
 	args := []string{"emit-ir"}
-	// Renderer flags pass-through (useful for diag consistency if the path errors)
 	args = append(args, forwardRenderFlags(argv)...)
 	args = append(args, entry)
 
@@ -247,7 +234,7 @@ func buildCmd(argv []string) int {
 }
 
 func testCmd(argv []string) int {
-	// Placeholder: run `go test ./...`
+	// Placeholder: run `go test ./...` from current repo
 	cmd := exec.Command("go", "test", "./...")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -278,7 +265,6 @@ func loadManifestOrFail(verb string) (project.Manifest, string, bool) {
 }
 
 func pickIRoots(argv []string, m project.Manifest) string {
-	// CLI -I wins; otherwise manifest roots.
 	if cli := parseIRootsArg(argv); cli != "" {
 		return cli
 	}
@@ -286,7 +272,7 @@ func pickIRoots(argv []string, m project.Manifest) string {
 	if len(rs) == 0 {
 		return ""
 	}
-	sep := string(os.PathListSeparator) // ':' or ';'
+	sep := string(os.PathListSeparator)
 	return strings.Join(rs, sep)
 }
 
@@ -323,7 +309,6 @@ func forwardRenderFlags(argv []string) []string {
 			strings.HasPrefix(a, "--color="),
 			a == "--color":
 			out = append(out, a)
-			// if it was a split-arg form, grab the value too
 			if (a == "--error-format" || a == "--color") && i+1 < len(argv) {
 				out = append(out, argv[i+1])
 				i++
@@ -341,7 +326,6 @@ func exitCode(err error) int {
 		if ws, ok := ee.Sys().(interface{ ExitStatus() int }); ok {
 			return ws.ExitStatus()
 		}
-		// On Windows:
 		if runtime.GOOS == "windows" {
 			return int(ee.ExitCode())
 		}
@@ -353,16 +337,9 @@ func safePkgName(name string) string {
 	if name == "" {
 		return "app"
 	}
-	// super simple sanitation
 	return strings.Map(func(r rune) rune {
 		switch {
-		case r >= 'a' && r <= 'z':
-			return r
-		case r >= 'A' && r <= 'Z':
-			return r
-		case r >= '0' && r <= '9':
-			return r
-		case r == '-', r == '_':
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
 			return r
 		default:
 			return '_'
@@ -371,9 +348,8 @@ func safePkgName(name string) string {
 }
 
 func quote(s string) string {
-	// Minimal quoting for manifest strings
 	if !strings.ContainsAny(s, " \t\"") {
-		return `"` + s + `"` // still quote for consistency
+		return `"` + s + `"`
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
 }
