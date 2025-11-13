@@ -144,6 +144,7 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 		ex = &Exports{
 			Funcs:      map[string][]*types.Func{},
 			FuncModes:  map[string][][]ast.ParamMode{},
+			ParamNames: map[string][][]string{},
 			FuncExtern: map[string][]ExternMeta{},
 		}
 	}
@@ -193,10 +194,13 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 			}
 			modesTab := subEx.FuncModes[name]
 			metaTab := subEx.FuncExtern[name]
+			namesTab := subEx.ParamNames[name]
+
 			// Append (not overwrite) to allow multiple sources providing overloads.
 			ex.Funcs[local] = append(ex.Funcs[local], cands...)
 			ex.FuncModes[local] = append(ex.FuncModes[local], modesTab...)
 			ex.FuncExtern[local] = append(ex.FuncExtern[local], metaTab...)
+			ex.ParamNames[local] = append(ex.ParamNames[local], namesTab...)
 		}
 	}
 	return ex

@@ -24,6 +24,10 @@ type Exports struct {
 	// This carries the callee-declared parameter passing modes for each exported function.
 	FuncModes map[string][][]ast.ParamMode
 
+	// NEW (E-2): ParamNames is index-aligned with Funcs[name]: one []string per overload.
+	// ParamNames[i][j] is the source-level parameter name for overload i, parameter j.
+	ParamNames map[string][][]string
+
 	// FuncExtern is index-aligned with Funcs[name]: extern metadata per overload.
 	FuncExtern map[string][]ExternMeta
 }
@@ -41,6 +45,7 @@ func CollectExports(mod *ast.Module) *Exports {
 	out := &Exports{
 		Funcs:      map[string][]*types.Func{},
 		FuncModes:  map[string][][]ast.ParamMode{},
+		ParamNames: map[string][][]string{},
 		FuncExtern: map[string][]ExternMeta{},
 	}
 	if mod == nil {
@@ -86,12 +91,19 @@ func CollectExports(mod *ast.Module) *Exports {
 		name := fn.Name.Name
 		out.Funcs[name] = append(out.Funcs[name], ft)
 
-		// Collect parameter modes aligned with this overload.
+		// Parameter modes aligned with this overload.
 		modes := make([]ast.ParamMode, len(fn.Params))
 		for i := range fn.Params {
 			modes[i] = fn.Params[i].Mode
 		}
 		out.FuncModes[name] = append(out.FuncModes[name], modes)
+
+		// NEW (E-2): parameter names aligned with this overload.
+		pnames := make([]string, len(fn.Params))
+		for i := range fn.Params {
+			pnames[i] = fn.Params[i].Name.Name
+		}
+		out.ParamNames[name] = append(out.ParamNames[name], pnames)
 
 		// ---- FFI extern metadata (index-aligned) ----
 		meta := ExternMeta{}
@@ -109,10 +121,9 @@ func CollectExports(mod *ast.Module) *Exports {
 			// If second arg is a string literal, mark link hint as present with a placeholder.
 			if len(dec.Args) >= 2 {
 				if _, ok := dec.Args[1].(*ast.StrLit); ok {
-					meta.Link = "__present__" // placeholder: presence-only in M9B
+					meta.Link = "__present__" // presence-only
 				}
 			}
-			// Stop after the first extern decorator, if multiple.
 			break
 		}
 		out.FuncExtern[name] = append(out.FuncExtern[name], meta)
