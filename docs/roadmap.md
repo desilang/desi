@@ -210,6 +210,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 > **Status:** Shipped as a **token-rewrite formatter** (`internal/format`), plus a small polish release (**M11.1**) for EOL comments & docstrings. An AST pretty-printer is deferred to **M11.2** (see below).
 
 **What shipped (Formatter v1)**
+
 * Deterministic **token rewriter**:
   * Rewrites **whitespace/trivia only**; does **not** change tokens.
   * **Tabs-only** at BOL; **no trailing spaces**; single trailing newline.
@@ -222,11 +223,13 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
   * Golden Phase-1/2 and idempotence tests; smoke tests; repo-wide smoke on examples.
 
 **M11.1 — Comments & Docstrings polish (✅ DONE)**
+
 * Preserve **end-of-line `#` comments** that trail real code (ignore `#{` set-literal openers; never move comment-only lines).
 * Hardened **multi-line docstring** reconstruction (no duplication, no spill across tokens).
 * Added Phase-3 goldens and idempotence; improved test harness output.
 
 **M11.2 — Formatter v2 (AST pretty-printer, Deferred)**
+
 * **Goal:** full AST-backed pretty-printer (import grouping, line-wrapping, break rules).
 * **Why deferred:** no comment/trivia model attached to AST; grammar edges (tuples/lists/comps) still settling; high churn risk.
 * **Prereqs:**
@@ -237,7 +240,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
   - Tuple syntax rework & tuple-return pattern disambiguation.
   - Bare list literal vs. comprehension parser sharp edges.
   - Block comment model (if we ever add it).
-  - F-string interpolation semantics beyond stage-1 (currently plain strings).
+  - **F-string interpolation semantics beyond stage-1** (currently plain strings; actual formatting is scheduled under **M14**).
   - Any AST/IR redesign — kept out of formatter milestones.
 * **Scheduling:** revisit **after M12** once diagnostics and parser/style are stable; no downstream blockers.
 
@@ -274,50 +277,101 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M13 — Project Manifest & Packaging + Call/Param Polish (🚧 In progress)
+### M13 — Project Manifest & Packaging + Call/Param Polish (✅ DONE)
 
-**Scope**
+**What shipped**
 
-* **Project manifest**: `desi.mod` (DML/INI-like), parser/validator in `internal/project` with `DPM*` diags; `FindRoot` and `Load`.
-* **Manifest-aware CLIs**: `desic init|run|build|test`
-  * `init NAME [-p PATH] [-v VERSION] [-e EDITION] [--force]`: scaffolds `desi.mod`, `src/main.desi`, `tests/`.
-  * `run`: resolve `entry`/`roots` from manifest (unless overridden); type-check.
-  * `build`: emit textual LLVM IR to `<out_dir>/<package>.ll`; `--verify-llvm` optionally runs `llvm-as` if available.
-  * `test`: placeholder → `go test ./...` (Desi test runner later).
+* **Project manifest**: `desi.mod` (DML/INI-like):
+  * Parser/validator under `internal/project` with `DPM*` diagnostics.
+  * `FindRoot` walks up from CWD to discover the manifest.
+  * `Load` normalizes paths, editions, and diagnostics defaults.
+* **Manifest-aware CLIs** (`desic` subcommands):
+  * `init NAME [-p PATH] [-v VERSION] [-e EDITION] [--force]`:
+    * scaffolds `desi.mod`, `src/main.desi`, and `tests/`,
+    * refuses to overwrite unless `--force`.
+  * `run`:
+    * resolves `entry`/`roots` from the manifest (unless overridden by CLI),
+    * type-checks the import graph starting at the chosen entry.
+  * `build`:
+    * emits textual LLVM IR to `<out_dir>/<package>.ll`,
+    * `--verify-llvm` optionally runs `llvm-as` if available.
+  * `test`:
+    * placeholder; today shells out to `go test ./...` (real Desi test runner later).
   * **Precedence**: **CLI > env > manifest > defaults**; diagnostics defaults from `[diagnostics]` are seeded early and still overridden by flags.
-* **Call/Param polish**:
-  * **Named arguments** (no splats). After the first named arg, all following must be named. Diags: `DCA0001` unknown name, `DCA0002` duplicate, `DCA0003` positional after named.
-  * **Positional varargs `*args`** (safe subset): final param `*p:T` treated as `list[T]`; call-site `*Expr` must type to `list[T]`. Diags: `DCA0010` wrong element type, `DCA0011` `inout` via varargs forbidden.
+* **Named arguments for function calls** (no varargs yet):
+  * Surface: `f(1, 2, z=3, w=4)`; **no `**kwargs`** or splats.
+  * Rule: after the first **named** argument, **no positional** arguments are allowed.
+  * Resolver exports per-overload parameter names and extern metadata; checker stores per-candidate param-name vectors.
+  * Checker maps call-site names → parameter indices **per overload**, then reuses the existing overload engine.
+  * Borrow/move rules and FFI unsafe gate are applied on the **canonical positional vector** after mapping.
+  * Pipelines (`lhs |> f(...)`) use the same overload machinery and continue to behave as in M4/M8.
+* **New diagnostics (calls)**:
+  * `DCA0001` — unknown named argument.
+  * `DCA0002` — duplicate named argument.
+  * `DCA0003` — positional argument after named arguments.
+* **Behavioral guarantees**:
+  * Calls that use **only positionals** behave exactly as before M13 (no surprises).
+  * Named-arg failures favor **specific** `DCA*` codes; generic `DTE0101/102` are reserved for real overload/type issues.
+  * FFI unsafe rule (**DFI0003**) and borrow checker diagnostics (`DBR*`) continue to fire exactly as pre-M13; named arguments are just a different way to feed the same engine.
+
+**Deferred from M13**
+
+* Positional varargs `*args` and related checks:
+  * Collection of trailing positionals and starred lists into `list[T]`.
+  * Diags like `DCA0010` (wrong element type) and `DCA0011` (`inout` via varargs forbidden).
+* These are moved to **M14+** where they can be introduced together with `Display`-based printing.
 
 **Acceptance**
 
-* `desic init demo && cd demo && desic run` succeeds; `desic build` writes IR file.
-* Renderer flags (`--error-format`, `--color`) honored per precedence; JSON mode emits a single array to **stderr**.
-* Named args canonicalize correctly; varargs collect positionals and starred lists with precise diags.
+* `desic init demo && cd demo && desic run` succeeds; `desic build` writes an IR file named after the package.
+* Renderer flags (`--error-format`, `--color`) continue to follow `CLI > env > manifest > defaults`.
+* Named arguments:
+  * Canonicalize correctly for both local and imported functions.
+  * Enforce `DCA0003` (“named last”) at the call site.
+  * Produce `DCA0001/2` for unknown/duplicate names.
+* All existing arithmetic/borrow/async/FFI tests stay green; new tests for named arguments and `DCA*` codes pass.
 
 ---
 
-### M14 — Defaults, Display, Import-Closure IR, and Stdlib Growth (🆕 Planned)
+### M14 — Defaults, Display, F-Strings (Stage 2), Import-Closure IR, and Stdlib Growth (🆕 Planned)
 
 **Goals**
-Deliver Python-like ergonomics without dynamic typing: default parameters, a lightweight `Display` trait for stringification, robust `print` API on top, import-closure IR emission, and a first useful wave of stdlib modules written in Desi.
+
+Deliver Python-like ergonomics without dynamic typing: default parameters, a lightweight `Display`/`Debug`-style story for stringification, robust `print`/formatting on top (including **f-strings stage 2**), import-closure IR emission, and a first useful wave of stdlib modules written in Desi.
 
 **Language & Checker**
+
 * **Parameter defaults**:
   * Grammar: `Param := [mode] Ident ":" Type [ "=" ConstExpr ]`.
   * Rules: defaults allowed for `move` and `ref`; **not** for `inout`. Defaults must be **compile-time const** (literals, enum variants, `len("…")` and similar constfolded intrinsics).
   * Overload selection unchanged; after selecting the overload, the checker fills omitted actuals from defaults. Arity errors/diags updated accordingly.
   * Diagnostics: `DDF0001` default not const; `DDF0002` default on `inout`; `DDF0003` missing required arg; `DDF0004` conflicting defaults across overloads (if applicable).
 * **`Display` trait (or `Show`)**:
-  * Provide a prelude trait with `to_str(self) -> str`.
-  * Built-in impls: `int`, `float`, `bool`, `str`, potentially `char`.
-  * Enables typed stringification without `any`.
-* **`print` on top of E/F + defaults**:
-  * Public API: `def print(*args: list[Display], sep: str = " ", end: str = "\n") -> int`.
-  * Internals: `print_core(args: list[str], sep: str, end: str) -> int` + wrapper that maps `Display`→`str`.
-  * Examples updated accordingly.
+  * Prelude trait with `to_str(self) -> str`.
+  * Built-in impls: `int`, `float`, `bool`, `str`, and any other core scalars we decide to expose.
+  * Enables typed stringification **without** an `any`-style escape hatch.
+* **F-strings (stage 2 semantics)**:
+  * Reuse the existing `f"…"` lexical form from M0/M5.
+  * Each `{expr}` inside an f-string is a **type-checked expression**.
+  * Formatting semantics are **Rust-style**:
+    * default expansion uses the `Display`-like trait,
+    * a `{:?}`-style suffix (or similar) can opt into a `Debug`/repr-like trait when we add it.
+  * No ES6/backtick templates; no stringly-eval. Everything stays in the typed expression world.
+  * Result type is `str`; the compiler wires f-strings into `Display`/`Debug` under the hood so they compose with `print` and other APIs.
+* **Varargs and `print` on top of defaults + Display**:
+  * Language-level support for positional varargs `*args` on the last parameter:
+    * `*p:T` in the signature is treated as `list[T]` at the type level.
+    * Call-site `*Expr` must type-check to `list[T]`.
+    * Diagnostics: `DCA0010` wrong vararg element type; `DCA0011` `inout` through varargs forbidden.
+  * Public `print` API built on this:
+    * `def print(*args: list[Display], sep: str = " ", end: str = "\n") -> int`.
+    * Internals: `print_core(args: list[str], sep: str, end: str) -> int` + wrapper that maps `Display`→`str`.
+  * Examples and tests updated to rely on:
+    * implicit stringification via `Display`,
+    * f-strings for more complex formatting (`f"total = {x}"` etc.).
 
 **Backend & Build**
+
 * **Import-closure IR emission**:
   * `desic build` gathers the entry module **and all imported, reachable `pub` defs** from `roots` and emits a **single** `.ll` module.
   * Ensure deduped declarations/definitions and stable symbol names. Extend `types_lower` tests and add `emit_smoke` coverage for cross-module calls.
@@ -325,6 +379,7 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
   * Keep `--verify-llvm` flag; add CI step that **optionally** runs it when `llvm-as` is present.
 
 **Stdlib Growth (written in Desi)**
+
 * Seed modules (scope is realistic, not exhaustive):
   * `string` (split/join/replace/basic search),
   * `time` (monotonic now, sleep),
@@ -334,19 +389,24 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 * Each module exports only **fully typed** `pub` defs; no dynamic `any`.
 
 **Docs & EBNF updates (explicit)**
+
 * Update `docs/syntax.md` with:
   * Default-arg syntax, evaluation rules, and restrictions.
-  * `Display` trait intro and how `print` uses it.
-* Update `docs/grammar.ebnf` to include `Param "=" ConstExpr` and trait decl/impl surface if needed.
+  * `Display` trait intro and how `print` and f-strings use it.
+  * Varargs rules, including diagnostics for bad `*args` uses.
+* Update `docs/grammar.ebnf` to include `Param "=" ConstExpr`, trait decl/impl surface if needed, varargs, and f-string interpolation notes.
 * Update `docs/syntax_tour.md` with fresh examples:
   * `print("a", 5, sep=",", end="!")`,
-  * defaulted function parameters,
-  * simple trait impl and `to_str` usage.
+  * functions with defaults,
+  * simple trait impl and `to_str` usage,
+  * f-strings such as `f"total is {total}"` and `f"value = {x:?}"`.
 
 **Acceptance**
+
 * New examples compile & run:
   * `print("hello", 5, sep=",")` works without explicit `str(5)`.
   * A function with defaults can be called omitting trailing args; diags for non-trailing omissions are crisp.
+  * F-strings type-check embedded expressions and expand via `Display`/`Debug` traits.
 * `desic build --verify-llvm` passes on the import-closure output; no duplicate symbol emission across imports.
 * Docs updated (`syntax.md`, `grammar.ebnf`, `syntax_tour.md`) and consistent with behavior.
 * All prior milestones remain green (`go build ./... && go test ./...`).
