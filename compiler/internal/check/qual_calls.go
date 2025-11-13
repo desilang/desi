@@ -58,6 +58,7 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 	}
 	cands := ex.Funcs[fe.Name.Name]
 	modesTab := ex.FuncModes[fe.Name.Name]
+	namesTab := ex.ParamNames[fe.Name.Name]
 
 	set = &OverloadSet{Name: fe.Name.Name}
 	for i, ft := range cands {
@@ -71,13 +72,27 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 				modes[j] = ast.ParamMove
 			}
 		}
+		var pnames []string
+		if i < len(namesTab) {
+			pnames = namesTab[i]
+		}
 		ext := false
 		if metas, ok := ex.FuncExtern[fe.Name.Name]; ok {
 			if i < len(metas) {
 				ext = metas[i].Extern
 			}
 		}
-		set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes, Extern: ext})
+		set.Add(&FuncCand{Decl: nil, Type: ft, Modes: modes, Extern: ext, ParamNames: cloneNames(pnames)})
 	}
 	return set, id, true
+}
+
+// cloneNames is a tiny helper to avoid aliasing exported slices.
+func cloneNames(in []string) []string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
 }
