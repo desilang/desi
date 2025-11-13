@@ -44,7 +44,7 @@ type FuncCand struct {
 	Type       *types.Func     // canonical function type (params + ret)
 	Modes      []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
 	Extern     bool            // true if this candidate represents an @extern declaration
-	ParamNames []string        // NEW (E-2): parameter names (index-aligned with Type.Params; may be empty)
+	ParamNames []string        // E-2: parameter names by index (len == arity), may be nil/empty
 }
 
 // OverloadSet groups candidate functions by name.
