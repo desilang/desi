@@ -438,11 +438,6 @@
       "id": "DMW0005",
       "title": "unused imported name",
       "help": "Remove the unused item from the 'from' list."
-    },
-    "duplicate_from_item": {
-      "id": "DMW0006",
-      "title": "duplicate item in from-import",
-      "help": "Remove the repeated item; listing the same name multiple times has no effect."
     }
   },
   "warn": {
@@ -614,6 +609,23 @@
     "io_error": {
       "id": "DPM9999",
       "title": "manifest I/O error"
+    }
+  },
+  "call": {
+    "unknown_named_argument": {
+      "id": "DCA0001",
+      "title": "unknown named argument",
+      "help": "the provided argument name does not match any parameter in the selected overload"
+    },
+    "duplicate_named_argument": {
+      "id": "DCA0002",
+      "title": "duplicate named argument",
+      "help": "remove one of the occurrences or rename the argument"
+    },
+    "positional_after_named": {
+      "id": "DCA0003",
+      "title": "positional argument after named arguments",
+      "help": "once a named argument is used, all subsequent arguments must be named"
     }
   }
 }

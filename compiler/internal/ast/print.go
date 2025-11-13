@@ -48,6 +48,7 @@ func (p *pp) printParams(params []Param) {
 			p.wr("ref ")
 		case ParamInout:
 			p.wr("inout ")
+		default:
 		}
 		p.wr("%s", prm.Name.Name)
 		if prm.Type != nil {
@@ -242,7 +243,8 @@ func (p *pp) node(n Node, d int) {
 			}
 			p.node(x, 0)
 		}
-		p.wr(" := ")
+		p.wr(" :=")
+		p.wr(" ")
 		for i, x := range n.RHS {
 			if i > 0 {
 				p.wr(", ")
@@ -439,11 +441,28 @@ func (p *pp) node(n Node, d int) {
 		p.wr("Call ")
 		p.node(n.Callee, 0)
 		p.wr("(")
-		for i, a := range n.Args {
-			if i > 0 {
-				p.wr(", ")
+		if len(n.ArgNodes) > 0 {
+			for i, a := range n.ArgNodes {
+				if i > 0 {
+					p.wr(", ")
+				}
+				if a.Star {
+					p.wr("*")
+				}
+				if a.Name != nil {
+					p.wr("%s=", a.Name.Name)
+				}
+				if a.Expr != nil {
+					p.node(a.Expr, 0)
+				}
 			}
-			p.node(a, 0)
+		} else {
+			for i, a := range n.Args {
+				if i > 0 {
+					p.wr(", ")
+				}
+				p.node(a, 0)
+			}
 		}
 		p.wr(")")
 
