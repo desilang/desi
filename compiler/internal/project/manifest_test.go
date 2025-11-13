@@ -20,6 +20,10 @@ func writeTemp(t *testing.T, dir, name, content string) string {
 
 func TestParseValid(t *testing.T) {
 	dir := t.TempDir()
+
+	// Create the manifest-declared roots and entry so Load() validation passes.
+	writeTemp(t, dir, "src/main.desi", "def main() -> int:\n  0\n")
+
 	mod := `
 [package]
 name    = "hello-desi"
@@ -49,6 +53,7 @@ name = "sqrt"
 lib  = "m"
 `
 	mp := writeTemp(t, dir, "desi.mod", mod)
+
 	m, diags := Load(mp)
 	if len(diags) > 0 {
 		t.Fatalf("unexpected diags: %+v", diags)
@@ -56,13 +61,15 @@ lib  = "m"
 	if m.Package.Name != "hello-desi" || m.EntryPath() == "" || len(m.Roots()) != 1 {
 		t.Fatalf("bad manifest fields: %+v", m)
 	}
-	if m.DiagDefaults().ErrorFormat != "human" || m.DiagDefaults().Color != "auto" || m.DiagDefaults().MaxErrors != 100 {
-		t.Fatalf("bad diag defaults: %+v", m.DiagDefaults())
+	dd := m.DiagDefaults()
+	if dd.ErrorFormat != "human" || dd.Color != "auto" || dd.MaxErrors != 100 {
+		t.Fatalf("bad diag defaults: %+v", dd)
 	}
 }
 
 func TestUnknownSectionAndKey(t *testing.T) {
 	dir := t.TempDir()
+	// No roots/entry created here on purpose; we only assert "some diags".
 	mod := `
 [unknown]
 foo = "bar"
@@ -85,7 +92,7 @@ func TestFindRoot(t *testing.T) {
 	if err := os.MkdirAll(inner, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	_ = writeTemp(t, top, "desi.mod", `[package]
+	writeTemp(t, top, "desi.mod", `[package]
 name="x"
 entry="src/main.desi"
 roots=["src"]`)
