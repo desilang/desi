@@ -74,7 +74,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 				if _, seen := info.ModuleExports[mpath]; !seen {
 					info.ModuleExports[mpath] = CollectExports(tmod)
 				}
-				// NEW: augment with re-exports declared in the imported module itself
+				// augment with re-exports declared in the imported module itself
 				info.ModuleExports[mpath] = reexportIntoExports(info.ModuleExports[mpath], tmod, ldr, info, &diags)
 			}
 			local := ""
@@ -103,7 +103,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 					ex = CollectExports(tmod)
 					info.ModuleExports[mpath] = ex
 				}
-				// NEW: augment with re-exports declared in that module as well
+				// augment with re-exports declared in that module as well
 				info.ModuleExports[mpath] = reexportIntoExports(ex, tmod, ldr, info, &diags)
 			}
 			for _, it := range s.Items {
@@ -142,10 +142,11 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 	// Ensure ex maps are non-nil
 	if ex == nil {
 		ex = &Exports{
-			Funcs:      map[string][]*types.Func{},
-			FuncModes:  map[string][][]ast.ParamMode{},
-			ParamNames: map[string][][]string{},
-			FuncExtern: map[string][]ExternMeta{},
+			Funcs:        map[string][]*types.Func{},
+			FuncModes:    map[string][][]ast.ParamMode{},
+			ParamNames:   map[string][][]string{},
+			FuncExtern:   map[string][]ExternMeta{},
+			FuncDefaults: map[string][][]bool{},
 		}
 	}
 	// Find the synthetic top function to read its statements.
@@ -195,12 +196,14 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 			modesTab := subEx.FuncModes[name]
 			metaTab := subEx.FuncExtern[name]
 			namesTab := subEx.ParamNames[name]
+			defaultsTab := subEx.FuncDefaults[name]
 
 			// Append (not overwrite) to allow multiple sources providing overloads.
 			ex.Funcs[local] = append(ex.Funcs[local], cands...)
 			ex.FuncModes[local] = append(ex.FuncModes[local], modesTab...)
 			ex.FuncExtern[local] = append(ex.FuncExtern[local], metaTab...)
 			ex.ParamNames[local] = append(ex.ParamNames[local], namesTab...)
+			ex.FuncDefaults[local] = append(ex.FuncDefaults[local], defaultsTab...)
 		}
 	}
 	return ex

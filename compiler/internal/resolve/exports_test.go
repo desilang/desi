@@ -8,7 +8,7 @@ import (
 
 func TestCollectExports_TypedOnly(t *testing.T) {
 	src := `
-pub def add(a: int, b: int) -> int:
+pub def add(a: int, b: int = 1) -> int:
   return a + b
 
 def bad(a):
@@ -47,5 +47,23 @@ def priv(a: int) -> int:
 	}
 	if _, ok := exp.Funcs["priv"]; ok {
 		t.Fatalf("priv should not be exported (not pub)")
+	}
+
+	// Defaults mask for add: a has no default, b has a default.
+	defs, ok := exp.FuncDefaults["add"]
+	if !ok {
+		t.Fatalf("missing FuncDefaults for add")
+	}
+	if len(defs) != 1 {
+		t.Fatalf("expected 1 defaults entry for add, got %d", len(defs))
+	}
+	if len(defs[0]) != 2 {
+		t.Fatalf("expected 2 param-default flags for add, got %d", len(defs[0]))
+	}
+	if defs[0][0] {
+		t.Fatalf("param a should not have a default")
+	}
+	if !defs[0][1] {
+		t.Fatalf("param b should have a default")
 	}
 }
