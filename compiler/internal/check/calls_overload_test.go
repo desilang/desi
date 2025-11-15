@@ -29,12 +29,23 @@ func buildOverloadModule() *ast.Module {
 		RetType: &ast.TypeName{Name: "int"},
 		Body:    &ast.Block{},
 	}
-	call1 := &ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "f"}, Args: []ast.Expr{&ast.IntLit{}}}}
-	call2 := &ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "f"}, Args: []ast.Expr{&ast.FloatLit{}}}}
+
+	call1 := &ast.ExprStmt{Expr: &ast.CallExpr{
+		Callee:   &ast.Ident{Name: "f"},
+		ArgNodes: []ast.CallArg{{Expr: &ast.IntLit{}}},
+	}}
+	call2 := &ast.ExprStmt{Expr: &ast.CallExpr{
+		Callee:   &ast.Ident{Name: "f"},
+		ArgNodes: []ast.CallArg{{Expr: &ast.FloatLit{}}},
+	}}
 	call3 := &ast.ExprStmt{Expr: &ast.CallExpr{
 		Callee: &ast.Ident{Name: "g"},
-		Args:   []ast.Expr{&ast.IntLit{}, &ast.IntLit{}},
+		ArgNodes: []ast.CallArg{
+			{Expr: &ast.IntLit{}},
+			{Expr: &ast.IntLit{}},
+		},
 	}}
+
 	main := &ast.FuncDecl{
 		Name:    ast.Ident{Name: "main"},
 		Params:  nil,
@@ -54,7 +65,9 @@ func TestM4_Calls_Overload_NoMatch(t *testing.T) {
 	// Only f(int) and f(float) exist; h(int) is missing.
 	h := &ast.ExprStmt{Expr: &ast.CallExpr{
 		Callee: &ast.Ident{Name: "h"},
-		Args:   []ast.Expr{&ast.IntLit{}},
+		ArgNodes: []ast.CallArg{
+			{Expr: &ast.IntLit{}},
+		},
 	}}
 	top := &ast.FuncDecl{
 		Name:    ast.Ident{Name: "top"},
@@ -70,7 +83,9 @@ func TestM4_Calls_Overload_ArityMismatch(t *testing.T) {
 	// g expects two ints; here we pass one
 	call := &ast.ExprStmt{Expr: &ast.CallExpr{
 		Callee: &ast.Ident{Name: "g"},
-		Args:   []ast.Expr{&ast.IntLit{}},
+		ArgNodes: []ast.CallArg{
+			{Expr: &ast.IntLit{}},
+		},
 	}}
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
