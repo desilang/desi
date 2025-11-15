@@ -91,7 +91,7 @@ func addPreludeBuiltins(info *Info) {
 			Type:       types.FuncOf([]types.T{param}, ret),
 			Modes:      []ast.ParamMode{mode},
 			ParamNames: makeNames(1, pname),
-			Defaults:   nil,
+			Defaults:   nil, // builtins have no defaults in M14
 		})
 	}
 	addN := func(name string, params []types.T, modes []ast.ParamMode, ret types.T, pnames []string) {
@@ -105,7 +105,7 @@ func addPreludeBuiltins(info *Info) {
 			Type:       types.FuncOf(params, ret),
 			Modes:      modes,
 			ParamNames: makeNames(len(params), pnames...),
-			Defaults:   nil,
+			Defaults:   nil, // builtins have no defaults in M14
 		})
 	}
 
