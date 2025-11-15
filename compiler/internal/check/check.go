@@ -139,16 +139,21 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		set = &OverloadSet{Name: name}
 		c.info.Funcs[name] = set
 	}
-	// Collect param modes from the declaration.
+	// Collect param modes + default mask from the declaration.
 	modes := make([]ast.ParamMode, len(fd.Params))
+	defaults := make([]bool, len(fd.Params))
 	for i := range fd.Params {
 		modes[i] = fd.Params[i].Mode
+		if fd.Params[i].Default != nil {
+			defaults[i] = true
+		}
 	}
 	set.Add(&FuncCand{
-		Decl:   fd,
-		Type:   sig,
-		Modes:  modes,
-		Extern: isExternDecl(fd), // <-- critical: mark local @extern functions
+		Decl:     fd,
+		Type:     sig,
+		Modes:    modes,
+		Extern:   isExternDecl(fd), // <-- critical: mark local @extern functions
+		Defaults: defaults,         // M14: record which params have defaults
 	})
 
 	// Bind the function name in the current scope for call resolution.
@@ -212,7 +217,7 @@ func (c *checker) checkBlock(b *ast.Block) {
 //   - no defaults on inout params (DDF0002)
 //   - trailing-defaults rule (DDF0003)
 //   - default expr must be a compile-time constant (DDF0001)
-//   - if param has a type, default type must match (DDF0004)
+//   - if param has a type, default type must match (DTE0004)
 func (c *checker) validateParamDefaults(fd *ast.FuncDecl) {
 	if fd == nil {
 		return
@@ -253,7 +258,7 @@ func (c *checker) validateParamDefaults(fd *ast.FuncDecl) {
 			if pt != nil {
 				dt := c.typ(p.Default)
 				if dt != nil && !types.Equal(pt, dt) {
-					c.add(diagAt("DDF0004", p.Default.SpanOf(), "default value has type "+dt.String()+", expected "+pt.String()))
+					c.add(diagAt("DTE0004", p.Default.SpanOf(), "default value has type "+dt.String()+", expected "+pt.String()))
 				}
 			}
 		}
