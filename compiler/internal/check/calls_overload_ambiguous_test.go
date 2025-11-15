@@ -26,7 +26,9 @@ func TestM4_Calls_Overload_Ambiguous(t *testing.T) {
 			Stmts: []ast.Stmt{
 				&ast.ExprStmt{Expr: &ast.CallExpr{
 					Callee: &ast.Ident{Name: "f"},
-					Args:   []ast.Expr{&ast.IntLit{}},
+					ArgNodes: []ast.CallArg{
+						{Expr: &ast.IntLit{}},
+					},
 				}},
 			},
 		},
