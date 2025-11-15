@@ -187,6 +187,9 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		}
 	}
 
+	// M14: validate parameter defaults (modes, trailing, const-ness, type match).
+	c.validateParamDefaults(fd)
+
 	// M6-C: callee-side borrow rule on async functions.
 	c.checkAsyncInoutAwait(fd)
 
@@ -202,6 +205,77 @@ func (c *checker) checkBlock(b *ast.Block) {
 	}
 	for _, s := range b.Stmts {
 		c.checkStmt(s)
+	}
+}
+
+// validateParamDefaults enforces:
+//   - no defaults on inout params (DDF0002)
+//   - trailing-defaults rule (DDF0003)
+//   - default expr must be a compile-time constant (DDF0001)
+//   - if param has a type, default type must match (DDF0004)
+func (c *checker) validateParamDefaults(fd *ast.FuncDecl) {
+	if fd == nil {
+		return
+	}
+
+	// Trailing-defaults + inout rule.
+	seenDefault := false
+	for i := range fd.Params {
+		p := &fd.Params[i]
+		if p.Default != nil {
+			if p.Mode == ast.ParamInout {
+				c.add(diagAt("DDF0002", p.Name.Span, "inout parameters cannot have default values"))
+			}
+			seenDefault = true
+		} else if seenDefault {
+			// Non-trailing param without default after a defaulted param.
+			c.add(diagAt("DDF0003", p.Name.Span, "non-default parameter cannot follow parameter with default"))
+		}
+	}
+
+	// Const-ness + type compatibility of defaults.
+	for i := range fd.Params {
+		p := &fd.Params[i]
+		if p.Default == nil {
+			continue
+		}
+
+		// Const-ness: only a narrow set of literal forms are allowed in M14.
+		if !isConstDefaultExpr(p.Default) {
+			c.add(diagAt("DDF0001", p.Default.SpanOf(), "default value must be a compile-time constant"))
+			// Don't try to type-match non-const defaults; we've already rejected them.
+			continue
+		}
+
+		// If the param has a declared type, enforce that the default's type matches.
+		if p.Type != nil {
+			pt := surfaceToType(p.Type.Name)
+			if pt != nil {
+				dt := c.typ(p.Default)
+				if dt != nil && !types.Equal(pt, dt) {
+					c.add(diagAt("DDF0004", p.Default.SpanOf(), "default value has type "+dt.String()+", expected "+pt.String()))
+				}
+			}
+		}
+	}
+}
+
+// isConstDefaultExpr reports whether e is an allowed compile-time constant default
+// expression in M14 (literals and simple unary-minus on numeric literals).
+func isConstDefaultExpr(e ast.Expr) bool {
+	switch x := e.(type) {
+	case *ast.IntLit, *ast.FloatLit, *ast.BoolLit, *ast.StrLit, *ast.NoneLit:
+		return true
+	case *ast.UnaryExpr:
+		if x.Op == "-" {
+			switch x.X.(type) {
+			case *ast.IntLit, *ast.FloatLit:
+				return true
+			}
+		}
+		return false
+	default:
+		return false
 	}
 }
 

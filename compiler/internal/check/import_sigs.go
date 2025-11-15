@@ -65,6 +65,8 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 					modesTab := ex.FuncModes[name]
 					namesTab := ex.ParamNames[name]
 					metaTab := ex.FuncExtern[name]
+					defaultsTab := ex.FuncDefaults[name]
+
 					for i, ft := range cands {
 						var modes []ast.ParamMode
 						if i < len(modesTab) {
@@ -84,12 +86,18 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 						if i < len(metaTab) {
 							ext = metaTab[i].Extern
 						}
+						var defaults []bool
+						if i < len(defaultsTab) {
+							defaults = defaultsTab[i]
+						}
+
 						set.Add(&FuncCand{
 							Decl:       nil,
 							Type:       types.FuncOf(ft.Params, ft.Ret),
 							Modes:      modes,
 							Extern:     ext,
 							ParamNames: cloneNames(pnames),
+							Defaults:   cloneBools(defaults),
 						})
 					}
 				}
