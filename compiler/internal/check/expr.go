@@ -1065,23 +1065,44 @@ func filterByArity(cands []*FuncCand, n int) []*FuncCand {
 	return out
 }
 
-// filterExactByTypes returns candidates whose parameter types exactly match args.
+// filterExactByTypes returns candidates whose parameter types exactly match
+// the provided argument types, allowing trailing parameters to be satisfied
+// by defaults (M14).
 func filterExactByTypes(cands []*FuncCand, args []types.T) []*FuncCand {
 	out := make([]*FuncCand, 0, len(cands))
 	for _, cand := range cands {
-		if len(cand.Type.Params) != len(args) {
+		if cand == nil || cand.Type == nil {
 			continue
 		}
+		params := cand.Type.Params
+		if len(args) > len(params) {
+			// more args than parameters: cannot match
+			continue
+		}
+		defaults := candDefaults(cand)
+
 		ok := true
+		// Check the prefix that has explicit arguments.
 		for i := range args {
-			if !types.Equal(args[i], cand.Type.Params[i]) {
+			if !types.Equal(params[i], args[i]) {
 				ok = false
 				break
 			}
 		}
-		if ok {
-			out = append(out, cand)
+		if !ok {
+			continue
 		}
+		// Any remaining parameters must be satisfied by defaults.
+		for i := len(args); i < len(params); i++ {
+			if len(defaults) != len(params) || !defaults[i] {
+				ok = false
+				break
+			}
+		}
+		if !ok {
+			continue
+		}
+		out = append(out, cand)
 	}
 	return out
 }
