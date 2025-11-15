@@ -68,6 +68,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		}
 	}
 
+	// M14: enforce default-parameter consistency across overloads.
+	res.Diags = append(res.Diags, enforceDefaultConsistency(res.Info)...)
+
 	// Pass 2: check bodies.
 	for _, d := range mod.Decls {
 		switch dd := d.(type) {
@@ -97,6 +100,69 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	res.Diags = append(res.Diags, ut.emitUnusedDiags()...)
 
 	return res
+}
+
+// enforceDefaultConsistency ensures that all overloads for a given name share
+// the same "which parameters have defaults" mask. It only reports on local
+// declarations (Decl != nil); imported/builtin candidates participate in the
+// comparison but don't get their own spans.
+func enforceDefaultConsistency(info *Info) []diag.Diagnostic {
+	var out []diag.Diagnostic
+	if info == nil {
+		return out
+	}
+
+	for name, set := range info.Funcs {
+		if set == nil || len(set.Cands) <= 1 {
+			continue
+		}
+
+		var baseline []bool
+
+		for _, cand := range set.Cands {
+			if cand == nil || cand.Type == nil {
+				continue
+			}
+
+			mask := candDefaults(cand)
+			if len(mask) == 0 {
+				continue
+			}
+
+			if baseline == nil {
+				baseline = make([]bool, len(mask))
+				copy(baseline, mask)
+				continue
+			}
+
+			if len(mask) != len(baseline) {
+				if cand.Decl != nil {
+					out = append(out, diagAt("DDF0005", cand.Decl.Name.Span,
+						"default parameters must be consistent across overloads of "+name))
+				}
+				continue
+			}
+
+			mismatchIdx := -1
+			for i := range baseline {
+				if mask[i] != baseline[i] {
+					mismatchIdx = i
+					break
+				}
+			}
+			if mismatchIdx >= 0 && cand.Decl != nil {
+				// Point at the parameter whose default status disagrees.
+				if mismatchIdx < len(cand.Decl.Params) {
+					out = append(out, diagAt("DDF0005", cand.Decl.Params[mismatchIdx].Name.Span,
+						"default parameters must be consistent across overloads of "+name))
+				} else {
+					out = append(out, diagAt("DDF0005", cand.Decl.Name.Span,
+						"default parameters must be consistent across overloads of "+name))
+				}
+			}
+		}
+	}
+	return out
 }
 
 type checker struct {
