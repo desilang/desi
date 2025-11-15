@@ -28,7 +28,7 @@ This doc tracks the **implemented** subset at each milestone and calls out “wh
   - Global `--error-format` / `--color` flags for `desic` and `desifmt`.
 - **M13** adds:
   - **Project manifest** `desi.mod` with `FindRoot`/`Load` in `internal/project`, and manifest-aware `desic init|run|build|test`.
-  - **Named arguments** in function calls (no defaults/varargs yet). See **Calls & named arguments (M13)** below.
+  - **Named arguments** in function calls. Defaults and overloads are enforced at check time (see below).
 
 ---
 
@@ -42,6 +42,11 @@ M4 introduces a semantic/type pass that runs after parsing:
   - binary arithmetic on `int|float` (exact operand types); comparisons produce `bool`; logical `and/or` require `bool`.
   - **pipeline `|>`** is checked as “insert LHS as the first argument”: `a |> f(b,c)` ≡ `f(a,b,c)`. Pipeline diagnostics mention “pipeline …” in messages for clarity.
   - **exact-match overloading** by **arity + parameter types**; ambiguous/missing picks report targeted diagnostics.
+  - **parameter defaults**:
+    - Functions may declare defaults in the signature: `def f(a: int, b: int = 1, c = 2) -> int: ...`.
+    - Call sites may omit **trailing** parameters; missing ones are filled from defaults.
+    - Defaults participate in overload matching; conflicting default layouts across overloads are rejected (see `DTE0102`).
+  - **named arguments** (M13) are resolved per overload using the exported parameter names; bad names / duplicates get `DCA*` diagnostics.
   - **comprehensions** propagate element/key/value types into `list/set/dict`.
   - **lambdas**: typed parameters are supported (tests prefer explicit param types).
   - **multi-return** (via grouped assignment and returns): enforces **width** and element-wise compatibility.
@@ -61,8 +66,12 @@ M13 extends call syntax to support **named arguments** while keeping old positio
   - `f(1, 2, 3)`
 - **Named + positional**:
   - `f(1, 2, z=3, w=4)`
+- **Defaults** (M14 surface, checked in M4/M14 type phase):
+  - `def f(a: int, b: int = 1, c = 2) -> int: ...`
+  - `f(10)` uses defaults for `b` and `c`.
+  - `f(10, c=5)` uses default for `b`, explicit value for `c`.
 
-There is **no** `*args` / `**kwargs` / varargs in the language yet (those are planned for a later milestone). Parameter defaults (`param = value` in the signature) are **not implemented**; they are syntax-tour/future-only for now.
+There is **no** `*args` / `**kwargs` / varargs in the language yet (those are planned for a later milestone).
 
 ### Rules
 
@@ -73,8 +82,14 @@ There is **no** `*args` / `**kwargs` / varargs in the language yet (those are pl
 - Named arguments are matched **per overload** using parameter names exported by:
   - the local function declaration (`def f(x: int, y: int) -> …`), or
   - resolver metadata for imported functions (e.g., `from math import add`).
+- Defaults are applied **after** the named/positional mapping:
+  - Omitted trailing parameters with defaults are filled.
+  - You can skip a defaulted parameter by using a **named** argument on a later parameter:
+    - `def f(a, b=1, c=2) -> int: ...`
+    - `f(10, c=5)` is allowed; `b` uses its default.
+- If, after mapping + defaults, **multiple overloads still fit**, the call is reported as **ambiguous** (`DTE0102`).
 
-### Diagnostics (M13)
+### Diagnostics (M13/M14)
 
 - `DCA0001` — **unknown named argument**:
   - `f(x=1, z=2)` when `z` is not a parameter of any candidate.
@@ -82,8 +97,9 @@ There is **no** `*args` / `**kwargs` / varargs in the language yet (those are pl
   - `f(x=1, x=2)` or `f(1, x=2)` when the first positional already filled `x`.
 - `DCA0003` — **positional argument after named arguments**:
   - `f(x=1, 2)`.
+- `DTE0102` — **ambiguous overload** (including when defaults make multiple overloads equally good).
 
-For calls that use **only positional arguments**, overload resolution behaves exactly as before M13. Named-arg failures prefer the `DCA*` codes; `DTE0101/0102` are used only when a real overload/type mismatch remains after mapping.
+For calls that use **only positional arguments**, overload resolution behaves exactly as before M13; defaults only allow you to pass fewer arguments when the declaration has trailing defaults.
 
 ---
 
@@ -140,7 +156,7 @@ Desi uses layout with `NL`, `Indent`, `Dedent`.
 - Strings: `"..."`, `f"..."`, long `"""..."""` (triple-quoted).
   - Triple-quoted strings are recognized specially as **docstrings** when they are the **first statement in a block**; the parser emits a `StmtDocString` and, for **functions and classes**, attaches it to the decl.
   - **f-strings (stage 1):**
-    - Lexically recognized via the `f` prefix.
+    - Lexically recognized via the `f` prefix (`f"..."`).
     - **Today** they are treated as plain `str` at type-time; `{…}` inside the string does **not** perform interpolation yet.
     - Proper interpolation semantics (Rust-style `Display`/`Debug` traits, typed holes) are scheduled under **M14**.
 
@@ -187,55 +203,64 @@ or
 
 ## Indexing & Slicing
 
-- **Indexing:** `x[i]`
-- **Slicing with steps (M5-4d):** `x[i:j:k]` supports any part omitted:
-  - `x[i:j]`, `x[:j]`, `x[:]`, `x[::k]`, `x[2::]`, `x[1:5:2]`, etc.
-- **Typing in M5:** if `x` is `str`, then `x[...]` is `str`. Other container slice typing will be added in a later milestone.
+* **Indexing:** `x[i]`
+* **Slicing with steps (M5-4d):** `x[i:j:k]` supports any part omitted:
+
+  * `x[i:j]`, `x[:j]`, `x[:]`, `x[::k]`, `x[2::]`, `x[1:5:2]`, etc.
+* **Typing in M5:** if `x` is `str`, then `x[...]` is `str`. Other container slice typing will be added in a later milestone.
 
 ---
 
 ## M2 statements
 
-- `let [mut] name [: Type] = Expr`
-- `return [Expr]`
-- `if Expr: SimpleStmt` or block form (`:` + NL + indented block). `elif`/`else` supported in both forms.
-- `while Expr: SimpleStmt` or block form.
-- `for Target in Expr: SimpleStmt` or block form.
+* `let [mut] name [: Type] = Expr`
+* `return [Expr]`
+* `if Expr: SimpleStmt` or block form (`:` + NL + indented block). `elif`/`else` supported in both forms.
+* `while Expr: SimpleStmt` or block form.
+* `for Target in Expr: SimpleStmt` or block form.
   *Note:* the **Target** is parsed with `in` reserved for the clause (membership operator is disabled in that position).
-- `using Expr: Block`
-- `defer SimpleStmt` (executes at scope-exit)
-- `match Expr: Block` with guarded arms (parse surface in M4; more checks later)
+* `using Expr: Block`
+* `defer SimpleStmt` (executes at scope-exit)
+* `match Expr: Block` with guarded arms (parse surface in M4; more checks later)
 
 ## Declarations
 
-- `def name(params…) [-> Type]: Block` (decorators + docstrings supported; implicit `self` for class methods).
-  - Parameter defaults (`param = value`) are **not** implemented; any such syntax should be treated as future/roadmap-only.
-- `class Name [ (Base, …) ]: Block` (parse-only checks in M3A; visibility policy in policy doc)
-- `struct Name: Fields…`
-- `enum Name: Variants…`
-- `type Name = T`
+* `def name(params…) [-> Type]: Block` (decorators + docstrings supported; implicit `self` for class methods).
+
+  * Parameters may have defaults: `x: int = 1`, `y = 2`.
+  * Defaults should form a **suffix** of the parameter list; the checker applies defaults to omitted trailing args and participates in overload consistency/diagnostics.
+* `class Name [ (Base, …) ]: Block` (parse-only checks in M3A; visibility policy in policy doc)
+* `struct Name: Fields…`
+* `enum Name: Variants…`
+* `type Name = T`
 
 ---
 
 ## Imports (M5)
 
-- `import dotted.name [as alias]` binds the **leaf** or `alias` as a **module binding** in the local scope.
-- `from dotted.name import f [as g], …` binds selected items (**functions only**, if exported) directly in the local scope.
-- **Packages:** a directory is a package iff it contains `__mod.desi` (leaf files may stand alone as modules).
-- **Module-qualified calls (Phase-3):** `import math; math.add(2,3)` resolves via resolver **Exports**. Non-exported member → **`DME0003`**.
-- **Lints:** `DMW0004` unused module import; `DMW0005` unused from-item. Using a qualifier (`math.add`) counts as usage.
-- Module-qualified calls share the same **named-argument** rules as plain calls (M13).
+* `import dotted.name [as alias]` binds the **leaf** or `alias` as a **module binding** in the local scope.
+* `from dotted.name import f [as g], …` binds selected items (**functions only**, if exported) directly in the local scope.
+* **Packages:** a directory is a package iff it contains `__mod.desi` (leaf files may stand alone as modules).
+* **Module-qualified calls (Phase-3):** `import math; math.add(2,3)` resolves via resolver **Exports**. Non-exported member → **`DME0003`**.
+* **Re-exports (M14):** imports in a package’s `__mod.desi` are surfaced in the resolver’s **ModuleExports** so that:
+
+  * `from math import add` works whether `add` is defined directly in `math/__mod.desi` or re-exported from `math/add.desi`.
+* **Lints:** `DMW0004` unused module import; `DMW0005` unused from-item. Using a qualifier (`math.add`) counts as usage.
+* Module-qualified calls share the same **named-argument** rules as plain calls (M13).
 
 ---
 
 ## CLI notes
 
-- `desic check` exit codes: `0` ok, `1` had diagnostics, `2` arg/I/O error.
-- `-I` supports **multi-root import search** (e.g., `-I "examples:compiler/lib"`).
-- **Diagnostics output (M12):**
-  - Human mode (TTY) uses a Rust-style renderer with caret/underline and color policy (`--color=auto|always|never`).
-  - JSON mode (`--error-format=json`) emits **one JSON array** to **stderr** per run.
-- **Manifest-aware CLIs (M13):**
-  - `desic init|run|build|test` honor a `desi.mod` project manifest discovered via `FindRoot`.
-  - Precedence for diagnostic settings: **CLI > env > manifest > defaults**.
-- Diagnostic output is capped to a small number in the CLI with a suppression summary (keeps the console readable for very error-y files).
+* `desic check` exit codes: `0` ok, `1` had diagnostics, `2` arg/I/O error.
+* `-I` supports **multi-root import search** (e.g., `-I "examples:compiler/lib"`).
+* **Diagnostics output (M12):**
+
+  * Human mode (TTY) uses a Rust-style renderer with caret/underline and color policy (`--color=auto|always|never`).
+  * JSON mode (`--error-format=json`) emits **one JSON array** to **stderr** per run.
+* **Manifest-aware CLIs (M13):**
+
+  * `desic init|run|build|test` honor a `desi.mod` project manifest discovered via `FindRoot`.
+  * Precedence for diagnostic settings: **CLI > env > manifest > defaults**.
+* Diagnostic output is capped to a small number in the CLI with a suppression summary (keeps the console readable for very error-y files).
+
