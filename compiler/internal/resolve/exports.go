@@ -24,12 +24,16 @@ type Exports struct {
 	// This carries the callee-declared parameter passing modes for each exported function.
 	FuncModes map[string][][]ast.ParamMode
 
-	// NEW (E-2): ParamNames is index-aligned with Funcs[name]: one []string per overload.
-	// ParamNames[i][j] is the source-level parameter name for overload i, parameter j.
+	// ParamNames is index-aligned with Funcs[name]: one []string per overload.
+	// ParamNames[name][i][j] is the source-level parameter name for overload i, parameter j.
 	ParamNames map[string][][]string
 
 	// FuncExtern is index-aligned with Funcs[name]: extern metadata per overload.
 	FuncExtern map[string][]ExternMeta
+
+	// FuncDefaults is index-aligned with Funcs[name]: one []bool per overload.
+	// FuncDefaults[name][i][j] is true if parameter j of overload i has a default value.
+	FuncDefaults map[string][][]bool
 }
 
 // CollectExports walks a parsed module and returns its exported function signatures.
@@ -43,10 +47,11 @@ type Exports struct {
 //     Tier-0: ABI is set to "C" if the first arg is any string literal; link is marked as present if a second string exists.
 func CollectExports(mod *ast.Module) *Exports {
 	out := &Exports{
-		Funcs:      map[string][]*types.Func{},
-		FuncModes:  map[string][][]ast.ParamMode{},
-		ParamNames: map[string][][]string{},
-		FuncExtern: map[string][]ExternMeta{},
+		Funcs:        map[string][]*types.Func{},
+		FuncModes:    map[string][][]ast.ParamMode{},
+		ParamNames:   map[string][][]string{},
+		FuncExtern:   map[string][]ExternMeta{},
+		FuncDefaults: map[string][][]bool{},
 	}
 	if mod == nil {
 		return out
@@ -98,12 +103,21 @@ func CollectExports(mod *ast.Module) *Exports {
 		}
 		out.FuncModes[name] = append(out.FuncModes[name], modes)
 
-		// NEW (E-2): parameter names aligned with this overload.
+		// Parameter names aligned with this overload.
 		pnames := make([]string, len(fn.Params))
 		for i := range fn.Params {
 			pnames[i] = fn.Params[i].Name.Name
 		}
 		out.ParamNames[name] = append(out.ParamNames[name], pnames)
+
+		// Default-argument mask aligned with this overload.
+		defaults := make([]bool, len(fn.Params))
+		for i, p := range fn.Params {
+			if p.Default != nil {
+				defaults[i] = true
+			}
+		}
+		out.FuncDefaults[name] = append(out.FuncDefaults[name], defaults)
 
 		// ---- FFI extern metadata (index-aligned) ----
 		meta := ExternMeta{}
@@ -118,7 +132,7 @@ func CollectExports(mod *ast.Module) *Exports {
 					meta.Extern = true
 				}
 			}
-			// If second arg is a string literal, mark link hint as present with a placeholder.
+			// If second arg is a string literal, mark link hint as present.
 			if len(dec.Args) >= 2 {
 				if _, ok := dec.Args[1].(*ast.StrLit); ok {
 					meta.Link = "__present__" // presence-only

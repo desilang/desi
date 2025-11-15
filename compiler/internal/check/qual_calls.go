@@ -60,6 +60,7 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 	modesTab := ex.FuncModes[fe.Name.Name]
 	namesTab := ex.ParamNames[fe.Name.Name]
 	metaTab := ex.FuncExtern[fe.Name.Name]
+	defaultsTab := ex.FuncDefaults[fe.Name.Name]
 
 	set = &OverloadSet{Name: fe.Name.Name}
 	for i, ft := range cands {
@@ -81,12 +82,17 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 		if i < len(metaTab) {
 			ext = metaTab[i].Extern
 		}
+		var defaults []bool
+		if i < len(defaultsTab) {
+			defaults = defaultsTab[i]
+		}
 		set.Add(&FuncCand{
 			Decl:       nil,
 			Type:       ft,
 			Modes:      modes,
 			Extern:     ext,
 			ParamNames: cloneNames(pnames),
+			Defaults:   cloneBools(defaults),
 		})
 	}
 	return set, id, true
@@ -98,6 +104,16 @@ func cloneNames(in []string) []string {
 		return nil
 	}
 	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}
+
+// cloneBools is a tiny helper to avoid aliasing exported default masks.
+func cloneBools(in []bool) []bool {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]bool, len(in))
 	copy(out, in)
 	return out
 }

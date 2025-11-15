@@ -550,25 +550,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				if chosen.Extern && c.unsafeDepth == 0 {
 					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
 				}
-				// Build positional vector for borrow/move
+				// Build positional Args vector aligned to params for borrow/move
 				tmp := *call
-				tmp.Args = make([]ast.Expr, len(chosen.Type.Params))
-				_, _ = c.canonicalizeForCandidate(chosen, argsNodes)
-				//for i := range tmp.Args {
-				//  // recompute exprs from argsNodes order via names
-				//  // easiest: just rebuild from the names again
-				//  // but we already checked mapping; reuse a second pass:
-				//  // Fill tmp.Args in positional order using types vector as a guide
-				//  // (we only need alignment length)
-				//  // Simpler: re-run mapping to get exprs:
-				//}
-				// Instead of reusing tmp.Args, just enforce using call-site indices of argsNodes.
-				// We'll synthesize from argsNodes in the same order as cand params:
-				tmp.Args = tmp.Args[:0]
-				// Build expr vector aligned to params
 				vecE := make([]ast.Expr, len(chosen.Type.Params))
-				// Construct name->expr and positionals
-				pos := 0
+				// Map names -> indices
 				pnames := c.paramNamesForCand(chosen)
 				name2idx := map[string]int{}
 				for i, nm := range pnames {
@@ -576,7 +561,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						name2idx[nm] = i
 					}
 				}
-				// Leading positionals
+				// Fill leading positionals
+				pos := 0
 				for _, an := range argsNodes {
 					if an.Name == nil {
 						if pos < len(vecE) {
@@ -585,7 +571,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						}
 					}
 				}
-				// Named fill
+				// Fill named
 				for _, an := range argsNodes {
 					if an.Name != nil {
 						if idx, ok := name2idx[an.Name.Name]; ok {
@@ -593,9 +579,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						}
 					}
 				}
-				tmp.Args = append(tmp.Args, vecE...)
+				tmp.Args = vecE
 
-				// Enforce
+				// Enforce borrow (no move tracking here: IR for these is handled via exports)
 				c.enforceCallsiteBorrow(chosen, &tmp)
 				ret := chosen.Type.Ret
 				if chosen.Decl != nil && chosen.Decl.Async {
@@ -1051,11 +1037,28 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	}
 }
 
-// filterByArity returns candidates whose arity equals n.
+// filterByArity returns candidates whose arity is compatible with n, taking
+// parameter defaults into account (M14).
 func filterByArity(cands []*FuncCand, n int) []*FuncCand {
 	out := make([]*FuncCand, 0, len(cands))
 	for _, cand := range cands {
-		if len(cand.Type.Params) == n {
+		if cand == nil || cand.Type == nil {
+			continue
+		}
+		total := len(cand.Type.Params)
+		defaults := candDefaults(cand)
+
+		required := total
+		if len(defaults) == total && total > 0 {
+			required = 0
+			for i := 0; i < total; i++ {
+				if !defaults[i] {
+					required++
+				}
+			}
+		}
+
+		if required <= n && n <= total {
 			out = append(out, cand)
 		}
 	}
@@ -1123,6 +1126,26 @@ func candParamNames(cand *FuncCand) []string {
 	return nil
 }
 
+// candDefaults returns a bool slice marking which params have defaults.
+// For local decls we read directly from the AST; for imported/builtins we use
+// FuncCand.Defaults (if present).
+func candDefaults(cand *FuncCand) []bool {
+	if cand == nil || cand.Type == nil {
+		return nil
+	}
+	if cand.Decl != nil {
+		out := make([]bool, len(cand.Decl.Params))
+		for i := range cand.Decl.Params {
+			out[i] = cand.Decl.Params[i].Default != nil
+		}
+		return out
+	}
+	if len(cand.Defaults) == len(cand.Type.Params) && len(cand.Defaults) > 0 {
+		return cand.Defaults
+	}
+	return nil
+}
+
 // checkNoPosAfterNamed enforces: after first named arg, no positional args.
 // Returns true if OK; false if a diagnostic was emitted.
 func (c *checker) checkNoPosAfterNamed(args []ast.CallArg) bool {
@@ -1143,7 +1166,8 @@ func (c *checker) checkNoPosAfterNamed(args []ast.CallArg) bool {
 
 // canonicalizeForCandidate maps 'args' into a positional vector aligned to cand.Type.Params.
 // It emits DCA0001 (unknown name) / DCA0002 (duplicate) / DCA0003 (positional-after-named) as needed.
-// On success, returns a slice of types for each param index.
+// On success, returns a slice of types for each param index, using param types for
+// omitted-but-defaulted params.
 func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) ([]types.T, bool) {
 	if cand == nil || cand.Type == nil {
 		return nil, false
@@ -1157,7 +1181,7 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 	out := make([]types.T, n)
 	filled := make([]bool, n)
 
-	// Param name lookup (may be nil => cannot map names)
+	// Param name lookup (maybe nil => cannot map names)
 	pnames := candParamNames(cand)
 	nameToIdx := map[string]int{}
 	if len(pnames) == n {
@@ -1210,12 +1234,20 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 		filled[idx] = true
 	}
 
-	// (3) All params must be provided (no defaults yet)
+	// (3) Fill omitted parameters using defaults; all non-defaulted params must be provided.
+	defaults := candDefaults(cand)
 	for i := 0; i < n; i++ {
-		if !filled[i] {
-			// Let normal arity/type filtering handle this candidate as non-match.
-			return nil, false
+		if filled[i] {
+			continue
 		}
+		// If this param has a default, treat it as supplied with its declared type.
+		if len(defaults) == n && defaults[i] {
+			out[i] = cand.Type.Params[i]
+			filled[i] = true
+			continue
+		}
+		// No arg and no default: this candidate is not a match.
+		return nil, false
 	}
 	return out, true
 }

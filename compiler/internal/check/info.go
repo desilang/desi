@@ -45,6 +45,7 @@ type FuncCand struct {
 	Modes      []ast.ParamMode // callee-declared parameter modes (index-aligned with Type.Params)
 	Extern     bool            // true if this candidate represents an @extern declaration
 	ParamNames []string        // E-2: parameter names by index (len == arity), may be nil/empty
+	Defaults   []bool          // M14: param has default value (index-aligned with Type.Params)
 }
 
 // OverloadSet groups candidate functions by name.
@@ -90,6 +91,7 @@ func addPreludeBuiltins(info *Info) {
 			Type:       types.FuncOf([]types.T{param}, ret),
 			Modes:      []ast.ParamMode{mode},
 			ParamNames: makeNames(1, pname),
+			Defaults:   nil,
 		})
 	}
 	addN := func(name string, params []types.T, modes []ast.ParamMode, ret types.T, pnames []string) {
@@ -103,6 +105,7 @@ func addPreludeBuiltins(info *Info) {
 			Type:       types.FuncOf(params, ret),
 			Modes:      modes,
 			ParamNames: makeNames(len(params), pnames...),
+			Defaults:   nil,
 		})
 	}
 
