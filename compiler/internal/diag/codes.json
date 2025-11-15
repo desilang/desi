@@ -371,6 +371,11 @@
       "id": "DTE0047",
       "title": "incompatible enum assignment",
       "help": "assign a value of the same enum type/variant"
+    },
+    "defaults_overload_inconsistent": {
+      "id": "DDF0005",
+      "title": "inconsistent default parameters across overloads",
+      "help": "all overloads for a function name must agree on which parameters have defaults"
     }
   },
   "module": {

@@ -1149,11 +1149,14 @@ func candParamNames(cand *FuncCand) []string {
 
 // candDefaults returns a bool slice marking which params have defaults.
 // For local decls we read directly from the AST; for imported/builtins we use
-// FuncCand.Defaults (if present).
+// FuncCand.Defaults (if present). If no metadata is available, we return an
+// all-false slice sized to the arity so arity logic can still run.
 func candDefaults(cand *FuncCand) []bool {
 	if cand == nil || cand.Type == nil {
 		return nil
 	}
+
+	// Local declaration: source of truth is the AST params.
 	if cand.Decl != nil {
 		out := make([]bool, len(cand.Decl.Params))
 		for i := range cand.Decl.Params {
@@ -1161,10 +1164,20 @@ func candDefaults(cand *FuncCand) []bool {
 		}
 		return out
 	}
-	if len(cand.Defaults) == len(cand.Type.Params) && len(cand.Defaults) > 0 {
-		return cand.Defaults
+
+	// Imported/builtin: use stored Defaults if it’s arity-aligned.
+	n := len(cand.Type.Params)
+	if n == 0 {
+		return nil
 	}
-	return nil
+	if len(cand.Defaults) == n {
+		out := make([]bool, n)
+		copy(out, cand.Defaults)
+		return out
+	}
+
+	// No metadata: treat as "no defaults" but still expose arity.
+	return make([]bool, n)
 }
 
 // checkNoPosAfterNamed enforces: after first named arg, no positional args.
