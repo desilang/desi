@@ -189,6 +189,19 @@ func (s *Scanner) Next() Item {
 		return Item{Tok: token.FLOAT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
 	}
 
+	// --- STRINGS FIRST (including f-strings) ---
+	// strings: """...""", f"...", "..."
+	if s.peek2Is(`"""`) {
+		return s.scanLongString()
+	}
+	if s.peekIs('f') && s.peekRuneN(1) == '"' {
+		return s.scanFString()
+	}
+	if s.peekIs('"') {
+		return s.scanString()
+	}
+	// --- end strings ---
+
 	// identifier / keyword
 	if s.i < len(s.src) {
 		r, w := utf8.DecodeRune(s.src[s.i:])
@@ -352,17 +365,6 @@ func (s *Scanner) Next() Item {
 			}
 			return Item{Tok: token.INT_DEC, Lexeme: lex, Line: s.line, Col: startCol}
 		}
-	}
-
-	// strings: """...""", f"...", "..."
-	if s.peek2Is(`"""`) {
-		return s.scanLongString()
-	}
-	if s.peekIs('f') && s.peekRuneN(1) == '"' {
-		return s.scanFString()
-	}
-	if s.peekIs('"') {
-		return s.scanString()
 	}
 
 	// operators/punctuators (greedy)
