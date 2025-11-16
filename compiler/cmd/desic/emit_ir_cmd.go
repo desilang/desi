@@ -13,6 +13,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/lower"
 	"github.com/desilang/desi/compiler/internal/parse"
+	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
 )
 
@@ -23,7 +24,7 @@ func init() {
 		return
 	}
 
-	file, err := parseEmitArgs(os.Args[2:])
+	file, roots, err := parseEmitArgs(os.Args[2:])
 	if err != nil {
 		term.Eprintln("emit-ir error:", err)
 		term.Flush()
@@ -38,9 +39,9 @@ func init() {
 	}
 
 	// Parse (no resolve/check here; emit-ir is a Tier-0 demo tool)
-	mod, diags := parse.ParseFile(file, src)
-	if len(diags) > 0 {
-		for _, d := range diags {
+	mod, pdiags := parse.ParseFile(file, src)
+	if len(pdiags) > 0 {
+		for _, d := range pdiags {
 			// Render directly to stderr with a default (zero-value) theme.
 			d.RenderTTY(os.Stderr, diag.Theme{})
 		}
@@ -48,8 +49,37 @@ func init() {
 		os.Exit(2)
 	}
 
-	// NEW: run pre-check desugars so map/filter become list-comps
-	// before lowering, which ensures compact IR without declare @map/filter.
+	// NEW: resolve imports with a filesystem loader and register LLVM
+	// function signature overrides from the full import closure.
+	var loader resolve.Loader
+	if roots != "" {
+		rs := splitRoots(roots)
+		if len(rs) > 0 && rs[0] != "" {
+			loader = resolve.NewFSLoaderMulti(rs)
+		}
+	}
+	if loader != nil {
+		rdiags, info := resolve.Resolve(mod, loader)
+		if len(rdiags) > 0 {
+			// Keep it simple: if resolve produced diagnostics, surface them and bail.
+			const maxResolveDiags = 20
+			limit := len(rdiags)
+			if limit > maxResolveDiags {
+				limit = maxResolveDiags
+			}
+			for i := 0; i < limit; i++ {
+				rdiags[i].RenderTTY(os.Stderr, diag.Theme{})
+			}
+			if extra := len(rdiags) - limit; extra > 0 {
+				term.Eprintln("…", extra, "more resolve errors suppressed")
+			}
+			term.Flush()
+			os.Exit(2)
+		}
+		registerImportClosureSigs(info)
+	}
+
+	// Run pre-check desugars so map/filter become list-comps before lowering.
 	check.DesugarPrecheck(mod)
 
 	// Lower the entire module to HIR (sync: 1 fn; async: wrapper+poll)
@@ -64,7 +94,7 @@ func init() {
 	lm := llvm.NewModule(filepath.Base(file))
 	markAsyncWrappers(lm, hm)
 
-	// NEW: inject param/ret textual types from surface annotations.
+	// Inject param/ret textual types from surface annotations in the entry module.
 	injectUserFuncSigs(mod)
 
 	// Emit every lowered function (order as lowered is fine for Tier-0)
@@ -76,20 +106,48 @@ func init() {
 	os.Exit(0)
 }
 
-func parseEmitArgs(argv []string) (string, error) {
-	// Very simple: one positional <file>. (We can add -I later if needed.)
-	if len(argv) == 0 {
-		return "", fmt.Errorf("usage: desic emit-ir <file.desi>")
-	}
-	// Ignore extra args for now; accept the first non-flag as the file.
-	for _, a := range argv {
-		if len(a) > 0 && a[0] != '-' {
-			return a, nil
+// parseEmitArgs accepts flags in any order after `emit-ir` and returns (file, roots).
+// Supports: -I ROOTS, -I=ROOTS, and "--" to end flags.
+// Usage: desic emit-ir [-I ROOTS] <file.desi>
+func parseEmitArgs(argv []string) (string, string, error) {
+	var file string
+	var roots string
+
+	sawSep := false
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		if a == "--" {
+			sawSep = true
+			continue
+		}
+		if !sawSep && strings.HasPrefix(a, "-") {
+			switch {
+			case a == "-I":
+				if i+1 >= len(argv) {
+					return "", "", fmt.Errorf("missing value for -I")
+				}
+				roots = argv[i+1]
+				i++
+			case strings.HasPrefix(a, "-I="):
+				roots = strings.TrimPrefix(a, "-I=")
+			default:
+				return "", "", fmt.Errorf("unknown flag %q", a)
+			}
+			continue
+		}
+		// positional: first non-flag is the entry file
+		if file == "" {
+			file = a
 		}
 	}
-	return "", fmt.Errorf("missing <file.desi>")
+
+	if file == "" {
+		return "", "", fmt.Errorf("usage: desic emit-ir [-I ROOTS] <file.desi>")
+	}
+	return file, roots, nil
 }
 
+// findMainFunc is kept for possible future use; currently unused.
 func findMainFunc(m *ast.Module) *ast.FuncDecl {
 	for _, d := range m.Decls {
 		if fd, ok := d.(*ast.FuncDecl); ok {
@@ -146,12 +204,8 @@ func injectUserFuncSigs(mod *ast.Module) {
 	}
 }
 
-// Minimal surface->LLVM textual type mapping for Tier-0:
-// - ints: i8..i128 → i8..i128
-// - uints: u8..u128 → i8..i128 (2C ABI tier-0)
-// - bool → i1
-// - f32 → float; f64/float → double
-// - usize/isize → i64 (Tier-0)
+// llvmTypeFromSurface maps simple surface type names to textual LLVM IR types.
+// This is the same Tier-0 mapping used for per-module annotations.
 func llvmTypeFromSurface(name string) string {
 	switch name {
 	case "bool":
@@ -178,5 +232,31 @@ func llvmTypeFromSurface(name string) string {
 		return "i128"
 	default:
 		return "" // unknown → leave default
+	}
+}
+
+// registerImportClosureSigs installs LLVM func signature overrides using the
+// typed export surfaces collected by resolve.Resolve across the import closure.
+func registerImportClosureSigs(info *resolve.Info) {
+	if info == nil || info.ModuleExports == nil {
+		return
+	}
+	for _, ex := range info.ModuleExports {
+		if ex == nil {
+			continue
+		}
+		for name, overloads := range ex.Funcs {
+			if len(overloads) == 0 {
+				continue
+			}
+			ft := overloads[0]
+			if ft == nil {
+				continue
+			}
+			ret, params := llvm.LowerFuncSignature(ft)
+			llvm.SetFuncSig(name, ret, params)
+			// We deliberately use the first overload only for Tier-0; true
+			// overload-aware lowering will come later with a real call resolver.
+		}
 	}
 }
