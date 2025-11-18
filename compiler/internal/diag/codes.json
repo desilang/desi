@@ -633,19 +633,19 @@
       "help": "once a named argument is used, all subsequent arguments must be named"
     },
     "defaults_not_trailing": {
-      "id": "DDF0001",
+      "id": "DDF0003",
       "title": "parameters with defaults must come last",
       "help": "once a parameter has a default value, all following parameters must also have defaults."
     },
     "default_requires_annotation": {
       "id": "DDF0002",
-      "title": "defaulted parameter must have a type annotation",
-      "help": "add an explicit type to the parameter so the default expression can be checked."
+      "title": "inout parameters cannot have default values",
+      "help": "remove the default value or change the parameter mode; inout parameters cannot have defaults."
     },
     "default_incompatible_type": {
-      "id": "DDF0003",
-      "title": "default value incompatible with parameter type",
-      "help": "ensure the default expression has the same type as the annotated parameter."
+      "id": "DDF0001",
+      "title": "default value must be a compile-time constant",
+      "help": "use a literal or other compile-time constant expression as the default value."
     },
     "default_inconsistent_overloads": {
       "id": "DDF0004",
