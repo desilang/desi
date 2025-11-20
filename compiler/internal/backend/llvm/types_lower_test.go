@@ -45,6 +45,7 @@ func TestLowerFuncSignature(t *testing.T) {
 			types.CPtrOf(types.Float),
 		},
 		mustType("isize"),
+		false,
 	)
 	ret, params := llvm.LowerFuncSignature(ft)
 	if ret != "i64" {

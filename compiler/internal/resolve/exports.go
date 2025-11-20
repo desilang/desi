@@ -74,7 +74,12 @@ func CollectExports(mod *ast.Module) *Exports {
 				break
 			}
 			if t, ok := types.FromName(p.Type.Name); ok {
-				params[i] = t
+				// If this is a variadic parameter, wrap in list[T]
+				if p.Variadic {
+					params[i] = types.ListOf(t)
+				} else {
+					params[i] = t
+				}
 			} else {
 				okTypes = false
 				break
@@ -92,7 +97,14 @@ func CollectExports(mod *ast.Module) *Exports {
 			continue
 		}
 
-		ft := types.FuncOf(params, rt)
+		variadic := false
+		for _, p := range fn.Params {
+			if p.Variadic {
+				variadic = true
+			}
+		}
+
+		ft := types.FuncOf(params, rt, variadic)
 		name := fn.Name.Name
 		out.Funcs[name] = append(out.Funcs[name], ft)
 

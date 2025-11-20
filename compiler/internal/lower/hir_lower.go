@@ -3,6 +3,7 @@ package lower
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -34,6 +35,50 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
+// LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
+func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func {
+	b := hir.NewFunc(fd.Name.Name)
+	ls := &lowerState{
+		b:                   b,
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		terminated:          false,
+		info:                info,
+		src:                 src,
+		tempsFromArenaAlloc: map[string]bool{},
+	}
+	ls.lowerBlock(fd.Body)
+	f := b.Func()
+
+	// Populate parameters from AST
+	// For variadic functions, the last parameter has already been wrapped in list[T] by the type checker
+	// We need to get the types from the type checker's info
+	if info != nil {
+		// Try to get the function type from info.Funcs
+		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
+			// Use the first candidate (should be the only one for this function)
+			funcType := set.Cands[0].Type
+			if funcType != nil {
+				for i, p := range fd.Params {
+					paramType := "ptr" // default
+					if i < len(funcType.Params) && funcType.Params[i] != nil {
+						paramType = lowerType(funcType.Params[i])
+					}
+					f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: paramType})
+				}
+				return f
+			}
+		}
+	}
+
+	// Fallback: use default types
+	for _, p := range fd.Params {
+		f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: "ptr"})
+	}
+
+	return f
+}
+
+// LowerBlockFromSource lowers just a block with a given name (for compatibility with existing code).
 func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []byte) *hir.Func {
 	b := hir.NewFunc(name)
 	ls := &lowerState{
@@ -52,7 +97,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 func LowerDefaultToStr(name, typeName string) *hir.Func {
 	b := hir.NewFunc(name)
 	f := b.Func()
-	f.Params = []hir.Param{{Name: "self"}}
+	f.Params = []hir.Param{{Name: "self", Type: "ptr"}}
 	f.RetType = "ptr"
 	// For M14, just return the type name as a string.
 	// TODO: Generate "TypeName(field=val, ...)"
@@ -588,7 +633,112 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	return res
 }
 
+func (ls *lowerState) lowerVariadicCall(x *ast.CallExpr, ft *types.Func) hir.Value {
+	callee := ls.calleeName(x.Callee)
+
+	// Fixed params
+	nFixed := len(ft.Params) - 1
+	var args []hir.Value
+
+	// Lower fixed args (positional only for Tier-0)
+	for i := 0; i < nFixed && i < len(x.Args); i++ {
+		args = append(args, ls.lowerExpr(x.Args[i]))
+	}
+
+	// Excess args
+	var excess []hir.Value
+	for i := nFixed; i < len(x.Args); i++ {
+		excess = append(excess, ls.lowerExpr(x.Args[i]))
+	}
+
+	// Construct list
+	// List type: ft.Params[nFixed] which is list[T]
+	// Elem type T:
+	var elemTy string = "ptr" // default
+	if lst, ok := ft.Params[nFixed].(*types.List); ok {
+		elemTy = lowerType(lst.Elem)
+	}
+
+	// 1. Allocate array
+	count := len(excess)
+	arrDst := ls.b.FreshTemp("varargs_arr")
+	if count > 0 {
+		ls.b.Emit(&hir.Alloca{Type: elemTy, Count: count, Dst: arrDst})
+
+		// 2. Populate array
+		for i, val := range excess {
+			// GEP
+			ptrDst := ls.b.FreshTemp("elem_ptr")
+			idxVal := hir.ConstInt{Text: fmt.Sprintf("%d", i)}
+			ls.b.Emit(&hir.GetElementPtr{
+				Type:    elemTy,
+				Base:    arrDst,
+				Indices: []hir.Value{idxVal},
+				Dst:     ptrDst,
+			})
+			// Store
+			ls.b.Emit(&hir.Store{Dst: ptrDst, Val: val})
+		}
+	} else {
+		// Allocate 1 dummy element to get a valid pointer
+		ls.b.Emit(&hir.Alloca{Type: elemTy, Count: 1, Dst: arrDst})
+	}
+
+	// 3. Allocate list struct {ptr, i64}
+	listDst := ls.b.FreshTemp("varargs_list")
+	ls.b.Emit(&hir.Alloca{Type: "{ptr, i64}", Count: 1, Dst: listDst})
+
+	// 4. Store array ptr to list.0
+	// GEP to field 0
+	f0Dst := ls.b.FreshTemp("list_ptr")
+	ls.b.Emit(&hir.GetElementPtr{
+		Type:    "{ptr, i64}",
+		Base:    listDst,
+		Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "0"}},
+		Dst:     f0Dst,
+	})
+	ls.b.Emit(&hir.Store{Dst: f0Dst, Val: arrDst})
+
+	// 5. Store len to list.1
+	// GEP to field 1 (FIXED: was 0, should be 1)
+	f1Dst := ls.b.FreshTemp("list_len")
+	ls.b.Emit(&hir.GetElementPtr{
+		Type:    "{ptr, i64}",
+		Base:    listDst,
+		Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "1"}},
+		Dst:     f1Dst,
+	})
+	// Store as i64
+	lenVal := hir.ConstInt{Text: fmt.Sprintf("%d", count), Type: "i64"}
+	ls.b.Emit(&hir.Store{Dst: f1Dst, Val: lenVal})
+
+	// Add list to args
+	args = append(args, listDst)
+
+	// Emit call
+	dst := ls.b.FreshTemp("call")
+	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
+	return dst
+}
+
 func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
+	// 0. Variadic calls (M14)
+	// Look up the function by name to get its signature
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if set, ok := ls.info.Funcs[calleeName]; ok && len(set.Cands) > 0 {
+			// Check if any candidate is variadic
+			// In practice, after type checking, we know which one was chosen
+			// For simplicity, check the first variadic candidate
+			// TODO: This could be improved by tracking which candidate was chosen
+			for _, cand := range set.Cands {
+				if cand.Type != nil && cand.Type.Variadic {
+					return ls.lowerVariadicCall(x, cand.Type)
+				}
+			}
+		}
+	}
+
 	// 1. M14 Stage 3: print(Display)
 	// If we have type info, check if this is print(arg) where arg implements Display.
 	if ls.info != nil {
@@ -756,4 +906,30 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
 	return dst
+}
+
+// lowerType maps types to LLVM strings (Tier-0 subset).
+func lowerType(t types.T) string {
+	if t == nil {
+		return "void"
+	}
+	name := t.String()
+	switch name {
+	case "int", "i32", "u32":
+		return "i32"
+	case "i64", "u64", "isize", "usize":
+		return "i64"
+	case "bool":
+		return "i1"
+	case "float":
+		return "double"
+	case "str":
+		return "ptr"
+	case "none":
+		return "void"
+	}
+	if strings.HasPrefix(name, "list[") {
+		return "ptr" // list struct pointer
+	}
+	return "ptr" // default
 }

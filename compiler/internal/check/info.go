@@ -93,7 +93,7 @@ func addPreludeBuiltins(info *Info) {
 		}
 		set.Add(&FuncCand{
 			Decl:       nil,
-			Type:       types.FuncOf([]types.T{param}, ret),
+			Type:       types.FuncOf([]types.T{param}, ret, false),
 			Modes:      []ast.ParamMode{mode},
 			ParamNames: makeNames(1, pname),
 			Defaults:   nil, // builtins have no defaults in M14
@@ -107,7 +107,7 @@ func addPreludeBuiltins(info *Info) {
 		}
 		set.Add(&FuncCand{
 			Decl:       nil,
-			Type:       types.FuncOf(params, ret),
+			Type:       types.FuncOf(params, ret, false),
 			Modes:      modes,
 			ParamNames: makeNames(len(params), pnames...),
 			Defaults:   nil, // builtins have no defaults in M14

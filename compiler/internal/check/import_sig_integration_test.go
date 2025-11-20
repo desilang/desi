@@ -42,7 +42,7 @@ from math import add as sum
 	cand := set.Cands[0]
 
 	// Signature matches
-	want := types.FuncOf([]types.T{types.Int, types.Int}, types.Int)
+	want := types.FuncOf([]types.T{types.Int, types.Int}, types.Int, false)
 	got := cand.Type
 	if !types.Equal(want, got) {
 		t.Fatalf("cand mismatch: want %s, got %s", want, got)

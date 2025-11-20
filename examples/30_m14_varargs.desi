@@ -1,0 +1,9 @@
+# M14: Variadic functions demo
+
+def sum(x: int, *rest: int) -> int:
+	return x
+
+def main():
+	sum(5)
+	sum(1, 2, 3)
+	sum(10, 20, 30, 40, 50)

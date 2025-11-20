@@ -91,6 +91,8 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 
 func (p *Parser) parseParams() []ast.Param {
 	var out []ast.Param
+	seenVariadic := false
+
 	for {
 		// Optional leading parameter mode: 'ref' | 'inout' (soft keywords).
 		paramMode := ast.ParamMove
@@ -105,6 +107,16 @@ func (p *Parser) parseParams() []ast.Param {
 			}
 			paramStart = spanPos(p.file, p.cur)
 			p.next()
+		}
+
+		// Check for variadic '*' prefix
+		variadic := false
+		if p.accept(token.STAR) {
+			variadic = true
+			if seenVariadic {
+				p.errExpected(spanPos(p.file, p.cur), "only one variadic parameter allowed")
+			}
+			seenVariadic = true
 		}
 
 		// Name is required.
@@ -127,12 +139,17 @@ func (p *Parser) parseParams() []ast.Param {
 			def = p.parseExpr()
 		}
 
+		if variadic && def != nil {
+			p.errExpected(def.SpanOf(), "variadic parameter cannot have default value")
+		}
+
 		out = append(out, ast.Param{
-			Name:    name,
-			Type:    ty,
-			Default: def,
-			Mode:    paramMode, // new in M6
-			Span:    ast.JoinSpan(paramStart, lastSpan(def, name.Span)),
+			Name:     name,
+			Type:     ty,
+			Default:  def,
+			Mode:     paramMode,
+			Variadic: variadic,
+			Span:     ast.JoinSpan(paramStart, lastSpan(def, name.Span)),
 		})
 
 		// Comma or end.
@@ -141,6 +158,9 @@ func (p *Parser) parseParams() []ast.Param {
 		}
 		if p.cur.Tok == token.RPAREN {
 			break // trailing comma
+		}
+		if seenVariadic {
+			p.errExpected(spanPos(p.file, p.cur), "variadic parameter must be last")
 		}
 	}
 	return out

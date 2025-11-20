@@ -39,11 +39,12 @@ func (*FuncDecl) isDecl()             {}
 func (d *FuncDecl) SpanOf() diag.Span { return d.Span }
 
 type Param struct {
-	Name    Ident
-	Type    *TypeName // optional
-	Default Expr      // optional
-	Mode    ParamMode // default is ParamMove (zero value)
-	Span    diag.Span
+	Name     Ident
+	Type     *TypeName // optional
+	Default  Expr      // optional
+	Mode     ParamMode // default is ParamMove (zero value)
+	Variadic bool      // true if *args
+	Span     diag.Span
 }
 
 /* ---------- Statements ---------- */
