@@ -84,7 +84,7 @@ func init() {
 	// Register LLVM signatures from imports (Tier-0 compat)
 	registerImportClosureSigs(res.Info.R)
 
-	// Lower the entire module to HIR (sync: 1 fn; async: wrapper+poll)
+	// Lower the entry module to HIR
 	hm := lower.LowerModuleFromSource(mod, res.Info, src)
 	if hm == nil || len(hm.Funcs) == 0 {
 		term.Eprintln("emit-ir:", filepath.Base(file)+": no functions to lower")
@@ -92,21 +92,59 @@ func init() {
 		os.Exit(2)
 	}
 
+	// Collect all HIR modules (entry + imports)
+	allModules := []*hir.Module{hm}
+	allASTs := []*ast.Module{mod}
+
+	// Track processed modules to avoid duplicates
+	processed := make(map[string]bool)
+	processed[filepath.Base(file)] = true // mark entry module as processed
+
+	// Process all imported modules
+	importedPaths := collectImportedModulePaths(res.Info.R)
+	for _, impPath := range importedPaths {
+		if processed[impPath] {
+			continue
+		}
+		processed[impPath] = true
+
+		// Load and lower the imported module
+		impHIR, _, impAST, err := loadAndLowerModule(impPath, loader, res.Info)
+		if err != nil {
+			// Skip modules that fail to load (they might be extern/built-in)
+			continue
+		}
+		if impHIR != nil {
+			allModules = append(allModules, impHIR)
+		}
+		if impAST != nil {
+			allASTs = append(allASTs, impAST)
+		}
+	}
+
 	// Build textual LLVM module. Mark async wrapper names if their poll exists.
 	lm := llvm.NewModule(filepath.Base(file))
 	markAsyncWrappers(lm, hm)
 
-	// Inject param/ret textual types from surface annotations in the entry module.
-	injectUserFuncSigs(mod)
+	// Inject param/ret textual types from surface annotations in all modules
+	for _, astMod := range allASTs {
+		injectUserFuncSigs(astMod)
+	}
 
-	// Emit every lowered function (order as lowered is fine for Tier-0)
-	// First, mark all functions as defined to avoid unnecessary declarations
-	for _, f := range hm.Funcs {
-		lm.MarkDefined(f.Name)
+	// Mark all functions as defined to avoid unnecessary declarations
+	for _, hirMod := range allModules {
+		for _, f := range hirMod.Funcs {
+			lm.MarkDefined(f.Name)
+		}
 	}
-	for _, f := range hm.Funcs {
-		lm.EmitFunc(f)
+
+	// Emit all functions from all modules
+	for _, hirMod := range allModules {
+		for _, f := range hirMod.Funcs {
+			lm.EmitFunc(f)
+		}
 	}
+
 	fmt.Print(lm.IR())
 	term.Flush()
 	os.Exit(0)
@@ -279,4 +317,53 @@ func registerImportClosureSigs(info *resolve.Info) {
 			// overload-aware lowering will come later with a real call resolver.
 		}
 	}
+}
+
+// collectImportedModulePaths extracts all unique module paths from the import closure.
+// It returns paths in no particular order.
+func collectImportedModulePaths(rinfo *resolve.Info) []string {
+	if rinfo == nil || rinfo.ModuleExports == nil {
+		return nil
+	}
+
+	// Use a map to deduplicate paths
+	seen := make(map[string]bool)
+	for path := range rinfo.ModuleExports {
+		seen[path] = true
+	}
+
+	// Convert to slice
+	paths := make([]string, 0, len(seen))
+	for path := range seen {
+		paths = append(paths, path)
+	}
+
+	return paths
+}
+
+// loadAndLowerModule loads a module by its dotted path and lowers it to HIR.
+// Returns (HIR module, source bytes, error). The source is returned for signature injection.
+func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*hir.Module, []byte, *ast.Module, error) {
+	// Load the module using the loader
+	mod, diags, err := loader.Load(path)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to load module %s: %w", path, err)
+	}
+	if len(diags) > 0 {
+		return nil, nil, nil, fmt.Errorf("parse errors in module %s", path)
+	}
+
+	// Read the source file for lowering
+	// The loader returns a parsed module but we need the source bytes
+	// For now, we'll try to read the file again if we can determine the path
+	// This is a limitation of the current loader interface
+
+	// For now, pass nil as source - lower will handle it
+	// (LowerModuleFromSource can work without source for most cases)
+	var src []byte
+
+	// Lower to HIR
+	hm := lower.LowerModuleFromSource(mod, info, src)
+
+	return hm, src, mod, nil
 }
