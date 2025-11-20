@@ -415,6 +415,16 @@ func (p *pp) node(n Node, d int) {
 			p.wr("Str")
 		}
 
+	case *FString:
+		p.wr("FString(")
+		for i, part := range n.Parts {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(part, 0)
+		}
+		p.wr(")")
+
 	case *BoolLit:
 		if n.Value {
 			p.wr("True")

@@ -564,12 +564,71 @@ func isRcLike(t types.T) bool {
 func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	switch x := e.(type) {
 	case *ast.IntLit:
-		return &hir.ConstInt{Text: x.Text}
+		return hir.ConstInt{Text: x.Text}
 	case *ast.BoolLit:
-		return &hir.ConstBool{Value: x.Value}
+		return hir.ConstBool{Value: x.Value}
 	case *ast.StrLit:
-		// String literal payload is handled elsewhere; here we just mark "str".
-		return &hir.ConstStr{Text: "<lit>"}
+		// String literal payload is handled elsewhere; here we just mark "<lit>".
+		return hir.ConstStr{Text: "<lit>"}
+	case *ast.FString:
+		// F-string: use asprintf for formatting
+		// 1. Allocate buffer for result
+		bufPtr := ls.b.FreshTemp("fstr_buf")
+		ls.b.Emit(&hir.Alloca{Type: "ptr", Dst: bufPtr})
+
+		// 2. Build format string and arguments
+		var fmtBuilder strings.Builder
+		var args []hir.Value
+		args = append(args, bufPtr) // First arg is &bufPtr
+
+		for _, part := range x.Parts {
+			switch p := part.(type) {
+			case *ast.StrLit:
+				// For F-string parts, use the Value field directly
+				if p.Value != "" {
+					// Unescape {{ and }}
+					unescaped := strings.ReplaceAll(p.Value, "{{", "{")
+					unescaped = strings.ReplaceAll(unescaped, "}}", "}")
+					// Escape % for printf
+					escaped := strings.ReplaceAll(unescaped, "%", "%%")
+					fmtBuilder.WriteString(escaped)
+				}
+			default:
+				// Expression - lower it and add format specifier
+				val := ls.lowerExpr(p)
+				if ls.info != nil {
+					typ := ls.info.Types[p]
+					if types.Equal(typ, types.Int) {
+						fmtBuilder.WriteString("%d")
+					} else if types.Equal(typ, types.Str) {
+						fmtBuilder.WriteString("%s")
+					} else if types.Equal(typ, types.Float) {
+						fmtBuilder.WriteString("%f")
+					} else {
+						fmtBuilder.WriteString("<?>")
+					}
+				} else {
+					fmtBuilder.WriteString("%s")
+				}
+				args = append(args, val)
+			}
+		}
+
+		// 3. Create format string constant and build final args
+		fmtStr := hir.ConstStr{Text: fmtBuilder.String()}
+		finalArgs := make([]hir.Value, 0, len(args)+1)
+		finalArgs = append(finalArgs, args[0])     // bufPtr
+		finalArgs = append(finalArgs, fmtStr)      // format string
+		finalArgs = append(finalArgs, args[1:]...) // remaining args
+
+		// 4. Call asprintf
+		ls.b.Emit(&hir.Call{Fn: "asprintf", Args: finalArgs})
+
+		// 5. Load result from buffer
+		res := ls.b.FreshTemp("fstr_res")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: bufPtr, Dst: res})
+
+		return res
 	case *ast.Ident:
 		return hir.Var{Name: x.Name}
 

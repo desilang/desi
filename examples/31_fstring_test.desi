@@ -1,0 +1,3 @@
+def main():
+	let x = 10
+	print(f"x is {x}")

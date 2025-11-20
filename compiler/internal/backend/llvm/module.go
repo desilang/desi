@@ -305,6 +305,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				ptrOp := m.ptrOperand(x.Dst)
 				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, ptrOp)
 
+			case *hir.Load:
+				ptrOp := m.ptrOperand(x.Src)
+				wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, ptrOp)
+				m.tempTypes[x.Dst.Name] = x.Type
+
 			case *hir.GetElementPtr:
 				baseOp := m.ptrOperand(x.Base)
 				var idxStr strings.Builder
