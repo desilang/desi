@@ -14,6 +14,7 @@ const (
 	SymVar SymbolKind = iota
 	SymParam
 	SymFunc
+	SymType // M14: type name
 )
 
 // Symbol represents a bound identifier in a scope.
@@ -36,6 +37,9 @@ type Info struct {
 
 	// M6-P2-B: per-function move tracking for identifiers.
 	Moved map[string]diag.Span
+
+	// M14: trait implementations (TypeName -> Trait -> []*FuncDecl)
+	Impls map[string]map[string][]*ast.FuncDecl
 }
 
 // FuncCand represents a single callable candidate.
@@ -63,6 +67,7 @@ func NewInfo() *Info {
 		ImportPaths: make(map[string]string),
 		R:           nil,
 		Moved:       make(map[string]diag.Span),
+		Impls:       make(map[string]map[string][]*ast.FuncDecl),
 	}
 	addPreludeBuiltins(info)
 	return info

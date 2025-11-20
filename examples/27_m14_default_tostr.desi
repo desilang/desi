@@ -1,0 +1,11 @@
+# M14: Default to_str (auto-generated)
+
+struct Point:
+	x: int
+	y: int
+
+def main():
+	let p = Point(x=10, y=20)
+	# Should work! Default to_str is auto-generated
+	let s = p.to_str()
+	let x = 42

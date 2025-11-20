@@ -58,32 +58,34 @@ func init() {
 			loader = resolve.NewFSLoaderMulti(rs)
 		}
 	}
-	if loader != nil {
-		rdiags, info := resolve.Resolve(mod, loader)
-		if len(rdiags) > 0 {
-			// Keep it simple: if resolve produced diagnostics, surface them and bail.
-			const maxResolveDiags = 20
-			limit := len(rdiags)
-			if limit > maxResolveDiags {
-				limit = maxResolveDiags
-			}
-			for i := 0; i < limit; i++ {
-				rdiags[i].RenderTTY(os.Stderr, diag.Theme{})
-			}
-			if extra := len(rdiags) - limit; extra > 0 {
-				term.Eprintln("…", extra, "more resolve errors suppressed")
-			}
-			term.Flush()
-			os.Exit(2)
-		}
-		registerImportClosureSigs(info)
+	if loader == nil {
+		loader = resolve.NewMemLoader(nil)
 	}
 
-	// Run pre-check desugars so map/filter become list-comps before lowering.
-	check.DesugarPrecheck(mod)
+	// Run full type checker (M14: needed for struct/trait info)
+	res := check.CheckWithLoader(mod, loader)
+	if len(res.Diags) > 0 {
+		// Keep it simple: if check produced diagnostics, surface them and bail.
+		const maxDiags = 20
+		limit := len(res.Diags)
+		if limit > maxDiags {
+			limit = maxDiags
+		}
+		for i := 0; i < limit; i++ {
+			res.Diags[i].RenderTTY(os.Stderr, diag.Theme{})
+		}
+		if extra := len(res.Diags) - limit; extra > 0 {
+			term.Eprintln("…", extra, "more errors suppressed")
+		}
+		term.Flush()
+		os.Exit(2)
+	}
+
+	// Register LLVM signatures from imports (Tier-0 compat)
+	registerImportClosureSigs(res.Info.R)
 
 	// Lower the entire module to HIR (sync: 1 fn; async: wrapper+poll)
-	hm := lower.LowerModuleFromSource(mod, src)
+	hm := lower.LowerModuleFromSource(mod, res.Info, src)
 	if hm == nil || len(hm.Funcs) == 0 {
 		term.Eprintln("emit-ir:", filepath.Base(file)+": no functions to lower")
 		term.Flush()
@@ -201,6 +203,20 @@ func injectUserFuncSigs(mod *ast.Module) {
 		}
 		// Package-level override (no Module struct changes needed).
 		llvm.SetFuncSig(fd.Name.Name, ret, params)
+	}
+	// M14: Register struct/class constructors as returning ptr
+	for _, d := range mod.Decls {
+		var name string
+		if s, ok := d.(*ast.StructDecl); ok {
+			name = s.Name.Name
+		} else if c, ok := d.(*ast.ClassDecl); ok {
+			name = c.Name.Name
+		}
+		if name != "" {
+			llvm.SetFuncSig(name, "ptr", nil)
+			// Also register the default to_str method
+			llvm.SetFuncSig(name+"_to_str", "ptr", nil)
+		}
 	}
 }
 

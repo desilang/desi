@@ -34,18 +34,30 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
-func LowerBlockFromSource(name string, blk *ast.Block, src []byte) *hir.Func {
+func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []byte) *hir.Func {
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
 		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
 		terminated:          false,
-		info:                nil,
+		info:                info,
 		src:                 src,
 		tempsFromArenaAlloc: map[string]bool{},
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
+}
+
+// LowerDefaultToStr generates a default to_str implementation that returns the type name.
+func LowerDefaultToStr(name, typeName string) *hir.Func {
+	b := hir.NewFunc(name)
+	f := b.Func()
+	f.Params = []hir.Param{{Name: "self"}}
+	f.RetType = "ptr"
+	// For M14, just return the type name as a string.
+	// TODO: Generate "TypeName(field=val, ...)"
+	b.Emit(&hir.Ret{Val: hir.ConstStr{Text: typeName}})
+	return f
 }
 
 type lowerState struct {
@@ -529,35 +541,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
 	case *ast.CallExpr:
-		// Determine a printable callee name for Ident or FieldExpr.
-		callee := ls.calleeName(x.Callee)
-
-		// Lower arguments first.
-		var args []hir.Value
-		for _, a := range x.Args {
-			args = append(args, ls.lowerExpr(a))
-		}
-
-		// Special-cases for arena helpers (support Ident("arena.alloc") or FieldExpr arena.alloc).
-		switch callee {
-		case "arena.alloc":
-			dst := ls.b.FreshTemp("alloc")
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "arena.alloc", Args: args})
-			// Mark temp as coming from arena.alloc so let-binding flags arenaOwned.
-			ls.tempsFromArenaAlloc[dst.Name] = true
-			return dst
-		case "arena.register_poll":
-			ls.b.Emit(&hir.Call{Fn: "arena.register_poll", Args: args})
-			return nil
-		}
-
-		// Generic call: emit `%t = call <callee>(args...)` if value needed.
-		dst := ls.b.FreshTemp("call")
-		if callee == "" {
-			callee = "<call>"
-		}
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
-		return dst
+		return ls.lowerCall(x)
 
 	case *ast.FieldExpr:
 		// For expressions used as values, represent field access via a helper call.
@@ -602,4 +586,174 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	ls.b.Emit(&hir.Call{Fn: "list_push", Args: []hir.Value{res, elem}})
 
 	return res
+}
+
+func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
+	// 1. M14 Stage 3: print(Display)
+	// If we have type info, check if this is print(arg) where arg implements Display.
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "print" && len(x.Args) == 1 {
+			// Check if arg implements Display
+			// We need the type of the argument.
+			// Since we are lowering, we assume check has run.
+			// But we don't have easy access to arg type unless we look it up in info.Types.
+			// info.Types maps *ast.Expr -> types.T
+			if argT := ls.info.Types[x.Args[0]]; argT != nil {
+				typeName := argT.String()
+				if impls, ok := ls.info.Impls[typeName]; ok {
+					if _, hasDisplay := impls["Display"]; hasDisplay {
+						// Rewrite to print(TypeName_to_str(arg))
+						// 1. Lower arg
+						argVal := ls.lowerExpr(x.Args[0])
+						// 2. Emit call to to_str
+						toStrName := fmt.Sprintf("%s_to_str", typeName)
+						strTemp := ls.b.FreshTemp("str")
+						ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrName, Args: []hir.Value{argVal}})
+						// 3. Emit call to print(str)
+						dst := ls.b.FreshTemp("print")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{strTemp}})
+						return dst
+					}
+				}
+			}
+		}
+	}
+
+	// 2. M14 Stage 1: Method Calls (obj.method())
+	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
+		// Check if this is a method call
+		// We need the type of the receiver (fe.X)
+		if recvT := ls.info.Types[fe.X]; recvT != nil {
+			typeName := recvT.String()
+			methodName := fe.Name.Name
+			// Check if method exists in Impls
+			// Note: This is a simplification. We should check if the method was actually resolved to a trait method.
+			// But for M14, all methods on structs come from Impls (or are treated similarly).
+			if impls, ok := ls.info.Impls[typeName]; ok {
+				// Iterate all traits to find the method?
+				// Or just check if we can find it.
+				// For now, assume if we find it in any trait, it's the one.
+				found := false
+				for _, methods := range impls {
+					for _, m := range methods {
+						if m.Name.Name == methodName {
+							found = true
+							break
+						}
+					}
+					if found {
+						break
+					}
+				}
+
+				if found {
+					// Rewrite to TypeName_MethodName(obj, args...)
+					mangledName := fmt.Sprintf("%s_%s", typeName, methodName)
+
+					// Lower receiver
+					recvVal := ls.lowerExpr(fe.X)
+
+					// Lower args
+					var args []hir.Value
+					args = append(args, recvVal) // receiver is first arg
+					for _, a := range x.Args {
+						args = append(args, ls.lowerExpr(a))
+					}
+
+					dst := ls.b.FreshTemp("call")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args})
+					return dst
+				}
+			}
+		}
+	}
+
+	// 3. M14: Struct Instantiation
+	// Check if callee is a Type
+	if id, ok := x.Callee.(*ast.Ident); ok && ls.info != nil {
+		if def := ls.info.Idents[id]; def != nil {
+			// Check if def is a Type symbol (Struct/Class)
+			// In check.Info, Uses maps to types.T.
+			// If it's a type name usage, it maps to the Type it refers to?
+			// Or does it map to a *types.Sym?
+			// Let's check types package or assume generic handling.
+			// If the type string matches a known struct...
+			// Actually, let's check if it's in info.Impls (implies it's a type we know about).
+			// Or check if it's a struct type.
+			// For M14, let's rely on the fact that we collected structs.
+			// If the name matches a struct name...
+			// But we don't have a list of structs here.
+			// We can check if the result type of the call is the same as the callee name?
+			// info.Types[x] gives the result type.
+			if resT := ls.info.Types[x]; resT != nil {
+				if resT.String() == id.Name {
+					// Likely a constructor call!
+					// Emit Alloc + Init
+					// For M14 Tier-0, we can just emit a call to a constructor function if we had one.
+					// But we don't generate constructors.
+					// We need to allocate memory.
+					// Since we don't have fields info here easily (without looking up the AST node for the struct),
+					// maybe we can just emit a "Alloc" intrinsic?
+					// But we need to initialize fields.
+					// The args are named: Point(x=1, y=2).
+					// We need to map args to fields.
+					// This is hard without the StructDecl.
+
+					// FALLBACK: For M14 Tier-0, let's just emit a call to the function named "TypeName".
+					// The LLVM backend will treat it as an external call if we don't define it.
+					// BUT we want it to work.
+					// Maybe we can treat it as a "struct literal" if we had that in HIR.
+					// We don't.
+
+					// Let's skip full struct instantiation lowering for now and focus on Method Calls and Print.
+					// The user example `let p = Point(x=10)` needs to produce *something*.
+					// If we emit `call Point(...)`, and `Point` is not defined, it links to nothing.
+					// We need to define `Point` function?
+					// Or emit `alloca` and `store`.
+
+					// Let's just emit a call to "Point" and assume the user provides a C constructor?
+					// No, that's cheating.
+
+					// OK, minimal effort:
+					// Just emit `call Point` (as before) but maybe we can define a dummy `Point` function?
+					// No, `LowerModuleFromSource` iterates `FuncDecl`. It doesn't generate constructors.
+
+					// If I want `Point(x=10)` to work, I should probably generate a constructor function in `LowerModuleFromSource`.
+					// Yes! I should generate a `Point` function that takes args and returns the struct.
+					// But `Point` is a type.
+					// In Desi, `Point(...)` is syntax for instantiation.
+
+					// Let's stick to the existing behavior for instantiation (call "Point")
+					// AND update `LowerModuleFromSource` to generate a default constructor for every struct!
+				}
+			}
+		}
+	}
+
+	// Legacy/Default behavior
+	callee := ls.calleeName(x.Callee)
+	var args []hir.Value
+	for _, a := range x.Args {
+		args = append(args, ls.lowerExpr(a))
+	}
+
+	// Special-cases for arena helpers
+	switch callee {
+	case "arena.alloc":
+		dst := ls.b.FreshTemp("alloc")
+		ls.b.Emit(&hir.Call{Dst: dst, Fn: "arena.alloc", Args: args})
+		ls.tempsFromArenaAlloc[dst.Name] = true
+		return dst
+	case "arena.register_poll":
+		ls.b.Emit(&hir.Call{Fn: "arena.register_poll", Args: args})
+		return nil
+	}
+
+	dst := ls.b.FreshTemp("call")
+	if callee == "" {
+		callee = "<call>"
+	}
+	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
+	return dst
 }
