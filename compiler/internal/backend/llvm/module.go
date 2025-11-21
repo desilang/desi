@@ -33,6 +33,7 @@ type Module struct {
 	curRetIsPtr   bool                 // set per function during EmitFunc
 	ssa           map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
 	curFuncRetTy  string               // textual LLVM return type for the function being emitted
+	tempTypes     map[string]string    // temp name -> llvm type (e.g. "t1" -> "ptr")
 }
 
 func NewModule(name string) *Module {
@@ -103,7 +104,7 @@ func (m *Module) writeGlobals() {
 			it.name, count, escaped)
 	}
 	if m.needPuts {
-		m.ensureDecl("declare i32 @puts(i8*)")
+		m.ensureDecl("declare i32 @puts(ptr)")
 	}
 	if m.needRcDec {
 		m.ensureDecl("declare void @__rc_dec(ptr)")
@@ -135,6 +136,7 @@ func escapeForCString(s string) string {
 func (m *Module) EmitFunc(fn *hir.Func) {
 	// Reset per-function state.
 	m.ssa = make(map[string]hir.Value)
+	m.tempTypes = make(map[string]string)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
 
 	// --- header types (now typed-aware) ---
@@ -146,6 +148,10 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	// Override from registered signature, unless this define is an async wrapper.
 	if sig, ok := getFuncSig(fn.Name); ok && !m.curRetIsPtr && sig.ret != "" {
 		retTy = sig.ret
+	}
+	// Explicit HIR override (M14)
+	if fn.RetType != "" {
+		retTy = fn.RetType
 	}
 
 	m.curFuncRetTy = retTy
@@ -300,12 +306,21 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 func (m *Module) emitCall(c *hir.Call) {
 	// Built-in print via puts
 	if c.Fn == "print" && len(c.Args) == 1 {
+		// Special case for string literal
 		if s, ok := c.Args[0].(hir.ConstStr); ok {
 			g, n := m.ensureCStringGlobal(s.Text, true)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
 				m.tempID, n, n, g)
-			wprintf(&m.funcs, "  %%t%d = call i32 @puts(i8* %%t%d)\n", m.tempID+1, m.tempID)
+			wprintf(&m.funcs, "  %%t%d = call i32 @puts(ptr %%t%d)\n", m.tempID+1, m.tempID)
 			m.tempID += 2
+			m.needPuts = true
+			return
+		}
+		// General case: if arg is ptr, assume it's a string and call puts
+		ty, val := m.operand(c.Args[0])
+		if ty == "ptr" {
+			wprintf(&m.funcs, "  %%t%d = call i32 @puts(ptr %s)\n", m.tempID, val)
+			m.tempID++
 			m.needPuts = true
 			return
 		}
@@ -341,13 +356,27 @@ func (m *Module) emitCall(c *hir.Call) {
 	// Fallback: external call — choose return type via overrides/async, honor c.Dst if provided.
 	ret := m.callRetType(c.Fn)
 
-	// Ensure we have exactly one declare stub for the target symbol (typed).
-	// We keep the signature minimal at Tier-0 (no params here).
-	m.ensureDecl(fmt.Sprintf("declare %s @%s()", ret, c.Fn))
+	// Build args
+	var argStr strings.Builder
+	argStr.WriteString("(")
+	for i, a := range c.Args {
+		if i > 0 {
+			argStr.WriteString(", ")
+		}
+		ty, val := m.operand(a)
+		argStr.WriteString(fmt.Sprintf("%s %s", ty, val))
+	}
+	argStr.WriteString(")")
+
+	// Ensure we have a declare stub. Use varargs (...) to allow any args.
+	m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
 
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
-		wprintf(&m.funcs, "  %s = call %s @%s()\n", dst, ret, c.Fn)
+		wprintf(&m.funcs, "  %s = call %s @%s%s\n", dst, ret, c.Fn, argStr.String())
+		if strings.HasPrefix(dst, "%") {
+			m.tempTypes[dst[1:]] = ret
+		}
 		if strings.HasPrefix(dst, "%t") {
 			if n, err := strconv.Atoi(dst[2:]); err == nil {
 				if n >= m.tempID {
@@ -358,8 +387,73 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	wprintf(&m.funcs, "  %%t%d = call %s @%s()\n", m.tempID, ret, c.Fn)
+	wprintf(&m.funcs, "  %%t%d = call %s @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	m.tempTypes[fmt.Sprintf("t%d", m.tempID)] = ret
 	m.tempID++
+}
+
+// operand infers the (type, value) pair for a generic value.
+func (m *Module) operand(v hir.Value) (string, string) {
+	switch t := v.(type) {
+	case hir.ConstInt:
+		return "i32", t.Text
+	case hir.ConstBool:
+		return "i1", fmt.Sprintf("%v", t.Value)
+	case hir.ConstStr:
+		// Strings are pointers to globals
+		g, n := m.ensureCStringGlobal(t.Text, true)
+		// We need to emit a GEP to get the pointer
+		// But operand() is called inside a printf, we can't emit instructions here easily!
+		// Wait, emitCall builds the string.
+		// We can't emit instructions inside the argument list construction if we are just returning strings.
+		// We need to pre-emit the GEP if it's a string literal.
+		// Hack: return the global array directly? No, need i8*.
+		// We can use `i8* getelementptr ...` constant expression!
+		return "ptr", fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
+	case hir.Temp:
+		// Infer type from source
+		return m.inferType(t.Name), t.Name
+	case hir.Var:
+		if ali, ok := m.ssa[t.Name]; ok {
+			return m.operand(ali)
+		}
+		// Var is usually a pointer (alloca).
+		// But if we want the value, we should have loaded it?
+		// Tier-0 uses alloca for everything.
+		// If we pass a Var, we usually pass the pointer (by ref) or load it?
+		// Desi passes by value for primitives, by ref for others?
+		// For M14, let's assume we pass the value.
+		// But we haven't emitted a load!
+		// The Var `p` is `alloca i32`.
+		// We need to load it to pass it?
+		// Or pass the pointer?
+		// `Point_to_str(p)` expects `ptr` (self).
+		// If `p` is `alloca`, then `%p` is `ptr`.
+		// So passing `%p` is correct for `self`.
+		return "ptr", "%" + t.Name
+	default:
+		return "i32", "0"
+	}
+}
+
+func (m *Module) inferType(name string) string {
+	key := name
+	if strings.HasPrefix(key, "%") {
+		key = key[1:]
+	}
+	// Check ssa
+	if v, ok := m.ssa[key]; ok {
+		ty, _ := m.operand(v)
+		return ty
+	}
+	// Check tempTypes
+	if ty, ok := m.tempTypes[key]; ok {
+		return ty
+	}
+	// Check if it was a Call result
+	// We don't track which temp came from which call easily.
+	// But we can assume i32 default.
+	return "i32"
 }
 
 func (m *Module) emitRet(r *hir.Ret) {
@@ -389,7 +483,7 @@ func (m *Module) emitRet(r *hir.Ret) {
 
 	// Non-nil return: keep Tier-0 behavior; if current func is a ptr-returner (async wrapper),
 	// format as a pointer; otherwise use the i32-operand path to keep existing tests stable.
-	if m.curRetIsPtr {
+	if m.curRetIsPtr || m.curFuncRetTy == "ptr" {
 		wprintf(&m.funcs, "  ret %s\n", m.ptrOperand(r.Val))
 		return
 	}
@@ -401,6 +495,9 @@ func (m *Module) ptrOperand(v hir.Value) string {
 	switch t := v.(type) {
 	case hir.Temp:
 		return fmt.Sprintf("ptr %s", t.Name)
+	case hir.ConstStr:
+		g, n := m.ensureCStringGlobal(t.Text, true)
+		return fmt.Sprintf("ptr getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
 	case hir.Var:
 		if ali, ok := m.ssa[t.Name]; ok {
 			return m.ptrOperand(ali)

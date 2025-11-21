@@ -1,0 +1,18 @@
+# M14: Custom to_str via impl Display
+
+trait Display:
+	"""Display trait for custom string representation."""
+	def to_str() -> str
+
+struct Point:
+	x: int
+	y: int
+
+impl Display for Point:
+	def to_str() -> str:
+		return "Point(x=?, y=?)"
+
+def main():
+	let p = Point(x=10, y=20)
+	let s = p.to_str()
+	let x = 42

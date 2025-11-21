@@ -47,6 +47,14 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 				if e := p.parseEnumWithDecs(decs); e != nil {
 					m.Decls = append(m.Decls, e)
 				}
+			case p.cur.Tok == token.KW_trait || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_trait):
+				if t := p.parseTrait(decs); t != nil {
+					m.Decls = append(m.Decls, t)
+				}
+			case p.cur.Tok == token.KW_impl:
+				if i := p.parseImpl(decs); i != nil {
+					m.Decls = append(m.Decls, i)
+				}
 			default:
 				if f := p.parseFuncWithDecs(decs); f != nil {
 					m.Decls = append(m.Decls, f)
@@ -72,6 +80,18 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			}
 			continue
 
+		case token.KW_trait:
+			if t := p.parseTrait(nil); t != nil {
+				m.Decls = append(m.Decls, t)
+			}
+			continue
+
+		case token.KW_impl:
+			if i := p.parseImpl(nil); i != nil {
+				m.Decls = append(m.Decls, i)
+			}
+			continue
+
 		case token.KW_pub:
 			// NEW: allow 'pub def' (and 'pub async def') at top-level
 			switch p.peek.Tok {
@@ -88,6 +108,11 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			case token.KW_enum:
 				if e := p.parseEnumWithDecs(nil); e != nil {
 					m.Decls = append(m.Decls, e)
+				}
+				continue
+			case token.KW_trait:
+				if t := p.parseTrait(nil); t != nil {
+					m.Decls = append(m.Decls, t)
 				}
 				continue
 			case token.KW_def, token.KW_async:
@@ -115,6 +140,7 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		for p.cur.Tok != token.EOF &&
 			p.cur.Tok != token.KW_def && p.cur.Tok != token.KW_async &&
 			p.cur.Tok != token.KW_class && p.cur.Tok != token.KW_struct && p.cur.Tok != token.KW_enum &&
+			p.cur.Tok != token.KW_trait && p.cur.Tok != token.KW_impl &&
 			p.cur.Tok != token.KW_pub && p.cur.Tok != token.AT {
 			if s := p.parseStmt(); s != nil {
 				top.Body.Stmts = append(top.Body.Stmts, s)

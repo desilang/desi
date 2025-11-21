@@ -12,6 +12,8 @@ var keywords = map[string]Token{
 	"class":    KW_class,
 	"struct":   KW_struct,
 	"enum":     KW_enum,
+	"trait":    KW_trait,
+	"impl":     KW_impl,
 	"type":     KW_type,
 	"let":      KW_let,
 	"mut":      KW_mut,

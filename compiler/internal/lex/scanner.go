@@ -116,9 +116,16 @@ func (s *Scanner) Next() Item {
 			return Item{Tok: token.Indent, Line: s.line, Col: 1}
 		}
 		if indent < cur {
+			// Multiple dedents? Queue them up.
 			for len(s.indents) > 0 && indent < s.indents[len(s.indents)-1] {
 				s.indents = s.indents[:len(s.indents)-1]
-				return Item{Tok: token.Dedent, Line: s.line, Col: 1}
+				s.pending = append(s.pending, Item{Tok: token.Dedent, Line: s.line, Col: 1})
+			}
+			// Return the first one now.
+			if len(s.pending) > 0 {
+				it := s.pending[0]
+				s.pending = s.pending[1:]
+				return it
 			}
 		}
 	}
@@ -755,6 +762,10 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_struct, true
 	case "enum":
 		return token.KW_enum, true
+	case "trait":
+		return token.KW_trait, true
+	case "impl":
+		return token.KW_impl, true
 	case "type":
 		return token.KW_type, true
 	case "let":

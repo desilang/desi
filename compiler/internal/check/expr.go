@@ -533,7 +533,219 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				}
 			}
 
-			// Named-args path (per-candidate mapping)
+			// Named-args path (per-candidate mapping) - only execute if there are named args
+			if hasNamed {
+				var exact []*FuncCand
+				for _, cand := range set.Cands {
+					vec, ok := c.canonicalizeForCandidate(cand, argsNodes)
+					if !ok {
+						continue
+					}
+					if typesMatchExactly(cand.Type.Params, vec) {
+						exact = append(exact, cand)
+					}
+				}
+				switch len(exact) {
+				case 1:
+					chosen := exact[0]
+					if chosen.Extern && c.unsafeDepth == 0 {
+						c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+					}
+					// Build positional Args vector aligned to params for borrow/move
+					tmp := *call
+					vecE := make([]ast.Expr, len(chosen.Type.Params))
+					// Map names -> indices
+					pnames := c.paramNamesForCand(chosen)
+					name2idx := map[string]int{}
+					for i, nm := range pnames {
+						if nm != "" {
+							name2idx[nm] = i
+						}
+					}
+					// Fill leading positionals
+					pos := 0
+					for _, an := range argsNodes {
+						if an.Name == nil {
+							if pos < len(vecE) {
+								vecE[pos] = an.Expr
+								pos++
+							}
+						}
+					}
+					// Fill named
+					for _, an := range argsNodes {
+						if an.Name != nil {
+							if idx, ok := name2idx[an.Name.Name]; ok {
+								vecE[idx] = an.Expr
+							}
+						}
+					}
+					tmp.Args = vecE
+
+					// Enforce borrow (no move tracking here: IR for these is handled via exports)
+					c.enforceCallsiteBorrow(chosen, &tmp)
+					ret := chosen.Type.Ret
+					if chosen.Decl != nil && chosen.Decl.Async {
+						ret = types.FutureOf(ret)
+					}
+					c.info.Types[call] = ret
+					return ret
+				case 0:
+					if !hasCands(set) {
+						c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
+						return nil
+					}
+					c.add(diagAt("DTE0101", fe.Name.Span, "no matching overload"))
+					return nil
+				default:
+					c.add(diagAt("DTE0102", fe.Name.Span, "ambiguous overload"))
+					return nil
+				}
+			}
+		}
+		// Not a module import - try instance method call
+		// Skip if X is an import identifier
+		if xIdent, ok := fe.X.(*ast.Ident); ok {
+			if _, isImport := c.info.ImportPaths[xIdent.Name]; isImport {
+				return nil
+			}
+		}
+
+		recvT := c.typ(fe.X)
+		if recvT != nil {
+			typeName := recvT.String()
+			methodName := fe.Name.Name
+
+			if impls, ok := c.info.Impls[typeName]; ok {
+				var method *ast.FuncDecl
+				for _, methods := range impls {
+					for _, m := range methods {
+						if m.Name.Name == methodName {
+							method = m
+							break
+						}
+					}
+					if method != nil {
+						break
+					}
+				}
+
+				if method != nil {
+					args := make([]types.T, len(argsNodes))
+					for i, a := range argsNodes {
+						args[i] = c.typ(a.Expr)
+					}
+
+					if len(args) != len(method.Params) {
+						c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch"))
+						return nil
+					}
+
+					for i := range args {
+						var paramT types.T = types.None
+						if method.Params[i].Type != nil {
+							if t, ok := types.FromName(method.Params[i].Type.Name); ok {
+								paramT = t
+							}
+						}
+						if !types.Assignable(paramT, args[i]) {
+							c.add(diagAt("DTE0104", argsNodes[i].Expr.SpanOf(), "argument type mismatch"))
+						}
+					}
+
+					var retT types.T = types.None
+					if method.RetType != nil {
+						if t, ok := types.FromName(method.RetType.Name); ok {
+							retT = t
+						}
+					}
+					c.info.Types[call] = retT
+					return retT
+				}
+			}
+		}
+		return nil
+	}
+
+	// --- Case 2: plain identifier call: f(...)
+	if id, ok := call.Callee.(*ast.Ident); ok {
+		set := c.info.Funcs[id.Name]
+		sym := c.scope.Lookup(id.Name)
+		isCallableSym := sym != nil && sym.Kind == SymFunc
+		isTypeSym := sym != nil && sym.Kind == SymType
+		callable := isCallableSym || isTypeSym || (set != nil && len(set.Cands) > 0)
+		if !callable {
+			if sym == nil {
+				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+				return nil
+			}
+			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
+			return nil
+		}
+
+		if isTypeSym {
+			return c.checkTypeCall(call, sym)
+		}
+
+		if !hasNamed {
+			// Legacy positional path
+			args := make([]types.T, len(argsNodes))
+			for i, a := range argsNodes {
+				args[i] = c.typ(a.Expr)
+			}
+			// M14 Stage 3: Special handling for print(Display) - check AFTER arg types computed
+			if id.Name == "print" && len(args) == 1 && args[0] != nil {
+				typeName := args[0].String()
+				if impls, ok := c.info.Impls[typeName]; ok {
+					if _, hasDisplay := impls["Display"]; hasDisplay {
+						c.info.Types[call] = types.None
+						return types.None
+					}
+				}
+			}
+
+			if set == nil || len(set.Cands) == 0 {
+				c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
+				return nil
+			}
+			arityCands := filterByArity(set.Cands, len(args))
+			if len(arityCands) == 0 {
+				c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
+				return nil
+			}
+			exact := filterExactByTypes(arityCands, args)
+			switch len(exact) {
+			case 1:
+				chosen := exact[0]
+				if chosen.Extern && c.unsafeDepth == 0 {
+					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+				}
+				// Synthesize positional Args for borrow/move enforcement
+				tmp := *call
+				tmp.Args = make([]ast.Expr, len(argsNodes))
+				for i, a := range argsNodes {
+					tmp.Args[i] = a.Expr
+				}
+				c.markMovesFromCall(chosen, &tmp, args)
+				c.enforceCallsiteBorrow(chosen, &tmp)
+
+				ret := chosen.Type.Ret
+				if chosen.Decl != nil && chosen.Decl.Async {
+					ret = types.FutureOf(ret)
+				}
+				c.info.Types[call] = ret
+				return ret
+			case 0:
+				c.add(diagAt("DTE0101", id.Span, "no matching overload"))
+				return nil
+			default:
+				c.add(diagAt("DTE0102", id.Span, "ambiguous overload"))
+				return nil
+			}
+		}
+
+		// Named-args path - only execute if there are named args
+		if hasNamed {
 			var exact []*FuncCand
 			for _, cand := range set.Cands {
 				vec, ok := c.canonicalizeForCandidate(cand, argsNodes)
@@ -581,74 +793,13 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				}
 				tmp.Args = vecE
 
-				// Enforce borrow (no move tracking here: IR for these is handled via exports)
-				c.enforceCallsiteBorrow(chosen, &tmp)
-				ret := chosen.Type.Ret
-				if chosen.Decl != nil && chosen.Decl.Async {
-					ret = types.FutureOf(ret)
+				// Types for move tracking (aligned)
+				vecT := make([]types.T, len(vecE))
+				for i := range vecE {
+					vecT[i] = c.typ(vecE[i])
 				}
-				c.info.Types[call] = ret
-				return ret
-			case 0:
-				if !hasCands(set) {
-					c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
-					return nil
-				}
-				c.add(diagAt("DTE0101", fe.Name.Span, "no matching overload"))
-				return nil
-			default:
-				c.add(diagAt("DTE0102", fe.Name.Span, "ambiguous overload"))
-				return nil
-			}
-		}
-		_ = c.typ(fe.X)
-		return nil
-	}
 
-	// --- Case 2: plain identifier call: f(...)
-	if id, ok := call.Callee.(*ast.Ident); ok {
-		set := c.info.Funcs[id.Name]
-		sym := c.scope.Lookup(id.Name)
-		isCallableSym := sym != nil && sym.Kind == SymFunc
-		callable := isCallableSym || (set != nil && len(set.Cands) > 0)
-		if !callable {
-			if sym == nil {
-				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
-				return nil
-			}
-			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
-			return nil
-		}
-
-		if !hasNamed {
-			// Legacy positional path
-			args := make([]types.T, len(argsNodes))
-			for i, a := range argsNodes {
-				args[i] = c.typ(a.Expr)
-			}
-			if set == nil || len(set.Cands) == 0 {
-				c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
-				return nil
-			}
-			arityCands := filterByArity(set.Cands, len(args))
-			if len(arityCands) == 0 {
-				c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
-				return nil
-			}
-			exact := filterExactByTypes(arityCands, args)
-			switch len(exact) {
-			case 1:
-				chosen := exact[0]
-				if chosen.Extern && c.unsafeDepth == 0 {
-					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-				}
-				// Synthesize positional Args for borrow/move enforcement
-				tmp := *call
-				tmp.Args = make([]ast.Expr, len(argsNodes))
-				for i, a := range argsNodes {
-					tmp.Args[i] = a.Expr
-				}
-				c.markMovesFromCall(chosen, &tmp, args)
+				c.markMovesFromCall(chosen, &tmp, vecT)
 				c.enforceCallsiteBorrow(chosen, &tmp)
 
 				ret := chosen.Type.Ret
@@ -664,77 +815,6 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.add(diagAt("DTE0102", id.Span, "ambiguous overload"))
 				return nil
 			}
-		}
-
-		// Named-args path
-		var exact []*FuncCand
-		for _, cand := range set.Cands {
-			vec, ok := c.canonicalizeForCandidate(cand, argsNodes)
-			if !ok {
-				continue
-			}
-			if typesMatchExactly(cand.Type.Params, vec) {
-				exact = append(exact, cand)
-			}
-		}
-		switch len(exact) {
-		case 1:
-			chosen := exact[0]
-			if chosen.Extern && c.unsafeDepth == 0 {
-				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-			}
-			// Build positional Args vector aligned to params for borrow/move
-			tmp := *call
-			vecE := make([]ast.Expr, len(chosen.Type.Params))
-			// Map names -> indices
-			pnames := c.paramNamesForCand(chosen)
-			name2idx := map[string]int{}
-			for i, nm := range pnames {
-				if nm != "" {
-					name2idx[nm] = i
-				}
-			}
-			// Fill leading positionals
-			pos := 0
-			for _, an := range argsNodes {
-				if an.Name == nil {
-					if pos < len(vecE) {
-						vecE[pos] = an.Expr
-						pos++
-					}
-				}
-			}
-			// Fill named
-			for _, an := range argsNodes {
-				if an.Name != nil {
-					if idx, ok := name2idx[an.Name.Name]; ok {
-						vecE[idx] = an.Expr
-					}
-				}
-			}
-			tmp.Args = vecE
-
-			// Types for move tracking (aligned)
-			vecT := make([]types.T, len(vecE))
-			for i := range vecE {
-				vecT[i] = c.typ(vecE[i])
-			}
-
-			c.markMovesFromCall(chosen, &tmp, vecT)
-			c.enforceCallsiteBorrow(chosen, &tmp)
-
-			ret := chosen.Type.Ret
-			if chosen.Decl != nil && chosen.Decl.Async {
-				ret = types.FutureOf(ret)
-			}
-			c.info.Types[call] = ret
-			return ret
-		case 0:
-			c.add(diagAt("DTE0101", id.Span, "no matching overload"))
-			return nil
-		default:
-			c.add(diagAt("DTE0102", id.Span, "ambiguous overload"))
-			return nil
 		}
 	}
 

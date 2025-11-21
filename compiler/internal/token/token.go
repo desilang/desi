@@ -39,6 +39,8 @@ const (
 	KW_class
 	KW_struct
 	KW_enum
+	KW_trait
+	KW_impl
 	KW_type
 	KW_let
 	KW_mut
@@ -140,7 +142,7 @@ func TokenCategory(t Token) Category {
 		return CatIdent
 	case INT_DEC, INT_HEX, INT_BIN, INT_OCT, FLOAT, FLOAT_EXP, STR, LONGSTR, FSTR:
 		return CatLiteral
-	case KW_import, KW_from, KW_as, KW_pub, KW_def, KW_async, KW_class, KW_struct, KW_enum, KW_type,
+	case KW_import, KW_from, KW_as, KW_pub, KW_def, KW_async, KW_class, KW_struct, KW_enum, KW_trait, KW_impl, KW_type,
 		KW_let, KW_mut, KW_return, KW_if, KW_elif, KW_else, KW_while, KW_for, KW_in, KW_using, KW_defer,
 		KW_match, KW_select, KW_await, KW_true, KW_false, KW_none, KW_and, KW_or, KW_not, KW_ref, KW_inout,
 		KW_unsafe, KW_break, KW_continue:

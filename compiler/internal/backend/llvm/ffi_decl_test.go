@@ -27,7 +27,7 @@ func TestExternDeclare_EmittedOnce_ForFallbackCalls(t *testing.T) {
 	ir := m.IR()
 
 	// Should contain exactly one 'declare' for @sin and at least one call.
-	if !strings.Contains(ir, "declare i32 @sin()") && !strings.Contains(ir, "declare ptr @sin()") {
+	if !strings.Contains(ir, "declare i32 @sin(...)") && !strings.Contains(ir, "declare ptr @sin(...)") {
 		t.Fatalf("missing declare for @sin:\n%s", ir)
 	}
 	if !strings.Contains(ir, "call i32 @sin()") && !strings.Contains(ir, "call ptr @sin()") {

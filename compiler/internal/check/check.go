@@ -61,10 +61,14 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		switch dd := d.(type) {
 		case *ast.FuncDecl:
 			c.collectFunc(dd)
+		case *ast.StructDecl:
+			c.collectStruct(dd)
 		case *ast.ClassDecl:
-			for _, m := range dd.Methods {
-				c.collectFunc(m)
-			}
+			c.collectClass(dd)
+		case *ast.TraitDecl:
+			c.collectTrait(dd)
+		case *ast.ImplDecl:
+			c.collectImpl(dd)
 		}
 	}
 
@@ -80,6 +84,10 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 			for _, m := range dd.Methods {
 				c.checkFunc(m)
 			}
+		case *ast.TraitDecl:
+			c.checkTraitBody(dd)
+		case *ast.ImplDecl:
+			c.checkImplBody(dd)
 		}
 	}
 

@@ -1,0 +1,21 @@
+# M14: Traits and Impls
+
+trait Display:
+	"""
+	A trait for things that can be converted to a string.
+	"""
+	def to_str() -> str
+
+struct Point:
+	x: int
+	y: int
+
+impl Display for Point:
+	def to_str() -> str:
+		return "Point"
+
+def main():
+	let p = Point(x=10, y=20)
+	# For now, just ensure this parses and checks without error.
+	# We haven't implemented method dispatch via traits yet.
+	let s = p.to_str()

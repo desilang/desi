@@ -23,6 +23,9 @@ const (
 	BoolKind
 	StrKind
 	NoneKind
+	TypeKind // M14: type of a type
+	StructKind
+	ClassKind
 
 	// Container kinds
 	ListKind
@@ -68,6 +71,7 @@ var (
 	Bool  = &basic{kind: BoolKind, name: "bool"}
 	Str   = &basic{kind: StrKind, name: "str"}
 	None  = &basic{kind: NoneKind, name: "none"}
+	Type  = &basic{kind: TypeKind, name: "type"}
 
 	// M9A: size-specific integers (Tier-0: treated as part of the int family)
 	USize = &basic{kind: IntKind, name: "usize"}

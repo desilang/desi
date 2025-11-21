@@ -1,0 +1,12 @@
+# M14: print(Display) integration
+
+struct Point:
+	x: int
+	y: int
+
+# Point automatically gets default Display impl
+
+def main():
+	let p = Point(x=10, y=20)
+	# This should now work! print accepts Display types
+	print(p)

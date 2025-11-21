@@ -170,9 +170,10 @@ type Module struct {
 }
 
 type Func struct {
-	Name   string
-	Params []Param
-	Blocks []*Block
+	Name    string
+	Params  []Param
+	RetType string // optional (e.g. "ptr", "i32")
+	Blocks  []*Block
 }
 
 type Block struct {
