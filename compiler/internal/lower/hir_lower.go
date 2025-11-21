@@ -658,6 +658,14 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.DictLit:
 		return ls.lowerDictLit(x)
 
+	case *ast.SetLit:
+		if ls.info != nil {
+			if t, ok := ls.info.Types[x].(*types.Set); ok {
+				return ls.lowerSetLit(x, t)
+			}
+		}
+		return hir.Var{Name: "<set_lit_error>"}
+
 	case *ast.ListComp:
 		return ls.lowerListComp(x)
 
@@ -825,6 +833,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		if ls.info != nil {
 			if t, ok := ls.info.Types[fe.X].(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
+			}
+			if t, ok := ls.info.Types[fe.X].(*types.Set); ok {
+				return ls.lowerSetMethod(fe, x.Args, t)
 			}
 		}
 	}
