@@ -1,0 +1,5 @@
+pub def add(x: int, y: int) -> int:
+    return x + y
+
+pub def multiply(a: int, b: int) -> int:
+    return a * b
