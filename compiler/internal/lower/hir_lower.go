@@ -655,6 +655,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})
 		return dst
 
+	case *ast.DictLit:
+		return ls.lowerDictLit(x)
+
 	case *ast.ListComp:
 		return ls.lowerListComp(x)
 
@@ -688,6 +691,37 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 
 	// For now: a single append with prelude stub. (Tight loop elab comes next.)
 	ls.b.Emit(&hir.Call{Fn: "list_push", Args: []hir.Value{res, elem}})
+
+	return res
+}
+
+// lowerDictLit builds HIR for dict literals:
+//
+//	let %dict = call dict_new(value_size)
+//	call dict_insert(%dict, "key1", &val1)
+//	call dict_insert(%dict, "key2", &val2)
+//	...
+//
+// Returns %dict as the value of the literal.
+//
+// Tier-0 note: For now, we assume string keys and pass value size as sizeof(int).
+// More sophisticated value handling will come in later tiers.
+func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
+	// Create new dict handle
+	// For Tier-0, assume value_size = sizeof(int) = 8 (64-bit)
+	res := ls.b.FreshTemp("dict")
+	valueSize := &hir.ConstInt{Text: "8"}
+	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{valueSize}})
+
+	// Insert each key-value pair
+	for i := range d.Keys {
+		key := ls.lowerExpr(d.Keys[i])
+		val := ls.lowerExpr(d.Values[i])
+
+		// For Tier-0, we need to pass pointers to the values
+		// Emit a call to dict_insert(dict, key, &value)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, val}})
+	}
 
 	return res
 }
