@@ -1,0 +1,25 @@
+# Set literal syntax test
+
+def main():
+    # Empty set
+    let empty = #{}
+    
+    # Integer set
+    let nums = #{1, 2, 3}
+    
+    # String set
+    let words = #{"hello", "world"}
+    
+    # Test contains
+    if nums.contains(2):
+        print("Has 2")
+    
+    # Test add
+    nums.add(4)
+    
+    # Free sets
+    empty.free()
+    nums.free()
+    words.free()
+    
+    print("All tests passed")
