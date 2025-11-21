@@ -1,0 +1,23 @@
+# Set runtime bindings for Desi prelude
+# Provides set[T] operations via C FFI
+
+@extern("C")
+pub def set_new() -> cptr[void]
+
+@extern("C")
+pub def set_free(s: cptr[void]) -> none
+
+@extern("C")
+pub def set_add(s: cptr[void], key: cptr[u8]) -> none
+
+@extern("C")
+pub def set_contains(s: cptr[void], key: cptr[u8]) -> bool
+
+@extern("C")
+pub def set_remove(s: cptr[void], key: cptr[u8]) -> none
+
+@extern("C")
+pub def set_clear(s: cptr[void]) -> none
+
+@extern("C")
+pub def set_to_array(s: cptr[void], out_len: cptr[usize]) -> cptr[cptr[u8]]
