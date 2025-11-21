@@ -375,7 +375,7 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.LBRACE:
 		open := spanPos(p.file, p.cur)
 		p.next()
-		return p.parseDictLiteral(open)
+		return p.parseDictLiteralOrComp(open)
 
 	case token.HASH:
 		// Set comprehension starts with "#{".
@@ -432,8 +432,98 @@ func (p *Parser) parseFString() ast.Expr {
 	}
 }
 
+// parseDictLiteralOrComp disambiguates between dict literals and comprehensions.
+// Called with current token after '{'.
+func (p *Parser) parseDictLiteralOrComp(open diag.Span) ast.Expr {
+	// Handle empty dict
+	if p.cur.Tok == token.RBRACE {
+		end := spanPos(p.file, p.cur)
+		p.next() // consume '}'
+		return &ast.DictLit{
+			Keys:   nil,
+			Values: nil,
+			Span:   ast.JoinSpan(open, end),
+		}
+	}
+
+	// Parse first key
+	key := p.parseExpr()
+
+	// Expect ':'
+	if !p.expect(token.COLON, ":") {
+		// Error recovery
+		for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF {
+			p.next()
+		}
+		_ = p.accept(token.RBRACE)
+		return key
+	}
+
+	// Parse first value
+	val := p.parseExpr()
+
+	// Check next token to disambiguate
+	if p.cur.Tok == token.KW_for {
+		// It's a dict comprehension - hand off to parseDictComp
+		// We already parsed key and val, now parse the rest
+		p.next() // consume 'for'
+		clauses := p.parseCompClausesAfterFor()
+		if !p.expect(token.RBRACE, "}") {
+			return key
+		}
+		return &ast.DictComp{
+			Key:     key,
+			Val:     val,
+			Clauses: clauses,
+			Span:    ast.JoinSpan(open, spanPos(p.file, p.cur)),
+		}
+	}
+
+	// It's a dict literal - continue parsing key-value pairs
+	keys := []ast.Expr{key}
+	values := []ast.Expr{val}
+
+	for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF {
+		// Expect comma
+		if p.cur.Tok != token.COMMA {
+			break
+		}
+		p.next() // consume ','
+
+		// Allow trailing comma
+		if p.cur.Tok == token.RBRACE {
+			break
+		}
+
+		// Parse next key
+		nextKey := p.parseExpr()
+		keys = append(keys, nextKey)
+
+		// Expect ':'
+		if !p.expect(token.COLON, ":") {
+			break
+		}
+
+		// Parse next value
+		nextVal := p.parseExpr()
+		values = append(values, nextVal)
+	}
+
+	end := spanPos(p.file, p.cur)
+	if p.cur.Tok == token.RBRACE {
+		p.next() // consume '}'
+	}
+
+	return &ast.DictLit{
+		Keys:   keys,
+		Values: values,
+		Span:   ast.JoinSpan(open, end),
+	}
+}
+
 // parseDictLiteral parses a dict literal: {k1: v1, k2: v2, ...} or empty {}
 // open is the Span of the opening '{'.
+// NOTE: This is now only called from parseDictLiteralOrComp for the literal path.
 func (p *Parser) parseDictLiteral(open diag.Span) ast.Expr {
 	// Handle empty dict
 	if p.cur.Tok == token.RBRACE {
