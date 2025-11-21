@@ -2,6 +2,7 @@ package parse
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
@@ -374,7 +375,7 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.LBRACE:
 		open := spanPos(p.file, p.cur)
 		p.next()
-		return p.parseDictComp(&ast.Ident{Name: "", Span: open})
+		return p.parseDictLiteral(open)
 
 	case token.HASH:
 		// Set comprehension starts with "#{".
@@ -428,5 +429,67 @@ func (p *Parser) parseFString() ast.Expr {
 			p.errUnexpected(spanPos(p.file, p.cur), "f-string part or end")
 			return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 		}
+	}
+}
+
+// parseDictLiteral parses a dict literal: {k1: v1, k2: v2, ...} or empty {}
+// open is the Span of the opening '{'.
+func (p *Parser) parseDictLiteral(open diag.Span) ast.Expr {
+	// Handle empty dict
+	if p.cur.Tok == token.RBRACE {
+		end := spanPos(p.file, p.cur)
+		p.next() // consume '}'
+		return &ast.DictLit{
+			Keys:   nil,
+			Values: nil,
+			Span:   ast.JoinSpan(open, end),
+		}
+	}
+
+	var keys []ast.Expr
+	var values []ast.Expr
+
+	for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF {
+		// Parse key expression
+		key := p.parseExpr()
+		keys = append(keys, key)
+
+		// Expect ':'
+		if !p.expect(token.COLON, ":") {
+			// On error, try to continue parsing
+			break
+		}
+
+		// Parse value expression
+		val := p.parseExpr()
+		values = append(values, val)
+
+		// Check for comma or closing brace
+		if p.cur.Tok == token.RBRACE {
+			break
+		}
+		if p.cur.Tok == token.COMMA {
+			p.next()
+			// Allow trailing comma
+			if p.cur.Tok == token.RBRACE {
+				break
+			}
+			continue
+		}
+
+		// No comma and not '}' - error, but try to continue
+		p.errUnexpected(spanPos(p.file, p.cur), "',' or '}'")
+		break
+	}
+
+	end := spanPos(p.file, p.cur)
+	if p.cur.Tok == token.RBRACE {
+		p.next() // consume '}'
+	}
+
+	return &ast.DictLit{
+		Keys:   keys,
+		Values: values,
+		Span:   ast.JoinSpan(open, end),
 	}
 }

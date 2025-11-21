@@ -1,0 +1,3 @@
+def main():
+    let d = {"Alice": 100, "Bob": 85}
+    print(d)
