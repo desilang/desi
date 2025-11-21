@@ -39,7 +39,7 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 			out.Funcs = append(out.Funcs, w, p)
 			continue
 		}
-		out.Funcs = append(out.Funcs, LowerBlockFromSource(fd.Name.Name, fd.Body, info, src))
+		out.Funcs = append(out.Funcs, LowerFuncFromDecl(fd, info, src))
 	}
 
 	// Lower explicit ImplDecl methods

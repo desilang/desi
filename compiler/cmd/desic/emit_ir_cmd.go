@@ -100,6 +100,10 @@ func init() {
 	injectUserFuncSigs(mod)
 
 	// Emit every lowered function (order as lowered is fine for Tier-0)
+	// First, mark all functions as defined to avoid unnecessary declarations
+	for _, f := range hm.Funcs {
+		lm.MarkDefined(f.Name)
+	}
 	for _, f := range hm.Funcs {
 		lm.EmitFunc(f)
 	}

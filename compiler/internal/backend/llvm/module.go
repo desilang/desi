@@ -19,28 +19,30 @@ func wprintf(w io.Writer, format string, a ...any) {
 }
 
 type Module struct {
-	name          string
-	globals       bytes.Buffer
-	funcs         bytes.Buffer
-	strLits       map[string]string // text-key -> global name
-	strOrder      []string          // deterministic order
-	needPuts      bool
-	needRcDec     bool
-	needArena     bool
-	wroteGlob     bool
-	tempID        int
-	asyncWrappers map[string]bool      // symbols that return ptr future handles
-	curRetIsPtr   bool                 // set per function during EmitFunc
-	ssa           map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
-	curFuncRetTy  string               // textual LLVM return type for the function being emitted
-	tempTypes     map[string]string    // temp name -> llvm type (e.g. "t1" -> "ptr")
+	name             string
+	globals          bytes.Buffer
+	funcs            bytes.Buffer
+	strLits          map[string]string // text-key -> global name
+	strOrder         []string          // deterministic order
+	needPuts         bool
+	needRcDec        bool
+	needArena        bool
+	wroteGlob        bool
+	tempID           int
+	asyncWrappers    map[string]bool      // symbols that return ptr future handles
+	curRetIsPtr      bool                 // set per function during EmitFunc
+	ssa              map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
+	curFuncRetTy     string               // textual LLVM return type for the function being emitted
+	tempTypes        map[string]string    // temp name -> llvm type (e.g. "t1" -> "ptr")
+	definedFunctions map[string]bool      // functions defined in this module (to avoid duplicate declares)
 }
 
 func NewModule(name string) *Module {
 	return &Module{
-		name:          name,
-		strLits:       make(map[string]string),
-		asyncWrappers: make(map[string]bool),
+		name:             name,
+		strLits:          make(map[string]string),
+		asyncWrappers:    make(map[string]bool),
+		definedFunctions: make(map[string]bool),
 	}
 }
 
@@ -134,6 +136,9 @@ func escapeForCString(s string) string {
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
 func (m *Module) EmitFunc(fn *hir.Func) {
+	// Mark this function as defined to avoid emitting a declare for it
+	m.definedFunctions[fn.Name] = true
+
 	// Reset per-function state.
 	m.ssa = make(map[string]hir.Value)
 	m.tempTypes = make(map[string]string)
@@ -162,9 +167,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		if i > 0 {
 			wprintf(&m.funcs, ", ")
 		}
-		pty := "ptr"
-		if sig, ok := getFuncSig(fn.Name); ok && i < len(sig.params) && sig.params[i] != "" {
-			pty = sig.params[i]
+		pty := p.Type // Use type from HIR if available
+		if pty == "" {
+			// Fallback to signature lookup
+			pty = "ptr"
+			if sig, ok := getFuncSig(fn.Name); ok && i < len(sig.params) && sig.params[i] != "" {
+				pty = sig.params[i]
+			}
 		}
 		wprintf(&m.funcs, "%s %%%s", pty, p.Name)
 	}
@@ -274,6 +283,45 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.needArena = true
 				}
 
+			// ------- M14: Low-level memory ops -------
+			case *hir.Alloca:
+				ty := x.Type
+				if ty == "" {
+					ty = "i32"
+				}
+				count := x.Count
+				if count < 1 {
+					count = 1
+				}
+				if count > 1 {
+					wprintf(&m.funcs, "  %s = alloca %s, i32 %d\n", x.Dst.Name, ty, count)
+				} else {
+					wprintf(&m.funcs, "  %s = alloca %s\n", x.Dst.Name, ty)
+				}
+				m.tempTypes[x.Dst.Name] = "ptr"
+
+			case *hir.Store:
+				valTy, valOp := m.operand(x.Val)
+				ptrOp := m.ptrOperand(x.Dst)
+				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, ptrOp)
+
+			case *hir.GetElementPtr:
+				baseOp := m.ptrOperand(x.Base)
+				var idxStr strings.Builder
+				for i, idx := range x.Indices {
+					if i > 0 {
+						idxStr.WriteString(", ")
+					}
+					idxStr.WriteString(m.i32Operand(idx))
+				}
+				wprintf(&m.funcs, "  %s = getelementptr inbounds %s, %s, %s\n", x.Dst.Name, x.Type, baseOp, idxStr.String())
+				m.tempTypes[x.Dst.Name] = "ptr"
+
+			case *hir.BitCast:
+				valTy, valOp := m.operand(x.Val)
+				wprintf(&m.funcs, "  %s = bitcast %s %s to %s\n", x.Dst.Name, valTy, valOp, x.Type)
+				m.tempTypes[x.Dst.Name] = x.Type
+
 			// ------- control flow (elided) -------
 			case *hir.If:
 			case *hir.While:
@@ -369,13 +417,16 @@ func (m *Module) emitCall(c *hir.Call) {
 	argStr.WriteString(")")
 
 	// Ensure we have a declare stub. Use varargs (...) to allow any args.
-	m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
+	// But skip if this function is defined in the same module
+	if !m.definedFunctions[c.Fn] {
+		m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
+	}
 
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
 		wprintf(&m.funcs, "  %s = call %s @%s%s\n", dst, ret, c.Fn, argStr.String())
 		if strings.HasPrefix(dst, "%") {
-			m.tempTypes[dst[1:]] = ret
+			m.tempTypes[dst] = ret
 		}
 		if strings.HasPrefix(dst, "%t") {
 			if n, err := strconv.Atoi(dst[2:]); err == nil {
@@ -396,7 +447,11 @@ func (m *Module) emitCall(c *hir.Call) {
 func (m *Module) operand(v hir.Value) (string, string) {
 	switch t := v.(type) {
 	case hir.ConstInt:
-		return "i32", t.Text
+		ty := t.Type
+		if ty == "" {
+			ty = "i32"
+		}
+		return ty, t.Text
 	case hir.ConstBool:
 		return "i1", fmt.Sprintf("%v", t.Value)
 	case hir.ConstStr:
@@ -437,19 +492,18 @@ func (m *Module) operand(v hir.Value) (string, string) {
 }
 
 func (m *Module) inferType(name string) string {
-	key := name
-	if strings.HasPrefix(key, "%") {
-		key = key[1:]
+	// Check tempTypes with the full name (including %)
+	if ty, ok := m.tempTypes[name]; ok {
+		return ty
 	}
-	// Check ssa
+
+	key := strings.TrimPrefix(name, "%")
+	// Check ssa with stripped name
 	if v, ok := m.ssa[key]; ok {
 		ty, _ := m.operand(v)
 		return ty
 	}
-	// Check tempTypes
-	if ty, ok := m.tempTypes[key]; ok {
-		return ty
-	}
+
 	// Check if it was a Call result
 	// We don't track which temp came from which call easily.
 	// But we can assume i32 default.
@@ -537,4 +591,9 @@ func (m *Module) callRetType(name string) string {
 		return sig.ret
 	}
 	return "i32"
+}
+
+// MarkDefined marks a function as defined in this module.
+func (m *Module) MarkDefined(name string) {
+	m.definedFunctions[name] = true
 }

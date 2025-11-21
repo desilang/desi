@@ -126,7 +126,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 			}
 		}
 		bt := c.typ(x.Body)
-		c.info.Types[e] = types.FuncOf(params, bt)
+		c.info.Types[e] = types.FuncOf(params, bt, false)
 		return c.info.Types[e]
 
 	default:
@@ -344,6 +344,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
 				}
 				ret := chosen.Type.Ret
+				c.info.Types[call.Callee] = chosen.Type
 				c.info.Types[x] = ret
 				return ret
 			case 0:
@@ -370,7 +371,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 				continue
 			}
 			vec[0] = lhsT // force first param to be lhsT
-			if typesMatchExactly(cand.Type.Params, vec) {
+			if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
 				exact = append(exact, cand)
 			}
 		}
@@ -381,6 +382,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
 			}
 			ret := chosen.Type.Ret
+			c.info.Types[call.Callee] = chosen.Type
 			c.info.Types[x] = ret
 			return ret
 		case 0:
@@ -541,7 +543,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					if !ok {
 						continue
 					}
-					if typesMatchExactly(cand.Type.Params, vec) {
+					if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
 						exact = append(exact, cand)
 					}
 				}
@@ -752,7 +754,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				if !ok {
 					continue
 				}
-				if typesMatchExactly(cand.Type.Params, vec) {
+				if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
 					exact = append(exact, cand)
 				}
 			}
@@ -960,7 +962,7 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 		return -1
 	}
 	for _, m := range okMapped {
-		if typesMatchExactly(m.cand.Type.Params, m.vecType) {
+		if typesMatchExactly(m.cand.Type.Params, m.vecType, m.cand.Type.Variadic) {
 			best = append(best, m.cand)
 		}
 	}
@@ -1026,12 +1028,39 @@ func indexOfName(names []string, want string) int {
 	return -1
 }
 
-func typesMatchExactly(params []types.T, args []types.T) bool {
+func typesMatchExactly(params []types.T, args []types.T, isVariadic bool) bool {
+	if isVariadic {
+		// Variadic: args must be at least len(params)-1
+		if len(args) < len(params)-1 {
+			return false
+		}
+		// Check prefix
+		for i := 0; i < len(params)-1; i++ {
+			if !types.Assignable(params[i], args[i]) {
+				return false
+			}
+		}
+		// Check variadic tail
+		lastParam := params[len(params)-1]
+		var elemType types.T
+		if lst, ok := lastParam.(*types.List); ok {
+			elemType = lst.Elem
+		} else {
+			return false
+		}
+		for i := len(params) - 1; i < len(args); i++ {
+			if !types.Assignable(elemType, args[i]) {
+				return false
+			}
+		}
+		return true
+	}
+
 	if len(params) != len(args) {
 		return false
 	}
 	for i := range params {
-		if !types.Equal(params[i], args[i]) {
+		if !types.Assignable(params[i], args[i]) {
 			return false
 		}
 	}
@@ -1047,17 +1076,41 @@ func (c *checker) enforceCallsiteBorrow(chosen *FuncCand, call *ast.CallExpr) {
 	// Gather effective modes for the chosen overload.
 	// Prefer local Decl param modes; fall back to chosen.Modes for cross-module exports.
 	var modes []ast.ParamMode
+	isVariadic := chosen.Type.Variadic
+
 	if chosen.Decl != nil {
 		fd := chosen.Decl
-		n := min(len(fd.Params), len(call.Args))
+		nParams := len(fd.Params)
+		nArgs := len(call.Args)
+		n := nArgs
+		if !isVariadic && nParams < n {
+			n = nParams
+		}
+
 		modes = make([]ast.ParamMode, n)
 		for i := 0; i < n; i++ {
-			modes[i] = fd.Params[i].Mode
+			if i < nParams {
+				modes[i] = fd.Params[i].Mode
+			} else if isVariadic {
+				modes[i] = fd.Params[nParams-1].Mode
+			}
 		}
 	} else if len(chosen.Modes) > 0 {
-		n := min(len(chosen.Modes), len(call.Args))
+		nParams := len(chosen.Modes)
+		nArgs := len(call.Args)
+		n := nArgs
+		if !isVariadic && nParams < n {
+			n = nParams
+		}
+
 		modes = make([]ast.ParamMode, n)
-		copy(modes, chosen.Modes[:n])
+		for i := 0; i < n; i++ {
+			if i < nParams {
+				modes[i] = chosen.Modes[i]
+			} else if isVariadic {
+				modes[i] = chosen.Modes[nParams-1]
+			}
+		}
 	} else {
 		// No mode info available; nothing to enforce.
 		return
@@ -1128,18 +1181,32 @@ func filterByArity(cands []*FuncCand, n int) []*FuncCand {
 		total := len(cand.Type.Params)
 		defaults := candDefaults(cand)
 
-		required := total
-		if len(defaults) == total && total > 0 {
-			required = 0
-			for i := 0; i < total; i++ {
+		if cand.Type.Variadic {
+			// Variadic: last param is *args (list[T]), always optional.
+			// Required count depends on preceding params.
+			required := 0
+			for i := 0; i < total-1; i++ {
 				if !defaults[i] {
 					required++
 				}
 			}
-		}
+			if n >= required {
+				out = append(out, cand)
+			}
+		} else {
+			required := total
+			if len(defaults) == total && total > 0 {
+				required = 0
+				for i := 0; i < total; i++ {
+					if !defaults[i] {
+						required++
+					}
+				}
+			}
 
-		if required <= n && n <= total {
-			out = append(out, cand)
+			if required <= n && n <= total {
+				out = append(out, cand)
+			}
 		}
 	}
 	return out
@@ -1155,16 +1222,38 @@ func filterExactByTypes(cands []*FuncCand, args []types.T) []*FuncCand {
 			continue
 		}
 		params := cand.Type.Params
-		if len(args) > len(params) {
-			// more args than parameters: cannot match
-			continue
-		}
 		defaults := candDefaults(cand)
+		isVariadic := cand.Type.Variadic
+
+		if !isVariadic {
+			if len(args) > len(params) {
+				continue
+			}
+		}
 
 		ok := true
-		// Check the prefix that has explicit arguments.
+		// Check explicit arguments against parameters
 		for i := range args {
-			if !types.Equal(params[i], args[i]) {
+			var paramType types.T
+			if isVariadic && i >= len(params)-1 {
+				// Variadic argument: match against element type of the last param (list[T])
+				lastParam := params[len(params)-1]
+				if lst, ok := lastParam.(*types.List); ok {
+					paramType = lst.Elem
+				} else {
+					ok = false
+					break
+				}
+			} else {
+				// Normal argument
+				if i >= len(params) {
+					ok = false
+					break
+				}
+				paramType = params[i]
+			}
+
+			if !types.Assignable(paramType, args[i]) {
 				ok = false
 				break
 			}
@@ -1172,8 +1261,15 @@ func filterExactByTypes(cands []*FuncCand, args []types.T) []*FuncCand {
 		if !ok {
 			continue
 		}
-		// Any remaining parameters must be satisfied by defaults.
-		for i := len(args); i < len(params); i++ {
+
+		// Ensure unsatisfied parameters have defaults
+		// For variadic, we only care about non-variadic params (prefix)
+		checkLimit := len(params)
+		if isVariadic {
+			checkLimit--
+		}
+
+		for i := len(args); i < checkLimit; i++ {
 			if len(defaults) != len(params) || !defaults[i] {
 				ok = false
 				break
@@ -1308,11 +1404,16 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 
 	// (1) Fill leading positionals
 	next := 0
+	isVariadic := cand.Type.Variadic
 	for _, a := range args {
 		if a.Name != nil {
 			continue
 		}
 		if next >= n {
+			if isVariadic {
+				out = append(out, c.typ(a.Expr))
+				continue
+			}
 			// Too many args (will just fail to match this cand silently)
 			return nil, false
 		}

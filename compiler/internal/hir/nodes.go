@@ -49,7 +49,10 @@ type Temp struct{ Name string }
 func (Temp) isValue()         {}
 func (t Temp) String() string { return t.Name }
 
-type ConstInt struct{ Text string }
+type ConstInt struct {
+	Text string
+	Type string // default "i32"
+}
 
 func (ConstInt) isValue()         {}
 func (c ConstInt) String() string { return c.Text }
@@ -144,7 +147,10 @@ func (*While) isStmt() {}
 // ----- Task H: function params + frame sugar -----
 
 // Param is a minimal function parameter (Tier-0 only needs the name).
-type Param struct{ Name string }
+type Param struct {
+	Name string
+	Type string // LLVM type (e.g., "i32", "ptr")
+}
 
 // FrameSet: conceptual store to a logical frame slot (e.g., "frame.x").
 type FrameSet struct {
@@ -182,3 +188,37 @@ type Block struct {
 }
 
 func NewBlock(name string) *Block { return &Block{Name: name} }
+
+// ----- M14: Low-level memory ops for varargs/structs -----
+
+type Alloca struct {
+	Type  string // textual LLVM type (e.g. "i32", "{ptr, i64}")
+	Count int    // number of elements (default 1)
+	Dst   Temp
+}
+
+func (*Alloca) isStmt() {}
+
+type Store struct {
+	Dst Value // address (ptr)
+	Val Value // value to store
+}
+
+func (*Store) isStmt() {}
+
+type GetElementPtr struct {
+	Type    string  // type of the element being indexed (e.g. "i32" or "{ptr, i64}")
+	Base    Value   // base pointer
+	Indices []Value // indices
+	Dst     Temp
+}
+
+func (*GetElementPtr) isStmt() {}
+
+type BitCast struct {
+	Val  Value
+	Type string // target type
+	Dst  Temp
+}
+
+func (*BitCast) isStmt() {}

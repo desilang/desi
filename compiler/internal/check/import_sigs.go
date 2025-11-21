@@ -93,7 +93,7 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 
 						set.Add(&FuncCand{
 							Decl:       nil,
-							Type:       types.FuncOf(ft.Params, ft.Ret),
+							Type:       types.FuncOf(ft.Params, ft.Ret, ft.Variadic),
 							Modes:      modes,
 							Extern:     ext,
 							ParamNames: cloneNames(pnames),

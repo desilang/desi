@@ -23,6 +23,7 @@ const (
 	BoolKind
 	StrKind
 	NoneKind
+	AnyKind  // M14: top type
 	TypeKind // M14: type of a type
 	StructKind
 	ClassKind
@@ -71,6 +72,7 @@ var (
 	Bool  = &basic{kind: BoolKind, name: "bool"}
 	Str   = &basic{kind: StrKind, name: "str"}
 	None  = &basic{kind: NoneKind, name: "none"}
+	Any   = &basic{kind: AnyKind, name: "Any"}
 	Type  = &basic{kind: TypeKind, name: "type"}
 
 	// M9A: size-specific integers (Tier-0: treated as part of the int family)
@@ -86,8 +88,9 @@ type Dict struct{ Key, Val T }
 type Tuple struct{ Elems []T }
 type Future struct{ Elem T }
 type Func struct {
-	Params []T
-	Ret    T
+	Params   []T
+	Ret      T
+	Variadic bool // true if last param is *args
 }
 type Multi struct{ Elems []T }
 
@@ -141,10 +144,10 @@ func TupleOf(elems ...T) *Tuple {
 	return &Tuple{Elems: cp}
 }
 func FutureOf(elem T) *Future { return &Future{Elem: elem} }
-func FuncOf(params []T, ret T) *Func {
+func FuncOf(params []T, ret T, variadic bool) *Func {
 	cp := make([]T, len(params))
 	copy(cp, params)
-	return &Func{Params: cp, Ret: ret}
+	return &Func{Params: cp, Ret: ret, Variadic: variadic}
 }
 func MultiOf(elems ...T) *Multi {
 	cp := make([]T, len(elems))
@@ -254,8 +257,15 @@ func Equal(a, b T) bool {
 // Phase-1 semantics: exact type equality only (monomorphic), except that `none` is
 // assignable to itself only (no optionals yet).
 func Assignable(dst, src T) bool {
+	if dst == src {
+		return true
+	}
 	if dst == nil || src == nil {
 		return false
+	}
+	// Any accepts anything
+	if kindOf(dst) == AnyKind {
+		return true
 	}
 	// exact structural equality
 	return Equal(dst, src)
@@ -278,6 +288,8 @@ func FromName(name string) (T, bool) {
 		return Str, true
 	case "none":
 		return None, true
+	case "Any":
+		return Any, true
 
 	// Pointer-sized ints (Tier-0: still IntKind)
 	case "usize":

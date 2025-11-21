@@ -23,7 +23,7 @@ func TestM4_Lambda_TypedParams_OK(t *testing.T) {
 	mustNoDiags(t, diags)
 
 	got := info.Types[l]
-	want := types.FuncOf([]types.T{types.Int}, types.Int)
+	want := types.FuncOf([]types.T{types.Int}, types.Int, false)
 	if !types.Equal(got, want) {
 		t.Fatalf("lambda type mismatch: got %v, want %v", got, want)
 	}

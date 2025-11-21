@@ -45,7 +45,7 @@ def main() -> int:
 	if set == nil || len(set.Cands) != 1 {
 		t.Fatalf("expected 1 overload for lerp, got %#v", set)
 	}
-	want := types.FuncOf([]types.T{types.Float, types.Float, types.Float}, types.Float)
+	want := types.FuncOf([]types.T{types.Float, types.Float, types.Float}, types.Float, false)
 	if got := set.Cands[0].Type; !types.Equal(got, want) {
 		t.Fatalf("lerp signature mismatch: want %s, got %s", want, got)
 	}
@@ -89,7 +89,7 @@ def main() -> int:
 	if set == nil || len(set.Cands) != 1 {
 		t.Fatalf("expected 1 overload for ulerp, got %#v", set)
 	}
-	want := types.FuncOf([]types.T{types.Float, types.Float, types.Float}, types.Float)
+	want := types.FuncOf([]types.T{types.Float, types.Float, types.Float}, types.Float, false)
 	if got := set.Cands[0].Type; !types.Equal(got, want) {
 		t.Fatalf("ulerp signature mismatch: want %s, got %s", want, got)
 	}

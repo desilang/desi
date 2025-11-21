@@ -193,11 +193,20 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 
 	// Build function type from parameter annotations (surface forms allowed).
 	params := make([]types.T, len(fd.Params))
+	variadic := false
 	for i, p := range fd.Params {
 		if p.Type != nil {
 			if tt := surfaceToType(p.Type.Name); tt != nil {
-				params[i] = tt
+				// If this is a variadic parameter, wrap in list[T]
+				if p.Variadic {
+					params[i] = types.ListOf(tt)
+				} else {
+					params[i] = tt
+				}
 			}
+		}
+		if p.Variadic {
+			variadic = true
 		}
 	}
 	var ret types.T = types.None
@@ -206,7 +215,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 			ret = tt
 		}
 	}
-	sig := types.FuncOf(params, ret)
+	sig := types.FuncOf(params, ret, variadic)
 
 	set := c.info.Funcs[name]
 	if set == nil {
@@ -252,6 +261,9 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		var pt types.T
 		if p.Type != nil {
 			pt = surfaceToType(p.Type.Name)
+		}
+		if p.Variadic {
+			pt = types.ListOf(pt)
 		}
 		_ = c.scope.Define(&Symbol{
 			Name: p.Name.Name, Kind: SymParam, Type: pt, Node: &fd.Params[i].Name,
