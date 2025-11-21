@@ -65,6 +65,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.StrLit:
 		c.info.Types[e] = types.Str
 		return types.Str
+	case *ast.FString:
+		for _, part := range x.Parts {
+			_ = c.typ(part)
+		}
+		c.info.Types[e] = types.Str
+		return types.Str
 	case *ast.NoneLit:
 		c.info.Types[e] = types.None
 		return types.None

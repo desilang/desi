@@ -297,13 +297,16 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return it
 
-	case token.STR, token.FSTR, token.LONGSTR:
+	case token.STR, token.LONGSTR:
 		st := &ast.StrLit{
 			Long: p.cur.Tok == token.LONGSTR,
 			Span: spanPos(p.file, p.cur),
 		}
 		p.next()
 		return st
+
+	case token.FSTR_START:
+		return p.parseFString()
 
 	case token.KW_true:
 		b := &ast.BoolLit{Value: true, Span: spanPos(p.file, p.cur)}
@@ -389,5 +392,41 @@ func (p *Parser) parsePrimary() ast.Expr {
 			p.next()
 		}
 		return errId
+	}
+}
+
+func (p *Parser) parseFString() ast.Expr {
+	start := spanPos(p.file, p.cur)
+	p.next() // consume FSTR_START
+
+	var parts []ast.Expr
+	for {
+		switch p.cur.Tok {
+		case token.FSTR_PART:
+			st := &ast.StrLit{
+				Long:  false,
+				Value: p.cur.Lexeme, // Store the literal text from the token
+				Span:  spanPos(p.file, p.cur),
+			}
+			parts = append(parts, st)
+			p.next()
+
+		case token.LBRACE:
+			p.next() // consume {
+			expr := p.parseExpr()
+			parts = append(parts, expr)
+			if !p.expect(token.RBRACE, "}") {
+				return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+			}
+
+		case token.FSTR_END:
+			end := spanPos(p.file, p.cur)
+			p.next() // consume "
+			return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, end)}
+
+		default:
+			p.errUnexpected(spanPos(p.file, p.cur), "f-string part or end")
+			return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+		}
 	}
 }

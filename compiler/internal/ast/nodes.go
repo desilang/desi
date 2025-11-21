@@ -121,13 +121,23 @@ func (x *FloatLit) SpanOf() diag.Span { return x.Span }
 
 // StrLit tracks whether it was a triple-quoted (long) string.
 // Long == true when the token was LONGSTR (scanner recognized """...""").
+// Value is populated for F-string parts (FSTR_PART tokens) to store the literal text.
 type StrLit struct {
-	Long bool // true for """...""", false for "..." or f"..."
-	Span diag.Span
+	Long  bool   // true for """...""", false for "..." or f"..."
+	Value string // populated for F-string parts, empty otherwise
+	Span  diag.Span
 }
 
 func (*StrLit) isExpr()             {}
 func (x *StrLit) SpanOf() diag.Span { return x.Span }
+
+type FString struct {
+	Parts []Expr // StrLit or other Exprs
+	Span  diag.Span
+}
+
+func (*FString) isExpr()             {}
+func (x *FString) SpanOf() diag.Span { return x.Span }
 
 type BoolLit struct {
 	Value bool

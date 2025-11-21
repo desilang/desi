@@ -22,9 +22,11 @@ var tokenNames = [...]string{
 	FLOAT:     "FLOAT",
 	FLOAT_EXP: "FLOAT_EXP",
 
-	STR:     "STR",
-	LONGSTR: "LONGSTR",
-	FSTR:    "FSTR",
+	STR:        "STR",
+	LONGSTR:    "LONGSTR",
+	FSTR_START: "FSTR_START",
+	FSTR_PART:  "FSTR_PART",
+	FSTR_END:   "FSTR_END",
 
 	// Keywords: show source spellings in String()
 	KW_import: "import",

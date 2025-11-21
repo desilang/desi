@@ -206,6 +206,14 @@ type Store struct {
 
 func (*Store) isStmt() {}
 
+type Load struct {
+	Type string // type to load (e.g. "ptr")
+	Src  Value  // address
+	Dst  Temp
+}
+
+func (*Load) isStmt() {}
+
 type GetElementPtr struct {
 	Type    string  // type of the element being indexed (e.g. "i32" or "{ptr, i64}")
 	Base    Value   // base pointer
