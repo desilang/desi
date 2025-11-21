@@ -718,9 +718,14 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		key := ls.lowerExpr(d.Keys[i])
 		val := ls.lowerExpr(d.Values[i])
 
-		// For Tier-0, we need to pass pointers to the values
+		// For Tier-0, we need to pass pointers to the values.
+		// Since 'val' might be an immediate (e.g. integer), we spill it to a temp alloca.
+		valPtr := ls.b.FreshTemp("val_ptr")
+		ls.b.Emit(&hir.Alloca{Dst: valPtr, Type: "i64", Count: 1})
+		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val})
+
 		// Emit a call to dict_insert(dict, key, &value)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, val}})
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, valPtr}})
 	}
 
 	return res
@@ -815,7 +820,16 @@ func (ls *lowerState) lowerVariadicCall(x *ast.CallExpr, ft *types.Func) hir.Val
 }
 
 func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
-	// 0. Variadic calls (M14)
+	// 0. Method calls (FieldExpr callee)
+	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
+		if ls.info != nil {
+			if t, ok := ls.info.Types[fe.X].(*types.Dict); ok {
+				return ls.lowerDictMethod(fe, x.Args, t)
+			}
+		}
+	}
+
+	// 1. Variadic calls (M14)
 	// Look up the function by name to get its signature
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
@@ -832,7 +846,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
-	// 1. M14 Stage 3: print(Display)
+	// 2. M14 Stage 3: print(Display)
 	// If we have type info, check if this is print(arg) where arg implements Display.
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)

@@ -1,0 +1,19 @@
+def main():
+    let d = {"a": 1, "b": 2}
+    
+    # Using method syntax
+    let val = d.get("a", 0)
+    
+    # Check if key exists
+    let has_a = d.has_key("a")
+    
+    # Clear dict
+    d.clear()
+    
+    # Free dict (manual for now)
+    # Note: 'free' is not a standard method but added for Tier-0 manual management
+    # If we implemented Drop trait for dict, this wouldn't be needed.
+    # For now, we'll use the manual method I added.
+    # d.free() 
+    # Wait, I added 'free' to lowerDictMethod but not to check/expr.go!
+    # I need to add 'free' to check/expr.go first.

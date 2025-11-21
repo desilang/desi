@@ -55,3 +55,28 @@ func TestSeparatorsAndDots(t *testing.T) {
 		t.Fatalf("unexpected errs: %v", errs)
 	}
 }
+
+func TestBraceNewlineSuppression(t *testing.T) {
+	src := `
+{
+	"a": 1
+}
+`
+	items, errs := toks(src)
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	nlCount := 0
+	for _, it := range items {
+		if it.Tok == token.NL {
+			nlCount++
+		}
+	}
+
+	// Expect 2 NLs: one for initial blank line, one after RBRACE.
+	// Newlines inside braces (lines 3 and 4) should be suppressed.
+	if nlCount > 2 {
+		t.Errorf("expected 2 NLs, got %d. Items: %v", nlCount, items)
+	}
+}

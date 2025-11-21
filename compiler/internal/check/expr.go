@@ -157,8 +157,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return c.typCall(x)
 
 	case *ast.FieldExpr:
-		// Not modeled yet
-		return nil
+		return c.typFieldExpr(x)
 	case *ast.IndexExpr:
 		// Not modeled yet
 		return nil
