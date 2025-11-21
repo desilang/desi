@@ -163,6 +163,14 @@ type DictLit struct {
 func (*DictLit) isExpr()             {}
 func (x *DictLit) SpanOf() diag.Span { return x.Span }
 
+type SetLit struct {
+	Elems []Expr
+	Span  diag.Span
+}
+
+func (*SetLit) isExpr()             {}
+func (x *SetLit) SpanOf() diag.Span { return x.Span }
+
 type UnaryExpr struct {
 	Op   string // "-", "!", "not", "await"
 	X    Expr
