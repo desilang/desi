@@ -100,6 +100,36 @@ func (c *checker) typ(e ast.Expr) types.T {
 		c.info.Types[x] = t
 		return t
 
+	case *ast.SetLit:
+		// Empty set literal {} is ambiguous with empty dict, but parser handles {} as empty dict.
+		// So SetLit here implies non-empty or we might have explicit syntax later.
+		// Actually, parser returns DictLit for empty {}.
+		if len(x.Elems) == 0 {
+			// Should not happen via current parser path for {}
+			return types.SetOf(types.Any)
+		}
+
+		// Infer element type from first element
+		et := c.typ(x.Elems[0])
+		if et == nil {
+			return nil
+		}
+
+		// Validate all elements have the same type
+		for _, elem := range x.Elems {
+			elemType := c.typ(elem)
+			if elemType == nil {
+				continue
+			}
+			if !types.Equal(elemType, et) {
+				c.add(diagAt("DTE0104", elem.SpanOf(), "set element type mismatch"))
+			}
+		}
+
+		t := types.SetOf(et)
+		c.info.Types[x] = t
+		return t
+
 	case *ast.IntLit:
 		c.info.Types[e] = types.Int
 		return types.Int
