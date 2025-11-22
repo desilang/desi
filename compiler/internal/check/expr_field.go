@@ -19,6 +19,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveDictMethod(x, d)
 	}
 
+	// Handle Set methods
+	if s, ok := t.(*types.Set); ok {
+		return c.resolveSetMethod(x, s)
+	}
+
 	c.add(diagAt("DTE0005", x.Span, "field access not supported on this type"))
 	return nil
 }
@@ -43,8 +48,6 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 		methodType = types.FuncOf(nil, types.None, false)
 	case "keys":
 		// keys() -> list[K]
-		// Note: We don't have a generic List type in 'types' package easily accessible as "List".
-		// But we have types.ListOf(elem).
 		methodType = types.FuncOf(nil, types.ListOf(d.Key), false)
 	case "values":
 		// values() -> list[V]
@@ -54,6 +57,35 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 		methodType = types.FuncOf(nil, types.None, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on dict"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "add":
+		// add(elem: T) -> none
+		methodType = types.FuncOf([]types.T{s.Elem}, types.None, false)
+	case "remove":
+		// remove(elem: T) -> none
+		methodType = types.FuncOf([]types.T{s.Elem}, types.None, false)
+	case "contains":
+		// contains(elem: T) -> bool
+		methodType = types.FuncOf([]types.T{s.Elem}, types.Bool, false)
+	case "clear":
+		// clear() -> none
+		methodType = types.FuncOf(nil, types.None, false)
+	case "free":
+		// free() -> none
+		methodType = types.FuncOf(nil, types.None, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on set"))
 		return nil
 	}
 
