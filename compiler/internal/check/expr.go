@@ -53,6 +53,53 @@ func (c *checker) typ(e ast.Expr) types.T {
 		}
 		return nil
 
+	case *ast.DictLit:
+		// Empty dict requires type annotation (deferred for now)
+		if len(x.Keys) == 0 {
+			// For now, return error - require type annotation for empty dicts
+			c.add(diagAt("DTE0004", x.Span, "empty dict literals require type annotation (not yet supported)"))
+			return nil
+		}
+
+		// Infer key type from first key
+		kt := c.typ(x.Keys[0])
+		if kt == nil {
+			return nil
+		}
+
+		// Infer value type from first value
+		vt := c.typ(x.Values[0])
+		if vt == nil {
+			return nil
+		}
+
+		// Validate all keys have the same type
+		for _, key := range x.Keys {
+			keyType := c.typ(key)
+			if keyType == nil {
+				continue
+			}
+			if !types.Equal(keyType, kt) {
+				c.add(diagAt("DTE0104", key.SpanOf(), "dict key type mismatch"))
+			}
+		}
+
+		// Validate all values have the same type
+		for _, val := range x.Values {
+			valType := c.typ(val)
+			if valType == nil {
+				continue
+			}
+			if !types.Equal(valType, vt) {
+				c.add(diagAt("DTE0104", val.SpanOf(), "dict value type mismatch"))
+			}
+		}
+
+		// Return dict[K, V] type
+		t := types.DictOf(kt, vt)
+		c.info.Types[x] = t
+		return t
+
 	case *ast.IntLit:
 		c.info.Types[e] = types.Int
 		return types.Int
