@@ -25,6 +25,7 @@ var (
 	flagTokens      = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST         = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 	flagCheck       = flag.String("check", "", "parse + resolve/check the given .desi file")
+	flagEmitIR      = flag.String("emit-ir", "", "compile the given .desi file and print LLVM IR to stdout")
 	flagIRoots      = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
 	flagVerbose     = flag.Bool("v", false, "verbose output")
 	flagErrorFormat = flag.String("error-format", "human", "error format: human|json")

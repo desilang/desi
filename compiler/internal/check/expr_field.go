@@ -1,0 +1,62 @@
+package check
+
+import (
+	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/types"
+)
+
+// typFieldExpr handles obj.field or obj.method.
+// Currently supports:
+// - dict methods: get, has_key, pop, clear, keys, values
+func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
+	t := c.typ(x.X)
+	if t == nil {
+		return nil
+	}
+
+	// Handle Dict methods
+	if d, ok := t.(*types.Dict); ok {
+		return c.resolveDictMethod(x, d)
+	}
+
+	c.add(diagAt("DTE0005", x.Span, "field access not supported on this type"))
+	return nil
+}
+
+func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "get":
+		// get(key: K, default: V) -> V
+		// TODO: Make default optional?
+		methodType = types.FuncOf([]types.T{d.Key, d.Val}, d.Val, false)
+	case "has_key":
+		// has_key(key: K) -> bool
+		methodType = types.FuncOf([]types.T{d.Key}, types.Bool, false)
+	case "pop":
+		// pop(key: K) -> V
+		methodType = types.FuncOf([]types.T{d.Key}, d.Val, false)
+	case "clear":
+		// clear() -> none
+		methodType = types.FuncOf(nil, types.None, false)
+	case "keys":
+		// keys() -> list[K]
+		// Note: We don't have a generic List type in 'types' package easily accessible as "List".
+		// But we have types.ListOf(elem).
+		methodType = types.FuncOf(nil, types.ListOf(d.Key), false)
+	case "values":
+		// values() -> list[V]
+		methodType = types.FuncOf(nil, types.ListOf(d.Val), false)
+	case "free":
+		// free() -> none (manual memory management)
+		methodType = types.FuncOf(nil, types.None, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on dict"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}

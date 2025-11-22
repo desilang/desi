@@ -163,6 +163,9 @@ func (s *Scanner) Next() Item {
 			s.i += w
 			s.line++
 			s.col = 1
+			if s.braceLevel > 0 {
+				return s.Next()
+			}
 			s.atBOL = true
 			return Item{Tok: token.NL, Line: s.line - 1, Col: 1}
 		}
@@ -451,8 +454,8 @@ func (s *Scanner) measureIndentAndComment() (indent int, isCommentLine bool) {
 			continue
 		}
 		if r == '\n' {
-			// true blank line: let caller handle it (we no longer dedent on blanks)
-			return 0, false
+			// true blank line: treat as comment line so we don't dedent
+			return indent, true
 		}
 		if r == '#' {
 			r2 := s.peekRuneAt(off + w)

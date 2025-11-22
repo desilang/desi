@@ -307,7 +307,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			case *hir.Load:
 				ptrOp := m.ptrOperand(x.Src)
-				wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, ptrOp)
+				wprintf(&m.funcs, "  %s = load %s, %s\n", x.Dst.Name, x.Type, ptrOp)
 				m.tempTypes[x.Dst.Name] = x.Type
 
 			case *hir.GetElementPtr:
@@ -440,6 +440,11 @@ func (m *Module) emitCall(c *hir.Call) {
 				}
 			}
 		}
+		return
+	}
+
+	if ret == "void" {
+		wprintf(&m.funcs, "  call %s @%s%s\n", ret, c.Fn, argStr.String())
 		return
 	}
 
