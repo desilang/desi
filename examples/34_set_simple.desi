@@ -1,0 +1,6 @@
+# Simplified set test
+
+def main():
+    let s = {1, 2, 3}
+    let result = s.contains(1)
+    print("Done")

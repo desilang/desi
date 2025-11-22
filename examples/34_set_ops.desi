@@ -1,0 +1,33 @@
+# Test set operations
+
+def main():
+    # Set literal
+    let s = #{1, 2, 3}
+    print("Set created")
+
+    # Contains
+    if s.contains(1):
+        print("Contains 1")
+
+    # Add
+    s.add(4)
+    if s.contains(4):
+        print("Added 4")
+
+    # Remove
+    s.remove(2)
+    print("Removed 2")
+
+    # Clear
+    s.clear()
+    print("Cleared set")
+
+    # Free
+    s.free()
+    print("Freed set")
+
+    # String set
+    let s2 = #{"hello", "world"}
+    if s2.contains("hello"):
+        print("String set works")
+    s2.free()
