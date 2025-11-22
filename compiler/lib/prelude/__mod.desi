@@ -23,3 +23,12 @@ from prelude.dict import dict_pop as dict_pop
 from prelude.dict import dict_clear as dict_clear
 from prelude.dict import dict_keys as dict_keys
 from prelude.dict import dict_values as dict_values
+
+# Set runtime operations
+from prelude.set import set_new as set_new
+from prelude.set import set_free as set_free
+from prelude.set import set_add as set_add
+from prelude.set import set_contains as set_contains
+from prelude.set import set_remove as set_remove
+from prelude.set import set_clear as set_clear
+from prelude.set import set_to_array as set_to_array
