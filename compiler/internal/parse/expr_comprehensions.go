@@ -73,23 +73,59 @@ func (p *Parser) parseDictComp(openSpan ast.Node) ast.Expr {
 
 func (p *Parser) parseSetComp(openSpan ast.Node) ast.Expr {
 	// Called with current token after '#{' sequence (we consumed both).
-	elem := p.parseExpr()
-	if !p.accept(token.KW_for) {
-		p.errExpected(spanPos(p.file, p.cur), "'for' in set comprehension")
-		for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF {
-			p.next()
+	// This handles both:
+	//   - Set literals: #{1, 2, 3}
+	//   - Set comprehensions: #{x for x in y}
+
+	// Handle empty set: #{}
+	if p.cur.Tok == token.RBRACE {
+		end := spanPos(p.file, p.cur)
+		p.next()
+		return &ast.SetLit{
+			Elems: nil,
+			Span:  ast.JoinSpan(openSpan.SpanOf(), end),
 		}
-		_ = p.accept(token.RBRACE)
-		return elem
 	}
-	clauses := p.parseCompClausesAfterFor()
-	if !p.expect(token.RBRACE, "}") {
-		return elem
+
+	elem := p.parseExpr()
+
+	// Check if it's a comprehension (has 'for')
+	if p.cur.Tok == token.KW_for {
+		p.next() // consume 'for'
+		clauses := p.parseCompClausesAfterFor()
+		if !p.expect(token.RBRACE, "}") {
+			return elem
+		}
+		return &ast.SetComp{
+			Elem:    elem,
+			Clauses: clauses,
+			Span:    ast.JoinSpan(openSpan.SpanOf(), spanPos(p.file, p.cur)),
+		}
 	}
-	return &ast.SetComp{
-		Elem:    elem,
-		Clauses: clauses,
-		Span:    ast.JoinSpan(openSpan.SpanOf(), spanPos(p.file, p.cur)),
+
+	// It's a set literal - parse comma-separated elements
+	elems := []ast.Expr{elem}
+
+	for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF {
+		if p.cur.Tok != token.COMMA {
+			break
+		}
+		p.next() // consume ','
+		if p.cur.Tok == token.RBRACE {
+			break // allow trailing comma
+		}
+		nextElem := p.parseExpr()
+		elems = append(elems, nextElem)
+	}
+
+	end := spanPos(p.file, p.cur)
+	if p.cur.Tok == token.RBRACE {
+		p.next()
+	}
+
+	return &ast.SetLit{
+		Elems: elems,
+		Span:  ast.JoinSpan(openSpan.SpanOf(), end),
 	}
 }
 
