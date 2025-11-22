@@ -27,5 +27,16 @@ func init() {
 	SetFuncSig("dict_keys", "ptr", nil)
 	SetFuncSig("dict_values", "ptr", nil)
 	SetFuncSig("dict_clear", "void", nil)
+	SetFuncSig("dict_values", "ptr", nil)
+	SetFuncSig("dict_clear", "void", nil)
 	SetFuncSig("dict_free", "void", nil)
+
+	// Set runtime overrides
+	SetFuncSig("set_new", "ptr", nil)
+	SetFuncSig("set_add", "void", nil)
+	SetFuncSig("set_remove", "void", nil)
+	SetFuncSig("set_contains", "i1", nil)
+	SetFuncSig("set_clear", "void", nil)
+	SetFuncSig("set_free", "void", nil)
+	SetFuncSig("set_to_array", "ptr", nil)
 }
