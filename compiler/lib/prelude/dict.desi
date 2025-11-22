@@ -1,0 +1,31 @@
+# Dict runtime bindings for Desi prelude
+# Provides dict[K, V] operations via C FFI
+
+# Core dict operations
+@extern("C")
+def dict_new(value_size: usize) -> cptr[void]
+
+@extern("C")
+def dict_free(d: cptr[void]) -> none
+
+@extern("C")
+def dict_insert(d: cptr[void], key: cptr[u8], value: cptr[void]) -> none
+
+@extern("C")
+def dict_get(d: cptr[void], key: cptr[u8], default_val: cptr[void]) -> cptr[void]
+
+@extern("C")
+def dict_has_key(d: cptr[void], key: cptr[u8]) -> bool
+
+@extern("C")
+def dict_pop(d: cptr[void], key: cptr[u8]) -> cptr[void]
+
+@extern("C")
+def dict_clear(d: cptr[void]) -> none
+
+# Collection methods
+@extern("C")
+def dict_keys(d: cptr[void], out_len: cptr[usize]) -> cptr[cptr[u8]]
+
+@extern("C")
+def dict_values(d: cptr[void], out_len: cptr[usize]) -> cptr[cptr[void]]
