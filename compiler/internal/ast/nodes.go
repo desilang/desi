@@ -154,6 +154,15 @@ type NoneLit struct {
 func (*NoneLit) isExpr()             {}
 func (x *NoneLit) SpanOf() diag.Span { return x.Span }
 
+type DictLit struct {
+	Keys   []Expr
+	Values []Expr
+	Span   diag.Span
+}
+
+func (*DictLit) isExpr()             {}
+func (x *DictLit) SpanOf() diag.Span { return x.Span }
+
 type UnaryExpr struct {
 	Op   string // "-", "!", "not", "await"
 	X    Expr

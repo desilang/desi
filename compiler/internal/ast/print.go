@@ -435,6 +435,18 @@ func (p *pp) node(n Node, d int) {
 	case *NoneLit:
 		p.wr("None")
 
+	case *DictLit:
+		p.wr("{")
+		for i := range n.Keys {
+			if i > 0 {
+				p.wr(", ")
+			}
+			p.node(n.Keys[i], 0)
+			p.wr(": ")
+			p.node(n.Values[i], 0)
+		}
+		p.wr("}")
+
 	case *UnaryExpr:
 		p.wr("( %s ", n.Op)
 		p.node(n.X, 0)
