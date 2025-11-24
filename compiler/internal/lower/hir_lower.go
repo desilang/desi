@@ -610,7 +610,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				if ls.info != nil {
 					typ := ls.info.Types[p]
 					if types.Equal(typ, types.Int) {
-						fmtBuilder.WriteString("%d")
+						fmtBuilder.WriteString("%lld")
 					} else if types.Equal(typ, types.Str) {
 						fmtBuilder.WriteString("%s")
 					} else if types.Equal(typ, types.Float) {
