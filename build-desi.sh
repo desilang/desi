@@ -22,12 +22,13 @@ echo "==> Compiling Desi to LLVM IR..."
 echo "==> Compiling C runtime..."
 clang -c compiler/runtime/set.c -o build/set.o
 clang -c compiler/runtime/dict.c -o build/dict.o
+clang -c compiler/runtime/print.c -o build/print.o
 
 echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
-clang build/program.o build/set.o build/dict.o -o "build/output/$OUTPUT_NAME"
+clang build/program.o build/set.o build/dict.o build/print.o -o "build/output/$OUTPUT_NAME"
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o

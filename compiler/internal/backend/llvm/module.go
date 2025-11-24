@@ -357,7 +357,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 }
 
 func (m *Module) emitCall(c *hir.Call) {
-	// Built-in print via puts
+	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal
 		if s, ok := c.Args[0].(hir.ConstStr); ok {
@@ -369,8 +369,21 @@ func (m *Module) emitCall(c *hir.Call) {
 			m.needPuts = true
 			return
 		}
-		// General case: if arg is ptr, assume it's a string and call puts
+		// Integer arguments: call print_int
 		ty, val := m.operand(c.Args[0])
+		if ty == "i32" || ty == "i64" {
+			m.ensureDecl("declare void @print_int(i64)")
+			// Cast to i64 if needed
+			if ty == "i32" {
+				wprintf(&m.funcs, "  %%t%d = sext i32 %s to i64\n", m.tempID, val)
+				wprintf(&m.funcs, "  call void @print_int(i64 %%t%d)\n", m.tempID)
+				m.tempID++
+			} else {
+				wprintf(&m.funcs, "  call void @print_int(i64 %s)\n", val)
+			}
+			return
+		}
+		// General case: if arg is ptr, assume it's a string and call puts
 		if ty == "ptr" {
 			wprintf(&m.funcs, "  %%t%d = call i32 @puts(ptr %s)\n", m.tempID, val)
 			m.tempID++
