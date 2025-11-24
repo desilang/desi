@@ -688,13 +688,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 		}
 		// Not a module import - try instance method call
-		// Skip if X is an import identifier
-		if xIdent, ok := fe.X.(*ast.Ident); ok {
-			if _, isImport := c.info.ImportPaths[xIdent.Name]; isImport {
-				return nil
-			}
-		}
-
+		// Original instance method handling
 		recvT := c.typ(fe.X)
 		if recvT != nil {
 			typeName := recvT.String()
@@ -745,6 +739,37 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					}
 					c.info.Types[call] = retT
 					return retT
+				}
+			}
+		}
+
+		// Handle instance method calls for built-in collection types (set, dict, list)
+		// ONLY if not handled by trait/custom type logic above
+		// Check the receiver type - only handle our built-in collection types
+		receiverType := c.typ(fe.X)
+		if receiverType != nil {
+			// Only handle built-in collection types, not custom structs/types
+			isBuiltinCollection := false
+			switch receiverType.(type) {
+			case *types.Set, *types.Dict, *types.List:
+				isBuiltinCollection = true
+			}
+
+			if isBuiltinCollection {
+				// Get the method type from the field expression
+				methodType := c.typFieldExpr(fe)
+				if methodType != nil {
+					// Type check arguments
+					args := make([]types.T, len(argsNodes))
+					for i, a := range argsNodes {
+						args[i] = c.typ(a.Expr)
+					}
+
+					// If methodType is a function type, extract and store its return type
+					if funcType, ok := methodType.(*types.Func); ok {
+						c.info.Types[call] = funcType.Ret
+						return funcType.Ret
+					}
 				}
 			}
 		}

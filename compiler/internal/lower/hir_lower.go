@@ -167,9 +167,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.dropLocalByName(s.Name.Name)
 			ls.removeLocal(s.Name.Name)
 		}
-		// record type shape
+		// record type shape and extract type from type checker
+		var varType interface{}
 		if ls.info != nil {
 			if sym := ls.info.Idents[&s.Name]; sym != nil {
+				varType = sym.Type
 				if isRcLike(sym.Type) {
 					ls.cur().rcLike[s.Name.Name] = true
 				}
@@ -188,7 +190,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				init = ls.lowerExpr(s.Value)
 			}
 		}
-		ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: init})
+		ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: init, Type: varType})
 
 		// M7C: if init was a temp that came from ArenaAlloc, mark this local as arena-owned.
 		if t, ok := init.(hir.Temp); ok && ls.tempsFromArenaAlloc[t.Name] {

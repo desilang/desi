@@ -85,7 +85,8 @@ type Stmt interface{ isStmt() }
 
 type Let struct {
 	Name string
-	Init Value // may be nil
+	Init Value       // may be nil
+	Type interface{} // types.T from type checker (helps backend with reference types)
 }
 
 func (*Let) isStmt() {}
