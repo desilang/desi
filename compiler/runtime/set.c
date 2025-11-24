@@ -5,13 +5,12 @@
 #define INITIAL_BUCKET_COUNT 16
 #define LOAD_FACTOR_THRESHOLD 0.75
 
-// FNV-1a hash function for strings (same as dict)
-static uint64_t set_hash(const char* key) {
+// Simple integer hash function
+static uint64_t set_hash_int(int64_t value) {
+    // FNV-1a hash for integers
     uint64_t hash = 14695981039346656037ULL;
-    while (*key) {
-        hash ^= (uint64_t)(unsigned char)(*key++);
-        hash *= 1099511628211ULL;
-    }
+    hash ^= (uint64_t)value;
+    hash *= 1099511628211ULL;
     return hash;
 }
 
@@ -37,7 +36,6 @@ void set_free(set_t* s) {
         set_entry_t* entry = s->buckets[i];
         while (entry) {
             set_entry_t* next = entry->next;
-            free(entry->key);
             free(entry);
             entry = next;
         }
@@ -47,16 +45,16 @@ void set_free(set_t* s) {
     free(s);
 }
 
-void set_add(set_t* s, const char* key) {
-    if (!s || !key) return;
+void set_add(set_t* s, int64_t value) {
+    if (!s) return;
     
-    uint64_t hash = set_hash(key);
+    uint64_t hash = set_hash_int(value);
     size_t index = hash % s->bucket_count;
     
-    // Check if key already exists
+    // Check if value already exists
     set_entry_t* entry = s->buckets[index];
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (entry->value == value) {
             return; // Already exists
         }
         entry = entry->next;
@@ -66,7 +64,7 @@ void set_add(set_t* s, const char* key) {
     set_entry_t* new_entry = malloc(sizeof(set_entry_t));
     if (!new_entry) return;
     
-    new_entry->key = strdup(key);
+    new_entry->value = value;
     
     // Insert at head
     new_entry->next = s->buckets[index];
@@ -74,15 +72,15 @@ void set_add(set_t* s, const char* key) {
     s->entry_count++;
 }
 
-bool set_contains(set_t* s, const char* key) {
-    if (!s || !key) return false;
+bool set_contains(set_t* s, int64_t value) {
+    if (!s) return false;
     
-    uint64_t hash = set_hash(key);
+    uint64_t hash = set_hash_int(value);
     size_t index = hash % s->bucket_count;
     
     set_entry_t* entry = s->buckets[index];
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (entry->value == value) {
             return true;
         }
         entry = entry->next;
@@ -91,24 +89,23 @@ bool set_contains(set_t* s, const char* key) {
     return false;
 }
 
-void set_remove(set_t* s, const char* key) {
-    if (!s || !key) return;
+void set_remove(set_t* s, int64_t value) {
+    if (!s) return;
     
-    uint64_t hash = set_hash(key);
+    uint64_t hash = set_hash_int(value);
     size_t index = hash % s->bucket_count;
     
     set_entry_t* entry = s->buckets[index];
     set_entry_t* prev = NULL;
     
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (entry->value == value) {
             if (prev) {
                 prev->next = entry->next;
             } else {
                 s->buckets[index] = entry->next;
             }
             
-            free(entry->key);
             free(entry);
             s->entry_count--;
             return;
@@ -125,7 +122,6 @@ void set_clear(set_t* s) {
         set_entry_t* entry = s->buckets[i];
         while (entry) {
             set_entry_t* next = entry->next;
-            free(entry->key);
             free(entry);
             entry = next;
         }
@@ -134,23 +130,23 @@ void set_clear(set_t* s) {
     s->entry_count = 0;
 }
 
-char** set_to_array(set_t* s, size_t* out_len) {
+int64_t* set_to_array(set_t* s, size_t* out_len) {
     if (!s || !out_len) return NULL;
     
     *out_len = s->entry_count;
     if (s->entry_count == 0) return NULL;
     
-    char** keys = malloc(sizeof(char*) * s->entry_count);
-    if (!keys) return NULL;
+    int64_t* values = malloc(sizeof(int64_t) * s->entry_count);
+    if (!values) return NULL;
     
     size_t k = 0;
     for (size_t i = 0; i < s->bucket_count; i++) {
         set_entry_t* entry = s->buckets[i];
         while (entry) {
-            keys[k++] = entry->key; // Shallow copy
+            values[k++] = entry->value;
             entry = entry->next;
         }
     }
     
-    return keys;
+    return values;
 }
