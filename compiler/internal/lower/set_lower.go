@@ -54,6 +54,27 @@ func (ls *lowerState) lowerSetMethod(fe *ast.FieldExpr, args []ast.Expr, setType
 		// free()
 		ls.b.Emit(&hir.Call{Fn: "set_free", Args: []hir.Value{receiver}})
 		return nil
+
+	case "union":
+		// union(other) -> set[T]
+		other := ls.lowerExpr(args[0])
+		res := ls.b.FreshTemp("union")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "set_union", Args: []hir.Value{receiver, other}})
+		return res
+
+	case "intersection":
+		// intersection(other) -> set[T]
+		other := ls.lowerExpr(args[0])
+		res := ls.b.FreshTemp("intersection")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "set_intersection", Args: []hir.Value{receiver, other}})
+		return res
+
+	case "difference":
+		// difference(other) -> set[T]
+		other := ls.lowerExpr(args[0])
+		res := ls.b.FreshTemp("difference")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "set_difference", Args: []hir.Value{receiver, other}})
+		return res
 	}
 
 	return nil

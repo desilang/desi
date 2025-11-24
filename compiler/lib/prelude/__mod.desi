@@ -32,3 +32,6 @@ from prelude.set import set_contains as set_contains
 from prelude.set import set_remove as set_remove
 from prelude.set import set_clear as set_clear
 from prelude.set import set_to_array as set_to_array
+from prelude.set import set_union as set_union
+from prelude.set import set_intersection as set_intersection
+from prelude.set import set_difference as set_difference

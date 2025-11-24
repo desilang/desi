@@ -84,6 +84,15 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 	case "free":
 		// free() -> none
 		methodType = types.FuncOf(nil, types.None, false)
+	case "union":
+		// union(other: set[T]) -> set[T]
+		methodType = types.FuncOf([]types.T{s}, s, false)
+	case "intersection":
+		// intersection(other: set[T]) -> set[T]
+		methodType = types.FuncOf([]types.T{s}, s, false)
+	case "difference":
+		// difference(other: set[T]) -> set[T]
+		methodType = types.FuncOf([]types.T{s}, s, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on set"))
 		return nil

@@ -150,3 +150,75 @@ int64_t* set_to_array(set_t* s, size_t* out_len) {
     
     return values;
 }
+
+// Advanced set operations
+
+// Union: Create new set with all elements from both sets
+set_t* set_union(set_t* s1, set_t* s2) {
+    if (!s1 || !s2) return NULL;
+    
+    set_t* result = set_new();
+    if (!result) return NULL;
+    
+    // Add all elements from s1
+    for (size_t i = 0; i < s1->bucket_count; i++) {
+        set_entry_t* entry = s1->buckets[i];
+        while (entry) {
+            set_add(result, entry->value);
+            entry = entry->next;
+        }
+    }
+    
+    // Add all elements from s2 (duplicates automatically handled)
+    for (size_t i = 0; i < s2->bucket_count; i++) {
+        set_entry_t* entry = s2->buckets[i];
+        while (entry) {
+            set_add(result, entry->value);
+            entry = entry->next;
+        }
+    }
+    
+    return result;
+}
+
+// Intersection: Create new set with common elements
+set_t* set_intersection(set_t* s1, set_t* s2) {
+    if (!s1 || !s2) return NULL;
+    
+    set_t* result = set_new();
+    if (!result) return NULL;
+    
+    // Iterate s1, add to result if exists in s2
+    for (size_t i = 0; i < s1->bucket_count; i++) {
+        set_entry_t* entry = s1->buckets[i];
+        while (entry) {
+            if (set_contains(s2, entry->value)) {
+                set_add(result, entry->value);
+            }
+            entry = entry->next;
+        }
+    }
+    
+    return result;
+}
+
+// Difference: Create new set with elements in s1 but not in s2
+set_t* set_difference(set_t* s1, set_t* s2) {
+    if (!s1 || !s2) return NULL;
+    
+    set_t* result = set_new();
+    if (!result) return NULL;
+    
+    // Iterate s1, add to result if NOT in s2
+    for (size_t i = 0; i < s1->bucket_count; i++) {
+        set_entry_t* entry = s1->buckets[i];
+        while (entry) {
+            if (!set_contains(s2, entry->value)) {
+                set_add(result, entry->value);
+            }
+            entry = entry->next;
+        }
+    }
+    
+    return result;
+}
