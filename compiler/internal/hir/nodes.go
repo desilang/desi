@@ -57,6 +57,13 @@ type ConstInt struct {
 func (ConstInt) isValue()         {}
 func (c ConstInt) String() string { return c.Text }
 
+type ConstFloat struct {
+	Text string
+}
+
+func (ConstFloat) isValue()         {}
+func (c ConstFloat) String() string { return c.Text }
+
 type ConstBool struct{ Value bool }
 
 func (ConstBool) isValue() {}

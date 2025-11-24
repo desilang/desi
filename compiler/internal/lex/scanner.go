@@ -653,64 +653,17 @@ func (s *Scanner) scanFStringPart() Item {
 
 		// Handle escapes
 		if r == '\\' {
-			if !s.consumeEscape() {
-				s.addErr("lexer.invalid_escape_sequence", "invalid escape sequence", s.line, s.col)
-				return Item{Tok: token.ILLEGAL, Lexeme: "invalid escape sequence", Line: s.line, Col: startCol}
+			// Append the backslash and the next character to preserve the escape sequence
+			buf.WriteRune(r)
+			s.i += w
+			s.col++
+			// Get the next character
+			if s.i < len(s.src) {
+				nextR, nextW := utf8.DecodeRune(s.src[s.i:])
+				buf.WriteRune(nextR)
+				s.i += nextW
+				s.col++
 			}
-			// consumeEscape advances s.i, but we need the character for the buffer?
-			// Wait, consumeEscape consumes the escape sequence but doesn't return the char?
-			// And scanString didn't build a buffer.
-			// Here we need the buffer.
-			// I need to extract the text.
-			// But consumeEscape advances s.i.
-			// I should capture the text.
-			// Or just append the raw source?
-			// FSTR_PART usually contains the raw text (including escapes) or the processed text?
-			// StrLit usually contains raw text?
-			// Let's assume raw text for now to match StrLit behavior (which returns empty lexeme but Parser uses Span).
-			// But here I am returning Lexeme.
-			// If I return Lexeme, I should probably return the raw text so Parser can process it (e.g. unescape).
-			// So I should just append to buf.
-			// But consumeEscape advances s.i.
-			// I'll just capture the range.
-			// But I am iterating char by char.
-			// I'll modify the loop to append to buf.
-			// Actually, if I want raw text, I should just append `s.src[start:end]`.
-			// But I am handling `{{` -> `{`. This implies processing.
-			// If I process `{{`, I should probably process `\n` too.
-			// But `StrLit` processing happens later?
-			// If `scanString` returns empty lexeme, it means Parser reads raw source.
-			// If I return processed text for FSTR_PART, it's inconsistent.
-			// But `{{` MUST be processed to distinguish from `{`.
-			// So FSTR_PART should probably be "cooked" (unescaped).
-			// If so, `consumeEscape` needs to return the char.
-			// But `consumeEscape` is designed for validation.
-
-			// Alternative: Return raw text, but handle `{{` as `{{`.
-			// And let Parser/Lowerer handle unescaping.
-			// But `scanFStringPart` needs to stop at `{`.
-			// If I return `{{` as `{{` in FSTR_PART, the Parser will see it as text.
-			// If I return `{` as LBRACE, Parser sees interpolation.
-			// This works.
-
-			// So I will append raw text to buf.
-			// For `{{`, I append `{{`.
-			// For `\n`, I append `\n`.
-			// For `{`, I stop.
-
-			// Wait, if I append `{{`, then `buf.WriteRune('{')` in my code above is wrong.
-			// I should append `{{`.
-
-			// Let's adjust.
-			// But wait, if I return raw `{{`, the backend needs to know to unescape it to `{`.
-			// Standard string unescaping handles `\`. It doesn't handle `{{`.
-			// So F-strings have special unescaping rules.
-
-			// I'll stick to returning raw text for now, including `{{`.
-			// The `FSTR_PART` token will contain `{{`.
-			// The consumer (Parser/Lowerer) will need to unescape `{{` to `{`.
-
-			// Re-implement loop to capture raw text.
 			continue
 		}
 

@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/backend/llvm/abi"
 	"github.com/desilang/desi/compiler/internal/backend/llvm/intrin"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/term"
@@ -120,38 +120,15 @@ func (m *Module) writeGlobals() {
 func (m *Module) IR() string {
 	m.writeGlobals()
 	var out bytes.Buffer
-	// Add target triple and datalayout for macOS ARM64
-	// Dynamic target detection
-	triple, layout := determineTarget()
-	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", layout))
-	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", triple))
+	// Use ABI layer for target information
+	abiInfo := abi.Current()
+	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", abiInfo.TargetLayout))
+	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", abiInfo.TargetTriple))
 
 	out.Write(m.globals.Bytes())
 	out.WriteString("\n")
 	out.Write(m.funcs.Bytes())
 	return out.String()
-}
-
-func determineTarget() (triple, layout string) {
-	switch runtime.GOOS {
-	case "darwin":
-		if runtime.GOARCH == "arm64" {
-			return "arm64-apple-macosx14.0.0", "e-m:o-i64:64-i128:128-n32:64-S128"
-		}
-		// amd64 (Intel Mac)
-		return "x86_64-apple-macosx14.0.0", "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-	case "linux":
-		if runtime.GOARCH == "arm64" {
-			return "aarch64-unknown-linux-gnu", "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
-		}
-		// amd64
-		return "x86_64-unknown-linux-gnu", "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-	case "windows":
-		return "x86_64-pc-windows-msvc", "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-	default:
-		// Fallback to generic/current assumption if unknown
-		return "x86_64-unknown-linux-gnu", "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
-	}
 }
 
 func escapeForCString(s string) string {
@@ -390,12 +367,18 @@ func (m *Module) emitCall(c *hir.Call) {
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal
 		if s, ok := c.Args[0].(hir.ConstStr); ok {
-			g, n := m.ensureCStringGlobal(s.Text, true)
+			// Use printf("%s\n", ...) instead of puts() to handle strings with explicit newlines
+			// This way print("hello\n") outputs "hello\n\n" (explicit newline + print's newline)
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%s\n", false)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
-				m.tempID, n, n, g)
-			wprintf(&m.funcs, "  %%t%d = call i32 @puts(ptr %%t%d)\n", m.tempID+1, m.tempID)
-			m.tempID += 2
-			m.needPuts = true
+				m.tempID, fmtN, fmtN, fmtG)
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID+1, strN, strN, strG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %%t%d)\n",
+				m.tempID+2, m.tempID, m.tempID+1)
+			m.tempID += 3
 			return
 		}
 		// Integer arguments: call print_int
@@ -412,11 +395,62 @@ func (m *Module) emitCall(c *hir.Call) {
 			}
 			return
 		}
-		// General case: if arg is ptr, assume it's a string and call puts
-		if ty == "ptr" {
-			wprintf(&m.funcs, "  %%t%d = call i32 @puts(ptr %s)\n", m.tempID, val)
+		// Float arguments: call printf with %f
+		if ty == "double" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			// Create format string global
+			g, n := m.ensureCStringGlobal("%f\n", true)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, n, n, g)
+			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
-			m.needPuts = true
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, double %s)\n", m.tempID, fmtPtr, val)
+			m.tempID++
+			return
+		}
+		// Boolean arguments: print true/false
+		if ty == "i1" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			// Select string based on value
+			// Inline implementation with select:
+			// %str = select i1 %val, ptr @true_str, ptr @false_str
+			// call printf("%s\n", %str)
+
+			trueG, trueN := m.ensureCStringGlobal("true", false)
+			falseG, falseN := m.ensureCStringGlobal("false", false)
+
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, trueN, trueN, trueG)
+			truePtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, falseN, falseN, falseG)
+			falsePtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+
+			wprintf(&m.funcs, "  %%t%d = select i1 %s, ptr %s, ptr %s\n", m.tempID, val, truePtr, falsePtr)
+			selPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+
+			// Use printf("%s\n", ...) to print the selected string
+			fmtG, fmtN := m.ensureCStringGlobal("%s\n", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, fmtN, fmtN, fmtG)
+			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, ptr %s)\n", m.tempID, fmtPtr, selPtr)
+			m.tempID++
+			return
+		}
+
+		// General case: if arg is ptr, assume it's a string and call printf
+		if ty == "ptr" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			// Use printf("%s\n", str) to preserve explicit newlines in the string
+			fmtG, fmtN := m.ensureCStringGlobal("%s\n", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
+				m.tempID+1, m.tempID, val)
+			m.tempID += 2
 			return
 		}
 	}
@@ -460,8 +494,9 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 		ty, val := m.operand(a)
 
-		// Special handling for asprintf args: promote i32 to i64
-		if (c.Fn == "asprintf" || c.Fn == "printf") && ty == "i32" {
+		// Use ABI layer to determine if i32 promotion is needed
+		abiInfo := abi.Current()
+		if abiInfo.NeedsI32ToI64Promotion(c.Fn) && ty == "i32" {
 			wprintf(&m.funcs, "  %%t%d = sext i32 %s to i64\n", m.tempID, val)
 			val = fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
@@ -472,24 +507,26 @@ func (m *Module) emitCall(c *hir.Call) {
 	}
 	argStr.WriteString(")")
 
-	// Ensure we have a declare stub. Use varargs (...) to allow any args.
+	// Ensure we have a declare stub. Use ABI layer for variadic signatures.
 	// But skip if this function is defined in the same module
 	if !m.definedFunctions[c.Fn] {
-		if c.Fn == "asprintf" {
-			m.ensureDecl("declare i32 @asprintf(ptr, ptr, ...)")
-		} else if c.Fn == "printf" {
-			m.ensureDecl("declare i32 @printf(ptr, ...)")
+		abiInfo := abi.Current()
+		sig := abiInfo.VariadicSignature(c.Fn, ret)
+		if sig != "" {
+			m.ensureDecl(sig)
 		} else {
+			// Generic variadic declaration
 			m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
 		}
 	}
 
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
-		if c.Fn == "asprintf" {
-			wprintf(&m.funcs, "  %s = call %s (ptr, ptr, ...) @%s%s\n", dst, ret, c.Fn, argStr.String())
-		} else if c.Fn == "printf" {
-			wprintf(&m.funcs, "  %s = call %s (ptr, ...) @%s%s\n", dst, ret, c.Fn, argStr.String())
+		// Use ABI layer to get explicit call syntax if needed
+		abiInfo := abi.Current()
+		explicitSig := abiInfo.ExplicitCallSyntax(c.Fn, ret)
+		if explicitSig != "" {
+			wprintf(&m.funcs, "  %s = call %s %s @%s%s\n", dst, ret, explicitSig, c.Fn, argStr.String())
 		} else {
 			wprintf(&m.funcs, "  %s = call %s @%s%s\n", dst, ret, c.Fn, argStr.String())
 		}
@@ -508,20 +545,22 @@ func (m *Module) emitCall(c *hir.Call) {
 	}
 
 	if ret == "void" {
-		if c.Fn == "asprintf" {
-			wprintf(&m.funcs, "  call %s (ptr, ptr, ...) @%s%s\n", ret, c.Fn, argStr.String())
-		} else if c.Fn == "printf" {
-			wprintf(&m.funcs, "  call %s (ptr, ...) @%s%s\n", ret, c.Fn, argStr.String())
+		// Use ABI layer to get explicit call syntax if needed
+		abiInfo := abi.Current()
+		explicitSig := abiInfo.ExplicitCallSyntax(c.Fn, ret)
+		if explicitSig != "" {
+			wprintf(&m.funcs, "  call %s %s @%s%s\n", ret, explicitSig, c.Fn, argStr.String())
 		} else {
 			wprintf(&m.funcs, "  call %s @%s%s\n", ret, c.Fn, argStr.String())
 		}
 		return
 	}
 
-	if c.Fn == "asprintf" {
-		wprintf(&m.funcs, "  %%t%d = call %s (ptr, ptr, ...) @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
-	} else if c.Fn == "printf" {
-		wprintf(&m.funcs, "  %%t%d = call %s (ptr, ...) @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	// Use ABI layer to get explicit call syntax if needed
+	abiInfo := abi.Current()
+	explicitSig := abiInfo.ExplicitCallSyntax(c.Fn, ret)
+	if explicitSig != "" {
+		wprintf(&m.funcs, "  %%t%d = call %s %s @%s%s\n", m.tempID, ret, explicitSig, c.Fn, argStr.String())
 	} else {
 		wprintf(&m.funcs, "  %%t%d = call %s @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
 	}
@@ -538,11 +577,14 @@ func (m *Module) operand(v hir.Value) (string, string) {
 			ty = "i32"
 		}
 		return ty, t.Text
+	case hir.ConstFloat:
+		return "double", t.Text
 	case hir.ConstBool:
 		return "i1", fmt.Sprintf("%v", t.Value)
 	case hir.ConstStr:
 		// Strings are pointers to globals
-		g, n := m.ensureCStringGlobal(t.Text, true)
+		// Don't add newline here - puts() will add it if needed
+		g, n := m.ensureCStringGlobal(t.Text, false)
 		// We need to emit a GEP to get the pointer
 		// But operand() is called inside a printf, we can't emit instructions here easily!
 		// Wait, emitCall builds the string.
