@@ -8,9 +8,11 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/backend/llvm"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lex"
+	"github.com/desilang/desi/compiler/internal/lower"
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
@@ -205,6 +207,29 @@ func main() {
 		goto END
 	}
 
+	if *flagEmitIR != "" {
+		if *flagVerbose {
+			if abs, err := filepath.Abs(*flagEmitIR); err == nil {
+				term.Eprintln("emit-ir:", abs)
+			} else {
+				term.Eprintln("emit-ir:", *flagEmitIR)
+			}
+			if *flagIRoots == "" {
+				term.Eprintln("roots: (none)")
+			} else {
+				term.Eprintln("roots:", *flagIRoots)
+			}
+		}
+
+		if err := runEmitIR(*flagEmitIR, *flagIRoots); err != nil {
+			term.Eprintln("emit-ir error:", err)
+			exitCode = 2
+			goto END
+		}
+		exitCode = 0
+		goto END
+	}
+
 	if *flagCheck != "" {
 		if *flagVerbose {
 			if abs, err := filepath.Abs(*flagCheck); err == nil {
@@ -233,7 +258,7 @@ func main() {
 		goto END
 	}
 
-	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, or `check <file>`.")
+	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, -emit-ir <file>, or `check <file>`.")
 	exitCode = 0
 
 END:
@@ -471,7 +496,55 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 	return true, nil
 }
 
+func runEmitIR(path, iroots string) error {
+	src, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	mod, pdiags := parse.ParseFile(path, src)
+
+	// If parsing produced diagnostics, show them and abort
+	if len(pdiags) > 0 {
+		for _, d := range pdiags {
+			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		return fmt.Errorf("parse errors")
+	}
+
+	// Build loader from -I roots
+	var loader resolve.Loader
+	roots := splitRoots(iroots)
+	if len(roots) > 0 && roots[0] != "" {
+		loader = resolve.NewFSLoaderMulti(roots)
+	} else {
+		loader = resolve.NewMemLoader(nil)
+	}
+
+	// Run type checker
+	res := check.CheckWithLoader(mod, loader)
+	if len(res.Diags) > 0 {
+		for _, d := range res.Diags {
+			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
+		}
+		return fmt.Errorf("type check errors")
+	}
+
+	// Lower to HIR
+	hmod := lower.LowerModuleFromSource(mod, res.Info, src)
+
+	// Emit LLVM IR
+	llvmMod := llvm.NewModule(mod.File)
+	for _, fn := range hmod.Funcs {
+		llvmMod.EmitFunc(fn)
+	}
+
+	// Print IR to stdout
+	term.Println(llvmMod.IR())
+	return nil
+}
+
 func splitRoots(s string) []string {
+
 	if s == "" {
 		return nil
 	}
