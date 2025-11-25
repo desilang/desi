@@ -39,4 +39,5 @@ func init() {
 	SetFuncSig("set_clear", "void", nil)
 	SetFuncSig("set_free", "void", nil)
 	SetFuncSig("set_to_array", "ptr", nil)
+	SetFuncSig("bool_to_cstring", "ptr", nil)
 }

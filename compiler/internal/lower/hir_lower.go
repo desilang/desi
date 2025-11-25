@@ -565,18 +565,22 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	switch x := e.(type) {
 	case *ast.IntLit:
 		return hir.ConstInt{Text: x.Text}
+	case *ast.FloatLit:
+		return hir.ConstFloat{Text: x.Text}
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: x.Value}
 	case *ast.StrLit:
 		// If Value is populated (F-string part), use it
 		if x.Value != "" {
-			return hir.ConstStr{Text: x.Value}
+			// Unescape the string to process escape sequences like \n, \t, etc.
+			return hir.ConstStr{Text: unescapeString(x.Value)}
 		}
 		// Otherwise, extract from source
 		if ls.src != nil {
 			text, ok := scanStringLiteral(ls.src, x.Span.Start.Line, x.Span.Start.Col, x.Long)
 			if ok {
-				return hir.ConstStr{Text: text}
+				// Unescape the extracted string as well
+				return hir.ConstStr{Text: unescapeString(text)}
 			}
 		}
 		// Fallback to placeholder if source unavailable
@@ -597,8 +601,10 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			case *ast.StrLit:
 				// For F-string parts, use the Value field directly
 				if p.Value != "" {
-					// Unescape {{ and }}
-					unescaped := strings.ReplaceAll(p.Value, "{{", "{")
+					// First unescape escape sequences like \n, \t, etc.
+					text := unescapeString(p.Value)
+					// Then unescape {{ and }}
+					unescaped := strings.ReplaceAll(text, "{{", "{")
 					unescaped = strings.ReplaceAll(unescaped, "}}", "}")
 					// Escape % for printf
 					escaped := strings.ReplaceAll(unescaped, "%", "%%")
@@ -615,6 +621,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						fmtBuilder.WriteString("%s")
 					} else if types.Equal(typ, types.Float) {
 						fmtBuilder.WriteString("%f")
+					} else if types.Equal(typ, types.Bool) {
+						fmtBuilder.WriteString("%s")
+						// Convert bool to string pointer using runtime helper
+						// We need to emit a call: bool_to_cstring(val) -> ptr
+						res := ls.b.FreshTemp("bool_str")
+						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
+						val = res
 					} else {
 						fmtBuilder.WriteString("<?>")
 					}
