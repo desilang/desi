@@ -568,7 +568,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: x.Value}
 	case *ast.StrLit:
-		// String literal payload is handled elsewhere; here we just mark "<lit>".
+		// If Value is populated (F-string part), use it
+		if x.Value != "" {
+			return hir.ConstStr{Text: x.Value}
+		}
+		// Otherwise, extract from source
+		if ls.src != nil {
+			text, ok := scanStringLiteral(ls.src, x.Span.Start.Line, x.Span.Start.Col, x.Long)
+			if ok {
+				return hir.ConstStr{Text: text}
+			}
+		}
+		// Fallback to placeholder if source unavailable
 		return hir.ConstStr{Text: "<lit>"}
 	case *ast.FString:
 		// F-string: use asprintf for formatting
