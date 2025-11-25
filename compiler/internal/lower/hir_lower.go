@@ -3,6 +3,7 @@ package lower
 import (
 	"bytes"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -655,6 +656,46 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ls.b.Emit(&hir.Load{Type: "ptr", Src: bufPtr, Dst: res})
 
 		return res
+	case *ast.TupleLit:
+		var vals []hir.Value
+		for _, e := range x.Elems {
+			vals = append(vals, ls.lowerExpr(e))
+		}
+
+		var agg hir.Value = hir.Undef{}
+		t := ls.info.Types[x]
+
+		for i, val := range vals {
+			dst := ls.b.FreshTemp("tup")
+			ls.b.Emit(&hir.InsertValue{
+				Agg:   agg,
+				Elem:  val,
+				Index: i,
+				Type:  t,
+				Dst:   dst,
+			})
+			agg = dst
+		}
+		return agg
+
+	case *ast.IndexExpr:
+		lhsType := ls.info.Types[x.X]
+		if _, ok := lhsType.(*types.Tuple); ok {
+			agg := ls.lowerExpr(x.X)
+			idxLit, _ := x.Idx.(*ast.IntLit)
+			idx, _ := strconv.Atoi(idxLit.Text)
+			resType := ls.info.Types[x]
+			dst := ls.b.FreshTemp("elem")
+			ls.b.Emit(&hir.ExtractValue{
+				Agg:   agg,
+				Index: idx,
+				Type:  resType,
+				Dst:   dst,
+			})
+			return dst
+		}
+		return hir.Var{Name: "<index_expr>"}
+
 	case *ast.Ident:
 		return hir.Var{Name: x.Name}
 

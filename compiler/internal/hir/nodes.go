@@ -79,6 +79,11 @@ type ConstStr struct{ Text string }
 func (ConstStr) isValue()         {}
 func (c ConstStr) String() string { return "\"" + c.Text + "\"" }
 
+type Undef struct{}
+
+func (Undef) isValue()       {}
+func (Undef) String() string { return "undef" }
+
 // ----- statements -----
 
 type Stmt interface{ isStmt() }
@@ -238,3 +243,22 @@ type BitCast struct {
 }
 
 func (*BitCast) isStmt() {}
+
+type InsertValue struct {
+	Agg   Value       // aggregate value (struct)
+	Elem  Value       // element to insert
+	Index int         // index to insert at
+	Type  interface{} // types.T or string (LLVM type)
+	Dst   Temp
+}
+
+func (*InsertValue) isStmt() {}
+
+type ExtractValue struct {
+	Agg   Value       // aggregate value (struct)
+	Index int         // index to extract
+	Type  interface{} // types.T or string (LLVM type)
+	Dst   Temp
+}
+
+func (*ExtractValue) isStmt() {}

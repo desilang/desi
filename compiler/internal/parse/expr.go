@@ -357,13 +357,51 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.LPAREN:
 		// If this '(' starts a parenthesized lambda head whose matching ')'
 		// is immediately followed by '=>', parse a lambda; otherwise fall
-		// back to classic parenthesized expression.
+		// back to classic parenthesized expression or tuple.
 		if p.parenLambdaAhead() {
 			return p.parseLambdaFromParen()
 		}
 		open := spanPos(p.file, p.cur)
-		p.next()
+		p.next() // consume '('
+
+		// Handle empty tuple ()
+		// TODO: Decide if () is unit/void or empty tuple. For now, treat as empty tuple.
+		/*
+			if p.cur.Tok == token.RPAREN {
+				end := spanPos(p.file, p.cur)
+				p.next()
+				return &ast.TupleLit{Elems: nil, Span: ast.JoinSpan(open, end)}
+			}
+		*/
+
 		e := p.parseExpr()
+
+		// Check for comma to distinguish tuple from paren expr
+		if p.cur.Tok == token.COMMA {
+			p.next() // consume ','
+
+			// Single element tuple (e,)
+			if p.cur.Tok == token.RPAREN {
+				end := spanPos(p.file, p.cur)
+				p.next()
+				return &ast.TupleLit{Elems: []ast.Expr{e}, Span: ast.JoinSpan(open, end)}
+			}
+
+			// Multi-element tuple (e1, e2, ...)
+			elems := []ast.Expr{e}
+			for p.cur.Tok != token.RPAREN && p.cur.Tok != token.EOF {
+				elems = append(elems, p.parseExpr())
+				if p.cur.Tok == token.COMMA {
+					p.next()
+				} else {
+					break
+				}
+			}
+			end := spanPos(p.file, p.cur)
+			p.expectClose(token.RPAREN, ")", open)
+			return &ast.TupleLit{Elems: elems, Span: ast.JoinSpan(open, end)}
+		}
+
 		p.expectClose(token.RPAREN, ")", open)
 		return e
 
