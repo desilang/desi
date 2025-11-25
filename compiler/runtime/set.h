@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 typedef struct set_entry {
-    char* key;
+    int64_t value;  // Store as integer for now (Tier-0)
     struct set_entry* next;
 } set_entry_t;
 
@@ -19,12 +19,12 @@ typedef struct {
 // Core operations
 set_t* set_new();
 void set_free(set_t* s);
-void set_add(set_t* s, const char* key);
-bool set_contains(set_t* s, const char* key);
-void set_remove(set_t* s, const char* key);
+void set_add(set_t* s, int64_t value);
+bool set_contains(set_t* s, int64_t value);
+void set_remove(set_t* s, int64_t value);
 void set_clear(set_t* s);
 
 // Helpers
-char** set_to_array(set_t* s, size_t* out_len);
+int64_t* set_to_array(set_t* s, size_t* out_len);
 
 #endif
