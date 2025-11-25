@@ -21,3 +21,13 @@ pub def set_clear(s: cptr[void]) -> none
 
 @extern("C")
 pub def set_to_array(s: cptr[void], out_len: cptr[usize]) -> cptr[cptr[u8]]
+
+# Advanced operations
+@extern("C")
+pub def set_union(s1: cptr[void], s2: cptr[void]) -> cptr[void]
+
+@extern("C")
+pub def set_intersection(s1: cptr[void], s2: cptr[void]) -> cptr[void]
+
+@extern("C")
+pub def set_difference(s1: cptr[void], s2: cptr[void]) -> cptr[void]
