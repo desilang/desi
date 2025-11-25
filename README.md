@@ -27,10 +27,48 @@ Diagnostics are single-sourced from a catalog.
 - **M7+**: more async + runtime shaping
 - **M8** groundwork visible in examples (async basic), more rules to come
 
-## Build & Test
+## Building from Source
+
+Desi uses a `Makefile` to build the compiler, tools, and runtime library.
+
+### Prerequisites
+- **Go 1.20+** (for compiler/tools)
+- **Clang/LLVM** (for runtime library and linking)
+- **Make** (for build automation)
+
+### Build Steps
+
+1.  **Build Compiler & Runtime**:
+    ```sh
+    make
+    ```
+    This creates:
+    - `bin/desic`: The compiler
+    - `bin/desifmt`: The formatter
+    - `bin/desirepl`: The REPL
+    - `build/libdesi.a`: The static runtime library
+
+2.  **Compile Desi Code**:
+    Use the provided script to compile and link your code:
+    ```sh
+    ./build-desi.sh examples/38_while_loop.desi my_program
+    ./build/output/my_program
+    ```
+
+### Supported Platforms
+
+- **macOS** (x86_64, arm64): Fully supported.
+- **Linux** (x86_64, arm64): Fully supported (requires clang/llvm).
+- **Windows**:
+  - **Tools**: You can build Windows executables (`.exe`) from macOS/Linux using:
+    ```sh
+    make windows
+    ```
+  - **Runtime**: Compiling the runtime library (`libdesi.a`) and linking requires a C compiler (MinGW/Clang) on Windows. Cross-compilation of the runtime is possible by overriding `CC` and `AR` in the Makefile.
+
+## Testing
 
 ```sh
-go build ./...
 go test ./...
 ```
 
