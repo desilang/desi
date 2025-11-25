@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -119,10 +120,38 @@ func (m *Module) writeGlobals() {
 func (m *Module) IR() string {
 	m.writeGlobals()
 	var out bytes.Buffer
+	// Add target triple and datalayout for macOS ARM64
+	// Dynamic target detection
+	triple, layout := determineTarget()
+	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", layout))
+	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", triple))
+
 	out.Write(m.globals.Bytes())
 	out.WriteString("\n")
 	out.Write(m.funcs.Bytes())
 	return out.String()
+}
+
+func determineTarget() (triple, layout string) {
+	switch runtime.GOOS {
+	case "darwin":
+		if runtime.GOARCH == "arm64" {
+			return "arm64-apple-macosx14.0.0", "e-m:o-i64:64-i128:128-n32:64-S128"
+		}
+		// amd64 (Intel Mac)
+		return "x86_64-apple-macosx14.0.0", "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+	case "linux":
+		if runtime.GOARCH == "arm64" {
+			return "aarch64-unknown-linux-gnu", "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128"
+		}
+		// amd64
+		return "x86_64-unknown-linux-gnu", "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+	case "windows":
+		return "x86_64-pc-windows-msvc", "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+	default:
+		// Fallback to generic/current assumption if unknown
+		return "x86_64-unknown-linux-gnu", "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128"
+	}
 }
 
 func escapeForCString(s string) string {
@@ -430,6 +459,15 @@ func (m *Module) emitCall(c *hir.Call) {
 			argStr.WriteString(", ")
 		}
 		ty, val := m.operand(a)
+
+		// Special handling for asprintf args: promote i32 to i64
+		if (c.Fn == "asprintf" || c.Fn == "printf") && ty == "i32" {
+			wprintf(&m.funcs, "  %%t%d = sext i32 %s to i64\n", m.tempID, val)
+			val = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			ty = "i64"
+		}
+
 		argStr.WriteString(fmt.Sprintf("%s %s", ty, val))
 	}
 	argStr.WriteString(")")
@@ -437,12 +475,25 @@ func (m *Module) emitCall(c *hir.Call) {
 	// Ensure we have a declare stub. Use varargs (...) to allow any args.
 	// But skip if this function is defined in the same module
 	if !m.definedFunctions[c.Fn] {
-		m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
+		if c.Fn == "asprintf" {
+			m.ensureDecl("declare i32 @asprintf(ptr, ptr, ...)")
+		} else if c.Fn == "printf" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+		} else {
+			m.ensureDecl(fmt.Sprintf("declare %s @%s(...)", ret, c.Fn))
+		}
 	}
 
 	if c.Dst.Name != "" {
 		dst := c.Dst.String()
-		wprintf(&m.funcs, "  %s = call %s @%s%s\n", dst, ret, c.Fn, argStr.String())
+		if c.Fn == "asprintf" {
+			wprintf(&m.funcs, "  %s = call %s (ptr, ptr, ...) @%s%s\n", dst, ret, c.Fn, argStr.String())
+		} else if c.Fn == "printf" {
+			wprintf(&m.funcs, "  %s = call %s (ptr, ...) @%s%s\n", dst, ret, c.Fn, argStr.String())
+		} else {
+			wprintf(&m.funcs, "  %s = call %s @%s%s\n", dst, ret, c.Fn, argStr.String())
+		}
+
 		if strings.HasPrefix(dst, "%") {
 			m.tempTypes[dst] = ret
 		}
@@ -457,11 +508,23 @@ func (m *Module) emitCall(c *hir.Call) {
 	}
 
 	if ret == "void" {
-		wprintf(&m.funcs, "  call %s @%s%s\n", ret, c.Fn, argStr.String())
+		if c.Fn == "asprintf" {
+			wprintf(&m.funcs, "  call %s (ptr, ptr, ...) @%s%s\n", ret, c.Fn, argStr.String())
+		} else if c.Fn == "printf" {
+			wprintf(&m.funcs, "  call %s (ptr, ...) @%s%s\n", ret, c.Fn, argStr.String())
+		} else {
+			wprintf(&m.funcs, "  call %s @%s%s\n", ret, c.Fn, argStr.String())
+		}
 		return
 	}
 
-	wprintf(&m.funcs, "  %%t%d = call %s @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	if c.Fn == "asprintf" {
+		wprintf(&m.funcs, "  %%t%d = call %s (ptr, ptr, ...) @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	} else if c.Fn == "printf" {
+		wprintf(&m.funcs, "  %%t%d = call %s (ptr, ...) @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	} else {
+		wprintf(&m.funcs, "  %%t%d = call %s @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
+	}
 	m.tempTypes[fmt.Sprintf("t%d", m.tempID)] = ret
 	m.tempID++
 }
