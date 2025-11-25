@@ -1,34 +1,55 @@
-MAKEFLAGS += --no-builtin-rules --warn-undefined-variables
+# Makefile for Desi Language
+# Supports cross-platform builds via GOOS/GOARCH and CC/AR overrides
 
-GO        := go
-DESIC     := $(GO) run ./compiler/cmd/desic
-DESIFMT   := $(GO) run ./compiler/cmd/desifmt
-DESIREPL  := $(GO) run ./compiler/cmd/desirepl
+# Variables
+CC ?= clang
+AR ?= ar
+GO ?= go
+BUILD_DIR = build
+BIN_DIR = bin
+RUNTIME_SRC = compiler/runtime
+RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o
+LIB_DESI = $(BUILD_DIR)/libdesi.a
 
-# All tracked .desi files (may be empty).
-DESI_FILES := $(shell git ls-files '*.desi')
+# Tools
+DESIC = $(BIN_DIR)/desic
+DESIFMT = $(BIN_DIR)/desifmt
+DESIREPL = $(BIN_DIR)/desirepl
 
-.PHONY: build test tokens demo-layout fmt repl
+.PHONY: all clean runtime compiler tools directories
 
-build:
-	$(GO) build ./...
+all: directories runtime compiler tools
 
-test:
-	$(GO) test ./...
+directories:
+	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
 
-tokens:
-	$(DESIC) -tokens examples/14_m7_main.desi
+# Runtime Library
+runtime: $(LIB_DESI)
 
-demo-layout:
-	$(DESIC) -demo-layout examples/14_m7_main.desi
+$(LIB_DESI): $(RUNTIME_OBJS)
+	@echo "==> Archiving runtime library to $@"
+	$(AR) rcs $@ $^
 
-fmt:
-	@files="$(DESI_FILES)"; \
-	if [ -z "$$files" ]; then \
-		echo "fmt: no .desi files found"; \
-	else \
-		$(DESIFMT) -w $$files; \
-	fi
+$(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
+	@echo "==> Compiling $<..."
+	$(CC) -c $< -o $@
 
-repl:
-	$(DESIREPL)
+# Compiler and Tools
+compiler: $(DESIC)
+
+tools: $(DESIFMT) $(DESIREPL)
+
+$(DESIC):
+	@echo "==> Building desic..."
+	$(GO) build -o $@ ./compiler/cmd/desic
+
+$(DESIFMT):
+	@echo "==> Building desifmt..."
+	$(GO) build -o $@ ./compiler/cmd/desifmt
+
+$(DESIREPL):
+	@echo "==> Building desirepl..."
+	$(GO) build -o $@ ./compiler/cmd/desirepl
+
+clean:
+	rm -rf $(BUILD_DIR) $(BIN_DIR) gen/
