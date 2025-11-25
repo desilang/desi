@@ -15,9 +15,10 @@ def main():
 	# For symmetric difference (elements in either but not both), that's a different operation
 	let diff_set = s1.difference(s2)
 	
-	# Cleanup original sets
-	# Note: Result sets cannot be freed due to type inference limitation
-	# Method chaining (e.g., s1.union(s2).free()) is also not yet supported
+	# Cleanup ALL sets (testing type inference fix)
+	union_set.free()
+	inter_set.free()
+	diff_set.free()
 	s1.free()
 	s2.free()
 	

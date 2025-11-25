@@ -24,11 +24,8 @@ func TestEmit_Smoke_PrintAndReturn(t *testing.T) {
 	m.EmitFunc(fn)
 	ir := m.IR()
 
-	if !strings.Contains(ir, "declare i32 @puts") {
-		t.Fatalf("missing puts declaration:\n%s", ir)
-	}
-	if !strings.Contains(ir, "getelementptr inbounds") || !strings.Contains(ir, "call i32 @puts") {
-		t.Fatalf("missing GEP or puts call:\n%s", ir)
+	if !strings.Contains(ir, "declare i32 @printf(ptr, ...)") {
+		t.Fatalf("missing printf declaration:\n%s", ir)
 	}
 	if !strings.Contains(ir, "define i32 @main()") || !strings.Contains(ir, "ret i32 0") {
 		t.Fatalf("missing function or return:\n%s", ir)

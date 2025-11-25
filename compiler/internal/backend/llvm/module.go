@@ -219,7 +219,17 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- core statements -------
 			case *hir.Let:
-				// Keep allocas + lifetimes for all locals to satisfy existing tests.
+				// If type is a reference type (set, dict, list, str), don't allocate
+				// Just use the init value directly as an SSA value
+				if isReferenceType(x.Type) {
+					if x.Init != nil {
+						m.ssa[x.Name] = x.Init
+					}
+					// Skip alloca for reference types - they're already pointers
+					continue
+				}
+
+				// For value types, emit alloca as before
 				llvmTy, size := "i32", 4
 				if x.Init != nil {
 					switch x.Init.(type) {
