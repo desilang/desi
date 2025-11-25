@@ -169,7 +169,7 @@ func (p *Parser) parseParams() []ast.Param {
 func (p *Parser) parseTypeName() *ast.TypeName {
 	if p.cur.Tok != token.IDENT {
 		p.errExpected(spanPos(p.file, p.cur), "type name")
-		return &ast.TypeName{Name: "<?>", Span: spanPos(p.file, p.cur)}
+		return &ast.TypeName{Name: "<?", Span: spanPos(p.file, p.cur)}
 	}
 	start := spanPos(p.file, p.cur)
 	var b bytes.Buffer
@@ -184,5 +184,24 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		b.WriteString(p.cur.Lexeme)
 		p.next()
 	}
-	return &ast.TypeName{Name: b.String(), Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+
+	// Parse type parameters: name[T1, T2, ...]
+	var params []*ast.TypeName
+	if p.accept(token.LBRACK) {
+		for {
+			param := p.parseTypeName()
+			params = append(params, param)
+
+			if !p.accept(token.COMMA) {
+				break
+			}
+		}
+		p.expect(token.RBRACK, "]")
+	}
+
+	return &ast.TypeName{
+		Name:   b.String(),
+		Params: params,
+		Span:   ast.JoinSpan(start, spanPos(p.file, p.cur)),
+	}
 }
