@@ -12,6 +12,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/backend/llvm/intrin"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/term"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // wprintf writes formatted text while ignoring write errors.
@@ -298,6 +299,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					wprintf(&m.funcs, "  call void @__arena_destroy(ptr %%%s)\n", v.Name)
 					m.needArena = true
 				}
+
+			// ------- tuple ops -------
+			case *hir.InsertValue:
+				m.emitInsertValue(x)
+			case *hir.ExtractValue:
+				m.emitExtractValue(x)
 
 			// ------- M14: Low-level memory ops -------
 			case *hir.Alloca:
@@ -624,6 +631,9 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		// If `p` is `alloca`, then `%p` is `ptr`.
 		// So passing `%p` is correct for `self`.
 		return "ptr", "%" + t.Name
+		return "ptr", "%" + t.Name
+	case hir.Undef:
+		return "undef", "undef"
 	default:
 		return "i32", "0"
 	}
@@ -734,4 +744,44 @@ func (m *Module) callRetType(name string) string {
 // MarkDefined marks a function as defined in this module.
 func (m *Module) MarkDefined(name string) {
 	m.definedFunctions[name] = true
+}
+func (m *Module) emitInsertValue(x *hir.InsertValue) {
+	aggTy, aggVal := m.operand(x.Agg)
+	if x.Type != nil {
+		if s, ok := x.Type.(string); ok && s != "" {
+			aggTy = s
+		} else if t, ok := x.Type.(types.T); ok {
+			aggTy = LowerPrimType(t)
+		}
+	}
+
+	elemTy, elemVal := m.operand(x.Elem)
+
+	// Use fmt.Fprintf directly to avoid percent escaping in aggVal (e.g., %tup1)
+	// x.Dst.Name already includes %% from FreshTemp
+	fmt.Fprintf(&m.funcs, "  %s = insertvalue %s %s, %s %s, %d\n",
+		x.Dst.Name, aggTy, aggVal, elemTy, elemVal, x.Index)
+
+	m.tempTypes[x.Dst.Name] = aggTy
+}
+
+func (m *Module) emitExtractValue(x *hir.ExtractValue) {
+	aggTy, aggVal := m.operand(x.Agg)
+	// We don't need x.Type for the instruction, but we need it for m.tempTypes
+
+	var resTy string
+	if x.Type != nil {
+		if s, ok := x.Type.(string); ok && s != "" {
+			resTy = s
+		} else if t, ok := x.Type.(types.T); ok {
+			resTy = LowerPrimType(t)
+		}
+	}
+
+	// Use fmt.Fprintf directly to avoid percent escaping
+	// x.Dst.Name already includes %% from FreshTemp
+	fmt.Fprintf(&m.funcs, "  %s = extractvalue %s %s, %d\n",
+		x.Dst.Name, aggTy, aggVal, x.Index)
+
+	m.tempTypes[x.Dst.Name] = resTy
 }

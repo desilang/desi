@@ -188,9 +188,17 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.FieldExpr:
 		return c.typFieldExpr(x)
+	case *ast.TupleLit:
+		var elems []types.T
+		for _, el := range x.Elems {
+			elems = append(elems, c.typ(el))
+		}
+		t := types.TupleOf(elems...)
+		c.info.Types[e] = t
+		return t
+
 	case *ast.IndexExpr:
-		// Not modeled yet
-		return nil
+		return c.typIndexExpr(x)
 
 	case *ast.LambdaExpr:
 		// require typed params in M4

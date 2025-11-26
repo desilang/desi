@@ -29,6 +29,16 @@ func LowerPrimType(t types.T) string {
 	if t == nil {
 		return "void"
 	}
+
+	// Handle Tuples -> LLVM anonymous struct {T1, T2, ...}
+	if tup, ok := t.(*types.Tuple); ok {
+		var parts []string
+		for _, elem := range tup.Elems {
+			parts = append(parts, LowerPrimType(elem))
+		}
+		return "{" + strings.Join(parts, ", ") + "}"
+	}
+
 	name := t.String()
 	return lowerByName(name)
 }
