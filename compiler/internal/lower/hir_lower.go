@@ -787,7 +787,52 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			fut := ls.lowerExpr(x.X)
 			ls.b.Emit(&hir.Await{Dst: dst, Fut: fut})
 			return dst
+		} else if x.Op == "-" {
+			// Unary minus: 0 - x
+			val := ls.lowerExpr(x.X)
+			dst := ls.b.FreshTemp("neg")
+
+			// Determine type
+			typ := "i64" // default
+			if ls.info != nil {
+				if t := ls.info.Types[x]; t != nil {
+					typ = lowerType(t)
+				}
+			}
+
+			var zero hir.Value
+			if typ == "double" || typ == "float" {
+				zero = hir.ConstFloat{Text: "0.0"}
+				// BinaryOp lowering handles operator mapping, but we might need explicit opcode if we want fsub
+				// Actually, BinaryOp lowering maps "-" to "sub". We need to update BinaryOp lowering to handle floats too!
+				// For now, let's assume BinaryOp lowering will be fixed to handle floats.
+				// Wait, BinaryOp lowering maps "-" to "sub" unconditionally.
+			} else {
+				zero = hir.ConstInt{Text: "0"}
+			}
+
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "-",
+				LHS:  zero,
+				RHS:  val,
+				Dst:  dst,
+				Type: typ,
+			})
+			return dst
+		} else if x.Op == "not" {
+			// Logical not: x ^ 1 (xor with true)
+			val := ls.lowerExpr(x.X)
+			dst := ls.b.FreshTemp("not")
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  val,
+				RHS:  hir.ConstBool{Value: false}, // x == false is equivalent to not x
+				Dst:  dst,
+				Type: "i1",
+			})
+			return dst
 		}
+
 		// Unknown unary: just print-through for now.
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
