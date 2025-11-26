@@ -37,7 +37,8 @@ type Module struct {
 	needArena        bool
 	curFuncRetTy     string
 	curRetIsPtr      bool
-	cfBlocks         map[string]string // blocks that need terminators to merge labels
+	cfBlocks         map[string]string    // blocks that need terminators to merge labels
+	cfLoopConds      map[string]hir.Value // loop condition blocks -> condition value
 	wroteGlob        bool
 }
 
@@ -48,6 +49,7 @@ func NewModule(name string) *Module {
 		asyncWrappers:    make(map[string]bool),
 		definedFunctions: make(map[string]bool),
 		cfBlocks:         make(map[string]string),
+		cfLoopConds:      make(map[string]hir.Value),
 	}
 }
 
@@ -279,6 +281,56 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			case *hir.Call:
 				m.emitCall(x)
 
+			case *hir.BinaryOp:
+				// Emit LLVM IR for binary operations
+				lty, lval := m.operand(x.LHS)
+				rty, rval := m.operand(x.RHS)
+
+				// Map Desi operators to LLVM instructions
+				var llvmInst string
+				switch x.Op {
+				case "+":
+					llvmInst = "add"
+				case "-":
+					llvmInst = "sub"
+				case "*":
+					llvmInst = "mul"
+				case "/":
+					llvmInst = "sdiv" // signed division
+				case "%":
+					llvmInst = "srem" // signed remainder
+				case "==":
+					llvmInst = "icmp eq"
+				case "!=":
+					llvmInst = "icmp ne"
+				case "<":
+					llvmInst = "icmp slt" // signed less than
+				case "<=":
+					llvmInst = "icmp sle"
+				case ">":
+					llvmInst = "icmp sgt"
+				case ">=":
+					llvmInst = "icmp sge"
+				case "**":
+					// Power operator - not a native LLVM instruction
+					// For now, emit a call to a runtime function
+					wprintf(&m.funcs, "  %s = call i64 @__pow_i64(%s, %s)\n",
+						x.Dst.String(), lval, rval)
+					m.ensureDecl("declare i64 @__pow_i64(i64, i64)")
+					m.tempTypes[x.Dst.Name] = x.Type
+					continue
+				default:
+					// Unknown operator
+					wprintf(&m.funcs, "  ; Unknown operator: %s\n", x.Op)
+					continue
+				}
+
+				// Emit the operation (rty is same as lty for now, use lty)
+				_ = rty // Suppress unused variable warning
+				wprintf(&m.funcs, "  %s = %s %s %s, %s\n",
+					x.Dst.String(), llvmInst, lty, lval, rval)
+				m.tempTypes[x.Dst.Name] = x.Type
+
 			case *hir.Ret:
 				// Emit lifetime.end for all locals *before* the ret (once).
 				if !lifetimesClosed {
@@ -346,7 +398,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 				m.tempTypes[x.Dst.Name] = "ptr"
 
-			// case *hir.Store: // Handled by emitStore
+			case *hir.Store:
+				// Emit store instruction: store <type> <value>, <type>* <pointer>
+				dstOp := m.ptrOperand(x.Dst)
+				valTy, valOp := m.operand(x.Val)
+				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, dstOp)
 
 			case *hir.Load:
 				ptrOp := m.ptrOperand(x.Src)
@@ -401,6 +457,36 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "%s:\n", mergeLabel)
 
 			case *hir.While:
+				// Emit proper LLVM loop structure:
+				// entry:
+				//   br label %loop_cond
+				// loop_cond:
+				//   <evaluate condition>
+				//   br i1 %cond, label %loop_body, label %loop_exit
+				// loop_body:
+				//   <body statements>
+				//   br label %loop_cond
+				// loop_exit:
+				//   <continue>
+
+				// Get unique labels
+				condLabel := blockLabels[x.CondBlock]
+				bodyLabel := blockLabels[x.Body]
+				exitLabel := fmt.Sprintf("loop_exit%d", m.mergeID)
+				m.mergeID++
+
+				// Emit unconditional branch to loop header
+				wprintf(&m.funcs, "  br label %%%s\n", condLabel)
+
+				// Store condition value and target labels for condition block
+				m.cfLoopConds[condLabel] = x.Cond
+				m.cfBlocks[condLabel] = exitLabel + "|" + bodyLabel
+
+				// Mark body block to branch back to condition
+				m.cfBlocks[bodyLabel] = condLabel
+
+				// Emit exit label immediately to split the block
+				wprintf(&m.funcs, "%s:\n", exitLabel)
 
 			// ------- M8 async/futures -------
 			case *hir.FutureNew:
@@ -425,12 +511,30 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 			}
 			if !hasTerminator {
-				wprintf(&m.funcs, "  br label %%%s\n", mergeLabel)
+				// Check if this is a loop condition block
+				if condVal, isLoop := m.cfLoopConds[label]; isLoop {
+					// Loop condition: emit conditional branch
+					// Format: "exit_label|body_label"
+					parts := strings.Split(mergeLabel, "|")
+					exitLabel := parts[0]
+					bodyLabel := parts[1]
+
+					// Get condition value
+					cty, cval := m.operand(condVal)
+					wprintf(&m.funcs, "  br %s %s, label %%%s, label %%%s\n",
+						cty, cval, bodyLabel, exitLabel)
+
+					// Clean up loop condition map
+					delete(m.cfLoopConds, label)
+				} else {
+					// Regular control flow block: unconditional branch
+					wprintf(&m.funcs, "  br label %%%s\n", mergeLabel)
+				}
 			}
 			// Remove from map
 			delete(m.cfBlocks, label)
 
-			// Do NOT emit merge label here - it was already emitted in the If case
+			// Do NOT emit merge label here - it was already emitted in the If/While case
 		}
 
 		// Close lifetimes for locals at end of block if we didn't just emit an early 'ret'.

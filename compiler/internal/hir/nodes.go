@@ -88,6 +88,17 @@ func (Undef) String() string { return "undef" }
 
 type Stmt interface{ isStmt() }
 
+// Binary operation: dst = lhs op rhs
+type BinaryOp struct {
+	Op   string // Operator: "+", "-", "*", "/", "%", "==", "<", ">", "<=", ">=", "!="
+	LHS  Value
+	RHS  Value
+	Dst  Temp
+	Type string // LLVM type hint (e.g., "i32", "i64", "i1")
+}
+
+func (*BinaryOp) isStmt() {}
+
 type Let struct {
 	Name string
 	Init Value       // may be nil
@@ -151,8 +162,9 @@ type If struct {
 func (*If) isStmt() {}
 
 type While struct {
-	Cond Value
-	Body *Block
+	Cond      Value  // Final condition value (temp holding boolean result)
+	CondBlock *Block // Block that evaluates Cond (for re-evaluation in loop header)
+	Body      *Block
 }
 
 func (*While) isStmt() {}

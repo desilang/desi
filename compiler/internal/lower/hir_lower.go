@@ -24,7 +24,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 nil,
@@ -41,7 +41,7 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -84,7 +84,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -123,6 +123,7 @@ type scope struct {
 	defers     []hir.Value
 	arenas     map[string]bool // names that are arena handles in this scope
 	arenaOwned map[string]bool // locals whose storage originates from arena.alloc
+	mutable    map[string]bool // variables declared with mut
 }
 
 func (ls *lowerState) push() {
@@ -133,6 +134,7 @@ func (ls *lowerState) push() {
 		defers:     []hir.Value{},
 		arenas:     map[string]bool{},
 		arenaOwned: map[string]bool{},
+		mutable:    map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -179,6 +181,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 		}
 		ls.cur().locals = append(ls.cur().locals, s.Name.Name)
+
+		// Track if variable is mutable
+		if s.Mutable {
+			ls.cur().mutable[s.Name.Name] = true
+		}
+
 		var init hir.Value
 		if s.Value != nil {
 			// detect trivial move: let y = x
@@ -191,7 +199,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				init = ls.lowerExpr(s.Value)
 			}
 		}
-		ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: init, Type: varType})
+
+		// For mutable variables, always allocate storage
+		if s.Mutable {
+			// Emit Let without init (will be allocated by backend)
+			ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: nil, Type: varType})
+			// If there's an initial value, store it
+			if init != nil {
+				ls.b.Emit(&hir.Store{
+					Dst: hir.Var{Name: s.Name.Name},
+					Val: init,
+				})
+			}
+		} else {
+			// Immutable: use SSA directly
+			ls.b.Emit(&hir.Let{Name: s.Name.Name, Init: init, Type: varType})
+		}
 
 		// M7C: if init was a temp that came from ArenaAlloc, mark this local as arena-owned.
 		if t, ok := init.(hir.Temp); ok && ls.tempsFromArenaAlloc[t.Name] {
@@ -202,7 +225,25 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {
 			lhs := ls.lowerLValue(s.LHS[0])
 			rhs := ls.lowerExpr(s.RHS[0])
-			ls.b.Emit(&hir.Assign{LHS: lhs, RHS: rhs})
+
+			// Check if this is a mutable variable assignment
+			isMutable := false
+			if lhsName, ok := s.LHS[0].(*ast.Ident); ok {
+				if ls.isMutable(lhsName.Name) {
+					isMutable = true
+				}
+			}
+
+			if isMutable {
+				// Emit Store for mutable variables
+				ls.b.Emit(&hir.Store{
+					Dst: hir.Var{Name: lhs},
+					Val: rhs,
+				})
+			} else {
+				// Emit Assign for SSA-style variables
+				ls.b.Emit(&hir.Assign{LHS: lhs, RHS: rhs})
+			}
 		}
 
 	case *ast.ExprStmt:
@@ -247,9 +288,17 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.b.Emit(&hir.If{Cond: cond, Then: thenBlk, Else: elseBlk})
 
 	case *ast.WhileStmt:
-		cond := ls.lowerExpr(s.Cond)
-		bodyBlk := ls.b.NewBlock("while")
+		// Create a condition block that will be re-evaluated each iteration
+		condBlk := ls.b.NewBlock("while_cond")
 		oldCur := ls.b.Block()
+
+		// Lower condition in the condition block
+		ls.b.SetBlock(condBlk)
+		cond := ls.lowerExpr(s.Cond)
+		ls.b.SetBlock(oldCur)
+
+		// Create body block
+		bodyBlk := ls.b.NewBlock("while_body")
 		ls.push()
 		ls.b.SetBlock(bodyBlk)
 		ls.lowerBlock(s.Body)
@@ -258,7 +307,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.emitScopeDrops(scWhile)
 		}
 		ls.b.SetBlock(oldCur)
-		ls.b.Emit(&hir.While{Cond: cond, Body: bodyBlk})
+
+		// Emit While with both condition block and body block
+		ls.b.Emit(&hir.While{Cond: cond, CondBlock: condBlk, Body: bodyBlk})
 
 	case *ast.UsingStmt:
 		// using X [= init]: body  → bind handle + defer destroy_arena(X)
@@ -493,9 +544,19 @@ func (ls *lowerState) emitAllDefersAndDrops() {
 }
 
 func (ls *lowerState) hasLocal(name string) bool {
-	sc := ls.cur()
-	for _, n := range sc.locals {
-		if n == name {
+	for _, s := range ls.scopes {
+		for _, n := range s.locals {
+			if n == name {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (ls *lowerState) isMutable(name string) bool {
+	for _, s := range ls.scopes {
+		if s.mutable[name] {
 			return true
 		}
 	}
@@ -697,6 +758,25 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: "<index_expr>"}
 
 	case *ast.Ident:
+		// If this is a mutable variable, emit a Load instruction
+		if ls.isMutable(x.Name) {
+			dst := ls.b.FreshTemp("load")
+
+			// Determine type
+			loadType := "i32" // default
+			if ls.info != nil {
+				if sym := ls.info.Idents[x]; sym != nil {
+					loadType = lowerType(sym.Type)
+				}
+			}
+
+			ls.b.Emit(&hir.Load{
+				Type: loadType,
+				Src:  hir.Var{Name: x.Name},
+				Dst:  dst,
+			})
+			return dst
+		}
 		return hir.Var{Name: x.Name}
 
 	case *ast.UnaryExpr:
@@ -735,6 +815,39 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 	case *ast.ListComp:
 		return ls.lowerListComp(x)
+
+	case *ast.BinaryExpr:
+		// Lower binary expressions: arithmetic (+, -, *, /, %, **) and comparisons (<, >, <=, >=, ==, !=)
+		lhs := ls.lowerExpr(x.Lhs)
+		rhs := ls.lowerExpr(x.Rhs)
+
+		// Determine result type based on operation
+		var resultType string
+		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" {
+			// Comparison operations return boolean (i1)
+			resultType = "i1"
+		} else {
+			// Arithmetic operations preserve operand type
+			if ls.info != nil {
+				if typ := ls.info.Types[x]; typ != nil {
+					resultType = lowerType(typ)
+				} else {
+					resultType = "i32" // default fallback
+				}
+			} else {
+				resultType = "i32" // default fallback
+			}
+		}
+
+		dst := ls.b.FreshTemp("binop")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   x.Op,
+			LHS:  lhs,
+			RHS:  rhs,
+			Dst:  dst,
+			Type: resultType,
+		})
+		return dst
 
 	default:
 		// Print-through placeholder for anything not wired yet.
