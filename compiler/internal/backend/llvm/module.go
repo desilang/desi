@@ -147,6 +147,12 @@ func escapeForCString(s string) string {
 // EmitFunc : Tier-0 subset—calls, returns, lifetimes for locals.
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
+//
+// RegisterFunc marks a function as defined in this module.
+func (m *Module) RegisterFunc(name string) {
+	m.definedFunctions[name] = true
+}
+
 func (m *Module) EmitFunc(fn *hir.Func) {
 	// Mark this function as defined to avoid emitting a declare for it
 	m.definedFunctions[fn.Name] = true

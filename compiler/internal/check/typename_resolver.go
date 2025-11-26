@@ -5,9 +5,11 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// fromTypeName resolves an AST TypeName to a types.T, handling parameterized types.
+// c.resolveType resolves an AST TypeName to a types.T, handling parameterized types.
 // Returns nil if the type cannot be resolved.
-func fromTypeName(tn *ast.TypeName) types.T {
+// resolveType resolves an AST TypeName to a types.T, handling parameterized types.
+// Returns nil if the type cannot be resolved.
+func (c *checker) resolveType(tn *ast.TypeName) types.T {
 	if tn == nil {
 		return nil
 	}
@@ -18,7 +20,7 @@ func fromTypeName(tn *ast.TypeName) types.T {
 		case "tuple":
 			var elems []types.T
 			for _, p := range tn.Params {
-				t := fromTypeName(p)
+				t := c.resolveType(p)
 				if t == nil {
 					return nil
 				}
@@ -30,7 +32,7 @@ func fromTypeName(tn *ast.TypeName) types.T {
 			if len(tn.Params) != 1 {
 				return nil
 			}
-			elem := fromTypeName(tn.Params[0])
+			elem := c.resolveType(tn.Params[0])
 			if elem == nil {
 				return nil
 			}
@@ -40,7 +42,7 @@ func fromTypeName(tn *ast.TypeName) types.T {
 			if len(tn.Params) != 1 {
 				return nil
 			}
-			elem := fromTypeName(tn.Params[0])
+			elem := c.resolveType(tn.Params[0])
 			if elem == nil {
 				return nil
 			}
@@ -50,8 +52,8 @@ func fromTypeName(tn *ast.TypeName) types.T {
 			if len(tn.Params) != 2 {
 				return nil
 			}
-			key := fromTypeName(tn.Params[0])
-			val := fromTypeName(tn.Params[1])
+			key := c.resolveType(tn.Params[0])
+			val := c.resolveType(tn.Params[1])
 			if key == nil || val == nil {
 				return nil
 			}
@@ -61,7 +63,7 @@ func fromTypeName(tn *ast.TypeName) types.T {
 			if len(tn.Params) != 1 {
 				return nil
 			}
-			elem := fromTypeName(tn.Params[0])
+			elem := c.resolveType(tn.Params[0])
 			if elem == nil {
 				return nil
 			}
@@ -71,7 +73,7 @@ func fromTypeName(tn *ast.TypeName) types.T {
 			if len(tn.Params) != 1 {
 				return nil
 			}
-			elem := fromTypeName(tn.Params[0])
+			elem := c.resolveType(tn.Params[0])
 			if elem == nil {
 				return nil
 			}
@@ -83,6 +85,14 @@ func fromTypeName(tn *ast.TypeName) types.T {
 	// No params - try simple name resolution
 	if t, ok := types.FromName(tn.Name); ok {
 		return t
+	}
+
+	// Look up user-defined types (structs, classes, etc.)
+	if c.scope != nil {
+		sym := c.scope.Lookup(tn.Name)
+		if sym != nil && sym.Kind == SymType {
+			return sym.Type
+		}
 	}
 
 	return nil

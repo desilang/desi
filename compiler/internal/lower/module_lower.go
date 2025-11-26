@@ -42,6 +42,16 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 		out.Funcs = append(out.Funcs, LowerFuncFromDecl(fd, info, src))
 	}
 
+	// Generate constructors for struct declarations
+	for _, d := range mod.Decls {
+		if sd, ok := d.(*ast.StructDecl); ok {
+			constructor := LowerStructConstructor(sd, info)
+			if constructor != nil {
+				out.Funcs = append(out.Funcs, constructor)
+			}
+		}
+	}
+
 	// Lower explicit ImplDecl methods
 	for _, d := range mod.Decls {
 		if impl, ok := d.(*ast.ImplDecl); ok {
@@ -91,4 +101,83 @@ func isExternDecorated(fd *ast.FuncDecl) bool {
 		}
 	}
 	return false
+}
+
+// LowerStructConstructor generates a constructor function for a struct.
+// Constructor signature: StructName(field1_type %field1, ...) -> ptr
+// Implementation: alloca struct, store fields, return pointer
+func LowerStructConstructor(sd *ast.StructDecl, info *check.Info) *hir.Func {
+	structName := sd.Name.Name
+	b := hir.NewFunc(structName)
+
+	// Create parameters from struct fields
+	var params []hir.Param
+	for _, field := range sd.Fields {
+		fieldType := "i32" // default to int
+		if field.Type != nil {
+			// Map type name to LLVM type
+			switch field.Type.Name {
+			case "int", "i32":
+				fieldType = "i32"
+			case "i64", "u64":
+				fieldType = "i64"
+			case "bool":
+				fieldType = "i1"
+			case "str":
+				fieldType = "ptr"
+			default:
+				fieldType = "i32" // default
+			}
+		}
+		params = append(params, hir.Param{
+			Name: field.Name.Name,
+			Type: fieldType,
+		})
+	}
+
+	// Calculate struct size (simplified - assume all fields are same size for now)
+	// In real implementation, would need proper struct layout
+	structSize := len(sd.Fields) * 8 // 8 bytes per field (i64/ptr)
+
+	// Create entry block
+	entry := hir.NewBlock("entry")
+
+	// Allocate space for struct
+	structPtr := hir.Temp{Name: "%struct_ptr"}
+	entry.Stmts = append(entry.Stmts, &hir.Alloca{
+		Type:  "i8", // byte array
+		Count: structSize,
+		Dst:   structPtr,
+	})
+
+	// Store each field
+	for i, field := range sd.Fields {
+		paramVar := hir.Var{Name: field.Name.Name}
+
+		// GEP to field offset
+		fieldPtr := hir.Temp{Name: fmt.Sprintf("%%field_%s_ptr", field.Name.Name)}
+		entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
+			Type:    "i8",
+			Base:    structPtr,
+			Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8)}}, // Simplified offset
+			Dst:     fieldPtr,
+		})
+
+		// Store parameter value to field
+		entry.Stmts = append(entry.Stmts, &hir.Store{
+			Dst: fieldPtr,
+			Val: paramVar,
+		})
+	}
+
+	// Return struct pointer
+	entry.Stmts = append(entry.Stmts, &hir.Ret{Val: structPtr})
+
+	f := b.Func()
+	f.Name = structName
+	f.Params = params
+	f.RetType = "ptr" // Return pointer to struct
+	f.Blocks = []*hir.Block{entry}
+
+	return f
 }
