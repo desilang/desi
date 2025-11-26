@@ -59,6 +59,16 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 			// Use the first candidate (should be the only one for this function)
 			funcType := set.Cands[0].Type
 			if funcType != nil {
+				// Set return type
+				if funcType.Ret != nil {
+					retType := lowerType(funcType.Ret)
+					// Don't set void - let backend use its defaults (e.g. i32 for main)
+					if retType != "void" {
+						f.RetType = retType
+					}
+				}
+
+				// Set parameter types
 				for i, p := range fd.Params {
 					paramType := "ptr" // default
 					if i < len(funcType.Params) && funcType.Params[i] != nil {
@@ -1247,7 +1257,20 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	if callee == "" {
 		callee = "<call>"
 	}
-	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args})
+
+	// Infer return type from type checker
+	var retType string
+	if ls.info != nil {
+		if t := ls.info.Types[x]; t != nil {
+			retType = lowerType(t)
+			// Don't set void - let backend use defaults
+			if retType == "void" {
+				retType = ""
+			}
+		}
+	}
+
+	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
 	return dst
 }
 
