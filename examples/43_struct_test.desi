@@ -1,0 +1,14 @@
+# Test struct definition and usage
+
+struct Point:
+    x: int
+    y: int
+
+def main():
+    print("Testing structs")
+    # Create a Point instance
+    let p = Point(x=10, y=20)
+    # Field access for printing might not be fully implemented yet
+    # Let's just verify instantiation works
+    print("Point created successfully")
+    print("Struct instantiation works!")

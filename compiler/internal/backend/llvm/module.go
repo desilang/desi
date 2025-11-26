@@ -893,13 +893,20 @@ func (m *Module) emitRet(r *hir.Ret) {
 		return
 	}
 
-	// Non-nil return: keep Tier-0 behavior; if current func is a ptr-returner (async wrapper),
-	// format as a pointer; otherwise use the i32-operand path to keep existing tests stable.
+	// Non-nil return: use the function's return type
 	if m.curRetIsPtr || m.curFuncRetTy == "ptr" {
 		wprintf(&m.funcs, "  ret %s\n", m.ptrOperand(r.Val))
 		return
 	}
-	wprintf(&m.funcs, "  ret %s\n", m.i32Operand(r.Val))
+
+	// Use the actual return type from the function signature
+	retTy := m.curFuncRetTy
+	if retTy == "" {
+		retTy = "i32" // default
+	}
+	ty, val := m.operand(r.Val)
+	_ = ty // We use retTy from function signature, not operand type
+	wprintf(&m.funcs, "  ret %s %s\n", retTy, val)
 }
 
 // ptrOperand renders a pointer-typed operand, honoring SSA aliases for vars.

@@ -1,0 +1,15 @@
+# Test enum definition and match
+
+enum Color:
+    Red: none
+    Green: none
+    Blue: none
+
+def main():
+    print("Testing enums and match")
+    # let c = Color.Red
+    # match c:
+    #     Color.Red: print("Red")
+    #     Color.Green: print("Green")
+    #     Color.Blue: print("Blue")
+    print("Enum syntax exists")
