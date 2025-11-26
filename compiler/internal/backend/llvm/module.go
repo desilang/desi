@@ -287,30 +287,77 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				rty, rval := m.operand(x.RHS)
 
 				// Map Desi operators to LLVM instructions
+				// Check for float types
+				isFloat := lty == "float" || lty == "double"
+
 				var llvmInst string
 				switch x.Op {
 				case "+":
-					llvmInst = "add"
+					if isFloat {
+						llvmInst = "fadd"
+					} else {
+						llvmInst = "add"
+					}
 				case "-":
-					llvmInst = "sub"
+					if isFloat {
+						llvmInst = "fsub"
+					} else {
+						llvmInst = "sub"
+					}
 				case "*":
-					llvmInst = "mul"
+					if isFloat {
+						llvmInst = "fmul"
+					} else {
+						llvmInst = "mul"
+					}
 				case "/":
-					llvmInst = "sdiv" // signed division
+					if isFloat {
+						llvmInst = "fdiv"
+					} else {
+						llvmInst = "sdiv"
+					}
 				case "%":
-					llvmInst = "srem" // signed remainder
+					if isFloat {
+						llvmInst = "frem"
+					} else {
+						llvmInst = "srem"
+					}
 				case "==":
-					llvmInst = "icmp eq"
+					if isFloat {
+						llvmInst = "fcmp oeq"
+					} else {
+						llvmInst = "icmp eq"
+					}
 				case "!=":
-					llvmInst = "icmp ne"
+					if isFloat {
+						llvmInst = "fcmp one"
+					} else {
+						llvmInst = "icmp ne"
+					}
 				case "<":
-					llvmInst = "icmp slt" // signed less than
+					if isFloat {
+						llvmInst = "fcmp olt"
+					} else {
+						llvmInst = "icmp slt"
+					}
 				case "<=":
-					llvmInst = "icmp sle"
+					if isFloat {
+						llvmInst = "fcmp ole"
+					} else {
+						llvmInst = "icmp sle"
+					}
 				case ">":
-					llvmInst = "icmp sgt"
+					if isFloat {
+						llvmInst = "fcmp ogt"
+					} else {
+						llvmInst = "icmp sgt"
+					}
 				case ">=":
-					llvmInst = "icmp sge"
+					if isFloat {
+						llvmInst = "fcmp oge"
+					} else {
+						llvmInst = "icmp sge"
+					}
 				case "**":
 					// Power operator - not a native LLVM instruction
 					// For now, emit a call to a runtime function
@@ -670,7 +717,10 @@ func (m *Module) emitCall(c *hir.Call) {
 	}
 
 	// Fallback: external call — choose return type via overrides/async, honor c.Dst if provided.
-	ret := m.callRetType(c.Fn)
+	ret := c.Type
+	if ret == "" {
+		ret = m.callRetType(c.Fn)
+	}
 
 	// Build args
 	var argStr strings.Builder

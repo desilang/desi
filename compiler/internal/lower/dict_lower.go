@@ -34,7 +34,7 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		// has_key(key)
 		key := ls.lowerExpr(args[0])
 		res := ls.b.FreshTemp("has")
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_has_key", Args: []hir.Value{receiver, key}})
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_has_key", Args: []hir.Value{receiver, key}, Type: "i1"})
 		return res
 
 	case "clear":

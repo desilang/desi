@@ -115,9 +115,10 @@ type Assign struct {
 func (*Assign) isStmt() {}
 
 type Call struct {
+	Dst  Temp // optional; empty Name => no result bound
 	Fn   string
 	Args []Value
-	Dst  Temp // optional; empty Name => no result bound
+	Type string // Return type, default "i32"
 }
 
 func (*Call) isStmt() {}
