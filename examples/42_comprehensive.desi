@@ -1,0 +1,65 @@
+# Comprehensive Desi Language Test
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+def multiply(x: int, y: int) -> int:
+    return x * y
+
+def main():
+    print("=== COMPREHENSIVE LANGUAGE TEST ===")
+    
+    # Functions with parameters and return values
+    print("--- Functions ---")
+    let sum = add(15, 25)
+    print(sum)  # 40
+    
+    let product = multiply(6, 7)
+    print(product)  # 42
+    
+    # Complex expressions
+    print("--- Complex Expressions ---")
+    let result = add(multiply(2, 3), multiply(4, 5))
+    print(result)  # 2*3 + 4*5 = 6 + 20 = 26
+    
+    # Comparisons and control flow
+    print("--- Comparisons ---")
+    if 10 > 0:
+        print("10 is positive")
+    
+    if -5 > 0:
+        print("Should not print")
+    else:
+        print("-5 is not positive")
+    
+    # Mutable variables in loops
+    print("--- Loops with Mutable State ---")
+    let mut i = 0
+    let mut factorial = 1
+    while i < 5:
+        i := i + 1
+        factorial := factorial * i
+    print(factorial)  # 5! = 120
+    
+    # Tuples
+    print("--- Tuples ---")
+    let pair = (100, 200)
+    let first = pair[0]
+    let second = pair[1]
+    let tuple_sum = add(first, second)
+    print(tuple_sum)  # 300
+    
+    # Sets
+    print("--- Sets ---")
+    let numbers = #{10, 20, 30}
+    if numbers.contains(20):
+        print("Set contains 20")
+    
+    # Dicts
+    print("--- Dicts ---")
+    let scores = {"alice": 95, "bob": 87}
+    if scores.has_key("alice"):
+        print("Alice is in scores")
+    
+    # All tests
+    print("=== ALL TESTS PASSED ===")
