@@ -1,0 +1,11 @@
+# Data enum test
+
+enum Number:
+  One: none
+  Many: int
+
+def main():
+  print("Testing data enums")
+  let one = Number.One()
+  let many = Number.Many(42)
+  print("Data enums created")

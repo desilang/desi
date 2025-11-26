@@ -27,6 +27,7 @@ const (
 	TypeKind // M14: type of a type
 	StructKind
 	ClassKind
+	EnumKind
 
 	// Container kinds
 	ListKind
@@ -107,6 +108,17 @@ type Struct struct {
 	Fields []Field
 }
 
+type Variant struct {
+	Name   string
+	Fields []Field
+	Tag    int
+}
+
+type Enum struct {
+	Name     string
+	Variants []Variant
+}
+
 func (*List) isType()   {}
 func (*Set) isType()    {}
 func (*Dict) isType()   {}
@@ -116,6 +128,7 @@ func (*Func) isType()   {}
 func (*Multi) isType()  {}
 func (*CPtr) isType()   {}
 func (*Struct) isType() {}
+func (*Enum) isType()   {}
 
 func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
 func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
@@ -144,6 +157,7 @@ func (t *Multi) String() string {
 }
 func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
 func (t *Struct) String() string { return t.Name }
+func (t *Enum) String() string   { return t.Name }
 
 // ----- Constructors -----
 
@@ -192,6 +206,8 @@ func kindOf(t T) Kind {
 		return CPtrKind
 	case *Struct:
 		return StructKind
+	case *Enum:
+		return EnumKind
 	// Avoid collisions with other wrappers in this package.
 	// Returning distinct pseudo-kinds keeps Equal safe (no bad type assertions).
 	case *Arena:
@@ -265,6 +281,9 @@ func Equal(a, b T) bool {
 	case *Struct:
 		// Nominal equality for now (name check)
 		return x.Name == b.(*Struct).Name
+	case *Enum:
+		// Nominal equality for enums (name check)
+		return x.Name == b.(*Enum).Name
 	default:
 		return false
 	}
