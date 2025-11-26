@@ -1,0 +1,23 @@
+# Test floats and functions
+
+def add(a: int, b: int) -> int:
+    return a + b
+
+def main():
+    print("--- Float Tests ---")
+    # Float literals - currently commented out pending print(float) support
+    # let f1 = 3.14
+    # let f2 = 2.5
+    # let f_sum = f1 + f2
+    # let f_diff = f1 - f2
+    # let f_prod = f1 * f2
+    # let f_quot = f1 / f2
+    
+    print("--- Function Tests ---")
+    let result = add(10, 20)
+    print(result)
+    
+    let result2 = add(5, 7)
+    print(result2)
+    
+    print("Functions work")
