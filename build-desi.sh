@@ -13,22 +13,25 @@ INPUT="$1"
 BASENAME=$(basename "$INPUT" .desi)
 OUTPUT_NAME="${2:-$BASENAME}"
 
+# Ensure tools and library exist
+if [ ! -f "bin/desic" ] || [ ! -f "build/libdesi.a" ]; then
+    echo "Error: Compiler or runtime library not found."
+    echo "Please run 'make' first to build the compiler and runtime."
+    exit 1
+fi
+
 # Create build directories
 mkdir -p build/output
 
 echo "==> Compiling Desi to LLVM IR..."
-./gen/desic -emit-ir "$INPUT" > build/program.ll
-
-echo "==> Compiling C runtime..."
-clang -c compiler/runtime/set.c -o build/set.o
-clang -c compiler/runtime/dict.c -o build/dict.o
-clang -c compiler/runtime/print.c -o build/print.o
+./bin/desic -emit-ir "$INPUT" > build/program.ll
 
 echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
-clang build/program.o build/set.o build/dict.o build/print.o -o "build/output/$OUTPUT_NAME"
+# Link against libdesi.a (static runtime)
+clang build/program.o -Lbuild -ldesi -o "build/output/$OUTPUT_NAME"
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o
