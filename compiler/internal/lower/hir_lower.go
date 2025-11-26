@@ -666,7 +666,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		t := ls.info.Types[x]
 
 		for i, val := range vals {
-			dst := ls.b.FreshTemp("tup")
+			dst := ls.b.FreshTemp("tuple_")
 			ls.b.Emit(&hir.InsertValue{
 				Agg:   agg,
 				Elem:  val,

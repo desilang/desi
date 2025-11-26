@@ -24,19 +24,21 @@ type Module struct {
 	name             string
 	globals          bytes.Buffer
 	funcs            bytes.Buffer
-	strLits          map[string]string // text-key -> global name
-	strOrder         []string          // deterministic order
+	strLits          map[string]string    // text-key -> global name
+	strOrder         []string             // deterministic order
+	ssa              map[string]hir.Value // SSA-alias for simple variables
+	tempTypes        map[string]string    // map from temp name to LLVM type
+	tempID           int                  // counter for %t0, %t1, ...
+	mergeID          int                  // counter for merge blocks
+	asyncWrappers    map[string]bool      // functions returning ptr (future handle)
+	definedFunctions map[string]bool      // track which functions we've defined
 	needPuts         bool
 	needRcDec        bool
 	needArena        bool
+	curFuncRetTy     string
+	curRetIsPtr      bool
+	cfBlocks         map[string]string // blocks that need terminators to merge labels
 	wroteGlob        bool
-	tempID           int
-	asyncWrappers    map[string]bool      // symbols that return ptr future handles
-	curRetIsPtr      bool                 // set per function during EmitFunc
-	ssa              map[string]hir.Value // simple name -> value alias (lets/assigns + frame slots)
-	curFuncRetTy     string               // textual LLVM return type for the function being emitted
-	tempTypes        map[string]string    // temp name -> llvm type (e.g. "t1" -> "ptr")
-	definedFunctions map[string]bool      // functions defined in this module (to avoid duplicate declares)
 }
 
 func NewModule(name string) *Module {
@@ -45,6 +47,7 @@ func NewModule(name string) *Module {
 		strLits:          make(map[string]string),
 		asyncWrappers:    make(map[string]bool),
 		definedFunctions: make(map[string]bool),
+		cfBlocks:         make(map[string]string),
 	}
 }
 
@@ -190,11 +193,31 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		name string
 		size int
 	}
-	for bi, b := range fn.Blocks {
-		label := b.Name
-		if bi == 0 && (label == "" || label == "entry") {
-			label = "entry"
+
+	// Pre-calculate unique labels for all blocks
+	blockLabels := make(map[*hir.Block]string)
+	labelCounts := make(map[string]int)
+	for i, b := range fn.Blocks {
+		name := b.Name
+		if name == "" {
+			name = "block"
 		}
+		if i == 0 {
+			name = "entry"
+		}
+
+		// Uniquify
+		count := labelCounts[name]
+		uniqueName := name
+		if count > 0 {
+			uniqueName = fmt.Sprintf("%s%d", name, count)
+		}
+		labelCounts[name]++
+		blockLabels[b] = uniqueName
+	}
+
+	for _, b := range fn.Blocks {
+		label := blockLabels[b]
 		wprintf(&m.funcs, "%s:\n", label)
 
 		// Pre-seed simple SSA aliases for Let;Assign pairs (let x; x = ...).
@@ -323,10 +346,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 				m.tempTypes[x.Dst.Name] = "ptr"
 
-			case *hir.Store:
-				valTy, valOp := m.operand(x.Val)
-				ptrOp := m.ptrOperand(x.Dst)
-				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, ptrOp)
+			// case *hir.Store: // Handled by emitStore
 
 			case *hir.Load:
 				ptrOp := m.ptrOperand(x.Src)
@@ -352,6 +372,34 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- control flow (elided) -------
 			case *hir.If:
+				// Emit proper LLVM control flow for If statement
+				cty, cval := m.operand(x.Cond)
+
+				// Generate merge block label
+				mergeLabel := fmt.Sprintf("merge%d", m.mergeID)
+				m.mergeID++
+
+				// Get unique labels for then/else blocks
+				thenLabel := blockLabels[x.Then]
+				elseLabel := mergeLabel
+				if x.Else != nil {
+					elseLabel = blockLabels[x.Else]
+				}
+
+				// Emit conditional branch
+				wprintf(&m.funcs, "  br %s %s, label %%%s, label %%%s\n",
+					cty, cval, thenLabel, elseLabel)
+
+				// Mark that then/else blocks need terminator to merge
+				m.cfBlocks[thenLabel] = mergeLabel
+				if x.Else != nil {
+					m.cfBlocks[elseLabel] = mergeLabel
+				}
+
+				// Emit merge label immediately to split the current block
+				// Subsequent statements in this loop will be emitted into the merge block
+				wprintf(&m.funcs, "%s:\n", mergeLabel)
+
 			case *hir.While:
 
 			// ------- M8 async/futures -------
@@ -365,6 +413,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "  call void @__future_complete(%s, %s)\n", m.ptrOperand(x.Fut), m.i32Operand(x.Val))
 				m.ensureDecl("declare void @__future_complete(ptr, i32)")
 			}
+		}
+
+		// Add terminator for control flow blocks (branches to merge)
+		if mergeLabel, ok := m.cfBlocks[label]; ok {
+			// Check if block already has a terminator (e.g., ret)
+			hasTerminator := false
+			if len(b.Stmts) > 0 {
+				if _, isRet := b.Stmts[len(b.Stmts)-1].(*hir.Ret); isRet {
+					hasTerminator = true
+				}
+			}
+			if !hasTerminator {
+				wprintf(&m.funcs, "  br label %%%s\n", mergeLabel)
+			}
+			// Remove from map
+			delete(m.cfBlocks, label)
+
+			// Do NOT emit merge label here - it was already emitted in the If case
 		}
 
 		// Close lifetimes for locals at end of block if we didn't just emit an early 'ret'.

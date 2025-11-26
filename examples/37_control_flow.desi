@@ -1,0 +1,17 @@
+def main():
+    print("Start")
+    if true:
+        print("True 1")
+        if true:
+            print("True 2")
+        else:
+            print("False 2")
+    else:
+        print("False 1")
+    
+    if false:
+        print("True 3")
+    else:
+        print("False 3")
+        
+    print("End")

@@ -237,8 +237,9 @@ func (x *FieldExpr) SpanOf() diag.Span { return x.Span }
 /* ---------- Types (minimal) ---------- */
 
 type TypeName struct {
-	Name string // "Foo" or "a.b.C"
-	Span diag.Span
+	Name   string      // "Foo" or "a.b.C" or "tuple"
+	Params []*TypeName // Type parameters for generics (e.g., tuple[int, str])
+	Span   diag.Span
 }
 
 /* ---------- Helpers ---------- */
