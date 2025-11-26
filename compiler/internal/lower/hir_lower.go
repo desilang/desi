@@ -856,13 +856,15 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Check if base is a struct
 		if ls.info != nil {
 			if st, ok := ls.info.Types[x.X].(*types.Struct); ok {
-				// Find field index
+				// Find field index and offset
 				idx := -1
+				offset := 0
 				for i, f := range st.Fields {
 					if f.Name == name {
 						idx = i
 						break
 					}
+					offset += getSize(f.Type)
 				}
 
 				if idx != -1 {
@@ -871,7 +873,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					ls.b.Emit(&hir.GetElementPtr{
 						Type:    "i8", // struct is i8 array
 						Base:    base,
-						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", idx*8)}},
+						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
 						Dst:     fieldPtr,
 					})
 
@@ -1316,6 +1318,12 @@ func lowerType(t types.T) string {
 	if t == nil {
 		return "void"
 	}
+
+	// Handle struct types explicitly
+	if _, ok := t.(*types.Struct); ok {
+		return "ptr"
+	}
+
 	name := t.String()
 	switch name {
 	case "int", "i32", "u32":

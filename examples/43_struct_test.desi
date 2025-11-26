@@ -1,12 +1,27 @@
-# Test struct definition and usage
+# Test nested structs
 
 struct Point:
     x: int
     y: int
 
+struct Rect:
+    top_left: Point
+    bottom_right: Point
+
 def main():
-    print("Testing structs")
-    # Create a Point instance
-    let p = Point(x=10, y=20)
-    print("Point created")
-    print("Done")
+    print("=== Nested Struct Test ===")
+    
+    let p1 = Point(x=0, y=0)
+    let p2 = Point(x=10, y=20)
+    
+    let r = Rect(top_left=p1, bottom_right=p2)
+    
+    print("Top Left:")
+    print(r.top_left.x)
+    print(r.top_left.y)
+    
+    print("Bottom Right:")
+    print(r.bottom_right.x)
+    print(r.bottom_right.y)
+    
+    print("=== Done ===")
