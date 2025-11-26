@@ -1,0 +1,9 @@
+# Simple function test
+
+def greet():
+    print("Hello from function")
+
+def main():
+    print("Start")
+    greet()
+    print("End")

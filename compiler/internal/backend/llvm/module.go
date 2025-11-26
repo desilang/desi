@@ -188,6 +188,8 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 		wprintf(&m.funcs, "%s %%%s", pty, p.Name)
+		// Track parameter type for operand() lookups
+		m.tempTypes[p.Name] = pty
 	}
 	wprintf(&m.funcs, ") {\n")
 
@@ -837,21 +839,9 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		if ali, ok := m.ssa[t.Name]; ok {
 			return m.operand(ali)
 		}
-		// Var is usually a pointer (alloca).
-		// But if we want the value, we should have loaded it?
-		// Tier-0 uses alloca for everything.
-		// If we pass a Var, we usually pass the pointer (by ref) or load it?
-		// Desi passes by value for primitives, by ref for others?
-		// For M14, let's assume we pass the value.
-		// But we haven't emitted a load!
-		// The Var `p` is `alloca i32`.
-		// We need to load it to pass it?
-		// Or pass the pointer?
-		// `Point_to_str(p)` expects `ptr` (self).
-		// If `p` is `alloca`, then `%p` is `ptr`.
-		// So passing `%p` is correct for `self`.
-		return "ptr", "%" + t.Name
-		return "ptr", "%" + t.Name
+		// Check if we have type info for this variable (including function parameters)
+		ty := m.inferType(t.Name)
+		return ty, "%" + t.Name
 	case hir.Undef:
 		return "undef", "undef"
 	default:
