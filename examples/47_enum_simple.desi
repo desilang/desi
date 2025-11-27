@@ -1,0 +1,12 @@
+# Simple enum constructor test
+
+enum Status:
+  Pending: none
+  Running: none
+
+def main():
+  print("Testing enum constructor")
+  let s = Status.Pending()
+  print("Created s")
+  # If s has a type, this should work
+  print("Done")

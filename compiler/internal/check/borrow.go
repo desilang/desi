@@ -77,6 +77,13 @@ func collectAwaitSpans(n ast.Node) []diag.Span {
 			}
 		case *ast.Ident, *ast.IntLit, *ast.FloatLit, *ast.BoolLit, *ast.StrLit, *ast.NoneLit:
 			// leaf
+		case *ast.MatchExpr:
+			walkExpr(x.Scrutinee)
+			for _, arm := range x.Arms {
+				walkExpr(arm.Pattern)
+				walkExpr(arm.Result)
+			}
+
 		default:
 			// unmodeled node kinds
 		}
@@ -123,12 +130,7 @@ func collectAwaitSpans(n ast.Node) []diag.Span {
 			if st.Call != nil {
 				walkExpr(st.Call)
 			}
-		case *ast.MatchStmt:
-			walkExpr(st.Scrutinee)
-			for _, arm := range st.Arms {
-				walkExpr(arm.Pattern)
-				walkExpr(arm.Result)
-			}
+
 		case *ast.DocStringStmt:
 			// ignore
 		default:
@@ -288,12 +290,7 @@ func collectLastUsesAndAwaits(body *ast.Block, inoutSet map[string]struct{}, bas
 			if st.Call != nil {
 				walkExpr(st.Call)
 			}
-		case *ast.MatchStmt:
-			walkExpr(st.Scrutinee)
-			for _, arm := range st.Arms {
-				walkExpr(arm.Pattern)
-				walkExpr(arm.Result)
-			}
+
 		case *ast.DocStringStmt:
 			// ignore
 		default:

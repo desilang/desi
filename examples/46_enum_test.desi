@@ -1,11 +1,35 @@
-# Data enum test
+# Enum and Match test
+
+enum Status:
+  Pending: none
+  Running: none
+  Completed: none
 
 enum Number:
   One: none
   Many: int
 
 def main():
-  print("Testing data enums")
-  let one = Number.One()
-  let many = Number.Many(42)
-  print("Data enums created")
+  print("Testing enums and match")
+  
+  # Test 1: Unit variants match
+  let s = Status.Pending()
+  print("Created Status.Pending")
+  let res = match s:
+    Status.Pending(): "matched"
+    _: "wildcard"
+  print(res)
+    
+  # Test 2: Data variants match (without binding for now)
+  let n = Number.Many(42)
+  match n:
+    Number.One(): print("Number is One")
+    _: print("Wildcard matched for number")
+    
+  # Test 3: Wildcard match
+  let s2 = Status.Running()
+  match s2:
+    Status.Pending(): print("Should not be here")
+    _: print("Wildcard matched for Running")
+
+  print("Done")

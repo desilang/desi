@@ -391,6 +391,22 @@ func byteOffsetFromLineCol(src []byte, line, col int) int {
 	return i
 }
 
+// lowerExpr is not fully provided in the context, but the edit implies its structure.
+// Assuming it looks something like this:
+/*
+func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
+	switch x := e.(type) {
+	// ... other cases ...
+	case *ast.MatchExpr:
+		return ls.lowerMatchExpr(x)
+	default:
+		// ... default handling ...
+	}
+	return nil
+}
+*/
+// The edit is placed to insert the MatchExpr case into such a switch.
+
 // scanStringLiteral expects src at the opening quote (or opening """ if long)
 // and returns the raw (unescaped) contents between quotes.
 // It tolerates backslash-escaped quotes by skipping the backslash.
@@ -942,6 +958,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			Type: resultType,
 		})
 		return dst
+
+	case *ast.MatchExpr:
+		return ls.lowerMatchExpr(x)
 
 	default:
 		// Print-through placeholder for anything not wired yet.

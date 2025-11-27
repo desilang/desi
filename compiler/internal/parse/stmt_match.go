@@ -9,7 +9,7 @@ import (
 //
 //	pattern: Expr
 //	_:       Expr
-func (p *Parser) parseMatch() ast.Stmt {
+func (p *Parser) parseMatch() *ast.MatchExpr {
 	start := spanPos(p.file, p.cur) // 'match'
 	p.next()                        // consume 'match'
 
@@ -25,7 +25,7 @@ func (p *Parser) parseMatch() ast.Stmt {
 	}
 	if !p.accept(token.Indent) {
 		// empty body; produce node with no arms
-		return &ast.MatchStmt{Scrutinee: scr, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+		return &ast.MatchExpr{Scrutinee: scr, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 	}
 
 	var arms []ast.MatchArm
@@ -71,7 +71,7 @@ func (p *Parser) parseMatch() ast.Stmt {
 		p.next()
 	}
 
-	return &ast.MatchStmt{
+	return &ast.MatchExpr{
 		Scrutinee: scr,
 		Arms:      arms,
 		Span:      ast.JoinSpan(start, spanPos(p.file, p.cur)),

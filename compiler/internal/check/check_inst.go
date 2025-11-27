@@ -5,7 +5,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// checkTypeCall handles T(...) where T is a type (struct or class).
+// checkTypeCall handles T(...) where T is a type (struct, class, or enum variant).
 func (c *checker) checkTypeCall(call *ast.CallExpr, sym *Symbol) types.T {
 	var t types.T
 	switch d := sym.Node.(type) {
@@ -13,6 +13,11 @@ func (c *checker) checkTypeCall(call *ast.CallExpr, sym *Symbol) types.T {
 		t = c.checkStructInit(call, d)
 	case *ast.ClassDecl:
 		t = c.checkClassInit(call, d)
+	case *ast.EnumDecl:
+		// For enum, T() is not valid - must use T.Variant()
+		// This case shouldn't normally be hit since enums use T.Variant() syntax
+		c.add(diagAt("DTE0105", call.Callee.SpanOf(), "enum types must be constructed via T.Variant() syntax"))
+		return nil
 	default:
 		c.add(diagAt("DTE0105", call.Callee.SpanOf(), "type is not instantiable"))
 		return nil

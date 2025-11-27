@@ -53,6 +53,9 @@ func (c *checker) typ(e ast.Expr) types.T {
 		}
 		return nil
 
+	case *ast.MatchExpr:
+		return c.checkMatchExpr(x)
+
 	case *ast.DictLit:
 		// Empty dict requires type annotation (deferred for now)
 		if len(x.Keys) == 0 {
@@ -779,6 +782,36 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						return funcType.Ret
 					}
 				}
+			}
+		}
+
+		// Handle enum variant constructor calls: EnumType.Variant(...)
+		// The FieldExpr (e.g., Status.Pending) should have been resolved to a function type by typFieldExpr
+		// We hust need to extract and return the return type
+		constructorType := c.typFieldExpr(fe)
+		if constructorType != nil {
+			if funcType, ok := constructorType.(*types.Func); ok {
+				// Type check arguments against function parameters
+				args := make([]types.T, len(argsNodes))
+				for i, a := range argsNodes {
+					args[i] = c.typ(a.Expr)
+				}
+
+				// Simple arity check
+				if len(args) != len(funcType.Params) {
+					c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch"))
+					return nil
+				}
+
+				// Simple type check
+				for i := range args {
+					if !types.Assignable(funcType.Params[i], args[i]) {
+						c.add(diagAt("DTE0104", argsNodes[i].Expr.SpanOf(), "argument type mismatch"))
+					}
+				}
+
+				c.info.Types[call] = funcType.Ret
+				return funcType.Ret
 			}
 		}
 		return nil

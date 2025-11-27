@@ -324,6 +324,9 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return n
 
+	case token.KW_match:
+		return p.parseMatch()
+
 	case token.KW_async:
 		// Allow: async (x, y) => expr   |   async x => expr
 		as := spanPos(p.file, p.cur)

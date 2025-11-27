@@ -93,7 +93,12 @@ func (p *Parser) parseStmt() ast.Stmt {
 
 		// Expression statement: require newline (tolerate EOF/Dedent).
 		span := ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))
-		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+
+		if _, isMatch := e.(*ast.MatchExpr); isMatch {
+			if p.cur.Tok == token.NL {
+				p.next()
+			}
+		} else if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 			p.errExpected(spanPos(p.file, p.cur), "newline")
 		}
 		return &ast.ExprStmt{Expr: e, Span: span}
@@ -124,7 +129,13 @@ func (p *Parser) parseLet() ast.Stmt {
 	}
 	val := p.parseExpr()
 
-	if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+	// If the expression was a MatchExpr, it ends with a block (Dedent),
+	// so we don't strictly need a newline separator before the next statement.
+	if _, isMatch := val.(*ast.MatchExpr); isMatch {
+		if p.cur.Tok == token.NL {
+			p.next()
+		}
+	} else if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 		p.errExpected(spanPos(p.file, p.cur), "newline")
 	}
 
@@ -150,7 +161,12 @@ func (p *Parser) parseReturn() ast.Stmt {
 
 	// Otherwise parse a value.
 	e := p.parseExpr()
-	if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+
+	if _, isMatch := e.(*ast.MatchExpr); isMatch {
+		if p.cur.Tok == token.NL {
+			p.next()
+		}
+	} else if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
 		p.errExpected(spanPos(p.file, p.cur), "newline")
 	}
 	return &ast.ReturnStmt{
