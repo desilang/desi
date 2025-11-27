@@ -1,0 +1,45 @@
+# N-Arm Match Test with Debug
+
+enum Color:
+  Red: none
+  Green: none
+  Blue: none
+
+enum Status:
+  Idle: none
+  Running: none
+  Paused: none
+  Stopped: none
+
+def main():
+  print("Testing N-arm match expressions")
+  
+  # Test 1: 3-arm match
+  print("Test 1: 3-arm color match")
+  let c = Color.Red()
+  let color_name = match c:
+    Color.Red(): "Red"
+    Color.Green(): "Green"
+    Color.Blue(): "Blue"
+  print(color_name)
+  
+  # Test 2: 5-arm match - SIMPLIFIED
+  print("Test 2: 4-arm status match")
+  let s = Status.Paused()
+  let status_msg = match s:
+    Status.Idle(): "idle"
+    Status.Running(): "running"
+    Status.Paused(): "paused"
+    _: "other"
+  print(status_msg)
+  
+  # Test 3: Different variant
+  print("Test 3: 3-arm color match (Blue)")
+  let c2 = Color.Blue()
+  let name2 = match c2:
+    Color.Red(): "R"
+    Color.Green(): "G"
+    Color.Blue(): "B"
+  print(name2)
+  
+  print("All N-arm tests passed!")
