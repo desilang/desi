@@ -10,16 +10,12 @@ import (
 func (c *checker) checkStmt(s ast.Stmt) {
 	switch st := s.(type) {
 	case *ast.LetStmt:
-		var rhs types.T
-		if st.Value != nil {
-			rhs = c.typ(st.Value)
-		}
+		rhs := c.typ(st.Value)
 		var t types.T
 		if st.Type != nil {
-			t, _ = types.FromName(st.Type.Name)
-			// Use new helper for parameterized types
+			t = c.resolveType(st.Type)
 			if t == nil {
-				t = c.resolveType(st.Type)
+				return // explicit type failed to resolve
 			}
 			if rhs != nil && !types.Assignable(t, rhs) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
@@ -98,6 +94,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.ExprStmt:
 		_ = c.typ(st.Expr)
 
+	case *ast.MatchExpr:
+		_ = c.checkMatchExpr(st)
+
 	case *ast.IfStmt:
 		_ = c.typ(st.Cond)
 		if st.Then != nil {
@@ -111,24 +110,6 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 		if st.Else != nil {
 			c.checkBlock(st.Else)
-		}
-
-	case *ast.MatchStmt:
-		// M4: we only require all arm result types to match; do NOT type the scrutinee here.
-		var want types.T
-		for _, arm := range st.Arms {
-			if arm.Result == nil {
-				continue // allow empty/side-effect arms for now
-			}
-			at := c.typ(arm.Result)
-			if want == nil {
-				want = at
-				continue
-			}
-			if at != nil && !types.Equal(at, want) {
-				c.add(diagAt("DTE0004", arm.Result.SpanOf(),
-					"match arm type mismatch"))
-			}
 		}
 
 	case *ast.WhileStmt:

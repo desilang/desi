@@ -8,13 +8,14 @@ type MatchArm struct {
 	Span    diag.Span
 }
 
-type MatchStmt struct {
+type MatchExpr struct {
 	Scrutinee Expr
 	Arms      []MatchArm
 	Span      diag.Span
 }
 
-func (m *MatchStmt) SpanOf() diag.Span { return m.Span }
+func (m *MatchExpr) SpanOf() diag.Span { return m.Span }
 
-// --- satisfy the Stmt interface (marker method) ---
-func (*MatchStmt) isStmt() {}
+// --- satisfy the Expr interface ---
+func (*MatchExpr) isExpr() {}
+func (*MatchExpr) isStmt() {} // Also satisfy Stmt for backward compatibility if needed, but better to wrap in ExprStmt

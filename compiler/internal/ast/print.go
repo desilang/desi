@@ -296,7 +296,8 @@ func (p *pp) node(n Node, d int) {
 		}
 
 	// Parse-only Match (value arms)
-	case *MatchStmt:
+	case *MatchExpr:
+		p.wr("MatchExpr ")
 		p.tabs(d)
 		p.wr("Match ")
 		p.node(n.Scrutinee, 0)

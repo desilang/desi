@@ -9,6 +9,70 @@ import (
 // Currently supports:
 // - dict methods: get, has_key, pop, clear, keys, values
 func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
+	// Special case: EnumType.Variant (accessing variant constructor on enum type)
+	// x.X might be an Ident referring to an enum type
+	if id, ok := x.X.(*ast.Ident); ok {
+		sym := c.scope.Lookup(id.Name)
+		if sym != nil && sym.Kind == SymType {
+			if enumDecl, ok := sym.Node.(*ast.EnumDecl); ok {
+				// x is EnumType.Variant
+				// Look up the enum type
+				var enumType *types.Enum
+				if sym.Type != nil {
+					enumType, _ = sym.Type.(*types.Enum)
+				}
+
+				// Verify variant exists
+				variantName := x.Name.Name
+				var variantFound bool
+				var variantParams []types.T
+
+				if enumType != nil {
+					for _, v := range enumType.Variants {
+						if v.Name == variantName {
+							variantFound = true
+							// Variant constructors take payload fields as parameters
+							for _, f := range v.Fields {
+								variantParams = append(variantParams, f.Type)
+							}
+							break
+						}
+					}
+				} else {
+					// Fallback: check AST
+					for _, v := range enumDecl.Variants {
+						if v.Name.Name == variantName {
+							variantFound = true
+							// For MVP, each variant has at most one Type field
+							if v.Type != nil {
+								if t := c.resolveType(v.Type); t != nil {
+									variantParams = append(variantParams, t)
+								}
+							}
+							break
+						}
+					}
+				}
+
+				if !variantFound {
+					c.add(diagAt("DTE0001", x.Name.Span, "undefined variant '"+variantName+"' on enum '"+id.Name+"'"))
+					return nil
+				}
+
+				// Return a function type: (params...) -> EnumType
+				// But we need the enum type
+				resultType := sym.Type
+				if resultType == nil && enumType != nil {
+					resultType = enumType
+				}
+
+				funcType := types.FuncOf(variantParams, resultType, false)
+				c.info.Types[x] = funcType
+				return funcType
+			}
+		}
+	}
+
 	t := c.typ(x.X)
 	if t == nil {
 		return nil
