@@ -54,13 +54,14 @@ func (ls *lowerState) lowerMatchExpr(m *ast.MatchExpr) hir.Value {
 	}
 
 	// Generate nested If-Else chain recursively
-	ls.lowerMatchArms(m.Arms, 0, tagVal, enumType, resPtr, llvmResType)
+	// Generate nested If-Else chain recursively
+	ls.lowerMatchArms(m, m.Arms, 0, scrutinee, tagVal, enumType, resPtr, llvmResType)
 
 	return loadResult(ls, llvmResType, resPtr)
 }
 
 // lowerMatchArms generates If-Else chain for match arms starting from index 'start'
-func (ls *lowerState) lowerMatchArms(arms []ast.MatchArm, start int, tagVal hir.Value, enumType *types.Enum, resPtr hir.Temp, llvmResType string) {
+func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, start int, scrutinee hir.Value, tagVal hir.Value, enumType *types.Enum, resPtr hir.Temp, llvmResType string) {
 	if start >= len(arms) {
 		// No more arms - this shouldn't happen if match is exhaustive
 		return
@@ -89,7 +90,7 @@ func (ls *lowerState) lowerMatchArms(arms []ast.MatchArm, start int, tagVal hir.
 
 	if cond == nil {
 		// Pattern not supported, skip to next arm
-		ls.lowerMatchArms(arms, start+1, tagVal, enumType, resPtr, llvmResType)
+		ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 		return
 	}
 
@@ -98,9 +99,51 @@ func (ls *lowerState) lowerMatchArms(arms []ast.MatchArm, start int, tagVal hir.
 	savedBlock := ls.b.Block()
 	ls.b.SetBlock(thenBlock)
 
+	// Extract payload and bind pattern variables
+	// Extract payload and bind pattern variables
+	if ls.info != nil && ls.info.MatchBindings[m] != nil {
+		bindings := ls.info.MatchBindings[m][start]
+		if len(bindings) > 0 && enumType != nil {
+			// Load payload pointer from enum (offset 4, after the i32 tag)
+			payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+			ls.b.Emit(&hir.GetElementPtr{
+				Type:    "i8",
+				Base:    scrutinee,
+				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Dst:     payloadPtrSlot,
+			})
+
+			payloadPtr := ls.b.FreshTemp("payload_ptr")
+			ls.b.Emit(&hir.Load{
+				Type: "ptr",
+				Src:  payloadPtrSlot,
+				Dst:  payloadPtr,
+			})
+
+			// For each binding, load the field value
+			for _, binding := range bindings {
+				// For MVP: single field payload, so just load directly
+				val := ls.b.FreshTemp(binding.Name)
+				ls.b.Emit(&hir.Load{
+					Type: lowerType(binding.Type),
+					Src:  payloadPtr,
+					Dst:  val,
+				})
+
+				// Store in matchLocals for use in arm body
+				ls.matchLocals[binding.Name] = val
+			}
+		}
+	}
+
 	res := ls.lowerExpr(arm.Result)
 	if llvmResType != "void" {
 		ls.b.Emit(&hir.Store{Dst: resPtr, Val: res})
+	}
+
+	// Clear matchLocals for next arm
+	for binding := range ls.matchLocals {
+		delete(ls.matchLocals, binding)
 	}
 
 	// Build else block for remaining arms
@@ -108,7 +151,7 @@ func (ls *lowerState) lowerMatchArms(arms []ast.MatchArm, start int, tagVal hir.
 	ls.b.SetBlock(elseBlock)
 
 	// Recursively handle remaining arms in else block
-	ls.lowerMatchArms(arms, start+1, tagVal, enumType, resPtr, llvmResType)
+	ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 
 	// Go back to original block and emit If
 	ls.b.SetBlock(savedBlock)

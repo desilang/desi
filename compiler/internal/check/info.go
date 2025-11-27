@@ -40,6 +40,18 @@ type Info struct {
 
 	// M14: trait implementations (TypeName -> Trait -> []*FuncDecl)
 	Impls map[string]map[string][]*ast.FuncDecl
+
+	// Match expression: pattern variable bindings
+	// Key: MatchExpr node, Value: map of arm index -> bindings
+	MatchBindings map[*ast.MatchExpr]map[int][]MatchBinding
+}
+
+// MatchBinding represents a variable bound in a match pattern
+type MatchBinding struct {
+	Name       string     // Variable name (e.g., "x")
+	Type       types.T    // Payload field type
+	FieldIndex int        // Index in variant.Fields
+	Node       *ast.Ident // The identifier node in the pattern
 }
 
 // FuncCand represents a single callable candidate.
@@ -61,13 +73,14 @@ type OverloadSet struct {
 // NewInfo allocates a fresh Info and pre-populates prelude builtins.
 func NewInfo() *Info {
 	info := &Info{
-		Types:       make(map[ast.Node]types.T),
-		Idents:      make(map[*ast.Ident]*Symbol),
-		Funcs:       make(map[string]*OverloadSet),
-		ImportPaths: make(map[string]string),
-		R:           nil,
-		Moved:       make(map[string]diag.Span),
-		Impls:       make(map[string]map[string][]*ast.FuncDecl),
+		Types:         make(map[ast.Node]types.T),
+		Idents:        make(map[*ast.Ident]*Symbol),
+		Funcs:         make(map[string]*OverloadSet),
+		ImportPaths:   make(map[string]string),
+		R:             nil,
+		Moved:         make(map[string]diag.Span),
+		Impls:         make(map[string]map[string][]*ast.FuncDecl),
+		MatchBindings: make(map[*ast.MatchExpr]map[int][]MatchBinding),
 	}
 	addPreludeBuiltins(info)
 	return info

@@ -5,12 +5,11 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// checkMatchStmt type checks a match statement.
+// checkMatchExpr type checks a match expression.
 // - Verifies scrutinee type
 // - Type checks all arms
-// - Ensures all arm results have the same type (for expression context)
-// - Checks pattern validity (enum variants exist, etc.)
-// checkMatchExpr type checks a match expression.
+// - Validates pattern variable bindings
+// - Ensures all arm results have the same type
 func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 	// Type check the scrutinee (the value being matched)
 	scrutineeType := c.typ(m.Scrutinee)
@@ -22,46 +21,123 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 	var firstResultType types.T
 
 	for i, arm := range m.Arms {
-		// Type check the pattern
-		patternType := c.typ(arm.Pattern)
+		// Handle pattern binding for enum variants
+		var bindings []MatchBinding
 
-		// For enum matches, verify pattern is compatible with scrutinee
 		if et, ok := scrutineeType.(*types.Enum); ok {
-			// If pattern is a CallExpr, it should be EnumName.Variant(...)
 			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
-				// Verify the callee resolves to a variant of this enum
-				_ = call
-				_ = et
-				// TODO: Add variant validation
+				// Pattern is EnumName.Variant(args...)
+				// Extract variant name
+				var variantName string
+				var variant *types.Variant
+
+				if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+					variantName = sel.Name.Name
+					// Find variant in enum
+					for k := range et.Variants {
+						if et.Variants[k].Name == variantName {
+							variant = &et.Variants[k]
+							break
+						}
+					}
+				}
+
+				if variant != nil {
+					// Validate binding arguments
+					if len(call.Args) > 0 {
+						// Check arity
+						if len(call.Args) != len(variant.Fields) {
+							c.add(diagAt("DTE0001", arm.Pattern.SpanOf(),
+								"pattern arity mismatch: variant has "+string(rune(len(variant.Fields)))+" field(s), got "+string(rune(len(call.Args)))))
+							goto skipBindings
+						}
+
+						// Validate each binding
+						for j, arg := range call.Args {
+							// Argument must be an identifier
+							ident, ok := arg.(*ast.Ident)
+							if !ok {
+								c.add(diagAt("DTE0001", arg.SpanOf(),
+									"pattern binding must be an identifier"))
+								continue
+							}
+
+							// Don't bind wildcards
+							if ident.Name == "_" {
+								continue
+							}
+
+							// Create binding
+							binding := MatchBinding{
+								Name:       ident.Name,
+								Type:       variant.Fields[j].Type,
+								FieldIndex: j,
+								Node:       ident,
+							}
+							bindings = append(bindings, binding)
+
+							// Add to temporary scope for arm body
+							// Create a symbol for this binding
+							sym := &Symbol{
+								Name: ident.Name,
+								Kind: SymVar,
+								Type: variant.Fields[j].Type,
+								Node: ident,
+							}
+							c.info.Idents[ident] = sym
+						}
+					}
+				}
 			}
 		}
 
-		// Type check the result expression
+	skipBindings:
+		// Store bindings for this arm
+		if len(bindings) > 0 {
+			if c.info.MatchBindings[m] == nil {
+				c.info.MatchBindings[m] = make(map[int][]MatchBinding)
+			}
+			c.info.MatchBindings[m][i] = bindings
+		}
+
+		// Type check the pattern (for validation)
+		// NOTE: Skip this for patterns with bindings, since we've already validated them
+		// and c.typ would try to evaluate binding arguments as expressions
+		if len(bindings) == 0 {
+			_ = c.typ(arm.Pattern)
+		}
+
+		// Type check the result expression (can now use bindings)
+		// Push scope for bindings
+		c.scope = NewScope(c.scope)
+		for _, b := range bindings {
+			sym := &Symbol{
+				Name: b.Name,
+				Kind: SymVar,
+				Type: b.Type,
+				Node: b.Node,
+			}
+			c.scope.Define(sym)
+		}
+
 		resultType := c.typ(arm.Result)
+		c.scope = c.scope.parent
 		if resultType == nil {
 			continue
 		}
-
-		// c.info.Types[arm.Result] is already set by c.typ(arm.Result)
 
 		// Ensure all results have consistent types
 		if i == 0 {
 			firstResultType = resultType
 		} else {
-			if !types.Equal(firstResultType, resultType) {
+			if firstResultType != nil && resultType != nil && !types.Equal(firstResultType, resultType) {
 				c.add(diagAt("DTE0001", arm.Result.SpanOf(),
 					"match arm result type '"+resultType.String()+"' does not match first arm type '"+firstResultType.String()+"'"))
 			}
 		}
-
-		// Check pattern type compatibility
-		if patternType != nil && scrutineeType != nil {
-			// Pattern should be compatible with scrutinee type
-			_ = patternType
-		}
 	}
 
-	// Store the match statement's result type (type of all arms)
+	// Store the match expression's result type
 	if firstResultType != nil {
 		c.info.Types[m] = firstResultType
 	}
