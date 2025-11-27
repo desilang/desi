@@ -850,9 +850,46 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerCall(x)
 
 	case *ast.FieldExpr:
-		// For expressions used as values, represent field access via a helper call.
 		base := ls.lowerExpr(x.X)
 		name := x.Name.Name
+
+		// Check if base is a struct
+		if ls.info != nil {
+			if st, ok := ls.info.Types[x.X].(*types.Struct); ok {
+				// Find field index
+				idx := -1
+				for i, f := range st.Fields {
+					if f.Name == name {
+						idx = i
+						break
+					}
+				}
+
+				if idx != -1 {
+					// Emit GEP + Load
+					fieldPtr := ls.b.FreshTemp("field_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8", // struct is i8 array
+						Base:    base,
+						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", idx*8)}},
+						Dst:     fieldPtr,
+					})
+
+					dst := ls.b.FreshTemp("field_val")
+					// Determine field type for Load
+					fieldType := lowerType(st.Fields[idx].Type)
+
+					ls.b.Emit(&hir.Load{
+						Type: fieldType,
+						Src:  fieldPtr,
+						Dst:  dst,
+					})
+					return dst
+				}
+			}
+		}
+
+		// Fallback for methods (dict/set) or unknown types
 		dst := ls.b.FreshTemp("field")
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})
 		return dst

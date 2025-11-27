@@ -97,6 +97,16 @@ type Multi struct{ Elems []T }
 // M9A: C-ABI pointer type cptr[T]
 type CPtr struct{ Elem T }
 
+type Field struct {
+	Name string
+	Type T
+}
+
+type Struct struct {
+	Name   string
+	Fields []Field
+}
+
 func (*List) isType()   {}
 func (*Set) isType()    {}
 func (*Dict) isType()   {}
@@ -105,6 +115,7 @@ func (*Future) isType() {}
 func (*Func) isType()   {}
 func (*Multi) isType()  {}
 func (*CPtr) isType()   {}
+func (*Struct) isType() {}
 
 func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
 func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
@@ -131,7 +142,8 @@ func (t *Multi) String() string {
 	}
 	return "multi[" + strings.Join(parts, ", ") + "]"
 }
-func (t *CPtr) String() string { return "cptr[" + t.Elem.String() + "]" }
+func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
+func (t *Struct) String() string { return t.Name }
 
 // ----- Constructors -----
 
@@ -178,6 +190,8 @@ func kindOf(t T) Kind {
 		return MultiKind
 	case *CPtr:
 		return CPtrKind
+	case *Struct:
+		return StructKind
 	// Avoid collisions with other wrappers in this package.
 	// Returning distinct pseudo-kinds keeps Equal safe (no bad type assertions).
 	case *Arena:
@@ -248,6 +262,9 @@ func Equal(a, b T) bool {
 		return true
 	case *CPtr:
 		return Equal(x.Elem, b.(*CPtr).Elem)
+	case *Struct:
+		// Nominal equality for now (name check)
+		return x.Name == b.(*Struct).Name
 	default:
 		return false
 	}

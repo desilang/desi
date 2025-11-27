@@ -78,6 +78,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Pass 2: check bodies.
 	for _, d := range mod.Decls {
 		switch dd := d.(type) {
+		case *ast.StructDecl:
+			c.checkStruct(dd)
 		case *ast.FuncDecl:
 			c.checkFunc(dd)
 		case *ast.ClassDecl:

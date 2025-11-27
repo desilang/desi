@@ -24,6 +24,18 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveSetMethod(x, s)
 	}
 
+	// Handle Struct field access
+	if s, ok := t.(*types.Struct); ok {
+		for _, f := range s.Fields {
+			if f.Name == x.Name.Name {
+				c.info.Types[x] = f.Type
+				return f.Type
+			}
+		}
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+x.Name.Name+"' on struct '"+s.Name+"'"))
+		return nil
+	}
+
 	c.add(diagAt("DTE0005", x.Span, "field access not supported on this type"))
 	return nil
 }

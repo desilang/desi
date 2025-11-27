@@ -534,6 +534,10 @@ func runEmitIR(path, iroots string) error {
 
 	// Emit LLVM IR
 	llvmMod := llvm.NewModule(mod.File)
+	// Pre-register all functions to prevent forward-declaration conflicts
+	for _, fn := range hmod.Funcs {
+		llvmMod.RegisterFunc(fn.Name)
+	}
 	for _, fn := range hmod.Funcs {
 		llvmMod.EmitFunc(fn)
 	}

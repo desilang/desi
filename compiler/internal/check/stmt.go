@@ -19,7 +19,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			t, _ = types.FromName(st.Type.Name)
 			// Use new helper for parameterized types
 			if t == nil {
-				t = fromTypeName(st.Type)
+				t = c.resolveType(st.Type)
 			}
 			if rhs != nil && !types.Assignable(t, rhs) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))

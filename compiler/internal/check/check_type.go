@@ -7,11 +7,14 @@ import (
 )
 
 func (c *checker) collectStruct(d *ast.StructDecl) {
+	// Create struct type (fields populated in Pass 2)
+	st := &types.Struct{Name: d.Name.Name}
+
 	// Register the struct type name.
 	c.scope.Define(&Symbol{
 		Name: d.Name.Name,
 		Kind: SymType,
-		Type: types.Type,
+		Type: st,
 		Node: d,
 	})
 
@@ -62,4 +65,28 @@ func (c *checker) ensureDefaultDisplay(typeName string) {
 		c.info.Impls[typeName] = make(map[string][]*ast.FuncDecl)
 	}
 	c.info.Impls[typeName]["Display"] = []*ast.FuncDecl{defaultMethod}
+}
+
+func (c *checker) checkStruct(d *ast.StructDecl) {
+	sym := c.scope.Lookup(d.Name.Name)
+	if sym == nil || sym.Type == nil {
+		return
+	}
+
+	st, ok := sym.Type.(*types.Struct)
+	if !ok {
+		return
+	}
+
+	// Resolve fields
+	for _, f := range d.Fields {
+		var fieldType types.T = types.Any // default
+		if f.Type != nil {
+			fieldType = c.resolveType(f.Type)
+		}
+		st.Fields = append(st.Fields, types.Field{
+			Name: f.Name.Name,
+			Type: fieldType,
+		})
+	}
 }
