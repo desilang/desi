@@ -63,6 +63,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 			c.collectFunc(dd)
 		case *ast.StructDecl:
 			c.collectStruct(dd)
+		case *ast.EnumDecl:
+			c.collectEnum(dd)
 		case *ast.ClassDecl:
 			c.collectClass(dd)
 		case *ast.TraitDecl:
@@ -80,6 +82,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		switch dd := d.(type) {
 		case *ast.StructDecl:
 			c.checkStruct(dd)
+		case *ast.EnumDecl:
+			c.checkEnum(dd)
 		case *ast.FuncDecl:
 			c.checkFunc(dd)
 		case *ast.ClassDecl:

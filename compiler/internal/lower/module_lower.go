@@ -53,6 +53,14 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 		}
 	}
 
+	// Generate constructors for enum declarations
+	for _, d := range mod.Decls {
+		if ed, ok := d.(*ast.EnumDecl); ok {
+			constructors := LowerEnumConstructors(ed, info)
+			out.Funcs = append(out.Funcs, constructors...)
+		}
+	}
+
 	// Lower explicit ImplDecl methods
 	for _, d := range mod.Decls {
 		if impl, ok := d.(*ast.ImplDecl); ok {
