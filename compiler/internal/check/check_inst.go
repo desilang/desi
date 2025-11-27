@@ -7,18 +7,29 @@ import (
 
 // checkTypeCall handles T(...) where T is a type (struct or class).
 func (c *checker) checkTypeCall(call *ast.CallExpr, sym *Symbol) types.T {
+	var t types.T
 	switch d := sym.Node.(type) {
 	case *ast.StructDecl:
-		return c.checkStructInit(call, d)
+		t = c.checkStructInit(call, d)
 	case *ast.ClassDecl:
-		return c.checkClassInit(call, d)
+		t = c.checkClassInit(call, d)
 	default:
 		c.add(diagAt("DTE0105", call.Callee.SpanOf(), "type is not instantiable"))
 		return nil
 	}
+	// Store the type for the call expression
+	c.info.Types[call] = t
+	return t
 }
 
 func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T {
+	// Look up the actual struct type from the symbol table
+	sym := c.scope.Lookup(d.Name.Name)
+	var st *types.Struct
+	if sym != nil && sym.Type != nil {
+		st, _ = sym.Type.(*types.Struct)
+	}
+
 	// Helper to map fields.
 	fields := make(map[string]*ast.FieldDecl)
 	for _, f := range d.Fields {
@@ -47,10 +58,22 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 
 		// Check type.
 		valT := c.typ(arg.Expr)
-		var fieldT types.T = types.None // Default
-		if f.Type != nil {
-			if t, ok := types.FromName(f.Type.Name); ok {
-				fieldT = t
+		var fieldT types.T = types.None
+
+		// Get resolved field type from struct definition
+		if st != nil {
+			for _, sf := range st.Fields {
+				if sf.Name == name {
+					fieldT = sf.Type
+					break
+				}
+			}
+		} else {
+			// Fallback (shouldn't happen if struct was collected)
+			if f.Type != nil {
+				if t, ok := types.FromName(f.Type.Name); ok {
+					fieldT = t
+				}
 			}
 		}
 
@@ -67,6 +90,10 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 	}
 
 	// Return the struct instance type.
+	if st != nil {
+		return st
+	}
+	// Fallback (shouldn't happen if checkStruct ran)
 	return types.Basic(d.Name.Name, types.StructKind)
 }
 

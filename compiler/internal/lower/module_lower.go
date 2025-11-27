@@ -6,6 +6,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
@@ -105,61 +106,72 @@ func isExternDecorated(fd *ast.FuncDecl) bool {
 
 // LowerStructConstructor generates a constructor function for a struct.
 // Constructor signature: StructName(field1_type %field1, ...) -> ptr
-// Implementation: alloca struct, store fields, return pointer
+// Implementation: malloc struct, store fields, return pointer
 func LowerStructConstructor(sd *ast.StructDecl, info *check.Info) *hir.Func {
 	structName := sd.Name.Name
 	b := hir.NewFunc(structName)
 
-	// Create parameters from struct fields
-	var params []hir.Param
-	for _, field := range sd.Fields {
-		fieldType := "i32" // default to int
-		if field.Type != nil {
-			// Map type name to LLVM type
-			switch field.Type.Name {
-			case "int", "i32":
-				fieldType = "i32"
-			case "i64", "u64":
-				fieldType = "i64"
-			case "bool":
-				fieldType = "i1"
-			case "str":
-				fieldType = "ptr"
-			default:
-				fieldType = "i32" // default
-			}
-		}
-		params = append(params, hir.Param{
-			Name: field.Name.Name,
-			Type: fieldType,
-		})
+	// Look up struct type to get resolved field types
+	var st *types.Struct
+	if t := info.Types[sd]; t != nil {
+		st, _ = t.(*types.Struct)
 	}
 
-	// Calculate struct size (simplified - assume all fields are same size for now)
-	// In real implementation, would need proper struct layout
-	structSize := len(sd.Fields) * 8 // 8 bytes per field (i64/ptr)
+	// Calculate layout and create parameters
+	var params []hir.Param
+	var offsets []int
+	currentOffset := 0
+
+	for i, field := range sd.Fields {
+		var fieldType types.T
+		if st != nil && i < len(st.Fields) {
+			fieldType = st.Fields[i].Type
+		}
+
+		// Calculate size and offset
+		size := getSize(fieldType)
+		offsets = append(offsets, currentOffset)
+		currentOffset += size
+
+		// Determine LLVM type for parameter
+		llvmType := lowerType(fieldType)
+
+		params = append(params, hir.Param{
+			Name: field.Name.Name,
+			Type: llvmType,
+		})
+	}
+	b.Func().Params = params
+	b.Func().RetType = "ptr"
+
+	structSize := currentOffset
+	if structSize == 0 {
+		structSize = 1 // Minimum allocation
+	}
 
 	// Create entry block
 	entry := hir.NewBlock("entry")
 
-	// Allocate space for struct
+	// Allocate space for struct using malloc
 	structPtr := hir.Temp{Name: "%struct_ptr"}
-	entry.Stmts = append(entry.Stmts, &hir.Alloca{
-		Type:  "i8", // byte array
-		Count: structSize,
-		Dst:   structPtr,
+	entry.Stmts = append(entry.Stmts, &hir.Call{
+		Dst:  structPtr,
+		Fn:   "malloc",
+		Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", structSize)}},
+		Type: "ptr",
 	})
 
 	// Store each field
 	for i, field := range sd.Fields {
 		paramVar := hir.Var{Name: field.Name.Name}
+		offset := offsets[i]
 
 		// GEP to field offset
 		fieldPtr := hir.Temp{Name: fmt.Sprintf("%%field_%s_ptr", field.Name.Name)}
 		entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 			Type:    "i8",
 			Base:    structPtr,
-			Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8)}}, // Simplified offset
+			Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
 			Dst:     fieldPtr,
 		})
 
@@ -173,11 +185,36 @@ func LowerStructConstructor(sd *ast.StructDecl, info *check.Info) *hir.Func {
 	// Return struct pointer
 	entry.Stmts = append(entry.Stmts, &hir.Ret{Val: structPtr})
 
-	f := b.Func()
-	f.Name = structName
-	f.Params = params
-	f.RetType = "ptr" // Return pointer to struct
-	f.Blocks = []*hir.Block{entry}
+	b.Func().Blocks = []*hir.Block{entry}
+	return b.Func()
+}
 
-	return f
+// getSize returns the size in bytes for a given type
+func getSize(t types.T) int {
+	if t == nil {
+		return 8 // default to pointer size
+	}
+
+	// Handle struct types (pointers)
+	if _, ok := t.(*types.Struct); ok {
+		return 8
+	}
+
+	name := t.String()
+	switch name {
+	case "int", "i32", "u32":
+		return 4
+	case "i64", "u64", "isize", "usize":
+		return 8
+	case "bool":
+		return 1
+	case "float", "f64":
+		return 8
+	case "f32":
+		return 4
+	case "str":
+		return 8 // ptr
+	default:
+		return 8 // pointers, etc.
+	}
 }

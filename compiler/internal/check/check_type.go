@@ -18,6 +18,9 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 		Node: d,
 	})
 
+	// Store type for backend access
+	c.info.Types[d] = st
+
 	// M14 Stage 2: Auto-generate default Display impl if not provided
 	c.ensureDefaultDisplay(d.Name.Name)
 }
