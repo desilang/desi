@@ -127,7 +127,10 @@ type Ret struct{ Val Value } // nil => void ret
 
 func (*Ret) isStmt() {}
 
-type Drop struct{ Val Value }
+type Drop struct {
+	Val  Value
+	Type interface{} // types.T from type checker (helps backend with cleanup)
+}
 
 func (*Drop) isStmt() {}
 
