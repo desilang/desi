@@ -1,0 +1,9 @@
+enum Dummy:
+    A: none
+    B: none
+
+def main():
+    let x = Dummy.A()
+    match x:
+        Dummy.A(): 42
+        Dummy.B(): "string"
