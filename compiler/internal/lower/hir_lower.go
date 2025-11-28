@@ -29,6 +29,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 		info:                info,
 		src:                 nil,
 		tempsFromArenaAlloc: map[string]bool{},
+		matchLocals:         map[string]hir.Value{},
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
@@ -46,6 +47,7 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 		info:                info,
 		src:                 src,
 		tempsFromArenaAlloc: map[string]bool{},
+		matchLocals:         map[string]hir.Value{},
 	}
 	ls.lowerBlock(fd.Body)
 	f := b.Func()
@@ -99,6 +101,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 		info:                info,
 		src:                 src,
 		tempsFromArenaAlloc: map[string]bool{},
+		matchLocals:         map[string]hir.Value{},
 	}
 	ls.lowerBlock(blk)
 	return b.Func()
@@ -123,7 +126,8 @@ type lowerState struct {
 	info       *check.Info
 	src        []byte // optional: original source for literal materialization
 
-	tempsFromArenaAlloc map[string]bool // temp.Name -> true if produced by ArenaAlloc
+	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
+	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
 }
 
 type scope struct {
@@ -258,6 +262,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.ExprStmt:
 		_ = ls.lowerExpr(s.Expr) // materialize side effects if needed
+
+	case *ast.MatchExpr:
+		_ = ls.lowerMatchExpr(s)
 
 	case *ast.ReturnStmt:
 		// Before returning, run defers and drop locals from all open scopes (inner→outer).
@@ -784,6 +791,11 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: "<index_expr>"}
 
 	case *ast.Ident:
+		// Check if this is a pattern binding variable first
+		if val, ok := ls.matchLocals[x.Name]; ok {
+			return val
+		}
+
 		// If this is a mutable variable, emit a Load instruction
 		if ls.isMutable(x.Name) {
 			dst := ls.b.FreshTemp("load")

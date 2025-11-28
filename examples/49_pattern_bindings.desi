@@ -1,0 +1,36 @@
+# Pattern Variable Bindings Test
+
+enum Option:
+  Some: int
+  None: none
+
+enum Result:
+  Ok: str
+  Err: int
+
+def main():
+  print("Testing pattern variable bindings")
+  
+  # Test 1: Extract int from Some
+  print("Test 1: Extract int payload")
+  let opt = Option.Some(42)
+  match opt:
+    Option.Some(x): print(x)  # Should print 42
+    Option.None(): print("none")
+  
+  # Test 2: Extract str from Ok
+  print("Test 2: Extract str payload")
+  let res = Result.Ok("success")
+  match res:
+    Result.Ok(msg): print(msg)  # Should print "success"
+    Result.Err(code): print(code)
+  
+  # Test 3: Use binding in expression
+  print("Test 3: Use binding in match result")
+  let n = Option.Some(10)
+  let doubled = match n:
+    Option.Some(val): val
+    Option.None(): 0
+  print(doubled)  # Should print 10
+  
+  print("All binding tests passed!")
