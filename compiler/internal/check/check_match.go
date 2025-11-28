@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -140,6 +142,48 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 	// Store the match expression's result type
 	if firstResultType != nil {
 		c.info.Types[m] = firstResultType
+	}
+
+	// Exhaustiveness check
+	if et, ok := scrutineeType.(*types.Enum); ok {
+		covered := make(map[string]bool)
+		hasWildcard := false
+
+		for _, arm := range m.Arms {
+			// Check for wildcard
+			if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name == "_" {
+				hasWildcard = true
+				break
+			}
+
+			// Check for variant match
+			var variantName string
+			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+				if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+					variantName = sel.Name.Name
+				}
+			} else if sel, ok := arm.Pattern.(*ast.FieldExpr); ok {
+				variantName = sel.Name.Name
+			}
+
+			if variantName != "" {
+				covered[variantName] = true
+			}
+		}
+
+		if !hasWildcard {
+			var missing []string
+			for _, v := range et.Variants {
+				if !covered[v.Name] {
+					missing = append(missing, v.Name)
+				}
+			}
+
+			if len(missing) > 0 {
+				msg := "match is not exhaustive. Missing variants: " + strings.Join(missing, ", ")
+				c.add(diagAt("DW0007", m.Span, msg))
+			}
+		}
 	}
 
 	return firstResultType
