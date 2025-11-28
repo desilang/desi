@@ -83,7 +83,7 @@ func (m *Module) emitStructDrop(val string, st *types.Struct) {
 		// GEP to field i
 		fieldPtr := fmt.Sprintf("%%field_ptr_%d_%d", m.tempID, i)
 		m.tempID++
-		fmt.Fprintf(&m.funcs, "  %s = getelementptr inbounds %%%s, ptr %s, i32 0, i32 %d\n",
+		fmt.Fprintf(&m.funcs, "  %s = getelementptr %%%s, ptr %s, i32 0, i32 %d\n",
 			fieldPtr, st.Name, val, i)
 
 		// Load field value
