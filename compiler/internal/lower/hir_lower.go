@@ -87,6 +87,22 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	for _, p := range fd.Params {
 		f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: "ptr"})
 	}
+	if fd.RetType != nil {
+		switch fd.RetType.Name {
+		case "str":
+			f.RetType = "ptr"
+		case "int":
+			f.RetType = "i32"
+		case "bool":
+			f.RetType = "i1"
+		case "float":
+			f.RetType = "double"
+		case "none":
+			f.RetType = "void"
+		default:
+			f.RetType = "ptr"
+		}
+	}
 
 	return f
 }

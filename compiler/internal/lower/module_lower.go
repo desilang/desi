@@ -68,7 +68,10 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 			for _, m := range impl.Methods {
 				// Mangle: Type_Method
 				name := fmt.Sprintf("%s_%s", typeName, m.Name.Name)
-				out.Funcs = append(out.Funcs, LowerBlockFromSource(name, m.Body, info, src))
+				// Use LowerFuncFromDecl to properly handle parameters and return types
+				fn := LowerFuncFromDecl(m, info, src)
+				fn.Name = name
+				out.Funcs = append(out.Funcs, fn)
 			}
 		}
 	}
