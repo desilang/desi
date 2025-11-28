@@ -1,0 +1,17 @@
+
+# Your exact example - testing union types and nullable types
+struct MyStruct:
+    item: str
+    value: int|float  # Union type
+
+def main():
+    # default nullable
+    let apple = MyStruct(item="apple", value=none)
+    # int
+    let banana = MyStruct(item="banana", value=9)
+    # float 
+    let random = MyStruct(item="random", value=2.4)
+    # error for value as hex is not type for value
+    let error_item = MyStruct(item="error_item", value=0x4)
+    
+    print("If this prints, union types work!")

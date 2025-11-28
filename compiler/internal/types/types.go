@@ -95,6 +95,9 @@ type Func struct {
 }
 type Multi struct{ Elems []T }
 
+// Union type for sum types: int|float, MyStruct|YourEnum, etc.
+type Union struct{ Variants []T }
+
 // M9A: C-ABI pointer type cptr[T]
 type CPtr struct{ Elem T }
 
@@ -126,6 +129,7 @@ func (*Tuple) isType()  {}
 func (*Future) isType() {}
 func (*Func) isType()   {}
 func (*Multi) isType()  {}
+func (*Union) isType()  {}
 func (*CPtr) isType()   {}
 func (*Struct) isType() {}
 func (*Enum) isType()   {}
@@ -155,6 +159,13 @@ func (t *Multi) String() string {
 	}
 	return "multi[" + strings.Join(parts, ", ") + "]"
 }
+func (t *Union) String() string {
+	parts := make([]string, len(t.Variants))
+	for i, v := range t.Variants {
+		parts[i] = v.String()
+	}
+	return strings.Join(parts, "|")
+}
 func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
 func (t *Struct) String() string { return t.Name }
 func (t *Enum) String() string   { return t.Name }
@@ -179,6 +190,11 @@ func MultiOf(elems ...T) *Multi {
 	cp := make([]T, len(elems))
 	copy(cp, elems)
 	return &Multi{Elems: cp}
+}
+func UnionOf(variants ...T) *Union {
+	cp := make([]T, len(variants))
+	copy(cp, variants)
+	return &Union{Variants: cp}
 }
 func CPtrOf(elem T) *CPtr { return &CPtr{Elem: elem} }
 
@@ -276,6 +292,17 @@ func Equal(a, b T) bool {
 			}
 		}
 		return true
+	case *Union:
+		y := b.(*Union)
+		if len(x.Variants) != len(y.Variants) {
+			return false
+		}
+		for i := range x.Variants {
+			if !Equal(x.Variants[i], y.Variants[i]) {
+				return false
+			}
+		}
+		return true
 	case *CPtr:
 		return Equal(x.Elem, b.(*CPtr).Elem)
 	case *Struct:
@@ -292,6 +319,7 @@ func Equal(a, b T) bool {
 // Assignable reports if a value of type src can be assigned to a destination of type dst.
 // Phase-1 semantics: exact type equality only (monomorphic), except that `none` is
 // assignable to itself only (no optionals yet).
+// Union types: src is assignable to dst if dst is a union and src matches any variant.
 func Assignable(dst, src T) bool {
 	if dst == src {
 		return true
@@ -302,6 +330,15 @@ func Assignable(dst, src T) bool {
 	// Any accepts anything
 	if kindOf(dst) == AnyKind {
 		return true
+	}
+	// Union type: check if src matches any variant
+	if u, ok := dst.(*Union); ok {
+		for _, variant := range u.Variants {
+			if Assignable(variant, src) {
+				return true
+			}
+		}
+		return false
 	}
 	// exact structural equality
 	return Equal(dst, src)

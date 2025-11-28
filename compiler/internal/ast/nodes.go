@@ -7,6 +7,13 @@ type Node interface{ SpanOf() diag.Span }
 
 /* ---------- Module / Decls ---------- */
 
+type TypeName struct {
+	Name       string
+	Params     []*TypeName // e.g., list[int], dict[str, int]
+	UnionTypes []*TypeName // e.g., int|float|none (if present, Name is empty)
+	Span       diag.Span
+}
+
 type Module struct {
 	File  string
 	Decls []Decl
@@ -235,14 +242,6 @@ func (*FieldExpr) isExpr()             {}
 func (x *FieldExpr) SpanOf() diag.Span { return x.Span }
 
 /* ---------- Types (minimal) ---------- */
-
-type TypeName struct {
-	Name   string      // "Foo" or "a.b.C" or "tuple"
-	Params []*TypeName // Type parameters for generics (e.g., tuple[int, str])
-	Span   diag.Span
-}
-
-/* ---------- Helpers ---------- */
 
 // JoinSpan returns a Span spanning [a,b] (or a if b is zero/empty).
 func JoinSpan(a, b diag.Span) diag.Span {
