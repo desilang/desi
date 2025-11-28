@@ -9,13 +9,59 @@ import (
 
 // emitDrop generates cleanup code for a value based on its type
 func (m *Module) emitDrop(x *hir.Drop) {
-	// TODO: Implement proper memory management
-	// Current issue: we're trying to free stack-allocated variables (%opt)
-	// instead of the heap-allocated values they hold (%call3).
-	// Need to rethink how we track the actual heap pointers vs stack slots.
-	// For now, leaving as no-op to prevent crashes.
-	_ = x // Suppress unused warning
-	return
+	// If no type information, can't do anything
+	if x.Type == nil {
+		return
+	}
+
+	varName, ok := x.Val.(hir.Var)
+	if !ok {
+		return // Can only drop variables
+	}
+
+	t, ok := x.Type.(types.T)
+	if !ok {
+		return
+	}
+
+	// Only free heap-allocated types (Enums and Structs)
+	// Primitives (int, bool, str, etc.) don't need cleanup
+	var needsCleanup bool
+
+	if _, ok := t.(*types.Enum); ok {
+		needsCleanup = true
+	} else if _, ok := t.(*types.Struct); ok {
+		needsCleanup = true
+	}
+
+	if !needsCleanup {
+		return
+	}
+
+	// Get the actual value to free (handles SSA lookup automatically)
+	// The operand() method will:
+	// 1. Check SSA map for the variable
+	// 2. Return the actual heap pointer (e.g., %call3)
+	// 3. For mutable variables, return %%%varName which we'll need to load
+	_, ptrValue := m.operand(varName)
+
+	// If the returned value starts with %%, it's a variable reference
+	// We need to load it (mutable variable case)
+	var ptrToFree string
+	if len(ptrValue) > 0 && ptrValue[0] == '%' && m.ssa[varName.Name] == nil {
+		// Mutable variable case: need to load from alloca
+		loadTemp := fmt.Sprintf("%%drop_load_%d", m.tempID)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", loadTemp, ptrValue)
+		ptrToFree = loadTemp
+	} else {
+		// SSA value case: use directly
+		ptrToFree = ptrValue
+	}
+
+	// Generate free call
+	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", ptrToFree)
+	m.ensureDecl("declare void @free(ptr)")
 }
 
 // emitEnumDrop generates cleanup code for an enum value
