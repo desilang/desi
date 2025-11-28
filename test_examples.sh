@@ -2,6 +2,9 @@
 # Test all working example files (26+) to ensure no regressions
 # Usage: ./test_examples.sh [start_number]
 # Example: ./test_examples.sh 26
+#
+# Expected failure tests: Add "# EXPECTED: COMPILE_ERROR" or "# EXPECTED: RUNTIME_ERROR" 
+# as the first line of the test file
 
 set -e
 
@@ -42,18 +45,52 @@ for f in examples/[2-9][0-9]_*.desi; do
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
     echo "[$TOTAL_COUNT] Testing: $f"
     
+    # Check if this test is expected to fail
+    EXPECTED_FAIL=$(head -n 1 "$f" | grep "# EXPECTED:" || true)
+    
     # Build and run
+    COMPILE_SUCCESS=false
+    RUNTIME_SUCCESS=false
+    
     if ./build-desi.sh "$f" "test_exec" > /dev/null 2>&1; then
+        COMPILE_SUCCESS=true
         if ./build/output/test_exec > /dev/null 2>&1; then
+            RUNTIME_SUCCESS=true
+        fi
+    fi
+    
+    # Determine if test passed based on expectations
+    if [[ -n "$EXPECTED_FAIL" ]]; then
+        # Expected to fail
+        if echo "$EXPECTED_FAIL" | grep -q "COMPILE_ERROR"; then
+            if [[ "$COMPILE_SUCCESS" == false ]]; then
+                echo "  ✓ PASSED (expected compile error)"
+                PASSED_COUNT=$((PASSED_COUNT + 1))
+            else
+                echo "  ❌ FAILED (expected compile error, but compiled successfully)"
+                FAILED_TESTS+=("$f (unexpected success)")
+            fi
+        elif echo "$EXPECTED_FAIL" | grep -q "RUNTIME_ERROR"; then
+            if [[ "$COMPILE_SUCCESS" == true && "$RUNTIME_SUCCESS" == false ]]; then
+                echo "  ✓ PASSED (expected runtime error)"
+                PASSED_COUNT=$((PASSED_COUNT + 1))
+            else
+                echo "  ❌ FAILED (expected runtime error, but ran successfully)"
+                FAILED_TESTS+=("$f (unexpected success)")
+            fi
+        fi
+    else
+        # Expected to pass
+        if [[ "$COMPILE_SUCCESS" == true && "$RUNTIME_SUCCESS" == true ]]; then
             echo "  ✓ PASSED"
             PASSED_COUNT=$((PASSED_COUNT + 1))
+        elif [[ "$COMPILE_SUCCESS" == false ]]; then
+            echo "  ❌ FAILED (compile error)"
+            FAILED_TESTS+=("$f (compile)")
         else
             echo "  ❌ FAILED (runtime error)"
             FAILED_TESTS+=("$f (runtime)")
         fi
-    else
-        echo "  ❌ FAILED (compile error)"
-        FAILED_TESTS+=("$f (compile)")
     fi
     echo ""
 done

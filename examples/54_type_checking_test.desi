@@ -1,4 +1,5 @@
-
+# EXPECTED: COMPILE_ERROR
+# Test: Wrong types should be rejected
 struct TestTypes:
     name: str
     count: int

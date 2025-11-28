@@ -1,4 +1,5 @@
-
+# EXPECTED: COMPILE_ERROR
+# Test: Non-exhaustive match should trigger warning
 enum Color:
     Red: none
     Green: none
@@ -11,3 +12,4 @@ def main():
     match c:
         Color.Red(): print("Red")
         Color.Green(): print("Green")
+        # Missing Blue - should trigger DW0007 warning
