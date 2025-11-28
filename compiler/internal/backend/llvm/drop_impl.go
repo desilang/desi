@@ -24,25 +24,11 @@ func (m *Module) emitDrop(x *hir.Drop) {
 		return
 	}
 
-	// Only free heap-allocated types (Enums and Structs)
-	// Primitives (int, bool, str, etc.) don't need cleanup
-	var needsCleanup bool
-
-	if _, ok := t.(*types.Enum); ok {
-		needsCleanup = true
-	} else if _, ok := t.(*types.Struct); ok {
-		needsCleanup = true
-	}
-
-	if !needsCleanup {
+	if !isHeapType(t) {
 		return
 	}
 
 	// Get the actual value to free (handles SSA lookup automatically)
-	// The operand() method will:
-	// 1. Check SSA map for the variable
-	// 2. Return the actual heap pointer (e.g., %call3)
-	// 3. For mutable variables, return %%%varName which we'll need to load
 	_, ptrValue := m.operand(varName)
 
 	// If the returned value starts with %%, it's a variable reference
@@ -59,32 +45,56 @@ func (m *Module) emitDrop(x *hir.Drop) {
 		ptrToFree = ptrValue
 	}
 
-	// Generate free call
-	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", ptrToFree)
+	m.emitDropForType(ptrToFree, t)
+}
+
+// emitDropForType recursively drops a value of type t
+func (m *Module) emitDropForType(val string, t types.T) {
+	// Null check
+	cond := fmt.Sprintf("%%drop_cond_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = icmp eq ptr %s, null\n", cond, val)
+
+	dropLabel := fmt.Sprintf("drop_do_%d", m.mergeID)
+	doneLabel := fmt.Sprintf("drop_done_%d", m.mergeID)
+	m.mergeID++
+
+	fmt.Fprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", cond, doneLabel, dropLabel)
+
+	fmt.Fprintf(&m.funcs, "\n%s:\n", dropLabel)
+	if st, ok := t.(*types.Struct); ok {
+		m.emitStructDrop(val, st)
+	} else if et, ok := t.(*types.Enum); ok {
+		m.emitEnumDrop(val, et)
+	}
+	fmt.Fprintf(&m.funcs, "  br label %%%s\n", doneLabel)
+
+	fmt.Fprintf(&m.funcs, "\n%s:\n", doneLabel)
+}
+
+// emitStructDrop generates cleanup code for a struct value
+func (m *Module) emitStructDrop(val string, st *types.Struct) {
+	// TODO: Recursively drop heap-allocated fields
+	// For now, just free the struct pointer itself to avoid the main leak
+	// This prevents the struct allocation from leaking, but nested heap types may still leak
+
+	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 }
 
 // emitEnumDrop generates cleanup code for an enum value
-func (m *Module) emitEnumDrop(varName string, enumType *types.Enum) {
-	// Enums are heap-allocated pointers
-	// Layout: i32 tag at offset 0, ptr payload at offset 4
+func (m *Module) emitEnumDrop(val string, et *types.Enum) {
+	// TODO: Load tag, switch on variants, recursively drop payloads
+	// For now, just free the enum pointer itself to avoid the main leak
 
-	// TODO: Free payloads for variants with fields
-	// For now, we only free the enum struct itself to avoid crashes
-	// from trying to free unallocated payloads (variants with no fields)
-	// This still prevents the main leak (the enum struct)
-
-	// Free the enum struct itself
-	fmt.Fprintf(&m.funcs, "  call void @free(ptr %%%s)\n", varName)
+	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 }
 
-// emitStructDrop generates cleanup code for a struct value
-func (m *Module) emitStructDrop(varName string, structType *types.Struct) {
-	// Structs are heap-allocated pointers
-	// For now, just free the struct pointer
-	// TODO: Recursively drop fields if they contain heap-allocated types
-
-	fmt.Fprintf(&m.funcs, "  call void @free(ptr %%%s)\n", varName)
-	m.ensureDecl("declare void @free(ptr)")
+func isHeapType(t types.T) bool {
+	switch t.(type) {
+	case *types.Struct, *types.Enum, *types.List, *types.Dict, *types.Set:
+		return true
+	}
+	return false
 }
