@@ -398,7 +398,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				m.emitRet(x)
 
 			case *hir.Drop:
-				// Tier-0 no-op
+				m.emitDrop(x)
 			case *hir.IncRef:
 				// Tier-0 no-op
 			case *hir.DecRef:

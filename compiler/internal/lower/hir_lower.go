@@ -24,7 +24,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 nil,
@@ -42,7 +42,7 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -112,7 +112,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -151,9 +151,10 @@ type scope struct {
 	rcLike     map[string]bool // locals that are rc/arc
 	moved      map[string]bool // locals moved-from; skip drop
 	defers     []hir.Value
-	arenas     map[string]bool // names that are arena handles in this scope
-	arenaOwned map[string]bool // locals whose storage originates from arena.alloc
-	mutable    map[string]bool // variables declared with mut
+	arenas     map[string]bool    // names that are arena handles in this scope
+	arenaOwned map[string]bool    // locals whose storage originates from arena.alloc
+	mutable    map[string]bool    // variables declared with mut
+	types      map[string]types.T // variable types for Drop
 }
 
 func (ls *lowerState) push() {
@@ -165,6 +166,7 @@ func (ls *lowerState) push() {
 		arenas:     map[string]bool{},
 		arenaOwned: map[string]bool{},
 		mutable:    map[string]bool{},
+		types:      map[string]types.T{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -211,6 +213,13 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 		}
 		ls.cur().locals = append(ls.cur().locals, s.Name.Name)
+
+		// Store type for Drop instruction
+		if varType != nil {
+			if t, ok := varType.(types.T); ok {
+				ls.cur().types[s.Name.Name] = t
+			}
+		}
 
 		// Track if variable is mutable
 		if s.Mutable {
@@ -565,7 +574,7 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if sc.rcLike[name] {
 			ls.b.Emit(&hir.DecRef{Val: hir.Var{Name: name}})
 		} else {
-			ls.b.Emit(&hir.Drop{Val: hir.Var{Name: name}})
+			ls.b.Emit(&hir.Drop{Val: hir.Var{Name: name}, Type: sc.types[name]})
 		}
 	}
 	// defers
@@ -579,6 +588,8 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		// rc-like target?
 		if varName, ok := v.(hir.Var); ok && sc.rcLike[varName.Name] {
 			ls.b.Emit(&hir.DecRef{Val: v})
+		} else if varName, ok := v.(hir.Var); ok {
+			ls.b.Emit(&hir.Drop{Val: v, Type: sc.types[varName.Name]})
 		} else {
 			ls.b.Emit(&hir.Drop{Val: v})
 		}
