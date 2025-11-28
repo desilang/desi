@@ -202,7 +202,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	variadic := false
 	for i, p := range fd.Params {
 		if p.Type != nil {
-			if tt := surfaceToType(p.Type.Name); tt != nil {
+			if tt := c.resolveType(p.Type); tt != nil {
 				// If this is a variadic parameter, wrap in list[T]
 				if p.Variadic {
 					params[i] = types.ListOf(tt)
@@ -217,7 +217,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	}
 	var ret types.T = types.None
 	if fd.RetType != nil {
-		if tt := surfaceToType(fd.RetType.Name); tt != nil {
+		if tt := c.resolveType(fd.RetType); tt != nil {
 			ret = tt
 		}
 	}
@@ -266,7 +266,7 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		p := fd.Params[i]
 		var pt types.T
 		if p.Type != nil {
-			pt = surfaceToType(p.Type.Name)
+			pt = c.resolveType(p.Type)
 		}
 		if p.Variadic {
 			pt = types.ListOf(pt)
@@ -279,7 +279,7 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	// Declared return type (if any).
 	c.curFuncRet = types.None
 	if fd.RetType != nil {
-		if tt := surfaceToType(fd.RetType.Name); tt != nil {
+		if tt := c.resolveType(fd.RetType); tt != nil {
 			c.curFuncRet = tt
 		}
 	}
