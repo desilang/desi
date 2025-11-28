@@ -131,6 +131,22 @@ func init() {
 		injectUserFuncSigs(astMod)
 	}
 
+	// Collect all struct and enum declarations from AST modules
+	var allStructDecls []*ast.StructDecl
+	var allEnumDecls []*ast.EnumDecl
+	for _, astMod := range allASTs {
+		for _, decl := range astMod.Decls {
+			if structDecl, ok := decl.(*ast.StructDecl); ok {
+				allStructDecls = append(allStructDecls, structDecl)
+			} else if enumDecl, ok := decl.(*ast.EnumDecl); ok {
+				allEnumDecls = append(allEnumDecls, enumDecl)
+			}
+		}
+	}
+
+	// Emit struct/enum type definitions before functions
+	lm.EmitTypeDefs(allStructDecls, allEnumDecls, res.Info)
+
 	// Mark all functions as defined to avoid unnecessary declarations
 	for _, hirMod := range allModules {
 		for _, f := range hirMod.Funcs {
