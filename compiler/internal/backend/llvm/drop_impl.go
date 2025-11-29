@@ -19,6 +19,11 @@ func (m *Module) emitDrop(x *hir.Drop) {
 		return // Can only drop variables
 	}
 
+	// Check if variable was moved
+	if m.currentMoves != nil && m.currentMoves[varName.Name] {
+		return // Skip drop for moved variable
+	}
+
 	t, ok := x.Type.(types.T)
 	if !ok {
 		return
@@ -38,47 +43,57 @@ func (m *Module) emitDrop(x *hir.Drop) {
 		// Mutable variable case: need to load from alloca
 		loadTemp := fmt.Sprintf("%%drop_load_%d", m.tempID)
 		m.tempID++
-		fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", loadTemp, ptrValue)
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", loadTemp, ptrValue)
 		ptrToFree = loadTemp
 	} else {
-		// SSA value case: use directly
+		// SSA value or immediate
 		ptrToFree = ptrValue
 	}
 
 	m.emitDropForType(ptrToFree, t)
 }
 
-// emitDropForType recursively drops a value of type t
+// emitDropForType generates cleanup code for a value of a specific type
 func (m *Module) emitDropForType(val string, t types.T) {
-	// Null check
+	// Check for null before dropping
+	// if (val == null) return;
 	cond := fmt.Sprintf("%%drop_cond_%d", m.tempID)
 	m.tempID++
-	fmt.Fprintf(&m.funcs, "  %s = icmp eq ptr %s, null\n", cond, val)
+	wprintf(&m.funcs, "  %s = icmp eq ptr %s, null\n", cond, val)
 
-	dropLabel := fmt.Sprintf("drop_do_%d", m.mergeID)
 	doneLabel := fmt.Sprintf("drop_done_%d", m.mergeID)
+	doLabel := fmt.Sprintf("drop_do_%d", m.mergeID)
 	m.mergeID++
 
-	fmt.Fprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", cond, doneLabel, dropLabel)
+	wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n\n", cond, doneLabel, doLabel)
+	wprintf(&m.funcs, "%s:\n", doLabel)
+	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 1)\n")
+	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.dropping, ptr %s)\n", val)
 
-	fmt.Fprintf(&m.funcs, "\n%s:\n", dropLabel)
-	if st, ok := t.(*types.Struct); ok {
-		m.emitStructDrop(val, st)
-	} else if et, ok := t.(*types.Enum); ok {
-		m.emitEnumDrop(val, et)
+	switch t := t.(type) {
+	case *types.Struct:
+		m.emitStructDrop(val, t)
+	case *types.Enum:
+		m.emitEnumDrop(val, t)
+	default:
+		// Simple free for other heap types (str, etc)
+		wprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
+		m.ensureDecl("declare void @free(ptr)")
 	}
-	fmt.Fprintf(&m.funcs, "  br label %%%s\n", doneLabel)
 
-	fmt.Fprintf(&m.funcs, "\n%s:\n", doneLabel)
+	wprintf(&m.funcs, "  br label %%%s\n\n", doneLabel)
+	wprintf(&m.funcs, "%s:\n", doneLabel)
 }
 
 // emitStructDrop generates cleanup code for a struct value
 func (m *Module) emitStructDrop(val string, st *types.Struct) {
+	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 2)\n")
 	// Recursively drop heap-allocated fields using offset-based GEP
 	for i, field := range st.Fields {
 		if !isHeapType(field.Type) {
 			continue
 		}
+		wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 3)\n")
 
 		// Calculate byte offset for this field
 		offset := calculateFieldOffset(st, i)
@@ -99,8 +114,11 @@ func (m *Module) emitStructDrop(val string, st *types.Struct) {
 	}
 
 	// Free the struct itself
+	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 4)\n")
+	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.free_debug, ptr %s)\n", val)
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
+	m.ensureDecl("declare i32 @printf(ptr, ...)")
 }
 
 // emitEnumDrop generates cleanup code for an enum value

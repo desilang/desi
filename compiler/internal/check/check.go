@@ -294,6 +294,15 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
 	}
+
+	// Save moved variables for backend
+	if c.info != nil && c.info.FuncMoves != nil {
+		moves := make(map[string]bool)
+		for _, k := range c.moved.Keys() {
+			moves[k] = true
+		}
+		c.info.FuncMoves[fd] = moves
+	}
 }
 
 func (c *checker) checkBlock(b *ast.Block) {

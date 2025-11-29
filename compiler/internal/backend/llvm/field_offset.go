@@ -22,8 +22,10 @@ func fieldSize(t types.T) int {
 	default:
 		// Check basic types
 		switch t.String() {
-		case "int", "float":
-			return 8 // i64/double
+		case "int":
+			return 4 // i32
+		case "float":
+			return 8 // double
 		case "bool":
 			return 1 // i1
 		case "str":

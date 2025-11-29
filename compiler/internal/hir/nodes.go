@@ -209,6 +209,7 @@ type Func struct {
 	Params  []Param
 	RetType string // optional (e.g. "ptr", "i32")
 	Blocks  []*Block
+	Origin  interface{} // *ast.FuncDecl (using interface{} to avoid import cycle if needed, but ast is likely fine)
 }
 
 type Block struct {
