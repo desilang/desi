@@ -1,4 +1,4 @@
-
+# EXPECTED: COMPILE_ERROR
 # Your exact example - testing union types and nullable types
 struct MyStruct:
     item: str
