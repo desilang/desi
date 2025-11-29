@@ -24,7 +24,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 nil,
@@ -42,7 +42,7 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -113,7 +113,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -156,6 +156,7 @@ type scope struct {
 	arenaOwned map[string]bool    // locals whose storage originates from arena.alloc
 	mutable    map[string]bool    // variables declared with mut
 	types      map[string]types.T // variable types for Drop
+	tempDrops  map[string]bool    // temporaries that need to be dropped
 }
 
 func (ls *lowerState) push() {
@@ -163,6 +164,7 @@ func (ls *lowerState) push() {
 		locals:     []string{},
 		rcLike:     map[string]bool{},
 		moved:      map[string]bool{},
+		tempDrops:  map[string]bool{},
 		defers:     []hir.Value{},
 		arenas:     map[string]bool{},
 		arenaOwned: map[string]bool{},
@@ -257,8 +259,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 		// M7C: if init was a temp that came from ArenaAlloc, mark this local as arena-owned.
-		if t, ok := init.(hir.Temp); ok && ls.tempsFromArenaAlloc[t.Name] {
-			ls.cur().arenaOwned[s.Name.Name] = true
+		if t, ok := init.(hir.Temp); ok {
+			if ls.tempsFromArenaAlloc[t.Name] {
+				ls.cur().arenaOwned[s.Name.Name] = true
+			}
+			// Consume temp so it's not dropped
+			ls.consumeTemp(t)
 		}
 
 	case *ast.AssignStmt:
@@ -280,9 +286,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					Dst: hir.Var{Name: lhs},
 					Val: rhs,
 				})
+				ls.consumeTemp(rhs) // Store consumes the value
 			} else {
 				// Emit Assign for SSA-style variables
 				ls.b.Emit(&hir.Assign{LHS: lhs, RHS: rhs})
+				ls.consumeTemp(rhs) // Assign consumes the value
 			}
 		}
 
@@ -298,6 +306,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		var v hir.Value
 		if s.Value != nil {
 			v = ls.lowerExpr(s.Value)
+			ls.consumeTemp(v) // Return consumes the value
 		}
 		ls.b.Emit(&hir.Ret{Val: v})
 		ls.terminated = true
@@ -595,6 +604,8 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 			ls.b.Emit(&hir.Drop{Val: v})
 		}
 	}
+	// temporaries
+	ls.emitTempDrops()
 }
 
 func (ls *lowerState) emitAllDefersAndDrops() {
@@ -693,11 +704,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.FloatLit:
 		return hir.ConstFloat{Text: x.Text}
 	case *ast.BoolLit:
-		val := 0
-		if x.Value {
-			val = 1
-		}
-		return &hir.ConstInt{Text: strconv.Itoa(val)}
+		return hir.ConstBool{Value: x.Value}
 
 	case *ast.NoneLit:
 		// Lower none as null pointer (0)
@@ -1007,6 +1014,21 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			Dst:  dst,
 			Type: resultType,
 		})
+
+		// If string concatenation, track result for cleanup
+		if x.Op == "+" && resultType == "ptr" {
+			// Check if it's actually a string type
+			isStr := false
+			if ls.info != nil {
+				if t, ok := ls.info.Types[x]; ok && types.Equal(t, types.Str) {
+					isStr = true
+				}
+			}
+			if isStr {
+				ls.addTempDrop(dst.Name)
+			}
+		}
+
 		return dst
 
 	case *ast.MatchExpr:
@@ -1274,6 +1296,10 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 					dst := ls.b.FreshTemp("call")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args})
+					// Consume args (methods move by default)
+					for _, arg := range args {
+						ls.consumeTemp(arg)
+					}
 					return dst
 				}
 			}
@@ -1379,6 +1405,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
+
+	// Consume args if not a known borrowing function
+	// TODO: Use type checker info to determine if callee borrows
+	if callee != "print" && callee != "asprintf" && callee != "bool_to_cstring" && !strings.HasPrefix(callee, "arena.") {
+		for _, arg := range args {
+			ls.consumeTemp(arg)
+		}
+	}
+
 	return dst
 }
 

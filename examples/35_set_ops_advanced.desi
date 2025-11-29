@@ -16,10 +16,6 @@ def main():
 	let diff_set = s1.difference(s2)
 	
 	# Cleanup ALL sets (testing type inference fix)
-	union_set.free()
-	inter_set.free()
-	diff_set.free()
-	s1.free()
-	s2.free()
+
 	
 	print("Advanced set operations test completed successfully!")

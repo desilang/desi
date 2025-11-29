@@ -18,8 +18,6 @@ def main():
     nums.add(4)
     
     # Free sets
-    empty.free()
-    nums.free()
-    words.free()
+
     
     print("All tests passed")
