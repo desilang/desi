@@ -1,4 +1,4 @@
-# Test string concat with Display trait
+# Debug: Check what type 'self' has
 
 struct Person:
     name: str
@@ -6,10 +6,10 @@ struct Person:
 
 impl Display for Person:
     def to_str(self) -> str:
-        return "Person"
+        # What type is self?
+        let x = self
+        return "test"
 
 def main() -> int:
     let p = Person(name="Alice", age=30)
-    let greeting = "Hello, " + p
-    
     return 0

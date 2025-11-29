@@ -947,9 +947,10 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					fieldType := lowerType(st.Fields[idx].Type)
 
 					ls.b.Emit(&hir.Load{
-						Type: fieldType,
-						Src:  fieldPtr,
-						Dst:  dst,
+						Type:     fieldType,
+						Src:      fieldPtr,
+						Dst:      dst,
+						DesiType: st.Fields[idx].Type,
 					})
 					return dst
 				}

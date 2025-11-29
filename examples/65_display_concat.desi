@@ -1,4 +1,4 @@
-# Test string concat with Display trait
+# Test 3: Display with string concat in to_str
 
 struct Person:
     name: str
@@ -6,10 +6,10 @@ struct Person:
 
 impl Display for Person:
     def to_str(self) -> str:
-        return "Person"
+        return self.name + " is " + self.age
 
 def main() -> int:
     let p = Person(name="Alice", age=30)
     let greeting = "Hello, " + p
-    
+    print(greeting)
     return 0

@@ -237,9 +237,10 @@ type Store struct {
 func (*Store) isStmt() {}
 
 type Load struct {
-	Type string // type to load (e.g. "ptr")
-	Src  Value  // address
-	Dst  Temp
+	Type     string // type to load (e.g. "ptr")
+	Src      Value  // address
+	Dst      Temp
+	DesiType interface{} // types.T from type checker
 }
 
 func (*Load) isStmt() {}

@@ -298,7 +298,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
-		// String ergonomics: allow str + (int|float|bool|str) => str
+		// String ergonomics: allow str + (int|float|bool|str|Display) => str
 		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
 			if types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 				c.info.Types[x] = types.Str
@@ -310,8 +310,23 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			} else {
 				other = lt
 			}
-			if types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
-				types.Equal(other, types.Bool) || types.Equal(other, types.Str) {
+			// Check if other type is allowed
+			allowed := types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
+				types.Equal(other, types.Bool) || types.Equal(other, types.Str)
+
+			// Also allow if type implements Display trait
+			if !allowed {
+				if st, ok := other.(*types.Struct); ok {
+					typeName := st.Name
+					if impls, ok := c.info.Impls[typeName]; ok {
+						if _, hasDisplay := impls["Display"]; hasDisplay {
+							allowed = true
+						}
+					}
+				}
+			}
+
+			if allowed {
 				c.info.Types[x] = types.Str
 				return types.Str
 			}
