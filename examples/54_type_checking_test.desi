@@ -1,0 +1,22 @@
+
+struct TestTypes:
+    name: str
+    count: int
+    ratio: float
+
+def main():
+    # Test 1: Correct types (should pass)
+    let valid = TestTypes(name="valid", count=10, ratio=1.5)
+    print("Valid struct created")
+    
+    # Test 2: Wrong type for count (str instead of int)
+    let wrong_count = TestTypes(name="wrong", count="not a number", ratio=1.5)
+    print("Wrong count type - should have failed!")
+    
+    # Test 3: Wrong type for ratio (int instead of float)
+    let wrong_ratio = TestTypes(name="wrong", count=10, ratio=5)
+    print("Wrong ratio type - should have failed!")
+    
+    # Test 4: Using none for a non-nullable field
+    let none_count = TestTypes(name="none_test", count=none, ratio=1.5)
+    print("None for count - should have failed!")

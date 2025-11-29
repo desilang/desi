@@ -199,9 +199,29 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		p.expect(token.RBRACK, "]")
 	}
 
-	return &ast.TypeName{
+	firstType := &ast.TypeName{
 		Name:   b.String(),
 		Params: params,
 		Span:   ast.JoinSpan(start, spanPos(p.file, p.cur)),
+	}
+
+	// Parse union types: type1|type2|type3
+	// Check for | token (PIPE)
+	if p.cur.Tok != token.PIPE {
+		return firstType
+	}
+
+	// We have a union type
+	variants := []*ast.TypeName{firstType}
+	for p.accept(token.PIPE) {
+		variant := p.parseTypeName()
+		variants = append(variants, variant)
+	}
+
+	// Return a TypeName with UnionTypes field
+	return &ast.TypeName{
+		Name:       "", // Union types don't have a single name
+		UnionTypes: variants,
+		Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
 }

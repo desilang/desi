@@ -14,6 +14,19 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 		return nil
 	}
 
+	// Handle union types (int|float|none)
+	if len(tn.UnionTypes) > 0 {
+		var variants []types.T
+		for _, ut := range tn.UnionTypes {
+			t := c.resolveType(ut)
+			if t == nil {
+				return nil // If any variant fails to resolve, fail the whole union
+			}
+			variants = append(variants, t)
+		}
+		return types.UnionOf(variants...)
+	}
+
 	// Handle parameterized types
 	if len(tn.Params) > 0 {
 		switch tn.Name {
