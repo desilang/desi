@@ -74,10 +74,28 @@ func (m *Module) emitDropForType(val string, t types.T) {
 
 // emitStructDrop generates cleanup code for a struct value
 func (m *Module) emitStructDrop(val string, st *types.Struct) {
-	// TODO: Recursively drop heap-allocated fields
-	// For now, just free the struct pointer itself to avoid the main leak
-	// This prevents the struct allocation from leaking, but nested heap types may still leak
+	// Recursively drop heap-allocated fields before freeing struct
+	for i, field := range st.Fields {
+		if !isHeapType(field.Type) {
+			continue
+		}
 
+		// GEP to field i
+		fieldPtr := fmt.Sprintf("%%field_ptr_%d_%d", m.tempID, i)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = getelementptr inbounds %%%s, ptr %s, i32 0, i32 %d\n",
+			fieldPtr, st.Name, val, i)
+
+		// Load field value
+		fieldVal := fmt.Sprintf("%%field_val_%d_%d", m.tempID, i)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", fieldVal, fieldPtr)
+
+		// Recursively drop field
+		m.emitDropForType(fieldVal, field.Type)
+	}
+
+	// Free the struct itself
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 }

@@ -79,9 +79,10 @@ func resolveTypeFromName(name string) types.T {
 	if t, ok := types.FromName(name); ok {
 		return t
 	}
-	// For custom types, we'd need to look them up in the scope
-	// For now, return ptr for unknown types
-	return nil
+	// For custom types (structs/enums), create a placeholder struct type
+	// The actual struct definition will be added by EmitTypeDefs
+	// We just need to signal that this is a ptr type in LLVM
+	return &types.Struct{Name: name} // Placeholder - will map to ptr in llvmType()
 }
 
 // emitStructTypeDefs emits the actual LLVM type definitions
