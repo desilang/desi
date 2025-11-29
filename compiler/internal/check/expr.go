@@ -108,8 +108,9 @@ func (c *checker) typ(e ast.Expr) types.T {
 		// So SetLit here implies non-empty or we might have explicit syntax later.
 		// Actually, parser returns DictLit for empty {}.
 		if len(x.Elems) == 0 {
-			// Should not happen via current parser path for {}
-			return types.SetOf(types.Any)
+			t := types.SetOf(types.Any)
+			c.info.Types[x] = t
+			return t
 		}
 
 		// Infer element type from first element

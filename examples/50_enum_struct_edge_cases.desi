@@ -1,0 +1,72 @@
+
+# Edge case tests for Enums and Structs
+
+# 1. Nested Structs
+struct Inner:
+    val: int
+
+struct Outer:
+    inner: Inner
+    name: str
+
+# 2. Nested Enums
+enum Status:
+    Idle: none
+    Running: int
+    Error: str
+
+enum Machine:
+    Off: none
+    On: Status
+
+# 3. Struct inside Enum
+struct Point:
+    x: int
+    y: int
+
+enum Shape:
+    Circle: int
+    Rect: Point
+
+# 4. Enum inside Struct
+struct Worker:
+    id: int
+    status: Status
+
+def check_status(stat: Status):
+    match stat:
+        Status.Idle(): print("Status: Idle")
+        Status.Running(speed): print(speed)
+        Status.Error(msg): print(msg)
+
+def main():
+    print("Testing Nested Structs...")
+    let i = Inner(val=42)
+    let o = Outer(inner=i, name="nested")
+    print(o.name)
+    print(o.inner.val)
+    
+    print("Testing Nested Enums...")
+    let s = Status.Running(100)
+    let m = Machine.On(s)
+    
+    match m:
+        Machine.Off(): print("Machine is Off")
+        Machine.On(stat): check_status(stat)
+
+    print("Testing Struct inside Enum...")
+    let p = Point(x=10, y=20)
+    let rect = Shape.Rect(p)
+    
+    match rect:
+        Shape.Circle(r): print("Circle")
+        Shape.Rect(pt): print(pt.x)
+
+    print("Testing Enum inside Struct...")
+    let w = Worker(id=1, status=Status.Error("Out of coffee"))
+    print(w.id)
+    match w.status:
+        Status.Error(e): print(e)
+        _: print("Worker OK")
+
+    print("All edge cases passed!")
