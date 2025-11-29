@@ -1,0 +1,17 @@
+
+struct Inner:
+    value: int
+
+struct Outer:
+    inner: Inner
+    data: int
+
+def main():
+    print("Allocating nested structs...")
+    let i = Inner(value=42)
+    let o = Outer(inner=i, data=100)
+    
+    print("Dropping nested structs...")
+    # When o goes out of scope, it should:
+    # 1. Free o.inner (the Inner struct)
+    # 2. Free o itself
