@@ -92,6 +92,27 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 			}
 			return types.CPtrOf(elem)
 		}
+
+		// Check for user-defined generic types (enum/struct/class with type params)
+		if c.scope != nil {
+			sym := c.scope.Lookup(tn.Name)
+			if sym != nil && sym.Kind == SymType {
+				// Resolve type arguments
+				var args []types.T
+				for _, p := range tn.Params {
+					arg := c.resolveType(p)
+					if arg == nil {
+						return nil
+					}
+					args = append(args, arg)
+				}
+				// Create Generic instantiation
+				return &types.Generic{
+					Base: sym.Type,
+					Args: args,
+				}
+			}
+		}
 		return nil
 	}
 
