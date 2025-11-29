@@ -74,9 +74,31 @@ func (m *Module) emitDropForType(val string, t types.T) {
 
 // emitStructDrop generates cleanup code for a struct value
 func (m *Module) emitStructDrop(val string, st *types.Struct) {
-	// TODO: Recursive field dropping requires typed pointers or explicit offset calculation
-	// For now, just free the struct pointer itself to prevent the main leak
-	// This prevents the struct allocation from leaking
+	// Recursively drop heap-allocated fields using offset-based GEP
+	for i, field := range st.Fields {
+		if !isHeapType(field.Type) {
+			continue
+		}
+
+		// Calculate byte offset for this field
+		offset := calculateFieldOffset(st, i)
+
+		// GEP to field at byte offset (works with opaque pointers)
+		fieldPtr := fmt.Sprintf("%%field_ptr_%d_%d", m.tempID, i)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = getelementptr i8, ptr %s, i32 %d\n",
+			fieldPtr, val, offset)
+
+		// Load field value (ptr type)
+		fieldVal := fmt.Sprintf("%%field_val_%d_%d", m.tempID, i)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", fieldVal, fieldPtr)
+
+		// Recursively drop field
+		m.emitDropForType(fieldVal, field.Type)
+	}
+
+	// Free the struct itself
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 }
