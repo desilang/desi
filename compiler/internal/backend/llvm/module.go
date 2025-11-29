@@ -308,6 +308,16 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				lty, lval := m.operand(x.LHS)
 				rty, rval := m.operand(x.RHS)
 
+				// Special case: String concatenation
+				if x.Op == "+" && (lty == "ptr" || rty == "ptr") {
+					// String concatenation
+					wprintf(&m.funcs, "  %s = call ptr @string_concat(ptr %s, ptr %s)\n",
+						x.Dst.String(), lval, rval)
+					m.ssa[x.Dst.Name] = x.Dst
+					m.ensureDecl("declare ptr @string_concat(ptr, ptr)")
+					continue
+				}
+
 				// Map Desi operators to LLVM instructions
 				// Check for float types
 				isFloat := lty == "float" || lty == "double"

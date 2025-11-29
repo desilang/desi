@@ -8,7 +8,7 @@ GO ?= go
 BUILD_DIR = build
 BIN_DIR = bin
 RUNTIME_SRC = compiler/runtime
-RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o
+RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o $(BUILD_DIR)/string.o
 LIB_DESI = $(BUILD_DIR)/libdesi.a
 
 # Tools
