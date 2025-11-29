@@ -134,9 +134,6 @@ func (m *Module) IR() string {
 	abiInfo := abi.Current()
 	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", abiInfo.TargetLayout))
 	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", abiInfo.TargetTriple))
-	out.WriteString("@.str.free_debug = private unnamed_addr constant [12 x i8] c\"Freeing %p\\0A\\00\", align 1\n")
-	out.WriteString("@.str.dropping = private unnamed_addr constant [13 x i8] c\"Dropping %p\\0A\\00\", align 1\n")
-	out.WriteString("@.str.trace_marker = private unnamed_addr constant [12 x i8] c\"MARKER: %d\\0A\\00\", align 1\n")
 
 	out.Write(m.globals.Bytes())
 	out.WriteString("\n")

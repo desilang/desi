@@ -67,8 +67,6 @@ func (m *Module) emitDropForType(val string, t types.T) {
 
 	wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n\n", cond, doneLabel, doLabel)
 	wprintf(&m.funcs, "%s:\n", doLabel)
-	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 1)\n")
-	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.dropping, ptr %s)\n", val)
 
 	switch t := t.(type) {
 	case *types.Struct:
@@ -87,13 +85,11 @@ func (m *Module) emitDropForType(val string, t types.T) {
 
 // emitStructDrop generates cleanup code for a struct value
 func (m *Module) emitStructDrop(val string, st *types.Struct) {
-	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 2)\n")
 	// Recursively drop heap-allocated fields using offset-based GEP
 	for i, field := range st.Fields {
 		if !isHeapType(field.Type) {
 			continue
 		}
-		wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 3)\n")
 
 		// Calculate byte offset for this field
 		offset := calculateFieldOffset(st, i)
@@ -114,8 +110,6 @@ func (m *Module) emitStructDrop(val string, st *types.Struct) {
 	}
 
 	// Free the struct itself
-	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.trace_marker, i32 4)\n")
-	wprintf(&m.funcs, "  call i32 (ptr, ...) @printf(ptr @.str.free_debug, ptr %s)\n", val)
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 	m.ensureDecl("declare i32 @printf(ptr, ...)")
