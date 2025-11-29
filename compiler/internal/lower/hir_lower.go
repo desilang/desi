@@ -51,6 +51,7 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	}
 	ls.lowerBlock(fd.Body)
 	f := b.Func()
+	f.Origin = fd // Track AST origin for move analysis lookup
 
 	// Populate parameters from AST
 	// For variadic functions, the last parameter has already been wrapped in list[T] by the type checker

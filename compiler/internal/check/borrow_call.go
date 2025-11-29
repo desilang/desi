@@ -83,6 +83,8 @@ func (c *checker) enforceCallModes(call *ast.CallExpr, cand *FuncCand) {
 		// (3) move tracking: identifier passed to a move param is considered moved.
 		if mode == ast.ParamMove {
 			if id, ok := arg.(*ast.Ident); ok {
+				c.moved.mark(id.Name, id.Span)
+				// Also update info.Moved for compatibility if needed, but c.moved is the source of truth
 				if c.info != nil {
 					if c.info.Moved == nil {
 						c.info.Moved = make(map[string]diag.Span)

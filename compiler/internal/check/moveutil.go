@@ -26,6 +26,18 @@ func (ms *MoveSet) movedAt(name string) (diag.Span, bool) {
 	return sp, ok
 }
 
+// Keys returns all moved variable names
+func (ms *MoveSet) Keys() []string {
+	if ms == nil || ms.m == nil {
+		return nil
+	}
+	keys := make([]string, 0, len(ms.m))
+	for k := range ms.m {
+		keys = append(keys, k)
+	}
+	return keys
+}
+
 // isCopyType returns true for value types that do NOT "move" on pass-by-value.
 // M6 polish: primitives are copy types: int, float, bool, str.
 // Everything else remains move-by-default for now.

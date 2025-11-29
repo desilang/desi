@@ -85,6 +85,13 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 		if !types.Assignable(fieldT, valT) {
 			c.add(diagAt("DTE0104", arg.Expr.SpanOf(), "field '"+name+"' expects type "+fieldT.String()))
 		}
+
+		// Mark as moved if not a copy type
+		if !isCopyType(valT) {
+			if name, ok := c.baseLvalue(arg.Expr); ok {
+				c.moved.mark(name, arg.Expr.SpanOf())
+			}
+		}
 	}
 
 	// Check missing fields.

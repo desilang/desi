@@ -9,6 +9,7 @@ import (
 // EmitTypeDefs emits LLVM type definitions for structs and enums
 // This must be called before emitting functions that reference these types
 func (m *Module) EmitTypeDefs(structDecls []*ast.StructDecl, enumDecls []*ast.EnumDecl, info *check.Info) {
+	m.info = info // Store for later use in EmitFunc
 	// Convert AST structs to types.Struct using info.Types
 	var structs []*types.Struct
 	for _, sd := range structDecls {

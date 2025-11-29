@@ -8,8 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/backend/llvm/abi"
 	"github.com/desilang/desi/compiler/internal/backend/llvm/intrin"
+	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -40,6 +42,8 @@ type Module struct {
 	cfBlocks         map[string]string    // blocks that need terminators to merge labels
 	cfLoopConds      map[string]hir.Value // loop condition blocks -> condition value
 	wroteGlob        bool
+	info             *check.Info     // type checker info for move analysis
+	currentMoves     map[string]bool // moved variables in current function
 }
 
 func NewModule(name string) *Module {
@@ -130,6 +134,9 @@ func (m *Module) IR() string {
 	abiInfo := abi.Current()
 	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", abiInfo.TargetLayout))
 	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", abiInfo.TargetTriple))
+	out.WriteString("@.str.free_debug = private unnamed_addr constant [12 x i8] c\"Freeing %p\\0A\\00\", align 1\n")
+	out.WriteString("@.str.dropping = private unnamed_addr constant [13 x i8] c\"Dropping %p\\0A\\00\", align 1\n")
+	out.WriteString("@.str.trace_marker = private unnamed_addr constant [12 x i8] c\"MARKER: %d\\0A\\00\", align 1\n")
 
 	out.Write(m.globals.Bytes())
 	out.WriteString("\n")
@@ -161,6 +168,16 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	m.ssa = make(map[string]hir.Value)
 	m.tempTypes = make(map[string]string)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
+	m.currentMoves = nil
+
+	// Look up moves if we have origin info
+	if m.info != nil && fn.Origin != nil {
+		if fd, ok := fn.Origin.(*ast.FuncDecl); ok {
+			if moves, ok := m.info.FuncMoves[fd]; ok {
+				m.currentMoves = moves
+			}
+		}
+	}
 
 	// --- header types (now typed-aware) ---
 	// Default ret: i32 (Tier-0), but async wrappers return ptr (future handle).

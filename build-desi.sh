@@ -24,7 +24,7 @@ fi
 mkdir -p build/output
 
 echo "==> Compiling Desi to LLVM IR..."
-./bin/desic -emit-ir "$INPUT" > build/program.ll
+./bin/desic emit-ir "$INPUT" > build/program.ll
 
 echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o

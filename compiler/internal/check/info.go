@@ -44,6 +44,11 @@ type Info struct {
 	// Match expression: pattern variable bindings
 	// Key: MatchExpr node, Value: map of arm index -> bindings
 	MatchBindings map[*ast.MatchExpr]map[int][]MatchBinding
+
+	// FuncMoves tracks which variables are moved in each function.
+	// Key: FuncDecl, Value: Set of moved variable names.
+	// This is used by the backend to avoid double-freeing moved variables.
+	FuncMoves map[*ast.FuncDecl]map[string]bool
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -81,6 +86,7 @@ func NewInfo() *Info {
 		Moved:         make(map[string]diag.Span),
 		Impls:         make(map[string]map[string][]*ast.FuncDecl),
 		MatchBindings: make(map[*ast.MatchExpr]map[int][]MatchBinding),
+		FuncMoves:     make(map[*ast.FuncDecl]map[string]bool),
 	}
 	addPreludeBuiltins(info)
 	return info
