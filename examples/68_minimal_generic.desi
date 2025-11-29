@@ -1,0 +1,3 @@
+# Minimal test for generic parsing
+enum Test<T>:
+    Val: T

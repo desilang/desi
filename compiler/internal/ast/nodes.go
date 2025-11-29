@@ -28,12 +28,13 @@ type Decl interface {
 }
 
 type FuncDecl struct {
-	Async   bool
-	Pub     bool
-	Name    Ident
-	Params  []Param
-	RetType *TypeName // optional
-	Body    *Block    // nil if just a signature + NL
+	Async      bool
+	Pub        bool
+	Name       Ident
+	TypeParams []Ident // e.g., [T, U] for def swap<T, U>
+	Params     []Param
+	RetType    *TypeName // optional
+	Body       *Block    // nil if just a signature + NL
 	// Decorators holds any @decorators that immediately preceded this decl.
 	Decorators []*Decorator
 	// Doc holds the first triple-quoted string ("""...""") from the function body,

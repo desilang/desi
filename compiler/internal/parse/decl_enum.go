@@ -25,6 +25,28 @@ func (p *Parser) parseEnumWithDecs(decs []*ast.Decorator) *ast.EnumDecl {
 	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
+	// Parse optional type parameters: <T> or <T, U>
+	var typeParams []ast.Ident
+	if p.cur.Tok == token.LT { // <
+		p.next()
+		for {
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "type parameter name")
+				break
+			}
+			typeParams = append(typeParams, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+			p.next()
+
+			if p.cur.Tok == token.GT { // >
+				p.next()
+				break
+			}
+			if !p.expect(token.COMMA, ",") {
+				break
+			}
+		}
+	}
+
 	if !p.expect(token.COLON, ":") {
 		p.syncStmt()
 		return nil
@@ -94,6 +116,7 @@ func (p *Parser) parseEnumWithDecs(decs []*ast.Decorator) *ast.EnumDecl {
 	return &ast.EnumDecl{
 		Pub:        explicitPub, // top-level default is private unless 'pub'
 		Name:       name,
+		TypeParams: typeParams,
 		Variants:   variants,
 		Decorators: decs,
 		Doc:        doc,
