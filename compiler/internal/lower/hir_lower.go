@@ -692,7 +692,16 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.FloatLit:
 		return hir.ConstFloat{Text: x.Text}
 	case *ast.BoolLit:
-		return hir.ConstBool{Value: x.Value}
+		val := 0
+		if x.Value {
+			val = 1
+		}
+		return &hir.ConstInt{Text: strconv.Itoa(val)}
+
+	case *ast.NoneLit:
+		// Lower none as null pointer (0)
+		return &hir.ConstInt{Text: "0"}
+
 	case *ast.StrLit:
 		// If Value is populated (F-string part), use it
 		if x.Value != "" {

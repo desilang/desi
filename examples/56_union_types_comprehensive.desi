@@ -1,0 +1,54 @@
+
+# Test 1: Basic union types (int|float)
+struct MixedNumber:
+    value: int|float
+
+def test_basic_union():
+    # Should accept int
+    let a = MixedNumber(value=42)
+    print("int accepted")
+    
+    # Should accept float
+    let b = MixedNumber(value=3.14)
+    print("float accepted")
+    
+    print("Basic union test passed!")
+
+# Test 2: Nullable union (int|none)
+struct OptionalInt:
+    count: int|none
+
+def test_nullable():
+    # Should accept int
+    let x = OptionalInt(count=10)
+    print("int accepted")
+    
+    # Should accept none
+    let y = OptionalInt(count=none)
+    print("none accepted")
+    
+    print("Nullable test passed!")
+
+# Test 3: Multi-variant union (int|float|str)
+struct FlexibleValue:
+    data: int|float|str
+
+def test_multi_variant():
+    let a = FlexibleValue(data=100)
+    print("int accepted")
+    
+    let b = FlexibleValue(data=2.5)
+    print("float accepted")
+    
+    let c = FlexibleValue(data="hello")
+    print("str accepted")
+    
+    print("Multi-variant test passed!")
+
+def main():
+    test_basic_union()
+    print("---")
+    test_nullable()
+    print("---")
+    test_multi_variant()
+    print("\nAll union type tests passed! ✅")

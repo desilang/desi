@@ -167,12 +167,41 @@ func (p *Parser) parseParams() []ast.Param {
 }
 
 func (p *Parser) parseTypeName() *ast.TypeName {
-	if p.cur.Tok != token.IDENT {
+	// Accept IDENT or 'none' keyword as type name
+	if p.cur.Tok != token.IDENT && p.cur.Tok != token.KW_none {
 		p.errExpected(spanPos(p.file, p.cur), "type name")
 		return &ast.TypeName{Name: "<?", Span: spanPos(p.file, p.cur)}
 	}
 	start := spanPos(p.file, p.cur)
 	var b bytes.Buffer
+
+	// Handle 'none' keyword
+	if p.cur.Tok == token.KW_none {
+		b.WriteString("none")
+		p.next()
+		// none doesn't have parameters or dots
+		firstType := &ast.TypeName{
+			Name: "none",
+			Span: ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		}
+		// Check for union continuation
+		if p.cur.Tok != token.PIPE {
+			return firstType
+		}
+		// Parse union
+		variants := []*ast.TypeName{firstType}
+		for p.accept(token.PIPE) {
+			variant := p.parseTypeName()
+			variants = append(variants, variant)
+		}
+		return &ast.TypeName{
+			Name:       "",
+			UnionTypes: variants,
+			Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		}
+	}
+
+	// Regular IDENT path
 	b.WriteString(p.cur.Lexeme)
 	p.next()
 	for p.accept(token.DOT) {
