@@ -98,6 +98,19 @@ type Multi struct{ Elems []T }
 // Union type for sum types: int|float, MyStruct|YourEnum, etc.
 type Union struct{ Variants []T }
 
+// Generic represents a parameterized type instantiation
+// Example: Option<int> is Generic{Base: Option, Args: [Int]}
+type Generic struct {
+	Base T   // The generic definition (e.g., Option, Result)
+	Args []T // Type arguments (e.g., [int] for Option<int>)
+}
+
+// TypeParam represents a type parameter like T, U, E
+// Used during type checking of generic definitions
+type TypeParam struct {
+	Name string // "T", "U", "E", etc.
+}
+
 // M9A: C-ABI pointer type cptr[T]
 type CPtr struct{ Elem T }
 
@@ -122,17 +135,19 @@ type Enum struct {
 	Variants []Variant
 }
 
-func (*List) isType()   {}
-func (*Set) isType()    {}
-func (*Dict) isType()   {}
-func (*Tuple) isType()  {}
-func (*Future) isType() {}
-func (*Func) isType()   {}
-func (*Multi) isType()  {}
-func (*Union) isType()  {}
-func (*CPtr) isType()   {}
-func (*Struct) isType() {}
-func (*Enum) isType()   {}
+func (*List) isType()      {}
+func (*Set) isType()       {}
+func (*Dict) isType()      {}
+func (*Tuple) isType()     {}
+func (*Future) isType()    {}
+func (*Func) isType()      {}
+func (*Multi) isType()     {}
+func (*Union) isType()     {}
+func (*CPtr) isType()      {}
+func (*Struct) isType()    {}
+func (*Enum) isType()      {}
+func (*Generic) isType()   {}
+func (*TypeParam) isType() {}
 
 func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
 func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
@@ -165,6 +180,21 @@ func (t *Union) String() string {
 		parts[i] = v.String()
 	}
 	return strings.Join(parts, "|")
+}
+
+func (t *Generic) String() string {
+	if len(t.Args) == 0 {
+		return t.Base.String()
+	}
+	args := make([]string, len(t.Args))
+	for i, a := range t.Args {
+		args[i] = a.String()
+	}
+	return t.Base.String() + "<" + strings.Join(args, ", ") + ">"
+}
+
+func (t *TypeParam) String() string {
+	return t.Name
 }
 func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
 func (t *Struct) String() string { return t.Name }
