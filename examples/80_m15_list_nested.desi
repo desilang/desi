@@ -1,12 +1,11 @@
 # Test: Nested lists (list of lists)
 def main() -> int:
-    # Create individual rows
-    let row1: list[int] = [1, 2, 3]
-    let row2: list[int] = [4, 5, 6]
-    let row3: list[int] = [7, 8, 9]
-    
-    # Create list of lists
-    let matrix: list[list[int]] = [row1, row2, row3]
+    # Create a list of lists
+    let matrix: list[list[int]] = [
+        [1, 2, 3],
+        [4, 5, 6],
+        [7, 8, 9]
+    ]
     
     # Access nested element
     let row: list[int] = matrix[1]

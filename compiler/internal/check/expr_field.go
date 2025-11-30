@@ -256,6 +256,33 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "free":
 		// free() -> void
 		methodType = types.FuncOf(nil, types.None, false)
+	case "insert":
+		// insert(index: int, elem: T) -> void
+		methodType = types.FuncOf([]types.T{types.Int, l.Elem}, types.None, false)
+	case "remove":
+		// remove(elem: T) -> void
+		methodType = types.FuncOf([]types.T{l.Elem}, types.None, false)
+	case "reverse":
+		// reverse() -> void
+		methodType = types.FuncOf(nil, types.None, false)
+	case "clear":
+		// clear() -> void
+		methodType = types.FuncOf(nil, types.None, false)
+	case "copy":
+		// copy() -> list[T]
+		methodType = types.FuncOf(nil, l, false)
+	case "extend":
+		// extend(other: list[T]) -> void
+		methodType = types.FuncOf([]types.T{l}, types.None, false)
+	case "index":
+		// index(elem: T) -> int
+		methodType = types.FuncOf([]types.T{l.Elem}, types.Int, false)
+	case "count":
+		// count(elem: T) -> int
+		methodType = types.FuncOf([]types.T{l.Elem}, types.Int, false)
+	case "contains":
+		// contains(elem: T) -> bool
+		methodType = types.FuncOf([]types.T{l.Elem}, types.Bool, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil
