@@ -23,6 +23,7 @@ func TestDictLit_BasicTypeInference(t *testing.T) {
 
 	letStmt := &ast.LetStmt{
 		Name:  ast.Ident{Name: "d"},
+		Type:  &ast.TypeName{Name: "dict", Params: []*ast.TypeName{{Name: "str"}, {Name: "int"}}},
 		Value: dictLit,
 	}
 
@@ -156,6 +157,7 @@ func TestDictLit_SingleEntry(t *testing.T) {
 
 	letStmt := &ast.LetStmt{
 		Name:  ast.Ident{Name: "d"},
+		Type:  &ast.TypeName{Name: "dict", Params: []*ast.TypeName{{Name: "str"}, {Name: "int"}}},
 		Value: dictLit,
 	}
 

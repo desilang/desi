@@ -46,7 +46,7 @@ func TestM6_Ref_Requires_Lvalue_IdentOK(t *testing.T) {
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.LetStmt{Name: ast.Ident{Name: "a"}, Type: &ast.TypeName{Name: "list", Params: []*ast.TypeName{{Name: "int"}}}, Value: &ast.IntLit{}},
+			&ast.LetStmt{Name: ast.Ident{Name: "a"}, Type: &ast.TypeName{Name: "int"}, Value: &ast.IntLit{}},
 			&ast.ExprStmt{Expr: &ast.CallExpr{
 				Callee: &ast.Ident{Name: "take"},
 				Args:   []ast.Expr{&ast.Ident{Name: "a"}}, // lvalue ⇒ OK
