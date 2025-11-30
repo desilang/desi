@@ -138,6 +138,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveSetMethod(x, s)
 	}
 
+	// Handle List methods
+	if l, ok := t.(*types.List); ok {
+		return c.resolveListMethod(x, l)
+	}
+
 	// Handle Struct field access
 	if s, ok := t.(*types.Struct); ok {
 		for _, f := range s.Fields {
@@ -221,6 +226,38 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 		methodType = types.FuncOf([]types.T{s}, s, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on set"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "append":
+		// append(elem: T) -> void
+		methodType = types.FuncOf([]types.T{l.Elem}, types.None, false)
+	case "get":
+		// get(index: int) -> T
+		methodType = types.FuncOf([]types.T{types.Int}, l.Elem, false)
+	case "set":
+		// set(index: int, elem: T) -> void
+		methodType = types.FuncOf([]types.T{types.Int, l.Elem}, types.None, false)
+	case "len":
+		// len() -> int
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "pop":
+		// pop() -> T
+		methodType = types.FuncOf(nil, l.Elem, false)
+	case "free":
+		// free() -> void
+		methodType = types.FuncOf(nil, types.None, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil
 	}
 

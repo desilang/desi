@@ -171,6 +171,14 @@ type DictLit struct {
 func (*DictLit) isExpr()             {}
 func (x *DictLit) SpanOf() diag.Span { return x.Span }
 
+type ListLit struct {
+	Elems []Expr
+	Span  diag.Span
+}
+
+func (*ListLit) isExpr()             {}
+func (x *ListLit) SpanOf() diag.Span { return x.Span }
+
 type SetLit struct {
 	Elems []Expr
 	Span  diag.Span

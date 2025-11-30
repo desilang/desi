@@ -1,33 +1,28 @@
 package parse
 
 import (
-	"strings"
 	"testing"
 )
 
 func TestDiagnostics_LambdaHeadAndCompHead(t *testing.T) {
 	src := `
 let badLam = (f(x)) => x   # invalid lambda head before =>
-let a = [x]                # missing 'for'
+let a = [x]                # VALID: single-element list literal now
 let b = {k: v}             # VALID dict literal now (not an error!)
 let c = #{x}               # VALID set literal now (not an error!)
 `
 	_, diags := ParseFile("<mem>", []byte(src))
-	if len(diags) < 2 {
-		t.Fatalf("expected at least 2 diagnostics, got %d", len(diags))
+	if len(diags) < 1 {
+		t.Fatalf("expected at least 1 diagnostic, got %d", len(diags))
 	}
-	// We don't assert strict ordering; just that the expected messages appear.
-	var lam, list bool
+	// We only check for lambda error now; [x] is a valid list literal
+	var lam bool
 	for _, d := range diags {
 		if d.Title == "lambda parameter list expected" {
 			lam = true
 		}
-		if strings.Contains(d.Message, "expected 'for' in list comprehension") {
-			list = true
-		}
-		// NOTE: #{x} is now a valid set literal, so we don't check for set comp error
 	}
-	if !lam || !list {
-		t.Fatalf("missing expected diagnostics: lambda:%v list:%v\nGot: %+v", lam, list, diags)
+	if !lam {
+		t.Fatalf("missing expected lambda diagnostic\nGot: %+v", diags)
 	}
 }
