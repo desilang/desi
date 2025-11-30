@@ -218,7 +218,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ls.cur().locals = append(ls.cur().locals, s.Name.Name)
 
 		// Store type for Drop instruction
-		if varType != nil {
+		// IMPORTANT: Don't track variables initialized from index expressions for drop
+		// Index expressions return borrowed references, not owned values
+		skipDrop := false
+		if s.Value != nil {
+			if _, isIndexExpr := s.Value.(*ast.IndexExpr); isIndexExpr {
+				skipDrop = true
+			}
+		}
+
+		if varType != nil && !skipDrop {
 			if t, ok := varType.(types.T); ok {
 				ls.cur().types[s.Name.Name] = t
 			}

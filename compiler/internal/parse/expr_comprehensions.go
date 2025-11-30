@@ -14,6 +14,9 @@ import (
 func (p *Parser) parseListLiteralOrComp(openSpan ast.Node) ast.Expr {
 	// Called with current token after '['.
 
+	// Skip any leading newlines for multiline support
+	p.skipNLs()
+
 	// Handle empty list: []
 	if p.cur.Tok == token.RBRACK {
 		end := spanPos(p.file, p.cur)
@@ -47,7 +50,8 @@ func (p *Parser) parseListLiteralOrComp(openSpan ast.Node) ast.Expr {
 		if p.cur.Tok != token.COMMA {
 			break
 		}
-		p.next() // consume ','
+		p.next()    // consume ','
+		p.skipNLs() // Allow newlines after comma
 		if p.cur.Tok == token.RBRACK {
 			break // allow trailing comma
 		}
@@ -55,6 +59,7 @@ func (p *Parser) parseListLiteralOrComp(openSpan ast.Node) ast.Expr {
 		elems = append(elems, nextElem)
 	}
 
+	p.skipNLs() // Allow newlines before closing bracket
 	end := spanPos(p.file, p.cur)
 	if !p.expect(token.RBRACK, "]") {
 		return &ast.Ident{Name: "<error>", Span: end}
