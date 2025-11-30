@@ -23,8 +23,8 @@ impl Display for Point:
 		return "Point"
 
 def main():
-	let p = Point(x=10, y=20)
-	let s = p.to_str()
+	let p: Point = Point(x=10, y=20)
+	let s: str = p.to_str()
 `
 	mod, pdiags := parse.ParseFile("<mem>", []byte(src))
 	if len(pdiags) > 0 {
@@ -64,8 +64,8 @@ struct Point:
 	y: int
 
 def main():
-	let p = Point(x=10, y=20)
-	let s = p.to_str()
+	let p: Point = Point(x=10, y=20)
+	let s: str = p.to_str()
 `
 	mod, pdiags := parse.ParseFile("<mem>", []byte(src))
 	if len(pdiags) > 0 {
@@ -114,8 +114,8 @@ impl Display for Point:
 		return "Point"
 
 def main():
-	let p = Point(x=10, y=20)
-	let s = p.to_str()
+	let p: Point = Point(x=10, y=20)
+	let s: str = p.to_str()
 `
 	mod, pdiags := parse.ParseFile("<mem>", []byte(src))
 	if len(pdiags) > 0 {
@@ -168,8 +168,8 @@ impl Display for Point:
 		return "CustomPoint"
 
 def main():
-	let p = Point(x=10, y=20)
-	let s = p.to_str()
+	let p: Point = Point(x=10, y=20)
+	let s: str = p.to_str()
 `
 	mod, pdiags := parse.ParseFile("<mem>", []byte(src))
 	if len(pdiags) > 0 {
@@ -228,7 +228,7 @@ struct Point:
 	y: int
 
 def main():
-	let p = Point(x=10, y=20)
+	let p: Point = Point(x=10, y=20)
 	print(p)
 `
 	mod, pdiags := parse.ParseFile("<mem>", []byte(src))

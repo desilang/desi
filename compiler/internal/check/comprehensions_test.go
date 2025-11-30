@@ -12,7 +12,7 @@ func TestM4_Comprehensions_List_Types(t *testing.T) {
 	comp := &ast.ListComp{
 		Elem: &ast.IntLit{},
 	}
-	let := &ast.LetStmt{Name: ast.Ident{Name: "a"}, Value: comp}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "a"}, Type: &ast.TypeName{Name: "list", Params: []*ast.TypeName{{Name: "int"}}}, Value: comp}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
@@ -31,7 +31,7 @@ func TestM4_Comprehensions_Set_Types(t *testing.T) {
 	comp := &ast.SetComp{
 		Elem: &ast.StrLit{},
 	}
-	let := &ast.LetStmt{Name: ast.Ident{Name: "s"}, Value: comp}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "s"}, Type: &ast.TypeName{Name: "set", Params: []*ast.TypeName{{Name: "str"}}}, Value: comp}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
@@ -51,7 +51,7 @@ func TestM4_Comprehensions_Dict_Types(t *testing.T) {
 		Key: &ast.IntLit{},
 		Val: &ast.StrLit{},
 	}
-	let := &ast.LetStmt{Name: ast.Ident{Name: "d"}, Value: comp}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "d"}, Type: &ast.TypeName{Name: "dict", Params: []*ast.TypeName{{Name: "int"}, {Name: "str"}}}, Value: comp}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 

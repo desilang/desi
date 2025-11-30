@@ -20,6 +20,7 @@ func TestM6P2_UseAfterMove_LocalCall(t *testing.T) {
 	// def main(): let t = 1; take(t); t
 	let := &ast.LetStmt{
 		Name:  ast.Ident{Name: "t"},
+		Type:  &ast.TypeName{Name: "int"},
 		Value: &ast.IntLit{Text: "1"},
 	}
 	call := &ast.ExprStmt{

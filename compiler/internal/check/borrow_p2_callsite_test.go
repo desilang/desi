@@ -45,7 +45,7 @@ func TestM6P2_Inout_Aliasing(t *testing.T) {
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.LetStmt{Name: ast.Ident{Name: "x"}, Value: &ast.IntLit{}},
+			&ast.LetStmt{Name: ast.Ident{Name: "x"}, Type: &ast.TypeName{Name: "int"}, Value: &ast.IntLit{}},
 			&ast.ExprStmt{
 				Expr: &ast.CallExpr{
 					Callee: &ast.Ident{Name: "g"},
@@ -72,7 +72,7 @@ func TestM6P2_Use_After_Move(t *testing.T) {
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.LetStmt{Name: ast.Ident{Name: "t"}, Value: &ast.IntLit{}},
+			&ast.LetStmt{Name: ast.Ident{Name: "t"}, Type: &ast.TypeName{Name: "int"}, Value: &ast.IntLit{}},
 			&ast.ExprStmt{Expr: &ast.CallExpr{Callee: &ast.Ident{Name: "g"}, Args: []ast.Expr{&ast.Ident{Name: "t"}}}},
 			&ast.ExprStmt{Expr: &ast.Ident{Name: "t"}}, // previously "use after move"; now allowed (copy)
 		}},
