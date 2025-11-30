@@ -1,0 +1,21 @@
+# Test string concat with custom types using Display trait
+
+struct Person:
+    name: str
+    age: int
+
+impl Display for Person:
+    def to_str(self) -> str:
+        return "Person{" + self.name + ", " + str(self.age) + "}"
+
+def main() -> int:
+    # String + primitive types
+    let s1 = "Age: " + 20
+    let s2 = "Price: $" + 9.99
+    let s3 = "Active: " + true
+    
+    # String + custom type with Display  
+    let p = Person(name="Alice", age=30)
+    let greeting = "Hello, " + p  # Should call p.to_str()
+    
+    return 0

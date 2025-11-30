@@ -26,6 +26,43 @@ char* string_concat(const char* a, const char* b) {
     return result;
 }
 
+// Convert int to string (newly allocated)
+char* int_to_str(int value) {
+    // Max int is ~10 digits + sign + null
+    char* result = (char*)malloc(12);
+    if (!result) {
+        fprintf(stderr, "int_to_str: allocation failed\n");
+        exit(1);
+    }
+    snprintf(result, 12, "%d", value);
+    return result;
+}
+
+// Convert float to string (newly allocated)
+char* float_to_str(double value) {
+    // Reasonable buffer for float
+    char* result = (char*)malloc(32);
+    if (!result) {
+        fprintf(stderr, "float_to_str: allocation failed\n");
+        exit(1);
+    }
+    snprintf(result, 32, "%g", value);
+    return result;
+}
+
+// Convert bool to string (newly allocated)
+char* bool_to_str(int value) {
+    if (value) {
+        char* result = (char*)malloc(5);
+        strcpy(result, "true");
+        return result;
+    } else {
+        char* result = (char*)malloc(6);
+        strcpy(result, "false");
+        return result;
+    }
+}
+
 // Get string length
 int string_len(const char* s) {
     return s ? (int)strlen(s) : 0;

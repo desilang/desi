@@ -308,12 +308,57 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				lty, lval := m.operand(x.LHS)
 				rty, rval := m.operand(x.RHS)
 
-				// Special case: String concatenation
-				if x.Op == "+" && (lty == "ptr" || rty == "ptr") {
-					// String concatenation
+				// Special case: String concatenation with type conversions
+				if x.Op == "+" && x.Type == "ptr" {
+					// This is a string concatenation (dest type is ptr/string)
+					leftStr := lval
+					rightStr := rval
+
+					// Convert left if it's not already a string (ptr)
+					if lty != "ptr" {
+						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+						m.tempID++
+						switch lty {
+						case "i32":
+							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", convTemp, lval)
+							m.ensureDecl("declare ptr @int_to_str(i32)")
+							leftStr = convTemp
+						case "double", "float":
+							wprintf(&m.funcs, "  %s = call ptr @float_to_str(double %s)\n", convTemp, lval)
+							m.ensureDecl("declare ptr @float_to_str(double)")
+							leftStr = convTemp
+						case "i1":
+							wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", convTemp, lval)
+							m.ensureDecl("declare ptr @bool_to_str(i1)")
+							leftStr = convTemp
+						}
+					}
+
+					// Convert right if it's not already a string (ptr)
+					if rty != "ptr" {
+						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+						m.tempID++
+						switch rty {
+						case "i32":
+							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", convTemp, rval)
+							m.ensureDecl("declare ptr @int_to_str(i32)")
+							rightStr = convTemp
+						case "double", "float":
+							wprintf(&m.funcs, "  %s = call ptr @float_to_str(double %s)\n", convTemp, rval)
+							m.ensureDecl("declare ptr @float_to_str(double)")
+							rightStr = convTemp
+						case "i1":
+							wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", convTemp, rval)
+							m.ensureDecl("declare ptr @bool_to_str(i1)")
+							rightStr = convTemp
+						}
+					}
+
+					// Now concatenate
 					wprintf(&m.funcs, "  %s = call ptr @string_concat(ptr %s, ptr %s)\n",
-						x.Dst.String(), lval, rval)
+						x.Dst.String(), leftStr, rightStr)
 					m.ssa[x.Dst.Name] = x.Dst
+					m.tempTypes[x.Dst.Name] = "ptr" // Track that result is a string (ptr)
 					m.ensureDecl("declare ptr @string_concat(ptr, ptr)")
 					continue
 				}

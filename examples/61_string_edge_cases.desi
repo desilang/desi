@@ -1,0 +1,10 @@
+# String concatenation edge cases  
+
+def main() -> int:
+    # Basic string + primitives (each tested separately)
+    let msg1 = "Age: " + 20
+    let msg2 = "Price: $" + 9.99  
+    let msg3 = "Active: " + true
+    let msg4 = "Hello" + " World"
+    
+    return 0

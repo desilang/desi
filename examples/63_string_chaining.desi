@@ -1,0 +1,13 @@
+# Test chained string concatenation
+
+def main() -> int:
+    # Chained string concat
+    let msg1 = "Part1" + "Part2" + "Part3"
+    
+    # Mixed chaining  
+    let msg2 = "User: " + "Alice" + ", Age: " + 25
+    
+    # Complex chain
+    let msg3 = "Price: $" + 9.99 + " (includes " + " tax)"
+    
+    return 0
