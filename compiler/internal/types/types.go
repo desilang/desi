@@ -396,6 +396,23 @@ func Assignable(dst, src T) bool {
 		}
 		return false
 	}
+
+	// Special case: set[any] (empty set literal) is assignable to any set[T]
+	if _, ok := dst.(*Set); ok {
+		if srcSet, ok := src.(*Set); ok {
+			if kindOf(srcSet.Elem) == AnyKind {
+				return true // Empty set literal can be assigned to any set type
+			}
+		}
+	}
+
+	// Special case: TypeParam can be assigned to same TypeParam name
+	if dstTP, ok := dst.(*TypeParam); ok {
+		if srcTP, ok := src.(*TypeParam); ok {
+			return dstTP.Name == srcTP.Name
+		}
+	}
+
 	// exact structural equality
 	return Equal(dst, src)
 }
