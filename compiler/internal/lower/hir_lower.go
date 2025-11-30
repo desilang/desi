@@ -822,26 +822,62 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		return res
 	case *ast.TupleLit:
-		var vals []hir.Value
-		for _, e := range x.Elems {
-			vals = append(vals, ls.lowerExpr(e))
+		// Tuples are heap-allocated using arena allocator to support returning from generic functions.
+		// For Tier-0 Generics (Type Erasure), ALL tuple elements are boxed to 'ptr'.
+		// This ensures layout compatibility between (T, T) -> {ptr, ptr} and (int, int).
+		var elemTypes []string
+		for range x.Elems {
+			elemTypes = append(elemTypes, "ptr")
 		}
+		structType := "{" + strings.Join(elemTypes, ", ") + "}"
 
-		var agg hir.Value = hir.Undef{}
-		t := ls.info.Types[x]
+		// Calculate struct size (ptr = 8 bytes on 64-bit, so N elements = N * 8)
+		structSize := len(x.Elems) * 8
 
-		for i, val := range vals {
-			dst := ls.b.FreshTemp("tuple_")
-			ls.b.Emit(&hir.InsertValue{
-				Agg:   agg,
-				Elem:  val,
-				Index: i,
-				Type:  t,
-				Dst:   dst,
+		// Allocate on heap using malloc
+		dst := ls.b.FreshTemp("tuple_ptr")
+		sizeVal := hir.ConstInt{Text: fmt.Sprintf("%d", structSize), Type: "i64"}
+		ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{sizeVal}, Type: "ptr"})
+
+		// Store elements
+		for i, e := range x.Elems {
+			val := ls.lowerExpr(e)
+
+			// Box if necessary (allocate + store for primitives)
+			valType := "ptr" // default
+			if ls.info != nil {
+				if t := ls.info.Types[e]; t != nil {
+					valType = lowerType(t)
+				}
+			}
+
+			var boxedVal hir.Value = val
+			if valType != "ptr" && valType != "void" {
+				// Allocate storage for the value on heap
+				boxPtr := ls.b.FreshTemp("elem_box_ptr")
+				elemSize := hir.ConstInt{Text: "8", Type: "i64"} // conservative: always 8 bytes
+				if valType == "i32" || valType == "i1" {
+					elemSize = hir.ConstInt{Text: "4", Type: "i64"}
+				}
+				ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{elemSize}, Type: "ptr"})
+				// Store the value
+				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: val})
+				boxedVal = boxPtr
+			}
+
+			// GEP
+			fieldPtr := ls.b.FreshTemp("tuple_field")
+			ls.b.Emit(&hir.GetElementPtr{
+				Type:    structType,
+				Base:    dst,
+				Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+				Dst:     fieldPtr,
 			})
-			agg = dst
+
+			// Store
+			ls.b.Emit(&hir.Store{Dst: fieldPtr, Val: boxedVal})
 		}
-		return agg
+		return dst
 
 	case *ast.SliceExpr:
 		// list[start:end] -> list_slice(list, start, end)
@@ -878,19 +914,50 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 	case *ast.IndexExpr:
 		lhsType := ls.info.Types[x.X]
-		if _, ok := lhsType.(*types.Tuple); ok {
-			agg := ls.lowerExpr(x.X)
+		if tup, ok := lhsType.(*types.Tuple); ok {
+			base := ls.lowerExpr(x.X) // pointer to tuple
 			idxLit, _ := x.Idx.(*ast.IntLit)
 			idx, _ := strconv.Atoi(idxLit.Text)
-			resType := ls.info.Types[x]
-			dst := ls.b.FreshTemp("elem")
-			ls.b.Emit(&hir.ExtractValue{
-				Agg:   agg,
-				Index: idx,
-				Type:  resType,
-				Dst:   dst,
+
+			// Reconstruct struct type string for GEP (all ptrs)
+			var elemTypes []string
+			for range tup.Elems {
+				elemTypes = append(elemTypes, "ptr")
+			}
+			structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+			// GEP
+			fieldPtr := ls.b.FreshTemp("tuple_elem_ptr")
+			ls.b.Emit(&hir.GetElementPtr{
+				Type:    structType,
+				Base:    base,
+				Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", idx)}},
+				Dst:     fieldPtr,
 			})
-			return dst
+
+			// Load ptr
+			dstPtr := ls.b.FreshTemp("tuple_elem_ptr_val")
+			ls.b.Emit(&hir.Load{
+				Type: "ptr",
+				Src:  fieldPtr,
+				Dst:  dstPtr,
+			})
+
+			// Unbox if necessary (load from pointer for primitives)
+			targetType := lowerType(tup.Elems[idx])
+			if targetType != "ptr" && targetType != "void" {
+				// dstPtr points to allocated storage containing the primitive value
+				// Load the actual value
+				unboxed := ls.b.FreshTemp("unboxed")
+				ls.b.Emit(&hir.Load{
+					Type: targetType,
+					Src:  dstPtr,
+					Dst:  unboxed,
+				})
+				return unboxed
+			}
+
+			return dstPtr
 		}
 
 		// Handle list indexing: list[index]
@@ -1025,42 +1092,63 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		base := ls.lowerExpr(x.X)
 		name := x.Name.Name
 
-		// Check if base is a struct
-		if ls.info != nil {
-			if st, ok := ls.info.Types[x.X].(*types.Struct); ok {
-				// Find field index and offset
-				idx := -1
-				offset := 0
-				for i, f := range st.Fields {
-					if f.Name == name {
-						idx = i
-						break
-					}
-					offset += getSize(f.Type)
+		// Check if base is a struct (or generic struct)
+		var st *types.Struct
+		baseType := ls.info.Types[x.X]
+		if s, ok := baseType.(*types.Struct); ok {
+			st = s
+		} else if g, ok := baseType.(*types.Generic); ok {
+			if s, ok := g.Base.(*types.Struct); ok {
+				st = s
+			}
+		}
+
+		if st != nil {
+			// Find field index and offset
+			idx := -1
+			offset := 0
+			for i, f := range st.Fields {
+				if f.Name == name {
+					idx = i
+					break
+				}
+				offset += getSize(f.Type)
+			}
+
+			if idx != -1 {
+				// Emit GEP + Load
+				fieldPtr := ls.b.FreshTemp("field_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    "i8", // struct is i8 array
+					Base:    base,
+					Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+					Dst:     fieldPtr,
+				})
+
+				dst := ls.b.FreshTemp("field_val")
+				// Determine field type for Load (storage type)
+				storageType := lowerType(st.Fields[idx].Type)
+
+				ls.b.Emit(&hir.Load{
+					Type:     storageType,
+					Src:      fieldPtr,
+					Dst:      dst,
+					DesiType: st.Fields[idx].Type,
+				})
+
+				// Check if unboxing is needed (Generic T -> primitive)
+				// If storage is ptr (from T) but expression type is primitive (e.g. int)
+				exprType := ls.info.Types[x]
+				targetType := lowerType(exprType)
+
+				if storageType == "ptr" && targetType != "ptr" && targetType != "void" {
+					// Unbox: ptr -> targetType
+					unboxed := ls.b.FreshTemp("unboxed")
+					ls.b.Emit(&hir.Cast{Dst: unboxed, Src: dst, Type: targetType})
+					return unboxed
 				}
 
-				if idx != -1 {
-					// Emit GEP + Load
-					fieldPtr := ls.b.FreshTemp("field_ptr")
-					ls.b.Emit(&hir.GetElementPtr{
-						Type:    "i8", // struct is i8 array
-						Base:    base,
-						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
-						Dst:     fieldPtr,
-					})
-
-					dst := ls.b.FreshTemp("field_val")
-					// Determine field type for Load
-					fieldType := lowerType(st.Fields[idx].Type)
-
-					ls.b.Emit(&hir.Load{
-						Type:     fieldType,
-						Src:      fieldPtr,
-						Dst:      dst,
-						DesiType: st.Fields[idx].Type,
-					})
-					return dst
-				}
+				return dst
 			}
 		}
 
@@ -1428,63 +1516,96 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	// 3. M14: Struct Instantiation
-	// Check if callee is a Type
-	if id, ok := x.Callee.(*ast.Ident); ok && ls.info != nil {
-		if def := ls.info.Idents[id]; def != nil {
-			// Check if def is a Type symbol (Struct/Class)
-			// In check.Info, Uses maps to types.T.
-			// If it's a type name usage, it maps to the Type it refers to?
-			// Or does it map to a *types.Sym?
-			// Let's check types package or assume generic handling.
-			// If the type string matches a known struct...
-			// Actually, let's check if it's in info.Impls (implies it's a type we know about).
-			// Or check if it's a struct type.
-			// For M14, let's rely on the fact that we collected structs.
-			// If the name matches a struct name...
-			// But we don't have a list of structs here.
-			// We can check if the result type of the call is the same as the callee name?
-			// info.Types[x] gives the result type.
-			if resT := ls.info.Types[x]; resT != nil {
-				if resT.String() == id.Name {
-					// Likely a constructor call!
-					// Emit Alloc + Init
-					// For M14 Tier-0, we can just emit a call to a constructor function if we had one.
-					// But we don't generate constructors.
-					// We need to allocate memory.
-					// Since we don't have fields info here easily (without looking up the AST node for the struct),
-					// maybe we can just emit a "Alloc" intrinsic?
-					// But we need to initialize fields.
-					// The args are named: Point(x=1, y=2).
-					// We need to map args to fields.
-					// This is hard without the StructDecl.
+	// Check if callee is a Type (Struct or Generic Instance)
+	// We rely on the fact that check_inst resolves the call type to the struct type.
+	if ls.info != nil {
+		resT := ls.info.Types[x]
+		var st *types.Struct
 
-					// FALLBACK: For M14 Tier-0, let's just emit a call to the function named "TypeName".
-					// The LLVM backend will treat it as an external call if we don't define it.
-					// BUT we want it to work.
-					// Maybe we can treat it as a "struct literal" if we had that in HIR.
-					// We don't.
+		if s, ok := resT.(*types.Struct); ok {
+			st = s
+		} else if g, ok := resT.(*types.Generic); ok {
+			if s, ok := g.Base.(*types.Struct); ok {
+				st = s
+			}
+		}
 
-					// Let's skip full struct instantiation lowering for now and focus on Method Calls and Print.
-					// The user example `let p = Point(x=10)` needs to produce *something*.
-					// If we emit `call Point(...)`, and `Point` is not defined, it links to nothing.
-					// We need to define `Point` function?
-					// Or emit `alloca` and `store`.
-
-					// Let's just emit a call to "Point" and assume the user provides a C constructor?
-					// No, that's cheating.
-
-					// OK, minimal effort:
-					// Just emit `call Point` (as before) but maybe we can define a dummy `Point` function?
-					// No, `LowerModuleFromSource` iterates `FuncDecl`. It doesn't generate constructors.
-
-					// If I want `Point(x=10)` to work, I should probably generate a constructor function in `LowerModuleFromSource`.
-					// Yes! I should generate a `Point` function that takes args and returns the struct.
-					// But `Point` is a type.
-					// In Desi, `Point(...)` is syntax for instantiation.
-
-					// Let's stick to the existing behavior for instantiation (call "Point")
-					// AND update `LowerModuleFromSource` to generate a default constructor for every struct!
+		if st != nil {
+			// Check if the callee name matches the struct name (heuristic for constructor call)
+			// Or just assume if the result type is a struct, it's a constructor call.
+			// But it could be a function returning a struct.
+			// We check if callee is an Ident that resolves to a Type symbol.
+			isConstructor := false
+			if id, ok := x.Callee.(*ast.Ident); ok {
+				if sym := ls.info.Idents[id]; sym != nil && sym.Kind == check.SymType {
+					isConstructor = true
 				}
+			}
+
+			if isConstructor {
+				// Emit Alloc
+				// Calculate size
+				size := 0
+				for _, f := range st.Fields {
+					size += getSize(f.Type)
+				}
+				// Align to 8 bytes for simplicity
+				if size == 0 {
+					size = 1
+				} // Empty struct
+
+				inst := ls.b.FreshTemp("inst")
+				// Allocate as i8 array
+				ls.b.Emit(&hir.Alloca{Type: "i8", Count: size, Dst: inst})
+
+				// Initialize fields
+				// We iterate ArgNodes to get names and values
+				for _, arg := range x.ArgNodes {
+					name := arg.Name.Name
+					valExpr := arg.Expr
+					val := ls.lowerExpr(valExpr)
+
+					// Find field
+					offset := 0
+					var fieldType types.T
+					for _, f := range st.Fields {
+						if f.Name == name {
+							fieldType = f.Type
+							break
+						}
+						offset += getSize(f.Type)
+					}
+
+					// Emit GEP
+					fieldPtr := ls.b.FreshTemp("field_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    inst,
+						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+						Dst:     fieldPtr,
+					})
+
+					// Check boxing (primitive -> Generic T (ptr))
+					storageType := lowerType(fieldType)
+					// We need to know the type of val.
+					// We can look up valExpr type.
+					valExprType := ls.info.Types[valExpr]
+					valLowerType := lowerType(valExprType)
+
+					if storageType == "ptr" && valLowerType != "ptr" && valLowerType != "void" {
+						// Box: cast primitive to ptr
+						boxed := ls.b.FreshTemp("boxed")
+						ls.b.Emit(&hir.Cast{Dst: boxed, Src: val, Type: "ptr"})
+						val = boxed
+					}
+
+					// Store
+					ls.b.Emit(&hir.Store{
+						Dst: fieldPtr,
+						Val: val,
+					})
+				}
+				return inst
 			}
 		}
 	}
@@ -1494,6 +1615,37 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	var args []hir.Value
 	for _, a := range x.Args {
 		args = append(args, ls.lowerExpr(a))
+	}
+
+	// M15: Box arguments for generic functions
+	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
+	if ls.info != nil {
+		if id, ok := x.Callee.(*ast.Ident); ok {
+			if sym := ls.info.Idents[id]; sym != nil {
+				if funcType, ok := sym.Type.(*types.Func); ok && len(funcType.TypeParams) > 0 {
+					// This is a call to a generic function
+					// Box all primitive arguments to ptr (allocate + store + return pointer)
+					for i, arg := range args {
+						argType := "i32" // default
+						if i < len(x.Args) {
+							if t := ls.info.Types[x.Args[i]]; t != nil {
+								argType = lowerType(t)
+							}
+						}
+
+						if argType != "ptr" && argType != "void" {
+							// Allocate storage
+							boxPtr := ls.b.FreshTemp("arg_box_ptr")
+							ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})
+							// Store value
+							ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
+							// Use pointer as argument
+							args[i] = boxPtr
+						}
+					}
+				}
+			}
+		}
 	}
 
 	// Special-cases for arena helpers

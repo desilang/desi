@@ -27,6 +27,19 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 		return types.UnionOf(variants...)
 	}
 
+	// Handle tuple types (T1, T2)
+	if len(tn.TupleTypes) > 0 {
+		var elems []types.T
+		for _, et := range tn.TupleTypes {
+			t := c.resolveType(et)
+			if t == nil {
+				return nil
+			}
+			elems = append(elems, t)
+		}
+		return types.TupleOf(elems...)
+	}
+
 	// Handle parameterized types
 	if len(tn.Params) > 0 {
 		switch tn.Name {

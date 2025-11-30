@@ -1,0 +1,26 @@
+# Test generic functions
+
+def identity<T>(x: T) -> T:
+    return x
+
+def swap<T>(a: T, b: T) -> (T, T):
+    return (b, a)
+
+def main() -> int:
+    # Test identity with int
+    let i = identity(42)
+    print("identity(42):")
+    print(i)
+    
+    # Test identity with str
+    let s = identity("hello")
+    print("identity('hello'):")
+    print(s)
+    
+    # Test swap
+    let p = swap(1, 2)
+    print("swap(1, 2):")
+    print(p[0])
+    print(p[1])
+    
+    return 0

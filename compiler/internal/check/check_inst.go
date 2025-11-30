@@ -43,6 +43,14 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 
 	// Check args.
 	seen := make(map[string]bool)
+
+	// M15: Generic Type Inference
+	// If the struct is generic, we need to infer type arguments from the provided fields.
+	var inferred map[string]types.T
+	if st != nil && len(st.TypeParams) > 0 {
+		inferred = make(map[string]types.T)
+	}
+
 	for _, arg := range call.ArgNodes {
 		if arg.Name == nil {
 			c.add(diagAt("DTE0106", arg.Expr.SpanOf(), "struct initialization requires named arguments"))
@@ -82,6 +90,13 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 			}
 		}
 
+		// Try to unify field type (pattern) with value type (concrete) to infer type params
+		if inferred != nil {
+			_ = unify(fieldT, valT, inferred)
+			// Substitute known type params into fieldT for checking
+			fieldT = substitute(fieldT, inferred)
+		}
+
 		if !types.Assignable(fieldT, valT) {
 			c.add(diagAt("DTE0104", arg.Expr.SpanOf(), "field '"+name+"' expects type "+fieldT.String()))
 		}
@@ -103,6 +118,19 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 
 	// Return the struct instance type.
 	if st != nil {
+		// If generic, return instantiated Generic type
+		if len(st.TypeParams) > 0 {
+			var args []types.T
+			for _, tp := range st.TypeParams {
+				if t, ok := inferred[tp.Name]; ok {
+					args = append(args, t)
+				} else {
+					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name+"'"))
+					args = append(args, types.Any) // Fallback
+				}
+			}
+			return &types.Generic{Base: st, Args: args}
+		}
 		return st
 	}
 	// Fallback (shouldn't happen if checkStruct ran)

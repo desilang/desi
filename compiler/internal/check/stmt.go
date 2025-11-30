@@ -21,9 +21,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
 			}
 		} else {
-			// Strict typing: require explicit type annotation
-			c.add(diagAt("DTE0004", st.Span, "missing type annotation for variable '"+st.Name.Name+"'"))
-			// Recovery: infer type anyway to avoid cascading errors
+			// Infer type from RHS
+			if rhs == nil {
+				c.add(diagAt("DTE0004", st.Span, "missing type annotation and no value for variable '"+st.Name.Name+"'"))
+			}
 			t = rhs
 		}
 		sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
