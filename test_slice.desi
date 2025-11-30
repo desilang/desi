@@ -1,0 +1,22 @@
+# Test list slice syntax
+def main() -> int:
+    let nums: list[int] = [10, 20, 30, 40, 50]
+    
+    # Slice [1:4] -> [20, 30, 40]
+    let sub: list[int] = nums[1:4]
+    
+    if sub.len() != 3: return 1
+    if sub[0] != 20: return 2
+    if sub[2] != 40: return 3
+    
+    # Slice [:2] -> [10, 20]
+    let prefix: list[int] = nums[:2]
+    if prefix.len() != 2: return 4
+    if prefix[1] != 20: return 5
+    
+    # Slice [3:] -> [40, 50]
+    let suffix: list[int] = nums[3:]
+    if suffix.len() != 2: return 6
+    if suffix[0] != 40: return 7
+    
+    return 0
