@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // DesiList - Dynamic growable list (type-erased via void*)
 typedef struct {
@@ -11,13 +12,41 @@ typedef struct {
     size_t capacity;   // Total allocated capacity
 } DesiList;
 
-// Core list operations
+// === Core Operations ===
 DesiList* list_new(void);
-void list_append(DesiList* list, void* item);
+void list_free(DesiList* list);
+void list_clear(DesiList* list);
+DesiList* list_copy(DesiList* list);
+
+// === Element Access ===
 void* list_get(DesiList* list, int64_t index);
 void list_set(DesiList* list, int64_t index, void* item);
 int64_t list_len(DesiList* list);
+
+// === Modification ===
+void list_append(DesiList* list, void* item);
+void list_extend(DesiList* list, DesiList* other);
+void list_insert(DesiList* list, int64_t index, void* item);
+void* list_pop(DesiList* list, int64_t index);
+void list_remove(DesiList* list, void* item);  // Remove first occurrence
+void list_reverse(DesiList* list);
+
+// === Slicing & Search ===
 DesiList* list_slice(DesiList* list, int64_t start, int64_t end);
-void list_free(DesiList* list);
+int64_t list_index(DesiList* list, void* item, int64_t start, int64_t end);
+int64_t list_count(DesiList* list, void* item);
+bool list_contains(DesiList* list, void* item);
+
+// === Functional Operations ===
+// Note: These require function pointers for callbacks
+typedef void* (*MapFunc)(void*);
+typedef bool (*FilterFunc)(void*);
+typedef void* (*ReduceFunc)(void*, void*);
+
+DesiList* list_map(DesiList* list, MapFunc func);
+DesiList* list_filter(DesiList* list, FilterFunc func);
+void* list_reduce(DesiList* list, ReduceFunc func, void* initial);
+bool list_any(DesiList* list, FilterFunc predicate);
+bool list_all(DesiList* list, FilterFunc predicate);
 
 #endif // DESI_LIST_H
