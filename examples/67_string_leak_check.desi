@@ -1,0 +1,12 @@
+def main():
+    let mut i = 0
+    while i < 10:
+        # This creates a temporary string "prefix" + "suffix"
+        # If not freed, this loop will leak memory
+        print("prefix" + "suffix")
+        
+        # Chained concat: (a+b)+c
+        # a+b is temp, must be freed
+        print("a" + "b" + "c")
+        
+        i := i + 1

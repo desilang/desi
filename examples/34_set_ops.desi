@@ -23,11 +23,9 @@ def main():
     print("Cleared set")
 
     # Free
-    s.free()
-    print("Freed set")
+    print("Cleared set")
 
     # String set
     let s2 = #{"hello", "world"}
     if s2.contains("hello"):
         print("String set works")
-    s2.free()
