@@ -78,6 +78,56 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return nil
 	}
 
+	// Handle Generic types (e.g. Option[int].Some)
+	if gen, ok := t.(*types.Generic); ok {
+		if enumT, ok := gen.Base.(*types.Enum); ok {
+			// Look up variant
+			variantName := x.Name.Name
+			var variantFound bool
+			var variantParams []types.T
+
+			for _, v := range enumT.Variants {
+				if v.Name == variantName {
+					variantFound = true
+					// Substitute type parameters
+					// Map TypeParam name -> Generic Arg
+					subst := make(map[string]types.T)
+					if len(enumT.TypeParams) == len(gen.Args) {
+						for i, tp := range enumT.TypeParams {
+							subst[tp.Name] = gen.Args[i]
+						}
+					}
+
+					for _, f := range v.Fields {
+						// Perform substitution
+						if tp, ok := f.Type.(*types.TypeParam); ok {
+							if arg, found := subst[tp.Name]; found {
+								variantParams = append(variantParams, arg)
+							} else {
+								variantParams = append(variantParams, f.Type)
+							}
+						} else {
+							// TODO: Recursive substitution for complex types (e.g. List[T])
+							// For now, assume simple T
+							variantParams = append(variantParams, f.Type)
+						}
+					}
+					break
+				}
+			}
+
+			if !variantFound {
+				c.add(diagAt("DTE0001", x.Name.Span, "undefined variant '"+variantName+"' on generic enum"))
+				return nil
+			}
+
+			// Return function type: (params...) -> GenericType
+			funcType := types.FuncOf(variantParams, gen, false)
+			c.info.Types[x] = funcType
+			return funcType
+		}
+	}
+
 	// Handle Dict methods
 	if d, ok := t.(*types.Dict); ok {
 		return c.resolveDictMethod(x, d)

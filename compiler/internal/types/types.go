@@ -50,6 +50,10 @@ const (
 	RcKind
 	ArcKind
 	WeakKind
+
+	// Generics
+	GenericKind
+	TypeParamKind
 )
 
 // ----- Basic types (singletons) -----
@@ -120,8 +124,9 @@ type Field struct {
 }
 
 type Struct struct {
-	Name   string
-	Fields []Field
+	Name       string
+	TypeParams []TypeParam
+	Fields     []Field
 }
 
 type Variant struct {
@@ -131,8 +136,9 @@ type Variant struct {
 }
 
 type Enum struct {
-	Name     string
-	Variants []Variant
+	Name       string
+	TypeParams []TypeParam
+	Variants   []Variant
 }
 
 func (*List) isType()      {}
@@ -264,6 +270,10 @@ func kindOf(t T) Kind {
 		return ArcKind
 	case *Weak:
 		return WeakKind
+	case *Generic:
+		return GenericKind
+	case *TypeParam:
+		return TypeParamKind
 	default:
 		return InvalidKind
 	}
@@ -341,6 +351,22 @@ func Equal(a, b T) bool {
 	case *Enum:
 		// Nominal equality for enums (name check)
 		return x.Name == b.(*Enum).Name
+	case *Generic:
+		y := b.(*Generic)
+		if !Equal(x.Base, y.Base) {
+			return false
+		}
+		if len(x.Args) != len(y.Args) {
+			return false
+		}
+		for i := range x.Args {
+			if !Equal(x.Args[i], y.Args[i]) {
+				return false
+			}
+		}
+		return true
+	case *TypeParam:
+		return x.Name == b.(*TypeParam).Name
 	default:
 		return false
 	}

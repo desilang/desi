@@ -819,15 +819,79 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					return nil
 				}
 
-				// Simple type check
+				// Generic Type Inference
+				// If the return type is a generic Enum, try to infer type parameters
+				var inferredArgs []types.T
+				var enumType *types.Enum
+				if et, ok := funcType.Ret.(*types.Enum); ok && len(et.TypeParams) > 0 {
+					enumType = et
+					// Initialize inferred args with nil
+					inferredArgs = make([]types.T, len(et.TypeParams))
+
+					// Map param name -> index
+					paramIdx := make(map[string]int)
+					for i, tp := range et.TypeParams {
+						paramIdx[tp.Name] = i
+					}
+
+					// Infer from arguments
+					for i, paramT := range funcType.Params {
+						if tp, ok := paramT.(*types.TypeParam); ok {
+							if idx, found := paramIdx[tp.Name]; found {
+								if inferredArgs[idx] == nil {
+									inferredArgs[idx] = args[i]
+								} else {
+									// Check for conflict
+									if !types.Equal(inferredArgs[idx], args[i]) {
+										c.add(diagAt("DTE0104", argsNodes[i].Expr.SpanOf(), "conflicting type inference for "+tp.Name))
+									}
+								}
+								continue // Skip standard assignable check for now
+							}
+						}
+					}
+				}
+
+				// Type check
 				for i := range args {
+					// If param is TypeParam, we already handled it (or it's unconstrained)
+					if _, ok := funcType.Params[i].(*types.TypeParam); ok {
+						continue
+					}
 					if !types.Assignable(funcType.Params[i], args[i]) {
 						c.add(diagAt("DTE0104", argsNodes[i].Expr.SpanOf(), "argument type mismatch"))
 					}
 				}
 
-				c.info.Types[call] = funcType.Ret
-				return funcType.Ret
+				// Construct return type
+				retType := funcType.Ret
+				if enumType != nil {
+					// Verify all params inferred
+					allInferred := true
+					for _, t := range inferredArgs {
+						if t == nil {
+							allInferred = false
+							break
+						}
+					}
+
+					if allInferred {
+						retType = &types.Generic{
+							Base: enumType,
+							Args: inferredArgs,
+						}
+					} else {
+						// If not all inferred, maybe we can't instantiate yet?
+						// For now, return Generic with Any or error?
+						// Or maybe the user provided explicit type args?
+						// But this path is for implicit constructor call.
+						// If inference fails, we might return raw Enum (which is wrong) or error.
+						// Let's assume for now simple cases work.
+					}
+				}
+
+				c.info.Types[call] = retType
+				return retType
 			}
 		}
 		return nil

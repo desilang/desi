@@ -10,6 +10,9 @@ import (
 func (c *checker) collectEnum(d *ast.EnumDecl) {
 	// Create enum type (variants populated in Pass 2)
 	et := &types.Enum{Name: d.Name.Name}
+	for _, tp := range d.TypeParams {
+		et.TypeParams = append(et.TypeParams, types.TypeParam{Name: tp.Name})
+	}
 
 	// Register the enum type name
 	c.scope.Define(&Symbol{
@@ -38,6 +41,17 @@ func (c *checker) checkEnum(d *ast.EnumDecl) {
 		return
 	}
 
+	// Add type parameters to scope for generic enums
+	// e.g., for "enum Option<T>", add T as a TypeParam
+	c.scope = NewScope(c.scope)
+	for _, typeParam := range d.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: typeParam.Name,
+			Kind: SymType,
+			Type: &types.TypeParam{Name: typeParam.Name},
+		})
+	}
+
 	// Resolve each variant
 	for i, v := range d.Variants {
 		variant := types.Variant{
@@ -60,4 +74,7 @@ func (c *checker) checkEnum(d *ast.EnumDecl) {
 
 		et.Variants = append(et.Variants, variant)
 	}
+
+	// Pop type parameter scope
+	c.scope = c.scope.parent
 }

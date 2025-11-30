@@ -1,0 +1,18 @@
+# Test nested generics and Result with explicit instantiation
+enum Option<T>:
+    Some: T
+    None: none
+
+enum Result<T, E>:
+    Ok: T
+    Err: E
+
+def main():
+    # Nested Option
+    let nested: Option[Option[str]] = Option.Some(Option.Some("nested"))
+    
+    # Result with explicit instantiation
+    let res: Result[str, str] = Result[str, str].Ok("success")
+    let err: Result[str, str] = Result[str, str].Err("failure")
+    
+    print("Nested and Result test passed")

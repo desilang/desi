@@ -237,6 +237,30 @@ func (p *Parser) parsePostfix() ast.Expr {
 			if p.cur.Tok != token.COLON && p.cur.Tok != token.RBRACK {
 				i1 = p.parseExpr()
 			}
+
+			// Check for comma - multi-index (e.g. Result[T, E])
+			if p.cur.Tok == token.COMMA {
+				// We have multiple indices - treat as a tuple
+				elems := []ast.Expr{i1}
+				for p.accept(token.COMMA) {
+					elems = append(elems, p.parseExpr())
+				}
+				// Create implicit TupleLit for the index
+				i1 = &ast.TupleLit{
+					Elems: elems,
+					Span:  ast.JoinSpan(i1.SpanOf(), spanPos(p.file, p.cur)),
+				}
+				// Ensure we expect closing bracket
+				p.expect(token.RBRACK, "]")
+
+				e = &ast.IndexExpr{
+					X:    e,
+					Idx:  i1,
+					Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur)),
+				}
+				continue
+			}
+
 			// If we see a colon, it's a slice.
 			if p.cur.Tok == token.COLON {
 				isSlice = true
@@ -253,19 +277,30 @@ func (p *Parser) parsePostfix() ast.Expr {
 					}
 				}
 			}
-			p.expectClose(token.RBRACK, "]", idxStart)
-			if isSlice {
-				e = &ast.SliceExpr{X: e, I: i1, J: i2, K: i3, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
-			} else {
-				e = &ast.IndexExpr{X: e, Idx: i1, Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur))}
-			}
+			p.expect(token.RBRACK, "]")
 
+			if isSlice {
+				e = &ast.SliceExpr{
+					X:    e,
+					I:    i1,
+					J:    i2,
+					K:    i3,
+					Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur)),
+				}
+			} else {
+				e = &ast.IndexExpr{
+					X:    e,
+					Idx:  i1,
+					Span: ast.JoinSpan(idxStart, spanPos(p.file, p.cur)),
+				}
+			}
 		case token.DOT:
 			dot := p.cur
 			p.next()
 			if p.cur.Tok != token.IDENT {
 				p.errExpected(spanPos(p.file, p.cur), "identifier")
 				return e
+
 			}
 			name := ast.Ident{Name: p.cur.Lexeme, Span: joinTok(p.file, dot, p.cur)}
 			e = &ast.FieldExpr{X: e, Name: name, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
