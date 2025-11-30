@@ -18,7 +18,7 @@ def identity<T>(x: T) -> T:
 class Container<T>:
     value: T
     
-    def get<U>(self) -> T:
+    def get(self) -> T:
         return self.value
 
 def main():
