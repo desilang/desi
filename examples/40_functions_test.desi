@@ -14,10 +14,10 @@ def main():
     # let f_quot = f1 / f2
     
     print("--- Function Tests ---")
-    let result = add(10, 20)
+    let result: int = add(10, 20)
     print(result)
     
-    let result2 = add(5, 7)
+    let result2: int = add(5, 7)
     print(result2)
     
     print("Functions work")

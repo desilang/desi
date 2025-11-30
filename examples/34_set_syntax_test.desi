@@ -2,13 +2,13 @@
 
 def main():
     # Empty set
-    let empty = #{}
+    let empty: set[int] = #{}
     
     # Integer set
-    let nums = #{1, 2, 3}
+    let nums: set[int] = #{1, 2, 3}
     
     # String set
-    let words = #{"hello", "world"}
+    let words: set[str] = #{"hello", "world"}
     
     # Test contains
     if nums.contains(2):

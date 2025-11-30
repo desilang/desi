@@ -1,6 +1,6 @@
 def main():
     # Basic dict literal
-    let scores = {"Alice": 100, "Bob": 85}
+    let scores: dict[str, int] = {"Alice": 100, "Bob": 85}
     
     # Single entry dict
-    let single = {"key": 42}
+    let single: dict[str, int] = {"key": 42}

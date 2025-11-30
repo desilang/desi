@@ -9,7 +9,7 @@ impl Display for Person:
         return "Person"
 
 def main() -> int:
-    let p = Person(name="Alice", age=30)
-    let greeting = "Hello, " + p
+    let p: Person = Person(name="Alice", age=30)
+    let greeting: str = "Hello, " + p
     
     return 0

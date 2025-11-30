@@ -1,6 +1,6 @@
 # Simple set test
 
 def main():
-    let s = #{1, 2, 3}
+    let s: set[int] = #{1, 2, 3}
     s.add(4)
 

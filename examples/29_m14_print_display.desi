@@ -7,6 +7,6 @@ struct Point:
 # Point automatically gets default Display impl
 
 def main():
-	let p = Point(x=10, y=20)
+	let p: Point = Point(x=10, y=20)
 	# This should now work! print accepts Display types
 	print(p)

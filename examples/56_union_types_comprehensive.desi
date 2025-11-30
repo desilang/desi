@@ -5,11 +5,11 @@ struct MixedNumber:
 
 def test_basic_union():
     # Should accept int
-    let a = MixedNumber(value=42)
+    let a: MixedNumber = MixedNumber(value=42)
     print("int accepted")
     
     # Should accept float
-    let b = MixedNumber(value=3.14)
+    let b: MixedNumber = MixedNumber(value=3.14)
     print("float accepted")
     
     print("Basic union test passed!")
@@ -20,11 +20,11 @@ struct OptionalInt:
 
 def test_nullable():
     # Should accept int
-    let x = OptionalInt(count=10)
+    let x: OptionalInt = OptionalInt(count=10)
     print("int accepted")
     
     # Should accept none
-    let y = OptionalInt(count=none)
+    let y: OptionalInt = OptionalInt(count=none)
     print("none accepted")
     
     print("Nullable test passed!")
@@ -34,13 +34,13 @@ struct FlexibleValue:
     data: int|float|str
 
 def test_multi_variant():
-    let a = FlexibleValue(data=100)
+    let a: FlexibleValue = FlexibleValue(data=100)
     print("int accepted")
     
-    let b = FlexibleValue(data=2.5)
+    let b: FlexibleValue = FlexibleValue(data=2.5)
     print("float accepted")
     
-    let c = FlexibleValue(data="hello")
+    let c: FlexibleValue = FlexibleValue(data="hello")
     print("str accepted")
     
     print("Multi-variant test passed!")

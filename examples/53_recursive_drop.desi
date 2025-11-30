@@ -8,8 +8,8 @@ struct Outer:
 
 def main():
     print("Allocating nested structs...")
-    let i = Inner(value=42)
-    let o = Outer(inner=i, data=100)
+    let i: Inner = Inner(value=42)
+    let o: Outer = Outer(inner=i, data=100)
     
     print("Dropping nested structs...")
     # When o goes out of scope, it should:

@@ -5,7 +5,7 @@ enum Color:
     Blue: none
 
 def main():
-    let c = Color.Red()
+    let c: Color = Color.Red()
     
     # Exhaustive match without wildcard
     match c:
