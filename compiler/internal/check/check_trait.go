@@ -2,6 +2,7 @@ package check
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // collectTrait registers the trait in the scope (M14 stub).
@@ -37,7 +38,25 @@ func (c *checker) checkTraitBody(d *ast.TraitDecl) {
 
 // checkImplBody checks the methods inside an impl.
 func (c *checker) checkImplBody(d *ast.ImplDecl) {
+	// Resolve the struct type that this impl is for
+	var structType types.T
+	if d.ForType != nil {
+		structType = c.resolveType(d.ForType)
+	}
+
 	for _, m := range d.Methods {
+		// If this method has a 'self' parameter, we need to set its type to the struct
+		if len(m.Params) > 0 && m.Params[0].Name.Name == "self" {
+			// Temporarily store the struct type for this parameter
+			// We'll modify the AST node to include the type
+			// Actually, we can't modify AST. Instead, we should register it in scope manually.
+			// Let's use a different approach - modify checkFunc to accept context
+			// OR we can set the parameter's Type field before calling checkFunc
+			if structType != nil && m.Params[0].Type == nil {
+				// Create a TypeName node for the struct
+				m.Params[0].Type = d.ForType
+			}
+		}
 		c.checkFunc(m)
 	}
 }

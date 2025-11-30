@@ -23,17 +23,23 @@ func wprintf(w io.Writer, format string, a ...any) {
 }
 
 type Module struct {
-	name             string
-	globals          bytes.Buffer
-	funcs            bytes.Buffer
-	strLits          map[string]string    // text-key -> global name
-	strOrder         []string             // deterministic order
-	ssa              map[string]hir.Value // SSA-alias for simple variables
-	tempTypes        map[string]string    // map from temp name to LLVM type
-	tempID           int                  // counter for %t0, %t1, ...
-	mergeID          int                  // counter for merge blocks
-	asyncWrappers    map[string]bool      // functions returning ptr (future handle)
-	definedFunctions map[string]bool      // track which functions we've defined
+	name      string
+	globals   bytes.Buffer
+	funcs     bytes.Buffer
+	strLits   map[string]string    // text-key -> global name
+	strOrder  []string             // deterministic order
+	ssa       map[string]hir.Value // SSA-alias for simple variables
+	tempTypes map[string]string    // Map of temp/SSA names to their LLVM types (e.g. "%t1" -> "ptr")
+
+	// Map of variable names to their high-level Desi types
+	varTypes map[string]types.T
+
+	// Current function being emitted
+	curFunc          *hir.Func
+	tempID           int             // counter for %t0, %t1, ...
+	mergeID          int             // counter for merge blocks
+	asyncWrappers    map[string]bool // functions returning ptr (future handle)
+	definedFunctions map[string]bool // track which functions we've defined
 	needPuts         bool
 	needRcDec        bool
 	needArena        bool
@@ -164,14 +170,25 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	// Reset per-function state.
 	m.ssa = make(map[string]hir.Value)
 	m.tempTypes = make(map[string]string)
+	m.varTypes = make(map[string]types.T)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
 	m.currentMoves = nil
 
-	// Look up moves if we have origin info
+	// Look up moves and param types if we have origin info
 	if m.info != nil && fn.Origin != nil {
 		if fd, ok := fn.Origin.(*ast.FuncDecl); ok {
 			if moves, ok := m.info.FuncMoves[fd]; ok {
 				m.currentMoves = moves
+			}
+			// Populate varTypes for parameters
+			for i := range fd.Params {
+				// Param.Name is a struct, so we take its address
+				// The checker uses the address of the Ident in the AST
+				if sym := m.info.Idents[&fd.Params[i].Name]; sym != nil {
+					if sym.Type != nil {
+						m.varTypes[fd.Params[i].Name.Name] = sym.Type
+					}
+				}
 			}
 		}
 	}
@@ -267,6 +284,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- core statements -------
 			case *hir.Let:
+				// Track Desi type if available
+				if x.Type != nil {
+					if t, ok := x.Type.(types.T); ok {
+						m.varTypes[x.Name] = t
+					}
+				}
+
 				// If type is a reference type (set, dict, list, str), don't allocate
 				// Just use the init value directly as an SSA value
 				if isReferenceType(x.Type) {
@@ -311,6 +335,21 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Special case: String concatenation with type conversions
 				if x.Op == "+" && x.Type == "ptr" {
 					// This is a string concatenation (dest type is ptr/string)
+
+					// Helper to get type
+					getType := func(val hir.Value) types.T {
+						if v, ok := val.(hir.Var); ok {
+							return m.varTypes[v.Name]
+						}
+						if t, ok := val.(hir.Temp); ok {
+							return m.varTypes[t.Name]
+						}
+						return nil
+					}
+
+					lType := getType(x.LHS)
+					rType := getType(x.RHS)
+
 					leftStr := lval
 					rightStr := rval
 
@@ -330,6 +369,28 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 						case "i1":
 							wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", convTemp, lval)
 							m.ensureDecl("declare ptr @bool_to_str(i1)")
+							leftStr = convTemp
+						}
+					} else {
+						// It's a ptr. Is it a string?
+						isStr := false
+						if lType != nil && types.Equal(lType, types.Str) {
+							isStr = true
+						} else if _, ok := x.LHS.(hir.ConstStr); ok {
+							isStr = true
+						}
+
+						if !isStr {
+							// Assume struct
+							typeName := "Unknown"
+							if lType != nil {
+								if s, ok := lType.(*types.Struct); ok {
+									typeName = s.Name
+								}
+							}
+							convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+							m.tempID++
+							wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, lval)
 							leftStr = convTemp
 						}
 					}
@@ -352,13 +413,36 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							m.ensureDecl("declare ptr @bool_to_str(i1)")
 							rightStr = convTemp
 						}
+					} else {
+						// It's a ptr. Is it a string?
+						isStr := false
+						if rType != nil && types.Equal(rType, types.Str) {
+							isStr = true
+						} else if _, ok := x.RHS.(hir.ConstStr); ok {
+							isStr = true
+						}
+
+						if !isStr {
+							// Assume struct
+							typeName := "Unknown"
+							if rType != nil {
+								if s, ok := rType.(*types.Struct); ok {
+									typeName = s.Name
+								}
+							}
+							convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+							m.tempID++
+							wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, rval)
+							rightStr = convTemp
+						}
 					}
 
 					// Now concatenate
 					wprintf(&m.funcs, "  %s = call ptr @string_concat(ptr %s, ptr %s)\n",
 						x.Dst.String(), leftStr, rightStr)
 					m.ssa[x.Dst.Name] = x.Dst
-					m.tempTypes[x.Dst.Name] = "ptr" // Track that result is a string (ptr)
+					m.tempTypes[x.Dst.Name] = "ptr"    // Track that result is a string (ptr)
+					m.varTypes[x.Dst.Name] = types.Str // Track high-level type
 					m.ensureDecl("declare ptr @string_concat(ptr, ptr)")
 					continue
 				}
@@ -532,6 +616,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				ptrOp := m.ptrOperand(x.Src)
 				wprintf(&m.funcs, "  %s = load %s, %s\n", x.Dst.Name, x.Type, ptrOp)
 				m.tempTypes[x.Dst.Name] = x.Type
+				if x.DesiType != nil {
+					if t, ok := x.DesiType.(types.T); ok {
+						m.varTypes[x.Dst.Name] = t
+					}
+				}
 
 			case *hir.GetElementPtr:
 				baseOp := m.ptrOperand(x.Base)
