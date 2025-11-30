@@ -15,7 +15,7 @@ impl Display for Point:
 		return "Point"
 
 def main():
-	let p = Point(x=10, y=20)
+	let p: Point = Point(x=10, y=20)
 	# For now, just ensure this parses and checks without error.
 	# We haven't implemented method dispatch via traits yet.
-	let s = p.to_str()
+	let s: str = p.to_str()

@@ -1,19 +1,19 @@
 def main():
     print("--- Primitives ---")
     # Integers
-    let i = 42
-    let neg = -10
+    let i: int = 42
+    let neg: int = -10
     print(i)
     print(neg)
     
     # Floats
-    let f = 3.14
-    let f_neg = -0.001
+    let f: float = 3.14
+    let f_neg: float = -0.001
     # print(f) # Float printing not fully supported in runtime yet? Let's check.
     
     # Booleans
-    let t = true
-    let f_bool = false
+    let t: bool = true
+    let f_bool: bool = false
     if t:
         print("True works")
     if f_bool:
@@ -22,15 +22,15 @@ def main():
         print("False works")
 
     # Strings
-    let s = "Hello Desi"
+    let s: str = "Hello Desi"
     print(s)
 
     print("--- Arithmetic ---")
-    let sum = 10 + 5
-    let diff = 10 - 5
-    let prod = 10 * 5
-    let quot = 10 / 2
-    let rem = 10 % 3
+    let sum: int = 10 + 5
+    let diff: int = 10 - 5
+    let prod: int = 10 * 5
+    let quot: int = 10 / 2
+    let rem: int = 10 % 3
     print(sum)
     print(diff)
     print(prod)
@@ -46,17 +46,17 @@ def main():
     if 5 <= 5: print("5 <= 5")
 
     print("--- Tuples ---")
-    let tup = (1, 2, 3)
+    let tup: tuple[int, int, int] = (1, 2, 3)
     # Destructuring not fully supported yet, use indexing
-    let a = tup[0]
-    let b = tup[1]
-    let c = tup[2]
+    let a: int = tup[0]
+    let b: int = tup[1]
+    let c: int = tup[2]
     print(a)
     print(b)
     print(c)
 
     print("--- Sets ---")
-    let s1 = #{1, 2, 3}
+    let s1: set[int] = #{1, 2, 3}
     if s1.contains(1):
         print("1 in set")
     if s1.contains(4):
@@ -65,13 +65,13 @@ def main():
         print("4 not in set")
 
     print("--- Dicts ---")
-    let d = {"a": 1, "b": 2}
+    let d: dict[str, int] = {"a": 1, "b": 2}
     if d.has_key("a"):
         print("Has key a")
     # let val = d.get("a", 0) # Method call lowering might be tricky, let's stick to basics
     
     print("--- Control Flow ---")
-    let mut count = 0
+    let mut count: int = 0
     while count < 3:
         print(count)
         count := count + 1

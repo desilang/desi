@@ -1,19 +1,19 @@
 # Advanced set operations test
 
 def main():
-	let s1 = #{1, 2, 3}
-	let s2 = #{2, 3, 4}
+	let s1: set[int] = #{1, 2, 3}
+	let s2: set[int] = #{2, 3, 4}
 	
 	# Test union - should have {1, 2, 3, 4}
-	let union_set = s1.union(s2)
+	let union_set: set[int] = s1.union(s2)
 	
 	# Test intersection - should have {2, 3}
-	let inter_set = s1.intersection(s2)
+	let inter_set: set[int] = s1.intersection(s2)
 	
 	# Test difference - should have {1}
 	# Note: s1.difference(s2) returns elements in s1 NOT in s2
 	# For symmetric difference (elements in either but not both), that's a different operation
-	let diff_set = s1.difference(s2)
+	let diff_set: set[int] = s1.difference(s2)
 	
 	# Cleanup ALL sets (testing type inference fix)
 

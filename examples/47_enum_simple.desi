@@ -6,7 +6,7 @@ enum Status:
 
 def main():
   print("Testing enum constructor")
-  let s = Status.Pending()
+  let s: Status = Status.Pending()
   print("Created s")
   # If s has a type, this should work
   print("Done")

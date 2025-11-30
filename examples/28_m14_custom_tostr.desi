@@ -13,6 +13,6 @@ impl Display for Point:
 		return "Point(x=?, y=?)"
 
 def main():
-	let p = Point(x=10, y=20)
-	let s = p.to_str()
-	let x = 42
+	let p: Point = Point(x=10, y=20)
+	let s: str = p.to_str()
+	let x: int = 42

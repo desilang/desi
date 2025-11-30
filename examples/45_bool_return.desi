@@ -1,16 +1,16 @@
 # Test bool return type
 
 def is_even(n: int) -> bool:
-    let remainder = n % 2
+    let remainder: int = n % 2
     return remainder == 0
 
 def main():
     print("Testing bool return")
-    let result = is_even(4)
+    let result: bool = is_even(4)
     if result:
         print("4 is even")
     
-    let result2 = is_even(5)
+    let result2: bool = is_even(5)
     if result2:
         print("5 is even - WRONG")
     else:

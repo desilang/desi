@@ -1,11 +1,11 @@
 def main():
-    let d = {"a": 1, "b": 2}
+    let d: dict[str, int] = {"a": 1, "b": 2}
     
     # Using method syntax
-    let val = d.get("a", 0)
+    let val: int = d.get("a", 0)
     
     # Check if key exists
-    let has_a = d.has_key("a")
+    let has_a: bool = d.has_key("a")
     
     # Clear dict
     d.clear()

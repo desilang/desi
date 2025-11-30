@@ -1,5 +1,5 @@
 def main():
-    let mut i = 0
+    let mut i: int = 0
     while i < 10:
         # This creates a temporary string "prefix" + "suffix"
         # If not freed, this loop will leak memory

@@ -2,7 +2,7 @@
 
 def main():
     # Set literal
-    let s = #{1, 2, 3}
+    let s: set[int] = #{1, 2, 3}
     print("Set created")
 
     # Contains
@@ -26,6 +26,6 @@ def main():
     print("Cleared set")
 
     # String set
-    let s2 = #{"hello", "world"}
+    let s2: set[str] = #{"hello", "world"}
     if s2.contains("hello"):
         print("String set works")

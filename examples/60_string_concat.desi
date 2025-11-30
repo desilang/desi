@@ -1,8 +1,8 @@
 # Test string concatenation
 
 def main() -> int:
-    let s1 = "Hello"
-    let s2 = " World"
-    let result = s1 + s2
+    let s1: str = "Hello"
+    let s2: str = " World"
+    let result: str = s1 + s2
     # For now, just test that concat compiles
     return 0

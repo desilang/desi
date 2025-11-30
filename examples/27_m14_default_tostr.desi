@@ -5,7 +5,7 @@ struct Point:
 	y: int
 
 def main():
-	let p = Point(x=10, y=20)
+	let p: Point = Point(x=10, y=20)
 	# Should work! Default to_str is auto-generated
-	let s = p.to_str()
-	let x = 42
+	let s: str = p.to_str()
+	let x: int = 42

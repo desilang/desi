@@ -13,21 +13,21 @@ def main():
   print("Testing enums and match")
   
   # Test 1: Unit variants match
-  let s = Status.Pending()
+  let s: Status = Status.Pending()
   print("Created Status.Pending")
-  let res = match s:
+  let res: str = match s:
     Status.Pending(): "matched"
     _: "wildcard"
   print(res)
     
   # Test 2: Data variants match (without binding for now)
-  let n = Number.Many(42)
+  let n: Number = Number.Many(42)
   match n:
     Number.One(): print("Number is One")
     _: print("Wildcard matched for number")
     
   # Test 3: Wildcard match
-  let s2 = Status.Running()
+  let s2: Status = Status.Running()
   match s2:
     Status.Pending(): print("Should not be here")
     _: print("Wildcard matched for Running")
