@@ -1,0 +1,11 @@
+# Test generic type instantiation
+# Note: Declarations use <T>, type expressions use [T]
+
+enum Option<T>:
+    Some: T
+    None: none
+
+def main():
+    # Type expression uses square brackets
+    let x: Option[int] = Option.Some(42)
+    print("Generic test")
