@@ -26,6 +26,28 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
+	// Parse optional type parameters: <T> or <T, U>
+	var typeParams []ast.Ident
+	if p.cur.Tok == token.LT { // <
+		p.next()
+		for {
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "type parameter name")
+				break
+			}
+			typeParams = append(typeParams, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+			p.next()
+
+			if p.cur.Tok == token.GT { // >
+				p.next()
+				break
+			}
+			if !p.expect(token.COMMA, ",") {
+				break
+			}
+		}
+	}
+
 	// Optional base list: "(" BaseList ")"
 	var bases []*ast.TypeName
 	if p.accept(token.LPAREN) {
@@ -144,6 +166,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	decl := &ast.ClassDecl{
 		Pub:        explicitPub || !isNested, // top-level default public
 		Name:       name,
+		TypeParams: typeParams,
 		Bases:      bases,
 		Fields:     fields,
 		Methods:    methods,
@@ -178,6 +201,28 @@ func (p *Parser) parseMethodWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
+	// Parse optional type parameters: <T> or <T, U>
+	var typeParams []ast.Ident
+	if p.cur.Tok == token.LT { // <
+		p.next()
+		for {
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "type parameter name")
+				break
+			}
+			typeParams = append(typeParams, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+			p.next()
+
+			if p.cur.Tok == token.GT { // >
+				p.next()
+				break
+			}
+			if !p.expect(token.COMMA, ",") {
+				break
+			}
+		}
+	}
+
 	lparen := spanPos(p.file, p.cur)
 	if !p.expect(token.LPAREN, "(") {
 		return nil
@@ -211,6 +256,7 @@ func (p *Parser) parseMethodWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 		Async:      async,
 		Pub:        pub,
 		Name:       name,
+		TypeParams: typeParams,
 		Params:     params,
 		RetType:    ret,
 		Body:       body,

@@ -1,0 +1,25 @@
+# Test all generic declaration types
+
+# Generic enum
+enum Option<T>:
+    Some: T
+    None: none
+
+# Generic struct
+struct Pair<A, B>:
+    first: A
+    second: B
+
+# Generic function
+def identity<T>(x: T) -> T:
+    return x
+
+# Generic class
+class Container<T>:
+    value: T
+    
+    def get<U>(self) -> T:
+        return self.value
+
+def main():
+    print("Parser test for all generic types")
