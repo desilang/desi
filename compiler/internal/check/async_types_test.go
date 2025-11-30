@@ -33,8 +33,8 @@ func TestM8E_Types_AsyncCallAndAwait(t *testing.T) {
 		Name:    ast.Ident{Name: "main"},
 		RetType: &ast.TypeName{Name: "int"},
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.LetStmt{Name: ast.Ident{Name: "fut"}, Value: call},
-			&ast.LetStmt{Name: ast.Ident{Name: "n"}, Value: aw},
+			&ast.LetStmt{Name: ast.Ident{Name: "fut"}, Type: &ast.TypeName{Name: "future", Params: []*ast.TypeName{{Name: "int"}}}, Value: call},
+			&ast.LetStmt{Name: ast.Ident{Name: "n"}, Type: &ast.TypeName{Name: "int"}, Value: aw},
 			&ast.ReturnStmt{Value: &ast.IntLit{Text: "0"}},
 		}},
 	}

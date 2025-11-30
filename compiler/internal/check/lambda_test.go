@@ -15,7 +15,7 @@ func TestM4_Lambda_TypedParams_OK(t *testing.T) {
 		// Body avoids referencing param to keep M4 simple
 		Body: &ast.IntLit{},
 	}
-	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Value: l}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Type: &ast.TypeName{Name: "func"}, Value: l}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
@@ -36,7 +36,7 @@ func TestM4_Lambda_UntypedParams_Error(t *testing.T) {
 		},
 		Body: &ast.IntLit{},
 	}
-	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Value: l}
+	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Type: &ast.TypeName{Name: "func"}, Value: l}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 

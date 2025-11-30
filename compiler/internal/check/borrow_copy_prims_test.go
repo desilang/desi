@@ -21,6 +21,7 @@ func buildCopyPrimModule(paramType string, lit ast.Expr) *ast.Module {
 	}
 	let := &ast.LetStmt{
 		Name:  ast.Ident{Name: "t"},
+		Type:  &ast.TypeName{Name: paramType},
 		Value: lit,
 	}
 	call := &ast.ExprStmt{

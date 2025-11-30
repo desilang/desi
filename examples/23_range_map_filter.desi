@@ -1,5 +1,5 @@
 def main() -> int:
-	 let a = [x for x in range(0, 5)]
-	 let b = [x for x in range(0, 5) if ((x % 2) == 0)]
+	 let a: list[int] = [x for x in range(0, 5)]
+	 let b: list[int] = [x for x in range(0, 5) if ((x % 2) == 0)]
 	 print("ok")
 	 0
