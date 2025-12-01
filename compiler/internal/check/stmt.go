@@ -64,25 +64,92 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		for i := range st.LHS {
 			lt := st.LHS[i]
 			rt := st.RHS[i]
-			// Only support identifier targets in M4
-			id, ok := lt.(*ast.Ident)
-			if !ok {
+
+			// Handle different LHS types
+			switch lhs := lt.(type) {
+			case *ast.Ident:
+				// Original identifier assignment logic
+				valT := c.typ(rt)
+				sym := c.scope.Lookup(lhs.Name)
+				if sym == nil {
+					c.add(diagAt("DTE0001", lhs.Span, "undefined name: "+lhs.Name))
+					continue
+				}
+				c.info.Idents[lhs] = sym
+				if sym.Type != nil {
+					c.info.Types[lhs] = sym.Type
+				}
+				if !types.Assignable(sym.Type, valT) {
+					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to '"+sym.Type.String()+"'"))
+				}
+
+			case *ast.FieldExpr:
+				// Field assignment: obj.field = value
+				objType := c.typ(lhs.X)
+				valT := c.typ(rt)
+
+				// Check if object type is a class
+				cls, ok := objType.(*types.Class)
+				if !ok {
+					c.add(diagAt("DTE0004", lhs.Span, "cannot assign to field of non-class type"))
+					continue
+				}
+
+				// Find the field
+				fieldName := lhs.Name.Name
+				var field *types.Field
+				curr := cls
+				for curr != nil {
+					for i := range curr.Fields {
+						if curr.Fields[i].Name == fieldName {
+							field = &curr.Fields[i]
+							break
+						}
+					}
+					if field != nil {
+						break
+					}
+					curr = curr.Base
+				}
+
+				if field == nil {
+					c.add(diagAt("DTE0001", lhs.Name.Span, "no such field: "+fieldName))
+					continue
+				}
+
+				// Visibility check
+				if !field.IsPub {
+					// Check if we're inside a method of the same class
+					allowed := false
+					if selfSym := c.scope.Lookup("self"); selfSym != nil {
+						if selfType, ok := selfSym.Type.(*types.Class); ok {
+							if types.Equal(selfType, cls) {
+								allowed = true
+							}
+						}
+					}
+					if !allowed {
+						c.add(diagAt("DTE0010", lhs.Name.Span, "field '"+fieldName+"' is private"))
+						continue
+					}
+				}
+
+				// Type check
+				if !types.Assignable(field.Type, valT) {
+					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to field of type '"+field.Type.String()+"'"))
+				}
+
+			case *ast.IndexExpr:
+				// Index assignment: arr[i] = value
+				// Type check both sides
+				_ = c.typ(lhs)
+				_ = c.typ(rt)
+				// Detailed validation deferred to future work
+
+			default:
+				// Unsupported LHS
 				_ = c.typ(lt)
 				_ = c.typ(rt)
-				continue
-			}
-			valT := c.typ(rt)
-			sym := c.scope.Lookup(id.Name)
-			if sym == nil {
-				c.add(diagAt("DTE0001", id.Span, "undefined name: "+id.Name))
-				continue
-			}
-			c.info.Idents[id] = sym
-			if sym.Type != nil {
-				c.info.Types[id] = sym.Type
-			}
-			if !types.Assignable(sym.Type, valT) {
-				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to '"+sym.Type.String()+"'"))
 			}
 		}
 

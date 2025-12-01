@@ -1,0 +1,9 @@
+class Point:
+    pub x: int
+    pub y: int
+
+def main() -> int:
+    let mut p = Point()
+    p.x = 10
+    p.y = 20
+    return 0
