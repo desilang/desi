@@ -281,9 +281,10 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			}
 
 			// Inject self/cls parameter based on decorator
-			if !hasSelf && methodName != "__new__" && !isStatic {
-				// Regular methods and class methods get self/cls
-				// Properties get self
+			if !hasSelf && methodName != "__new__" && !isStatic && !isClassMethod {
+				// Only regular instance methods get self
+				// Static methods and class methods: no parameter
+				// Properties: get self (they're instance methods)
 				ft.Params = append([]types.T{cls}, ft.Params...)
 			}
 

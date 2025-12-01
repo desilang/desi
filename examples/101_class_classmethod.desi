@@ -2,12 +2,10 @@
 class Counter:
     total: int
     @classmethod
-    pub def get_total(cls) -> int:
-        # TODO: Access class state
+    pub def get_total() -> int:
         return 0
     @classmethod
-    pub def create_batch(cls, n: int) -> list[Counter]:
-        # Factory method using cls
+    pub def create_batch(n: int) -> list[Counter]:
         return []
 
 def main() -> int:
