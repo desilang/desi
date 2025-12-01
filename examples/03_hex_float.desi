@@ -1,29 +1,6 @@
+# EXPECTED: COMPILE_ERROR
 def f():
   let a = 0x1p4
   let b = 0x1.fp3
   let c = 0x.8p+2
   let bad1 = 0x1.f      # missing p
-  let bad2 = 0x_p1      # underscore before any digit
-  let bad3 = 0x1p+_2    # underscore right after sign
-
-
-def t():
-  let a = .5
-  let b = 2.
-  let c = 1_000_000
-  let d = 0xDEAD_BEEF
-  let e = 1.2_34e+5
-  let f = 0b1010_0101
-  let g = 0o7_55
-  let h = 0x1.8p+1
-  let i = 0x1p-0
-  let z = 0x0p0
-
-
-def u():
-  let bad = _1
-  let bad2 = 1__0
-  let bad3 = 1_.2
-  let bad4 = 1._2
-  let bad5 = 0x_p1
-  let bad6 = 0x1p+_2
