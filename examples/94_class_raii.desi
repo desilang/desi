@@ -1,0 +1,12 @@
+class File:
+    pub path: str
+    
+    pub def __close__() -> none:
+        # Cleanup logic would go here
+        return
+
+def main() -> int:
+    using f = File():
+        # Use file
+        return 0
+    return 0

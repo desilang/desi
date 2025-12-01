@@ -206,6 +206,18 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			continue
 		}
 
+		// POLICY: Validate __close__ signature if present
+		if methodName == "__close__" {
+			// __close__(self) -> none
+			if ft.Ret != types.None {
+				c.add(diagAt("DCL0003", method.Span, "__close__ must return none"))
+			}
+			// After self injection, should have exactly 1 param (self)
+			if len(ft.Params) != 1 {
+				c.add(diagAt("DCL0003", method.Span, "__close__ must take only self (no other parameters)"))
+			}
+		}
+
 		// POLICY: Inject implicit self parameter if not present
 		// Check if first param is already self (explicit)
 		hasSelf := false
