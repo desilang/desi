@@ -1,0 +1,13 @@
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __copy__(self) -> Point:
+        # Deep copy - create new instance
+        return Point()
+
+def main() -> int:
+    let p1: Point = Point()
+    let p2: Point = p1.__copy__()  # Explicit copy creates new instance
+    # p1 and p2 are now separate objects
+    return 0

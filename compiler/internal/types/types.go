@@ -146,13 +146,14 @@ type Enum struct {
 
 // Class represents a class type with methods and dunders
 type Class struct {
-	Name       string
-	TypeParams []TypeParam
-	Fields     []Field
-	Methods    map[string]*Func // method name -> function type
-	Dunders    map[string]*Func // dunder name -> function type (__new__, __repr__, etc.)
-	Base       *Class           // single inheritance (nil if no base)
-	IsNested   bool             // true for nested classes
+	Name         string
+	TypeParams   []TypeParam
+	Fields       []Field
+	Methods      map[string]*Func // method name -> function type
+	Dunders      map[string]*Func // dunder name -> function type (__new__, __repr__, etc.)
+	Constructors []*Func          // All __new__ overloads
+	Base         *Class           // single inheritance (nil if no base)
+	IsNested     bool             // true for nested classes
 }
 
 func (*List) isType()      {}

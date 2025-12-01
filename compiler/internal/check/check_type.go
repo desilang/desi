@@ -195,48 +195,87 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			c.add(diagAt("DCL0001", method.Span, fmt.Sprintf("dunder method %s must be pub", methodName)))
 		}
 
-		// Look up method symbol
-		methodSym := c.scope.Lookup(methodName)
-		if methodSym == nil {
-			continue
-		}
-
-		ft, ok := methodSym.Type.(*types.Func)
-		if !ok {
-			continue
-		}
-
-		// POLICY: Validate __close__ signature if present
-		if methodName == "__close__" {
-			// __close__(self) -> none
-			if ft.Ret != types.None {
-				c.add(diagAt("DCL0003", method.Span, "__close__ must return none"))
+		// Look for overloads first
+		var funcs []*types.Func
+		if overloadSet := c.info.Funcs[methodName]; overloadSet != nil {
+			for _, cand := range overloadSet.Cands {
+				funcs = append(funcs, cand.Type)
 			}
-			// After self injection, should have exactly 1 param (self)
-			if len(ft.Params) != 1 {
-				c.add(diagAt("DCL0003", method.Span, "__close__ must take only self (no other parameters)"))
-			}
-		}
-
-		// POLICY: Inject implicit self parameter if not present
-		// Check if first param is already self (explicit)
-		hasSelf := false
-		if len(ft.Params) > 0 {
-			// If first param is the class type, it's explicit self
-			if types.Equal(ft.Params[0], cls) {
-				hasSelf = true
-			}
-		}
-
-		if !hasSelf {
-			// Prepend self as first parameter
-			ft.Params = append([]types.T{cls}, ft.Params...)
-		}
-
-		if isDunder {
-			cls.Dunders[methodName] = ft
 		} else {
-			cls.Methods[methodName] = ft
+			// Fallback to simple lookup (if not overloaded or not yet processed?)
+			// Note: checkFunc should have run by now? No, collectClass runs BEFORE checkFunc?
+			// Wait, collectClass runs in Phase 1 (type collection). checkFunc runs in Phase 2.
+			// So c.info.Funcs might NOT be populated yet!
+
+			// If we are in Phase 1, we need to resolve the function signature manually here?
+			// Or we rely on the fact that we are doing this in checkClass (Phase 2)?
+			// collectClass is Phase 1. checkClass is Phase 2.
+			// This code is in checkClass (based on file context).
+
+			// Let's verify where we are.
+			// The function is `checkClass`.
+
+			methodSym := c.scope.Lookup(methodName)
+			if methodSym != nil {
+				if ft, ok := methodSym.Type.(*types.Func); ok {
+					funcs = append(funcs, ft)
+				}
+			}
+		}
+
+		for _, ft := range funcs {
+			// POLICY: Validate __close__ signature if present
+			if methodName == "__close__" {
+				// __close__(self) -> none
+				if ft.Ret != types.None {
+					c.add(diagAt("DCL0003", method.Span, "__close__ must return none"))
+				}
+				// After self injection, should have exactly 1 param (self)
+				if len(ft.Params) != 1 {
+					c.add(diagAt("DCL0003", method.Span, "__close__ must take only self (no other parameters)"))
+				}
+			}
+
+			// POLICY: Inject implicit self parameter if not present
+			// Check if first param is already self (explicit)
+			hasSelf := false
+			if len(method.Params) > 0 {
+				// Check if first param is named "self"
+				if method.Params[0].Name.Name == "self" {
+					hasSelf = true
+					// Ensure the type of 'self' is the class type
+					if len(ft.Params) > 0 {
+						ft.Params[0] = cls
+					}
+				} else if len(ft.Params) > 0 && types.Equal(ft.Params[0], cls) {
+					// Also check by type if name isn't "self" (unlikely but possible)
+					hasSelf = true
+				}
+			}
+
+			if !hasSelf && methodName != "__new__" {
+				// Prepend self as first parameter
+				ft.Params = append([]types.T{cls}, ft.Params...)
+			}
+
+			if isDunder {
+				cls.Dunders[methodName] = ft
+				if methodName == "__new__" {
+					// Check if already added to avoid duplicates from loop
+					found := false
+					for _, existing := range cls.Constructors {
+						if existing == ft {
+							found = true
+							break
+						}
+					}
+					if !found {
+						cls.Constructors = append(cls.Constructors, ft)
+					}
+				}
+			} else {
+				cls.Methods[methodName] = ft
+			}
 		}
 	}
 }
