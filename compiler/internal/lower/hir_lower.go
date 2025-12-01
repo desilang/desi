@@ -264,6 +264,40 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			} else {
 				init = ls.lowerExpr(s.Value)
 			}
+
+			// M15: Unbox result from generic functions if needed
+			// If the call is to a generic function and the expected type is primitive, unbox
+			if call, ok := s.Value.(*ast.CallExpr); ok {
+				if id, ok := call.Callee.(*ast.Ident); ok && ls.info != nil {
+					// Check if calling a generic function
+					isGeneric := false
+					if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+						if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
+							isGeneric = true
+						}
+					}
+
+					if isGeneric {
+						// Generic function returns ptr, but we might need primitive
+						expectedType := varType
+						if expectedType != nil {
+							if t, ok := expectedType.(types.T); ok {
+								expectedLowered := lowerType(t)
+								if expectedLowered != "ptr" && expectedLowered != "void" {
+									// Need to unbox: load from ptr
+									unboxed := ls.b.FreshTemp("unboxed")
+									ls.b.Emit(&hir.Load{
+										Type: expectedLowered,
+										Src:  init,
+										Dst:  unboxed,
+									})
+									init = unboxed
+								}
+							}
+						}
+					}
+				}
+			}
 		}
 
 		// For mutable variables, always allocate storage
@@ -1695,6 +1729,19 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			// Don't set void - let backend use defaults
 			if retType == "void" {
 				retType = ""
+			}
+		}
+
+		// M15: If calling a generic function, the return type is always ptr (erased)
+		// regardless of the instantiated type.
+		if id, ok := x.Callee.(*ast.Ident); ok {
+			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+				if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
+					// It's a generic function, so it returns ptr (unless void)
+					if retType != "" {
+						retType = "ptr"
+					}
+				}
 			}
 		}
 	}
