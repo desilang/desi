@@ -87,22 +87,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		case *ast.FuncDecl:
 			c.checkFunc(dd)
 		case *ast.ClassDecl:
-			// Add class type parameters to scope for method checking
-			saved := c.scope
-			c.scope = NewScope(c.scope)
-			for _, typeParam := range dd.TypeParams {
-				c.scope.Define(&Symbol{
-					Name: typeParam.Name,
-					Kind: SymType,
-					Type: &types.TypeParam{Name: typeParam.Name},
-				})
-			}
-
-			for _, m := range dd.Methods {
-				c.checkFunc(m)
-			}
-
-			c.scope = saved
+			c.checkClass(dd)
 		case *ast.TraitDecl:
 			c.checkTraitBody(dd)
 		case *ast.ImplDecl:
