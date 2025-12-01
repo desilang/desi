@@ -843,6 +843,39 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		}
 		return agg
 
+	case *ast.SliceExpr:
+		// list[start:end] -> list_slice(list, start, end)
+		list := ls.lowerExpr(x.X)
+
+		// Start index (default 0)
+		var start hir.Value
+		if x.I != nil {
+			val := ls.lowerExpr(x.I)
+			// Cast i32 to i64 for runtime call
+			start = ls.b.FreshTemp("start_i64")
+			ls.b.Emit(&hir.Cast{Dst: start.(hir.Temp), Src: val, Type: "i64"})
+		} else {
+			start = hir.ConstInt{Text: "0", Type: "i64"}
+		}
+
+		// End index (default len(list))
+		var end hir.Value
+		if x.J != nil {
+			val := ls.lowerExpr(x.J)
+			// Cast i32 to i64 for runtime call
+			end = ls.b.FreshTemp("end_i64")
+			ls.b.Emit(&hir.Cast{Dst: end.(hir.Temp), Src: val, Type: "i64"})
+		} else {
+			// Call list_len -> i64
+			end = ls.b.FreshTemp("len_i64")
+			ls.b.Emit(&hir.Call{Dst: end.(hir.Temp), Fn: "list_len", Args: []hir.Value{list}})
+		}
+
+		// Call list_slice
+		res := ls.b.FreshTemp("slice")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{list, start, end}})
+		return res
+
 	case *ast.IndexExpr:
 		lhsType := ls.info.Types[x.X]
 		if _, ok := lhsType.(*types.Tuple); ok {
