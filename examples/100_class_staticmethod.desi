@@ -1,0 +1,18 @@
+# Test @staticmethod decorator
+class Point:
+    pub x: int
+    pub y: int
+    
+    @staticmethod
+    pub def origin() -> Point:
+        return Point()
+    
+    @staticmethod
+    pub def from_coords(px: int, py: int) -> Point:
+        let p = Point()
+        return p
+
+def main() -> int:
+    let p1 = Point.origin()     # Static method call
+    let p2 = Point.from_coords(10, 20)
+    return 0
