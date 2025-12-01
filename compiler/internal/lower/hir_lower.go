@@ -1668,37 +1668,83 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 	// M15: Box arguments for generic functions
 	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
+	// M15: Box arguments for generic functions
+	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
 	if ls.info != nil {
+		isGeneric := false
+
+		// Case 1: Identifier (Function call)
 		if id, ok := x.Callee.(*ast.Ident); ok {
 			// Check if this is a generic function by looking at the original declaration
-			isGeneric := false
 			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
 				// Check the declaration (not the instantiated type)
 				if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
 					isGeneric = true
 				}
 			}
+		}
 
-			if isGeneric {
-				// This is a call to a generic function
-				// Box all primitive arguments to ptr (allocate + store + return pointer)
-				for i, arg := range args {
-					argType := "i32" // default
-					if i < len(x.Args) {
-						if t := ls.info.Types[x.Args[i]]; t != nil {
-							argType = lowerType(t)
+		// Case 2: FieldExpr (Enum constructor like Option.Some)
+		if field, ok := x.Callee.(*ast.FieldExpr); ok {
+			// Check if the receiver is an identifier (e.g. Option)
+			if id, ok := field.X.(*ast.Ident); ok {
+				if sym := ls.info.Idents[id]; sym != nil {
+					t := sym.Type
+					// If it's a generic instance, unwrap it
+					var enumType *types.Enum
+					if e, ok := t.(*types.Enum); ok {
+						enumType = e
+					} else if g, ok := t.(*types.Generic); ok {
+						if e, ok := g.Base.(*types.Enum); ok {
+							enumType = e
 						}
 					}
 
-					if argType != "ptr" && argType != "void" {
-						// Allocate storage
-						boxPtr := ls.b.FreshTemp("arg_box_ptr")
-						ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})
-						// Store value
-						ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
-						// Use pointer as argument
-						args[i] = boxPtr
+					if enumType != nil && len(enumType.TypeParams) > 0 {
+						isGeneric = true
 					}
+				} else {
+					// Fallback: check types map
+					if t := ls.info.Types[field.X]; t != nil {
+						// If it's a generic instance, unwrap it
+						var enumType *types.Enum
+						if e, ok := t.(*types.Enum); ok {
+							enumType = e
+						} else if g, ok := t.(*types.Generic); ok {
+							if e, ok := g.Base.(*types.Enum); ok {
+								enumType = e
+							}
+						}
+
+						if enumType != nil {
+							if len(enumType.TypeParams) > 0 {
+								isGeneric = true
+							}
+						}
+					}
+				}
+			}
+		}
+
+		if isGeneric {
+			// This is a call to a generic function/constructor
+			// Box all primitive arguments to ptr (allocate + store + return pointer)
+			for i, arg := range args {
+				argType := "i32" // default
+				if i < len(x.Args) {
+					if t := ls.info.Types[x.Args[i]]; t != nil {
+						argType = lowerType(t)
+					}
+				}
+
+				if argType != "ptr" && argType != "void" {
+					// Allocate storage
+					boxPtr := ls.b.FreshTemp("arg_box_ptr")
+					ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})
+					// Store value
+					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
+					// Use pointer as argument
+					args[i] = boxPtr
 				}
 			}
 		}
