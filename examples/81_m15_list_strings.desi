@@ -1,0 +1,9 @@
+# Test: List of strings
+def main() -> int:
+    let names: list[str] = ["alice", "bob", "charlie"]
+    names.append("david")
+    
+    let count: int = names.len()
+    
+    # Should return 4
+    return count

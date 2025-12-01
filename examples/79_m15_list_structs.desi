@@ -1,0 +1,20 @@
+# Test: Lists of structs with indexing and modification
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    # Create points individually then add to list
+    let p1: Point = Point(x: 10, y: 20)
+    let p2: Point = Point(x: 30, y: 40)
+    let p3: Point = Point(x: 50, y: 60)
+    
+    # Create list and append
+    let points: list[Point] = [p1, p2, p3]
+    
+    # Access struct field via indexing
+    let first: Point = points[0]
+    let x_val: int = first.x
+    
+    # Should return 10
+    return x_val
