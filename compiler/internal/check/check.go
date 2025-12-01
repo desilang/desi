@@ -210,6 +210,20 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	// Top-level shadowing of builtin names is not allowed.
 	c.forbidBuiltinShadowing(name, fd.Name.Span)
 
+	// Create a temporary scope to resolve parameters using generic types
+	saved := c.scope
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = saved }()
+
+	// Add generic type parameters to scope
+	for _, typeParam := range fd.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: typeParam.Name,
+			Kind: SymType,
+			Type: &types.TypeParam{Name: typeParam.Name},
+		})
+	}
+
 	// Build function type from parameter annotations (surface forms allowed).
 	params := make([]types.T, len(fd.Params))
 	variadic := false
@@ -235,6 +249,10 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		}
 	}
 	sig := types.FuncOf(params, ret, variadic)
+	sig.Name = name
+	for _, tp := range fd.TypeParams {
+		sig.TypeParams = append(sig.TypeParams, types.TypeParam{Name: tp.Name})
+	}
 
 	set := c.info.Funcs[name]
 	if set == nil {
@@ -258,8 +276,8 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		Defaults: defaults,         // M14: record which params have defaults
 	})
 
-	// Bind the function name in the current scope for call resolution.
-	_ = c.scope.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
+	// Bind the function name in the OUTER scope (not the temp scope)
+	_ = saved.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
 
 func (c *checker) checkFunc(fd *ast.FuncDecl) {

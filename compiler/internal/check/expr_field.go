@@ -78,7 +78,7 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return nil
 	}
 
-	// Handle Generic types (e.g. Option[int].Some)
+	// Handle Generic types (e.g. Option[int].Some or Box[int].val)
 	if gen, ok := t.(*types.Generic); ok {
 		if enumT, ok := gen.Base.(*types.Enum); ok {
 			// Look up variant
@@ -100,17 +100,7 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 
 					for _, f := range v.Fields {
 						// Perform substitution
-						if tp, ok := f.Type.(*types.TypeParam); ok {
-							if arg, found := subst[tp.Name]; found {
-								variantParams = append(variantParams, arg)
-							} else {
-								variantParams = append(variantParams, f.Type)
-							}
-						} else {
-							// TODO: Recursive substitution for complex types (e.g. List[T])
-							// For now, assume simple T
-							variantParams = append(variantParams, f.Type)
-						}
+						variantParams = append(variantParams, substitute(f.Type, subst))
 					}
 					break
 				}
@@ -125,6 +115,27 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			funcType := types.FuncOf(variantParams, gen, false)
 			c.info.Types[x] = funcType
 			return funcType
+		} else if structT, ok := gen.Base.(*types.Struct); ok {
+			// Handle field access on generic struct
+			fieldName := x.Name.Name
+			for _, f := range structT.Fields {
+				if f.Name == fieldName {
+					// Map TypeParam name -> Generic Arg
+					subst := make(map[string]types.T)
+					if len(structT.TypeParams) == len(gen.Args) {
+						for i, tp := range structT.TypeParams {
+							subst[tp.Name] = gen.Args[i]
+						}
+					}
+
+					// Substitute type parameters in field type
+					fieldType := substitute(f.Type, subst)
+					c.info.Types[x] = fieldType
+					return fieldType
+				}
+			}
+			c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+fieldName+"' on generic struct '"+structT.Name+"'"))
+			return nil
 		}
 	}
 

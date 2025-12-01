@@ -988,7 +988,68 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.add(diagAt("DTE0105", call.Callee.SpanOf(), "value is not callable"))
 				return nil
 			}
-			arityCands := filterByArity(set.Cands, len(args))
+
+			// M15: Generic Function Inference
+			// If candidates are generic, try to infer type arguments
+			var inferredCands []*FuncCand
+			for _, cand := range set.Cands {
+				if len(cand.Type.TypeParams) > 0 {
+					// Generic candidate
+					inferred := make(map[string]types.T)
+					// Unify args with params
+					// Note: filterExactByTypes checks assignability, but for generics we need unification first.
+
+					// Check arity first
+					if !cand.Type.Variadic && len(args) != len(cand.Type.Params) {
+						continue
+					}
+					// TODO: Handle variadic generics if needed
+
+					match := true
+					for i, argT := range args {
+						if i >= len(cand.Type.Params) {
+							break
+						}
+						paramT := cand.Type.Params[i]
+						if !unify(paramT, argT, inferred) {
+							match = false
+							break
+						}
+					}
+
+					if match {
+						// Verify all type params are inferred
+						allInferred := true
+						for _, tp := range cand.Type.TypeParams {
+							if _, ok := inferred[tp.Name]; !ok {
+								allInferred = false
+								break
+							}
+						}
+
+						if allInferred {
+							// Instantiate the candidate
+							newType := substitute(cand.Type, inferred).(*types.Func)
+							// Create a new candidate with instantiated type
+							newCand := &FuncCand{
+								Decl:       cand.Decl,
+								Type:       newType,
+								Modes:      cand.Modes,
+								Extern:     cand.Extern,
+								Defaults:   cand.Defaults,
+								ParamNames: cand.ParamNames,
+							}
+							inferredCands = append(inferredCands, newCand)
+						}
+					}
+				} else {
+					// Non-generic candidate
+					inferredCands = append(inferredCands, cand)
+				}
+			}
+
+			// Use inferred candidates for filtering
+			arityCands := filterByArity(inferredCands, len(args))
 			if len(arityCands) == 0 {
 				c.add(diagAt("DTE0046", id.Span, "arity mismatch: wrong number of arguments"))
 				return nil

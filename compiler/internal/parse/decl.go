@@ -190,8 +190,8 @@ func (p *Parser) parseParams() []ast.Param {
 }
 
 func (p *Parser) parseTypeName() *ast.TypeName {
-	// Accept IDENT or 'none' keyword as type name
-	if p.cur.Tok != token.IDENT && p.cur.Tok != token.KW_none {
+	// Accept IDENT, 'none', or '(' (tuple) as type name start
+	if p.cur.Tok != token.IDENT && p.cur.Tok != token.KW_none && p.cur.Tok != token.LPAREN {
 		p.errExpected(spanPos(p.file, p.cur), "type name")
 		return &ast.TypeName{Name: "<?", Span: spanPos(p.file, p.cur)}
 	}
@@ -224,6 +224,42 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		}
 	}
 
+	// Handle Tuple types: (T1, T2, ...)
+	if p.cur.Tok == token.LPAREN {
+		p.next()
+		var elems []*ast.TypeName
+		for {
+			elem := p.parseTypeName()
+			elems = append(elems, elem)
+			if !p.accept(token.COMMA) {
+				break
+			}
+		}
+		p.expect(token.RPAREN, ")")
+
+		firstType := &ast.TypeName{
+			Name:       "",
+			TupleTypes: elems,
+			Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		}
+
+		// Check for union continuation
+		if p.cur.Tok != token.PIPE {
+			return firstType
+		}
+		// Parse union
+		variants := []*ast.TypeName{firstType}
+		for p.accept(token.PIPE) {
+			variant := p.parseTypeName()
+			variants = append(variants, variant)
+		}
+		return &ast.TypeName{
+			Name:       "",
+			UnionTypes: variants,
+			Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		}
+	}
+
 	// Regular IDENT path
 	b.WriteString(p.cur.Lexeme)
 	p.next()
@@ -237,7 +273,7 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		p.next()
 	}
 
-	// Parse type parameters: name[T1, T2, ...]
+	// Parse type parameters: name[T1, T2] or name<T1, T2>
 	var params []*ast.TypeName
 	if p.accept(token.LBRACK) {
 		for {
@@ -249,6 +285,16 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 			}
 		}
 		p.expect(token.RBRACK, "]")
+	} else if p.accept(token.LT) { // <
+		for {
+			param := p.parseTypeName()
+			params = append(params, param)
+
+			if !p.accept(token.COMMA) {
+				break
+			}
+		}
+		p.expect(token.GT, ">")
 	}
 
 	firstType := &ast.TypeName{

@@ -93,9 +93,11 @@ type Dict struct{ Key, Val T }
 type Tuple struct{ Elems []T }
 type Future struct{ Elem T }
 type Func struct {
-	Params   []T
-	Ret      T
-	Variadic bool // true if last param is *args
+	Name       string      // Optional name (for debugging/diagnostics)
+	TypeParams []TypeParam // Generic type parameters
+	Params     []T
+	Ret        T
+	Variadic   bool // true if last param is *args
 }
 type Multi struct{ Elems []T }
 

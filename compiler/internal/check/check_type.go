@@ -9,6 +9,9 @@ import (
 func (c *checker) collectStruct(d *ast.StructDecl) {
 	// Create struct type (fields populated in Pass 2)
 	st := &types.Struct{Name: d.Name.Name}
+	for _, tp := range d.TypeParams {
+		st.TypeParams = append(st.TypeParams, types.TypeParam{Name: tp.Name})
+	}
 
 	// Register the struct type name.
 	c.scope.Define(&Symbol{
@@ -79,6 +82,19 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 	st, ok := sym.Type.(*types.Struct)
 	if !ok {
 		return
+	}
+
+	// Add type parameters to scope for generic structs
+	// e.g., for "struct Pair<A, B>", add A and B as TypeParams
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = c.scope.parent }()
+
+	for _, typeParam := range d.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: typeParam.Name,
+			Kind: SymType,
+			Type: &types.TypeParam{Name: typeParam.Name},
+		})
 	}
 
 	// Resolve fields
