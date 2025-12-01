@@ -834,17 +834,44 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		}
 
 		// Handle list indexing: list[index]
-		if _, ok := lhsType.(*types.List); ok {
+		if listType, ok := lhsType.(*types.List); ok {
 			list := ls.lowerExpr(x.X)
 			index := ls.lowerExpr(x.Idx)
-			dst := ls.b.FreshTemp("elem")
-			// list_get returns void* (ptr)
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "list_get", Args: []hir.Value{list, index}})
-			// TODO: Unbox if element type is int/bool
-			// For now, assume element is ptr or we handle unboxing later
-			return dst
-		}
 
+			// list_get returns void* (ptr)
+			ptrResult := ls.b.FreshTemp("elem_ptr")
+			ls.b.Emit(&hir.Call{Dst: ptrResult, Fn: "list_get", Args: []hir.Value{list, index}})
+
+			// Unbox if element type is primitive
+			// Check if we need to convert ptr -> int/bool/float
+			needsUnboxing := false
+			targetType := "i32" // default
+
+			if listType.Elem != nil {
+				switch listType.Elem.String() {
+				case "int":
+					needsUnboxing = true
+					targetType = "i32"
+				case "bool":
+					needsUnboxing = true
+					targetType = "i1"
+				case "float":
+					needsUnboxing = true
+					targetType = "double"
+					// pointers (str, list, dict, etc.) don't need unboxing
+				}
+			}
+
+			if needsUnboxing {
+				// Cast ptr back to primitive type (ptrtoint)
+				dst := ls.b.FreshTemp("elem")
+				ls.b.Emit(&hir.Cast{Dst: dst, Src: ptrResult, Type: targetType})
+				return dst
+			}
+
+			// For pointer types, return as-is
+			return ptrResult
+		}
 		return hir.Var{Name: "<index_expr>"}
 
 	case *ast.Ident:
