@@ -35,6 +35,13 @@ func (ls *lowerState) lowerMatchExpr(m *ast.MatchExpr) hir.Value {
 
 	if et, ok := scrType.(*types.Enum); ok {
 		enumType = et
+	} else if g, ok := scrType.(*types.Generic); ok {
+		if et, ok := g.Base.(*types.Enum); ok {
+			enumType = et
+		}
+	}
+
+	if enumType != nil {
 		// Load tag from offset 0
 		tagPtr := ls.b.FreshTemp("tag_ptr")
 		ls.b.Emit(&hir.GetElementPtr{
@@ -165,23 +172,27 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 // buildMatchCondition creates the condition expression for a pattern match
 func (ls *lowerState) buildMatchCondition(pattern ast.Expr, tagVal hir.Value, enumType *types.Enum) hir.Value {
 	// For now, only support enum variant patterns
-	call, ok := pattern.(*ast.CallExpr)
-	if !ok {
+	var variantName string
+
+	if call, ok := pattern.(*ast.CallExpr); ok {
+		// Enum variant match: Enum.Variant(...)
+		if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+			variantName = sel.Name.Name
+		}
+	} else if sel, ok := pattern.(*ast.FieldExpr); ok {
+		// Enum variant match: Enum.Variant
+		variantName = sel.Name.Name
+	} else {
 		return nil // Unsupported pattern type
 	}
 
-	// Enum variant match: Enum.Variant(...)
+	// Enum variant match
 	targetTag := -1
-	if enumType != nil {
-		// Extract variant name from CallExpr
-		// CallExpr.Callee should be FieldExpr (Enum.Variant)
-		if sel, ok := call.Callee.(*ast.FieldExpr); ok {
-			variantName := sel.Name.Name
-			for _, v := range enumType.Variants {
-				if v.Name == variantName {
-					targetTag = v.Tag
-					break
-				}
+	if enumType != nil && variantName != "" {
+		for _, v := range enumType.Variants {
+			if v.Name == variantName {
+				targetTag = v.Tag
+				break
 			}
 		}
 	}

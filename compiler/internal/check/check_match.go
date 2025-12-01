@@ -26,7 +26,20 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 		// Handle pattern binding for enum variants
 		var bindings []MatchBinding
 
-		if et, ok := scrutineeType.(*types.Enum); ok {
+		// Unwrap Generic to get Enum and type arguments
+		var et *types.Enum
+		var typeArgs []types.T
+
+		if e, ok := scrutineeType.(*types.Enum); ok {
+			et = e
+		} else if g, ok := scrutineeType.(*types.Generic); ok {
+			if e, ok := g.Base.(*types.Enum); ok {
+				et = e
+				typeArgs = g.Args
+			}
+		}
+
+		if et != nil {
 			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
 				// Pattern is EnumName.Variant(args...)
 				// Extract variant name
@@ -54,6 +67,18 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 							goto skipBindings
 						}
 
+						// Prepare substitution map if needed
+						subst := make(map[string]types.T)
+						if len(typeArgs) > 0 && len(et.TypeParams) > 0 {
+							// et.TypeParams is []types.TypeParam (from types.Enum definition)
+							// Assuming et.TypeParams matches typeArgs length
+							for i, tp := range et.TypeParams {
+								if i < len(typeArgs) {
+									subst[tp.Name] = typeArgs[i]
+								}
+							}
+						}
+
 						// Validate each binding
 						for j, arg := range call.Args {
 							// Argument must be an identifier
@@ -69,10 +94,18 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 								continue
 							}
 
+							// Determine type of the field
+							fieldType := variant.Fields[j].Type
+
+							// If we have type arguments, substitute them
+							if len(subst) > 0 {
+								fieldType = substitute(fieldType, subst)
+							}
+
 							// Create binding
 							binding := MatchBinding{
 								Name:       ident.Name,
-								Type:       variant.Fields[j].Type,
+								Type:       fieldType,
 								FieldIndex: j,
 								Node:       ident,
 							}
@@ -83,7 +116,7 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 							sym := &Symbol{
 								Name: ident.Name,
 								Kind: SymVar,
-								Type: variant.Fields[j].Type,
+								Type: fieldType,
 								Node: ident,
 							}
 							c.info.Idents[ident] = sym

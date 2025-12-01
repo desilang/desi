@@ -1,0 +1,13 @@
+enum Option<T>:
+    Some: T
+    None: none
+
+def main() -> int:
+    let x = Option.Some(42)
+    # let y = Option.None # Commented out for now as type inference for None might be tricky without context
+    
+    match x:
+        Option.Some(v): print(v)
+        Option.None: print("none")
+
+    return 0
