@@ -7,10 +7,10 @@ This document provides detailed technical information about how classes are impl
 ## Design Philosophy
 
 Classes in Desi follow a **"pay only for what you use"** philosophy:
-- **Static dispatch by default**: No vtables unless needed
-- **Zero-cost abstractions**: Methods inline like functions
-- **Explicit costs**: Async, copy, and dynamic features are opt-in
-- **Memory efficient**: C-compatible layout, no hidden overhead
+- **Static dispatch by default**: No vtables unless needed ✅ **IMPLEMENTED**
+- **Zero-cost abstractions**: Methods inline like functions ✅ **IMPLEMENTED**
+- **Explicit costs**: Async, copy, and dynamic features are opt-in 🚧 **PARTIAL**
+- **Memory efficient**: C-compatible layout, no hidden overhead ✅ **IMPLEMENTED**
 
 **Inspiration**: Rust's zero-cost abstractions, C's struct layout, Python's readable syntax
 
@@ -141,7 +141,7 @@ entry:
 - **Stack allocation**: LLVM can promote to stack if escape analysis proves safe
 - **Zero-initialization**: Fields are uninitialized (caller responsible)
 
-### User-defined `__new__`
+### User-defined `__new__` ✅ **IMPLEMENTED**
 
 **With `__new__`:**
 ```desi
@@ -149,8 +149,12 @@ class Point:
     pub x: int
     pub y: int
     
-    pub def __new__(x: int, y: int) -> Point:
-        Point{ x: x, y: y }
+    pub def __new__(px: int, py: int) -> Point:
+        # Note: struct literal syntax not yet implemented
+        # For now, allocate and return
+        let p = Point()  # zero-arg call
+        # Field initialization via methods will be added
+        return p
 ```
 
 **Generated IR:**
@@ -166,7 +170,7 @@ entry:
 }
 ```
 
-**Constructor overloading allowed:**
+**Constructor overloading 🚧 DESIGNED (not yet implemented):**
 ```desi
 pub def __new__() -> Point:
     Point{ x: 0, y: 0 }
@@ -175,7 +179,7 @@ pub def __new__(x: int, y: int) -> Point:
     Point{ x: x, y: y }
 ```
 
-Compiles to: `Point()` and `Point$2(i32, i32)` (arity-based mangling)
+Will compile to: `Point()` and `Point$2(i32, i32)` (arity-based mangling)
 
 ---
 
@@ -217,11 +221,11 @@ c.set_value(10)  # Explicit method call
 
 ---
 
-## 5. Async Methods
+## 5. Async Methods 🚧 **NOT YET IMPLEMENTED**
 
-### State Machine Transformation
+### State Machine Transformation (Design)
 
-**Async methods compile to state machines** (zero-cost async/await):
+**Async methods will compile to state machines** (zero-cost async/await):
 
 ```desi
 class DataLoader:
@@ -269,11 +273,11 @@ def DataLoader_fetch$poll(self, state: &mut FetchState) -> Poll<str>:
 
 ---
 
-## 6. RAII & Resource Management
+## 6. RAII & Resource Management 🚧 **NOT YET IMPLEMENTED**
 
-### Deterministic Destruction with `__close__`
+### Deterministic Destruction with `__close__` (Design)
 
-**Decision**: Use scope-based cleanup (like C++ RAII)
+**Planned**: Use scope-based cleanup (like C++ RAII)
 
 ```desi
 class File:
@@ -311,11 +315,31 @@ using f = File("data.txt"):
 
 ---
 
-## 7. Generic Classes
+## 7. Generic Classes ✅ **TYPE INFERENCE IMPLEMENTED**
 
-### Monomorphization Strategy
+### Bidirectional Type Checking
 
-**Decision**: Specialize generic classes at compile time (like C++ templates)
+**Current implementation**: Type inference from annotations:
+
+```desi
+class Box<T>:
+    pub value: T
+
+let b1: Box<int> = Box()  # ✅ Type inferred from annotation!
+let b2: Box<str> = Box()  # ✅ Works!
+```
+
+**Generated code** (currently single constructor, monomorphization planned):
+```llvm
+define ptr @Box() {
+    %ptr = call ptr @malloc(i32 8)
+    ret ptr %ptr
+}
+```
+
+### Monomorphization Strategy 🚧 **PLANNED OPTIMIZATION**
+
+**Future**: Specialize generic classes at compile time (like C++ templates)
 
 ```desi
 class Box<T>:
@@ -360,22 +384,23 @@ define ptr @Box_str_get(ptr %self) { ... }
 
 ---
 
-## 8. Copy vs Move Semantics
+## 8. Copy vs Move Semantics 🚧 **MOVE IMPLEMENTED, COPY PLANNED**
 
-### Move-by-default, Opt-in Copy
+### Move-by-default ✅, Opt-in Copy 🚧
 
-**Decision**: Classes are moved by default, explicit `__copy__` for copying.
+**Current**: Classes are moved by default (enforced by borrow checker).
+**Planned**: Explicit `__copy__` for copying.
 
 ```desi
 let c1 = Counter(0)
-let c2 = c1  # MOVED, c1 is now invalid
+let c2 = c1  # MOVED, c1 is now invalid ✅
 
-# Explicit copy:
+# Explicit copy (planned):
 class Counter:
     pub def __copy__(self) -> Counter:
         Counter(self.value)
 
-let c3 = c1.__copy__()  # Explicit copy
+let c3 = c1.__copy__()  # Explicit copy 🚧
 ```
 
 **Why move-by-default?**
@@ -392,28 +417,29 @@ let c3 = c1.__copy__()  # Explicit copy
 
 ---
 
-## 9. Dunder Methods
+## 9. Dunder Methods ✅ **PUB ENFORCEMENT IMPLEMENTED**
 
 ### Reserved Special Methods
 
-**All dunders MUST be `pub`** (compiler enforces):
+**All dunders MUST be `pub`** ✅ (compiler enforces with error DCL0001):
 
 ```desi
 class Account:
-    pub def __new__(id: int) -> Account: ...
-    pub def __repr__(self) -> str: ...
-    pub def __eq__(self, other: Account) -> bool: ...
-    pub def __hash__(self) -> u64: ...
-    pub def __close__(self) -> none: ...
+    pub def __new__(id: int) -> Account: ...  # ✅ Required
+    pub def __repr__(self) -> str: ...        # ✅ Required
+    pub def __eq__(self, other: Account) -> bool: ...  # ✅ Required
+    pub def __hash__(self) -> u64: ...        # 🚧 Planned
+    pub def __close__(self) -> none: ...      # 🚧 Planned
+    pub def __copy__(self) -> Account: ...    # 🚧 Planned
 ```
 
 **Recognized dunders:**
-- `__new__(args...) -> Class` - Constructor
-- `__repr__(self) -> str` - String representation
-- `__eq__(self, other: Self) -> bool` - Equality
-- `__hash__(self) -> u64` - Hashing (required with `__eq__` for dict/set)
-- `__close__(self) -> none` - RAII cleanup
-- `__copy__(self) -> Self` - Deep copy
+- `__new__(args...) -> Class` ✅ **IMPLEMENTED** - Constructor
+- `__repr__(self) -> str` ✅ **IMPLEMENTED** - String representation  
+- `__eq__(self, other: Self) -> bool` 🚧 **PLANNED** - Equality
+- `__hash__(self) -> u64` 🚧 **PLANNED** - Hashing (required with `__eq__` for dict/set)
+- `__close__(self) -> none` 🚧 **PLANNED** - RAII cleanup
+- `__copy__(self) -> Self` 🚧 **PLANNED** - Deep copy
 - (Future: `__iter__`, `__next__`, `__lt__`, etc.)
 
 **Overloading:**
@@ -510,18 +536,38 @@ distance()        → Point_distance
 
 ---
 
-## Future Considerations
+## Implementation Status Summary
 
-### Not yet implemented (but designed for):
+### ✅ Production Ready (Implemented)
+- Static dispatch with name mangling
+- C-compatible memory layout
+- Single inheritance
+- Zero-arg and user-defined `__new__`
+- Method lowering with implicit self
+- Generic classes with type inference
+- Dunder pub enforcement
+- Error reporting with diagnostic codes
+- Move semantics
 
+### 🚧 Designed (Implementation Pending)
+- RAII (`__close__` with `using`)
+- Constructor overloading
+- Monomorphization for generics (optimization)
+- Copy semantics (`__copy__`)
+- Visibility enforcement (cross-file pub)
+- Async methods (state machines)
+- Additional dunders (`__eq__`, `__hash__`, etc.)
+
+### 🔮 Future Considerations
+
+**Not yet implemented (but designed for):**
 1. **Trait objects**: Virtual dispatch when needed
 2. **Property syntax**: `@property` decorator for getters
 3. **Abstract methods**: `@abstract` for inheritance
 4. **Reflection**: Limited runtime type information
 5. **Custom allocators**: Per-class `__allocate__` hook
 
-### Explicitly NOT supported:
-
+**Explicitly NOT supported:**
 1. **Multiple inheritance**: Use composition + traits
 2. **Operator overloading (general)**: Only specific dunders
 3. **Implicit conversions**: Must be explicit
