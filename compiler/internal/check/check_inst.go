@@ -192,6 +192,8 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 				if gen, ok := c.expected.(*types.Generic); ok {
 					if baseCls, ok := gen.Base.(*types.Class); ok && baseCls.Name == cls.Name {
 						// Expected type is the same generic class with type args
+						// Record this instantiation for monomorphization
+						c.info.ClassInstantiations[cls.Name] = append(c.info.ClassInstantiations[cls.Name], gen)
 						return c.expected
 					}
 				}
