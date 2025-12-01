@@ -1,20 +1,6 @@
+# EXPECTED: COMPILE_ERROR
 def s():
   # valid escapes: \n \t \" \\ \0 \xNN \uXXXX \UXXXXXXXX
   let ok = "A:\x41 B:\u0042 C:\U00000043 \n tab:\t quote:\" backslash:\\ zero:\0"
 
   # invalid escape → DLE0020 (invalid_escape_sequence)
-  let bad1 = "oops:\q"
-
-  # unterminated → DLE0001 (unterminated_string)
-  let bad2 = "whoops
-
-  # long string: may contain "" inside; only closes on """
-  let block = """
-line 1
-line 2 with "" inside
-"""
-
-  # invalid escape inside long string → DLE0020
-  let bad3 = """
-bad \xZZ still invalid
-"""

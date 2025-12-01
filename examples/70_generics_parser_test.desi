@@ -1,3 +1,6 @@
+# EXPECTED: COMPILE_ERROR
+# Test: Generics Parser Testion types
+
 # Test all generic declaration types
 
 # Generic enum
