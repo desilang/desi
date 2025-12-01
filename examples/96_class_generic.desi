@@ -1,0 +1,9 @@
+# Test generic class instantiation
+
+class Box<T>:
+    pub value: T
+
+def main() -> int:
+    let b1: Box<int> = Box()
+    let b2: Box<str> = Box()
+    return 0
