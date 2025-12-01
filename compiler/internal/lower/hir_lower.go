@@ -62,22 +62,37 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 			// Use the first candidate (should be the only one for this function)
 			funcType := set.Cands[0].Type
 			if funcType != nil {
-				// Set return type
-				if funcType.Ret != nil {
-					retType := lowerType(funcType.Ret)
-					// Don't set void - let backend use its defaults (e.g. i32 for main)
-					if retType != "void" {
-						f.RetType = retType
-					}
-				}
+				// M15: For generic functions, use erased signatures (all ptr)
+				isGeneric := len(funcType.TypeParams) > 0 || len(fd.TypeParams) > 0
 
-				// Set parameter types
-				for i, p := range fd.Params {
-					paramType := "ptr" // default
-					if i < len(funcType.Params) && funcType.Params[i] != nil {
-						paramType = lowerType(funcType.Params[i])
+				if isGeneric {
+					// Generic function: all parameters and return type are ptr
+					for _, p := range fd.Params {
+						f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: "ptr"})
 					}
-					f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: paramType})
+					// Return type is also erased to ptr (unless it's void/none)
+					if funcType.Ret != nil && !types.Equal(funcType.Ret, types.None) {
+						f.RetType = "ptr"
+					}
+				} else {
+					// Non-generic function: use actual types
+					// Set return type
+					if funcType.Ret != nil {
+						retType := lowerType(funcType.Ret)
+						// Don't set void - let backend use its defaults (e.g. i32 for main)
+						if retType != "void" {
+							f.RetType = retType
+						}
+					}
+
+					// Set parameter types
+					for i, p := range fd.Params {
+						paramType := "ptr" // default
+						if i < len(funcType.Params) && funcType.Params[i] != nil {
+							paramType = lowerType(funcType.Params[i])
+						}
+						f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: paramType})
+					}
 				}
 				return f
 			}
@@ -1621,27 +1636,34 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
 	if ls.info != nil {
 		if id, ok := x.Callee.(*ast.Ident); ok {
-			if sym := ls.info.Idents[id]; sym != nil {
-				if funcType, ok := sym.Type.(*types.Func); ok && len(funcType.TypeParams) > 0 {
-					// This is a call to a generic function
-					// Box all primitive arguments to ptr (allocate + store + return pointer)
-					for i, arg := range args {
-						argType := "i32" // default
-						if i < len(x.Args) {
-							if t := ls.info.Types[x.Args[i]]; t != nil {
-								argType = lowerType(t)
-							}
-						}
+			// Check if this is a generic function by looking at the original declaration
+			isGeneric := false
+			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+				// Check the declaration (not the instantiated type)
+				if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
+					isGeneric = true
+				}
+			}
 
-						if argType != "ptr" && argType != "void" {
-							// Allocate storage
-							boxPtr := ls.b.FreshTemp("arg_box_ptr")
-							ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})
-							// Store value
-							ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
-							// Use pointer as argument
-							args[i] = boxPtr
+			if isGeneric {
+				// This is a call to a generic function
+				// Box all primitive arguments to ptr (allocate + store + return pointer)
+				for i, arg := range args {
+					argType := "i32" // default
+					if i < len(x.Args) {
+						if t := ls.info.Types[x.Args[i]]; t != nil {
+							argType = lowerType(t)
 						}
+					}
+
+					if argType != "ptr" && argType != "void" {
+						// Allocate storage
+						boxPtr := ls.b.FreshTemp("arg_box_ptr")
+						ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})
+						// Store value
+						ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
+						// Use pointer as argument
+						args[i] = boxPtr
 					}
 				}
 			}
