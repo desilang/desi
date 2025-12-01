@@ -73,6 +73,18 @@ func (m *Module) emitDropForType(val string, t types.T) {
 		m.emitStructDrop(val, t)
 	case *types.Enum:
 		m.emitEnumDrop(val, t)
+	case *types.List:
+		// Call list_free for proper cleanup
+		wprintf(&m.funcs, "  call void @list_free(ptr %s)\n", val)
+		m.ensureDecl("declare void @list_free(ptr)")
+	case *types.Set:
+		// Call set_free for proper cleanup
+		wprintf(&m.funcs, "  call void @set_free(ptr %s)\n", val)
+		m.ensureDecl("declare void @set_free(ptr)")
+	case *types.Dict:
+		// Call dict_free for proper cleanup
+		wprintf(&m.funcs, "  call void @dict_free(ptr %s)\n", val)
+		m.ensureDecl("declare void @dict_free(ptr)")
 	default:
 		// Simple free for other heap types (str, etc)
 		wprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
