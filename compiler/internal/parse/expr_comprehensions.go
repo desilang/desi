@@ -11,29 +11,58 @@ import (
 // Dict: { key: val for target in iter { ... } [ if expr ] }
 // Set : #{ elem for target in iter { ... } [ if expr ] }
 
-func (p *Parser) parseListComp(openSpan ast.Node) ast.Expr {
+func (p *Parser) parseListLiteralOrComp(openSpan ast.Node) ast.Expr {
 	// Called with current token after '['.
+
+	// Handle empty list: []
+	if p.cur.Tok == token.RBRACK {
+		end := spanPos(p.file, p.cur)
+		p.next()
+		return &ast.ListLit{
+			Elems: nil,
+			Span:  ast.JoinSpan(openSpan.SpanOf(), end),
+		}
+	}
+
 	elem := p.parseExpr()
 
-	if !p.accept(token.KW_for) {
-		// No 'for' → not a comprehension; for M3 we only support comps, so
-		// emit a generic expectation and try to recover at ']'.
-		p.errExpected(spanPos(p.file, p.cur), "'for' in list comprehension")
-		for p.cur.Tok != token.RBRACK && p.cur.Tok != token.EOF {
-			p.next()
+	// Check if it's a comprehension (has 'for')
+	if p.cur.Tok == token.KW_for {
+		p.next() // consume 'for'
+		clauses := p.parseCompClausesAfterFor()
+		if !p.expect(token.RBRACK, "]") {
+			return elem
 		}
-		_ = p.accept(token.RBRACK)
-		return elem // best-effort: return the head expression
+		return &ast.ListComp{
+			Elem:    elem,
+			Clauses: clauses,
+			Span:    ast.JoinSpan(openSpan.SpanOf(), spanPos(p.file, p.cur)),
+		}
 	}
 
-	clauses := p.parseCompClausesAfterFor()
-	if !p.expect(token.RBRACK, "]") {
-		return elem
+	// It's a list literal - parse comma-separated elements
+	elems := []ast.Expr{elem}
+
+	for p.cur.Tok != token.RBRACK && p.cur.Tok != token.EOF {
+		if p.cur.Tok != token.COMMA {
+			break
+		}
+		p.next() // consume ','
+		if p.cur.Tok == token.RBRACK {
+			break // allow trailing comma
+		}
+		nextElem := p.parseExpr()
+		elems = append(elems, nextElem)
 	}
-	return &ast.ListComp{
-		Elem:    elem,
-		Clauses: clauses,
-		Span:    ast.JoinSpan(openSpan.SpanOf(), spanPos(p.file, p.cur)),
+
+	end := spanPos(p.file, p.cur)
+	if !p.expect(token.RBRACK, "]") {
+		return &ast.Ident{Name: "<error>", Span: end}
+	}
+
+	return &ast.ListLit{
+		Elems: elems,
+		Span:  ast.JoinSpan(openSpan.SpanOf(), end),
 	}
 }
 

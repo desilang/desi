@@ -1,0 +1,9 @@
+def main() -> int:
+    let nums: list[int] = [1, 2, 3]
+    nums.append(4)
+    nums.append(5)
+    
+    let length: int = nums.len()
+    let first: int = nums[0]
+    
+    return first

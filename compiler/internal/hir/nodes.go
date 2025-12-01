@@ -1,5 +1,7 @@
 package hir
 
+import "bytes"
+
 // Minimal HIR nodes for Tier-0 backend: structured control, explicit Drop/DecRef,
 // arena helpers, async surface ops live in async_nodes.go.
 // Task H adds: function Params and frame.set/get sugar ops.
@@ -48,6 +50,25 @@ type Temp struct{ Name string }
 
 func (Temp) isValue()         {}
 func (t Temp) String() string { return t.Name }
+
+type ListLit struct {
+	Elems []Value
+}
+
+func (*ListLit) isValue() {}
+
+func (x *ListLit) String() string {
+	var buf bytes.Buffer
+	buf.WriteString("[")
+	for i, e := range x.Elems {
+		if i > 0 {
+			buf.WriteString(", ")
+		}
+		buf.WriteString(e.String())
+	}
+	buf.WriteString("]")
+	return buf.String()
+}
 
 type ConstInt struct {
 	Text string
@@ -126,6 +147,14 @@ func (*Call) isStmt() {}
 type Ret struct{ Val Value } // nil => void ret
 
 func (*Ret) isStmt() {}
+
+type Cast struct {
+	Dst  Temp
+	Src  Value
+	Type string // Target type, e.g. "ptr"
+}
+
+func (*Cast) isStmt() {}
 
 type Drop struct {
 	Val  Value

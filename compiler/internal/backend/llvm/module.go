@@ -639,6 +639,18 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "  %s = bitcast %s %s to %s\n", x.Dst.Name, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type
 
+			case *hir.Cast:
+				valTy, valOp := m.operand(x.Src)
+				opcode := "bitcast"
+				// Simple heuristic for Tier-0
+				if (valTy == "i64" || valTy == "i32") && x.Type == "ptr" {
+					opcode = "inttoptr"
+				} else if valTy == "ptr" && (x.Type == "i64" || x.Type == "i32") {
+					opcode = "ptrtoint"
+				}
+				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
+				m.tempTypes[x.Dst.Name] = x.Type
+
 			// ------- control flow (elided) -------
 			case *hir.If:
 				// Emit proper LLVM control flow for If statement

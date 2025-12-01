@@ -446,7 +446,7 @@ func (p *Parser) parsePrimary() ast.Expr {
 	case token.LBRACK:
 		open := spanPos(p.file, p.cur)
 		p.next()
-		return p.parseListComp(&ast.Ident{Name: "", Span: open}) // Span carrier
+		return p.parseListLiteralOrComp(&ast.Ident{Name: "", Span: open}) // Span carrier
 
 	case token.LBRACE:
 		open := spanPos(p.file, p.cur)

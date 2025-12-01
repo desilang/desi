@@ -832,6 +832,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			})
 			return dst
 		}
+
+		// Handle list indexing: list[index]
+		if _, ok := lhsType.(*types.List); ok {
+			list := ls.lowerExpr(x.X)
+			index := ls.lowerExpr(x.Idx)
+			dst := ls.b.FreshTemp("elem")
+			// list_get returns void* (ptr)
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "list_get", Args: []hir.Value{list, index}})
+			// TODO: Unbox if element type is int/bool
+			// For now, assume element is ptr or we handle unboxing later
+			return dst
+		}
+
 		return hir.Var{Name: "<index_expr>"}
 
 	case *ast.Ident:
@@ -968,6 +981,24 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		dst := ls.b.FreshTemp("field")
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})
 		return dst
+
+	case *ast.ListLit:
+		// Create new list
+		res := ls.b.FreshTemp("list")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{}})
+
+		// Append elements
+		for _, e := range x.Elems {
+			val := ls.lowerExpr(e)
+
+			// Cast to ptr for generic storage (void*)
+			// This handles both pointers (bitcast) and integers (inttoptr)
+			valPtr := ls.b.FreshTemp("val_ptr")
+			ls.b.Emit(&hir.Cast{Dst: valPtr, Src: val, Type: "ptr"})
+
+			ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{res, valPtr}})
+		}
+		return res
 
 	case *ast.DictLit:
 		return ls.lowerDictLit(x)
@@ -1201,6 +1232,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 			if t, ok := ls.info.Types[fe.X].(*types.Set); ok {
 				return ls.lowerSetMethod(fe, x.Args, t)
+			}
+			if t, ok := ls.info.Types[fe.X].(*types.List); ok {
+				return ls.lowerListMethod(fe, x.Args, t)
 			}
 		}
 	}

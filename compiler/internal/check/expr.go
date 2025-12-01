@@ -1,6 +1,8 @@
 package check
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -55,6 +57,54 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.MatchExpr:
 		return c.checkMatchExpr(x)
+
+	case *ast.ListLit:
+		if len(x.Elems) == 0 {
+			// Empty list: []
+			// If we have an expected type from context (e.g. let x: list[int] = []), use it.
+			// But 'typ' doesn't take context.
+			// For now, we'll return list[void] or error if we can't infer.
+			// Actually, let's return a special "unknown list" type or just list[void]
+			// and let the assignment checker handle it?
+			// Better: return list[void] (bottom type) which is compatible with any list?
+			// Or just error for now saying explicit type needed.
+			// In the test case: let nums: list[int] = [1, 2, 3]
+			// The assignment checker will check compatibility.
+			// But for [] we don't know the type.
+			// Let's assume list[int] for now or error.
+			// Real solution: Bidirectional type checking or context.
+			// For now: Error if empty without context (which we don't have here).
+			// But wait, if we are in an assignment, we might check it later.
+			// Let's return types.ListOf(types.Void) for empty list?
+			// Or maybe types.ListOf(types.Any)?
+			// Let's try to infer from elements first.
+			c.add(diagAt("DTE0005", x.Span, "empty list literals require type annotation (not yet supported)"))
+			return nil
+		}
+
+		// Infer element type from first element
+		elemType := c.typ(x.Elems[0])
+		if elemType == nil {
+			return nil
+		}
+
+		// Verify all elements have the same type
+		for i, elem := range x.Elems {
+			if i == 0 {
+				continue
+			}
+			t := c.typ(elem)
+			if t == nil {
+				continue
+			}
+			if !types.Equal(t, elemType) {
+				c.add(diagAt("DTE0105", elem.SpanOf(), fmt.Sprintf("list element type mismatch: expected %s, got %s", elemType, t)))
+			}
+		}
+
+		t := types.ListOf(elemType)
+		c.info.Types[x] = t
+		return t
 
 	case *ast.DictLit:
 		// Empty dict requires type annotation (deferred for now)
