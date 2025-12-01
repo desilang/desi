@@ -243,12 +243,50 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
+			// ═══════════════════════════════════════════════════════════════════════
+			// DECORATOR POLICY (DO NOT REMOVE - Design Documentation)
+			// ═══════════════════════════════════════════════════════════════════════
+			//
+			// WHAT: Support for @staticmethod, @classmethod, and @property decorators
+			//
+			// HOW:
+			//   - @staticmethod: No self/cls parameter injection
+			//   - @classmethod:  No cls parameter (use class name directly in body)
+			//   - @property:     Validate (self) -> T signature, accessed without ()
+			//
+			// WHY @classmethod has no cls param:
+			//   1. Desi doesn't have class-level state yet (no static fields)
+			//   2. Current use: Factory methods → class name is sufficient
+			//   3. Simpler than Python's approach (no runtime class objects)
+			//
+			// FUTURE-PROOF:
+			//   - When adding class variables: Introduce `cls` parameter then
+			//     Example: `cls.total` for accessing `static total: int`
+			//   - Backward compatible: Can add `cls` without breaking existing code
+			//
+			// WHY @property uses function calls:
+			//   1. Simple implementation: property access → getter call
+			//   2. Performance: Acceptable for most use cases (not hot loops)
+			//   3. LLVM can inline trivial properties automatically
+			//
+			// OPTIMIZATION PATH:
+			//   - Current: Function call per access
+			//   - Future: Explicit inline hint for compiler
+			//   - Advanced: Memoization for expensive properties
+			//
+			// HOW TO EXTEND:
+			//   - New decorators: Add to this section, follow same pattern
+			//   - Class state: When adding static fields, inject implicit `cls`
+			//   - Property setters: Add @property.setter with (self, value) -> none
+			//
+			// ═══════════════════════════════════════════════════════════════════════
+
 			// Check decorators
 			isStatic := hasDecorator(method, "staticmethod")
 			isClassMethod := hasDecorator(method, "classmethod")
 			isProperty := hasDecorator(method, "property")
 
-			// Validate property signature
+			// Validate property signature: must be (self) -> T
 			if isProperty {
 				// Properties must have signature: (self) -> T (no other params)
 				if len(method.Params) > 1 || (len(method.Params) == 1 && method.Params[0].Name.Name != "self") {
