@@ -1,0 +1,41 @@
+# Test extended list methods
+def main() -> int:
+    let nums: list[int] = [1, 2, 3]
+    
+    # insert
+    nums.insert(1, 10) # [1, 10, 2, 3]
+    if nums[1] != 10: return 1
+    
+    # remove
+    nums.remove(10) # [1, 2, 3]
+    if nums.len() != 3: return 2
+    
+    # reverse
+    nums.reverse() # [3, 2, 1]
+    if nums[0] != 3: return 3
+    
+    # contains
+    if !nums.contains(2): return 4
+    if nums.contains(99): return 5
+    
+    # index
+    if nums.index(2) != 1: return 6
+    
+    # count
+    nums.append(2) # [3, 2, 1, 2]
+    if nums.count(2) != 2: return 7
+    
+    # copy
+    let copy: list[int] = nums.copy()
+    if copy.len() != 4: return 8
+    
+    # clear
+    copy.clear()
+    if copy.len() != 0: return 9
+    
+    # extend
+    let other: list[int] = [4, 5]
+    nums.extend(other) # [3, 2, 1, 2, 4, 5]
+    if nums.len() != 6: return 10
+    
+    return 0

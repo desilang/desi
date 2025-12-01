@@ -647,6 +647,10 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					opcode = "inttoptr"
 				} else if valTy == "ptr" && (x.Type == "i64" || x.Type == "i32") {
 					opcode = "ptrtoint"
+				} else if valTy == "i64" && x.Type == "i32" {
+					opcode = "trunc"
+				} else if valTy == "i32" && x.Type == "i64" {
+					opcode = "sext" // Assume signed integers for now
 				}
 				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type

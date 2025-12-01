@@ -325,6 +325,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 		thenBlk := ls.b.NewBlock("then")
 		oldCur := ls.b.Block()
+
+		// Save terminated state
+		wasTerminated := ls.terminated
+		ls.terminated = false // Start fresh for the block
+
 		ls.push()
 		ls.b.SetBlock(thenBlk)
 		ls.lowerBlock(s.Then)
@@ -332,11 +337,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		if !ls.terminated {
 			ls.emitScopeDrops(scThen)
 		}
+		thenTerminated := ls.terminated
 		ls.b.SetBlock(oldCur)
 
 		var elseBlk *hir.Block
+		elseTerminated := false
 		if s.Else != nil {
 			elseBlk = ls.b.NewBlock("else")
+
+			ls.terminated = false // Start fresh for the block
+
 			ls.push()
 			ls.b.SetBlock(elseBlk)
 			ls.lowerBlock(s.Else)
@@ -344,8 +354,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if !ls.terminated {
 				ls.emitScopeDrops(scElse)
 			}
+			elseTerminated = ls.terminated
 			ls.b.SetBlock(oldCur)
+
+			// If both branches terminate, the if statement terminates
+			ls.terminated = wasTerminated || (thenTerminated && elseTerminated)
+		} else {
+			// If no else, execution continues (unless already terminated before)
+			ls.terminated = wasTerminated
 		}
+
 		ls.b.Emit(&hir.If{Cond: cond, Then: thenBlk, Else: elseBlk})
 
 	case *ast.WhileStmt:
@@ -950,7 +968,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				Type: typ,
 			})
 			return dst
-		} else if x.Op == "not" {
+		} else if x.Op == "not" || x.Op == "!" {
 			// Logical not: x ^ 1 (xor with true)
 			val := ls.lowerExpr(x.X)
 			dst := ls.b.FreshTemp("not")
