@@ -10,12 +10,26 @@ import (
 // typFieldExpr handles obj.field or obj.method.
 // Currently supports:
 // - dict methods: get, has_key, pop, clear, keys, values
+// - Class static methods: ClassName.static_method()
 func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
-	// Special case: EnumType.Variant (accessing variant constructor on enum type)
-	// x.X might be an Ident referring to an enum type
+	// Special case: ClassName.StaticMethod (accessing static method on class type)
+	// x.X might be an Ident referring to a class type
 	if id, ok := x.X.(*ast.Ident); ok {
 		sym := c.scope.Lookup(id.Name)
 		if sym != nil && sym.Kind == SymType {
+			// Check if it's a Class type with static methods
+			if classType, ok := sym.Type.(*types.Class); ok {
+				methodName := x.Name.Name
+				// Look up static method
+				if staticMethod, exists := classType.StaticMethods[methodName]; exists {
+					// Return the static method type (no self parameter)
+					c.info.Types[x] = staticMethod
+					return staticMethod
+				}
+				// If not found in static methods, fall through to check constructors/variants
+			}
+
+			// Check for enum variant constructor (existing logic)
 			if enumDecl, ok := sym.Node.(*ast.EnumDecl); ok {
 				// x is EnumType.Variant
 				// Look up the enum type
