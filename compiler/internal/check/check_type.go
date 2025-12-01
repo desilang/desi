@@ -1,6 +1,7 @@
 package check
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -170,8 +171,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 		} else {
-			// TODO: Report error - base must be a class
-			// c.error(d.Bases[0], "base must be a class")
+			c.add(diagAt("DTE0004", d.Bases[0].Span, "base must be a class"))
 		}
 	}
 
@@ -192,8 +192,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 
 		// POLICY: All dunders MUST be pub
 		if isDunder && !method.Pub {
-			// TODO: Report error - dunder method must be pub
-			// c.error(method, "dunder method %s must be pub", methodName)
+			c.add(diagAt("DCL0001", method.Span, fmt.Sprintf("dunder method %s must be pub", methodName)))
 		}
 
 		// Look up method symbol

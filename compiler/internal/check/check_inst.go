@@ -1,6 +1,8 @@
 package check
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -156,8 +158,7 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		expectedParams := newFunc.Params[1:] // Skip self parameter
 
 		if len(call.Args) != len(expectedParams) {
-			// TODO: Proper error reporting
-			// c.error(call, "wrong number of arguments for %s.__new__", cls.Name)
+			c.add(diagAt("DTE0046", call.Span, fmt.Sprintf("wrong number of arguments for %s: expected %d, got %d", cls.Name, len(expectedParams), len(call.Args))))
 			return types.Any
 		}
 
@@ -165,8 +166,7 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		for i, arg := range call.Args {
 			argType := c.typ(arg)
 			if !types.Assignable(expectedParams[i], argType) {
-				// TODO: Proper error reporting
-				// c.error(arg, "argument %d has wrong type", i)
+				c.add(diagAt("DTE0004", arg.SpanOf(), fmt.Sprintf("argument %d has wrong type: expected %s, got %s", i+1, expectedParams[i], argType)))
 			}
 		}
 
@@ -180,8 +180,7 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 	} else {
 		// POLICY: No __new__ = implicit zero-arg constructor only
 		if len(call.Args) > 0 {
-			// TODO: Proper error reporting
-			// c.error(call, "class %s has no __new__ and accepts zero arguments only", cls.Name)
+			c.add(diagAt("DTE0046", call.Span, fmt.Sprintf("class %s has no __new__ and only accepts zero arguments", cls.Name)))
 			return types.Any
 		}
 
