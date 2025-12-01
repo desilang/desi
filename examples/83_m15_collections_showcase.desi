@@ -1,0 +1,81 @@
+# Showcase of Desi collections: List, Dict, Set
+# Demonstrates multiline literals and various methods
+
+def main() -> int:
+    print("--- List Showcase ---")
+    # Multiline list literal
+    let numbers: list[int] = [
+        10,
+        20,
+        30,
+        40,
+        50
+    ]
+    print("Initial list len:")
+    print(numbers.len())
+    
+    numbers.append(60)
+    print("After append(60), last element:")
+    print(numbers[5])
+    
+    numbers.reverse()
+    print("After reverse, first element (should be 60):")
+    print(numbers[0]) 
+    
+    if numbers.contains(30):
+        print("List contains 30")
+        
+    let popped: int = numbers.pop()
+    print("Popped element (should be 10):")
+    print(popped)
+
+    print("--- Dict Showcase ---")
+    # Multiline dict literal
+    let scores: dict[str, int] = {
+        "Alice": 95,
+        "Bob": 82,
+        "Charlie": 88
+    }
+    
+    print("Alice's score:")
+    print(scores["Alice"])
+    
+    scores["Dave"] = 90
+    print("Added Dave. Dict size:")
+    print(scores.len())
+    
+    if scores.contains("Bob"):
+        print("Dict contains Bob")
+        
+    scores.remove("Bob")
+    if !scores.contains("Bob"):
+        print("Bob removed successfully")
+
+    print("--- Set Showcase ---")
+    # Multiline set literal
+    let tags: set[str] = {
+        "red",
+        "green",
+        "blue"
+    }
+    
+    print("Set size:")
+    print(tags.len())
+    
+    tags.add("yellow")
+    if tags.contains("yellow"):
+        print("Added yellow")
+        
+    tags.remove("red")
+    if !tags.contains("red"):
+        print("Removed red")
+
+    print("--- Nested Collections ---")
+    let matrix: list[list[int]] = [
+        [1, 2],
+        [3, 4]
+    ]
+    print("Matrix[1][0] (should be 3):")
+    print(matrix[1][0])
+    
+    return 0
