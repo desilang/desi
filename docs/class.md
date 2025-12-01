@@ -548,6 +548,7 @@ distance()        → Point_distance
 - Dunder pub enforcement
 - Error reporting with diagnostic codes
 - Move semantics
+- **Decorators**: `@staticmethod`, `@classmethod`, `@property`
 
 ### 🚧 Designed (Implementation Pending)
 - RAII (`__close__` with `using`)
@@ -562,8 +563,7 @@ distance()        → Point_distance
 
 **Not yet implemented (but designed for):**
 1. **Trait objects**: Virtual dispatch when needed
-2. **Property syntax**: `@property` decorator for getters
-3. **Abstract methods**: `@abstract` for inheritance
+2. **Abstract methods**: `@abstract` for inheritance
 4. **Reflection**: Limited runtime type information
 5. **Custom allocators**: Per-class `__allocate__` hook
 
