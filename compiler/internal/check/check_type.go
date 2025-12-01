@@ -248,6 +248,19 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
+			//POLICY: Validate __copy__ signature if present
+			if methodName == "__copy__" {
+				// __copy__(self) -> ClassName
+				// Must return the same class type
+				if ft.Ret == nil || !types.Equal(ft.Ret, cls) {
+					c.add(diagAt("DCL0003", method.Span, "__copy__ must return "+cls.Name))
+				}
+				// After self injection, should have exactly 1 param (self)
+				if len(ft.Params) != 1 {
+					c.add(diagAt("DCL0003", method.Span, "__copy__ must take only self (no other parameters)"))
+				}
+			}
+
 			// ═══════════════════════════════════════════════════════════════════════
 			// DECORATOR POLICY (DO NOT REMOVE - Design Documentation)
 			// ═══════════════════════════════════════════════════════════════════════
