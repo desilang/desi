@@ -61,6 +61,21 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 		}
 	}
 
+	// Generate constructors and methods for class declarations
+	for _, d := range mod.Decls {
+		if cd, ok := d.(*ast.ClassDecl); ok {
+			// Constructor
+			constructor := LowerClassConstructor(cd, info)
+			if constructor != nil {
+				out.Funcs = append(out.Funcs, constructor)
+			}
+
+			// Methods
+			methods := LowerClassMethods(cd, info, src)
+			out.Funcs = append(out.Funcs, methods...)
+		}
+	}
+
 	// Lower explicit ImplDecl methods
 	for _, d := range mod.Decls {
 		if impl, ok := d.(*ast.ImplDecl); ok {
