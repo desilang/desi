@@ -1,0 +1,37 @@
+# Comprehensive @staticmethod edge cases
+class Math:
+    @staticmethod
+    pub def add(a: int, b: int) -> int:
+        return a + b
+    @staticmethod
+    pub def multiply(a: int, b: int) -> int:
+        let sum = Math.add(a, b)
+        return sum
+    pub def instance_method(self) -> int:
+        return 42
+
+class Counter:
+    pub count: int
+    @staticmethod
+    pub def create_zero() -> Counter:
+        return Counter()
+    pub def increment(self) -> int:
+        return self.count + 1
+
+class Base:
+    @staticmethod
+    pub def base_static() -> int:
+        return 1
+
+class Derived(Base):
+    @staticmethod
+    pub def derived_static() -> int:
+        return Base.base_static() + 1
+
+def main() -> int:
+    let sum = Math.add(5, 3)
+    let product = Math.multiply(2, 3)
+    let c = Counter.create_zero()
+    let base_val = Base.base_static()
+    let derived_val = Derived.derived_static()
+    return 0

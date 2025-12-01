@@ -112,8 +112,20 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 		// POLICY: Static dispatch with name mangling
 		fn.Name = fmt.Sprintf("%s_%s", className, methodName)
 
-		// POLICY: Inject self as first HIR parameter
-		fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+		// POLICY: Inject self as first HIR parameter (unless @staticmethod)
+		// Check if method has @staticmethod decorator
+		isStatic := false
+		for _, dec := range method.Decorators {
+			if dec != nil && dec.Name.Name == "staticmethod" {
+				isStatic = true
+				break
+			}
+		}
+
+		// Only inject self for non-static methods
+		if !isStatic {
+			fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+		}
 
 		funcs = append(funcs, fn)
 	}
