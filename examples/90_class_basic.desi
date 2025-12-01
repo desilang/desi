@@ -1,0 +1,7 @@
+class Note:
+    pub title: str
+    pub body: str
+
+def main() -> int:
+    let n = Note()
+    return 0
