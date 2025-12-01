@@ -206,7 +206,11 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		var funcs []*types.Func
 		if overloadSet := c.info.Funcs[methodName]; overloadSet != nil {
 			for _, cand := range overloadSet.Cands {
-				funcs = append(funcs, cand.Type)
+				// Only process the function corresponding to this AST declaration
+				if cand.Decl == method {
+					cand.Type.IsPub = method.Pub
+					funcs = append(funcs, cand.Type)
+				}
 			}
 		} else {
 			// Fallback to simple lookup (if not overloaded or not yet processed?)
@@ -225,6 +229,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			methodSym := c.scope.Lookup(methodName)
 			if methodSym != nil {
 				if ft, ok := methodSym.Type.(*types.Func); ok {
+					ft.IsPub = method.Pub
 					funcs = append(funcs, ft)
 				}
 			}

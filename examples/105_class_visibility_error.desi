@@ -1,0 +1,10 @@
+class Secret:
+    pub x: int
+
+    def private_method(self) -> int:
+        return 42
+
+def main() -> int:
+    let s = Secret()
+    let z = s.private_method()  # Should error: private
+    return 0

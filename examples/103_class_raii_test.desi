@@ -1,0 +1,14 @@
+class Resource:
+    pub def __close__(self) -> none:
+        # Explicit self required
+        return
+
+def main() -> int:
+    using r1 = Resource():
+        using r2 = Resource():
+            # Nested
+            pass
+        # r2 closed here
+    # r1 closed here
+    
+    return 0

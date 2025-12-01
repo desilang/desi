@@ -156,7 +156,14 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 		// Only inject self for regular instance methods
 		// Static methods and class methods: NO parameter injection
 		if !isStatic && !isClassMethod {
-			fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+			// Check if first param is already self (explicit)
+			hasSelf := false
+			if len(fn.Params) > 0 && fn.Params[0].Name == "self" {
+				hasSelf = true
+			}
+			if !hasSelf {
+				fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+			}
 		}
 
 		funcs = append(funcs, fn)
