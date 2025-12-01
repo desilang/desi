@@ -121,8 +121,9 @@ type TypeParam struct {
 type CPtr struct{ Elem T }
 
 type Field struct {
-	Name string
-	Type T
+	Name  string
+	Type  T
+	IsPub bool // public visibility (cross-file access)
 }
 
 type Struct struct {
@@ -143,6 +144,17 @@ type Enum struct {
 	Variants   []Variant
 }
 
+// Class represents a class type with methods and dunders
+type Class struct {
+	Name       string
+	TypeParams []TypeParam
+	Fields     []Field
+	Methods    map[string]*Func // method name -> function type
+	Dunders    map[string]*Func // dunder name -> function type (__new__, __repr__, etc.)
+	Base       *Class           // single inheritance (nil if no base)
+	IsNested   bool             // true for nested classes
+}
+
 func (*List) isType()      {}
 func (*Set) isType()       {}
 func (*Dict) isType()      {}
@@ -154,6 +166,7 @@ func (*Union) isType()     {}
 func (*CPtr) isType()      {}
 func (*Struct) isType()    {}
 func (*Enum) isType()      {}
+func (*Class) isType()     {}
 func (*Generic) isType()   {}
 func (*TypeParam) isType() {}
 
@@ -207,6 +220,7 @@ func (t *TypeParam) String() string {
 func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
 func (t *Struct) String() string { return t.Name }
 func (t *Enum) String() string   { return t.Name }
+func (t *Class) String() string  { return t.Name }
 
 // ----- Constructors -----
 
@@ -262,6 +276,8 @@ func kindOf(t T) Kind {
 		return StructKind
 	case *Enum:
 		return EnumKind
+	case *Class:
+		return ClassKind
 	// Avoid collisions with other wrappers in this package.
 	// Returning distinct pseudo-kinds keeps Equal safe (no bad type assertions).
 	case *Arena:
@@ -353,6 +369,9 @@ func Equal(a, b T) bool {
 	case *Enum:
 		// Nominal equality for enums (name check)
 		return x.Name == b.(*Enum).Name
+	case *Class:
+		// Nominal equality for classes (name check)
+		return x.Name == b.(*Class).Name
 	case *Generic:
 		y := b.(*Generic)
 		if !Equal(x.Base, y.Base) {

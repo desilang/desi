@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -29,15 +31,30 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 }
 
 func (c *checker) collectClass(d *ast.ClassDecl) {
-	// Register the class type name.
+	// Create class type with methods and dunders tracking
+	cls := &types.Class{
+		Name:     d.Name.Name,
+		Methods:  make(map[string]*types.Func),
+		Dunders:  make(map[string]*types.Func),
+		IsNested: false, // TODO: Detect if nested
+	}
+
+	// Add type parameters
+	for _, tp := range d.TypeParams {
+		cls.TypeParams = append(cls.TypeParams, types.TypeParam{Name: tp.Name})
+	}
+
+	// Register the class type
 	c.scope.Define(&Symbol{
 		Name: d.Name.Name,
 		Kind: SymType,
-		Type: types.Type,
+		Type: cls,
 		Node: d,
 	})
 
-	// Collect methods.
+	c.info.Types[d] = cls
+
+	// Collect methods (will be fully checked in checkClass)
 	for _, m := range d.Methods {
 		c.collectFunc(m)
 	}
@@ -107,5 +124,108 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 			Name: f.Name.Name,
 			Type: fieldType,
 		})
+	}
+}
+
+func (c *checker) checkClass(d *ast.ClassDecl) {
+	sym := c.scope.Lookup(d.Name.Name)
+	if sym == nil {
+		return
+	}
+
+	cls, ok := sym.Type.(*types.Class)
+	if !ok {
+		return
+	}
+
+	// Add type parameters to scope
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = c.scope.parent }()
+
+	for _, tp := range d.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: tp.Name,
+			Kind: SymType,
+			Type: &types.TypeParam{Name: tp.Name},
+		})
+	}
+
+	// Handle inheritance (single base class)
+	if len(d.Bases) > 0 {
+		baseType := c.resolveType(d.Bases[0])
+		if baseCls, ok := baseType.(*types.Class); ok {
+			cls.Base = baseCls
+			// Inherit fields (base first)
+			cls.Fields = append(baseCls.Fields, cls.Fields...)
+			// Inherit methods (can override)
+			for name, method := range baseCls.Methods {
+				if _, exists := cls.Methods[name]; !exists {
+					cls.Methods[name] = method
+				}
+			}
+			// Inherit dunders (can override)
+			for name, dunder := range baseCls.Dunders {
+				if _, exists := cls.Dunders[name]; !exists {
+					cls.Dunders[name] = dunder
+				}
+			}
+		} else {
+			// TODO: Report error - base must be a class
+			// c.error(d.Bases[0], "base must be a class")
+		}
+	}
+
+	// Resolve fields
+	for _, field := range d.Fields {
+		fieldType := c.resolveType(field.Type)
+		cls.Fields = append(cls.Fields, types.Field{
+			Name:  field.Name.Name,
+			Type:  fieldType,
+			IsPub: field.Pub,
+		})
+	}
+
+	// Process methods
+	for _, method := range d.Methods {
+		methodName := method.Name.Name
+		isDunder := strings.HasPrefix(methodName, "__") && strings.HasSuffix(methodName, "__")
+
+		// POLICY: All dunders MUST be pub
+		if isDunder && !method.Pub {
+			// TODO: Report error - dunder method must be pub
+			// c.error(method, "dunder method %s must be pub", methodName)
+		}
+
+		// Look up method symbol
+		methodSym := c.scope.Lookup(methodName)
+		if methodSym == nil {
+			continue
+		}
+
+		ft, ok := methodSym.Type.(*types.Func)
+		if !ok {
+			continue
+		}
+
+		// POLICY: Inject implicit self parameter if not present
+		// Check if first param is already self (explicit)
+		hasSelf := false
+		if len(ft.Params) > 0 {
+			// If first param is the class type, it's explicit self
+			if types.Equal(ft.Params[0], cls) {
+				hasSelf = true
+			}
+		}
+
+		if !hasSelf {
+			// Prepend self as first parameter
+			ft.Params = append([]types.T{cls}, ft.Params...)
+		}
+
+		if isDunder {
+			cls.Dunders[methodName] = ft
+		} else {
+			cls.Methods[methodName] = ft
+		}
 	}
 }
