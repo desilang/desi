@@ -184,6 +184,23 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 			return types.Any
 		}
 
+		// For generic classes, infer type arguments from expected type
+		if len(d.TypeParams) > 0 {
+			// Check if we have an expected type from context (e.g., let x: Box<int> = Box())
+			if c.expected != nil {
+				// Try to match expected type with class
+				if gen, ok := c.expected.(*types.Generic); ok {
+					if baseCls, ok := gen.Base.(*types.Class); ok && baseCls.Name == cls.Name {
+						// Expected type is the same generic class with type args
+						return c.expected
+					}
+				}
+			}
+			// No expected type or mismatch: return Generic with nil args (error case)
+			c.add(diagAt("DTE0110", call.Span, fmt.Sprintf("cannot infer type parameters for %s; explicit type annotation required", cls.Name)))
+			return &types.Generic{Base: cls, Args: nil}
+		}
+
 		return cls
 	}
 }
