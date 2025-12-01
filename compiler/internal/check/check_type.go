@@ -273,6 +273,38 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
+			//POLICY: Validate arithmetic operator dunders
+			if methodName == "__add__" || methodName == "__sub__" || methodName == "__mul__" || methodName == "__div__" {
+				// Signature: __op__(self, other: T) -> T
+				// Must have exactly 2 params (self, other)
+				if len(ft.Params) != 2 {
+					c.add(diagAt("DCL0003", method.Span, methodName+" must take exactly 2 parameters (self, other)"))
+				}
+			}
+
+			//POLICY: Validate comparison operator dunders
+			if methodName == "__eq__" || methodName == "__lt__" || methodName == "__le__" ||
+				methodName == "__gt__" || methodName == "__ge__" || methodName == "__ne__" {
+				// Signature: __cmp__(self, other: T) -> bool
+				if ft.Ret != types.Bool {
+					c.add(diagAt("DCL0003", method.Span, methodName+" must return bool"))
+				}
+				if len(ft.Params) != 2 {
+					c.add(diagAt("DCL0003", method.Span, methodName+" must take exactly 2 parameters (self, other)"))
+				}
+			}
+
+			//POLICY: Validate __hash__ signature
+			if methodName == "__hash__" {
+				// __hash__(self) -> u64
+				if ft.Ret != types.U64 {
+					c.add(diagAt("DCL0003", method.Span, "__hash__ must return u64"))
+				}
+				if len(ft.Params) != 1 {
+					c.add(diagAt("DCL0003", method.Span, "__hash__ must take only self (no other parameters)"))
+				}
+			}
+
 			// ═══════════════════════════════════════════════════════════════════════
 			// DECORATOR POLICY (DO NOT REMOVE - Design Documentation)
 			// ═══════════════════════════════════════════════════════════════════════
