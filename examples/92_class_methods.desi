@@ -1,0 +1,13 @@
+class Counter:
+    pub value: int
+    
+    pub def increment() -> none:
+        # Methods will be tested once we have field assignment working
+        return
+    
+    pub def get() -> int:
+        return 42
+
+def main() -> int:
+    let c = Counter()
+    return 0

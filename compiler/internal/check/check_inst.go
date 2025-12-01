@@ -138,7 +138,53 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 }
 
 func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
-	// Return class instance type.
-	// TODO: Check constructor arguments if __init__ exists.
-	return types.Basic(d.Name.Name, types.ClassKind)
+	// Look up the class type
+	sym := c.scope.Lookup(d.Name.Name)
+	if sym == nil {
+		return types.Any
+	}
+
+	cls, ok := sym.Type.(*types.Class)
+	if !ok {
+		return types.Any
+	}
+
+	// POLICY: Check for __new__ dunder
+	if newFunc, hasNew := cls.Dunders["__new__"]; hasNew {
+		// User-defined __new__
+		// Arguments must match __new__ signature (skip implicit self)
+		expectedParams := newFunc.Params[1:] // Skip self parameter
+
+		if len(call.Args) != len(expectedParams) {
+			// TODO: Proper error reporting
+			// c.error(call, "wrong number of arguments for %s.__new__", cls.Name)
+			return types.Any
+		}
+
+		// Type check each argument
+		for i, arg := range call.Args {
+			argType := c.typ(arg)
+			if !types.Assignable(expectedParams[i], argType) {
+				// TODO: Proper error reporting
+				// c.error(arg, "argument %d has wrong type", i)
+			}
+		}
+
+		// Return class type (or generic instance for generic classes)
+		if len(d.TypeParams) > 0 {
+			// TODO: Infer type arguments from call arguments
+			return &types.Generic{Base: cls, Args: nil}
+		}
+		return cls
+
+	} else {
+		// POLICY: No __new__ = implicit zero-arg constructor only
+		if len(call.Args) > 0 {
+			// TODO: Proper error reporting
+			// c.error(call, "class %s has no __new__ and accepts zero arguments only", cls.Name)
+			return types.Any
+		}
+
+		return cls
+	}
 }
