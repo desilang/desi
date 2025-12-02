@@ -346,7 +346,9 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 					allowed := false
 					if selfSym := c.scope.Lookup("self"); selfSym != nil {
 						if selfType, ok := selfSym.Type.(*types.Class); ok {
-							if types.Equal(selfType, cls) {
+							// Check if self is of the same class (or subclass) as curr
+							// For now: strict check - must be same class
+							if types.Equal(selfType, curr) {
 								allowed = true
 							}
 						}
