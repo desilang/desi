@@ -663,6 +663,11 @@
       "id": "DCL0002",
       "title": "base must be a class",
       "help": "Inheritance requires a class type; structs and other types cannot be used as base classes."
+    },
+    "invalid_close_signature": {
+      "id": "DCL0003",
+      "title": "invalid __close__ signature",
+      "help": "__close__ must have signature: __close__(self) -> none"
     }
   }
 }
