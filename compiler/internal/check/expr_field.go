@@ -20,13 +20,19 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			// Check if it's a Class type with static methods
 			if classType, ok := sym.Type.(*types.Class); ok {
 				methodName := x.Name.Name
-				// Look up static method
+				// Look up static method first
 				if staticMethod, exists := classType.StaticMethods[methodName]; exists {
 					// Return the static method type (no self parameter)
 					c.info.Types[x] = staticMethod
 					return staticMethod
 				}
-				// If not found in static methods, fall through to check constructors/variants
+				// Look up class method (ClassName.classmethod())
+				if classMethod, exists := classType.ClassMethods[methodName]; exists {
+					// Return the class method type (cls parameter, but call syntax is ClassName.method())
+					c.info.Types[x] = classMethod
+					return classMethod
+				}
+				// If not found in static/class methods, fall through to check constructors/variants
 			}
 
 			// Check for enum variant constructor (existing logic)
@@ -253,6 +259,24 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 					c.info.Types[x] = f.Type
 					return f.Type
 				}
+			}
+			curr = curr.Base
+		}
+
+		// 1.5. Check properties (instance.property - accessed like field, not method call)
+		curr = cls
+		for curr != nil {
+			if propFunc, exists := curr.Properties[name]; exists {
+				// Properties are called automatically, return their return type
+				// The property function signature is (self) -> T
+				// When accessed as instance.prop, we return T (the return type)
+				if propFunc.Ret != nil {
+					c.info.Types[x] = propFunc.Ret
+					return propFunc.Ret
+				}
+				// Fallback if no return type
+				c.info.Types[x] = types.Any
+				return types.Any
 			}
 			curr = curr.Base
 		}

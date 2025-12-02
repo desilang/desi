@@ -1,0 +1,16 @@
+# Test @classmethod decorator
+class Counter:
+    total: int
+    @classmethod
+    pub def get_total(cls) -> int:
+        # TODO: Access class state
+        return 0
+    @classmethod
+    pub def create_batch(cls, n: int) -> list[Counter]:
+        # Factory method using cls
+        return []
+
+def main() -> int:
+    let total = Counter.get_total()
+    let batch = Counter.create_batch(5)
+    return 0

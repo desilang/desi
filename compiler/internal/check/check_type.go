@@ -39,6 +39,8 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		Fields:        nil,                                           // will be populated in Phase 2
 		Methods:       make(map[string]*types.Func),
 		StaticMethods: make(map[string]*types.Func),
+		ClassMethods:  make(map[string]*types.Func),
+		Properties:    make(map[string]*types.Func),
 		Dunders:       make(map[string]*types.Func),
 		Constructors:  nil, // will be populated in checkClass
 		Base:          nil, // will be resolved in Phase 2
@@ -241,35 +243,57 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
-			// Check if method has @staticmethod decorator
+			// Check decorators
 			isStatic := hasDecorator(method, "staticmethod")
+			isClassMethod := hasDecorator(method, "classmethod")
+			isProperty := hasDecorator(method, "property")
+
+			// Validate property signature
+			if isProperty {
+				// Properties must have signature: (self) -> T (no other params)
+				if len(method.Params) > 1 || (len(method.Params) == 1 && method.Params[0].Name.Name != "self") {
+					c.add(diagAt("DCL0004", method.Span, "@property must have signature (self) -> T"))
+				}
+			}
 
 			// POLICY: Inject implicit self parameter if not present
 			// Check if first param is already self (explicit)
 			hasSelf := false
 			if len(method.Params) > 0 {
-				// Check if first param is named "self"
-				if method.Params[0].Name.Name == "self" {
+				// Check if first param is named "self" or "cls"
+				paramName := method.Params[0].Name.Name
+				if paramName == "self" || paramName == "cls" {
 					hasSelf = true
-					// Ensure the type of 'self' is the class type
+					// Ensure the type is correct
 					if len(ft.Params) > 0 {
-						ft.Params[0] = cls
+						if paramName == "cls" || isClassMethod {
+							// For @classmethod, inject Type[ClassName] (for now, just use cls)
+							// TODO: Implement Type[T] wrapper
+							ft.Params[0] = cls
+						} else {
+							ft.Params[0] = cls
+						}
 					}
 				} else if len(ft.Params) > 0 && types.Equal(ft.Params[0], cls) {
-					// Also check by type if name isn't "self" (unlikely but possible)
+					// Also check by type
 					hasSelf = true
 				}
 			}
 
-			// Static methods and __new__ don't get self injection
+			// Inject self/cls parameter based on decorator
 			if !hasSelf && methodName != "__new__" && !isStatic {
-				// Prepend self as first parameter
+				// Regular methods and class methods get self/cls
+				// Properties get self
 				ft.Params = append([]types.T{cls}, ft.Params...)
 			}
 
 			// Store method in appropriate map
 			if isStatic {
 				cls.StaticMethods[methodName] = ft
+			} else if isClassMethod {
+				cls.ClassMethods[methodName] = ft
+			} else if isProperty {
+				cls.Properties[methodName] = ft
 			} else if isDunder {
 				cls.Dunders[methodName] = ft
 				if methodName == "__new__" {
