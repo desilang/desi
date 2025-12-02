@@ -236,6 +236,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	}
 	sig := types.FuncOf(params, ret, variadic)
 	sig.Name = name
+	sig.IsPub = fd.Pub
 	for _, tp := range fd.TypeParams {
 		sig.TypeParams = append(sig.TypeParams, types.TypeParam{Name: tp.Name})
 	}

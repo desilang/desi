@@ -98,6 +98,7 @@ type Func struct {
 	Params     []T
 	Ret        T
 	Variadic   bool // true if last param is *args
+	IsPub      bool // true if function is public
 }
 type Multi struct{ Elems []T }
 

@@ -301,6 +301,21 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		curr = cls
 		for curr != nil {
 			if propFunc, exists := curr.Properties[name]; exists {
+				// Visibility check
+				if !propFunc.IsPub {
+					allowed := false
+					if selfSym := c.scope.Lookup("self"); selfSym != nil {
+						if selfType, ok := selfSym.Type.(*types.Class); ok {
+							if types.Equal(selfType, cls) {
+								allowed = true
+							}
+						}
+					}
+					if !allowed {
+						c.add(diagAt("DTE0010", x.Name.Span, "property '"+name+"' is private"))
+					}
+				}
+
 				// Properties are called automatically, return their return type
 				// The property function signature is (self) -> T
 				// When accessed as instance.prop, we return T (the return type)
@@ -327,20 +342,18 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 
 			if method != nil {
 				// Visibility check for methods
-				// Dunders are always pub (enforced at decl), so only check regular methods
-				if !strings.HasPrefix(name, "__") {
-					// How to check if method is pub?
-					// types.Func doesn't store IsPub!
-					// We need to store visibility in types.Func or types.Class.Methods map?
-					// Currently types.Class.Methods maps name -> *Func.
-					// We lost visibility info for methods in types!
-
-					// Fix: We need to store visibility.
-					// For now, let's assume methods are pub by default?
-					// No, they have 'pub' keyword.
-
-					// We need to update types.Class to store Method visibility.
-					// Let's defer method visibility check for now and focus on fields.
+				if !method.IsPub {
+					allowed := false
+					if selfSym := c.scope.Lookup("self"); selfSym != nil {
+						if selfType, ok := selfSym.Type.(*types.Class); ok {
+							if types.Equal(selfType, cls) {
+								allowed = true
+							}
+						}
+					}
+					if !allowed {
+						c.add(diagAt("DTE0010", x.Name.Span, "method '"+name+"' is private"))
+					}
 				}
 				// Create bound method type (strip self)
 				// Instance methods have self as first param.

@@ -1,0 +1,17 @@
+class Secret:
+    pub x: int
+
+    def private_method(self) -> int:
+        return 42
+
+    pub def public_method(self) -> int:
+        return self.private_method() # Allowed - inside class
+
+def main() -> int:
+    let s = Secret()
+    let y = s.public_method() # Allowed - public
+    
+    # This should fail if uncommented:
+    # let z = s.private_method()  # Error: private
+    
+    return 0

@@ -172,6 +172,7 @@ type scope struct {
 	mutable    map[string]bool    // variables declared with mut
 	types      map[string]types.T // variable types for Drop
 	tempDrops  map[string]bool    // temporaries that need to be dropped
+	closers    map[string]string  // RAII: variables that need __close__ called (mangled name)
 }
 
 func (ls *lowerState) push() {
@@ -185,6 +186,7 @@ func (ls *lowerState) push() {
 		arenaOwned: map[string]bool{},
 		mutable:    map[string]bool{},
 		types:      map[string]types.T{},
+		closers:    map[string]string{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -445,14 +447,47 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		ident := ls.nameOf(s.Bind)
 		if ident != "" {
 			// Don't register as "local" (avoid ordinary drop); we destroy via defer.
+			var initVal hir.Value
 			if s.Init != nil {
-				init := ls.lowerExpr(s.Init)
-				ls.b.Emit(&hir.Let{Name: ident, Init: init})
+				initVal = ls.lowerExpr(s.Init)
+				ls.b.Emit(&hir.Let{Name: ident, Init: initVal})
 			} else {
 				ls.b.Emit(&hir.Let{Name: ident})
 			}
-			// Mark this name as an arena handle in the current scope.
-			ls.cur().arenas[ident] = true
+
+			// Check if it's a class with __close__
+			var closeMangledName string
+			if s.Init != nil {
+				if typ := ls.info.Types[s.Init]; typ != nil {
+					if cls, ok := typ.(*types.Class); ok {
+						// Look for __close__ in class or base classes
+						curr := cls
+						for curr != nil {
+							if _, ok := curr.Dunders["__close__"]; ok {
+								// Found __close__. Construct mangled name.
+								// Name mangling: ClassName_methodName
+								// Note: We use the class where the method is defined?
+								// Or the class of the object?
+								// Desi uses static dispatch. If we call obj.__close__(), it resolves to ClassName___close__.
+								// If it's inherited, it resolves to BaseName___close__.
+								// So we should use `curr.Name`.
+								closeMangledName = fmt.Sprintf("%s___close__", curr.Name)
+								break
+							}
+							curr = curr.Base
+						}
+					}
+				}
+			}
+
+			if closeMangledName != "" {
+				// RAII class: register for __close__ call
+				ls.cur().closers[ident] = closeMangledName
+			} else {
+				// Fallback: Mark this name as an arena handle in the current scope.
+				ls.cur().arenas[ident] = true
+			}
+
 			// One destroy at scope end (or return) via defer.
 			ls.cur().defers = append(ls.cur().defers, hir.Var{Name: ident})
 		}
@@ -666,6 +701,19 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 	// defers
 	for i := len(sc.defers) - 1; i >= 0; i-- {
 		v := sc.defers[i]
+		// RAII closer?
+		if varName, ok := v.(hir.Var); ok {
+			if mangledName, exists := sc.closers[varName.Name]; exists {
+				// Emit call to ClassName___close__(self)
+				ls.b.Emit(&hir.Call{
+					Fn:   mangledName,
+					Args: []hir.Value{v},
+					Type: "void", // __close__ returns none -> void
+				})
+				continue
+			}
+		}
+
 		// Arena handle?
 		if varName, ok := v.(hir.Var); ok && sc.arenas[varName.Name] {
 			ls.b.Emit(&hir.DestroyArena{Arena: v})
