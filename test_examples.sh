@@ -1,12 +1,16 @@
 #!/bin/bash
-# Test all working example files (26+) to ensure no regressions
-# Usage: ./test_examples.sh [start_number]
-# Example: ./test_examples.sh 26
-#
-# Expected failure tests: Add "# EXPECTED: COMPILE_ERROR" or "# EXPECTED: RUNTIME_ERROR" 
-# as the first line of the test file
+# Test all .desi example files
+# Exit codes:
+#   0 - All tests passed
+#   1 - Some tests failed
 
 set -e
+
+BUILD_DIR="build/output"
+mkdir -p "$BUILD_DIR"
+
+# Expected failure tests: Add "# EXPECTED: COMPILE_ERROR" or "# EXPECTED: RUNTIME_ERROR"
+# as the first line of the test file
 
 START_NUM=${1:-0}
 FAILED_TESTS=()
@@ -28,14 +32,14 @@ fi
 echo "✓ Compiler built successfully"
 echo ""
 
-# Run tests
-for f in examples/[2-9][0-9]_*.desi; do
+# Run tests - find all files matching [0-9]*.desi pattern and sort numerically
+for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     if [ ! -f "$f" ]; then
         continue
     fi
     
     # Extract number from filename
-    num=$(basename "$f" | cut -d_ -f1)
+    num=$(basename "$f" | grep -o '^[0-9]*')
     
     # Skip if below start number
     if [[ $num -lt $START_NUM ]]; then

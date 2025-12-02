@@ -1,0 +1,7 @@
+class Secret:
+    x: int  # Private field
+
+def main() -> int:
+    let mut s = Secret()
+    s.x = 10  # Should fail - private field
+    return 0

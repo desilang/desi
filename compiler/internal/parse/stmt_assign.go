@@ -23,7 +23,29 @@ func (p *Parser) maybeMakeAssign(first ast.Expr) ast.Stmt {
 	}
 
 	switch p.cur.Tok {
-	case token.DECLARE: // ':='
+	case token.ASSIGN: // '=' (reassignment)
+		p.next()
+		rhs, rhsSpan := p.parseExprList()
+		// Validate targets - allow Ident, FieldExpr, IndexExpr
+		ok := true
+		for _, t := range lhs {
+			if !isAssignableLHS(t) {
+				p.errInvalidAssignTarget(t.SpanOf())
+				ok = false
+			}
+		}
+		// Statement terminator
+		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+			p.errExpected(spanPos(p.file, p.cur), "newline")
+		}
+		_ = ok // parser continues; checker can be stricter later
+		return &ast.AssignStmt{
+			LHS:  lhs,
+			RHS:  rhs,
+			Span: ast.JoinSpan(start, rhsSpan),
+		}
+
+	case token.DECLARE: // ':=' (declaration)
 		p.next()
 		rhs, rhsSpan := p.parseExprList()
 		// Validate targets
