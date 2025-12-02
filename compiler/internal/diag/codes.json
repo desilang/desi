@@ -652,5 +652,17 @@
       "title": "default parameters must be consistent across overloads",
       "help": "overloads of the same function must agree on which parameters have defaults."
     }
+  },
+  "class": {
+    "dunder_must_be_pub": {
+      "id": "DCL0001",
+      "title": "dunder method must be pub",
+      "help": "All dunder methods (__new__, __repr__, __eq__, __close__, etc.) must be declared with 'pub'."
+    },
+    "invalid_base_class": {
+      "id": "DCL0002",
+      "title": "base must be a class",
+      "help": "Inheritance requires a class type; structs and other types cannot be used as base classes."
+    }
   }
 }
