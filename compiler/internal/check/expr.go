@@ -597,6 +597,17 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		}
 		c.add(diagAt("DTE0004", x.Span, "incomparable operands for '"+op+"'"))
 		return nil
+
+	case "and", "or":
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+		if types.Equal(lt, types.Bool) && types.Equal(rt, types.Bool) {
+			c.info.Types[x] = types.Bool
+			return types.Bool
+		}
+		c.add(diagAt("DTE0004", x.Span, "logical operators require bool operands"))
+		return nil
+
 	default:
 		return nil
 	}

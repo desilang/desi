@@ -1189,22 +1189,35 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		base := ls.lowerExpr(x.X)
 		name := x.Name.Name
 
-		// Check if base is a struct (or generic struct)
-		var st *types.Struct
+		// Check if base is a struct, class, or generic instance
+		var fields []types.Field
 		baseType := ls.info.Types[x.X]
-		if s, ok := baseType.(*types.Struct); ok {
-			st = s
-		} else if g, ok := baseType.(*types.Generic); ok {
-			if s, ok := g.Base.(*types.Struct); ok {
-				st = s
+
+		if baseType == nil {
+			if id, ok := x.X.(*ast.Ident); ok {
+				if sym := ls.info.Idents[id]; sym != nil {
+					baseType = sym.Type
+				}
 			}
 		}
 
-		if st != nil {
+		if s, ok := baseType.(*types.Struct); ok {
+			fields = s.Fields
+		} else if c, ok := baseType.(*types.Class); ok {
+			fields = c.Fields
+		} else if g, ok := baseType.(*types.Generic); ok {
+			if s, ok := g.Base.(*types.Struct); ok {
+				fields = s.Fields
+			} else if c, ok := g.Base.(*types.Class); ok {
+				fields = c.Fields
+			}
+		}
+
+		if fields != nil {
 			// Find field index and offset
 			idx := -1
 			offset := 0
-			for i, f := range st.Fields {
+			for i, f := range fields {
 				if f.Name == name {
 					idx = i
 					break
@@ -1224,13 +1237,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 				dst := ls.b.FreshTemp("field_val")
 				// Determine field type for Load (storage type)
-				storageType := lowerType(st.Fields[idx].Type)
+				storageType := lowerType(fields[idx].Type)
 
 				ls.b.Emit(&hir.Load{
 					Type:     storageType,
 					Src:      fieldPtr,
 					Dst:      dst,
-					DesiType: st.Fields[idx].Type,
+					DesiType: fields[idx].Type,
 				})
 
 				// Check if unboxing is needed (Generic T -> primitive)
@@ -1293,8 +1306,8 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Determine result type based on operation
 		var resultType string
-		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" {
-			// Comparison operations return boolean (i1)
+		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" {
+			// Comparison and logical operations return boolean (i1)
 			resultType = "i1"
 		} else {
 			// Arithmetic operations preserve operand type
@@ -1540,6 +1553,10 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			// info.Types maps *ast.Expr -> types.T
 			if argT := ls.info.Types[x.Args[0]]; argT != nil {
 				typeName := argT.String()
+				// DEBUG
+				if typeName == "Unknown" || typeName == "" {
+					fmt.Printf("Lowering print: argT is %T, String()='%s'\n", argT, typeName)
+				}
 				if impls, ok := ls.info.Impls[typeName]; ok {
 					if _, hasDisplay := impls["Display"]; hasDisplay {
 						// Rewrite to print(TypeName_to_str(arg))
@@ -1566,7 +1583,41 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		if recvT := ls.info.Types[fe.X]; recvT != nil {
 			typeName := recvT.String()
 			methodName := fe.Name.Name
-			// Check if method exists in Impls
+
+			// Handle Class Methods
+			var cls *types.Class
+			if c, ok := recvT.(*types.Class); ok {
+				cls = c
+			}
+
+			if cls != nil {
+				// Check if method exists in class
+				// We can just trust the checker if we are sure, but let's be safe
+				// Actually, for classes, we just mangle as ClassName_MethodName
+				// The checker guarantees existence.
+
+				mangledName := fmt.Sprintf("%s_%s", cls.Name, methodName)
+
+				// Lower receiver
+				recvVal := ls.lowerExpr(fe.X)
+
+				// Lower args
+				var args []hir.Value
+				args = append(args, recvVal) // receiver is first arg
+				for _, a := range x.Args {
+					args = append(args, ls.lowerExpr(a))
+				}
+
+				dst := ls.b.FreshTemp("call")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args})
+				// Consume args (methods move by default)
+				for _, arg := range args {
+					ls.consumeTemp(arg)
+				}
+				return dst
+			}
+
+			// Check if method exists in Impls (Traits)
 			// Note: This is a simplification. We should check if the method was actually resolved to a trait method.
 			// But for M14, all methods on structs come from Impls (or are treated similarly).
 			if impls, ok := ls.info.Impls[typeName]; ok {

@@ -38,8 +38,9 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
         continue
     fi
     
-    # Extract number from filename
-    num=$(basename "$f" | grep -o '^[0-9]*')
+    # Extract number from filename (remove leading zeros)
+    num=$(basename "$f" | grep -o '^[0-9]*' | sed 's/^0*//')
+    if [[ -z "$num" ]]; then num=0; fi
     
     # Skip if below start number
     if [[ $num -lt $START_NUM ]]; then
@@ -56,9 +57,10 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     COMPILE_SUCCESS=false
     RUNTIME_SUCCESS=false
     
-    if ./build-desi.sh "$f" "test_exec" > /dev/null 2>&1; then
+    OUTPUT_LOG="build/output/test_output.log"
+    if ./build-desi.sh "$f" "test_exec" > "$OUTPUT_LOG" 2>&1; then
         COMPILE_SUCCESS=true
-        if ./build/output/test_exec > /dev/null 2>&1; then
+        if ./build/output/test_exec >> "$OUTPUT_LOG" 2>&1; then
             RUNTIME_SUCCESS=true
         fi
     fi
@@ -90,9 +92,11 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
             PASSED_COUNT=$((PASSED_COUNT + 1))
         elif [[ "$COMPILE_SUCCESS" == false ]]; then
             echo "  ❌ FAILED (compile error)"
+            cat "$OUTPUT_LOG" | sed 's/^/    /' # Indent output
             FAILED_TESTS+=("$f (compile)")
         else
             echo "  ❌ FAILED (runtime error)"
+            cat "$OUTPUT_LOG" | sed 's/^/    /' # Indent output
             FAILED_TESTS+=("$f (runtime)")
         fi
     fi

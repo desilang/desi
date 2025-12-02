@@ -342,7 +342,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							return m.varTypes[v.Name]
 						}
 						if t, ok := val.(hir.Temp); ok {
-							return m.varTypes[t.Name]
+							name := t.Name
+							if strings.HasPrefix(name, "%") {
+								name = name[1:]
+							}
+							return m.varTypes[name]
 						}
 						return nil
 					}
@@ -441,8 +445,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					wprintf(&m.funcs, "  %s = call ptr @string_concat(ptr %s, ptr %s)\n",
 						x.Dst.String(), leftStr, rightStr)
 					m.ssa[x.Dst.Name] = x.Dst
-					m.tempTypes[x.Dst.Name] = "ptr"    // Track that result is a string (ptr)
-					m.varTypes[x.Dst.Name] = types.Str // Track high-level type
+					m.tempTypes[x.Dst.Name] = "ptr" // Track that result is a string (ptr)
+
+					dstName := x.Dst.Name
+					if strings.HasPrefix(dstName, "%") {
+						dstName = dstName[1:]
+					}
+					m.varTypes[dstName] = types.Str // Track high-level type
 					m.ensureDecl("declare ptr @string_concat(ptr, ptr)")
 					continue
 				}
@@ -527,6 +536,10 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					m.ensureDecl("declare i64 @__pow_i64(i64, i64)")
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue
+				case "and":
+					llvmInst = "and"
+				case "or":
+					llvmInst = "or"
 				default:
 					// Unknown operator
 					wprintf(&m.funcs, "  ; Unknown operator: %s\n", x.Op)
@@ -871,6 +884,110 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
+	// Built-in str() conversion
+	if c.Fn == "str" && len(c.Args) == 1 {
+		ty, val := m.operand(c.Args[0])
+
+		// Determine destination name
+		dst := ""
+		if c.Dst.Name != "" {
+			dst = c.Dst.String()
+		} else {
+			dst = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+		}
+
+		// Helper to register type
+		registerType := func(name string) {
+			if strings.HasPrefix(name, "%") {
+				name = name[1:]
+			}
+			m.tempTypes[name] = "ptr"
+			m.varTypes[name] = types.Str
+		}
+
+		// Integer to string
+		if ty == "i32" || ty == "i64" {
+			m.ensureDecl("declare ptr @int_to_str(i32)")
+			if ty == "i64" {
+				// Truncate to i32 for now
+				truncDst := fmt.Sprintf("%%t%d", m.tempID)
+				m.tempID++
+				wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", truncDst, val)
+				val = truncDst
+			}
+			wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", dst, val)
+			registerType(dst)
+			return
+		}
+
+		// Float to string
+		if ty == "double" || ty == "float" {
+			m.ensureDecl("declare ptr @float_to_str(double)")
+			if ty == "float" {
+				extDst := fmt.Sprintf("%%t%d", m.tempID)
+				m.tempID++
+				wprintf(&m.funcs, "  %s = fpext float %s to double\n", extDst, val)
+				val = extDst
+			}
+			wprintf(&m.funcs, "  %s = call ptr @float_to_str(double %s)\n", dst, val)
+			registerType(dst)
+			return
+		}
+
+		// Bool to string
+		if ty == "i1" {
+			m.ensureDecl("declare ptr @bool_to_str(i1)")
+			wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", dst, val)
+			registerType(dst)
+			return
+		}
+
+		// String to string (identity)
+		if ty == "ptr" {
+			// Check if it's a string or struct
+			getType := func(val hir.Value) types.T {
+				if v, ok := val.(hir.Var); ok {
+					return m.varTypes[v.Name]
+				}
+				if t, ok := val.(hir.Temp); ok {
+					return m.varTypes[t.Name]
+				}
+				return nil
+			}
+
+			argType := getType(c.Args[0])
+			isStr := false
+			if argType != nil && types.Equal(argType, types.Str) {
+				isStr = true
+			} else if _, ok := c.Args[0].(hir.ConstStr); ok {
+				isStr = true
+			}
+
+			if isStr {
+				// Identity
+				wprintf(&m.funcs, "  %s = bitcast ptr %s to ptr\n", dst, val)
+				registerType(dst)
+				return
+			}
+
+			// Struct to string
+			typeName := "Unknown"
+			if argType != nil {
+				if s, ok := argType.(*types.Struct); ok {
+					typeName = s.Name
+				} else if cls, ok := argType.(*types.Class); ok {
+					typeName = cls.Name
+				}
+			}
+
+			wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", dst, typeName, val)
+			m.ensureDecl(fmt.Sprintf("declare ptr @%s_to_str(ptr)", typeName))
+			registerType(dst)
+			return
+		}
+	}
+
 	// __future_register_poll(fut, &name$poll, frame)
 	if c.Fn == "__future_register_poll" {
 		m.ensureDecl("declare void @__future_register_poll(ptr, ptr, ptr)")
@@ -952,6 +1069,16 @@ func (m *Module) emitCall(c *hir.Call) {
 
 		if strings.HasPrefix(dst, "%") {
 			m.tempTypes[dst] = ret
+			// Register high-level return type if available
+			if m.info != nil {
+				if set, ok := m.info.Funcs[c.Fn]; ok && len(set.Cands) > 0 {
+					dstName := dst
+					if strings.HasPrefix(dstName, "%") {
+						dstName = dstName[1:]
+					}
+					m.varTypes[dstName] = set.Cands[0].Type.Ret
+				}
+			}
 		}
 		if strings.HasPrefix(dst, "%t") {
 			if n, err := strconv.Atoi(dst[2:]); err == nil {
@@ -983,7 +1110,18 @@ func (m *Module) emitCall(c *hir.Call) {
 	} else {
 		wprintf(&m.funcs, "  %%t%d = call %s @%s%s\n", m.tempID, ret, c.Fn, argStr.String())
 	}
-	m.tempTypes[fmt.Sprintf("t%d", m.tempID)] = ret
+	tempName := fmt.Sprintf("t%d", m.tempID)
+	m.tempTypes[tempName] = ret
+
+	// Register high-level return type if available
+	if m.info != nil {
+		if set, ok := m.info.Funcs[c.Fn]; ok && len(set.Cands) > 0 {
+			// Use the return type of the first candidate (sufficient for builtins like str)
+			// TODO: Handle overloads with different return types if that ever happens
+			m.varTypes[tempName] = set.Cands[0].Type.Ret
+		}
+	}
+
 	m.tempID++
 }
 
@@ -1014,7 +1152,11 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		return "ptr", fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
 	case hir.Temp:
 		// Infer type from source
-		return m.inferType(t.Name), t.Name
+		name := t.Name
+		if !strings.HasPrefix(name, "%") {
+			name = "%" + name
+		}
+		return m.inferType(t.Name), name
 	case hir.Var:
 		if ali, ok := m.ssa[t.Name]; ok {
 			return m.operand(ali)
@@ -1036,6 +1178,12 @@ func (m *Module) inferType(name string) string {
 	}
 
 	key := strings.TrimPrefix(name, "%")
+
+	// Check tempTypes with stripped name
+	if ty, ok := m.tempTypes[key]; ok {
+		return ty
+	}
+
 	// Check ssa with stripped name
 	if v, ok := m.ssa[key]; ok {
 		ty, _ := m.operand(v)
