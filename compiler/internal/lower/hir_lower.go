@@ -1672,12 +1672,28 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 				mangledName := fmt.Sprintf("%s_%s", cls.Name, methodName)
 
-				// Lower receiver
-				recvVal := ls.lowerExpr(fe.X)
+				// Check if this is a static method or class method
+				isStaticMethod := false
+				isClassMethod := false
+
+				if _, ok := cls.StaticMethods[methodName]; ok {
+					isStaticMethod = true
+				}
+				if _, ok := cls.ClassMethods[methodName]; ok {
+					isClassMethod = true
+				}
 
 				// Lower args
 				var args []hir.Value
-				args = append(args, recvVal) // receiver is first arg
+
+				// Only add receiver for instance methods (not static/classmethod)
+				if !isStaticMethod && !isClassMethod {
+					// Lower receiver
+					recvVal := ls.lowerExpr(fe.X)
+					args = append(args, recvVal) // receiver is first arg
+				}
+
+				// Add user-provided args
 				for _, a := range x.Args {
 					args = append(args, ls.lowerExpr(a))
 				}
