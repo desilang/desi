@@ -1,0 +1,62 @@
+# Test various edge cases for abstract classes
+
+class Shape:
+    @abstract
+    pub def area(self) -> float:
+        return 0.0
+    
+    @abstract
+    pub def perimeter(self) -> float:
+        return 0.0
+    
+    @abstract
+    pub def name(self) -> str:
+        return "shape"
+
+# VALID: Implements all abstract methods with correct types
+class Circle(Shape):
+    pub radius: float
+    
+    pub def area(self) -> float:
+        return 3.14159 * self.radius * self.radius
+    
+    pub def perimeter(self) -> float:
+        return 2.0 * 3.14159 * self.radius
+    
+    pub def name(self) -> str:
+        return "circle"
+
+# VALID: Another correct implementation
+class Rectangle(Shape):
+    pub width: float
+    pub height: float
+    
+    pub def area(self) -> float:
+        return self.width * self.height
+    
+    pub def perimeter(self) -> float:
+        return 2.0 * (self.width + self.height)
+    
+    pub def name(self) -> str:
+        return "rectangle"
+
+def main() -> int:
+    # Cannot instantiate abstract class
+    # let s = Shape()  # Would error: DCL0007
+    
+    # Can instantiate concrete implementations
+    let c = Circle()
+    c.radius = 5.0
+    
+    let r = Rectangle()
+    r.width = 10.0
+    r.height = 20.0
+    
+    # Call abstract methods (now concrete)
+    let c_area = c.area()
+    let r_area = r.area()
+    
+    let c_name = c.name()
+    let r_name = r.name()
+    
+    return 0
