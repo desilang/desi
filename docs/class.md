@@ -523,6 +523,178 @@ Total: 16 bytes
 
 ---
 
+## Abstract Classes
+
+Abstract classes allow you to define interfaces that subclasses must implement. Use the `@abstract` decorator on methods to mark them as abstract.
+
+### Basic Abstract Class
+
+```desi
+class Animal:
+    pub name: str
+    
+    @abstract
+    pub def speak(self) -> str:
+        # Abstract method - subclasses must override
+        return "Some sound"
+    
+    @abstract
+    pub def move(self) -> str:
+        # Abstract method with default implementation
+        return ""
+
+class Dog(Animal):
+    # Must implement all abstract methods
+    pub def speak(self) -> str:
+        return "Woof!"
+    
+    pub def move(self) -> str:
+        return "Running"
+
+def main() -> int:
+    # ERROR: Cannot instantiate abstract class
+    # let a = Animal()
+    
+    let d = Dog()  # OK: Dog implements all abstract methods
+    return 0
+```
+
+### Key Rules
+
+**A class is abstract if:**
+- Any of its methods are marked `@abstract`
+- It inherits abstract methods that haven't been implemented
+
+**Abstract methods must:**
+- Be marked `pub` (same as regular methods)
+- Have a proper return statement (Desi has no `pass` keyword)
+- NOT be combined with `@staticmethod` or `@classmethod`
+
+**Subclasses must:**
+- Implement ALL inherited abstract methods
+- Use the SAME return type as the abstract method signature
+- Use the SAME parameter types as the abstract method signature
+
+### Type Safety
+
+The compiler enforces that implementations match the abstract method signatures:
+
+```desi
+class Shape:
+    @abstract
+    pub def area(self) -> float:
+        return 0.0
+
+class Circle(Shape):
+    pub radius: float
+    
+    # ✅ CORRECT: Returns float as required
+    pub def area(self) -> float:
+        return 3.14159 * self.radius * self.radius
+
+# ❌ WRONG: Would fail type checking if area returned int
+# class BadCircle(Shape):
+#     pub def area(self) -> int:  # Type mismatch!
+#         return 0
+```
+
+### Instantiation Prevention
+
+```desi
+class AbstractBase:
+    @abstract
+    pub def required_method(self) -> int:
+        return 0
+
+def main() -> int:
+    let obj = AbstractBase()  # Compile error: DCL0007
+    # Error: cannot instantiate abstract class 'AbstractBase'
+    return 0
+```
+
+### Missing Implementation
+
+```desi
+class Shape:
+    @abstract
+    pub def area(self) -> float:
+        return 0.0
+    
+    @abstract
+    pub def perimeter(self) -> float:
+        return 0.0
+
+# ❌ ERROR: PartialCircle doesn't implement perimeter
+class PartialCircle(Shape):
+    pub def area(self) -> float:
+        return 3.14159
+    # Missing perimeter() - compile error: DCL0006
+    # Error: class PartialCircle must implement abstract
+    #        method 'perimeter' from base class
+```
+
+### Abstract Methods with Defaults
+
+Abstract methods can have default implementations (like Python's ABC):
+
+```desi
+class Vehicle:
+    @abstract
+    pub def max_speed(self) -> int:
+        return 100  # Default implementation
+    
+    pub def describe(self) -> str:
+        # Can call abstract methods
+        return "Max speed: " + str(self.max_speed())
+
+class Car(Vehicle):
+    # Can use default or override
+    pub def max_speed(self) -> int:
+        return 200  # Override with specific value
+
+class Bicycle(Vehicle):
+    # Uses default implementation (100)
+    # No need to override if default is acceptable
+    pass  # Note: Still must implement if marked abstract
+```
+
+**Note:** Even if an abstract method has a default body, subclasses are still required to explicitly implement it to be considered concrete.
+
+### Best Practices
+
+**✅ DO:**
+```desi
+class Repository:
+    @abstract
+    pub def save(self, data: str) -> bool:
+        return false
+    
+    @abstract
+    pub def load(self, id: int) -> str:
+        return ""
+
+class Database Repository):
+    pub def save(self, data: str) -> bool:
+        # Actual implementation
+        return true
+    
+    pub def load(self, id: int) -> str:
+        # Actual implementation
+        return "data"
+```
+
+**❌ DON'T:**
+```desi
+# Don't combine @abstract with @staticmethod
+class Bad:
+    @abstract
+    @staticmethod  # ERROR: DCL0005
+    pub def method() -> int:
+        return 0
+```
+
+---
+
 ## Generic Classes
 
 ### Basic Generic Class

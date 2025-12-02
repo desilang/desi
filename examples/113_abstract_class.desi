@@ -1,0 +1,50 @@
+class Animal:
+    pub name: str
+    
+    @abstract
+    pub def speak(self) -> str:
+        # Abstract method - subclasses must override
+        return "Some sound"
+    
+    @abstract
+    pub def move(self) -> str:
+        # Abstract method with default implementation
+        return ""
+    
+
+class Dog(Animal):
+    pub breed: str
+    
+    # Must implement all abstract methods from Animal
+    pub def speak(self) -> str:
+        return "Woof!"
+    
+    pub def move(self) -> str:
+        return "Running on four legs"
+
+class Cat(Animal):
+    pub color: str
+    
+    # Must implement all abstract methods
+    pub def speak(self) -> str:
+        return "Meow!"
+    
+    pub def move(self) -> str:
+        return "Prowling silently"
+
+def main() -> int:
+    # This would fail: let a = Animal()  # ERROR: cannot instantiate abstract class
+    
+    let d = Dog()
+    d.name = "Buddy"
+    d.breed = "Golden Retriever"
+    
+    let c = Cat()
+    c.name = "Whiskers"
+    c.color = "Orange"
+    
+    # Use the objects
+    let dog_sound = d.speak()
+    let cat_sound = c.speak()
+    
+    return 0

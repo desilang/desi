@@ -151,6 +151,12 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		return types.Any
 	}
 
+	// POLICY: Prevent instantiation of abstract classes
+	if cls.IsAbstract {
+		c.add(diagAt("DCL0007", call.Span, fmt.Sprintf("cannot instantiate abstract class '%s'", cls.Name)))
+		return types.Any
+	}
+
 	// POLICY: Check for __new__ dunder (Constructors)
 	if len(cls.Constructors) > 0 {
 		// Overload resolution for __new__

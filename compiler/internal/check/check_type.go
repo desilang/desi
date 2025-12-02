@@ -347,6 +347,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			isStatic := hasDecorator(method, "staticmethod")
 			isClassMethod := hasDecorator(method, "classmethod")
 			isProperty := hasDecorator(method, "property")
+			isAbstract := hasDecorator(method, "abstract")
 
 			// Validate property signature: must be (self) -> T
 			if isProperty {
@@ -354,6 +355,23 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				if len(method.Params) > 1 || (len(method.Params) == 1 && method.Params[0].Name.Name != "self") {
 					c.add(diagAt("DCL0004", method.Span, "@property must have signature (self) -> T"))
 				}
+			}
+
+			// Validate abstract methods
+			if isAbstract {
+				// Abstract methods must not be static or class methods (for now)
+				if isStatic {
+					c.add(diagAt("DCL0005", method.Span, "@abstract cannot be combined with @staticmethod"))
+				}
+				if isClassMethod {
+					c.add(diagAt("DCL0005", method.Span, "@abstract cannot be combined with @classmethod"))
+				}
+				// Mark class as abstract
+				cls.IsAbstract = true
+				if cls.AbstractMethods == nil {
+					cls.AbstractMethods = make(map[string]bool)
+				}
+				cls.AbstractMethods[methodName] = true
 			}
 
 			// POLICY: Inject implicit self parameter if not present
@@ -417,5 +435,66 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 
 		// Check the method body
 		c.checkFunc(method)
+	}
+
+	// Handle abstract method inheritance and validation
+	if cls.Base != nil && cls.Base.IsAbstract {
+		// Inherit abstract methods from base class
+		if cls.AbstractMethods == nil {
+			cls.AbstractMethods = make(map[string]bool)
+		}
+
+		// Check each abstract method from base
+		for abstractMethod := range cls.Base.AbstractMethods {
+			// Check if this class implements the abstract method
+			implemented := false
+
+			// Check in regular methods
+			if _, ok := cls.Methods[abstractMethod]; ok {
+				// Check if it's not still marked abstract in this class by finding the AST node
+				for _, m := range d.Methods {
+					if m.Name.Name == abstractMethod && !hasDecorator(m, "abstract") {
+						implemented = true
+						break
+					}
+				}
+			}
+
+			// Check in dunders
+			if _, ok := cls.Dunders[abstractMethod]; ok {
+				// Check if it's  not still marked abstract
+				for _, m := range d.Methods {
+					if m.Name.Name == abstractMethod && !hasDecorator(m, "abstract") {
+						implemented = true
+						break
+					}
+				}
+			}
+
+			// If not implemented, inherit the abstract method requirement
+			if !implemented {
+				cls.AbstractMethods[abstractMethod] = true
+				cls.IsAbstract = true
+			}
+		}
+	}
+
+	// If class has unimplemented abstract methods, report error (unless class itself is abstract)
+	if len(cls.AbstractMethods) > 0 && !cls.IsAbstract {
+		// If this class doesn't define any new abstract methods but has inherited ones, it must implement them all
+		hasOwnAbstractMethods := false
+		for _, method := range d.Methods {
+			if hasDecorator(method, "abstract") {
+				hasOwnAbstractMethods = true
+				break
+			}
+		}
+
+		if !hasOwnAbstractMethods {
+			// This is a concrete class with unimplemented abstract methods
+			for abstractMethod := range cls.AbstractMethods {
+				c.add(diagAt("DCL0006", d.Span, fmt.Sprintf("class %s must implement abstract method '%s' from base class", cls.Name, abstractMethod)))
+			}
+		}
 	}
 }
