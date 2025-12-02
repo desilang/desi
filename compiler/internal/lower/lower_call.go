@@ -181,6 +181,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 
 			if cls != nil {
+				// Detect if fe.X is a Type symbol (unbound method call: Parent.method(self))
+				// vs instance access (obj.method())
+				// Heuristic: if fe.X is an Ident with the same name as the class, it's a type access
+				isUnboundMethod := false
+				if id, ok := fe.X.(*ast.Ident); ok {
+					if id.Name == cls.Name {
+						isUnboundMethod = true
+					}
+				}
 				// Check if method exists in class
 				// We can just trust the checker if we are sure, but let's be safe
 				// Actually, for classes, we just mangle as ClassName_MethodName
@@ -202,9 +211,12 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				// Lower args
 				var args []hir.Value
 
-				// Only add receiver for instance methods (not static/classmethod)
-				if !isStaticMethod && !isClassMethod {
-					// Lower receiver
+				// For unbound method calls (Parent.method(self, ...)),
+				// the user provides self explicitly, so we DON'T add receiver
+				// For bound method calls (obj.method(...)), we add receiver as first arg
+				// Static/class methods never get receiver from instance
+				if !isUnboundMethod && !isStaticMethod && !isClassMethod {
+					// Lower receiver for bound instance method call
 					recvVal := ls.lowerExpr(fe.X)
 					args = append(args, recvVal) // receiver is first arg
 				}

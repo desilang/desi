@@ -441,8 +441,27 @@ func Assignable(dst, src T) bool {
 		}
 	}
 
+	// Class inheritance: src is assignable to dst if src is subclass of dst
+	if dstClass, ok := dst.(*Class); ok {
+		if srcClass, ok := src.(*Class); ok {
+			return IsSubclass(srcClass, dstClass)
+		}
+	}
+
 	// exact structural equality
 	return Equal(dst, src)
+}
+
+// IsSubclass checks if sub is a subclass of base (or equal).
+func IsSubclass(sub, base *Class) bool {
+	curr := sub
+	for curr != nil {
+		if Equal(curr, base) {
+			return true
+		}
+		curr = curr.Base
+	}
+	return false
 }
 
 // FromName looks up builtin named types by their canonical surface spelling.
