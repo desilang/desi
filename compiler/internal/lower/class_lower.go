@@ -112,7 +112,34 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 		// POLICY: Static dispatch with name mangling
 		fn.Name = fmt.Sprintf("%s_%s", className, methodName)
 
-		// POLICY: Inject self as first HIR parameter (unless @staticmethod or @classmethod)
+		// ═══════════════════════════════════════════════════════════════════════
+		// LOWERING DECORATOR POLICY (DO NOT REMOVE - Design Documentation)
+		// ═══════════════════════════════════════════════════════════════════════
+		//
+		// SELF/CLS PARAMETER INJECTION:
+		//
+		// Instance methods:  def method(self, x) -> T
+		//                   Lowered: fn(self: ptr, x: T) -> T
+		//
+		// @staticmethod:    def method(x) -> T
+		//                   Lowered: fn(x: T) -> T  (NO self!)
+		//
+		// @classmethod:     def method(x) -> T
+		//                   Lowered: fn(x: T) -> T  (NO cls!)
+		//                   Note: Use class name in body, not cls param
+		//
+		// @property:        def prop(self) -> T
+		//                   Lowered: fn(self: ptr) -> T  (regular instance method)
+		//                   Called automatically when accessed as instance.prop
+		//
+		// FUTURE EXTENSIONS:
+		//   - When adding class variables: @classmethod may need cls injection
+		//     Format: fn(cls: Type[ClassName], args...) -> T
+		//   - Property setters: def prop(self, val) -> none
+		//     Lowered: fn(self: ptr, val: T) -> none
+		//
+		// ═══════════════════════════════════════════════════════════════════════
+
 		// Check decorators
 		isStatic := false
 		isClassMethod := false
@@ -127,7 +154,7 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 		}
 
 		// Only inject self for regular instance methods
-		// Static methods and class methods don't get self
+		// Static methods and class methods: NO parameter injection
 		if !isStatic && !isClassMethod {
 			fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
 		}

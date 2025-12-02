@@ -256,12 +256,49 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 						}
 					}
 
+```
 					c.info.Types[x] = f.Type
 					return f.Type
 				}
 			}
 			curr = curr.Base
 		}
+
+		// ═══════════════════════════════════════════════════════════════════════
+		// PROPERTY ACCESS POLICY (DO NOT REMOVE - Design Documentation)
+		// ═══════════════════════════════════════════════════════════════════════
+		//
+		// WHAT: Properties are accessed like fields but call getter functions
+		//
+		// SYNTAX:
+		//   Definition: @property pub def area(self) -> float: ...
+		//   Access:     let a = circle.area  (NO parentheses!)
+		//
+		// HOW IT WORKS:
+		//   1. Property stored in cls.Properties map
+		//   2. When accessed as instance.prop, return the property's return type
+		//   3. Lowering: Becomes a function call at codegen
+		//
+		// PERFORMANCE:
+		//   - Cost: One function call per access
+		//   - Mitigation: LLVM can inline trivial properties
+		//   - Hot loops: Cache the value: let r = circle.radius; for ...
+		//
+		// WHY THIS DESIGN:
+		//   1. Computed properties are common (area from radius)
+		//   2. Encapsulation: Can change field → property without breaking API
+		//   3. Acceptable tradeoff: Utility > small perf cost
+		//
+		// FUTURE OPTIMIZATIONS:
+		//   - Inline hint: #[inline] @property for always-inline
+		//   - Memoization: @cached_property for expensive computations
+		//   - Compile-time eval: @const_property for pure functions
+		//
+		// HOW TO EXTEND:
+		//   - Setters: @property.setter def area(self, val) -> none
+		//   - Deleters: @property.deleter def area(self) -> none (rare)
+		//
+		// ═══════════════════════════════════════════════════════════════════════
 
 		// 1.5. Check properties (instance.property - accessed like field, not method call)
 		curr = cls
