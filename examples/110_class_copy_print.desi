@@ -1,0 +1,24 @@
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __copy__(self) -> Point:
+        let p = Point()
+        p.x = self.x
+        p.y = self.y
+        return p
+
+def main() -> int:
+    let p1 = Point()
+    p1.x = 10
+    p1.y = 20
+    
+    # Note: to_str() is auto-generated, returns "Point\n"
+    print(p1.to_str())  # Prints: Point
+    
+    let p2 = p1.__copy__()
+    p2.x = 30
+    
+    print(p2.to_str())  # Prints: Point
+    
+    return 0

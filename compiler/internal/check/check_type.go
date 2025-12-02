@@ -261,6 +261,18 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
+			//POLICY: Validate __repr__ signature if present
+			if methodName == "__repr__" {
+				// __repr__(self) -> str
+				if ft.Ret != types.Str {
+					c.add(diagAt("DCL0003", method.Span, "__repr__ must return str"))
+				}
+				// After self injection, should have exactly 1 param (self)
+				if len(ft.Params) != 1 {
+					c.add(diagAt("DCL0003", method.Span, "__repr__ must take only self (no other parameters)"))
+				}
+			}
+
 			// ═══════════════════════════════════════════════════════════════════════
 			// DECORATOR POLICY (DO NOT REMOVE - Design Documentation)
 			// ═══════════════════════════════════════════════════════════════════════
