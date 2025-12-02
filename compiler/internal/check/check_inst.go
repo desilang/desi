@@ -151,23 +151,43 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		return types.Any
 	}
 
-	// POLICY: Check for __new__ dunder
-	if newFunc, hasNew := cls.Dunders["__new__"]; hasNew {
-		// User-defined __new__
-		// Arguments must match __new__ signature (skip implicit self)
-		expectedParams := newFunc.Params[1:] // Skip self parameter
+	// POLICY: Check for __new__ dunder (Constructors)
+	if len(cls.Constructors) > 0 {
+		// Overload resolution for __new__
+		var bestCand *types.Func
 
-		if len(call.Args) != len(expectedParams) {
-			c.add(diagAt("DTE0046", call.Span, fmt.Sprintf("wrong number of arguments for %s: expected %d, got %d", cls.Name, len(expectedParams), len(call.Args))))
-			return types.Any
+		// Simple score-based resolution:
+		// 0: exact match
+		// -1: no match
+
+		for _, ctor := range cls.Constructors {
+			// Check arity
+			// fmt.Printf("Checking ctor with %d params against %d args\n", len(ctor.Params), len(call.Args))
+			if len(call.Args) != len(ctor.Params) {
+				continue
+			}
+
+			// Check types
+			match := true
+			for i, arg := range call.Args {
+				argType := c.typ(arg)
+				// fmt.Printf("  Arg %d: expected %s, got %s\n", i, ctor.Params[i], argType)
+				if !types.Assignable(ctor.Params[i], argType) {
+					match = false
+					break
+				}
+			}
+
+			if match {
+				// Found a match!
+				bestCand = ctor
+				break
+			}
 		}
 
-		// Type check each argument
-		for i, arg := range call.Args {
-			argType := c.typ(arg)
-			if !types.Assignable(expectedParams[i], argType) {
-				c.add(diagAt("DTE0004", arg.SpanOf(), fmt.Sprintf("argument %d has wrong type: expected %s, got %s", i+1, expectedParams[i], argType)))
-			}
+		if bestCand == nil {
+			c.add(diagAt("DTE0046", call.Span, fmt.Sprintf("no matching constructor for %s with %d arguments", cls.Name, len(call.Args))))
+			return types.Any
 		}
 
 		// Return class type (or generic instance for generic classes)

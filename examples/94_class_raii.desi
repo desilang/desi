@@ -1,8 +1,9 @@
 class File:
     pub path: str
     
-    pub def __close__() -> none:
+    pub def __close__(self) -> none:
         # Cleanup logic would go here
+        # In real implementation: close file descriptor
         return
 
 def main() -> int:

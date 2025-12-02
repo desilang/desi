@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -163,6 +165,137 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			}
 		}
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+x.Name.Name+"' on struct '"+s.Name+"'"))
+		return nil
+	}
+
+	// Handle Class method/field access
+	if cls, ok := t.(*types.Class); ok {
+		name := x.Name.Name
+
+		// 1. Check fields (including inherited)
+		curr := cls
+		for curr != nil {
+			for _, f := range curr.Fields {
+				if f.Name == name {
+					// Visibility check: if not pub, must be in same module/file?
+					// For now, Desi classes are file-private by default unless pub.
+					// But wait, fields are marked IsPub.
+					// If !IsPub, access is only allowed from within the class methods?
+					// Or same file?
+					// Rust: private fields are private to the module.
+					// Let's assume same-file for now (simplest).
+					// But we don't track file of definition easily here?
+					// We can check if we are inside a method of the same class?
+
+					// For MVP: If !IsPub, forbid access unless we are in the same package/file.
+					// Actually, let's just enforce: if !IsPub, forbid access from outside.
+					// But "outside" needs definition.
+					// Let's assume "outside" means "not in a method of this class".
+
+					// Better: check if we are in the same file.
+					// c.file is current file. We need definition file of the field.
+					// We don't have that easily on types.Field.
+
+					// Alternative: Only enforce if imported from another module?
+					// If cls is from another module (how do we know?), then private fields are inaccessible.
+					// Types don't track their module.
+
+					// Let's implement a simple rule:
+					// If !IsPub, and we are not inside a method of 'cls' (or subclass), error.
+
+					if !f.IsPub {
+						// Check if we are inside a method of cls
+						// c.curFuncDecl is the current function.
+						// We need to know if c.curFuncDecl is a method of cls.
+						// We can check if c.curFuncDecl.Recv matches cls.
+						// But c.curFuncDecl is AST, cls is Type.
+
+						// Let's skip strict enforcement for same-file for now and just check "IsPub"
+						// If it's NOT pub, we warn/error?
+						// No, private fields are useful.
+
+						// Let's just enforce: if !IsPub, it is PRIVATE.
+						// Access allowed only if we are inside the class definition (methods).
+						// How to check that?
+						// We can check if `c.scope` contains `self` of type `cls`?
+
+						allowed := false
+						if selfSym := c.scope.Lookup("self"); selfSym != nil {
+							if selfType, ok := selfSym.Type.(*types.Class); ok {
+								if types.Equal(selfType, cls) {
+									allowed = true
+								}
+								// Also allow if subclass?
+								// Protected access?
+								// Let's stick to private = class-only.
+							}
+						}
+
+						if !allowed {
+							c.add(diagAt("DTE0010", x.Name.Span, "field '"+name+"' is private"))
+						}
+					}
+
+					c.info.Types[x] = f.Type
+					return f.Type
+				}
+			}
+			curr = curr.Base
+		}
+
+		// 2. Check methods/dunders (including inherited)
+		curr = cls
+		for curr != nil {
+			var method *types.Func
+			if strings.HasPrefix(name, "__") && strings.HasSuffix(name, "__") {
+				method = curr.Dunders[name]
+			} else {
+				method = curr.Methods[name]
+			}
+
+			if method != nil {
+				// Visibility check for methods
+				// Dunders are always pub (enforced at decl), so only check regular methods
+				if !strings.HasPrefix(name, "__") {
+					// How to check if method is pub?
+					// types.Func doesn't store IsPub!
+					// We need to store visibility in types.Func or types.Class.Methods map?
+					// Currently types.Class.Methods maps name -> *Func.
+					// We lost visibility info for methods in types!
+
+					// Fix: We need to store visibility.
+					// For now, let's assume methods are pub by default?
+					// No, they have 'pub' keyword.
+
+					// We need to update types.Class to store Method visibility.
+					// Let's defer method visibility check for now and focus on fields.
+				}
+				// Create bound method type (strip self)
+				// Instance methods have self as first param.
+				// Exception: __new__ is static, but we are accessing on instance?
+				// Accessing __new__ on instance is weird but if we allow it, it has no self.
+				// Regular methods have self.
+
+				if name == "__new__" {
+					// __new__ has no self, return as is
+					c.info.Types[x] = method
+					return method
+				}
+
+				if len(method.Params) > 0 {
+					newParams := method.Params[1:]
+					boundMethod := types.FuncOf(newParams, method.Ret, method.Variadic)
+					c.info.Types[x] = boundMethod
+					return boundMethod
+				}
+				// Should not happen for instance methods if self injection works
+				c.info.Types[x] = method
+				return method
+			}
+			curr = curr.Base
+		}
+
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field or method '"+name+"' on class '"+cls.Name+"'"))
 		return nil
 	}
 

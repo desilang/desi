@@ -1,0 +1,17 @@
+# EXPECTED: COMPILE_ERROR
+class Point:
+    pub x: int
+    pub y: int
+    priv_data: int  # private field
+    
+    pub def get_x(self) -> int:
+        return self.x
+    
+    pub def get_priv(self) -> int:
+        return self.priv_data  # Allowed: inside method
+
+def main() -> int:
+    let p = Point()
+    let a = p.x          # Allowed: public field
+    let b = p.priv_data  # Should error: private field
+    return 0
