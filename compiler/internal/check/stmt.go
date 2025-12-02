@@ -12,29 +12,30 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.LetStmt:
 		// If there's an explicit type annotation, use it as expected type for RHS
 		var expectedType types.T
+		var t types.T
+
 		if st.Type != nil {
 			expectedType = c.resolveType(st.Type)
-			if expectedType == nil {
-				return // explicit type failed to resolve
-			}
-			// Save and set expected type for bidirectional checking
+			// Even if type annotation doesn't resolve, we still check RHS
+			// (important for lambdas which have func type)
+
+			// Save and set expected type for bidirectional checking (if resolved)
 			savedExpected := c.expected
-			c.expected = expectedType
+			if expectedType != nil {
+				c.expected = expectedType
+			}
 			rhs := c.typ(st.Value)
 			c.expected = savedExpected
 
-			var t types.T = expectedType
-			if rhs != nil && !types.Assignable(t, rhs) {
-				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
-			}
-
-			sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
-			_ = c.scope.Define(sym)
-
-			// Enrich Info
-			c.info.Idents[&st.Name] = sym
-			if t != nil {
-				c.info.Types[&st.Name] = t
+			// Use resolved type annotation if available, otherwise use RHS type
+			if expectedType != nil {
+				t = expectedType
+				if rhs != nil && !types.Assignable(t, rhs) {
+					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
+				}
+			} else {
+				// Type annotation didn't resolve, use RHS type
+				t = rhs
 			}
 		} else {
 			// No type annotation: infer from RHS
@@ -42,15 +43,16 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			if rhs == nil {
 				c.add(diagAt("DTE0004", st.Span, "missing type annotation and no value for variable '"+st.Name.Name+"'"))
 			}
-			t := rhs
-			sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
-			_ = c.scope.Define(sym)
+			t = rhs
+		}
 
-			// Enrich Info
-			c.info.Idents[&st.Name] = sym
-			if t != nil {
-				c.info.Types[&st.Name] = t
-			}
+		sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
+		_ = c.scope.Define(sym)
+
+		// Enrich Info
+		c.info.Idents[&st.Name] = sym
+		if t != nil {
+			c.info.Types[&st.Name] = t
 		}
 
 	case *ast.AssignStmt:
