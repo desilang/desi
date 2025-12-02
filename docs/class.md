@@ -685,7 +685,7 @@ class User:
 
 ### Display Methods
 
-#### `__repr__` (Planned)
+#### `__repr__` ✅ Implemented
 **Signature:** `pub def __repr__(self) -> str`
 
 **Purpose:** String representation for debugging
@@ -698,7 +698,19 @@ class Point:
     
     pub def __repr__(self) -> str:
         return "Point(" + str(self.x) + ", " + str(self.y) + ")"
+
+def main() -> int:
+    let p = Point()
+    p.x = 5
+    p.y = 10
+    print(p.__repr__())  # Output: Point(5, 10)
+    return 0
 ```
+
+**Rules:**
+- Must be `pub`
+- Must return `str`
+- Takes only `self` parameter
 
 #### `to_str` (Auto-generated)
 **Current:** Every class gets a default `to_str` that returns classname + newline
@@ -722,7 +734,7 @@ class Connection:
 
 **Called:** Automatically at end of `using` block
 
-#### `__copy__` (Planned)
+#### `__copy__` ✅ Implemented
 **Signature:** `pub def __copy__(self) -> ClassName`
 
 **Purpose:** Create a deep copy of the instance
@@ -738,9 +750,22 @@ class Point:
         p.x = self.x
         p.y = self.y
         return p
+
+def main() -> int:
+    let p1 = Point()
+    p1.x = 5
+    p1.y = 10
+    let p2 = p1.__copy__()  # Create independent copy
+    p2.x = 20  # Modifying p2 doesn't affect p1
+    return 0
 ```
 
-### Comparison Methods (Planned)
+**Rules:**
+- Must be `pub`
+- Must return the same class type
+- Takes only `self` parameter
+
+### Comparison Methods ✅ Implemented
 
 #### `__eq__`
 **Signature:** `pub def __eq__(self, other: ClassName) -> bool`
@@ -755,6 +780,18 @@ class Point:
     
     pub def __eq__(self, other: Point) -> bool:
         return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    let p1 = Point()
+    p1.x = 5
+    p1.y = 10
+    
+    let p2 = Point()
+    p2.x = 5
+    p2.y = 10
+    
+    let equal = p1 == p2  # Calls p1.__eq__(p2), returns true
+    return 0
 ```
 
 #### `__hash__`
@@ -775,12 +812,21 @@ class Point:
         return (self.x as u64) * 31 + (self.y as u64)
 ```
 
-### Operator Overloading (Planned)
+### Operator Overloading ✅ Implemented
 
-#### `__add__`, `__sub__`, `__mul__`, `__div__`
-**Signature:** `pub def __add__(self, other: ClassName) -> ClassName`
+Desi supports full operator overloading for classes via dunder methods. When you define these methods, operators are automatically desugared to method calls during compilation.
 
-**Purpose:** Arithmetic operators
+#### Arithmetic Operators
+
+**Supported Operators:**
+- `+` → `__add__`
+- `-` → `__sub__`
+- `*` → `__mul__`
+- `/` → `__div__`
+- `%` → `__mod__` (planned)
+- `**` → `__pow__` (planned)
+
+**Signature:** `pub def __add__(self, other: ClassName) -> ReturnType`
 
 **Example:**
 ```desi
@@ -793,12 +839,82 @@ class Vector:
         v.x = self.x + other.x
         v.y = self.y + other.y
         return v
+    
+    pub def __sub__(self, other: Vector) -> Vector:
+        let v = Vector()
+        v.x = self.x - other.x
+        v.y = self.y - other.y
+        return v
+    
+    pub def __mul__(self, scale: float) -> Vector:
+        let v = Vector()
+        v.x = self.x * scale
+        v.y = self.y * scale
+        return v
 
-# Usage:
-let v1 = Vector()
-let v2 = Vector()
-let v3 = v1 + v2  # Calls v1.__add__(v2)
+def main() -> int:
+    let v1 = Vector()
+    v1.x = 1.0
+    v1.y = 2.0
+    
+    let v2 = Vector()
+    v2.x = 3.0
+    v2.y = 4.0
+    
+    let v3 = v1 + v2      # Calls v1.__add__(v2)
+    let v4 = v1 - v2      # Calls v1.__sub__(v2)
+    let v5 = v1 * 2.0     # Calls v1.__mul__(2.0)
+    return 0
 ```
+
+#### Comparison Operators
+
+**Supported Operators:**
+- `==` → `__eq__`
+- `!=` → `__ne__` (or `!__eq__` if `__ne__` is missing)
+- `<` → `__lt__` (planned)
+- `<=` → `__le__` (planned)
+- `>` → `__gt__` (planned)
+- `>=` → `__ge__` (planned)
+
+**Signature:** `pub def __eq__(self, other: ClassName) -> bool`
+
+**Example:**
+```desi
+class Vector:
+    pub x: float
+    pub y: float
+    
+    pub def __eq__(self, other: Vector) -> bool:
+        return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    let v1 = Vector()
+    v1.x = 1.0
+    v1.y = 2.0
+    
+    let v2 = Vector()
+    v2.x = 1.0
+    v2.y = 2.0
+    
+    let same = v1 == v2   # Calls v1.__eq__(v2), returns true
+    let diff = v1 != v2   # Calls v1.__eq__(v2) and negates result, returns false
+    return 0
+```
+
+**Rules for Operator Dunders:**
+- Must be `pub`
+- Arithmetic: Must take 2 params (`self`, `other`)
+- Comparison: Must take 2 params and return `bool`
+- Return type can vary for arithmetic (e.g., `Vector * float -> Vector`)
+
+**Performance:**
+- Operators are desugared at compile time to static method calls
+- Zero overhead compared to explicit method calls
+- Equivalent LLVM IR: `v1 + v2` → `Vector___add__(v1, v2)`
+
+**Note on `!=` Fallback:**
+If you don't define `__ne__`, Desi automatically uses `!__eq__` for the `!=` operator. This follows Python's convention.
 
 ---
 
