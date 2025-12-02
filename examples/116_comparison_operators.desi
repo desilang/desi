@@ -1,0 +1,72 @@
+# Test comparison operators for classes
+
+class Point:
+    pub x: int
+    pub y: int
+    
+    # Implement all comparison operators independently
+    pub def __lt__(self, other: Point) -> bool:
+        # Less than: compare by x, then y
+        if self.x < other.x:
+            return true
+        if self.x > other.x:
+            return false
+        return self.y < other.y
+    
+    pub def __le__(self, other: Point) -> bool:
+        # Less than or equal
+        if self.x < other.x:
+            return true
+        if self.x > other.x:
+            return false
+        if self.y < other.y:
+            return true
+        if self.y > other.y:
+            return false
+        return true  # equal
+    
+    pub def __gt__(self, other: Point) -> bool:
+        # Greater than
+        if self.x > other.x:
+            return true
+        if self.x < other.x:
+            return false
+        return self.y > other.y
+    
+    pub def __ge__(self, other: Point) -> bool:
+        # Greater than or equal
+        if self.x > other.x:
+            return true
+        if self.x < other.x:
+            return false
+        if self.y > other.y:
+            return true
+        if self.y < other.y:
+            return false
+        return true  # equal
+    
+    pub def __eq__(self, other: Point) -> bool:
+        return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    let p1 = Point()
+    p1.x = 1
+    p1.y = 2
+    
+    let p2 = Point()
+    p2.x = 3
+    p2.y = 4
+    
+    let p3 = Point()
+    p3.x = 1
+    p3.y = 2
+    
+    # Test all comparison operators
+    let less = p1 < p2      # true (1,2) < (3,4)
+    let less_eq = p1 <= p3  # true (equal)
+    let greater = p2 > p1   # true (3,4) > (1,2)
+    let greater_eq = p3 >= p1  # true (equal)
+    let equal = p1 == p3    # true
+    let not_equal = p1 != p2  # true
+    
+    return 0
