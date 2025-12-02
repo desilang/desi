@@ -1300,6 +1300,80 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerListComp(x)
 
 	case *ast.BinaryExpr:
+		// Check for operator overloading
+		if ls.info != nil {
+			if _, ok := ls.info.BinOpOverloads[x]; ok {
+				// Lower operands
+				lhs := ls.lowerExpr(x.Lhs)
+				rhs := ls.lowerExpr(x.Rhs)
+
+				// Get class type from LHS
+				lhsType := ls.info.Types[x.Lhs]
+				if cls, ok := lhsType.(*types.Class); ok {
+					var dunder string
+					switch x.Op {
+					case "+":
+						dunder = "__add__"
+					case "-":
+						dunder = "__sub__"
+					case "*":
+						dunder = "__mul__"
+					case "/":
+						dunder = "__div__"
+					case "%":
+						dunder = "__mod__"
+					case "**":
+						dunder = "__pow__"
+					case "==":
+						dunder = "__eq__"
+					case "!=":
+						dunder = "__ne__"
+					case "<":
+						dunder = "__lt__"
+					case "<=":
+						dunder = "__le__"
+					case ">":
+						dunder = "__gt__"
+					case ">=":
+						dunder = "__ge__"
+					}
+
+					// Handle != fallback to !__eq__
+					negate := false
+					if x.Op == "!=" && dunder == "__ne__" {
+						// Check if Class___ne__ exists
+						if _, hasNe := cls.Dunders["__ne__"]; !hasNe {
+							dunder = "__eq__"
+							negate = true
+						}
+					}
+
+					fnName := cls.Name + "_" + dunder
+					dst := ls.b.FreshTemp("op_call")
+					ls.b.Emit(&hir.Call{
+						Dst:  dst,
+						Fn:   fnName,
+						Args: []hir.Value{lhs, rhs},
+					})
+
+					if negate {
+						// Negate the result (i1)
+						negDst := ls.b.FreshTemp("ne_res")
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "==",
+							LHS:  dst,
+							RHS:  hir.ConstBool{Value: false},
+							Dst:  negDst,
+							Type: "i1",
+						})
+						return negDst
+					}
+
+					return dst
+				}
+			}
+		}
+
 		// Lower binary expressions: arithmetic (+, -, *, /, %, **) and comparisons (<, >, <=, >=, ==, !=)
 		lhs := ls.lowerExpr(x.Lhs)
 		rhs := ls.lowerExpr(x.Rhs)

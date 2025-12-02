@@ -348,6 +348,48 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
+		// Operator overloading for classes
+		if lt != nil {
+			if cls, ok := lt.(*types.Class); ok {
+				// Map operator to dunder method name
+				var dunder string
+				switch op {
+				case "+":
+					dunder = "__add__"
+				case "-":
+					dunder = "__sub__"
+				case "*":
+					dunder = "__mul__"
+				case "/":
+					dunder = "__div__"
+				case "%":
+					dunder = "__mod__"
+				case "**":
+					dunder = "__pow__"
+				}
+
+				if dunder != "" {
+					// Look up method in class's Dunders map
+					if ft, ok := cls.Dunders[dunder]; ok {
+						// Found overload!
+						// Check if it accepts the right operand type
+						if len(ft.Params) == 2 { // self + other
+							// Check if rt matches the second parameter
+							if types.Equal(rt, ft.Params[1]) {
+								c.info.Types[x] = ft.Ret
+								// Create a FuncCand for the overload
+								cand := &FuncCand{
+									Type: ft,
+								}
+								c.info.BinOpOverloads[x] = cand
+								return ft.Ret
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// String ergonomics: allow str + (int|float|bool|str|Display) => str
 		if op == "+" && (types.Equal(lt, types.Str) || types.Equal(rt, types.Str)) {
 			if types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
@@ -556,6 +598,59 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		"==", "!=":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
+
+		// Operator overloading for classes (comparisons)
+		if lt != nil {
+			if cls, ok := lt.(*types.Class); ok {
+				var dunder string
+				switch op {
+				case "==":
+					dunder = "__eq__"
+				case "!=":
+					dunder = "__ne__"
+				case "<":
+					dunder = "__lt__"
+				case "<=":
+					dunder = "__le__"
+				case ">":
+					dunder = "__gt__"
+				case ">=":
+					dunder = "__ge__"
+				}
+
+				if dunder != "" {
+					// Look up method in class's Dunders map
+					if ft, ok := cls.Dunders[dunder]; ok {
+						if len(ft.Params) == 2 {
+							if types.Equal(rt, ft.Params[1]) {
+								c.info.Types[x] = ft.Ret
+								cand := &FuncCand{
+									Type: ft,
+								}
+								c.info.BinOpOverloads[x] = cand
+								return ft.Ret
+							}
+						}
+					}
+
+					// Fallback for != using __eq__
+					if op == "!=" {
+						if ft, ok := cls.Dunders["__eq__"]; ok {
+							if len(ft.Params) == 2 {
+								if types.Equal(rt, ft.Params[1]) {
+									c.info.Types[x] = ft.Ret // Should be bool
+									cand := &FuncCand{
+										Type: ft,
+									}
+									c.info.BinOpOverloads[x] = cand // We'll need to negate this in lowering
+									return ft.Ret
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 
 		// Integers: same signedness & width, with the same M9 exception as above.
 		if ls, lw, lok := intInfo(lt); lok {

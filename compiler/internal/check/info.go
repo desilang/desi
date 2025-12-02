@@ -53,6 +53,10 @@ type Info struct {
 	// ClassInstantiations tracks generic class instantiations for monomorphization.
 	// Key: base class name, Value: list of instantiated Generic types
 	ClassInstantiations map[string][]*types.Generic
+
+	// BinOpOverloads maps binary expressions to their resolved operator method candidate.
+	// This allows the backend to emit a method call instead of a primitive binary op.
+	BinOpOverloads map[*ast.BinaryExpr]*FuncCand
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -92,6 +96,7 @@ func NewInfo() *Info {
 		MatchBindings:       make(map[*ast.MatchExpr]map[int][]MatchBinding),
 		FuncMoves:           make(map[*ast.FuncDecl]map[string]bool),
 		ClassInstantiations: make(map[string][]*types.Generic),
+		BinOpOverloads:      make(map[*ast.BinaryExpr]*FuncCand),
 	}
 	addPreludeBuiltins(info)
 	return info
