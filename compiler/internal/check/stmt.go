@@ -10,30 +10,47 @@ import (
 func (c *checker) checkStmt(s ast.Stmt) {
 	switch st := s.(type) {
 	case *ast.LetStmt:
-		rhs := c.typ(st.Value)
-		var t types.T
+		// If there's an explicit type annotation, use it as expected type for RHS
+		var expectedType types.T
 		if st.Type != nil {
-			t = c.resolveType(st.Type)
-			if t == nil {
+			expectedType = c.resolveType(st.Type)
+			if expectedType == nil {
 				return // explicit type failed to resolve
 			}
+			// Save and set expected type for bidirectional checking
+			savedExpected := c.expected
+			c.expected = expectedType
+			rhs := c.typ(st.Value)
+			c.expected = savedExpected
+
+			var t types.T = expectedType
 			if rhs != nil && !types.Assignable(t, rhs) {
 				c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
 			}
+
+			sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
+			_ = c.scope.Define(sym)
+
+			// Enrich Info
+			c.info.Idents[&st.Name] = sym
+			if t != nil {
+				c.info.Types[&st.Name] = t
+			}
 		} else {
-			// Infer type from RHS
+			// No type annotation: infer from RHS
+			rhs := c.typ(st.Value)
 			if rhs == nil {
 				c.add(diagAt("DTE0004", st.Span, "missing type annotation and no value for variable '"+st.Name.Name+"'"))
 			}
-			t = rhs
-		}
-		sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
-		_ = c.scope.Define(sym)
+			t := rhs
+			sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
+			_ = c.scope.Define(sym)
 
-		// Enrich Info: attach symbol/type to the declared name node
-		c.info.Idents[&st.Name] = sym
-		if t != nil {
-			c.info.Types[&st.Name] = t
+			// Enrich Info
+			c.info.Idents[&st.Name] = sym
+			if t != nil {
+				c.info.Types[&st.Name] = t
+			}
 		}
 
 	case *ast.AssignStmt:

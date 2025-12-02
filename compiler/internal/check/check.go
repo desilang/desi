@@ -185,6 +185,7 @@ type checker struct {
 	curFuncRet  types.T
 	moved       MoveSet
 	unsafeDepth int
+	expected    types.T // Expected type from context (for bidirectional checking)
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
