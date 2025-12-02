@@ -520,6 +520,38 @@ distance()        → Point_distance
 
 ---
 
+---
+
+## 2. Decorators & Metaprogramming
+
+Desi supports a set of built-in decorators to modify method behavior. These are designed to be zero-overhead or low-overhead abstractions.
+
+### @staticmethod
+**Design**: Defines a method that does not receive an implicit `self` parameter.
+- **Syntax**: Called as `ClassName.method()`
+- **Implementation**: Lowered to a regular function with no `self` parameter.
+- **Performance**: Zero overhead (identical to a regular function call).
+- **Use Case**: Utility functions related to the class but not requiring instance state.
+
+### @classmethod
+**Design**: Defines a method that operates on the class rather than an instance.
+- **Syntax**: Called as `ClassName.method()`.
+- **Parameter Policy**: Unlike Python, Desi does **not** inject an implicit `cls` parameter.
+  - **Reasoning**: Desi classes are static types without runtime class objects (meta-classes). There is no "class state" to pass.
+  - **Usage**: Use the class name directly within the method body (e.g., `Counter()`).
+- **Future Proofing**: If class-level state (static fields) is added in the future, we can introduce an implicit `cls` parameter then without breaking existing code.
+- **Performance**: Zero overhead (identical to a regular function call).
+
+### @property
+**Design**: Defines a getter method that is accessed like a field.
+- **Syntax**: Defined as `def prop(self) -> T`, accessed as `obj.prop` (no parentheses).
+- **Implementation**: The compiler rewrites field access `obj.prop` into a method call `obj.prop()`.
+- **Performance**: Cost of one function call.
+  - **Optimization**: The LLVM backend can inline trivial property getters (e.g., returning a field), making them zero-cost in release builds.
+  - **Recommendation**: For expensive computations in hot loops, cache the property value in a local variable.
+
+---
+
 ## Performance Summary
 
 | Operation | Cost | Compared to |
