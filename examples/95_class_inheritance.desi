@@ -1,0 +1,9 @@
+class Animal:
+    pub name: str
+
+class Dog(Animal):
+    pub breed: str
+
+def main() -> int:
+    let d = Dog()
+    return 0
