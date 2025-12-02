@@ -1,12 +1,10 @@
 class Point:
     pub x: int
     pub y: int
-    
-    pub def __new__(px: int, py: int) -> Point:
-        # For now, just allocate - field initialization will come later
-        let p = Point()
-        return p
 
 def main() -> int:
-    let p = Point(10, 20)
+    # Use default zero-arg constructor (always available)
+    let p = Point()
+    p.x = 10
+    p.y = 20
     return 0

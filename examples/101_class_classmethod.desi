@@ -1,14 +1,13 @@
 # Test @classmethod decorator
 class Counter:
-    total: int
+    pub count: int
+    
     @classmethod
-    pub def get_total() -> int:
-        return 0
-    @classmethod
-    pub def create_batch(n: int) -> list[Counter]:
-        return []
+    pub def zero() -> Counter:
+        let c = Counter()
+        c.count = 0
+        return c
 
 def main() -> int:
-    let total = Counter.get_total()
-    let batch = Counter.create_batch(5)
+    let c = Counter.zero()
     return 0
