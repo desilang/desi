@@ -414,5 +414,8 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				cls.Methods[methodName] = ft
 			}
 		}
+
+		// Check the method body
+		c.checkFunc(method)
 	}
 }

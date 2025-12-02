@@ -288,16 +288,49 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		})
 	}
 
+	// Find canonical function type to get correct parameter types (including injected self)
+	var funcType *types.Func
+	if set := c.info.Funcs[fd.Name.Name]; set != nil {
+		for _, cand := range set.Cands {
+			if cand.Decl == fd {
+				funcType = cand.Type
+				break
+			}
+		}
+	}
+
 	// Bind params.
 	for i := range fd.Params {
 		p := fd.Params[i]
 		var pt types.T
-		if p.Type != nil {
-			pt = c.resolveType(p.Type)
+
+		// Use canonical type if available (handles self injection and resolved types)
+		if funcType != nil && i < len(funcType.Params) {
+			pt = funcType.Params[i]
+		} else {
+			// Fallback (shouldn't happen for valid code, but safe)
+			if p.Type != nil {
+				pt = c.resolveType(p.Type)
+			}
 		}
+
 		if p.Variadic {
-			pt = types.ListOf(pt)
+			// If variadic, the canonical type might be the element type or list type depending on implementation.
+			// In types.Func, Params[i] is the type of the parameter.
+			// If it's *args, types.Func usually stores it as List[T] or similar?
+			// Let's check types.Func definition.
+			// types.Func has Variadic bool. Params are T.
+			// Usually for variadic, the last param type is the element type or the slice type?
+			// In Go, it's slice type.
+			// In Desi collectFunc:
+			// if p.Variadic { ... paramType = types.ListOf(elemType) ... }
+			// So funcType.Params[i] IS the list type.
+			// So we don't need to wrap it again if we got it from funcType.
+			if funcType == nil {
+				pt = types.ListOf(pt)
+			}
 		}
+
 		_ = c.scope.Define(&Symbol{
 			Name: p.Name.Name, Kind: SymParam, Type: pt, Node: &fd.Params[i].Name,
 		})

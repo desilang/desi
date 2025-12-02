@@ -136,7 +136,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 				// Type check
 				if !types.Assignable(field.Type, valT) {
-					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to field of type '"+field.Type.String()+"'"))
+					dstStr := "?"
+					if field.Type != nil {
+						dstStr = field.Type.String()
+					}
+					srcStr := "?"
+					if valT != nil {
+						srcStr = valT.String()
+					}
+					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+srcStr+"' to field of type '"+dstStr+"'"))
 				}
 
 			case *ast.IndexExpr:
