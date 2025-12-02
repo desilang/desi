@@ -32,12 +32,17 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 }
 
 func (c *checker) collectClass(d *ast.ClassDecl) {
-	// Create class type with methods and dunders tracking
+	// Create Class type
 	cls := &types.Class{
-		Name:     d.Name.Name,
-		Methods:  make(map[string]*types.Func),
-		Dunders:  make(map[string]*types.Func),
-		IsNested: false, // TODO: Detect if nested
+		Name:          d.Name.Name,
+		TypeParams:    make([]types.TypeParam, 0, len(d.TypeParams)), // Initialize TypeParams slice
+		Fields:        nil,                                           // will be populated in Phase 2
+		Methods:       make(map[string]*types.Func),
+		StaticMethods: make(map[string]*types.Func),
+		Dunders:       make(map[string]*types.Func),
+		Constructors:  nil, // will be populated in checkClass
+		Base:          nil, // will be resolved in Phase 2
+		IsNested:      false,
 	}
 
 	// Add type parameters
@@ -224,7 +229,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		}
 
 		for _, ft := range funcs {
-			// POLICY: Validate __close__ signature if present
+			//POLICY: Validate __close__ signature if present
 			if methodName == "__close__" {
 				// __close__(self) -> none
 				if ft.Ret != types.None {
@@ -235,6 +240,9 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 					c.add(diagAt("DCL0003", method.Span, "__close__ must take only self (no other parameters)"))
 				}
 			}
+
+			// Check if method has @staticmethod decorator
+			isStatic := hasDecorator(method, "staticmethod")
 
 			// POLICY: Inject implicit self parameter if not present
 			// Check if first param is already self (explicit)
@@ -253,12 +261,16 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 
-			if !hasSelf && methodName != "__new__" {
+			// Static methods and __new__ don't get self injection
+			if !hasSelf && methodName != "__new__" && !isStatic {
 				// Prepend self as first parameter
 				ft.Params = append([]types.T{cls}, ft.Params...)
 			}
 
-			if isDunder {
+			// Store method in appropriate map
+			if isStatic {
+				cls.StaticMethods[methodName] = ft
+			} else if isDunder {
 				cls.Dunders[methodName] = ft
 				if methodName == "__new__" {
 					// Check if already added to avoid duplicates from loop
