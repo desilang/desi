@@ -49,6 +49,10 @@ type Info struct {
 	// Key: FuncDecl, Value: Set of moved variable names.
 	// This is used by the backend to avoid double-freeing moved variables.
 	FuncMoves map[*ast.FuncDecl]map[string]bool
+
+	// ClassInstantiations tracks generic class instantiations for monomorphization.
+	// Key: base class name, Value: list of instantiated Generic types
+	ClassInstantiations map[string][]*types.Generic
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -78,15 +82,16 @@ type OverloadSet struct {
 // NewInfo allocates a fresh Info and pre-populates prelude builtins.
 func NewInfo() *Info {
 	info := &Info{
-		Types:         make(map[ast.Node]types.T),
-		Idents:        make(map[*ast.Ident]*Symbol),
-		Funcs:         make(map[string]*OverloadSet),
-		ImportPaths:   make(map[string]string),
-		R:             nil,
-		Moved:         make(map[string]diag.Span),
-		Impls:         make(map[string]map[string][]*ast.FuncDecl),
-		MatchBindings: make(map[*ast.MatchExpr]map[int][]MatchBinding),
-		FuncMoves:     make(map[*ast.FuncDecl]map[string]bool),
+		Types:               make(map[ast.Node]types.T),
+		Idents:              make(map[*ast.Ident]*Symbol),
+		Funcs:               make(map[string]*OverloadSet),
+		ImportPaths:         make(map[string]string),
+		R:                   nil,
+		Moved:               make(map[string]diag.Span),
+		Impls:               make(map[string]map[string][]*ast.FuncDecl),
+		MatchBindings:       make(map[*ast.MatchExpr]map[int][]MatchBinding),
+		FuncMoves:           make(map[*ast.FuncDecl]map[string]bool),
+		ClassInstantiations: make(map[string][]*types.Generic),
 	}
 	addPreludeBuiltins(info)
 	return info
