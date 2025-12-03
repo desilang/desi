@@ -331,6 +331,15 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		}
 
 		// 2. Check methods/dunders (including inherited)
+		// Determine if this is a static access (via ClassName) or instance access
+		isTypeAccess := false
+		if id, ok := x.X.(*ast.Ident); ok {
+			sym := c.scope.Lookup(id.Name)
+			if sym != nil && sym.Kind == SymType {
+				isTypeAccess = true
+			}
+		}
+
 		curr = cls
 		for curr != nil {
 			var method *types.Func
@@ -344,11 +353,15 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 				// Visibility check for methods
 				if !method.IsPub {
 					allowed := false
+					// Allow if same module (file-private)
+					// Note: types.Func doesn't store module, so we assume same-module if we can see it?
+					// But we can't verify module.
+					// Fallback: Allow if inside a method of the same class OR subclass.
+
 					if selfSym := c.scope.Lookup("self"); selfSym != nil {
 						if selfType, ok := selfSym.Type.(*types.Class); ok {
 							// Check if self is of the same class (or subclass) as curr
-							// For now: strict check - must be same class
-							if types.Equal(selfType, curr) {
+							if types.IsSubclass(selfType, curr) {
 								allowed = true
 							}
 						}
@@ -357,14 +370,18 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 						c.add(diagAt("DTE0010", x.Name.Span, "method '"+name+"' is private"))
 					}
 				}
+
 				// Create bound method type (strip self)
 				// Instance methods have self as first param.
-				// Exception: __new__ is static, but we are accessing on instance?
-				// Accessing __new__ on instance is weird but if we allow it, it has no self.
-				// Regular methods have self.
 
 				if name == "__new__" {
 					// __new__ has no self, return as is
+					c.info.Types[x] = method
+					return method
+				}
+
+				// If accessed via ClassName.method, return UNBOUND method (keep self)
+				if isTypeAccess {
 					c.info.Types[x] = method
 					return method
 				}

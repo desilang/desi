@@ -1,0 +1,18 @@
+# Example 117: Parent Method Access
+# Demonstrates calling parent class methods explicitly
+
+class Parent:
+    def greet(self):
+        print("Hello from Parent")
+
+class Child(Parent):
+    pub def greet(self):
+        print("Hello from Child")
+        # Call parent method explicitly (unbound method style)
+        # Parent.greet is private but accessible to subclass
+        Parent.greet(self)
+
+pub def main():
+    print("--- Testing Parent.method(self) ---")
+    let c = Child()
+    c.greet()
