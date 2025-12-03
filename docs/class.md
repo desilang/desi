@@ -218,6 +218,71 @@ def main() -> int:
     return 0
 ```
 
+### Static Fields
+
+Static fields are mutable class-level variables shared across all instances. They persist for the lifetime of the program and provide shared state.
+
+**Declaration:**
+
+Use `pub mut static` for public mutable static fields:
+
+```desi
+class Counter:
+    pub mut static count: int = 0
+    
+    pub def increment(self) -> int:
+        Counter.count = Counter.count + 1
+        return 0
+```
+
+**Access:**
+
+Access static fields using the class name, just like constants:
+
+```desi
+def main() -> int:
+    Counter.count = 10  # Write
+    let x = Counter.count  # Read
+    return 0
+```
+
+**Shared State:**
+
+Static fields are shared across all instances of a class:
+
+```desi
+class Counter:
+    pub mut static count: int = 0
+    
+    pub def increment(self) -> int:
+        Counter.count = Counter.count + 1
+        return Counter.count
+
+def main() -> int:
+    let c1 = Counter()
+    let c2 = Counter()
+    
+    let _ = c1.increment()  # count = 1
+    let _ = c2.increment()  # count = 2
+    
+    print(f"Count: {Counter.count}")  # Prints: Count: 2
+    return 0
+```
+
+**Mutability:**
+
+- `pub mut static` - Public, mutable static field
+- `mut static` - Private, mutable static field (accessible only within the class)
+- Static fields can be read and written from anywhere they are visible
+
+**vs Constants:**
+
+| Feature | Constants (`const`) | Static Fields (`static`) |
+|---------|-------------------|------------------------|
+| Mutability | Immutable | Mutable (with `mut`) |
+| Storage | Compile-time substitution | Runtime global variable |
+| Use Case | Fixed values (PI, E) | Shared state (counters, caches) |
+
 ---
 
 ## Methods and Self
