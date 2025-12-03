@@ -1,0 +1,28 @@
+
+class Math:
+    pub const PI: float = 3.14159
+    pub const E: float = 2.71828
+    const SECRET: int = 42
+
+    pub def get_secret(self) -> int:
+        return Math.SECRET
+
+class Circle(Math):
+    pub def area(self, r: float) -> float:
+        return Math.PI * r * r
+
+pub def main():
+    print(f"PI: {Math.PI}")
+    print(f"E: {Math.E}")
+    
+    let c = Circle()
+    print(f"Area of radius 2: {c.area(2.0)}")
+    
+    # Accessing inherited constant via subclass name (should work if we implement inheritance lookup)
+    # Currently my implementation in expr_field.go loops over base classes, so Circle.PI should work!
+    print(f"Circle.PI: {Circle.PI}") 
+    
+    print(f"Secret: {c.get_secret()}")
+
+    # This should fail if uncommented:
+    # print(Math.SECRET)

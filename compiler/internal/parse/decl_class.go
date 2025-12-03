@@ -83,10 +83,11 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	}
 
 	var (
-		fields  []*ast.FieldDecl
-		methods []*ast.FuncDecl
-		nested  []*ast.ClassDecl
-		doc     *ast.StrLit
+		fields    []*ast.FieldDecl
+		methods   []*ast.FuncDecl
+		nested    []*ast.ClassDecl
+		constants []*ast.ClassConstDecl
+		doc       *ast.StrLit
 	)
 
 	for p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
@@ -128,16 +129,58 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			continue
 		}
 
-		// Otherwise: Field = ["pub"] Ident ":" TypeName NL
-		fieldPub := false
+		// Otherwise: Field or Constant
+		// Check for 'pub' modifier
+		isPub := false
 		if p.cur.Tok == token.KW_pub {
-			// Confirm it's a field header (pub IDENT ":" ...)
-			if p.peek.Tok == token.IDENT {
-				fieldPub = true
-				p.next() // consume 'pub' only now that we've decided it's a field
+			// Confirm it's a field or const header (pub IDENT ":" ...) or (pub const IDENT ":" ...)
+			if p.peek.Tok == token.IDENT || p.peek.Tok == token.KW_const {
+				isPub = true
+				p.next()
 			}
 		}
 
+		// Check for 'const' (Class Constant)
+		if p.cur.Tok == token.KW_const {
+			p.next() // consume 'const'
+			// Expect identifier
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "constant name")
+				p.syncStmt()
+				continue
+			}
+			name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+			p.next()
+
+			// Expect type annotation ": Type"
+			if !p.expect(token.COLON, ":") {
+				p.syncStmt()
+				continue
+			}
+			typ := p.parseTypeName()
+
+			// Expect value assignment "= Value"
+			if !p.expect(token.ASSIGN, "=") {
+				p.syncStmt()
+				continue
+			}
+			val := p.parseExpr()
+
+			constDecl := &ast.ClassConstDecl{
+				Name:  name,
+				Type:  typ,
+				Value: val,
+				IsPub: isPub,
+				Span:  ast.JoinSpan(name.Span, val.SpanOf()),
+			}
+			constants = append(constants, constDecl)
+			if !p.accept(token.NL) && p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
+				p.errExpected(spanPos(p.file, p.cur), "newline")
+			}
+			continue
+		}
+
+		// If not a constant, it must be a field.
 		if p.cur.Tok != token.IDENT {
 			p.errExpected(spanPos(p.file, p.cur), "field name")
 			p.syncStmt()
@@ -154,7 +197,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			p.errExpected(spanPos(p.file, p.cur), "newline")
 		}
 		fields = append(fields, &ast.FieldDecl{
-			Pub:  fieldPub,
+			Pub:  isPub,
 			Name: fname,
 			Type: ty,
 			Span: ast.JoinSpan(fname.Span, ty.Span),
@@ -170,6 +213,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 		Bases:      bases,
 		Fields:     fields,
 		Methods:    methods,
+		Constants:  constants,
 		Nested:     nested,
 		Decorators: decs,
 		Doc:        doc,

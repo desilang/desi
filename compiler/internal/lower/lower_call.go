@@ -195,7 +195,44 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				// Actually, for classes, we just mangle as ClassName_MethodName
 				// The checker guarantees existence.
 
-				mangledName := fmt.Sprintf("%s_%s", cls.Name, methodName)
+				// Find defining class to use for mangled name
+				definingClass := cls
+
+				// Check which map the method is in
+				var targetMethod *types.Func
+				var isStatic, isClass bool
+
+				if m, ok := cls.Methods[methodName]; ok {
+					targetMethod = m
+				} else if m, ok := cls.StaticMethods[methodName]; ok {
+					targetMethod = m
+					isStatic = true
+				} else if m, ok := cls.ClassMethods[methodName]; ok {
+					targetMethod = m
+					isClass = true
+				}
+
+				if targetMethod != nil {
+					// Walk up to find the original definition
+					for definingClass.Base != nil {
+						var baseMethod *types.Func
+						if isStatic {
+							baseMethod = definingClass.Base.StaticMethods[methodName]
+						} else if isClass {
+							baseMethod = definingClass.Base.ClassMethods[methodName]
+						} else {
+							baseMethod = definingClass.Base.Methods[methodName]
+						}
+
+						if baseMethod == targetMethod {
+							definingClass = definingClass.Base
+						} else {
+							break
+						}
+					}
+				}
+
+				mangledName := fmt.Sprintf("%s_%s", definingClass.Name, methodName)
 
 				// Check if this is a static method or class method
 				isStaticMethod := false
@@ -226,8 +263,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					args = append(args, ls.lowerExpr(a))
 				}
 
+				// Determine return type string for LLVM
+				retType := "i32" // default
+				if targetMethod != nil && targetMethod.Ret != nil {
+					retType = lowerType(targetMethod.Ret)
+				}
+
 				dst := ls.b.FreshTemp("call")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args})
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args, Type: retType})
 				// Consume args (methods move by default)
 				for _, arg := range args {
 					ls.consumeTemp(arg)
