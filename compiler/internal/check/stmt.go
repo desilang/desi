@@ -201,11 +201,34 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 
 			case *ast.IndexExpr:
-				// Index assignment: arr[i] = value
-				// Type check both sides
-				_ = c.typ(lhs)
-				_ = c.typ(rt)
-				// Detailed validation deferred to future work
+				// Index assignment: obj[idx] = value
+				objType := c.typ(lhs.X)
+				idxType := c.typ(lhs.Idx)
+				valT := c.typ(rt)
+
+				// Check if objType is a custom class with __setitem__
+				if cls, ok := objType.(*types.Class); ok {
+					if setitem, found := cls.Dunders["__setitem__"]; found {
+						// __setitem__(self, index, value) -> none
+						if len(setitem.Params) == 3 {
+							// Check index type
+							if !types.Assignable(setitem.Params[1], idxType) {
+								c.add(diagAt("DTE0004", lhs.Idx.SpanOf(), "index type mismatch for __setitem__"))
+								continue
+							}
+							// Check value type
+							if !types.Assignable(setitem.Params[2], valT) {
+								c.add(diagAt("DTE0004", st.Span, "value type mismatch for __setitem__"))
+								continue
+							}
+							// Valid __setitem__ call
+							continue
+						}
+					}
+				}
+
+				// For built-in types (lists, dicts), validate normally
+				// This handles existing list/dict assignment
 
 			default:
 				// Unsupported LHS

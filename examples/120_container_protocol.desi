@@ -1,0 +1,39 @@
+class IntArray:
+    pub data: list[int]
+    pub size: int
+    
+    pub def __getitem__(self, index: int) -> int:
+        # Direct list indexing works
+        let result = self.data[index]
+        return result
+    
+    pub def __setitem__(self, index: int, value: int) -> none:
+        # Direct list assignment works
+        self.data[index] = value
+        return
+    
+    pub def __len__(self) -> int:
+        return self.size
+
+pub def main() -> int:
+    # Manual setup
+    let arr = IntArray()
+    arr.data = [10, 20, 30]
+    arr.size = 3
+    
+    print(f"Testing Container Protocol...")
+    
+    # Test __getitem__
+    let first = arr[0]
+    print(f"arr[0] = {first}")
+    
+    # Test __setitem__
+    arr[1] = 99
+    let second = arr[1]
+    print(f"arr[1] (after set) = {second}")
+    
+    # Test __len__
+    let length = arr.__len__()
+    print(f"length = {length}")
+    
+    return 0
