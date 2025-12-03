@@ -372,6 +372,33 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 				}
 				curr = curr.Base
 			}
+
+			// 2.1 Check Static Fields (only if accessing via ClassName)
+			curr = cls
+			for curr != nil {
+				if sf, ok := curr.StaticFields[name]; ok {
+					// Check visibility
+					if !sf.IsPub {
+						allowed := false
+						// Allow if we are inside the class (or subclass)
+						if selfSym := c.scope.Lookup("self"); selfSym != nil {
+							if selfType, ok := selfSym.Type.(*types.Class); ok {
+								if types.IsSubclass(selfType, cls) {
+									allowed = true
+								}
+							}
+						}
+
+						if !allowed {
+							c.add(diagAt("DTE0010", x.Name.Span, "static field '"+name+"' is private"))
+						}
+					}
+
+					c.info.Types[x] = sf.Type
+					return sf.Type
+				}
+				curr = curr.Base
+			}
 		}
 
 		curr = cls

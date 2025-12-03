@@ -33,31 +33,33 @@ type Module struct {
 	varTypes map[string]types.T
 
 	// Current function being emitted
-	curFunc          *hir.Func
-	tempID           int             // counter for %t0, %t1, ...
-	mergeID          int             // counter for merge blocks
-	asyncWrappers    map[string]bool // functions returning ptr (future handle)
-	definedFunctions map[string]bool // track which functions we've defined
-	needPuts         bool
-	needRcDec        bool
-	needArena        bool
-	curFuncRetTy     string
-	curRetIsPtr      bool
-	cfBlocks         map[string]string    // blocks that need terminators to merge labels
-	cfLoopConds      map[string]hir.Value // loop condition blocks -> condition value
-	wroteGlob        bool
-	info             *check.Info     // type checker info for move analysis
-	currentMoves     map[string]bool // moved variables in current function
+	curFunc            *hir.Func
+	tempID             int             // counter for %t0, %t1, ...
+	mergeID            int             // counter for merge blocks
+	asyncWrappers      map[string]bool // functions returning ptr (future handle)
+	definedFunctions   map[string]bool // track which functions we've defined
+	needPuts           bool
+	needRcDec          bool
+	needArena          bool
+	curFuncRetTy       string
+	curRetIsPtr        bool
+	cfBlocks           map[string]string    // blocks that need terminators to merge labels
+	cfLoopConds        map[string]hir.Value // loop condition blocks -> condition value
+	wroteGlob          bool
+	info               *check.Info       // type checker info for move analysis
+	currentMoves       map[string]bool   // moved variables in current function
+	staticFieldGlobals map[string]string // name -> LLVM type (e.g., "@Counter_count" -> "i32")
 }
 
 func NewModule(name string) *Module {
 	return &Module{
-		name:             name,
-		strLits:          make(map[string]string),
-		asyncWrappers:    make(map[string]bool),
-		definedFunctions: make(map[string]bool),
-		cfBlocks:         make(map[string]string),
-		cfLoopConds:      make(map[string]hir.Value),
+		name:               name,
+		strLits:            make(map[string]string),
+		asyncWrappers:      make(map[string]bool),
+		definedFunctions:   make(map[string]bool),
+		cfBlocks:           make(map[string]string),
+		cfLoopConds:        make(map[string]hir.Value),
+		staticFieldGlobals: make(map[string]string),
 	}
 }
 
@@ -128,6 +130,11 @@ func (m *Module) writeGlobals() {
 	}
 	if m.needArena {
 		m.ensureDecl("declare void @__arena_destroy(ptr)")
+	}
+
+	// Emit static field globals
+	for name, llvmType := range m.staticFieldGlobals {
+		wprintf(&m.globals, "%s = global %s 0, align 4\n", name, llvmType)
 	}
 }
 
@@ -284,6 +291,10 @@ func (m *Module) ptrOperand(v hir.Value) string {
 	case hir.Var:
 		if ali, ok := m.ssa[t.Name]; ok {
 			return m.ptrOperand(ali)
+		}
+		// Check if it's a global variable (starts with @)
+		if strings.HasPrefix(t.Name, "@") {
+			return fmt.Sprintf("ptr %s", t.Name)
 		}
 		return fmt.Sprintf("ptr %%%s", t.Name)
 	default:

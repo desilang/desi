@@ -83,11 +83,12 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	}
 
 	var (
-		fields    []*ast.FieldDecl
-		methods   []*ast.FuncDecl
-		nested    []*ast.ClassDecl
-		constants []*ast.ClassConstDecl
-		doc       *ast.StrLit
+		fields       []*ast.FieldDecl
+		methods      []*ast.FuncDecl
+		nested       []*ast.ClassDecl
+		constants    []*ast.ClassConstDecl
+		staticFields []*ast.ClassStaticDecl
+		doc          *ast.StrLit
 	)
 
 	for p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
@@ -129,15 +130,68 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			continue
 		}
 
-		// Otherwise: Field or Constant
+		// Otherwise: Field, Constant, or Static Field
 		// Check for 'pub' modifier
 		isPub := false
 		if p.cur.Tok == token.KW_pub {
-			// Confirm it's a field or const header (pub IDENT ":" ...) or (pub const IDENT ":" ...)
-			if p.peek.Tok == token.IDENT || p.peek.Tok == token.KW_const {
+			// Confirm it's a field, const, or static header
+			if p.peek.Tok == token.IDENT ||
+				p.peek.Tok == token.KW_const ||
+				p.peek.Tok == token.KW_static ||
+				p.peek.Tok == token.KW_mut {
 				isPub = true
 				p.next()
 			}
+		}
+
+		// Check for 'mut' modifier (for static fields)
+		isMut := false
+		if p.cur.Tok == token.KW_mut {
+			if p.peek.Tok == token.KW_static {
+				isMut = true
+				p.next()
+			}
+		}
+
+		// Check for 'static' (Class Static Field)
+		if p.cur.Tok == token.KW_static {
+			p.next() // consume 'static'
+			// Expect identifier
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "static field name")
+				p.syncStmt()
+				continue
+			}
+			name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+			p.next()
+
+			// Expect type annotation ": Type"
+			if !p.expect(token.COLON, ":") {
+				p.syncStmt()
+				continue
+			}
+			typ := p.parseTypeName()
+
+			// Expect value assignment "= Value"
+			if !p.expect(token.ASSIGN, "=") {
+				p.syncStmt()
+				continue
+			}
+			val := p.parseExpr()
+
+			staticDecl := &ast.ClassStaticDecl{
+				Name:  name,
+				Type:  typ,
+				Value: val,
+				IsPub: isPub,
+				IsMut: isMut,
+				Span:  ast.JoinSpan(name.Span, val.SpanOf()),
+			}
+			staticFields = append(staticFields, staticDecl)
+			if !p.accept(token.NL) && p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
+				p.errExpected(spanPos(p.file, p.cur), "newline")
+			}
+			continue
 		}
 
 		// Check for 'const' (Class Constant)
@@ -207,17 +261,18 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	_ = p.expect(token.Dedent, "dedent")
 
 	decl := &ast.ClassDecl{
-		Pub:        explicitPub || !isNested, // top-level default public
-		Name:       name,
-		TypeParams: typeParams,
-		Bases:      bases,
-		Fields:     fields,
-		Methods:    methods,
-		Constants:  constants,
-		Nested:     nested,
-		Decorators: decs,
-		Doc:        doc,
-		Span:       ast.JoinSpan(start, bodyStart),
+		Pub:          explicitPub || !isNested, // top-level default public
+		Name:         name,
+		TypeParams:   typeParams,
+		Bases:        bases,
+		Fields:       fields,
+		Methods:      methods,
+		Constants:    constants,
+		StaticFields: staticFields,
+		Nested:       nested,
+		Decorators:   decs,
+		Doc:          doc,
+		Span:         ast.JoinSpan(start, bodyStart),
 	}
 	return decl
 }

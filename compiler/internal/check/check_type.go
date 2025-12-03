@@ -42,6 +42,7 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		ClassMethods:  make(map[string]*types.Func),
 		Properties:    make(map[string]*types.Func),
 		Constants:     make(map[string]*types.ClassConstant),
+		StaticFields:  make(map[string]*types.ClassStaticField),
 		Dunders:       make(map[string]*types.Func),
 		Constructors:  nil, // will be populated in checkClass
 		Base:          nil, // will be resolved in Phase 2
@@ -211,6 +212,23 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			Type:  constType,
 			Value: cd.Value,
 			IsPub: cd.IsPub,
+		}
+	}
+
+	// Resolve static fields
+	for _, sd := range d.StaticFields {
+		staticType := c.resolveType(sd.Type)
+		valType := c.typ(sd.Value)
+
+		if !types.Assignable(staticType, valType) {
+			c.add(diagAt("DTE0004", sd.Value.SpanOf(), fmt.Sprintf("cannot assign %s to static field of type %s", valType, staticType)))
+		}
+
+		cls.StaticFields[sd.Name.Name] = &types.ClassStaticField{
+			Name:  sd.Name.Name,
+			Type:  staticType,
+			IsPub: sd.IsPub,
+			IsMut: sd.IsMut,
 		}
 	}
 

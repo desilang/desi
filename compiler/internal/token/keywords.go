@@ -41,6 +41,7 @@ var keywords = map[string]Token{
 	"break":    KW_break,
 	"continue": KW_continue,
 	"const":    KW_const,
+	"static":   KW_static,
 }
 
 // Builtin type spellings per revised grammar.

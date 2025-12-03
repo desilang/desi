@@ -404,6 +404,24 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 							}
 							curr = curr.Base
 						}
+
+						// Check for static field access (ClassName.FIELD)
+						curr = cls
+						for curr != nil {
+							if sf, ok := curr.StaticFields[x.Name.Name]; ok {
+								// Emit Load from global: @ClassName_FieldName
+								globalName := fmt.Sprintf("%s_%s", cls.Name, x.Name.Name)
+								dst := ls.b.FreshTemp("sfload")
+								sfType := lowerType(sf.Type)
+								ls.b.Emit(&hir.Load{
+									Type: sfType,
+									Src:  hir.Var{Name: "@" + globalName},
+									Dst:  dst,
+								})
+								return dst
+							}
+							curr = curr.Base
+						}
 					}
 				}
 			}

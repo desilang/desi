@@ -905,6 +905,8 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_continue, true
 	case "const":
 		return token.KW_const, true
+	case "static":
+		return token.KW_static, true
 	default:
 		return token.ILLEGAL, false
 	}
