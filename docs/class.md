@@ -3,7 +3,7 @@
 **Table of Contents:**
 1. [Quick Start](#quick-start)
 2. [Tutorial: Your First Class](#tutorial-your-first-class)
-3. [Fields and Visibility](#fields-and-visibility)
+3. [Fields, Constants, and Visibility](#fields-constants-and-visibility)
 4. [Methods and Self](#methods-and-self)
 5. [Constructors](#constructors)
 6. [Decorators](#decorators)
@@ -117,7 +117,7 @@ def main() -> int:
 
 ---
 
-## Fields and Visibility
+## Fields, Constants, and Visibility
 
 ### Public Fields
 
@@ -181,6 +181,42 @@ def main() -> int:
 - Field exists
 - Field is visible (public or same-class)
 - Type matches
+
+### Class Constants
+
+Class constants are immutable values associated with the class itself, not instances. They are evaluated at compile-time and substituted directly into the code.
+
+**Declaration:**
+
+```desi
+class Math:
+    pub const PI: float = 3.14159
+    pub const E: float = 2.71828
+    const SECRET: int = 42  # Private constant
+```
+
+**Access:**
+
+Access constants using the class name.
+
+```desi
+def main() -> int:
+    print(f"PI: {Math.PI}")
+    return 0
+```
+
+**Inheritance:**
+
+Constants are inherited by subclasses and can be accessed via the subclass name.
+
+```desi
+class Circle(Math):
+    pass
+
+def main() -> int:
+    print(f"Circle PI: {Circle.PI}")  # Inherited from Math
+    return 0
+```
 
 ---
 
