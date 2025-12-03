@@ -1262,6 +1262,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Check if this is a property access on a class
+		if cls, ok := baseType.(*types.Class); ok {
+			// Check if it's a property
+			if _, ok := cls.Properties[name]; ok {
+				// Property access should be lowered as a method call
+				mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
+				dst := ls.b.FreshTemp("prop")
+				// Properties are getters with just self parameter
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: []hir.Value{base}})
+				return dst
+			}
+		}
+
 		// Fallback for methods (dict/set) or unknown types
 		dst := ls.b.FreshTemp("field")
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})

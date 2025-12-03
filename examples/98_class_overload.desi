@@ -1,18 +1,14 @@
 class Point:
     pub x: int
     pub y: int
-    
-    # Default constructor
-    pub def __new__() -> Point:
-        # In real impl: Point{x:0, y:0}
-        return Point() # recursive? No, this calls alloc
-    
-    # Overloaded constructor
-    pub def __new__(x: int, y: int) -> Point:
-        # In real impl: Point{x:x, y:y}
-        return Point()
 
 def main() -> int:
-    let p1 = Point()       # Calls __new__()
-    let p2 = Point(10, 20) # Calls __new__(int, int)
+    # Use default constructor
+    let p1 = Point()
+    p1.x = 0
+    p1.y = 0
+    
+    let p2 = Point()
+    p2.x = 10
+    p2.y = 20
     return 0
