@@ -131,36 +131,61 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
-	// 2. M14 Stage 3: print(Display)
-	// If we have type info, check if this is print(arg) where arg implements Display.
+	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
+	// If we have type info, check if this is print(arg) where:
+	// - arg implements Display trait, OR
+	// - arg is a collection (list/dict/set) with to_str method, OR
+	// - arg is a custom class with to_str method
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
 		if calleeName == "print" && len(x.Args) == 1 {
-			// Check if arg implements Display
-			// We need the type of the argument.
-			// Since we are lowering, we assume check has run.
-			// But we don't have easy access to arg type unless we look it up in info.Types.
-			// info.Types maps *ast.Expr -> types.T
 			if argT := ls.info.Types[x.Args[0]]; argT != nil {
 				typeName := argT.String()
-				// DEBUG
-				if typeName == "Unknown" || typeName == "" {
-					fmt.Printf("Lowering print: argT is %T, String()='%s'\n", argT, typeName)
-				}
+				shouldCallToStr := false
+				toStrFuncName := ""
+
+				// Case 1: Display trait implementation
 				if impls, ok := ls.info.Impls[typeName]; ok {
 					if _, hasDisplay := impls["Display"]; hasDisplay {
-						// Rewrite to print(TypeName_to_str(arg))
-						// 1. Lower arg
-						argVal := ls.lowerExpr(x.Args[0])
-						// 2. Emit call to to_str
-						toStrName := fmt.Sprintf("%s_to_str", typeName)
-						strTemp := ls.b.FreshTemp("str")
-						ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrName, Args: []hir.Value{argVal}})
-						// 3. Emit call to print(str)
-						dst := ls.b.FreshTemp("print")
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{strTemp}})
-						return dst
+						shouldCallToStr = true
+						toStrFuncName = fmt.Sprintf("%s_to_str", typeName)
 					}
+				}
+
+				// Case 2: Built-in collections (list, dict, set)
+				if !shouldCallToStr {
+					switch t := argT.(type) {
+					case *types.List:
+						shouldCallToStr = true
+						toStrFuncName = "list_to_str"
+					case *types.Dict:
+						shouldCallToStr = true
+						toStrFuncName = "dict_to_str"
+					case *types.Set:
+						shouldCallToStr = true
+						toStrFuncName = "set_to_str"
+					case *types.Class:
+						// Case 3: Custom class with __str__ or to_str dunder
+						if _, found := t.Dunders["__str__"]; found {
+							shouldCallToStr = true
+							toStrFuncName = fmt.Sprintf("%s___str__", t.Name)
+						} else if _, found := t.Dunders["to_str"]; found {
+							shouldCallToStr = true
+							toStrFuncName = fmt.Sprintf("%s_to_str", t.Name)
+						}
+					}
+				}
+
+				if shouldCallToStr {
+					// 1. Lower arg
+					argVal := ls.lowerExpr(x.Args[0])
+					// 2. Emit call to to_str
+					strTemp := ls.b.FreshTemp("str")
+					ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal}, Type: "ptr"})
+					// 3. Emit call to print(str)
+					dst := ls.b.FreshTemp("print")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{strTemp}})
+					return dst
 				}
 			}
 		}

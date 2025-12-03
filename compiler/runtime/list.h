@@ -49,4 +49,7 @@ void* list_reduce(DesiList* list, ReduceFunc func, void* initial);
 bool list_any(DesiList* list, FilterFunc predicate);
 bool list_all(DesiList* list, FilterFunc predicate);
 
+// === String Representation ===
+char* list_to_str(DesiList* list);
+
 #endif // DESI_LIST_H

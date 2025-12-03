@@ -1,5 +1,6 @@
 #include "set.h"
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 
 #define INITIAL_BUCKET_COUNT 16
@@ -221,4 +222,65 @@ set_t* set_difference(set_t* s1, set_t* s2) {
     }
     
     return result;
+}
+
+// ========== String Representation ==========
+
+// Convert set to string representation
+char* set_to_str(set_t* s) {
+    if (!s) {
+        char* result = (char*)malloc(7);
+        strcpy(result, "<null>");
+        return result;
+    }
+    
+    // Allocate initial buffer
+    size_t bufsize = 256;
+    char* buffer = (char*)malloc(bufsize);
+    if (!buffer) {
+        fprintf(stderr, "set_to_str: malloc failed\n");
+        exit(1);
+    }
+    
+    size_t pos = 0;
+    buffer[pos++] = '{';
+    
+    bool first = true;
+    for (size_t i = 0; i < s->bucket_count; i++) {
+        set_entry_t* entry = s->buckets[i];
+        while (entry) {
+            if (!first) {
+                if (pos + 2 >= bufsize) {
+                    bufsize *= 2;
+                    buffer = (char*)realloc(buffer, bufsize);
+                }
+                buffer[pos++] = ',';
+                buffer[pos++] = ' ';
+            }
+            first = false;
+            
+            char temp[32];
+            snprintf(temp, sizeof(temp), "%lld", (long long)entry->value);
+            size_t len = strlen(temp);
+            
+            while (pos + len >= bufsize) {
+                bufsize *= 2;
+                buffer = (char*)realloc(buffer, bufsize);
+            }
+            
+            memcpy(buffer + pos, temp, len);
+            pos += len;
+            
+            entry = entry->next;
+        }
+    }
+    
+    if (pos + 2 >= bufsize) {
+        buffer = (char*)realloc(buffer, pos + 2);
+    }
+    
+    buffer[pos++] = '}';
+    buffer[pos] = '\0';
+    
+    return buffer;
 }
