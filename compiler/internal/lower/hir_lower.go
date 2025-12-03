@@ -1370,14 +1370,14 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					})
 
 					if negate {
-						// Negate the result (i1)
+						// Negate the result (i32 bool)
 						negDst := ls.b.FreshTemp("ne_res")
 						ls.b.Emit(&hir.BinaryOp{
 							Op:   "==",
 							LHS:  dst,
-							RHS:  hir.ConstBool{Value: false},
+							RHS:  hir.ConstInt{Text: "0"}, // false as i32
 							Dst:  negDst,
-							Type: "i1",
+							Type: "i32", // bool is i32 in LLVM
 						})
 						return negDst
 					}
