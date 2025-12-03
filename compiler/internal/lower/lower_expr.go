@@ -379,6 +379,36 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerCall(x)
 
 	case *ast.FieldExpr:
+		// Check for Class Constant access (ClassName.CONST)
+		if ls.info != nil {
+			if id, ok := x.X.(*ast.Ident); ok {
+				// Check if base is a Type symbol
+				// Note: We need to access check.SymType, but check package might not be imported or exposed?
+				// ls.info.Idents returns *check.Symbol.
+				// Let's assume we can access Symbol.Kind or check against SymType if imported.
+				// Actually, we can just check if sym.Type is a Class and it has the constant.
+				if sym := ls.info.Idents[id]; sym != nil {
+					if cls, ok := sym.Type.(*types.Class); ok {
+						// Check if it's a constant
+						// We need to traverse base classes too?
+						// The checker already resolved it, but here we need to find the value.
+						curr := cls
+						for curr != nil {
+							if cnst, ok := curr.Constants[x.Name.Name]; ok {
+								// Substitute constant value
+								if valExpr, ok := cnst.Value.(ast.Expr); ok {
+									return ls.lowerExpr(valExpr)
+								}
+								// Should not happen if checker did its job
+								return hir.Var{Name: "<const_error>"}
+							}
+							curr = curr.Base
+						}
+					}
+				}
+			}
+		}
+
 		base := ls.lowerExpr(x.X)
 		name := x.Name.Name
 

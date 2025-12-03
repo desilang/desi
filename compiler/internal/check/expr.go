@@ -284,6 +284,7 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 	}
 	if sym := c.scope.Lookup(x.Name); sym != nil {
 		c.info.Types[x] = sym.Type
+		c.info.Idents[x] = sym
 		return sym.Type
 	}
 	return nil
