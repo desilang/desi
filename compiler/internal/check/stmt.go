@@ -84,9 +84,18 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 
 			case *ast.FieldExpr:
-				// Field assignment: obj.field = value
-				objType := c.typ(lhs.X)
+				// Field assignment: obj.field = value OR ClassName.static_field = value
 				valT := c.typ(rt)
+
+				// Check if this is a type access (ClassName.FIELD) for static fields
+				isTypeAccess := false
+				if ident, ok := lhs.X.(*ast.Ident); ok {
+					if sym := c.scope.Lookup(ident.Name); sym != nil && sym.Kind == SymType {
+						isTypeAccess = true
+					}
+				}
+
+				objType := c.typ(lhs.X)
 
 				// Check if object type is a class
 				cls, ok := objType.(*types.Class)
@@ -95,8 +104,52 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					continue
 				}
 
-				// Find the field
 				fieldName := lhs.Name.Name
+
+				// If it's type access, check for static fields
+				if isTypeAccess {
+					var staticField *types.ClassStaticField
+					curr := cls
+					for curr != nil {
+						if sf, found := curr.StaticFields[fieldName]; found {
+							staticField = sf
+							break
+						}
+						curr = curr.Base
+					}
+
+					if staticField != nil {
+						// Check if mutable
+						if !staticField.IsMut {
+							c.add(diagAt("DTE0004", lhs.Name.Span, "cannot assign to immutable static field '"+fieldName+"'"))
+							continue
+						}
+
+						// Visibility check
+						if !staticField.IsPub {
+							allowed := false
+							if selfSym := c.scope.Lookup("self"); selfSym != nil {
+								if selfType, ok := selfSym.Type.(*types.Class); ok {
+									if types.IsSubclass(selfType, cls) {
+										allowed = true
+									}
+								}
+							}
+							if !allowed {
+								c.add(diagAt("DTE0010", lhs.Name.Span, "static field '"+fieldName+"' is private"))
+								continue
+							}
+						}
+
+						// Type check
+						if !types.Assignable(staticField.Type, valT) {
+							c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to static field of type '"+staticField.Type.String()+"'"))
+						}
+						continue
+					}
+				}
+
+				// Find the instance field
 				var field *types.Field
 				curr := cls
 				for curr != nil {

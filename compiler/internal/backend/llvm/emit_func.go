@@ -470,10 +470,22 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Emit store instruction: store <type> <value>, <type>* <pointer>
 				dstOp := m.ptrOperand(x.Dst)
 				valTy, valOp := m.operand(x.Val)
+				// Auto-register static field globals (globals starting with @)
+				if v, ok := x.Dst.(hir.Var); ok && strings.HasPrefix(v.Name, "@") {
+					if _, exists := m.staticFieldGlobals[v.Name]; !exists {
+						m.staticFieldGlobals[v.Name] = valTy
+					}
+				}
 				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, dstOp)
 
 			case *hir.Load:
 				ptrOp := m.ptrOperand(x.Src)
+				// Auto-register static field globals (globals starting with @)
+				if v, ok := x.Src.(hir.Var); ok && strings.HasPrefix(v.Name, "@") {
+					if _, exists := m.staticFieldGlobals[v.Name]; !exists {
+						m.staticFieldGlobals[v.Name] = x.Type
+					}
+				}
 				wprintf(&m.funcs, "  %s = load %s, %s\n", x.Dst.Name, x.Type, ptrOp)
 				m.tempTypes[x.Dst.Name] = x.Type
 				if x.DesiType != nil {

@@ -141,6 +141,35 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.AssignStmt:
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {
+			// Check for static field assignment (ClassName.FIELD = value)
+			if fieldExpr, ok := s.LHS[0].(*ast.FieldExpr); ok {
+				if ls.info != nil {
+					if id, ok := fieldExpr.X.(*ast.Ident); ok {
+						if sym := ls.info.Idents[id]; sym != nil {
+							if cls, ok := sym.Type.(*types.Class); ok {
+								// Check if it's a static field
+								fieldName := fieldExpr.Name.Name
+								curr := cls
+								for curr != nil {
+									if _, found := curr.StaticFields[fieldName]; found {
+										// Emit Store to global: @ClassName_FieldName
+										globalName := fmt.Sprintf("%s_%s", cls.Name, fieldName)
+										rhs := ls.lowerExpr(s.RHS[0])
+										ls.b.Emit(&hir.Store{
+											Dst: hir.Var{Name: "@" + globalName},
+											Val: rhs,
+										})
+										ls.consumeTemp(rhs)
+										return
+									}
+									curr = curr.Base
+								}
+							}
+						}
+					}
+				}
+			}
+
 			lhs := ls.lowerLValue(s.LHS[0])
 			rhs := ls.lowerExpr(s.RHS[0])
 

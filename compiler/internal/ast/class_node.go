@@ -13,17 +13,18 @@ type FieldDecl struct {
 func (f *FieldDecl) SpanOf() diag.Span { return f.Span }
 
 type ClassDecl struct {
-	Pub        bool
-	Name       Ident
-	TypeParams []Ident     // e.g., [T] for class Container<T>
-	Bases      []*TypeName // optional base classes
-	Methods    []*FuncDecl
-	Fields     []*FieldDecl
-	Constants  []*ClassConstDecl
-	Nested     []*ClassDecl
-	Decorators []*Decorator
-	Doc        *StrLit // optional docstring (first stmt)
-	Span       diag.Span
+	Pub          bool
+	Name         Ident
+	TypeParams   []Ident     // e.g., [T] for class Container<T>
+	Bases        []*TypeName // optional base classes
+	Methods      []*FuncDecl
+	Fields       []*FieldDecl
+	Constants    []*ClassConstDecl
+	StaticFields []*ClassStaticDecl
+	Nested       []*ClassDecl
+	Decorators   []*Decorator
+	Doc          *StrLit // optional docstring (first stmt)
+	Span         diag.Span
 }
 
 func (*ClassDecl) isDecl()             {}
@@ -42,3 +43,15 @@ type ClassConstDecl struct {
 
 func (*ClassConstDecl) isStmt()             {}
 func (x *ClassConstDecl) SpanOf() diag.Span { return x.Span }
+
+type ClassStaticDecl struct {
+	Name  Ident
+	Type  *TypeName
+	Value Expr
+	IsPub bool
+	IsMut bool
+	Span  diag.Span
+}
+
+func (*ClassStaticDecl) isStmt()             {}
+func (x *ClassStaticDecl) SpanOf() diag.Span { return x.Span }

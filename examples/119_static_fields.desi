@@ -1,0 +1,20 @@
+class Counter:
+    pub mut static count: int = 0
+
+    pub def increment(self) -> int:
+        Counter.count = Counter.count + 1
+        return 0
+    
+    pub def get_count(self) -> int:
+        return Counter.count
+
+pub def main() -> int:
+    let c1 = Counter()
+    let c2 = Counter()
+    
+    let x1 = c1.increment()
+    let x2 = c1.increment()
+    let x3 = c2.increment()
+    
+    print(f"Count: {c2.get_count()}")  # Should be 3
+    return 0

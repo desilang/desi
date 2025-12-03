@@ -70,6 +70,7 @@ const (
 	KW_break
 	KW_continue
 	KW_const
+	KW_static
 
 	// Delimiters / punctuators
 	LPAREN // (
