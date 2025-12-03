@@ -673,7 +673,7 @@ class Repository:
     pub def load(self, id: int) -> str:
         return ""
 
-class Database Repository):
+class Database(Repository):
     pub def save(self, data: str) -> bool:
         # Actual implementation
         return true
