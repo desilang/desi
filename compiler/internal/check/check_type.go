@@ -41,6 +41,7 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		StaticMethods: make(map[string]*types.Func),
 		ClassMethods:  make(map[string]*types.Func),
 		Properties:    make(map[string]*types.Func),
+		Constants:     make(map[string]*types.ClassConstant),
 		Dunders:       make(map[string]*types.Func),
 		Constructors:  nil, // will be populated in checkClass
 		Base:          nil, // will be resolved in Phase 2
@@ -190,6 +191,27 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			Type:  fieldType,
 			IsPub: field.Pub,
 		})
+	}
+
+	// Resolve constants
+	for _, cd := range d.Constants {
+		constType := c.resolveType(cd.Type)
+
+		// Check the value expression
+		// Note: We should verify it's a constant expression, but for now we just check the type.
+		// TODO: Add constant folding/verification.
+		valType := c.typ(cd.Value)
+
+		if !types.Assignable(constType, valType) {
+			c.add(diagAt("DTE0004", cd.Value.SpanOf(), fmt.Sprintf("cannot assign %s to constant of type %s", valType, constType)))
+		}
+
+		cls.Constants[cd.Name.Name] = &types.ClassConstant{
+			Name:  cd.Name.Name,
+			Type:  constType,
+			Value: cd.Value,
+			IsPub: cd.IsPub,
+		}
 	}
 
 	// Process methods

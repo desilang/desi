@@ -19,6 +19,7 @@ type ClassDecl struct {
 	Bases      []*TypeName // optional base classes
 	Methods    []*FuncDecl
 	Fields     []*FieldDecl
+	Constants  []*ClassConstDecl
 	Nested     []*ClassDecl
 	Decorators []*Decorator
 	Doc        *StrLit // optional docstring (first stmt)
@@ -26,4 +27,18 @@ type ClassDecl struct {
 }
 
 func (*ClassDecl) isDecl()             {}
+func (*ClassDecl) isStmt()             {}
 func (d *ClassDecl) SpanOf() diag.Span { return d.Span }
+
+// ClassConstDecl represents a class-level constant declaration:
+// pub const NAME: Type = Value
+type ClassConstDecl struct {
+	Name  Ident
+	Type  *TypeName
+	Value Expr
+	IsPub bool
+	Span  diag.Span
+}
+
+func (*ClassConstDecl) isStmt()             {}
+func (x *ClassConstDecl) SpanOf() diag.Span { return x.Span }

@@ -340,6 +340,40 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			}
 		}
 
+		// 2.0 Check Class Constants (only if accessing via ClassName)
+		if isTypeAccess {
+			curr = cls
+			for curr != nil {
+				if cnst, ok := curr.Constants[name]; ok {
+					// Check visibility
+					if !cnst.IsPub {
+						allowed := false
+						// Allow if we are inside the class (or subclass)
+						if selfSym := c.scope.Lookup("self"); selfSym != nil {
+							if selfType, ok := selfSym.Type.(*types.Class); ok {
+								// Check if selfType is subclass of cls (where constant is defined)
+								// Note: cls is the class we are accessing (e.g. Math).
+								// If we are in Circle (subclass of Math), self is Circle.
+								// Circle is subclass of Math. So allowed.
+								// If we are in Math, self is Math. Allowed.
+								if types.IsSubclass(selfType, cls) {
+									allowed = true
+								}
+							}
+						}
+
+						if !allowed {
+							c.add(diagAt("DTE0010", x.Name.Span, "constant '"+name+"' is private"))
+						}
+					}
+
+					c.info.Types[x] = cnst.Type
+					return cnst.Type
+				}
+				curr = curr.Base
+			}
+		}
+
 		curr = cls
 		for curr != nil {
 			var method *types.Func

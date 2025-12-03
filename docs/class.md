@@ -3,7 +3,7 @@
 **Table of Contents:**
 1. [Quick Start](#quick-start)
 2. [Tutorial: Your First Class](#tutorial-your-first-class)
-3. [Fields and Visibility](#fields-and-visibility)
+3. [Fields, Constants, and Visibility](#fields-constants-and-visibility)
 4. [Methods and Self](#methods-and-self)
 5. [Constructors](#constructors)
 6. [Decorators](#decorators)
@@ -117,7 +117,7 @@ def main() -> int:
 
 ---
 
-## Fields and Visibility
+## Fields, Constants, and Visibility
 
 ### Public Fields
 

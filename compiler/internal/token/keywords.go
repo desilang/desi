@@ -40,6 +40,7 @@ var keywords = map[string]Token{
 	"unsafe":   KW_unsafe,
 	"break":    KW_break,
 	"continue": KW_continue,
+	"const":    KW_const,
 }
 
 // Builtin type spellings per revised grammar.
