@@ -204,6 +204,34 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 	case *ast.IndexExpr:
 		lhsType := ls.info.Types[x.X]
+
+		// Handle custom classes with __getitem__ dunder
+		if cls, ok := lhsType.(*types.Class); ok {
+			if _, found := cls.Dunders["__getitem__"]; found {
+				// Desugar obj[idx] to obj.__getitem__(idx)
+				obj := ls.lowerExpr(x.X)
+				idx := ls.lowerExpr(x.Idx)
+
+				// Call __getitem__ method
+				mangledName := fmt.Sprintf("%s___getitem__", cls.Name)
+				dst := ls.b.FreshTemp("getitem")
+
+				// Determine return type
+				retType := "i32" // default
+				if getitem := cls.Dunders["__getitem__"]; getitem != nil && getitem.Ret != nil {
+					retType = lowerType(getitem.Ret)
+				}
+
+				ls.b.Emit(&hir.Call{
+					Dst:  dst,
+					Fn:   mangledName,
+					Args: []hir.Value{obj, idx},
+					Type: retType,
+				})
+				return dst
+			}
+		}
+
 		if tup, ok := lhsType.(*types.Tuple); ok {
 			base := ls.lowerExpr(x.X) // pointer to tuple
 			idxLit, _ := x.Idx.(*ast.IntLit)
@@ -289,6 +317,64 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			// For pointer types, return as-is
 			return ptrResult
 		}
+
+		// If lhsType is nil, try to infer from FieldExpr
+		if lhsType == nil {
+			if fieldExpr, ok := x.X.(*ast.FieldExpr); ok {
+				// Try to get the type of the field
+				if ls.info != nil {
+					if baseType := ls.info.Types[fieldExpr.X]; baseType != nil {
+						if cls, ok := baseType.(*types.Class); ok {
+							// Look up the field in the class
+							fieldName := fieldExpr.Name.Name
+							for _, field := range cls.Fields {
+								if field.Name == fieldName {
+									lhsType = field.Type
+									break
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Retry list indexing with inferred type
+		if listType, ok := lhsType.(*types.List); ok {
+			list := ls.lowerExpr(x.X)
+			index := ls.lowerExpr(x.Idx)
+
+			// list_get returns void* (ptr)
+			ptrResult := ls.b.FreshTemp("elem_ptr")
+			ls.b.Emit(&hir.Call{Dst: ptrResult, Fn: "list_get", Args: []hir.Value{list, index}})
+
+			// Unbox if element type is primitive
+			needsUnboxing := false
+			targetType := "i32" // default
+
+			if listType.Elem != nil {
+				switch listType.Elem.String() {
+				case "int":
+					needsUnboxing = true
+					targetType = "i32"
+				case "bool":
+					needsUnboxing = true
+					targetType = "i1"
+				case "float":
+					needsUnboxing = true
+					targetType = "double"
+				}
+			}
+
+			if needsUnboxing {
+				dst := ls.b.FreshTemp("elem")
+				ls.b.Emit(&hir.Cast{Dst: dst, Src: ptrResult, Type: targetType})
+				return dst
+			}
+
+			return ptrResult
+		}
+
 		return hir.Var{Name: "<index_expr>"}
 
 	case *ast.Ident:

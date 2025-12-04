@@ -170,6 +170,33 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
+			// Check for index assignment with __setitem__ (obj[idx] = value)
+			if indexExpr, ok := s.LHS[0].(*ast.IndexExpr); ok {
+				if ls.info != nil {
+					objType := ls.info.Types[indexExpr.X]
+					if cls, ok := objType.(*types.Class); ok {
+						if _, found := cls.Dunders["__setitem__"]; found {
+							// Desugar obj[idx] = value to obj.__setitem__(idx, value)
+							obj := ls.lowerExpr(indexExpr.X)
+							idx := ls.lowerExpr(indexExpr.Idx)
+							val := ls.lowerExpr(s.RHS[0])
+
+							// Call __setitem__ method
+							mangledName := fmt.Sprintf("%s___setitem__", cls.Name)
+							dst := ls.b.FreshTemp("setitem")
+							ls.b.Emit(&hir.Call{
+								Dst:  dst,
+								Fn:   mangledName,
+								Args: []hir.Value{obj, idx, val},
+								Type: "i32", // __setitem__ typically returns none
+							})
+							ls.consumeTemp(val)
+							return
+						}
+					}
+				}
+			}
+
 			lhs := ls.lowerLValue(s.LHS[0])
 			rhs := ls.lowerExpr(s.RHS[0])
 

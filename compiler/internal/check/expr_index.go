@@ -122,6 +122,21 @@ func (c *checker) typIndexExpr(x *ast.IndexExpr) types.T {
 		return types.Str
 	}
 
+	// Handle custom classes with __getitem__ dunder
+	if cls, ok := lhs.(*types.Class); ok {
+		if getitem, found := cls.Dunders["__getitem__"]; found {
+			// __getitem__(self, index) -> T
+			if len(getitem.Params) == 2 {
+				// Check index type matches
+				idxType := c.typ(x.Idx)
+				if types.Assignable(getitem.Params[1], idxType) {
+					c.info.Types[x] = getitem.Ret
+					return getitem.Ret
+				}
+			}
+		}
+	}
+
 	c.add(diagAt("DTE0005", x.Span, "type not indexable"))
 	return nil
 }
