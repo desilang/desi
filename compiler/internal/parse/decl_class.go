@@ -97,6 +97,22 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			break
 		}
 
+		// Handle unexpected Indent (from failed parsing that left nested blocks)
+		if p.cur.Tok == token.Indent {
+			// Skip entire nested block
+			depth := 1
+			p.next()
+			for depth > 0 && p.cur.Tok != token.EOF {
+				if p.cur.Tok == token.Indent {
+					depth++
+				} else if p.cur.Tok == token.Dedent {
+					depth--
+				}
+				p.next()
+			}
+			continue
+		}
+
 		// Leading docstring in the body attaches to the class and is removed.
 		if doc == nil && p.cur.Tok == token.LONGSTR {
 			doc = &ast.StrLit{Long: true, Span: spanPos(p.file, p.cur)}
@@ -134,13 +150,41 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 		// Check for 'pub' modifier
 		isPub := false
 		if p.cur.Tok == token.KW_pub {
-			// Confirm it's a field, const, or static header
-			if p.peek.Tok == token.IDENT ||
-				p.peek.Tok == token.KW_const ||
+			// Check what follows 'pub'
+			if p.peek.Tok == token.KW_const ||
 				p.peek.Tok == token.KW_static ||
 				p.peek.Tok == token.KW_mut {
 				isPub = true
 				p.next()
+			} else if p.peek.Tok == token.IDENT {
+				// Could be a field (name: type) - commit to field parsing
+				isPub = true
+				p.next()
+			} else {
+				// Invalid token after 'pub' (not a recognized pattern)
+				p.errExpected(spanPos(p.file, p.peek), "def, field declaration, const, static, or mut")
+				// Skip until we find a safe recovery point
+				for p.cur.Tok != token.Dedent && p.cur.Tok != token.EOF {
+					if p.cur.Tok == token.Indent {
+						// Skip nested block entirely
+						depth := 1
+						p.next()
+						for depth > 0 && p.cur.Tok != token.EOF {
+							if p.cur.Tok == token.Indent {
+								depth++
+							} else if p.cur.Tok == token.Dedent {
+								depth--
+							}
+							p.next()
+						}
+					} else if p.cur.Tok == token.NL {
+						p.next()
+						break
+					} else {
+						p.next()
+					}
+				}
+				continue
 			}
 		}
 

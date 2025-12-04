@@ -33,6 +33,29 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				if rhs != nil && !types.Assignable(t, rhs) {
 					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
 				}
+
+				// Propagate expected type to empty collection literals
+				// This ensures lowering sees the concrete type (e.g., list[Person]) instead of list[none]
+				if rhs != nil {
+					// List: [] -> list[none]
+					if l, ok := rhs.(*types.List); ok && l.Elem == types.None {
+						if _, ok := t.(*types.List); ok {
+							c.info.Types[st.Value] = t
+						}
+					}
+					// Set: set() -> set[none]
+					if s, ok := rhs.(*types.Set); ok && s.Elem == types.None {
+						if _, ok := t.(*types.Set); ok {
+							c.info.Types[st.Value] = t
+						}
+					}
+					// Dict: {} -> dict[none, none]
+					if d, ok := rhs.(*types.Dict); ok && d.Key == types.None && d.Val == types.None {
+						if _, ok := t.(*types.Dict); ok {
+							c.info.Types[st.Value] = t
+						}
+					}
+				}
 			} else {
 				// Type annotation didn't resolve, use RHS type
 				t = rhs

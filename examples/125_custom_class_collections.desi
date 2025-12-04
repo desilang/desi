@@ -10,15 +10,17 @@ class Person:
         return "Person(" + self.name + ")"
 
 def main():
-    # Test with custom class - use [initial_value] pattern for type inference
-    let p1 = Person("Alice")
-    let p2 = Person("Bob")
+    # Test with custom class
+    # Explicitly type the list as list[Person] so the compiler knows the element type
+    # and can generate the correct to_str function pointer (Person___str__)
+    let mut people: list[Person] = []
     
-    # Initialize with first element so type is inferred
-    let mut people = [p1]
-    people.append(p2)
+    people.append(Person("Alice"))
+    people.append(Person("Bob"))
+    people.append(Person(1)) 
     
     print("People list:")
     print(people)  # Should print: [Person(Alice), Person(Bob)]
     
+    # Test iteration
     print("Manual iteration test passed!")

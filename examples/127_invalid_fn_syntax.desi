@@ -1,0 +1,21 @@
+# Test custom class in collections - with invalid fn syntax
+
+class Person:
+    pub name: str
+    
+    pub fn __new__(self, name: str):
+        self.name = name
+    
+    pub fn __str__(self) -> str:
+        return "Person(" + self.name + ")"
+
+def main():
+    # Test with custom class
+    let mut people:list[int] = []
+    people.append(Person("Alice"))
+    people.append(Person("Bob"))
+    print("People list:")
+    print(people)  # Should print: [Person(Alice), Person(Bob)]
+    
+    # Test iteration (if for loop is implemented)
+    print("Manual iteration test passed!")
