@@ -57,9 +57,9 @@ func TestDictLit_BasicTypeInference(t *testing.T) {
 	}
 }
 
-func TestDictLit_EmptyDict_Error(t *testing.T) {
+func TestDictLit_EmptyDict_Success(t *testing.T) {
 	// def main():
-	//   let d = {}  // Should error: needs type annotation
+	//   let d = {}  // Should succeed with dict[none, none]
 	dictLit := &ast.DictLit{
 		Keys:   []ast.Expr{},
 		Values: []ast.Expr{},
@@ -76,10 +76,27 @@ func TestDictLit_EmptyDict_Error(t *testing.T) {
 	}
 
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
-	diags, _ := Check(mod)
+	diags, info := Check(mod)
 
-	if len(diags) == 0 {
-		t.Fatal("expected error for empty dict literal")
+	mustNoDiags(t, diags)
+
+	// Verify type is dict[none, none]
+	dictType := info.Types[dictLit]
+	if dictType == nil {
+		t.Fatal("dict literal has no type")
+	}
+
+	dt, ok := dictType.(*types.Dict)
+	if !ok {
+		t.Fatalf("expected dict type, got %T", dictType)
+	}
+
+	if !types.Equal(dt.Key, types.None) {
+		t.Errorf("expected key type none, got %v", dt.Key)
+	}
+
+	if !types.Equal(dt.Val, types.None) {
+		t.Errorf("expected value type none, got %v", dt.Val)
 	}
 }
 

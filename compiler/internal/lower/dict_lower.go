@@ -30,6 +30,23 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		ls.b.Emit(&hir.Load{Type: "i64", Src: resPtr, Dst: valDst})
 		return valDst
 
+	case "insert":
+		// insert(key, value)
+		key := ls.lowerExpr(args[0])
+		val := ls.lowerExpr(args[1])
+
+		// Cast to i64 to ensure we store 8 bytes (Tier-0 universal value size)
+		val64 := ls.b.FreshTemp("val64")
+		ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+
+		// Spill value to stack to pass as pointer
+		valPtr := ls.b.FreshTemp("val_ptr")
+		ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
+		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, key, valPtr}})
+		return nil
+
 	case "has_key":
 		// has_key(key)
 		key := ls.lowerExpr(args[0])
