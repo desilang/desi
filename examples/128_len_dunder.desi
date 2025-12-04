@@ -1,7 +1,7 @@
 # Test __len__ dunder support
 
 class Stack:
-    pub items: list[int]
+    pub mut items: list[int]
     
     pub def __new__(self):
         self.items = []

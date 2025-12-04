@@ -216,6 +216,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					}
 				}
 
+				// Mutability check: only allow assignment to mutable fields (or in __new__)
+				if !field.IsMut && c.curFuncName != "__new__" {
+					c.add(diagAt("DCL0004", lhs.Name.Span, "cannot assign to immutable field '"+fieldName+"'"))
+					continue
+				}
+
 				// Type check
 				if !types.Assignable(field.Type, valT) {
 					dstStr := "?"

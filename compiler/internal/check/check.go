@@ -183,6 +183,7 @@ type checker struct {
 	scope       *Scope
 	moduleScope *Scope
 	curFuncRet  types.T
+	curFuncName string // Name of current function (for __new__ detection)
 	moved       MoveSet
 	unsafeDepth int
 	expected    types.T // Expected type from context (for bidirectional checking)
@@ -270,8 +271,13 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	// New scope for parameters and locals.
 	saved := c.scope
+	savedFuncName := c.curFuncName
 	c.scope = NewScope(c.scope)
-	defer func() { c.scope = saved }()
+	c.curFuncName = fd.Name.Name
+	defer func() {
+		c.scope = saved
+		c.curFuncName = savedFuncName
+	}()
 
 	// Reset per-function move-tracking state (our local tracker)
 	c.moved = MoveSet{}

@@ -4,6 +4,7 @@ import "github.com/desilang/desi/compiler/internal/diag"
 
 type FieldDecl struct {
 	Pub  bool
+	Mut  bool // mutable field (pub mut field: Type)
 	Name Ident
 	Type *TypeName // optional
 	Span diag.Span

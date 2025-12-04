@@ -668,6 +668,11 @@
       "id": "DCL0003",
       "title": "invalid __close__ signature",
       "help": "__close__ must have signature: __close__(self) -> none"
+    },
+    "immutable_field_assignment": {
+      "id": "DCL0004",
+      "title": "cannot assign to immutable field",
+      "help": "declare the field as 'pub mut field: Type' to allow mutation"
     }
   }
 }
