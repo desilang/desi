@@ -182,6 +182,10 @@ func (m *Module) operand(v hir.Value) (string, string) {
 	case hir.ConstBool:
 		return "i1", fmt.Sprintf("%v", t.Value)
 	case hir.ConstStr:
+		// Special case: "null" should be emitted as null pointer constant
+		if t.Text == "null" {
+			return "ptr", "null"
+		}
 		// Strings are pointers to globals
 		// Don't add newline here - puts() will add it if needed
 		g, n := m.ensureCStringGlobal(t.Text, false)
