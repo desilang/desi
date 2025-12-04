@@ -147,6 +147,12 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		res := ls.b.FreshTemp("found")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_contains", Args: []hir.Value{receiver, elemPtr}})
 		return res
+
+	case "to_str":
+		// to_str() -> str
+		res := ls.b.FreshTemp("str")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_to_str", Args: []hir.Value{receiver}, Type: "ptr"})
+		return res
 	}
 
 	return nil

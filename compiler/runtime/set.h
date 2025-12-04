@@ -32,4 +32,7 @@ set_t* set_union(set_t* s1, set_t* s2);
 set_t* set_intersection(set_t* s1, set_t* s2);
 set_t* set_difference(set_t* s1, set_t* s2);
 
+// String representation
+char* set_to_str(set_t* s);
+
 #endif

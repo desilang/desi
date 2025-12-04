@@ -75,6 +75,12 @@ func (ls *lowerState) lowerSetMethod(fe *ast.FieldExpr, args []ast.Expr, setType
 		res := ls.b.FreshTemp("difference")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "set_difference", Args: []hir.Value{receiver, other}})
 		return res
+
+	case "to_str":
+		// to_str() -> str
+		res := ls.b.FreshTemp("str")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "set_to_str", Args: []hir.Value{receiver}, Type: "ptr"})
+		return res
 	}
 
 	return nil

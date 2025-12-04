@@ -379,3 +379,79 @@ bool list_all(DesiList* list, FilterFunc predicate) {
     
     return true;
 }
+
+// ========== String Representation ==========
+
+// Convert list to string representation
+// Note: This is a simple implementation that treats pointers as integers
+// for small values (< 1000000), suitable for demo purposes
+char* list_to_str(DesiList* list) {
+    if (!list) {
+        char* result = (char*)malloc(7);
+        strcpy(result, "<null>");
+        return result;
+    }
+    
+    // Allocate initial buffer
+    size_t bufsize = 256;
+    char* buffer = (char*)malloc(bufsize);
+    if (!buffer) {
+        fprintf(stderr, "list_to_str: malloc failed\n");
+        exit(1);
+    }
+    
+    size_t pos = 0;
+    buffer[pos++] = '[';
+    
+    for (size_t i = 0; i < list->length; i++) {
+        if (i > 0) {
+            // Ensure space for ", "
+            if (pos + 2 >= bufsize) {
+                bufsize *= 2;
+                buffer = (char*)realloc(buffer, bufsize);
+                if (!buffer) {
+                    fprintf(stderr, "list_to_str: realloc failed\n");
+                    exit(1);
+                }
+            }
+            buffer[pos++] = ',';
+            buffer[pos++] = ' ';
+        }
+        
+        // Convert element to string (heuristic: treat as int if small pointer value)
+        void* elem = list->data[i];
+        intptr_t val = (intptr_t)elem;
+        
+        char temp[32];
+        snprintf(temp, sizeof(temp), "%lld", (long long)val);
+        size_t len = strlen(temp);
+        
+        // Ensure space
+        while (pos + len >= bufsize) {
+            bufsize *= 2;
+            buffer = (char*)realloc(buffer, bufsize);
+            if (!buffer) {
+                fprintf(stderr, "list_to_str: realloc failed\n");
+                exit(1);
+            }
+        }
+        
+        memcpy(buffer + pos, temp, len);
+        pos += len;
+    }
+    
+    // Ensure space for ]
+    if (pos + 2 >= bufsize) {
+        bufsize = pos + 2;
+        buffer = (char*)realloc(buffer, bufsize);
+        if (!buffer) {
+            fprintf(stderr, "list_to_str: realloc failed\n");
+            exit(1);
+        }
+    }
+    
+    buffer[pos++] = ']';
+    buffer[pos] = '\0';
+    
+    return buffer;
+}

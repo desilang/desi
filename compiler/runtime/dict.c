@@ -1,6 +1,7 @@
 #include "dict.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 #define INITIAL_BUCKET_COUNT 16
 #define LOAD_FACTOR_THRESHOLD 0.75
@@ -217,4 +218,79 @@ void** dict_values(dict_t* d, size_t* out_len) {
     }
     
     return values;
+}
+
+// ========== String Representation ==========
+
+// Convert dict to string representation
+char* dict_to_str(dict_t* d) {
+    if (!d) {
+        char* result = (char*)malloc(7);
+        strcpy(result, "<null>");
+        return result;
+    }
+    
+    // Allocate initial buffer
+    size_t bufsize = 256;
+    char* buffer = (char*)malloc(bufsize);
+    if (!buffer) {
+        fprintf(stderr, "dict_to_str: malloc failed\n");
+        exit(1);
+    }
+    
+    size_t pos = 0;
+    buffer[pos++] = '{';
+    
+    bool first = true;
+    for (size_t i = 0; i < d->bucket_count; i++) {
+        dict_entry_t* entry = d->buckets[i];
+        while (entry) {
+            if (!first) {
+                // Ensure space for ", "
+                if (pos + 2 >= bufsize) {
+                    bufsize *= 2;
+                    buffer = (char*)realloc(buffer, bufsize);
+                }
+                buffer[pos++] = ',';
+                buffer[pos++] = ' ';
+            }
+            first = false;
+            
+            // Add key
+            size_t key_len = strlen(entry->key);
+            while (pos + key_len + 10 >= bufsize) {
+                bufsize *= 2;
+                buffer = (char*)realloc(buffer, bufsize);
+            }
+            
+            memcpy(buffer + pos, entry->key, key_len);
+            pos += key_len;
+            buffer[pos++] = ':';
+            buffer[pos++] = ' ';
+            
+            // Add value (simplified as int)
+            char temp[32];
+            snprintf(temp, sizeof(temp), "%lld", (long long)(intptr_t)entry->value);
+            size_t val_len = strlen(temp);
+            
+            while (pos + val_len >= bufsize) {
+                bufsize *= 2;
+                buffer = (char*)realloc(buffer, bufsize);
+            }
+            
+            memcpy(buffer + pos, temp, val_len);
+            pos += val_len;
+            
+            entry = entry->next;
+        }
+    }
+    
+    if (pos + 2 >= bufsize) {
+        buffer = (char*)realloc(buffer, pos + 2);
+    }
+    
+    buffer[pos++] = '}';
+    buffer[pos] = '\0';
+    
+    return buffer;
 }

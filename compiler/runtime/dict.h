@@ -37,4 +37,7 @@ void** dict_values(dict_t* d, size_t* out_len);
 // Internal helper
 uint64_t dict_hash(const char* key);
 
+// String representation
+char* dict_to_str(dict_t* d);
+
 #endif // DESI_DICT_H

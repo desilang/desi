@@ -46,6 +46,12 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		// free() - manual memory management helper
 		ls.b.Emit(&hir.Call{Fn: "dict_free", Args: []hir.Value{receiver}})
 		return nil
+
+	case "to_str":
+		// to_str() -> str
+		res := ls.b.FreshTemp("str")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_to_str", Args: []hir.Value{receiver}, Type: "ptr"})
+		return res
 	}
 
 	return nil

@@ -495,6 +495,9 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 	case "free":
 		// free() -> none (manual memory management)
 		methodType = types.FuncOf(nil, types.None, false)
+	case "to_str":
+		// to_str() -> str
+		methodType = types.FuncOf(nil, types.Str, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on dict"))
 		return nil
@@ -533,6 +536,9 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 	case "difference":
 		// difference(other: set[T]) -> set[T]
 		methodType = types.FuncOf([]types.T{s}, s, false)
+	case "to_str":
+		// to_str() -> str
+		methodType = types.FuncOf(nil, types.Str, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on set"))
 		return nil
@@ -592,6 +598,9 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "contains":
 		// contains(elem: T) -> bool
 		methodType = types.FuncOf([]types.T{l.Elem}, types.Bool, false)
+	case "to_str":
+		// to_str() -> str
+		methodType = types.FuncOf(nil, types.Str, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil

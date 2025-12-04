@@ -1,22 +1,21 @@
-# Example 121: Empty Collections
-# Test empty list, dict, and set initialization
+# Example 121: Empty Collections and Auto to_str
+# Test empty list, dict initialization and automatic to_str() in print()
 
 pub def main():
     # Empty list
     let empty_list: list[int] = []
     print("Empty list created")
+    print(empty_list)  # Auto-calls to_str()
     
     # Empty dict
     let empty_dict: dict[str, int] = {}
     print("Empty dict created")
-    
-    # Note: Empty set requires explicit constructor call
-    # set() syntax is not yet supported, so we skip it for now
+    print(empty_dict)  # Auto-calls to_str()
     
     # Verify they work
     empty_list.append(42)
-    print("List after append: OK")
+    empty_list.append(420)
+    print("List after append:")
+    print(empty_list)  # Should show [42]
     
-    # Dict uses set/get, not insert
-    # For now, skip dict methods
     print("Empty collections work!")

@@ -372,14 +372,38 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			for i, a := range argsNodes {
 				args[i] = c.typ(a.Expr)
 			}
-			// M14 Stage 3: Special handling for print(Display) - check AFTER arg types computed
+			// M14 Stage 3: Special handling for print(Display) + Auto to_str
+			// Accept: Display trait, collections (list/dict/set), custom classes with __str__/to_str
 			if id.Name == "print" && len(args) == 1 && args[0] != nil {
+				shouldAccept := false
+
+				// Case 1: Display trait
 				typeName := args[0].String()
 				if impls, ok := c.info.Impls[typeName]; ok {
 					if _, hasDisplay := impls["Display"]; hasDisplay {
-						c.info.Types[call] = types.None
-						return types.None
+						shouldAccept = true
 					}
+				}
+
+				// Case 2: Built-in collections (list, dict, set)
+				if !shouldAccept {
+					switch args[0].(type) {
+					case *types.List, *types.Dict, *types.Set:
+						shouldAccept = true
+					case *types.Class:
+						// Case 3: Custom class with __str__ or to_str dunder
+						cls := args[0].(*types.Class)
+						if _, found := cls.Dunders["__str__"]; found {
+							shouldAccept = true
+						} else if _, found := cls.Dunders["to_str"]; found {
+							shouldAccept = true
+						}
+					}
+				}
+
+				if shouldAccept {
+					c.info.Types[call] = types.None
+					return types.None
 				}
 			}
 
