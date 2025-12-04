@@ -255,6 +255,7 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 							c.add(diagAt("DTE0010", x.Name.Span, "field '"+name+"' is private"))
 						}
 					}
+					c.info.Types[x] = f.Type
 					return f.Type
 				}
 			}
