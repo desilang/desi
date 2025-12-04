@@ -374,6 +374,48 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 			// M14 Stage 3: Special handling for print(Display) + Auto to_str
 			// Accept: Display trait, collections (list/dict/set), custom classes with __str__/to_str
+			// Built-in len() function
+			if id.Name == "len" && len(args) == 1 && args[0] != nil {
+				argType := args[0]
+				if argType == nil {
+					return nil
+				}
+
+				// Special case for string
+				if types.Equal(argType, types.Str) {
+					c.info.Types[call] = types.Int
+					return types.Int
+				}
+
+				// Check for __len__ method
+				hasLen := false
+				if _, ok := argType.(*types.List); ok {
+					hasLen = true
+				} else if _, ok := argType.(*types.Dict); ok {
+					hasLen = true
+				} else if _, ok := argType.(*types.Set); ok {
+					hasLen = true
+				} else if cls, ok := argType.(*types.Class); ok {
+					// Check for __len__ method in class or base classes
+					curr := cls
+					for curr != nil {
+						if _, ok := curr.Dunders["__len__"]; ok {
+							hasLen = true
+							break
+						}
+						curr = curr.Base
+					}
+				}
+
+				if hasLen {
+					c.info.Types[call] = types.Int
+					return types.Int
+				}
+
+				c.add(diagAt("DTE0001", call.Span, "type '"+argType.String()+"' has no len()"))
+				return nil
+			}
+
 			if id.Name == "print" && len(args) == 1 && args[0] != nil {
 				shouldAccept := false
 

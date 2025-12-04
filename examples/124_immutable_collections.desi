@@ -1,0 +1,20 @@
+# Test immutable collections
+
+def main():
+    # Test 1: Immutable list should ERROR
+    let xs = [1, 2, 3]
+    xs.append(4)  # ERROR: cannot call 'append' on immutable collection
+    
+    # Test 2: Mutable list should work
+    let mut ys = [1, 2, 3]
+    ys.append(4)  # OK
+    print(ys)
+    
+    # Test 3: Immutable dict should ERROR
+    let scores = {}
+    scores.insert("alice", 95)  # ERROR
+    
+    # Test 4: Mutable dict should work
+    let mut scores2 = {}
+    scores2.insert("alice", 95)  # OK
+    print(scores2)

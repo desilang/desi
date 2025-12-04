@@ -478,16 +478,19 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 		// TODO: Make default optional?
 		methodType = types.FuncOf([]types.T{d.Key, d.Val}, d.Val, false)
 	case "insert":
-		// insert(key: K, value: V) -> none
+		// insert(key: K, value: V) -> none (MUTATION)
+		c.checkMutableCollection(x, "insert")
 		methodType = types.FuncOf([]types.T{d.Key, d.Val}, types.None, false)
 	case "has_key":
 		// has_key(key: K) -> bool
 		methodType = types.FuncOf([]types.T{d.Key}, types.Bool, false)
 	case "pop":
-		// pop(key: K) -> V
+		// pop(key: K) -> V (MUTATION)
+		c.checkMutableCollection(x, "pop")
 		methodType = types.FuncOf([]types.T{d.Key}, d.Val, false)
 	case "clear":
-		// clear() -> none
+		// clear() -> none (MUTATION)
+		c.checkMutableCollection(x, "clear")
 		methodType = types.FuncOf(nil, types.None, false)
 	case "keys":
 		// keys() -> list[K]
@@ -498,6 +501,9 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 	case "free":
 		// free() -> none (manual memory management)
 		methodType = types.FuncOf(nil, types.None, false)
+	case "__len__":
+		// __len__() -> int
+		methodType = types.FuncOf(nil, types.Int, false)
 	case "to_str":
 		// to_str() -> str
 		methodType = types.FuncOf(nil, types.Str, false)
@@ -516,16 +522,19 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 
 	switch name {
 	case "add":
-		// add(elem: T) -> none
+		// add(elem: T) -> none (MUTATION)
+		c.checkMutableCollection(x, "add")
 		methodType = types.FuncOf([]types.T{s.Elem}, types.None, false)
 	case "remove":
-		// remove(elem: T) -> none
+		// remove(elem: T) -> none (MUTATION)
+		c.checkMutableCollection(x, "remove")
 		methodType = types.FuncOf([]types.T{s.Elem}, types.None, false)
 	case "contains":
 		// contains(elem: T) -> bool
 		methodType = types.FuncOf([]types.T{s.Elem}, types.Bool, false)
 	case "clear":
-		// clear() -> none
+		// clear() -> none (MUTATION)
+		c.checkMutableCollection(x, "clear")
 		methodType = types.FuncOf(nil, types.None, false)
 	case "free":
 		// free() -> none
@@ -539,6 +548,9 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 	case "difference":
 		// difference(other: set[T]) -> set[T]
 		methodType = types.FuncOf([]types.T{s}, s, false)
+	case "__len__":
+		// __len__() -> int
+		methodType = types.FuncOf(nil, types.Int, false)
 	case "to_str":
 		// to_str() -> str
 		methodType = types.FuncOf(nil, types.Str, false)
@@ -551,46 +563,70 @@ func (c *checker) resolveSetMethod(x *ast.FieldExpr, s *types.Set) types.T {
 	return methodType
 }
 
+// checkMutableCollection verifies that a mutation method is being called on a mutable collection.
+// Returns true if the check passes, false if an error was emitted.
+func (c *checker) checkMutableCollection(fe *ast.FieldExpr, methodName string) bool {
+	// Get the receiver expression
+	// If it's an identifier, check if it's mutable
+	if id, ok := fe.X.(*ast.Ident); ok {
+		sym := c.scope.Lookup(id.Name)
+		if sym != nil && !sym.IsMutable {
+			c.add(diagAt("DTE0004", fe.Name.Span,
+				"cannot call '"+methodName+"' on immutable collection '"+id.Name+"' (use 'let mut' instead of 'let')"))
+			return false
+		}
+	}
+	return true
+}
+
 func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	name := x.Name.Name
 	var methodType types.T
 
 	switch name {
 	case "append":
-		// append(elem: T) -> void
+		// append(elem: T) -> void (MUTATION)
+		c.checkMutableCollection(x, "append")
 		methodType = types.FuncOf([]types.T{l.Elem}, types.None, false)
 	case "get":
 		// get(index: int) -> T
 		methodType = types.FuncOf([]types.T{types.Int}, l.Elem, false)
 	case "set":
-		// set(index: int, elem: T) -> void
+		// set(index: int, elem: T) -> void (MUTATION)
+		c.checkMutableCollection(x, "set")
 		methodType = types.FuncOf([]types.T{types.Int, l.Elem}, types.None, false)
 	case "len":
 		// len() -> int
 		methodType = types.FuncOf(nil, types.Int, false)
 	case "pop":
-		// pop() -> T
+		// pop() -> T (MUTATION)
+		c.checkMutableCollection(x, "pop")
 		methodType = types.FuncOf(nil, l.Elem, false)
 	case "free":
 		// free() -> void
 		methodType = types.FuncOf(nil, types.None, false)
 	case "insert":
-		// insert(index: int, elem: T) -> void
+		// insert(index: int, elem: T) -> void (MUTATION)
+		c.checkMutableCollection(x, "insert")
 		methodType = types.FuncOf([]types.T{types.Int, l.Elem}, types.None, false)
 	case "remove":
-		// remove(elem: T) -> void
+		// remove(elem: T) -> void (MUTATION)
+		c.checkMutableCollection(x, "remove")
 		methodType = types.FuncOf([]types.T{l.Elem}, types.None, false)
 	case "reverse":
-		// reverse() -> void
+		// reverse() -> void (MUTATION)
+		c.checkMutableCollection(x, "reverse")
 		methodType = types.FuncOf(nil, types.None, false)
 	case "clear":
-		// clear() -> void
+		// clear() -> void (MUTATION)
+		c.checkMutableCollection(x, "clear")
 		methodType = types.FuncOf(nil, types.None, false)
 	case "copy":
 		// copy() -> list[T]
 		methodType = types.FuncOf(nil, l, false)
 	case "extend":
-		// extend(other: list[T]) -> void
+		// extend(other: list[T]) -> void (MUTATION)
+		c.checkMutableCollection(x, "extend")
 		methodType = types.FuncOf([]types.T{l}, types.None, false)
 	case "index":
 		// index(elem: T) -> int
@@ -601,6 +637,9 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "contains":
 		// contains(elem: T) -> bool
 		methodType = types.FuncOf([]types.T{l.Elem}, types.Bool, false)
+	case "__len__":
+		// __len__() -> int
+		methodType = types.FuncOf(nil, types.Int, false)
 	case "to_str":
 		// to_str() -> str
 		methodType = types.FuncOf(nil, types.Str, false)

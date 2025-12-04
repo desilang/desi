@@ -44,7 +44,13 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
 		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, key, valPtr}})
+		// Determine type tag
+		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+		if ls.info != nil {
+			typeTag = getTypeTag(ls.info.Types[args[1]])
+		}
+
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, key, valPtr, typeTag}})
 		return nil
 
 	case "has_key":

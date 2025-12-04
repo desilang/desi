@@ -46,7 +46,13 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			t = rhs
 		}
 
-		sym := &Symbol{Name: st.Name.Name, Kind: SymVar, Type: t, Node: st}
+		sym := &Symbol{
+			Name:      st.Name.Name,
+			Kind:      SymVar,
+			Type:      t,
+			Node:      st,
+			IsMutable: st.Mutable, // Track let vs let mut
+		}
 		_ = c.scope.Define(sym)
 
 		// Enrich Info

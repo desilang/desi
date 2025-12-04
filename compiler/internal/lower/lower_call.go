@@ -131,6 +131,51 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
+	// 1.5. len() builtin
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "len" && len(x.Args) == 1 {
+			if argT := ls.info.Types[x.Args[0]]; argT != nil {
+				// Lower argument
+				argVal := ls.lowerExpr(x.Args[0])
+
+				var lenFunc string
+				retType := "i64"
+
+				// Check if it's a string type
+				if argT == types.Str {
+					lenFunc = "string_len"
+				} else if _, ok := argT.(*types.List); ok {
+					lenFunc = "list_len"
+				} else if _, ok := argT.(*types.Dict); ok {
+					lenFunc = "dict_len"
+				} else if _, ok := argT.(*types.Set); ok {
+					lenFunc = "set_len"
+				} else if cls, ok := argT.(*types.Class); ok {
+					// Check for __len__
+					if _, found := cls.Dunders["__len__"]; found {
+						lenFunc = fmt.Sprintf("%s___len__", cls.Name)
+						retType = "i32" // User methods return i32
+					}
+				}
+
+				if lenFunc != "" {
+					resTemp := ls.b.FreshTemp("len_res")
+					ls.b.Emit(&hir.Call{Dst: resTemp, Fn: lenFunc, Args: []hir.Value{argVal}, Type: retType})
+
+					if retType == "i64" {
+						// Cast to i32 (Desi int)
+						res := ls.b.FreshTemp("len")
+						ls.b.Emit(&hir.Cast{Dst: res, Src: resTemp, Type: "i32"})
+						return res
+					} else {
+						return resTemp
+					}
+				}
+			}
+		}
+	}
+
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
 	// If we have type info, check if this is print(arg) where:
 	// - arg implements Display trait, OR

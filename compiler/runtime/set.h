@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Function pointer type for element-to-string conversion
+typedef char* (*ElemToStrFunc)(void*);
+
 typedef struct set_entry {
     int64_t value;  // Store as integer for now (Tier-0)
     struct set_entry* next;
@@ -14,15 +17,17 @@ typedef struct {
     set_entry_t** buckets;
     size_t bucket_count;
     size_t entry_count;
+    ElemToStrFunc elem_to_str_fn;  // Function pointer for custom types
 } set_t;
 
 // Core operations
-set_t* set_new();
+set_t* set_new(ElemToStrFunc elem_to_str_fn);
 void set_free(set_t* s);
 void set_add(set_t* s, int64_t value);
 bool set_contains(set_t* s, int64_t value);
 void set_remove(set_t* s, int64_t value);
 void set_clear(set_t* s);
+int64_t set_len(set_t* s);
 
 // Helpers
 int64_t* set_to_array(set_t* s, size_t* out_len);

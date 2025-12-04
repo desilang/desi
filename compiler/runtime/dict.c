@@ -17,8 +17,13 @@ uint64_t dict_hash(const char* key) {
 }
 
 // Create a new dictionary
-dict_t* dict_new(size_t value_size) {
-    dict_t* d = malloc(sizeof(dict_t));
+dict_t* dict_new(size_t value_size, int type_tag, ElemToStrFunc value_to_str_fn) {
+    if (value_size == 0) {
+        fprintf(stderr, "dict_new: value_size cannot be 0\n");
+        return NULL;
+    }
+    
+    dict_t* d = (dict_t*)malloc(sizeof(dict_t));
     if (!d) return NULL;
     
     d->buckets = calloc(INITIAL_BUCKET_COUNT, sizeof(dict_entry_t*));
@@ -30,6 +35,9 @@ dict_t* dict_new(size_t value_size) {
     d->bucket_count = INITIAL_BUCKET_COUNT;
     d->entry_count = 0;
     d->value_size = value_size;
+    d->type_tag = type_tag;
+    d->value_to_str_fn = value_to_str_fn;  // Store function pointer
+    
     return d;
 }
 
@@ -53,8 +61,14 @@ void dict_free(dict_t* d) {
 }
 
 // Insert or update a key-value pair
-void dict_insert(dict_t* d, const char* key, const void* value) {
-    if (!d || !key || !value) return;
+void dict_insert(dict_t* d, const char* key, const void* value, int type_tag) {
+    if (!d || !key) return;
+    
+    // Upgrade type tag if currently Int (0) and new tag is different
+    // This handles empty dicts (initialized as 0) becoming String/Bool dicts
+    if (d->type_tag == 0 && type_tag != 0) {
+        d->type_tag = type_tag;
+    }
     
     uint64_t hash = dict_hash(key);
     size_t index = hash % d->bucket_count;
@@ -172,6 +186,7 @@ void dict_clear(dict_t* d) {
         while (entry) {
             dict_entry_t* next = entry->next;
             free(entry->key);
+            // Value is stored in entry->value buffer, freed with entry
             free(entry->value);
             free(entry);
             entry = next;
@@ -180,6 +195,10 @@ void dict_clear(dict_t* d) {
     }
     
     d->entry_count = 0;
+}
+
+int64_t dict_len(dict_t* d) {
+    return d ? (int64_t)d->entry_count : 0;
 }
 
 // Get all keys (caller must free the array)
@@ -274,18 +293,45 @@ char* dict_to_str(dict_t* d) {
             buffer[pos++] = ':';
             buffer[pos++] = ' ';
             
-            // Add value (simplified as int)
-            // Note: dict stores pointers to values, so we must dereference
-            char temp[32];
-            snprintf(temp, sizeof(temp), "%lld", (long long)*(int64_t*)entry->value);
-            size_t val_len = strlen(temp);
+            // Format key and value
+            // Format value based on type
+            char val_str[256];
+            
+            // Use function pointer if available (custom types)
+            if (d->value_to_str_fn != NULL) {
+                char* custom_str = d->value_to_str_fn(entry->value);
+                if (custom_str) {
+                    snprintf(val_str, sizeof(val_str), "%s", custom_str);
+                } else {
+                    snprintf(val_str, sizeof(val_str), "<null>");
+                }
+            } else if (d->type_tag == 1) { // String
+                // Value is char*
+                char* str_val = (char*)entry->value;
+                snprintf(val_str, sizeof(val_str), "\"%s\"", str_val ? str_val : "null");
+            } else if (d->type_tag == 2) { // Bool
+                // Value is int64_t (0 or 1)
+                int64_t bool_val = 0;
+                if (d->value_size >= sizeof(int64_t)) {
+                    memcpy(&bool_val, entry->value, sizeof(int64_t));
+                }
+                snprintf(val_str, sizeof(val_str), "%s", bool_val ? "true" : "false");
+            } else { // Int (0) or default
+                // Value is int64_t
+                int64_t int_val = 0;
+                if (d->value_size >= sizeof(int64_t)) {
+                    memcpy(&int_val, entry->value, sizeof(int64_t));
+                }
+                snprintf(val_str, sizeof(val_str), "%lld", (long long)int_val);
+            }
+            size_t val_len = strlen(val_str);
             
             while (pos + val_len >= bufsize) {
                 bufsize *= 2;
                 buffer = (char*)realloc(buffer, bufsize);
             }
             
-            memcpy(buffer + pos, temp, val_len);
+            memcpy(buffer + pos, val_str, val_len);
             pos += val_len;
             
             entry = entry->next;

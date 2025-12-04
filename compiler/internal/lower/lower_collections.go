@@ -8,12 +8,51 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// resolveToStrFunc returns the to_str function name for a type, or "NULL" for primitives
+func resolveToStrFunc(t types.T) hir.Value {
+	if t == nil {
+		return hir.Temp{Name: "NULL"}
+	}
+
+	// For primitives, use NULL (runtime will use type_tag)
+	if t == types.Int || t == types.Float || t == types.Bool || t == types.Str || t == types.None {
+		return hir.Temp{Name: "NULL"}
+	}
+
+	// For classes with to_str or __str__
+	if cls, ok := t.(*types.Class); ok {
+		// Check for __str__ first (preferred)
+		if _, found := cls.Dunders["__str__"]; found {
+			return hir.Temp{Name: "@" + cls.Name + "___str__"}
+		}
+		// Check for to_str
+		if _, found := cls.Methods["to_str"]; found {
+			return hir.Temp{Name: "@" + cls.Name + "_to_str"}
+		}
+	}
+
+	// For unknown types, use NULL
+	return hir.Temp{Name: "NULL"}
+}
+
 func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 	// Create new dict handle
 	// For Tier-0, assume value_size = sizeof(int) = 8 (64-bit)
 	res := ls.b.FreshTemp("dict")
 	valueSize := hir.ConstInt{Text: "8", Type: "i64"}
-	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{valueSize}})
+
+	// Determine type tag and to_str function
+	var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+	var toStrFunc hir.Value = hir.Temp{Name: "NULL"}
+
+	if ls.info != nil {
+		if t, ok := ls.info.Types[d].(*types.Dict); ok {
+			typeTag = getTypeTag(t.Val)
+			toStrFunc = resolveToStrFunc(t.Val)
+		}
+	}
+
+	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{valueSize, typeTag, toStrFunc}})
 
 	// Insert each key-value pair
 	for i := range d.Keys {
@@ -26,8 +65,8 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		ls.b.Emit(&hir.Alloca{Dst: valPtr, Type: "i64", Count: 1})
 		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val})
 
-		// Emit a call to dict_insert(dict, key, &value)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, valPtr}})
+		// Emit a call to dict_insert(dict, key, &value, type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, valPtr, typeTag}})
 	}
 
 	return res
@@ -62,4 +101,17 @@ func lowerType(t types.T) string {
 		return "ptr" // list struct pointer
 	}
 	return "ptr" // default
+}
+
+func getTypeTag(t types.T) hir.Value {
+	if t == nil {
+		return hir.ConstInt{Text: "0", Type: "i32"}
+	}
+	if types.Equal(t, types.Str) {
+		return hir.ConstInt{Text: "1", Type: "i32"}
+	}
+	if types.Equal(t, types.Bool) {
+		return hir.ConstInt{Text: "2", Type: "i32"}
+	}
+	return hir.ConstInt{Text: "0", Type: "i32"}
 }

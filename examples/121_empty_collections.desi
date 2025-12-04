@@ -10,6 +10,10 @@ def main():
     # Empty dict
     let empty_dict: dict[str, int] = {}
     let str_dict: dict[str, str] = {}
+    let float_dict: dict[str, float] = {}
+    let bool_dict: dict[str, bool] = {}
+    let i64_dict: dict[str, i64] = {}
+
     print("Empty dict created")
     print(empty_dict)  # Auto-calls to_str()
     
@@ -28,5 +32,23 @@ def main():
     str_dict.insert("answer", "42")
     print("Str dict after insert:")
     print(str_dict)  # Should show {answer: 42}
+
+    print("\nFloat dict before insert:")
+    print(float_dict)  # Should show {}
+    float_dict.insert("answer", 3.14)
+    print("Float dict after insert:")
+    print(float_dict)  # Should show {answer: 3.14}
+
+    print("\nBool dict before insert:")
+    print(bool_dict)  # Should show {}
+    bool_dict.insert("answer", true)
+    print("Bool dict after insert:")
+    print(bool_dict)  # Should show {answer: true}
+
+    print("\nI64 dict before insert:")
+    print(i64_dict)  # Should show {}
+    i64_dict.insert("answer", 42000000)
+    print("I64 dict after insert:")
+    print(i64_dict)  # Should show {answer: 42000000}
     
     print("Empty collections work!")
