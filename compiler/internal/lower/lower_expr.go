@@ -611,15 +611,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Create new list
 		res := ls.b.FreshTemp("list")
 
-		// Determine type tag
+		// Determine type tag and to_str function
 		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+		var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+
 		if ls.info != nil {
 			if t, ok := ls.info.Types[x].(*types.List); ok {
 				typeTag = getTypeTag(t.Elem)
+				toStrFunc = resolveToStrFunc(t.Elem)
 			}
 		}
 
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag}})
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag, toStrFunc}})
 
 		// Append elements
 		for _, e := range x.Elems {
