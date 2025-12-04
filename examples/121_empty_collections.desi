@@ -1,7 +1,7 @@
 # Example 121: Empty Collections and Auto to_str
 # Test empty list, dict initialization and automatic to_str() in print()
 
-pub def main():
+def main():
     # Empty list
     let empty_list: list[int] = []
     print("Empty list created")
@@ -9,6 +9,7 @@ pub def main():
     
     # Empty dict
     let empty_dict: dict[str, int] = {}
+    let str_dict: dict[str, str] = {}
     print("Empty dict created")
     print(empty_dict)  # Auto-calls to_str()
     
@@ -17,5 +18,15 @@ pub def main():
     empty_list.append(420)
     print("List after append:")
     print(empty_list)  # Should show [42]
+    
+    empty_dict.insert("answer", 42)
+    print("Dict after insert:")
+    print(empty_dict)  # Should show {answer: 42}
+
+    print("\nStr dict before insert:")
+    print(str_dict)  # Should show {}
+    str_dict.insert("answer", "42")
+    print("Str dict after insert:")
+    print(str_dict)  # Should show {answer: 42}
     
     print("Empty collections work!")

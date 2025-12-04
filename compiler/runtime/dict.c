@@ -81,6 +81,12 @@ void dict_insert(dict_t* d, const char* key, const void* value) {
         free(new_entry);
         return;
     }
+    new_entry->value = malloc(d->value_size);
+    if (!new_entry->value) {
+        free(new_entry->key);
+        free(new_entry);
+        return;
+    }
     memcpy(new_entry->value, value, d->value_size);
     
     // Insert at head of bucket chain
@@ -269,8 +275,9 @@ char* dict_to_str(dict_t* d) {
             buffer[pos++] = ' ';
             
             // Add value (simplified as int)
+            // Note: dict stores pointers to values, so we must dereference
             char temp[32];
-            snprintf(temp, sizeof(temp), "%lld", (long long)(intptr_t)entry->value);
+            snprintf(temp, sizeof(temp), "%lld", (long long)*(int64_t*)entry->value);
             size_t val_len = strlen(temp);
             
             while (pos + val_len >= bufsize) {

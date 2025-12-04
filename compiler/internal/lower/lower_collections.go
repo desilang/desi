@@ -12,7 +12,7 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 	// Create new dict handle
 	// For Tier-0, assume value_size = sizeof(int) = 8 (64-bit)
 	res := ls.b.FreshTemp("dict")
-	valueSize := &hir.ConstInt{Text: "8"}
+	valueSize := hir.ConstInt{Text: "8", Type: "i64"}
 	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{valueSize}})
 
 	// Insert each key-value pair

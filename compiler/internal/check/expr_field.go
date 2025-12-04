@@ -477,6 +477,9 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 		// get(key: K, default: V) -> V
 		// TODO: Make default optional?
 		methodType = types.FuncOf([]types.T{d.Key, d.Val}, d.Val, false)
+	case "insert":
+		// insert(key: K, value: V) -> none
+		methodType = types.FuncOf([]types.T{d.Key, d.Val}, types.None, false)
 	case "has_key":
 		// has_key(key: K) -> bool
 		methodType = types.FuncOf([]types.T{d.Key}, types.Bool, false)
