@@ -442,11 +442,26 @@ func Assignable(dst, src T) bool {
 		return false
 	}
 
-	// Special case: set[any] (empty set literal) is assignable to any set[T]
+	// Special case: Empty collections (list[none], dict[none, none], set[none])
+	// are assignable to any typed collection of the same kind.
+	if _, ok := dst.(*List); ok {
+		if srcList, ok := src.(*List); ok {
+			if kindOf(srcList.Elem) == NoneKind {
+				return true
+			}
+		}
+	}
+	if _, ok := dst.(*Dict); ok {
+		if srcDict, ok := src.(*Dict); ok {
+			if kindOf(srcDict.Key) == NoneKind && kindOf(srcDict.Val) == NoneKind {
+				return true
+			}
+		}
+	}
 	if _, ok := dst.(*Set); ok {
 		if srcSet, ok := src.(*Set); ok {
-			if kindOf(srcSet.Elem) == AnyKind {
-				return true // Empty set literal can be assigned to any set type
+			if kindOf(srcSet.Elem) == NoneKind || kindOf(srcSet.Elem) == AnyKind {
+				return true
 			}
 		}
 	}

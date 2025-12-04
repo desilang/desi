@@ -60,25 +60,10 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.ListLit:
 		if len(x.Elems) == 0 {
 			// Empty list: []
-			// If we have an expected type from context (e.g. let x: list[int] = []), use it.
-			// But 'typ' doesn't take context.
-			// For now, we'll return list[void] or error if we can't infer.
-			// Actually, let's return a special "unknown list" type or just list[void]
-			// and let the assignment checker handle it?
-			// Better: return list[void] (bottom type) which is compatible with any list?
-			// Or just error for now saying explicit type needed.
-			// In the test case: let nums: list[int] = [1, 2, 3]
-			// The assignment checker will check compatibility.
-			// But for [] we don't know the type.
-			// Let's assume list[int] for now or error.
-			// Real solution: Bidirectional type checking or context.
-			// For now: Error if empty without context (which we don't have here).
-			// But wait, if we are in an assignment, we might check it later.
-			// Let's return types.ListOf(types.Void) for empty list?
-			// Or maybe types.ListOf(types.Any)?
-			// Let's try to infer from elements first.
-			c.add(diagAt("DTE0005", x.Span, "empty list literals require type annotation (not yet supported)"))
-			return nil
+			// Return list[none] which is assignable to any list[T]
+			t := types.ListOf(types.None)
+			c.info.Types[x] = t
+			return t
 		}
 
 		// Infer element type from first element
@@ -106,11 +91,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return t
 
 	case *ast.DictLit:
-		// Empty dict requires type annotation (deferred for now)
+		// Empty dict: {}
 		if len(x.Keys) == 0 {
-			// For now, return error - require type annotation for empty dicts
-			c.add(diagAt("DTE0004", x.Span, "empty dict literals require type annotation (not yet supported)"))
-			return nil
+			// Return dict[none, none] which is assignable to any dict[K, V]
+			t := types.DictOf(types.None, types.None)
+			c.info.Types[x] = t
+			return t
 		}
 
 		// Infer key type from first key
@@ -157,7 +143,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		// So SetLit here implies non-empty or we might have explicit syntax later.
 		// Actually, parser returns DictLit for empty {}.
 		if len(x.Elems) == 0 {
-			t := types.SetOf(types.Any)
+			t := types.SetOf(types.None)
 			c.info.Types[x] = t
 			return t
 		}

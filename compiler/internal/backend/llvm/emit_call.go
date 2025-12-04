@@ -275,7 +275,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
-	if c.Dst.Name != "" {
+	if c.Dst.Name != "" && ret != "void" {
 		dst := c.Dst.String()
 		// Use ABI layer to get explicit call syntax if needed
 		abiInfo := abi.Current()
