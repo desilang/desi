@@ -17,7 +17,6 @@ def main():
     
     people.append(Person("Alice"))
     people.append(Person("Bob"))
-    people.append(Person(1)) 
     
     print("People list:")
     print(people)  # Should print: [Person(Alice), Person(Bob)]
