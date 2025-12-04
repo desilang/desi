@@ -4,16 +4,16 @@ class Person:
     pub name: str
     pub age: int
     
-    fn __init__(self, name: str, age: int):
+    pub fn __init__(self, name: str, age: int):
         self.name = name
         self.age = age
     
-    fn to_str(self) -> str:
+    pub fn to_str(self) -> str:
         return self.name
 
-func main() {
+def main():
     # Create a list of custom objects
-    let people = []
+    let mut people = []
     
     let p1 = Person("Alice", 30)
     let p2 = Person("Bob", 25)
@@ -31,10 +31,9 @@ func main() {
         print(person.to_str())
     
     # The limitation: dict with custom classes
-    let people_map = {}
+    let mut people_map = {}
     people_map.insert("alice", p1)
     people_map.insert("bob", p2)
     
     print("\nPeople dict:")
     print(people_map)  # This will also print raw addresses
-}
