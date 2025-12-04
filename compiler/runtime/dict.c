@@ -306,8 +306,8 @@ char* dict_to_str(dict_t* d) {
                     snprintf(val_str, sizeof(val_str), "<null>");
                 }
             } else if (d->type_tag == 1) { // String
-                // Value is char*
-                char* str_val = (char*)entry->value;
+                // Value is char* (pointer to string)
+                char* str_val = *(char**)entry->value;
                 snprintf(val_str, sizeof(val_str), "\"%s\"", str_val ? str_val : "null");
             } else if (d->type_tag == 2) { // Bool
                 // Value is int64_t (0 or 1)
@@ -316,6 +316,13 @@ char* dict_to_str(dict_t* d) {
                     memcpy(&bool_val, entry->value, sizeof(int64_t));
                 }
                 snprintf(val_str, sizeof(val_str), "%s", bool_val ? "true" : "false");
+            } else if (d->type_tag == 3) { // Float
+                // Value is double
+                double float_val = 0.0;
+                if (d->value_size >= sizeof(double)) {
+                    memcpy(&float_val, entry->value, sizeof(double));
+                }
+                snprintf(val_str, sizeof(val_str), "%g", float_val);
             } else { // Int (0) or default
                 // Value is int64_t
                 int64_t int_val = 0;

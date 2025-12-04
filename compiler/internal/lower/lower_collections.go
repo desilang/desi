@@ -113,5 +113,8 @@ func getTypeTag(t types.T) hir.Value {
 	if types.Equal(t, types.Bool) {
 		return hir.ConstInt{Text: "2", Type: "i32"}
 	}
+	if types.Equal(t, types.Float) {
+		return hir.ConstInt{Text: "3", Type: "i32"}
+	}
 	return hir.ConstInt{Text: "0", Type: "i32"}
 }

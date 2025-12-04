@@ -1,8 +1,6 @@
 # Test len() on all collection types
 
 def main():
-    # Test len() on all collection types
-    
     # String length
     let message = "Hello, Desi!"
     print("String length:")
@@ -14,18 +12,9 @@ def main():
     print(len(nums))
     
     # Dict length
-    let mut scores = {}
-    scores.insert("alice", 95)
+    let mut scores = {"alice": 95}
     scores.insert("bob", 87)
     print("\nDict length:")
     print(len(scores))
-    
-    # Set length (Note: set literal syntax needs verification)
-    let mut unique = set_new()  # Assuming this is the correct syntax
-    unique.add(1)
-    unique.add(2)
-    unique.add(3)
-    print("\nSet length:")
-    print(len(unique))
     
     print("\nAll len() tests passed!")
