@@ -1,0 +1,12 @@
+# Simple collection mutation test
+
+def main():
+    let mut xs = [1, 2, 3]
+    xs.append(4)
+    print(xs)
+    
+    let mut scores = {"alice": 95}
+    scores.insert("bob", 87)
+    print(scores)
+    
+    print("Test passed!")

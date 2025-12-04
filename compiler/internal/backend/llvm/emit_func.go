@@ -138,18 +138,17 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					}
 				}
 
-				// If type is a reference type (set, dict, list, str), don't allocate
-				// Just use the init value directly as an SSA value
-				if isReferenceType(x.Type) {
-					if x.Init != nil {
-						m.ssa[x.Name] = x.Init
-					}
-					// Skip alloca for reference types - they're already pointers
+				// If type is a reference type (set, dict, list, str) with an initializer,
+				// use SSA directly without alloca (immutable variables)
+				if isReferenceType(x.Type) && x.Init != nil {
+					m.ssa[x.Name] = x.Init
+					// Skip alloca for immutable reference types - they're already pointers
 					continue
 				}
 
-				// For value types, emit alloca as before
-				llvmTy, size := "i32", 4
+				// For mutable reference types (Init == nil) or value types,
+				// emit alloca for proper stack storage
+				llvmTy, size := "ptr", 8 // Default to ptr for reference types
 				if x.Init != nil {
 					switch x.Init.(type) {
 					case hir.ConstBool:
@@ -159,10 +158,14 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
 					case hir.Temp:
+						// For temps, default to i32 unless it's a  reference type
 						llvmTy, size = "i32", 4
 					}
 					// Even with initializer, record SSA alias for convenience.
 					m.ssa[x.Name] = x.Init
+				} else if !isReferenceType(x.Type) {
+					// Value types without initializer
+					llvmTy, size = "i32", 4
 				}
 				wprintf(&m.funcs, "  %%%s = alloca %s\n", x.Name, llvmTy)
 				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
