@@ -208,6 +208,10 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		if ali, ok := m.ssa[t.Name]; ok {
 			return m.operand(ali)
 		}
+		// Global functions/variables start with @, don't add % prefix
+		if strings.HasPrefix(t.Name, "@") {
+			return "ptr", t.Name
+		}
 		// Check if we have type info for this variable (including function parameters)
 		ty := m.inferType(t.Name)
 		return ty, "%" + t.Name

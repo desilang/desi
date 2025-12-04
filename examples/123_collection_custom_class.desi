@@ -3,17 +3,17 @@
 class Person:
     pub name: str
     
-    fn __init__(self, name: str):
+    pub def __new__(self, name: str):
         self.name = name
     
-    fn to_str(self) -> str:
+    pub def __str__(self) -> str:
         return self.name
 
 def main():
     let p1 = Person("Alice")
     let p2 = Person("Bob")
     
-    let mut people: list[Person] = [p1]
+    let mut people = [p1]
     people.append(p2)
     
     print("People list:")
@@ -22,6 +22,6 @@ def main():
     print("\nManual iteration:")
     for i in range(0, len(people)):
         let person = people.get(i)
-        print(person.to_str())
+        print(person)
     
     print("\nTest passed!")
