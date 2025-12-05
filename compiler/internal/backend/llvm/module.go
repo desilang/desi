@@ -286,6 +286,11 @@ func (m *Module) ptrOperand(v hir.Value) string {
 	case hir.Temp:
 		return fmt.Sprintf("ptr %s", t.Name)
 	case hir.ConstStr:
+		// Special case: "null" should be emitted as null pointer, not string literal
+		if t.Text == "null" {
+			return "ptr null"
+		}
+		// Otherwise, normal string constant
 		g, n := m.ensureCStringGlobal(t.Text, true)
 		return fmt.Sprintf("ptr getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
 	case hir.Var:
