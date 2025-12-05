@@ -1,0 +1,25 @@
+# Test Result<T, E> type
+
+# Result<T, E> = Ok(T) | Err(E)
+
+def main() -> int:
+    # Test Result<int, str>
+    let x: Result<int, str> = Result.Ok(100)
+    
+    match x:
+        Result.Ok(v): print(f"Success: {v}")
+        Result.Err(e): print(f"Error: {e}")
+    
+    if x.is_ok():
+        print(f"Unwrapped Ok: {x.unwrap()}")
+    
+    let y: Result<int, str> = Result.Err("Something went wrong")
+    
+    match y:
+        Result.Ok(v): print(f"Success: {v}")
+        Result.Err(e): print(f"Error: {e}")
+        
+    if y.is_err():
+        print(f"Unwrapped Err: {y.unwrap_err()}")
+        
+    return 0

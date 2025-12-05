@@ -538,6 +538,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerCall(x)
 
 	case *ast.FieldExpr:
+		// Special handling for Option/Result variants accessed as fields (e.g. Option.Nothing)
+		if id, ok := x.X.(*ast.Ident); ok {
+			if id.Name == "Option" || id.Name == "Result" {
+				// Treat as constructor call (e.g. Option.Nothing())
+				// This handles unit variants like Option.Nothing being used as values.
+				ctorName := fmt.Sprintf("%s.%s", id.Name, x.Name.Name)
+				dst := ls.b.FreshTemp("enum_ctor")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: ctorName, Args: []hir.Value{}, Type: "ptr"})
+				return dst
+			}
+		}
+
 		// Check for Class Constant access (ClassName.CONST)
 		if ls.info != nil {
 			if id, ok := x.X.(*ast.Ident); ok {

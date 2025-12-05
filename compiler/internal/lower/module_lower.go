@@ -61,6 +61,19 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 		}
 	}
 
+	// Generate constructors for built-in Option and Result types.
+	// These are generated unconditionally for now; later we could analyze usage.
+	// We generate them once using "str" as the placeholder type because it lowers to "ptr".
+	// This matches the type erasure strategy where generic enum constructors take "ptr".
+
+	// Option<T> has variants: Some(T), Nothing
+	optionGeneric := types.OptionOf(types.Str)
+	out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Option", optionGeneric)...)
+
+	// Result<T, E> has variants: Ok(T), Err(E)
+	resultGeneric := types.ResultOf(types.Str, types.Str)
+	out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Result", resultGeneric)...)
+
 	// Generate constructors and methods for class declarations
 	for _, d := range mod.Decls {
 		if cd, ok := d.(*ast.ClassDecl); ok {

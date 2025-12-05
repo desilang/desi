@@ -130,3 +130,107 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 
 	return funcs
 }
+
+// LowerEnumConstructorsFromType generates constructor functions from a types.Enum directly.
+// Used for built-in enums like Option<T> and Result<T,E> that don't have AST declarations.
+func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func {
+	var funcs []*hir.Func
+
+	for i, variant := range et.Variants {
+		funcName := enumName + "." + variant.Name
+
+		// Build parameter list (if variant has payload)
+		var params []hir.Param
+		if len(variant.Fields) > 0 {
+			field := variant.Fields[0]
+			llvmType := lowerType(field.Type)
+			params = append(params, hir.Param{
+				Name: "value",
+				Type: llvmType,
+			})
+		}
+
+		// Create function
+		b := hir.NewFunc(funcName)
+		b.Func().Params = params
+		b.Func().RetType = "ptr" // Return pointer to enum
+
+		entry := hir.NewBlock("entry")
+
+		// Allocate enum struct: 12 bytes (4 for i32 tag + 8 for ptr payload)
+		enumPtr := hir.Temp{Name: "%enum_ptr"}
+		entry.Stmts = append(entry.Stmts, &hir.Call{
+			Dst:  enumPtr,
+			Fn:   "malloc",
+			Args: []hir.Value{hir.ConstInt{Text: "12"}},
+			Type: "ptr",
+		})
+
+		// Store tag at offset 0
+		tagPtr := hir.Temp{Name: "%tag_ptr"}
+		entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
+			Type:    "i8",
+			Base:    enumPtr,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		entry.Stmts = append(entry.Stmts, &hir.Store{
+			Dst: tagPtr,
+			Val: hir.ConstInt{Text: fmt.Sprintf("%d", i)}, // Tag value
+		})
+
+		// Handle payload
+		if len(variant.Fields) > 0 {
+			field := variant.Fields[0]
+			payloadSize := getSize(field.Type)
+
+			payloadPtr := hir.Temp{Name: "%payload_ptr"}
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Dst:  payloadPtr,
+				Fn:   "malloc",
+				Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", payloadSize)}},
+				Type: "ptr",
+			})
+
+			// Store the value to payload
+			entry.Stmts = append(entry.Stmts, &hir.Store{
+				Dst: payloadPtr,
+				Val: hir.Var{Name: "value"},
+			})
+
+			// Store payload pointer at offset 4
+			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
+			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
+				Type:    "i8",
+				Base:    enumPtr,
+				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Dst:     payloadPtrSlot,
+			})
+			entry.Stmts = append(entry.Stmts, &hir.Store{
+				Dst: payloadPtrSlot,
+				Val: payloadPtr,
+			})
+		} else {
+			// Unit variant: set payload to null
+			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
+			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
+				Type:    "i8",
+				Base:    enumPtr,
+				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Dst:     payloadPtrSlot,
+			})
+			entry.Stmts = append(entry.Stmts, &hir.Store{
+				Dst: payloadPtrSlot,
+				Val: hir.ConstInt{Text: "0"},
+			})
+		}
+
+		// Return enum pointer
+		entry.Stmts = append(entry.Stmts, &hir.Ret{Val: enumPtr})
+
+		b.Func().Blocks = []*hir.Block{entry}
+		funcs = append(funcs, b.Func())
+	}
+
+	return funcs
+}

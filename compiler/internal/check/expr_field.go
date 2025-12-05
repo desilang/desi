@@ -640,3 +640,67 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	c.info.Types[x] = methodType
 	return methodType
 }
+
+func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	// Get T from Option<T>
+	elemType := types.OptionSomeType(t)
+	if elemType == nil {
+		// Should not happen if IsOption(t) is true
+		elemType = types.Any // Fallback
+	}
+
+	switch name {
+	case "is_some", "is_none", "is_nothing":
+		// () -> bool
+		methodType = types.FuncOf(nil, types.Bool, false)
+	case "unwrap":
+		// () -> T
+		methodType = types.FuncOf(nil, elemType, false)
+	case "unwrap_or":
+		// (default: T) -> T
+		methodType = types.FuncOf([]types.T{elemType}, elemType, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	// Get T and E from Result<T, E>
+	okType := types.ResultOkType(t)
+	errType := types.ResultErrType(t)
+
+	if okType == nil {
+		okType = types.Any
+	}
+	if errType == nil {
+		errType = types.Any
+	}
+
+	switch name {
+	case "is_ok", "is_err":
+		// () -> bool
+		methodType = types.FuncOf(nil, types.Bool, false)
+	case "unwrap":
+		// () -> T
+		methodType = types.FuncOf(nil, okType, false)
+	case "unwrap_err":
+		// () -> E
+		methodType = types.FuncOf(nil, errType, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
