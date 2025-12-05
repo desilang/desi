@@ -13,5 +13,10 @@ def main() -> int:
     
     print(f"Middle element: {val}")
     
-    # Should return 5 (middle element)
-    return val
+    # Verify correctness (should be 5)
+    if val != 5:
+        print("ERROR: val should be 5")
+        return 1
+        
+    print("Nested list test passed!")
+    return 0

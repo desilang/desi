@@ -6,5 +6,13 @@ def main() -> int:
     
     print(f"first: {first}, second: {second}")
     
-    # Should return 30 (sum of 10 + 20)
-    return first + second
+    let sum: int = first + second
+    print(f"Sum: {sum}")
+    
+    # Verify correctness (should be 30)
+    if sum != 30:
+        print("ERROR: sum should be 30")
+        return 1
+        
+    print("List arithmetic test passed!")
+    return 0

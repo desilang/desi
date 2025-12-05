@@ -18,5 +18,10 @@ def main() -> int:
     
     print(f"First point x: {x_val}")
     
-    # Should return 10
-    return x_val
+    # Verify correctness (should be 10)
+    if x_val != 10:
+        print("ERROR: x_val should be 10")
+        return 1
+        
+    print("List structs test passed!")
+    return 0

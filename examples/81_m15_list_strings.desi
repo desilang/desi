@@ -7,5 +7,10 @@ def main() -> int:
     
     print(f"Count: {count}")
     
-    # Should return 4
-    return count
+    # Verify correctness (should be 4)
+    if count != 4:
+        print("ERROR: count should be 4")
+        return 1
+        
+    print("List strings test passed!")
+    return 0
