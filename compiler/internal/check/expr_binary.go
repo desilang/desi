@@ -59,7 +59,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	}
 
 	switch op {
-	case "+", "-", "*", "/", "%", "**":
+	case "+", "-", "*", "/", "%", "**", "|", "&", "^", "<<", ">>":
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
@@ -81,6 +81,16 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 					dunder = "__mod__"
 				case "**":
 					dunder = "__pow__"
+				case "|":
+					dunder = "__or__"
+				case "&":
+					dunder = "__and__"
+				case "^":
+					dunder = "__xor__"
+				case "<<":
+					dunder = "__lshift__"
+				case ">>":
+					dunder = "__rshift__"
 				}
 
 				if dunder != "" {
@@ -170,45 +180,26 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		}
 
 		// Floats: require same width (f32 with f32; f64/float with f64/float)
-		if lw, lok := floatInfo(lt); lok {
-			if rw, rok := floatInfo(rt); rok {
-				if lw != rw {
-					c.add(diagAt("DNT0001", x.Span, ""))
-					return nil
+		// Bitwise operators are NOT allowed on floats
+		if op != "|" && op != "&" && op != "^" && op != "<<" && op != ">>" {
+			if lw, lok := floatInfo(lt); lok {
+				if rw, rok := floatInfo(rt); rok {
+					if lw != rw {
+						c.add(diagAt("DNT0001", x.Span, ""))
+						return nil
+					}
+					if lw == 32 {
+						c.info.Types[x] = types.F32
+						return types.F32
+					}
+					c.info.Types[x] = types.Float // f64 alias
+					return types.Float
 				}
-				if lw == 32 {
-					c.info.Types[x] = types.F32
-					return types.F32
-				}
-				c.info.Types[x] = types.Float // f64 alias
-				return types.Float
 			}
 		}
 
 		// Any other combination is invalid for now.
 		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
-		return nil
-
-	case "|", "&", "^":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-		// Keep legacy behavior: bitwise ops require plain 'int'
-		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
-			c.info.Types[x] = types.Int
-			return types.Int
-		}
-		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
-		return nil
-
-	case "<<", ">>":
-		lt := c.typ(x.Lhs)
-		rt := c.typ(x.Rhs)
-		// Keep legacy behavior: shifts require plain 'int'
-		if types.Equal(lt, types.Int) && types.Equal(rt, types.Int) {
-			c.info.Types[x] = types.Int
-			return types.Int
-		}
-		c.add(diagAt("DTE0004", x.Span, "bitwise operators require int operands"))
 		return nil
 
 	case "|>":

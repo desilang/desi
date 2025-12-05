@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -196,6 +197,9 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.UnaryExpr:
 		t := c.typ(x.X)
+		fmt.Fprintf(os.Stderr, "DEBUG: checkUnary op=%s type=%s goType=%T\n", x.Op, t, t)
+
+		// Handle unary operators with dunder support
 		if x.Op == "await" {
 			if ft, ok := t.(*types.Future); ok {
 				c.info.Types[e] = ft.Elem
@@ -204,19 +208,78 @@ func (c *checker) typ(e ast.Expr) types.T {
 			c.add(diagAt("DTE0004", x.Span, "invalid unary 'await'"))
 			return nil
 		}
-		if x.Op == "-" {
-			if types.Equal(t, types.Int) || types.Equal(t, types.Float) {
-				c.info.Types[e] = t
-				return t
-			}
-		}
+
+		// Boolean negation
 		if x.Op == "!" || x.Op == "not" {
+			// TODO: Support __bool__ or truthiness for custom types?
+			// For now, require bool.
 			if types.Equal(t, types.Bool) {
 				c.info.Types[e] = types.Bool
 				return types.Bool
 			}
+			c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"' on type '"+t.String()+"' (expected bool)"))
+			return nil
 		}
-		c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"'"))
+
+		// Arithmetic/Bitwise unary operators: -, +, ~
+		// 1. Check for dunder methods on custom types
+		if cls, ok := t.(*types.Class); ok {
+			var method string
+			switch x.Op {
+			case "-":
+				method = "__neg__"
+			case "+":
+				method = "__pos__"
+			case "~":
+				method = "__invert__"
+			}
+
+			if method != "" {
+				// Lookup method (including inherited)
+				curr := cls
+				var m *types.Func
+				for curr != nil {
+					// Check Dunders map first
+					if found, ok := curr.Dunders[method]; ok {
+						m = found
+						break
+					}
+					// Also check Methods map just in case (though checkClass separates them)
+					if found, ok := curr.Methods[method]; ok {
+						m = found
+						break
+					}
+					curr = curr.Base
+				}
+
+				if m != nil {
+					// Check return type of dunder
+					c.info.Types[e] = m.Ret
+					return m.Ret
+				}
+			}
+		}
+
+		// 2. Fallback to primitive types
+		switch x.Op {
+		case "-":
+			if types.Equal(t, types.Int) || types.Equal(t, types.Float) {
+				c.info.Types[e] = t
+				return t
+			}
+		case "+":
+			if types.Equal(t, types.Int) || types.Equal(t, types.Float) {
+				c.info.Types[e] = t
+				return t
+			}
+		case "~":
+			if types.Equal(t, types.Int) {
+				c.info.Types[e] = t
+				return t
+			}
+		}
+
+		c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"' on type '"+t.String()+"'"))
 		return nil
 
 	case *ast.BinaryExpr:

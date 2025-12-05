@@ -2,6 +2,7 @@ package lower
 
 import (
 	"fmt"
+	"os"
 	"strconv"
 	"strings"
 
@@ -405,7 +406,59 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: x.Name}
 
 	case *ast.UnaryExpr:
-		// Await (async) is the only unary we lower in Tier-0.
+		// 1. Check for dunder methods on custom types
+		if ls.info != nil {
+			if t := ls.info.Types[x.X]; t != nil {
+				if cls, ok := t.(*types.Class); ok {
+					var method string
+					switch x.Op {
+					case "-":
+						method = "__neg__"
+					case "+":
+						method = "__pos__"
+					case "~":
+						method = "__invert__"
+					}
+
+					if method != "" {
+						// Check if method exists (checker already verified this, but good to be safe)
+						// We need to find the method to get its mangled name or just use lowerCall logic?
+						// Actually, we can construct a CallExpr and lower it, OR manually emit the call.
+						// Constructing a CallExpr is easier as it reuses lowerCall logic (mangling, self passing, etc.)
+						// But we are in lowerExpr, we can just call ls.lowerMethodCall?
+						// ls.lowerMethodCall takes a CallExpr.
+						// Let's manually construct the HIR call.
+
+						// Resolve method to get mangled name
+						// Inline mangling: ClassName_MethodName
+						mangled := fmt.Sprintf("%s_%s", cls.Name, method)
+
+						// Lower receiver
+						recv := ls.lowerExpr(x.X)
+
+						// Emit Call
+						dst := ls.b.FreshTemp("unary_res")
+
+						// We need the return type for the call instruction
+						retType := "void"
+						// Try to get return type from checker info
+						if retT := ls.info.Types[x]; retT != nil {
+							retType = lowerType(retT)
+						}
+
+						ls.b.Emit(&hir.Call{
+							Dst:  dst,
+							Fn:   mangled,
+							Args: []hir.Value{recv},
+							Type: retType,
+						})
+						return dst
+					}
+				}
+			}
+		}
+
+		// 2. Primitive / Builtin handling
 		if x.Op == "await" {
 			// await <expr>
 			dst := ls.b.FreshTemp("await")
@@ -428,10 +481,6 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			var zero hir.Value
 			if typ == "double" || typ == "float" {
 				zero = hir.ConstFloat{Text: "0.0"}
-				// BinaryOp lowering handles operator mapping, but we might need explicit opcode if we want fsub
-				// Actually, BinaryOp lowering maps "-" to "sub". We need to update BinaryOp lowering to handle floats too!
-				// For now, let's assume BinaryOp lowering will be fixed to handle floats.
-				// Wait, BinaryOp lowering maps "-" to "sub" unconditionally.
 			} else {
 				zero = hir.ConstInt{Text: "0"}
 			}
@@ -440,6 +489,30 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				Op:   "-",
 				LHS:  zero,
 				RHS:  val,
+				Dst:  dst,
+				Type: typ,
+			})
+			return dst
+		} else if x.Op == "+" {
+			// Unary plus: +x -> x (no-op for primitives)
+			return ls.lowerExpr(x.X)
+		} else if x.Op == "~" {
+			// Bitwise NOT: ~x -> x ^ -1
+			val := ls.lowerExpr(x.X)
+			dst := ls.b.FreshTemp("not")
+
+			// Assume integer for now (checker enforces it)
+			typ := "i64"
+			if ls.info != nil {
+				if t := ls.info.Types[x]; t != nil {
+					typ = lowerType(t)
+				}
+			}
+
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "^",
+				LHS:  val,
+				RHS:  hir.ConstInt{Text: "-1"},
 				Dst:  dst,
 				Type: typ,
 			})
@@ -676,6 +749,16 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						dunder = "__mod__"
 					case "**":
 						dunder = "__pow__"
+					case "&":
+						dunder = "__and__"
+					case "|":
+						dunder = "__or__"
+					case "^":
+						dunder = "__xor__"
+					case "<<":
+						dunder = "__lshift__"
+					case ">>":
+						dunder = "__rshift__"
 					case "==":
 						dunder = "__eq__"
 					case "!=":
@@ -729,6 +812,106 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Lower binary expressions: arithmetic (+, -, *, /, %, **) and comparisons (<, >, <=, >=, ==, !=)
 		lhs := ls.lowerExpr(x.Lhs)
 		rhs := ls.lowerExpr(x.Rhs)
+
+		// Check for operator overloading
+		if ls.info != nil {
+			cand := ls.info.BinOpOverloads[x]
+			if cand != nil {
+				// Dispatch to dunder method
+				// We need to find the class that defined this method to get the correct mangled name
+				lhsT := ls.info.Types[x.Lhs]
+				if cls, ok := lhsT.(*types.Class); ok {
+					// Map operator to dunder name
+					var method string
+					switch x.Op {
+					case "+":
+						method = "__add__"
+					case "-":
+						method = "__sub__"
+					case "*":
+						method = "__mul__"
+					case "/":
+						method = "__div__"
+					case "%":
+						method = "__mod__"
+					case "**":
+						method = "__pow__"
+					case "|":
+						method = "__or__"
+					case "&":
+						method = "__and__"
+					case "^":
+						method = "__xor__"
+					case "<<":
+						method = "__lshift__"
+					case ">>":
+						method = "__rshift__"
+					case "==":
+						method = "__eq__"
+					case "!=":
+						method = "__ne__" // Special handling: might be __eq__ negated
+					case "<":
+						method = "__lt__"
+					case "<=":
+						method = "__le__"
+					case ">":
+						method = "__gt__"
+					case ">=":
+						method = "__ge__"
+					}
+
+					// Handle != fallback to __eq__
+					negateResult := false
+					if x.Op == "!=" && method == "__ne__" {
+						// Check if __ne__ actually exists in the candidate
+						// The candidate type should match what we found in check
+						// But check might have fallen back to __eq__
+						// If the candidate matches __eq__, then we negate
+						if eqMethod, ok := cls.Dunders["__eq__"]; ok && eqMethod == cand.Type {
+							method = "__eq__"
+							negateResult = true
+						}
+					}
+
+					if method != "" {
+						// Find defining class
+						targetCls := cls
+						for targetCls.Base != nil {
+							if baseMethod, ok := targetCls.Base.Dunders[method]; ok && baseMethod == cand.Type {
+								targetCls = targetCls.Base
+							} else {
+								break
+							}
+						}
+						mangled := fmt.Sprintf("%s_%s", targetCls.Name, method)
+						fmt.Fprintf(os.Stderr, "DEBUG lowerBinary: op=%s method=%s mangled=%s\n", x.Op, method, mangled)
+
+						// Emit Call
+						dst := ls.b.FreshTemp("binop_call")
+						ls.b.Emit(&hir.Call{
+							Dst:  dst,
+							Fn:   mangled,
+							Args: []hir.Value{lhs, rhs},
+						})
+
+						if negateResult {
+							// Emit not
+							notDst := ls.b.FreshTemp("ne_res")
+							ls.b.Emit(&hir.BinaryOp{
+								Op:   "==",
+								LHS:  dst,
+								RHS:  hir.ConstBool{Value: false},
+								Dst:  notDst,
+								Type: "i1",
+							})
+							return notDst
+						}
+
+						return dst
+					}
+				}
+			}
+		}
 
 		// Determine result type based on operation
 		var resultType string

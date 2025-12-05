@@ -6,24 +6,11 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
-// Expression precedence (highest to lowest):
-//
-//	** (right-assoc)
-//	unary (- ! not await)
-//	* / %
-//	+ -
-//	^
-//	|           <-- inserted in M2 (bitwise OR)
-//	< <= > >=
-//	== !=
-//	|>          (pipe)
-//	and
-//	or
-//
-// Notes:
-//   - Postfix chain (call/index/field) remains greedy.
-//   - StrLit.Long is set when the lexer produces LONGSTR ("""...""").
-func (p *Parser) parseExpr() ast.Expr { return p.parseOr() }
+// ...
+
+func (p *Parser) parseExpr() ast.Expr {
+	return p.parseOr()
+}
 
 func (p *Parser) parseOr() ast.Expr {
 	e := p.parseAnd()
@@ -107,12 +94,34 @@ func (p *Parser) parseBitOr() ast.Expr {
 }
 
 func (p *Parser) parseXor() ast.Expr {
-	e := p.parseAdd()
+	e := p.parseBitAnd()
 	for p.cur.Tok == token.XOR {
 		op := p.cur
 		p.next()
-		r := p.parseAdd()
+		r := p.parseBitAnd()
 		e = &ast.BinaryExpr{Op: "^", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseBitAnd() ast.Expr {
+	e := p.parseShift()
+	for p.cur.Tok == token.AMP {
+		op := p.cur
+		p.next()
+		r := p.parseShift()
+		e = &ast.BinaryExpr{Op: "&", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
+	}
+	return e
+}
+
+func (p *Parser) parseShift() ast.Expr {
+	e := p.parseAdd()
+	for p.cur.Tok == token.LSHIFT || p.cur.Tok == token.RSHIFT {
+		op := p.cur
+		p.next()
+		r := p.parseAdd()
+		e = &ast.BinaryExpr{Op: op.Lexeme, Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
 	}
 	return e
 }
@@ -157,11 +166,21 @@ func (p *Parser) parseUnary() ast.Expr {
 		p.next()
 		x := p.parseUnary()
 		return &ast.UnaryExpr{Op: "-", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.PLUS:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "+", X: x, Span: joinTok(p.file, op, p.cur)}
 	case token.BANG:
 		op := p.cur
 		p.next()
 		x := p.parseUnary()
 		return &ast.UnaryExpr{Op: "!", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.TILDE:
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "~", X: x, Span: joinTok(p.file, op, p.cur)}
 	case token.KW_not:
 		op := p.cur
 		p.next()

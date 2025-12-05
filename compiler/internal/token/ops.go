@@ -7,6 +7,8 @@ var operators = []struct {
 }{
 	// 3-char first
 	{"**=", POW_EQ},
+	{"<<=", LSHIFT_EQ},
+	{">>=", RSHIFT_EQ},
 
 	// 2-char
 	{":=", DECLARE},
@@ -20,6 +22,10 @@ var operators = []struct {
 	{"/=", SLASH_EQ},
 	{"%=", PERCENT_EQ},
 	{"^=", XOR_EQ},
+	{"&=", AMP_EQ},
+	{"|=", PIPE_EQ},
+	{"<<", LSHIFT},
+	{">>", RSHIFT},
 	{"**", POW},
 	{"|>", PIPE_GT},
 	{"->", ARROW},
@@ -37,6 +43,8 @@ var operators = []struct {
 	{"!", BANG},
 	{"|", PIPE},
 	{"^", XOR},
+	{"&", AMP},
+	{"~", TILDE},
 	{"(", LPAREN},
 	{")", RPAREN},
 	{"[", LBRACK},
@@ -56,7 +64,8 @@ func IsOperator(t Token) bool {
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT,
 		PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
 		POW, POW_EQ, XOR, XOR_EQ,
-		EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW:
+		EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW,
+		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ:
 		return true
 	default:
 		return false

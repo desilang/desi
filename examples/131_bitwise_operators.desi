@@ -1,0 +1,46 @@
+
+class Bitwise:
+    pub val: int
+    pub def __new__(self, v: int):
+        self.val = v
+
+    pub def __and__(self, other: Bitwise) -> int:
+        print("calling __and__")
+        return self.val & other.val
+
+    pub def __or__(self, other: Bitwise) -> int:
+        print("calling __or__")
+        return self.val | other.val
+
+    pub def __xor__(self, other: Bitwise) -> int:
+        print("calling __xor__")
+        return self.val ^ other.val
+
+    pub def __lshift__(self, other: Bitwise) -> int:
+        print("calling __lshift__")
+        return self.val << other.val
+
+    pub def __rshift__(self, other: Bitwise) -> int:
+        print("calling __rshift__")
+        return self.val >> other.val
+
+def main():
+    print("--- Primitives ---")
+    let a = 12 # 1100
+    let b = 10 # 1010
+    print("12 & 10: " + str(a & b))   # 1000 = 8
+    print("12 | 10: " + str(a | b))   # 1110 = 14
+    print("12 ^ 10: " + str(a ^ b))   # 0110 = 6
+    print("12 << 1: " + str(a << 1))  # 11000 = 24
+    print("12 >> 1: " + str(a >> 1))  # 0110 = 6
+
+    print("\n--- Custom Class ---")
+    let x = Bitwise(12)
+    let y = Bitwise(10)
+    let z = Bitwise(1)
+
+    print("x & y: " + str(x & y))
+    print("x | y: " + str(x | y))
+    print("x ^ y: " + str(x ^ y))
+    print("x << z: " + str(x << z))
+    print("x >> z: " + str(x >> z))
