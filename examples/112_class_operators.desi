@@ -1,6 +1,6 @@
 class Vector:
-    pub x: float
-    pub y: float
+    pub mut x: float
+    pub mut y: float
     
     pub def __add__(self, other: Vector) -> Vector:
         let v = Vector()

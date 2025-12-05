@@ -1,5 +1,5 @@
 class Animal:
-    pub name: str
+    pub mut name: str
     
     @abstract
     pub def speak(self) -> str:
@@ -13,7 +13,7 @@ class Animal:
     
 
 class Dog(Animal):
-    pub breed: str
+    pub mut breed: str
     
     # Must implement all abstract methods from Animal
     pub def speak(self) -> str:
@@ -23,7 +23,7 @@ class Dog(Animal):
         return "Running on four legs"
 
 class Cat(Animal):
-    pub color: str
+    pub mut color: str
     
     # Must implement all abstract methods
     pub def speak(self) -> str:

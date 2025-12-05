@@ -1,6 +1,6 @@
 class Point:
-    pub x: int
-    pub y: int
+    pub mut x: int
+    pub mut y: int
     
     pub def __copy__(self) -> Point:
         let p = Point()
