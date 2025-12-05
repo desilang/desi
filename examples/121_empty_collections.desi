@@ -1,22 +1,54 @@
-# Example 121: Empty Collections - Simplified to avoid compiler bug
+# Example 121: Empty Collections and Auto to_str
+# Test empty list, dict initialization and automatic to_str() in print()
 
 def main():
-    # Test with non-empty initialization
-    let mut nums = [42]
-    print("List with one element:")
-    print(nums)
+    # Empty list
+    let mut empty_list: list[int] = []
+    print("Empty list created")
+    print(empty_list)  # Auto-calls to_str()
     
-    nums.append(420)
-    print("After append:")
-    print(nums)
+    # Empty dicts
+    let mut empty_dict: dict[str, int] = {}
+    let mut str_dict: dict[str, str] = {}
+    let mut float_dict: dict[str, float] = {}
+    let mut bool_dict: dict[str, bool] = {}
+    let mut i64_dict: dict[str, i64] = {}
+
+    print("Empty dict created")
+    print(empty_dict)  # Auto-calls to_str()
     
-    # Dict test
-    let mut scores = {"alice": 95}
-    print("\nDict with one entry:")
-    print(scores)
+    # Verify they work
+    empty_list.append(42)
+    empty_list.append(420)
+    print("List after append:")
+    print(empty_list)  # Should show [42, 420]
     
-    scores.insert("bob", 87)
-    print("After insert:")
-    print(scores)
+    empty_dict.insert("answer", 42)
+    print("Dict after insert:")
+    print(empty_dict)  # Should show {answer: 42}
+
+    print("\nStr dict before insert:")
+    print(str_dict)  # Should show {}
+    str_dict.insert("answer", "42")
+    print("Str dict after insert:")
+    print(str_dict)  # Should show {answer: "42"}
+
+    print("\nFloat dict before insert:")
+    print(float_dict)  # Should show {}
+    float_dict.insert("answer", 3.14)
+    print("Float dict after insert:")
+    print(float_dict)  # Should show {answer: 3.14}
+
+    print("\nBool dict before insert:")
+    print(bool_dict)  # Should show {}
+    bool_dict.insert("answer", true)
+    print("Bool dict after insert:")
+    print(bool_dict)  # Should show {answer: true}
+
+    print("\nI64 dict before insert:")
+    print(i64_dict)  # Should show {}
+    i64_dict.insert("answer", 42000000)
+    print("I64 dict after insert:")
+    print(i64_dict)  # Should show {answer: 42000000}
     
-    print("\nCollections work!")
+    print("Empty collections work!")
