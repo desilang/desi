@@ -254,6 +254,8 @@ func (m *Module) emitRet(r *hir.Ret) {
 	// If there's no explicit value, return a typed zero consistent with the current function header.
 	if r.Val == nil {
 		switch m.curFuncRetTy {
+		case "void":
+			wprintf(&m.funcs, "  ret void\n")
 		case "ptr":
 			wprintf(&m.funcs, "  ret ptr null\n")
 		case "float":

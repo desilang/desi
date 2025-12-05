@@ -1,4 +1,5 @@
-# Test custom class in collections - with invalid fn syntax
+# EXPECTED: COMPILE_ERROR
+# Test custom class in collections - with invalid fn syntax (uses fn instead of def)
 
 class Person:
     pub name: str

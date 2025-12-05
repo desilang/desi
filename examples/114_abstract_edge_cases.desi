@@ -15,7 +15,7 @@ class Shape:
 
 # VALID: Implements all abstract methods with correct types
 class Circle(Shape):
-    pub radius: float
+    pub mut radius: float
     
     pub def area(self) -> float:
         return 3.14159 * self.radius * self.radius
@@ -28,8 +28,8 @@ class Circle(Shape):
 
 # VALID: Another correct implementation
 class Rectangle(Shape):
-    pub width: float
-    pub height: float
+    pub mut width: float
+    pub mut height: float
     
     pub def area(self) -> float:
         return self.width * self.height

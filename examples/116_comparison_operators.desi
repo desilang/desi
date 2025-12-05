@@ -1,8 +1,8 @@
 # Test comparison operators for classes
 
 class Point:
-    pub x: int
-    pub y: int
+    pub mut x: int
+    pub mut y: int
     
     # Implement all comparison operators independently
     pub def __lt__(self, other: Point) -> bool:
