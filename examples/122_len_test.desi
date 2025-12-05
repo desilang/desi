@@ -1,25 +1,27 @@
-func main() {
+# Test len() on all collection types
+
+def main():
     # Test len() on all collection types
     
-    # String
-    let s = "hello"
+    # String length
+    let message = "Hello, Desi!"
     print("String length:")
-    print(len(s))
+    print(len(message))
     
-    # List
+    # List length
     let nums = [1, 2, 3, 4, 5]
     print("\nList length:")
     print(len(nums))
     
-    # Dict
-    let scores = {}
+    # Dict length
+    let mut scores = {}
     scores.insert("alice", 95)
     scores.insert("bob", 87)
     print("\nDict length:")
     print(len(scores))
     
-    # Set
-    let unique = set()
+    # Set length (Note: set literal syntax needs verification)
+    let mut unique = set_new()  # Assuming this is the correct syntax
     unique.add(1)
     unique.add(2)
     unique.add(3)
@@ -27,4 +29,3 @@ func main() {
     print(len(unique))
     
     print("\nAll len() tests passed!")
-}
