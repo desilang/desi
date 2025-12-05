@@ -1,6 +1,8 @@
 package check
 
 import (
+	"fmt"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -241,8 +243,28 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						args[i] = c.typ(a.Expr)
 					}
 
-					// If methodType is a function type, extract and store its return type
+					// If methodType is a function type, validate arguments and extract return type
 					if funcType, ok := methodType.(*types.Func); ok {
+						// Check arity
+						if len(args) != len(funcType.Params) {
+							c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch"))
+							return nil
+						}
+
+						// Check argument types
+						for i := range args {
+							if args[i] != nil && funcType.Params[i] != nil {
+								// DEBUG: Print types being compared
+								// fmt.Printf("Checking arg %d: expected %s, got %s\n", i, funcType.Params[i].String(), args[i].String())
+
+								if !types.Assignable(funcType.Params[i], args[i]) {
+									c.add(diagAt("DTE0104", argsNodes[i].Expr.SpanOf(),
+										fmt.Sprintf("argument type mismatch: expected %s, got %s",
+											funcType.Params[i].String(), args[i].String())))
+								}
+							}
+						}
+
 						c.info.Types[call] = funcType.Ret
 						return funcType.Ret
 					}
