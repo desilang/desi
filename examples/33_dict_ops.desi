@@ -1,19 +1,16 @@
-def main():
-    let d: dict[str, int] = {"a": 1, "b": 2}
+def main() -> int:
+    let mut d: dict<str, int> = {"a": 1, "b": 2}
     
     # Using method syntax
     let val: int = d.get("a", 0)
+    print(f"Got value: {val}")
     
     # Check if key exists
     let has_a: bool = d.has_key("a")
+    print(f"Has 'a': {has_a}")
     
-    # Clear dict
+    # Clear dict (requires mutable dict)
     d.clear()
+    print("Dict cleared")
     
-    # Free dict (manual for now)
-    # Note: 'free' is not a standard method but added for Tier-0 manual management
-    # If we implemented Drop trait for dict, this wouldn't be needed.
-    # For now, we'll use the manual method I added.
-    # d.free() 
-    # Wait, I added 'free' to lowerDictMethod but not to check/expr.go!
-    # I need to add 'free' to check/expr.go first.
+    return 0

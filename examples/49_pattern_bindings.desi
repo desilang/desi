@@ -1,36 +1,37 @@
 # Pattern Variable Bindings Test
 
-enum Option:
+enum MyOption:
   Some: int
-  None: none
+  Empty: none
 
-enum Result:
+enum MyResult:
   Ok: str
   Err: int
 
-def main():
+def main() -> int:
   print("Testing pattern variable bindings")
   
   # Test 1: Extract int from Some
   print("Test 1: Extract int payload")
-  let opt: Option = Option.Some(42)
+  let opt: MyOption = MyOption.Some(42)
   match opt:
-    Option.Some(x): print(x)  # Should print 42
-    Option.None(): print("none")
+    MyOption.Some(x): print(f"Got: {x}")
+    MyOption.Empty: print("empty")
   
   # Test 2: Extract str from Ok
   print("Test 2: Extract str payload")
-  let res: Result = Result.Ok("success")
+  let res: MyResult = MyResult.Ok("success")
   match res:
-    Result.Ok(msg): print(msg)  # Should print "success"
-    Result.Err(code): print(code)
+    MyResult.Ok(msg): print(f"Message: {msg}")
+    MyResult.Err(code): print(f"Error: {code}")
   
   # Test 3: Use binding in expression
   print("Test 3: Use binding in match result")
-  let n: Option = Option.Some(10)
+  let n: MyOption = MyOption.Some(10)
   let doubled: int = match n:
-    Option.Some(val): val
-    Option.None(): 0
-  print(doubled)  # Should print 10
+    MyOption.Some(val): val
+    MyOption.Empty: 0
+  print(f"Doubled: {doubled}")
   
   print("All binding tests passed!")
+  return 0

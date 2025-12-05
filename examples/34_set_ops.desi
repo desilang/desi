@@ -1,8 +1,8 @@
 # Test set operations
 
-def main():
-    # Set literal
-    let s: set[int] = #{1, 2, 3}
+def main() -> int:
+    # Set literal (mutable for add/remove/clear)
+    let mut s: set<int> = #{1, 2, 3}
     print("Set created")
 
     # Contains
@@ -22,10 +22,9 @@ def main():
     s.clear()
     print("Cleared set")
 
-    # Free
-    print("Cleared set")
-
     # String set
-    let s2: set[str] = #{"hello", "world"}
+    let s2: set<str> = #{"hello", "world"}
     if s2.contains("hello"):
         print("String set works")
+
+    return 0

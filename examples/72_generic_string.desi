@@ -1,8 +1,15 @@
 # Test generic type instantiation with reference type (str)
-enum Option<T>:
-    Some: T
-    None: none
 
-def main():
-    let x: Option[str] = Option.Some("hello")
-    print("Generic string test")
+enum MyStr<T>:
+    Data: T
+    Empty: none
+
+def main() -> int:
+    let x: MyStr<str> = MyStr.Data("hello")
+    
+    match x:
+        MyStr.Data(s): print(f"Got: {s}")
+        MyStr.Empty: print("Empty")
+    
+    print("Generic string test passed")
+    return 0
