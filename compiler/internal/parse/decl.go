@@ -294,7 +294,7 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 				break
 			}
 		}
-		p.expect(token.GT, ">")
+		p.expectTypeGT() // Use expectTypeGT for nested generics like Box<Box<int>>
 	}
 
 	firstType := &ast.TypeName{
