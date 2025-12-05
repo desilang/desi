@@ -1,0 +1,62 @@
+class Container<T>:
+    pub mut value: T
+
+    pub def get(self) -> T:
+        return self.value
+
+    pub def set(self, v: T):
+        self.value := v
+
+class Box<T>(Container<T>):
+    pub def set(self, v: T):
+        self.value := v
+
+class IntBox(Box<int>):
+    pub def __new__(val: int) -> IntBox:
+        let b = IntBox()
+        b.value = val
+        return b
+        
+    pub def increment(self):
+        self.value := self.value + 1
+
+class StrBox(Box<str>):
+    pub def __new__(val: str) -> StrBox:
+        let b = StrBox()
+        b.value = val
+        return b
+
+def main() -> int:
+    let ib = IntBox(10)
+    print("IntBox created")
+    
+    if ib.get() != 10:
+        print("ERROR: initial value mismatch")
+        return 1
+        
+    ib.set(20) 
+    if ib.get() != 20:
+        print("ERROR: set value mismatch")
+        return 1
+    
+    ib.increment()
+    if ib.get() != 21:
+        print("ERROR: increment value mismatch")
+        return 1
+    
+    print("IntBox tests passed")
+
+    let sb = StrBox("hello")
+    print("StrBox created")
+    
+    if sb.get() != "hello":
+         print("ERROR: string box mismatch")
+         return 1
+         
+    sb.set("world")
+    if sb.get() != "world":
+         print("ERROR: string box set mismatch")
+         return 1
+         
+    print("StrBox tests passed")
+    return 0
