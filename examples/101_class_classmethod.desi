@@ -1,6 +1,6 @@
 # Test @classmethod decorator
 class Counter:
-    pub count: int
+    pub mut count: int
     
     @classmethod
     pub def zero() -> Counter:
