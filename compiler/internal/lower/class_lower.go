@@ -207,5 +207,99 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 		funcs = append(funcs, fn)
 	}
 
+	// -------------------------------------------------------------------------
+	// LOWERING INHERITED METHODS (Monomorphization Strategy)
+	// -------------------------------------------------------------------------
+	// We must emit code for methods inherited from base classes, especially if
+	// the base class is generic and we are a concrete instantiation (or distinct class).
+	// Iterate through ALL methods known to the type system (inherited included).
+
+	var cls *types.Class
+	if t := info.Types[cd]; t != nil {
+		cls, _ = t.(*types.Class)
+	}
+
+	if cls != nil {
+		// Use a set to track methods we already emitted from the AST
+		emitted := make(map[string]bool)
+		for _, m := range cd.Methods {
+			emitted[m.Name.Name] = true
+		}
+
+		// Iterate over all semantic methods (including inherited)
+		for name := range cls.Methods {
+			// Skip if already emitted (overridden or defined locally)
+			if emitted[name] {
+				continue
+			}
+
+			// Skip __new__ (handled by constructor logic separately)
+			if name == "__new__" {
+				continue
+			}
+
+			// Find the original AST declaration by walking up the inheritance chain
+			astDecl := findMethodDecl(cls.Base, name)
+			if astDecl == nil {
+				// Should not happen if type checker is correct, but safer to skip
+				continue
+			}
+
+			// Lower the inherited method as if it belongs to this class
+			// M15 TODO: This re-lowering does NOT substitute generic types in the body.
+			// It relies on implicit compatibility (e.g. pointers) or that the layout matches.
+			// For full generics, we need a Monomorphizer that replaces T with concrete types in HIR.
+			fn := LowerFuncFromDecl(astDecl, info, src)
+
+			// Relabel it for THIS class: IntBox_get
+			fn.Name = fmt.Sprintf("%s_%s", className, name)
+
+			// Logic for self injection must match the original AST metadata (static, etc)
+			// LowerFuncFromDecl handles the body. We need to apply parameter policy (Self injection).
+			// We replicate the policy logic here:
+
+			isStatic := false
+			isClassMethod := false
+			for _, dec := range astDecl.Decorators {
+				if dec != nil {
+					if dec.Name.Name == "staticmethod" {
+						isStatic = true
+					} else if dec.Name.Name == "classmethod" {
+						isClassMethod = true
+					}
+				}
+			}
+
+			if !isStatic && !isClassMethod {
+				hasSelf := false
+				if len(fn.Params) > 0 && fn.Params[0].Name == "self" {
+					hasSelf = true
+				}
+				if !hasSelf {
+					fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+				}
+			}
+
+			funcs = append(funcs, fn)
+		}
+	}
+
 	return funcs
+}
+
+// findMethodDecl walks up the base chain to find the AST declaration of a method
+func findMethodDecl(cls *types.Class, name string) *ast.FuncDecl {
+	if cls == nil {
+		return nil
+	}
+	// Check if this class defines it in its AST
+	if cls.Decl != nil {
+		for _, m := range cls.Decl.Methods {
+			if m.Name.Name == name {
+				return m
+			}
+		}
+	}
+	// Recurse up
+	return findMethodDecl(cls.Base, name)
 }

@@ -3,6 +3,8 @@ package types
 import (
 	"fmt"
 	"strings"
+
+	"github.com/desilang/desi/compiler/internal/ast"
 )
 
 // T is the interface implemented by all types.
@@ -163,6 +165,7 @@ type Class struct {
 	IsNested        bool             // true for nested classes
 	IsAbstract      bool             // true if class has any abstract methods
 	AbstractMethods map[string]bool  // set of abstract method names
+	Decl            *ast.ClassDecl   // Backlink to AST for monomorphization
 }
 
 // ClassConstant represents a class-level constant
