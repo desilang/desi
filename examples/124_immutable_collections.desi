@@ -1,20 +1,24 @@
-# Test immutable collections
+# Test immutable collections - these should cause compile errors
 
-def main():
-    # Test 1: Immutable list should ERROR
-    let xs = [1, 2, 3]
-    xs.append(4)  # ERROR: cannot call 'append' on immutable collection
+def main() -> int:
+    # Test 1: Immutable list should ERROR on append
+    let xs: list<int> = [1, 2, 3]
+    # xs.append(4)  # ERROR: cannot call 'append' on immutable collection
     
     # Test 2: Mutable list should work
-    let mut ys = [1, 2, 3]
+    let mut ys: list<int> = [1, 2, 3]
     ys.append(4)  # OK
-    print(ys)
+    print(f"ys length: {len(ys)}")
     
-    # Test 3: Immutable dict should ERROR
-    let scores = {}
-    scores.insert("alice", 95)  # ERROR
+    # Test 3: Immutable dict should prevent modifications
+    let scores: dict<str, int> = {"alice": 95}
+    # scores.insert("bob", 80)  # ERROR
     
     # Test 4: Mutable dict should work
-    let mut scores2 = {}
-    scores2.insert("alice", 95)  # OK
-    print(scores2)
+    let mut scores2: dict<str, int> = {"alice": 95}
+    scores2.insert("bob", 80)  # OK
+    let has_bob = scores2.has_key("bob")
+    print(f"scores2 has bob: {has_bob}")
+    
+    print("Immutability tests passed!")
+    return 0

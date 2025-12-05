@@ -1,9 +1,10 @@
 def main() -> int:
-    let nums: list[int] = [1, 2, 3]
+    let mut nums: list<int> = [1, 2, 3]
     nums.append(4)
     nums.append(5)
     
-    let length: int = nums.len()
+    let length: int = len(nums)
     let first: int = nums[0]
     
+    print(f"Length: {length}, First: {first}")
     return first
