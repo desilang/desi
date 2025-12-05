@@ -191,6 +191,35 @@ func (p *Parser) expectClose(tok token.Token, label string, open diag.Span) bool
 	return false
 }
 
+// expectTypeGT expects a '>' in type context, handling '>>' (RSHIFT) specially.
+// For nested generics like Box<Box<int>>, the lexer produces '>>' as RSHIFT.
+// This method treats RSHIFT as two '>' tokens, consuming one and pushing
+// a synthetic '>' for the outer type parameter to consume.
+func (p *Parser) expectTypeGT() bool {
+	if p.cur.Tok == token.GT {
+		p.next()
+		return true
+	}
+	if p.cur.Tok == token.RSHIFT {
+		// Consume '>>' but pretend we only consumed one '>'
+		// Push a synthetic '>' token onto the ahead buffer
+		syntheticGT := lex.Item{
+			Tok:    token.GT,
+			Lexeme: ">",
+			Line:   p.cur.Line,
+			Col:    p.cur.Col + 1, // shift column by 1
+		}
+		// Prepend to ahead buffer so it's consumed next
+		p.ahead = append([]lex.Item{p.peek}, p.ahead...)
+		p.peek = syntheticGT
+		p.cur = lex.Item{} // mark as consumed
+		p.next()           // advance to the synthetic >
+		return true
+	}
+	p.errExpected(spanPos(p.file, p.cur), ">")
+	return false
+}
+
 func (p *Parser) skipNLs() {
 	for p.cur.Tok == token.NL {
 		p.next()
