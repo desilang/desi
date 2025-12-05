@@ -12,7 +12,7 @@ import (
 // LowerClassConstructor generates the constructor function for a class
 // POLICY: If no __new__, generate zero-arg constructor with default initialization
 // POLICY: If __new__ exists, lower the user-defined __new__ method
-func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) *hir.Func {
+func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) []*hir.Func {
 	className := cd.Name.Name
 
 	var cls *types.Class
@@ -33,10 +33,10 @@ func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 
 	if hasNew {
 		// Lower user-defined __new__
-		return LowerDunderNew(className, newMethod, info)
+		return LowerDunderNew(className, newMethod, info, cls)
 	} else {
 		// Generate default zero-arg constructor
-		return LowerDefaultConstructor(className, cls)
+		return []*hir.Func{LowerDefaultConstructor(className, cls)}
 	}
 }
 
@@ -80,16 +80,72 @@ func LowerDefaultConstructor(className string, cls *types.Class) *hir.Func {
 }
 
 // LowerDunderNew lowers a user-defined __new__ method
-func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info) *hir.Func {
-	// Lower as regular function but with special name
-	fn := LowerFuncFromDecl(method, info, nil)
-	fn.Name = className // Constructor has class name
+func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, cls *types.Class) []*hir.Func {
+	// 1. Lower the user's __new__ method as ClassName___new__
+	// This method takes (self, args...)
+	newFn := LowerFuncFromDecl(method, info, nil)
+	newFn.Name = fmt.Sprintf("%s___new__", className)
 
-	// __new__ already has implicit self in type system,
-	// but in HIR we don't include self as parameter for constructors
-	// The body should use literal construction: ClassName{...}
+	// 2. Generate the constructor wrapper: ClassName(args...) -> ptr
+	// This wrapper allocates memory, calls __new__, and returns the instance
+	wrapper := hir.NewFunc(className)
 
-	return fn
+	// Copy params from __new__ but skip the first one (self)
+	if len(newFn.Params) > 0 {
+		wrapper.Func().Params = make([]hir.Param, len(newFn.Params)-1)
+		for i := 1; i < len(newFn.Params); i++ {
+			wrapper.Func().Params[i-1] = newFn.Params[i]
+		}
+	}
+	wrapper.Func().RetType = "ptr"
+
+	entry := hir.NewBlock("entry")
+
+	// Calculate total size
+	totalSize := 0
+	if cls != nil {
+		for _, field := range cls.Fields {
+			totalSize += getSize(field.Type)
+		}
+	}
+	if totalSize == 0 {
+		totalSize = 1
+	}
+
+	// Allocate
+	instancePtr := hir.Temp{Name: "%instance"}
+	entry.Stmts = append(entry.Stmts, &hir.Call{
+		Dst:  instancePtr,
+		Fn:   "malloc",
+		Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", totalSize)}},
+		Type: "ptr",
+	})
+
+	// Call __new__(instance, args...)
+	callArgs := make([]hir.Value, 0, len(wrapper.Func().Params)+1)
+	callArgs = append(callArgs, instancePtr)
+	for _, p := range wrapper.Func().Params {
+		// We need to use the parameter names as values
+		// In HIR, parameters are values.
+		// But wait, hir.Param is {Name, Type}.
+		// We need to use hir.Var{Name: p.Name} or hir.Temp{Name: p.Name} depending on convention.
+		// LowerFuncFromDecl uses parameter names as is.
+		// Let's assume they are temps or vars.
+		// Usually params are %name.
+		callArgs = append(callArgs, hir.Temp{Name: "%" + p.Name})
+	}
+
+	entry.Stmts = append(entry.Stmts, &hir.Call{
+		Fn:   newFn.Name,
+		Args: callArgs,
+	})
+
+	// Return instance
+	entry.Stmts = append(entry.Stmts, &hir.Ret{Val: instancePtr})
+
+	wrapper.Func().Blocks = []*hir.Block{entry}
+
+	return []*hir.Func{wrapper.Func(), newFn}
 }
 
 // LowerClassMethods generates HIR functions for all class methods

@@ -158,8 +158,19 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
 					case hir.Temp:
-						// For temps, default to i32 unless it's a  reference type
-						llvmTy, size = "i32", 4
+						// Check the actual type - classes are pointers
+						if x.Type != nil {
+							if _, ok := x.Type.(*types.Class); ok {
+								llvmTy, size = "ptr", 8
+							} else if isReferenceType(x.Type) {
+								llvmTy, size = "ptr", 8
+							} else {
+								llvmTy, size = "i32", 4
+							}
+						} else {
+							// No type info, default to i32
+							llvmTy, size = "i32", 4
+						}
 					}
 					// Even with initializer, record SSA alias for convenience.
 					m.ssa[x.Name] = x.Init

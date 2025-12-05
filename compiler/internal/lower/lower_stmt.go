@@ -197,6 +197,89 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
+			// Handle field assignment: obj.field = val
+			if field, ok := s.LHS[0].(*ast.FieldExpr); ok {
+				// Lower receiver
+				recv := ls.lowerExpr(field.X)
+				rhs := ls.lowerExpr(s.RHS[0])
+
+				// Get field info
+				fieldName := field.Name.Name
+				var recvType types.T
+				if ls.info != nil {
+					recvType = ls.info.Types[field.X]
+				}
+
+				// Calculate offset
+				offset := 0
+				found := false
+				var fieldType types.T
+
+				// Helper to find field in struct/class
+				findField := func(fields []types.Field) {
+					for _, f := range fields {
+						if f.Name == fieldName {
+							found = true
+							fieldType = f.Type
+							break
+						}
+						offset += getSize(f.Type)
+					}
+				}
+
+				if recvType != nil {
+					if cls, ok := recvType.(*types.Class); ok {
+						findField(cls.Fields)
+					} else if st, ok := recvType.(*types.Struct); ok {
+						findField(st.Fields)
+					}
+				}
+
+				if found {
+					// Emit GEP
+					fieldPtr := ls.b.FreshTemp("field_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8", // We treat objects as i8* for offset calculation
+						Base:    recv,
+						Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+						Dst:     fieldPtr,
+					})
+
+					// Box if necessary (primitive -> ptr)
+					// Fields in classes are currently stored as ptr (boxed) if they are generic or if we want uniform layout?
+					// Actually, getSize returns 8 for everything in Tier-0?
+					// Let's check getSize.
+					// If fields are typed, we might need to cast the pointer to the field type?
+					// But GEP returns i8*. We should cast it to fieldType*.
+					// Or just Store to i8* if we cast the value?
+
+					// For Tier-0, we assume everything is 8 bytes (ptr or i64).
+					// But primitives like i32 are 4 bytes.
+					// If the field type is i32, we should store i32.
+
+					// Cast fieldPtr to fieldType*
+					_ = lowerType(fieldType) // Consumed for now to avoid unused var error if we need it later
+					typedPtr := ls.b.FreshTemp("typed_field_ptr")
+					ls.b.Emit(&hir.Cast{Dst: typedPtr, Src: fieldPtr, Type: "ptr"}) // Cast i8* to ptr (void*)?
+					// Actually, Store takes Dst (ptr) and Val.
+					// LLVM Store: store <ty> <val>, <ty>* <ptr>
+					// We need to make sure Val has the correct type.
+
+					// If fieldLowerType is "ptr", we just store.
+					// If fieldLowerType is "i32", we store i32.
+
+					ls.b.Emit(&hir.Store{
+						Dst: typedPtr,
+						Val: rhs,
+					})
+				} else {
+					// Fallback for unknown fields (shouldn't happen if type checked)
+					// Just ignore or emit error?
+				}
+				ls.consumeTemp(rhs)
+				return
+			}
+
 			lhs := ls.lowerLValue(s.LHS[0])
 			rhs := ls.lowerExpr(s.RHS[0])
 

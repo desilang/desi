@@ -65,10 +65,8 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 	for _, d := range mod.Decls {
 		if cd, ok := d.(*ast.ClassDecl); ok {
 			// Constructor
-			constructor := LowerClassConstructor(cd, info)
-			if constructor != nil {
-				out.Funcs = append(out.Funcs, constructor)
-			}
+			constructors := LowerClassConstructor(cd, info)
+			out.Funcs = append(out.Funcs, constructors...)
 
 			// Methods
 			methods := LowerClassMethods(cd, info, src)
