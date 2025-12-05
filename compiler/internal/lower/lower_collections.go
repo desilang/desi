@@ -23,11 +23,11 @@ func resolveToStrFunc(t types.T) hir.Value {
 	if cls, ok := t.(*types.Class); ok {
 		// Check for __str__ first (preferred)
 		if _, found := cls.Dunders["__str__"]; found {
-			return hir.Temp{Name: "@" + cls.Name + "___str__"}
+			return hir.Var{Name: "@" + cls.Name + "___str__"}
 		}
 		// Check for to_str
 		if _, found := cls.Methods["to_str"]; found {
-			return hir.Temp{Name: "@" + cls.Name + "_to_str"}
+			return hir.Var{Name: "@" + cls.Name + "_to_str"}
 		}
 	}
 
