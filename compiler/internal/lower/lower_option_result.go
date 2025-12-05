@@ -25,10 +25,11 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 
 		res := ls.b.FreshTemp("is_some")
 		ls.b.Emit(&hir.BinaryOp{
-			Op:  "==",
-			LHS: tag,
-			RHS: hir.ConstInt{Text: "0"},
-			Dst: res,
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0"},
+			Dst:  res,
+			Type: "i1",
 		})
 		return res
 
@@ -46,10 +47,11 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 
 		res := ls.b.FreshTemp("is_none")
 		ls.b.Emit(&hir.BinaryOp{
-			Op:  "==",
-			LHS: tag,
-			RHS: hir.ConstInt{Text: "1"},
-			Dst: res,
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "1"},
+			Dst:  res,
+			Type: "i1",
 		})
 		return res
 
@@ -133,10 +135,11 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 
 		res := ls.b.FreshTemp("is_ok")
 		ls.b.Emit(&hir.BinaryOp{
-			Op:  "==",
-			LHS: tag,
-			RHS: hir.ConstInt{Text: "0"},
-			Dst: res,
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0"},
+			Dst:  res,
+			Type: "i1",
 		})
 		return res
 
@@ -154,10 +157,11 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 
 		res := ls.b.FreshTemp("is_err")
 		ls.b.Emit(&hir.BinaryOp{
-			Op:  "==",
-			LHS: tag,
-			RHS: hir.ConstInt{Text: "1"},
-			Dst: res,
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "1"},
+			Dst:  res,
+			Type: "i1",
 		})
 		return res
 
