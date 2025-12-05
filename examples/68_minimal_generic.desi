@@ -1,3 +1,7 @@
 # Minimal test for generic parsing
 enum Test<T>:
     Val: T
+
+def main() -> int:
+    # Just testing that generic enum parsing works
+    return 0

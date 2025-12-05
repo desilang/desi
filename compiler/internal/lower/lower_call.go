@@ -406,14 +406,22 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	if ls.info != nil {
 		resT := ls.info.Types[x]
 		var st *types.Struct
+		var cls *types.Class
 
 		if s, ok := resT.(*types.Struct); ok {
 			st = s
 		} else if g, ok := resT.(*types.Generic); ok {
 			if s, ok := g.Base.(*types.Struct); ok {
 				st = s
+			} else if c, ok := g.Base.(*types.Class); ok {
+				cls = c
 			}
-		} else if cls, ok := resT.(*types.Class); ok {
+		} else if c, ok := resT.(*types.Class); ok {
+			cls = c
+		}
+
+		// Handle class instantiation (both Generic<Class> and regular Class)
+		if cls != nil {
 			// Class Instantiation
 			// Check if it's a constructor call
 			isConstructor := false
