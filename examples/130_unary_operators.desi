@@ -1,0 +1,40 @@
+# Test unary operators and dunders
+
+class Number:
+    pub val: int
+    
+    pub def __new__(self, v: int):
+        self.val = v
+        
+    pub def __neg__(self) -> int:
+        print("calling __neg__")
+        return -self.val
+        
+    pub def __pos__(self) -> int:
+        print("calling __pos__")
+        return self.val
+        
+    pub def __invert__(self) -> int:
+        print("calling __invert__")
+        return ~self.val
+
+def main():
+    print("--- Primitives ---")
+    let x = 10
+    print("-10: " + str(-x))
+    print("+10: " + str(+x))
+    print("~10: " + str(~x))
+    
+    let b = true
+    print("!true: " + str(!b))
+    print("not true: " + str(not b))
+    
+    print("\n--- Custom Class ---")
+    let n = Number(42)
+    print("-n: " + str(-n))
+    print("+n: " + str(+n))
+    print("~n: " + str(~n))
+    
+    print("\n--- String Len ---")
+    let s = "hello world"
+    print("len('hello world'): " + str(len(s)))

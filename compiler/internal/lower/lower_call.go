@@ -413,6 +413,54 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			if s, ok := g.Base.(*types.Struct); ok {
 				st = s
 			}
+		} else if cls, ok := resT.(*types.Class); ok {
+			// Class Instantiation
+			// Check if it's a constructor call
+			isConstructor := false
+
+			// Heuristic: if callee name matches class name, it's a constructor.
+			// This avoids issues where ls.info.Idents/Types lookup fails for the class name identifier.
+			if ls.calleeName(x.Callee) == cls.Name {
+				isConstructor = true
+			}
+
+			if isConstructor {
+				// 1. Allocate instance
+				// Calculate size
+				size := 0
+				for _, f := range cls.Fields {
+					size += getSize(f.Type)
+				}
+				if size == 0 {
+					size = 1
+				}
+
+				inst := ls.b.FreshTemp("inst")
+				// Use GC malloc if available, or stack alloca for now?
+				// Structs use alloca. Let's use alloca for consistency in Tier-0.
+				// TODO: Switch to heap allocation for classes.
+				ls.b.Emit(&hir.Alloca{Type: "i8", Count: size, Dst: inst})
+
+				// 2. Call __new__
+				// Find __new__
+				// It should be in cls.Constructors or Dunders["__new__"]
+				// We assume the checker validated arguments.
+				// Mangled name: ClassName___new__
+				ctorName := fmt.Sprintf("%s___new__", cls.Name)
+
+				// Prepare args: [inst, user_args...]
+				var args []hir.Value
+				args = append(args, inst)
+				for _, a := range x.Args {
+					args = append(args, ls.lowerExpr(a))
+				}
+
+				// Emit call
+				voidDst := ls.b.FreshTemp("void")
+				ls.b.Emit(&hir.Call{Dst: voidDst, Fn: ctorName, Args: args})
+
+				return inst
+			}
 		}
 
 		if st != nil {

@@ -245,29 +245,29 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							isStr = true
 						}
 
-                                if !isStr {
-                                    // Assume struct or class
-                                    typeName := "Unknown"
-                                    if lType != nil {
-                                        if s, ok := lType.(*types.Struct); ok {
-                                            typeName = s.Name
-                                        } else if c, ok := lType.(*types.Class); ok {
-                                            typeName = c.Name
-                                        }
-                                    }
-                                    // If still Unknown, check if it might be a string from a field load
-                                    if typeName == "Unknown" {
-                                        // Field loads from class methods often don't have type info
-                                        // Just use the value directly as it's likely a string
-                                        leftStr = lval
-                                    } else {
-                                        convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
-                                        m.tempID++
-                                        wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, lval)
-                                        leftStr = convTemp
-                                    }
-                                }
-                            }
+						if !isStr {
+							// Assume struct or class
+							typeName := "Unknown"
+							if lType != nil {
+								if s, ok := lType.(*types.Struct); ok {
+									typeName = s.Name
+								} else if c, ok := lType.(*types.Class); ok {
+									typeName = c.Name
+								}
+							}
+							// If still Unknown, check if it might be a string from a field load
+							if typeName == "Unknown" {
+								// Field loads from class methods often don't have type info
+								// Just use the value directly as it's likely a string
+								leftStr = lval
+							} else {
+								convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+								m.tempID++
+								wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, lval)
+								leftStr = convTemp
+							}
+						}
+					}
 
 					// Convert right if it's not already a string (ptr)
 					if rty != "ptr" {
@@ -296,29 +296,29 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							isStr = true
 						}
 
-                                if !isStr {
-                                    // Assume struct or class
-                                    typeName := "Unknown"
-                                    if rType != nil {
-                                        if s, ok := rType.(*types.Struct); ok {
-                                            typeName = s.Name
-                                        } else if c, ok := rType.(*types.Class); ok {
-                                            typeName = c.Name
-                                        }
-                                    }
-                                    // If still Unknown, check if it might be a string from a field load
-                                    if typeName == "Unknown" {
-                                        // Field loads from class methods often don't have type info
-                                        // Just use the value directly as it's likely a string
-                                        rightStr = rval
-                                    } else {
-                                        convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
-                                        m.tempID++
-                                        wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, rval)
-                                        rightStr = convTemp
-                                    }
-                                }
-                            }
+						if !isStr {
+							// Assume struct or class
+							typeName := "Unknown"
+							if rType != nil {
+								if s, ok := rType.(*types.Struct); ok {
+									typeName = s.Name
+								} else if c, ok := rType.(*types.Class); ok {
+									typeName = c.Name
+								}
+							}
+							// If still Unknown, check if it might be a string from a field load
+							if typeName == "Unknown" {
+								// Field loads from class methods often don't have type info
+								// Just use the value directly as it's likely a string
+								rightStr = rval
+							} else {
+								convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+								m.tempID++
+								wprintf(&m.funcs, "  %s = call ptr @%s_to_str(ptr %s)\n", convTemp, typeName, rval)
+								rightStr = convTemp
+							}
+						}
+					}
 
 					// Now concatenate
 					wprintf(&m.funcs, "  %s = call ptr @string_concat(ptr %s, ptr %s)\n",
@@ -419,6 +419,16 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					llvmInst = "and"
 				case "or":
 					llvmInst = "or"
+				case "^":
+					llvmInst = "xor"
+				case "|":
+					llvmInst = "or"
+				case "&":
+					llvmInst = "and"
+				case "<<":
+					llvmInst = "shl"
+				case ">>":
+					llvmInst = "ashr" // Arithmetic shift right for signed integers
 				default:
 					// Unknown operator
 					wprintf(&m.funcs, "  ; Unknown operator: %s\n", x.Op)
