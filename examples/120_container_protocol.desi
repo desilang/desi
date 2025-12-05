@@ -1,6 +1,6 @@
 class IntArray:
-    pub data: list[int]
-    pub size: int
+    pub mut data: list[int]
+    pub mut size: int
     
     pub def __getitem__(self, index: int) -> int:
         # Direct list indexing works

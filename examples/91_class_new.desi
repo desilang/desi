@@ -1,6 +1,6 @@
 class Point:
-    pub x: int
-    pub y: int
+    pub mut x: int
+    pub mut y: int
 
 def main() -> int:
     # Use default zero-arg constructor (always available)

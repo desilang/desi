@@ -42,38 +42,20 @@ func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) []*hir.Func {
 
 // LowerDefaultConstructor generates a zero-arg constructor
 // Allocates class instance and zero-initializes all fields
+// The function is named ClassName___new__ to match call site expectations
 func LowerDefaultConstructor(className string, cls *types.Class) *hir.Func {
-	b := hir.NewFunc(className)
-	b.Func().Params = []hir.Param{} // Zero arguments
-	b.Func().RetType = "ptr"
+	ctorName := fmt.Sprintf("%s___new__", className)
+	b := hir.NewFunc(ctorName)
+	// Zero-arg default constructor still takes self as first param for consistency
+	b.Func().Params = []hir.Param{{Name: "self", Type: "ptr"}}
+	b.Func().RetType = "void" // __new__ doesn't return, it initializes self
 
 	entry := hir.NewBlock("entry")
 
-	// Calculate total size
-	totalSize := 0
-	if cls != nil {
-		for _, field := range cls.Fields {
-			totalSize += getSize(field.Type)
-		}
-	}
-	if totalSize == 0 {
-		totalSize = 1
-	}
-
-	// Allocate
-	instancePtr := hir.Temp{Name: "%instance"}
-	entry.Stmts = append(entry.Stmts, &hir.Call{
-		Dst:  instancePtr,
-		Fn:   "malloc",
-		Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", totalSize)}},
-		Type: "ptr",
-	})
-
-	// Zero-initialize fields (memset or individual stores)
-	// For simplicity, we'll skip explicit zeroing (malloc often zeros memory)
-
-	// Return instance
-	entry.Stmts = append(entry.Stmts, &hir.Ret{Val: instancePtr})
+	// Default __new__ does nothing - self is already allocated by caller
+	// and fields are zero-initialized by default
+	// Just return (void)
+	entry.Stmts = append(entry.Stmts, &hir.Ret{})
 
 	b.Func().Blocks = []*hir.Block{entry}
 	return b.Func()
