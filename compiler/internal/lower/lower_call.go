@@ -115,6 +115,34 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			if t, ok := feXType.(*types.List); ok {
 				return ls.lowerListMethod(fe, x.Args, t)
 			}
+
+			if types.IsOption(feXType) {
+				// We pass nil for *types.Enum because lowerOptionMethod doesn't strictly need it
+				// or we can extract it. Let's update lowerOptionMethod to take types.T later if needed.
+				// For now, just pass nil as it seems unused in my implementation above except for signature.
+				// Wait, I defined it to take *types.Enum. I should cast it.
+				var enum *types.Enum
+				if e, ok := feXType.(*types.Enum); ok {
+					enum = e
+				} else if g, ok := feXType.(*types.Generic); ok {
+					if e, ok := g.Base.(*types.Enum); ok {
+						enum = e
+					}
+				}
+				return ls.lowerOptionMethod(fe, x.Args, enum)
+			}
+
+			if types.IsResult(feXType) {
+				var enum *types.Enum
+				if e, ok := feXType.(*types.Enum); ok {
+					enum = e
+				} else if g, ok := feXType.(*types.Generic); ok {
+					if e, ok := g.Base.(*types.Enum); ok {
+						enum = e
+					}
+				}
+				return ls.lowerResultMethod(fe, x.Args, enum)
+			}
 		}
 	}
 
@@ -682,6 +710,12 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 		}
+	}
+
+	// Fix for Option/Result constructors (built-in enums)
+	// These are not always in ls.info.Funcs, so we force ptr return type.
+	if strings.HasPrefix(callee, "Option.") || strings.HasPrefix(callee, "Result.") {
+		retType = "ptr"
 	}
 
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
