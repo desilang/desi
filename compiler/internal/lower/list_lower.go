@@ -19,7 +19,13 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		elemPtr := ls.b.FreshTemp("val_ptr")
 		ls.b.Emit(&hir.Cast{Dst: elemPtr, Src: elem, Type: "ptr"})
 
-		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{receiver, elemPtr}})
+		// Determine type tag
+		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+		if ls.info != nil {
+			typeTag = getTypeTag(ls.info.Types[args[0]])
+		}
+
+		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{receiver, elemPtr, typeTag}})
 		return nil
 
 	case "get":

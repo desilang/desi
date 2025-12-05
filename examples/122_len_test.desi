@@ -1,0 +1,30 @@
+func main() {
+    # Test len() on all collection types
+    
+    # String
+    let s = "hello"
+    print("String length:")
+    print(len(s))
+    
+    # List
+    let nums = [1, 2, 3, 4, 5]
+    print("\nList length:")
+    print(len(nums))
+    
+    # Dict
+    let scores = {}
+    scores.insert("alice", 95)
+    scores.insert("bob", 87)
+    print("\nDict length:")
+    print(len(scores))
+    
+    # Set
+    let unique = set()
+    unique.add(1)
+    unique.add(2)
+    unique.add(3)
+    print("\nSet length:")
+    print(len(unique))
+    
+    print("\nAll len() tests passed!")
+}

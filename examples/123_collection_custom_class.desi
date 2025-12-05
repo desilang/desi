@@ -1,0 +1,40 @@
+# Demonstrates the limitation: storing custom classes in collections
+
+class Person:
+    pub name: str
+    pub age: int
+    
+    fn __init__(self, name: str, age: int):
+        self.name = name
+        self.age = age
+    
+    fn to_str(self) -> str:
+        return self.name
+
+func main() {
+    # Create a list of custom objects
+    let people = []
+    
+    let p1 = Person("Alice", 30)
+    let p2 = Person("Bob", 25)
+    
+    people.append(p1)
+    people.append(p2)
+    
+    print("People list:")
+    print(people)  # This will print raw pointer addresses
+    
+    # Workaround: manually iterate and call to_str
+    print("\nManual iteration:")
+    for i in range(0, len(people)):
+        let person = people.get(i)
+        print(person.to_str())
+    
+    # The limitation: dict with custom classes
+    let people_map = {}
+    people_map.insert("alice", p1)
+    people_map.insert("bob", p2)
+    
+    print("\nPeople dict:")
+    print(people_map)  # This will also print raw addresses
+}

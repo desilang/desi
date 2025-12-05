@@ -5,6 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Function pointer type for value-to-string conversion
+typedef char* (*ElemToStrFunc)(void*);
+
 // Simple hashmap implementation for Desi dict[K, V]
 // For Tier-0: supports string keys with generic value types
 
@@ -19,16 +22,19 @@ typedef struct dict {
     size_t bucket_count;        // Number of buckets
     size_t entry_count;         // Number of entries
     size_t value_size;          // Size of each value in bytes
+    int type_tag;               // 0=int, 1=str, 2=bool, 3=other
+    ElemToStrFunc value_to_str_fn; // Function pointer for custom types
 } dict_t;
 
 // Core operations
-dict_t* dict_new(size_t value_size);
+dict_t* dict_new(size_t value_size, int type_tag, ElemToStrFunc value_to_str_fn);
 void dict_free(dict_t* d);
-void dict_insert(dict_t* d, const char* key, const void* value);
+void dict_insert(dict_t* d, const char* key, const void* value, int type_tag);
 void* dict_get(dict_t* d, const char* key, const void* default_val);
 bool dict_has_key(dict_t* d, const char* key);
 void* dict_pop(dict_t* d, const char* key);
 void dict_clear(dict_t* d);
+int64_t dict_len(dict_t* d);
 
 // Collection methods
 char** dict_keys(dict_t* d, size_t* out_len);

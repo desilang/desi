@@ -2,9 +2,12 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
+#include <stdint.h>
 
 #define INITIAL_BUCKET_COUNT 16
 #define LOAD_FACTOR_THRESHOLD 0.75
+#define SET_INITIAL_BUCKETS 16
 
 // Simple integer hash function
 static uint64_t set_hash_int(int64_t value) {
@@ -15,11 +18,15 @@ static uint64_t set_hash_int(int64_t value) {
     return hash;
 }
 
-set_t* set_new() {
-    set_t* s = malloc(sizeof(set_t));
+set_t* set_new(ElemToStrFunc elem_to_str_fn) {
+    set_t* s = (set_t*)malloc(sizeof(set_t));
     if (!s) return NULL;
     
-    s->buckets = calloc(INITIAL_BUCKET_COUNT, sizeof(set_entry_t*));
+    s->bucket_count = SET_INITIAL_BUCKETS;
+    s->entry_count = 0;
+    s->elem_to_str_fn = elem_to_str_fn;  // Store function pointer
+    
+    s->buckets = calloc(s->bucket_count, sizeof(set_entry_t*));
     if (!s->buckets) {
         free(s);
         return NULL;
@@ -131,6 +138,10 @@ void set_clear(set_t* s) {
     s->entry_count = 0;
 }
 
+int64_t set_len(set_t* s) {
+    return s ? (int64_t)s->entry_count : 0;
+}
+
 int64_t* set_to_array(set_t* s, size_t* out_len) {
     if (!s || !out_len) return NULL;
     
@@ -158,7 +169,7 @@ int64_t* set_to_array(set_t* s, size_t* out_len) {
 set_t* set_union(set_t* s1, set_t* s2) {
     if (!s1 || !s2) return NULL;
     
-    set_t* result = set_new();
+    set_t* result = set_new(NULL);  // No custom to_str for now
     if (!result) return NULL;
     
     // Add all elements from s1
@@ -186,7 +197,7 @@ set_t* set_union(set_t* s1, set_t* s2) {
 set_t* set_intersection(set_t* s1, set_t* s2) {
     if (!s1 || !s2) return NULL;
     
-    set_t* result = set_new();
+    set_t* result = set_new(NULL);  // No custom to_str for now
     if (!result) return NULL;
     
     // Iterate s1, add to result if exists in s2
@@ -207,7 +218,7 @@ set_t* set_intersection(set_t* s1, set_t* s2) {
 set_t* set_difference(set_t* s1, set_t* s2) {
     if (!s1 || !s2) return NULL;
     
-    set_t* result = set_new();
+    set_t* result = set_new(NULL);  // No custom to_str for now
     if (!result) return NULL;
     
     // Iterate s1, add to result if NOT in s2

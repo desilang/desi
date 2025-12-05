@@ -610,7 +610,16 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.ListLit:
 		// Create new list
 		res := ls.b.FreshTemp("list")
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{}})
+
+		// Determine type tag
+		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+		if ls.info != nil {
+			if t, ok := ls.info.Types[x].(*types.List); ok {
+				typeTag = getTypeTag(t.Elem)
+			}
+		}
+
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag}})
 
 		// Append elements
 		for _, e := range x.Elems {
@@ -621,7 +630,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			valPtr := ls.b.FreshTemp("val_ptr")
 			ls.b.Emit(&hir.Cast{Dst: valPtr, Src: val, Type: "ptr"})
 
-			ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{res, valPtr}})
+			ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{res, valPtr, typeTag}})
 		}
 		return res
 

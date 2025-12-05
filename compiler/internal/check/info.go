@@ -19,10 +19,11 @@ const (
 
 // Symbol represents a bound identifier in a scope.
 type Symbol struct {
-	Name string
-	Kind SymbolKind
-	Type types.T
-	Node ast.Node
+	Name      string
+	Kind      SymbolKind
+	Type      types.T
+	Node      ast.Node
+	IsMutable bool // true for `let mut`, false for `let`
 }
 
 // Info carries type facts, bindings, and overload sets discovered by the checker.

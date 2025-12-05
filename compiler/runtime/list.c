@@ -8,21 +8,23 @@
 // ========== Core Operations ==========
 
 // Create a new empty list
-DesiList* list_new(void) {
+DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
     DesiList* list = (DesiList*)malloc(sizeof(DesiList));
     if (!list) {
-        fprintf(stderr, "list_new: malloc failed\n");
-        exit(1);
+        return NULL;
     }
     
-    list->data = (void**)malloc(LIST_INITIAL_CAPACITY * sizeof(void*));
-    if (!list->data) {
-        fprintf(stderr, "list_new: malloc failed for data\n");
-        exit(1);
-    }
-    
-    list->length = 0;
     list->capacity = LIST_INITIAL_CAPACITY;
+    list->length = 0;
+    list->type_tag = type_tag;
+    list->to_str_fn = to_str_fn;  // Store function pointer
+    list->data = (void**)malloc(list->capacity * sizeof(void*));
+    
+    if (!list->data) {
+        free(list);
+        return NULL;
+    }
+    
     return list;
 }
 
@@ -46,23 +48,23 @@ void list_clear(DesiList* list) {
 DesiList* list_copy(DesiList* list) {
     if (!list) return NULL;
     
-    DesiList* copy = list_new();
+    DesiList* result = list_new(list->type_tag, list->to_str_fn);  // Copy function pointer too
     
     // Ensure capacity
-    if (list->length > copy->capacity) {
-        copy->data = (void**)realloc(copy->data, list->length * sizeof(void*));
-        if (!copy->data) {
+    if (list->length > result->capacity) {
+        result->data = (void**)realloc(result->data, list->length * sizeof(void*));
+        if (!result->data) {
             fprintf(stderr, "list_copy: realloc failed\n");
             exit(1);
         }
-        copy->capacity = list->length;
+        result->capacity = list->length;
     }
     
     // Copy elements (shallow copy - pointers only)
-    memcpy(copy->data, list->data, list->length * sizeof(void*));
-    copy->length = list->length;
+    memcpy(result->data, list->data, list->length * sizeof(void*));
+    result->length = list->length;
     
-    return copy;
+    return result;
 }
 
 // ========== Element Access ==========
@@ -135,11 +137,16 @@ static void list_ensure_capacity(DesiList* list, size_t new_capacity) {
     list->capacity = target;
 }
 
-// Append an item to the end of the list
-void list_append(DesiList* list, void* item) {
+// Append an item to the list
+void list_append(DesiList* list, void* item, int type_tag) {
     if (!list) {
         fprintf(stderr, "list_append: null list\n");
         return;
+    }
+    
+    // Upgrade type tag if currently Int (0) and new tag is different
+    if (list->type_tag == 0 && type_tag != 0) {
+        list->type_tag = type_tag;
     }
     
     list_ensure_capacity(list, list->length + 1);
@@ -263,9 +270,9 @@ DesiList* list_slice(DesiList* list, int64_t start, int64_t end) {
     if (end > (int64_t)list->length) end = (int64_t)list->length;
     if (start > end) start = end;
     
-    DesiList* result = list_new();
+    DesiList* result = list_new(list->type_tag, list->to_str_fn);
     for (int64_t i = start; i < end; i++) {
-        list_append(result, list->data[i]);
+        list_append(result, list->data[i], list->type_tag);
     }
     
     return result;
@@ -317,11 +324,17 @@ bool list_contains(DesiList* list, void* item) {
 DesiList* list_map(DesiList* list, MapFunc func) {
     if (!list || !func) return NULL;
     
-    DesiList* result = list_new();
-    list_ensure_capacity(result, list->length);
+    DesiList* result = list_new(list->type_tag, list->to_str_fn); // Preserve type tag? Or unknown?
+    // Map can change type. For Tier-0, let's assume it preserves or becomes unknown (3).
+    // But we don't know the return type of func.
+    // Let's use 3 (Unknown) if we can't be sure, or propagate.
+    // If we propagate, we might print wrong.
+    // But map is generic.
+    // Let's propagate for now, assuming map(int->int) or map(str->str).
+    if (!result) return NULL;
     
     for (size_t i = 0; i < list->length; i++) {
-        list_append(result, func(list->data[i]));
+        list_append(result, func(list->data[i]), list->type_tag);
     }
     
     return result;
@@ -331,11 +344,12 @@ DesiList* list_map(DesiList* list, MapFunc func) {
 DesiList* list_filter(DesiList* list, FilterFunc func) {
     if (!list || !func) return NULL;
     
-    DesiList* result = list_new();
+    DesiList* result = list_new(list->type_tag, list->to_str_fn);
+    if (!result) return NULL;
     
     for (size_t i = 0; i < list->length; i++) {
         if (func(list->data[i])) {
-            list_append(result, list->data[i]);
+            list_append(result, list->data[i], list->type_tag);
         }
     }
     
@@ -418,12 +432,29 @@ char* list_to_str(DesiList* list) {
             buffer[pos++] = ' ';
         }
         
-        // Convert element to string (heuristic: treat as int if small pointer value)
-        void* elem = list->data[i];
-        intptr_t val = (intptr_t)elem;
+        // Convert element to string
+        char temp[256];
+        void* item = list->data[i];
         
-        char temp[32];
-        snprintf(temp, sizeof(temp), "%lld", (long long)val);
+        // Use function pointer if available (custom types)
+        if (list->to_str_fn != NULL) {
+            char* custom_str = list->to_str_fn(item);
+            if (custom_str) {
+                snprintf(temp, sizeof(temp), "%s", custom_str);
+                // Note: Assuming to_str_fn returns malloc'd string, don't free it here
+            } else {
+                snprintf(temp, sizeof(temp), "<null>");
+            }
+        } else if (list->type_tag == 1) { // String
+            // Item is char*
+            snprintf(temp, sizeof(temp), "\"%s\"", (char*)item ? (char*)item : "null");
+        } else if (list->type_tag == 2) { // Bool
+            // Item is intptr_t (0 or 1)
+            snprintf(temp, sizeof(temp), "%s", (intptr_t)item ? "true" : "false");
+        } else { // Int (0) or default
+            // Item is intptr_t
+            snprintf(temp, sizeof(temp), "%lld", (long long)(intptr_t)item);
+        }
         size_t len = strlen(temp);
         
         // Ensure space

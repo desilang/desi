@@ -5,15 +5,20 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+// Function pointer type for element-to-string conversion
+typedef char* (*ElemToStrFunc)(void*);
+
 // DesiList - Dynamic growable list (type-erased via void*)
 typedef struct {
     void** data;       // Array of pointers to elements
     size_t length;     // Current number of elements
     size_t capacity;   // Total allocated capacity
+    int type_tag;      // 0=int, 1=str, 2=bool, 3=other
+    ElemToStrFunc to_str_fn;   // Function pointer for custom types
 } DesiList;
 
 // === Core Operations ===
-DesiList* list_new(void);
+DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn);
 void list_free(DesiList* list);
 void list_clear(DesiList* list);
 DesiList* list_copy(DesiList* list);
@@ -24,7 +29,7 @@ void list_set(DesiList* list, int64_t index, void* item);
 int64_t list_len(DesiList* list);
 
 // === Modification ===
-void list_append(DesiList* list, void* item);
+void list_append(DesiList* list, void* item, int type_tag);
 void list_extend(DesiList* list, DesiList* other);
 void list_insert(DesiList* list, int64_t index, void* item);
 void* list_pop(DesiList* list, int64_t index);
