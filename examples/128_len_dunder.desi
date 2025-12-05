@@ -1,0 +1,30 @@
+# Test __len__ dunder support
+
+class Stack:
+    pub items: list[int]
+    
+    pub def __new__(self):
+        self.items = []
+        
+    pub def push(self, val: int):
+        self.items.append(val)
+        
+    pub def __len__(self) -> int:
+        return len(self.items)
+
+def main():
+    let s = Stack()
+    s.push(10)
+    s.push(20)
+    s.push(30)
+    
+    print("Stack created with 3 items")
+    
+    # This should call s.__len__()
+    let size = len(s)
+    print("Size: " + str(size))
+    
+    if size == 3:
+        print("Test passed!")
+    else:
+        print("Test failed: expected size 3, got " + str(size))

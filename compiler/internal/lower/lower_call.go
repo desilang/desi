@@ -102,13 +102,17 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// 0. Method calls (FieldExpr callee)
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
 		if ls.info != nil {
-			if t, ok := ls.info.Types[fe.X].(*types.Dict); ok {
+			feXType := ls.info.Types[fe.X]
+			// DEBUG
+			// fmt.Printf("DEBUG lowerCall: fe.X type = %T, value = %v, method = %s\n", feXType, feXType, fe.Name.Name)
+
+			if t, ok := feXType.(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
 			}
-			if t, ok := ls.info.Types[fe.X].(*types.Set); ok {
+			if t, ok := feXType.(*types.Set); ok {
 				return ls.lowerSetMethod(fe, x.Args, t)
 			}
-			if t, ok := ls.info.Types[fe.X].(*types.List); ok {
+			if t, ok := feXType.(*types.List); ok {
 				return ls.lowerListMethod(fe, x.Args, t)
 			}
 		}
