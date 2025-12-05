@@ -1,0 +1,23 @@
+# Test custom class in collections
+
+class Person:
+    pub name: str
+    
+    pub fn __init__(self, name: str):
+        self.name = name
+    
+    pub fn to_str(self) -> str:
+        return "Person(" + self.name + ")"
+
+def main():
+    # Test with custom class
+    let mut people = []
+    people.append(Person("Alice"))
+    people.append(Person("Bob"))
+    print(people)  # Should print: [Person(Alice), Person(Bob)]
+    
+    # Test dict with custom values
+    let mut scores = {}
+    scores.insert("alice", Person("Alice"))
+    scores.insert("bob", Person("Bob"))
+    print(scores)

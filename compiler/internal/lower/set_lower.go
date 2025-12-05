@@ -7,10 +7,16 @@ import (
 )
 
 func (ls *lowerState) lowerSetLit(x *ast.SetLit, t *types.Set) hir.Value {
-	// 1. Allocate new set
-	// set_new() -> ptr
+	// 1. Allocate new set with to_str function
 	dict := ls.b.FreshTemp("set")
-	ls.b.Emit(&hir.Call{Dst: dict, Fn: "set_new", Args: []hir.Value{}})
+
+	// Determine to_str function for set elements
+	var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+	if t != nil {
+		toStrFunc = resolveToStrFunc(t.Elem)
+	}
+
+	ls.b.Emit(&hir.Call{Dst: dict, Fn: "set_new", Args: []hir.Value{toStrFunc}})
 
 	// 2. Insert elements
 	for _, elem := range x.Elems {
