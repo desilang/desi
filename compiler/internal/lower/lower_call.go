@@ -280,6 +280,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				} else if m, ok := cls.ClassMethods[methodName]; ok {
 					targetMethod = m
 					isClass = true
+				} else if m, ok := cls.Dunders[methodName]; ok {
+					targetMethod = m
 				}
 
 				if targetMethod != nil {

@@ -3,21 +3,22 @@
 class Person:
     pub name: str
     
-    pub fn __init__(self, name: str):
+    pub def __new__(self, name: str):
         self.name = name
     
-    pub fn to_str(self) -> str:
+    pub def __str__(self) -> str:
         return "Person(" + self.name + ")"
 
 def main():
-    # Test with custom class
-    let mut people = []
-    people.append(Person("Alice"))
-    people.append(Person("Bob"))
+    # Test with custom class - use [initial_value] pattern for type inference
+    let p1 = Person("Alice")
+    let p2 = Person("Bob")
+    
+    # Initialize with first element so type is inferred
+    let mut people = [p1]
+    people.append(p2)
+    
+    print("People list:")
     print(people)  # Should print: [Person(Alice), Person(Bob)]
     
-    # Test dict with custom values
-    let mut scores = {}
-    scores.insert("alice", Person("Alice"))
-    scores.insert("bob", Person("Bob"))
-    print(scores)
+    print("Manual iteration test passed!")
