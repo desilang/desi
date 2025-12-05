@@ -191,6 +191,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			Name:  field.Name.Name,
 			Type:  fieldType,
 			IsPub: field.Pub,
+			IsMut: field.Mut,
 		})
 	}
 

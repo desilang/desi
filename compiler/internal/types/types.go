@@ -125,6 +125,7 @@ type Field struct {
 	Name  string
 	Type  T
 	IsPub bool // public visibility (cross-file access)
+	IsMut bool // mutable field (can be modified after construction)
 }
 
 type Struct struct {

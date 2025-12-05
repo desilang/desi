@@ -188,12 +188,13 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 			}
 		}
 
-		// Check for 'mut' modifier (for static fields)
+		// Check for 'mut' modifier (for mutable fields or static fields)
 		isMut := false
 		if p.cur.Tok == token.KW_mut {
-			if p.peek.Tok == token.KW_static {
+			// mut can precede: static (for static fields) or IDENT (for regular mutable fields)
+			if p.peek.Tok == token.KW_static || p.peek.Tok == token.IDENT {
 				isMut = true
-				p.next()
+				p.next() // consume 'mut'
 			}
 		}
 
@@ -296,6 +297,7 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 		}
 		fields = append(fields, &ast.FieldDecl{
 			Pub:  isPub,
+			Mut:  isMut,
 			Name: fname,
 			Type: ty,
 			Span: ast.JoinSpan(fname.Span, ty.Span),
