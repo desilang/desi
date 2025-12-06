@@ -1,0 +1,22 @@
+# Test generic inheritance: Field substitution
+# Verifies that inherited fields get the correct concrete type from base class
+
+class Box<T>:
+    pub mut val: T
+
+class IntBox(Box<int>):
+    pub def dummy(self) -> none:
+        return
+
+def main() -> int:
+    let b = IntBox()
+    b.val = 10  # Type checker should allow this (val is int)
+    
+    print(f"b.val: {b.val}")
+    
+    # Simple verification logic
+    if b.val != 10: 
+        print("ERROR: value mismatch")
+        return 1
+        
+    return 0
