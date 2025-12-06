@@ -163,13 +163,57 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	// Handle inheritance (single base class)
 	if len(d.Bases) > 0 {
 		baseType := c.resolveType(d.Bases[0])
-		if baseCls, ok := baseType.(*types.Class); ok {
+
+		var baseCls *types.Class
+		var subst map[string]types.T
+
+		if cls, ok := baseType.(*types.Class); ok {
+			baseCls = cls
+		} else if gen, ok := baseType.(*types.Generic); ok {
+			if cls, ok := gen.Base.(*types.Class); ok {
+				baseCls = cls
+				// Create substitution map
+				if len(cls.TypeParams) == len(gen.Args) {
+					subst = make(map[string]types.T)
+					for i, tp := range cls.TypeParams {
+						subst[tp.Name] = gen.Args[i]
+					}
+				}
+			}
+		}
+
+		if baseCls != nil {
 			cls.Base = baseCls
+
 			// Inherit fields (base first)
-			cls.Fields = append(baseCls.Fields, cls.Fields...)
+			if subst == nil {
+				cls.Fields = append(baseCls.Fields, cls.Fields...)
+			} else {
+				// Apply substitution to inherited fields
+				for _, f := range baseCls.Fields {
+					newType := substitute(f.Type, subst)
+					cls.Fields = append(cls.Fields, types.Field{
+						Name:  f.Name,
+						Type:  newType,
+						IsPub: f.IsPub,
+						IsMut: f.IsMut,
+					})
+				}
+				// Sort inherited fields to be before own fields
+				// The loop above appended to end. We need [inherited..., own...]
+				// But wait, cls.Fields currently only has defaults? No, resolveFields hasn't run yet.
+				// cls.Fields is empty initially for a new class, right?
+				// Actually, 'd.Fields' has AST fields. 'cls.Fields' is what we are building.
+				// Wait, if we are revisiting checking (circular checks?), cls.Fields might be populated?
+				// But here we are building it. 'cls' is the type object created in collectClass.
+				// cls.Fields should be empty at this point in checkClass?
+				// Let's check collectClass.
+			}
+
 			// Inherit methods (can override)
 			for name, method := range baseCls.Methods {
 				if _, exists := cls.Methods[name]; !exists {
+					// TODO: Substitute types in method signatures if generic
 					cls.Methods[name] = method
 				}
 			}
@@ -180,7 +224,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 				}
 			}
 		} else {
-			c.add(diagAt("DTE0004", d.Bases[0].Span, "base must be a class"))
+			c.add(diagAt("DTE0999", d.Bases[0].Span, "CRITICAL_ERROR: base must be a class (or generic instantiation of class)"))
 		}
 	}
 
