@@ -1,11 +1,16 @@
-# Test generic type instantiation
-# Note: Declarations use <T>, type expressions use [T]
+# Test generic type instantiation with user-defined generic enum
 
-enum Option<T>:
+enum MyOption<T>:
     Some: T
-    None: none
+    Empty: none
 
-def main():
-    # Type expression uses square brackets
-    let x: Option[int] = Option.Some(42)
-    print("Generic test")
+def main() -> int:
+    # Create an instance of MyOption<int>
+    let x: MyOption<int> = MyOption.Some(42)
+    
+    match x:
+        MyOption.Some(v): print(f"Got value: {v}")
+        MyOption.Empty: print("Empty")
+    
+    print("Generic test passed")
+    return 0

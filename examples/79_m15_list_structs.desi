@@ -5,15 +5,17 @@ struct Point:
 
 def main() -> int:
     # Create a list of struct instances
-    let points: list[Point] = [
-        Point(x: 10, y: 20),
-        Point(x: 30, y: 40),
-        Point(x: 50, y: 60)
+    let points: list<Point> = [
+        Point{x: 10, y: 20},
+        Point{x: 30, y: 40},
+        Point{x: 50, y: 60}
     ]
     
     # Access struct field via indexing
     let first: Point = points[0]
     let x_val: int = first.x
+    
+    print(f"First point x: {x_val}")
     
     # Should return 10
     return x_val
