@@ -7,4 +7,14 @@ def main() -> int:
     let first: int = nums[0]
     
     print(f"Length: {length}, First: {first}")
-    return first
+    
+    # Verify correctness
+    if first != 1:
+        print("ERROR: first should be 1")
+        return 1
+    if length != 5:
+        print("ERROR: length should be 5")
+        return 1
+        
+    print("List indexing test passed!")
+    return 0
