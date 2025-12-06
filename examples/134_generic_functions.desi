@@ -1,0 +1,24 @@
+# Test generic functions
+
+def identity<T>(x: T) -> T:
+    return x
+
+def swap<T, U>(a: T, b: U) -> (U, T):
+    return (b, a)
+
+def main() -> int:
+    # Test identity with int
+    let i: int = identity(42)
+    print(f"identity(42) = {i}")
+    
+    # Test identity with str
+    let s: str = identity("hello")
+    print(f"identity('hello') = {s}")
+    
+    # Verify results
+    if i != 42:
+        print("ERROR: identity(42) should be 42")
+        return 1
+        
+    print("Generic functions test passed!")
+    return 0
