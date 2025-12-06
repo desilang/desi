@@ -47,6 +47,7 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		Constructors:  nil, // will be populated in checkClass
 		Base:          nil, // will be resolved in Phase 2
 		IsNested:      false,
+		Decl:          d,
 	}
 
 	// Add type parameters
@@ -63,6 +64,18 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 	})
 
 	c.info.Types[d] = cls
+
+	// Create inner scope for method collection so generic parameters are visible
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = c.scope.parent }()
+
+	for i, tp := range d.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: tp.Name,
+			Kind: SymType,
+			Type: &cls.TypeParams[i],
+		})
+	}
 
 	// Collect methods (will be fully checked in checkClass)
 	for _, m := range d.Methods {
@@ -214,7 +227,19 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			for name, method := range baseCls.Methods {
 				if _, exists := cls.Methods[name]; !exists {
 					// TODO: Substitute types in method signatures if generic
-					cls.Methods[name] = method
+					if subst != nil {
+						newMethod := *method
+						newParams := make([]types.T, len(method.Params))
+						for i, p := range method.Params {
+							newParams[i] = substitute(p, subst)
+						}
+						newRet := substitute(method.Ret, subst)
+						newMethod.Params = newParams
+						newMethod.Ret = newRet
+						cls.Methods[name] = &newMethod
+					} else {
+						cls.Methods[name] = method
+					}
 				}
 			}
 			// Inherit dunders (can override)

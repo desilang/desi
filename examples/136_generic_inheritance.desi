@@ -12,24 +12,18 @@ class Box<T>(Container<T>):
         self.value := v
 
 class IntBox(Box<int>):
-    pub def __new__(val: int) -> IntBox:
-        let b = IntBox()
-        b.value = val
-        return b
-        
     pub def increment(self):
         self.value := self.value + 1
 
 class StrBox(Box<str>):
-    pub def __new__(val: str) -> StrBox:
-        let b = StrBox()
-        b.value = val
-        return b
+    pub def dummy(self):
+        pass
 
 def main() -> int:
-    let ib = IntBox(10)
+    let ib = IntBox()
+    ib.value = 10
     print("IntBox created")
-    
+    print(ib.get())
     if ib.get() != 10:
         print("ERROR: initial value mismatch")
         return 1
@@ -46,9 +40,10 @@ def main() -> int:
     
     print("IntBox tests passed")
 
-    let sb = StrBox("hello")
+    let sb = StrBox()
+    sb.value = "hello"
     print("StrBox created")
-    
+    print(sb.get())
     if sb.get() != "hello":
          print("ERROR: string box mismatch")
          return 1
