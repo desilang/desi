@@ -1,9 +1,11 @@
 # Test: List of strings
 def main() -> int:
-    let names: list[str] = ["alice", "bob", "charlie"]
+    let mut names: list<str> = ["alice", "bob", "charlie"]
     names.append("david")
     
-    let count: int = names.len()
+    let count: int = len(names)
+    
+    print(f"Count: {count}")
     
     # Should return 4
     return count

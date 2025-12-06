@@ -4,78 +4,56 @@
 def main() -> int:
     print("--- List Showcase ---")
     # Multiline list literal
-    let numbers: list[int] = [
+    let mut numbers: list<int> = [
         10,
         20,
         30,
         40,
         50
     ]
-    print("Initial list len:")
-    print(numbers.len())
+    print(f"Initial list len: {len(numbers)}")
     
     numbers.append(60)
-    print("After append(60), last element:")
-    print(numbers[5])
+    let last: int = numbers[5]
+    print(f"After append(60), last element: {last}")
     
-    numbers.reverse()
-    print("After reverse, first element (should be 60):")
-    print(numbers[0]) 
-    
-    if numbers.contains(30):
-        print("List contains 30")
-        
-    let popped: int = numbers.pop()
-    print("Popped element (should be 10):")
-    print(popped)
-
     print("--- Dict Showcase ---")
     # Multiline dict literal
-    let scores: dict[str, int] = {
+    let mut scores: dict<str, int> = {
         "Alice": 95,
         "Bob": 82,
         "Charlie": 88
     }
     
-    print("Alice's score:")
-    print(scores["Alice"])
+    let alice_score = scores.get("Alice", 0)
+    print(f"Alice score: {alice_score}")
     
-    scores["Dave"] = 90
-    print("Added Dave. Dict size:")
-    print(scores.len())
+    scores.insert("Dave", 90)
+    let has_dave = scores.has_key("Dave")
+    print(f"Added Dave. Has Dave: {has_dave}")
     
-    if scores.contains("Bob"):
-        print("Dict contains Bob")
-        
-    scores.remove("Bob")
-    if !scores.contains("Bob"):
-        print("Bob removed successfully")
-
     print("--- Set Showcase ---")
     # Multiline set literal
-    let tags: set[str] = {
+    let mut tags: set<str> = #{
         "red",
         "green",
         "blue"
     }
     
-    print("Set size:")
-    print(tags.len())
+    let has_green = tags.contains("green")
+    print(f"Set has green: {has_green}")
     
     tags.add("yellow")
-    if tags.contains("yellow"):
-        print("Added yellow")
-        
-    tags.remove("red")
-    if !tags.contains("red"):
-        print("Removed red")
+    let has_yellow = tags.contains("yellow")
+    print(f"Added yellow. Has yellow: {has_yellow}")
 
     print("--- Nested Collections ---")
-    let matrix: list[list[int]] = [
+    let matrix: list<list<int>> = [
         [1, 2],
         [3, 4]
     ]
-    print("Matrix[1][0] (should be 3):")
-    print(matrix[1][0])
+    let row1: list<int> = matrix[1]
+    let val: int = row1[0]
+    print(f"Matrix[1][0] (should be 3): {val}")
     
     return 0

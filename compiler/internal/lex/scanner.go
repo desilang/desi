@@ -385,12 +385,17 @@ func (s *Scanner) Next() Item {
 		}
 	}
 
-	// operators/punctuators (greedy)
 	if it, ok := s.scanOperatorOrPunct(); ok {
-		if it.Tok == token.LBRACE {
+		// Track all bracket types for multi-line literal support
+		switch it.Tok {
+		case token.LBRACE, token.LBRACK, token.LPAREN:
 			s.braceLevel++
-		} else if it.Tok == token.RBRACE {
+		case token.RBRACE, token.RBRACK, token.RPAREN:
 			s.braceLevel--
+		}
+
+		// Special handling for f-string interpolation end
+		if it.Tok == token.RBRACE {
 			// Check if we finished interpolation
 			if len(s.fstrStack) > 0 {
 				target := s.fstrStack[len(s.fstrStack)-1]

@@ -1,8 +1,10 @@
 def main() -> int:
     # Test list with proper unboxing
-    let nums: list[int] = [10, 20, 30]
+    let nums: list<int> = [10, 20, 30]
     let first: int = nums[0]
     let second: int = nums[1]
+    
+    print(f"first: {first}, second: {second}")
     
     # Should return 30 (sum of 10 + 20)
     return first + second
