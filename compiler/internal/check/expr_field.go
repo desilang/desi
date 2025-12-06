@@ -176,6 +176,16 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveListMethod(x, l)
 	}
 
+	// Handle Option methods
+	if types.IsOption(t) {
+		return c.checkOptionMethod(x, t)
+	}
+
+	// Handle Result methods
+	if types.IsResult(t) {
+		return c.checkResultMethod(x, t)
+	}
+
 	// Handle Struct field access
 	if s, ok := t.(*types.Struct); ok {
 		for _, f := range s.Fields {
