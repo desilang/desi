@@ -77,6 +77,8 @@ func (p *Parser) parseClassWithDecs(decs []*ast.Decorator, isNested bool) *ast.C
 	}
 
 	// Class body
+	// Skip any NL tokens from comment-only lines before the body starts
+	p.skipNLs()
 	bodyStart := spanPos(p.file, p.cur)
 	if !p.expect(token.Indent, "indent") {
 		return nil
