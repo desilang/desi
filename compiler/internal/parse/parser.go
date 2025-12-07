@@ -80,6 +80,12 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			}
 			continue
 
+		case token.KW_type:
+			if t := p.parseTypeAlias(false); t != nil {
+				m.Decls = append(m.Decls, t)
+			}
+			continue
+
 		case token.KW_trait:
 			if t := p.parseTrait(nil); t != nil {
 				m.Decls = append(m.Decls, t)
@@ -112,6 +118,11 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 				continue
 			case token.KW_trait:
 				if t := p.parseTrait(nil); t != nil {
+					m.Decls = append(m.Decls, t)
+				}
+				continue
+			case token.KW_type:
+				if t := p.parseTypeAlias(true); t != nil {
 					m.Decls = append(m.Decls, t)
 				}
 				continue

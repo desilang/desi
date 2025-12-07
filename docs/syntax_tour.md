@@ -14,6 +14,10 @@ from string import trim, to_upper as upcase, starts_with, ends_with
 pub type Seconds = int
 type Name = str
 
+# Generic type aliases (with type parameters)
+type Box<T> = Option<T>
+type Pair<A, B> = (A, B)
+
 pub let APP_NAME: str = "Desi Syntax Tour"
 let banner: str = "Pythonic surface • Rusty safety • Elixir-y async"
 

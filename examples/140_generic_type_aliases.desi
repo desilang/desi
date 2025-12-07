@@ -1,0 +1,12 @@
+# Test generic type aliases - basic
+
+# Simple type alias
+type IntList = list<int>
+
+def main() -> int:
+    # Use simple alias
+    let nums: IntList = [1, 2, 3]
+    print(f"IntList length: {len(nums)}")
+    
+    print("Type alias test passed!")
+    return 0

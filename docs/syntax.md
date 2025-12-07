@@ -232,7 +232,8 @@ or
 * `class Name [ (Base, …) ]: Block` (parse-only checks in M3A; visibility policy in policy doc)
 * `struct Name: Fields…`
 * `enum Name: Variants…`
-* `type Name = T`
+* `type Name = T` — simple type alias
+* `type Name<T, U> = ...` — generic type alias with type parameters
 
 ---
 

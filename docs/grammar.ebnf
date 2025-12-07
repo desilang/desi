@@ -59,7 +59,7 @@ StructDecl        = "struct" Ident ":" NL Indent StructBody Dedent ;
 StructBody        = StructField { NL StructField } ;
 StructField       = ["pub"] Ident ":" Type ;
 
-TypeDecl          = "type" Ident "=" Type NL ;
+TypeDecl          = ["pub"] "type" Ident [ "<" Ident { "," Ident } ">" ] "=" Type NL ;
 
 (* ---------- Blocks & Statements ---------- *)
 
