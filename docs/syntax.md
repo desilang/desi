@@ -149,6 +149,44 @@ Desi uses layout with `NL`, `Indent`, `Dedent`.
 
 *(Some of these are “ready in syntax” but only partially used in the current backend; see the roadmap for when specific sizes become semantically meaningful.)*
 
+## Standard Library Types
+
+### Option<T> and Result<T, E>
+Rust-style error handling types built into the language:
+
+```desi
+# Option<T> - represents a value that may or may not exist
+let x: Option<int> = Option.Some(42)
+let y: Option<str> = Option.Nothing
+
+if x.is_some():
+    print(x.unwrap())  # 42
+
+# Result<T, E> - represents success or error
+let ok: Result<int, str> = Result.Ok(100)
+let err: Result<int, str> = Result.Err("failed")
+
+match ok:
+    Result.Ok(v): print(f"Got {v}")
+    Result.Err(e): print(f"Error: {e}")
+```
+
+### Generic Type Aliases
+Create reusable type aliases with optional type parameters:
+
+```desi
+# Simple alias
+type IntList = list<int>
+
+# Generic alias with type parameters
+type Box<T> = Option<T>
+type Pair<A, B> = (A, B)
+
+# Usage
+let nums: IntList = [1, 2, 3]
+let boxed: Box<int> = Option.Some(42)
+```
+
 ## Literals
 
 - Integers: dec/hex/bin/oct with `_` separators.
