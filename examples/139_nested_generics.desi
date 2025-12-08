@@ -1,0 +1,20 @@
+# Test nested generics: List<Option<T>>
+
+def main() -> int:
+    # Test 1: Simple nested - list of Options
+    let opts: list<Option<int>> = [Option.Some(1), Option.Some(2), Option.Nothing]
+    print("Created list<Option<int>>")
+    
+    # Test 2: Access and check
+    let first = opts[0]
+    if first.is_some():
+        print(f"First value: {first.unwrap()}")
+    
+    # Test 3: Option containing a list
+    let maybe_list: Option<list<int>> = Option.Some([1, 2, 3])
+    if maybe_list.is_some():
+        let inner = maybe_list.unwrap()
+        print(f"Inner list length: {len(inner)}")
+    
+    print("Nested generics test passed!")
+    return 0
