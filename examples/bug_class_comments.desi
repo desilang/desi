@@ -1,0 +1,18 @@
+class CommentTest:
+    # This is a comment at the top
+    pub mut x: int
+
+    # Comment between fields
+    pub mut y: int
+
+    # Comment before method
+    def foo(self):
+        # Comment inside method (usually works)
+        print("Hello")
+
+    # Comment at the end
+
+def main() -> int:
+    let c = CommentTest()
+    c.x = 10
+    return 0
