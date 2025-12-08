@@ -208,4 +208,13 @@ func addPreludeBuiltins(info *Info) {
 		nil,
 		[]string{"start", "stop", "step"},
 	)
+
+	// --- File I/O builtins ---
+	// open(path: str, mode: str) -> File
+	addN("open",
+		[]types.T{types.Str, types.Str},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		types.File,
+		[]string{"path", "mode"},
+	)
 }

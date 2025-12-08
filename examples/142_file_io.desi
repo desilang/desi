@@ -1,0 +1,19 @@
+# Test file I/O: open, read, write, close
+
+def main() -> int:
+    # Test write
+    let outfile = open("test_output.txt", "w")
+    outfile.write("Hello from Desi!")
+    outfile.write("\nSecond line")
+    outfile.close()
+    print("File written!")
+    
+    # Test read
+    let infile = open("test_output.txt", "r")
+    let content = infile.read()
+    print("Read content:")
+    print(content)
+    infile.close()
+    
+    print("File I/O test passed!")
+    return 0

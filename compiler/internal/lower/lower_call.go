@@ -129,6 +129,11 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// File methods: read, write, close, is_open
+			if types.Equal(feXType, types.File) {
+				return ls.lowerFileMethod(fe, x.Args)
+			}
+
 			if types.IsOption(feXType) {
 				// We pass nil for *types.Enum because lowerOptionMethod doesn't strictly need it
 				// or we can extract it. Let's update lowerOptionMethod to take types.T later if needed.
@@ -218,6 +223,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 				}
 			}
+		}
+	}
+
+	// 1.6. open() builtin - file I/O
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "open" && len(x.Args) == 2 {
+			return ls.lowerFileOpen(x.Args)
 		}
 	}
 
