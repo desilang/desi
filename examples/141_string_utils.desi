@@ -1,0 +1,29 @@
+# Test string split, join, and replace
+
+def main() -> int:
+    # Test split
+    let text = "apple,banana,cherry"
+    let parts = text.split(",")
+    print("Split result length:")
+    print(len(parts))
+    
+    # Test join
+    let words = ["one", "two", "three"]
+    let joined = words.join("-")
+    print("Joined:")
+    print(joined)
+    
+    # Test replace
+    let sentence = "hello world world!"
+    let replaced = sentence.replace("world", "desi")
+    print("Replaced:")
+    print(replaced)
+    
+    # More tests
+    let path = "/home/user/docs"
+    let dirs = path.split("/")
+    print("Path split length:")
+    print(len(dirs))
+    
+    print("String utilities test passed!")
+    return 0
