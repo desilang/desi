@@ -167,9 +167,16 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		// -1: no match
 
 		for _, ctor := range cls.Constructors {
-			// __new__ is a static method in Desi, no implicit self/cls injection
-			// unless explicitly defined (which check_type handles, but for now assuming clean static)
-			numExpectedArgs := len(ctor.Params)
+			// __new__ methods have an implicit self parameter as the first param (injected by check_type.go)
+			// Callers do NOT pass self explicitly, so we need to skip it in arity and type checks
+			params := ctor.Params
+			if len(params) > 0 {
+				// Check if first param is the class type (i.e., self)
+				if _, ok := params[0].(*types.Class); ok {
+					params = params[1:] // Skip implicit self
+				}
+			}
+			numExpectedArgs := len(params)
 
 			// Check arity
 			if len(call.Args) != numExpectedArgs {
@@ -180,7 +187,7 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 			match := true
 			for i, arg := range call.Args {
 				argType := c.typ(arg)
-				if !types.Assignable(ctor.Params[i], argType) {
+				if !types.Assignable(params[i], argType) {
 					match = false
 					break
 				}
