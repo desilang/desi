@@ -403,7 +403,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				initVal = ls.lowerExpr(s.Init)
 				ls.b.Emit(&hir.Let{Name: ident, Init: initVal})
 			} else {
-				ls.b.Emit(&hir.Let{Name: ident})
+				// No explicit init - create a new arena with __arena_new
+				arenaPtr := ls.b.FreshTemp("arena_new")
+				ls.b.Emit(&hir.Call{
+					Dst:  arenaPtr,
+					Fn:   "__arena_new",
+					Args: []hir.Value{hir.ConstInt{Text: "0", Type: "i64"}}, // 0 = default capacity (64KB)
+					Type: "ptr",
+				})
+				initVal = arenaPtr
+				ls.b.Emit(&hir.Let{Name: ident, Init: initVal})
 			}
 
 			// Check if it's a class with __close__

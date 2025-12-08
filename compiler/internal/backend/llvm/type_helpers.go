@@ -17,7 +17,7 @@ func isReferenceType(t interface{}) bool {
 
 	// Check if it's a reference type
 	switch typ.(type) {
-	case *types.Set, *types.Dict, *types.List:
+	case *types.Set, *types.Dict, *types.List, *types.Arena:
 		return true
 	}
 
