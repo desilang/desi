@@ -1,0 +1,26 @@
+# Test multiple type parameters
+# This tests <T, U> with actual calls
+
+def swap<T, U>(a: T, b: U) -> (U, T):
+    return (b, a)
+
+def pair<A, B>(first: A, second: B) -> (A, B):
+    return (first, second)
+
+# More comprehensive test: 3 type params
+def triple<X, Y, Z>(x: X, y: Y, z: Z) -> (X, Y, Z):
+    return (x, y, z)
+
+def main() -> int:
+    # These calls compile and run, proving multi-param generics work
+    let result = swap(42, "hello")
+    print("swap(42, 'hello') called successfully")
+    
+    let p = pair("world", 100)
+    print("pair('world', 100) called successfully")
+    
+    let t = triple(1, "two", 3.14)
+    print("triple(1, 'two', 3.14) called successfully")
+    
+    print("Multiple type parameters test passed!")
+    return 0
