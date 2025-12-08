@@ -1,12 +1,60 @@
-# Test generic type aliases - basic
+# Test generic type aliases - comprehensive
 
-# Simple type alias
+# Simple type aliases
 type IntList = list<int>
+type StrList = list<str>
+
+# Generic type aliases
+type Box<T> = Option<T>
+type Pair<A, B> = (A, B)
+type Triple<X, Y, Z> = (X, Y, Z)
+
+# Custom struct for testing
+struct Point:
+    x: int
+    y: int
+
+# Type alias with custom struct
+type PointList = list<Point>
 
 def main() -> int:
-    # Use simple alias
-    let nums: IntList = [1, 2, 3]
-    print(f"IntList length: {len(nums)}")
+    # Test simple aliases
+    let nums: IntList = [1, 2, 3, 4, 5]
+    print(f"IntList: len={len(nums)}")
     
-    print("Type alias test passed!")
+    let strs: StrList = ["a", "b", "c"]
+    print(f"StrList: len={len(strs)}")
+    
+    # Test generic alias - Box<T> = Option<T>
+    let boxed_int: Box<int> = Option.Some(42)
+    let boxed_str: Box<str> = Option.Some("hello")
+    let empty_box: Box<int> = Option.Nothing
+    
+    match boxed_int:
+        Option.Some(v): print(f"Box<int> contains: {v}")
+        Option.Nothing: print("Box is empty")
+    
+    match boxed_str:
+        Option.Some(s): print(f"Box<str> contains: {s}")
+        Option.Nothing: print("Box is empty")
+    
+    match empty_box:
+        Option.Some(n): print(f"Value: {n}")
+        Option.Nothing: print("Empty box is Nothing (correct)")
+    
+    # Test Pair<A, B> alias
+    let p: Pair<str, int> = ("test", 100)
+    print("Pair<str, int> created")
+    
+    # Test Triple<X, Y, Z> alias
+    let t: Triple<int, str, bool> = (1, "two", true)
+    print("Triple<int, str, bool> created")
+    
+    # Test custom struct alias
+    let p1 = Point(x=10, y=20)
+    let p2 = Point(x=30, y=40)
+    let points: PointList = [p1, p2]
+    print(f"PointList with custom struct: len={len(points)}")
+    
+    print("All type alias tests passed!")
     return 0
