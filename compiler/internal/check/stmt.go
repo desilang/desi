@@ -339,8 +339,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 
 	case *ast.UsingStmt:
-		if st.Bind != nil {
-			_ = c.typ(st.Bind)
+		// Bind the using identifier to the scope as Arena type
+		if id, ok := st.Bind.(*ast.Ident); ok {
+			sym := &Symbol{
+				Name: id.Name,
+				Kind: SymVar,
+				Type: types.ArenaOf(),
+			}
+			_ = c.scope.Define(sym)
+			c.info.Idents[id] = sym
 		}
 		if st.Init != nil {
 			_ = c.typ(st.Init)

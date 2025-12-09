@@ -700,7 +700,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	switch callee {
 	case "arena.alloc":
 		dst := ls.b.FreshTemp("alloc")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "arena.alloc", Args: args})
+		// Emit ArenaAlloc HIR node (LLVM backend will emit __arena_alloc call)
+		ls.b.Emit(&hir.ArenaAlloc{Dst: dst, Arena: args[0], Args: args[1:]})
 		ls.tempsFromArenaAlloc[dst.Name] = true
 		return dst
 	case "arena.register_poll":

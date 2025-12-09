@@ -186,6 +186,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveFileMethod(x)
 	}
 
+	// Handle Arena methods: alloc
+	if _, ok := t.(*types.Arena); ok {
+		return c.resolveArenaMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -774,6 +779,25 @@ func (c *checker) resolveFileMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf(nil, types.Bool, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on File"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveArenaMethod handles arena.alloc()
+func (c *checker) resolveArenaMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "alloc":
+		// alloc(size: int) -> ptr (opaque pointer to arena-allocated memory)
+		// For type checking, we return Any since the caller decides the type
+		methodType = types.FuncOf([]types.T{types.Int}, types.Any, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on arena"))
 		return nil
 	}
 

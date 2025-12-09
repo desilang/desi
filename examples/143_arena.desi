@@ -1,0 +1,16 @@
+# Test Arena memory management
+# using arena creates a bump allocator scope
+# arena.alloc allocates memory from the arena
+# Memory is freed all at once when scope exits
+
+def main() -> int:
+    print("Arena test start")
+    
+    using arena:
+        # Allocate from arena - all freed at scope exit
+        let x = arena.alloc(100)    # allocate 100 bytes
+        let y = arena.alloc(200)    # allocate 200 bytes
+        print("Allocated from arena")
+    
+    print("Arena test passed!")
+    return 0
