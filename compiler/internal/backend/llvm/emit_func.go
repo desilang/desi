@@ -474,16 +474,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- arena helpers -------
 			case *hir.ArenaAlloc:
-				if v, ok := x.Arena.(hir.Var); ok {
-					wprintf(&m.funcs, "  %%t%d = call ptr @__arena_alloc(ptr %%%s)\n", m.tempID, v.Name)
-					m.ensureDecl("declare ptr @__arena_alloc(ptr)")
-					m.tempID++
+				// Get arena operand - use m.operand to resolve SSA aliases
+				_, arenaOp := m.operand(x.Arena)
+
+				// Get size operand from Args[0], default to 8 bytes if not provided
+				sizeOp := "8"
+				if len(x.Args) > 0 {
+					_, sizeOp = m.operand(x.Args[0])
 				}
+
+				// Emit call and store result to destination temp
+				wprintf(&m.funcs, "  %s = call ptr @__arena_alloc(ptr %s, i64 %s)\n", x.Dst.String(), arenaOp, sizeOp)
+				m.ensureDecl("declare ptr @__arena_alloc(ptr, i64)")
+				m.tempTypes[x.Dst.Name] = "ptr"
 			case *hir.DestroyArena:
-				if v, ok := x.Arena.(hir.Var); ok {
-					wprintf(&m.funcs, "  call void @__arena_destroy(ptr %%%s)\n", v.Name)
-					m.needArena = true
-				}
+				// Use ptrOperand to resolve SSA aliases
+				arenaPtr := m.ptrOperand(x.Arena)
+				wprintf(&m.funcs, "  call void @__arena_destroy(%s)\n", arenaPtr)
+				m.needArena = true
 
 			// ------- tuple ops -------
 			case *hir.InsertValue:

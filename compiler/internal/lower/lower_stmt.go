@@ -412,7 +412,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					Type: "ptr",
 				})
 				initVal = arenaPtr
-				ls.b.Emit(&hir.Let{Name: ident, Init: initVal})
+				ls.b.Emit(&hir.Let{Name: ident, Init: initVal, Type: types.ArenaOf()})
 			}
 
 			// Check if it's a class with __close__

@@ -161,6 +161,25 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 				return ls.lowerResultMethod(fe, x.Args, enum)
 			}
+
+			// Arena methods: alloc
+			if _, ok := feXType.(*types.Arena); ok {
+				if fe.Name.Name == "alloc" {
+					// arena.alloc(size) -> ArenaAlloc HIR node
+					arenaVal := ls.lowerExpr(fe.X) // Lower the arena receiver
+					dst := ls.b.FreshTemp("alloc")
+
+					// Get size from args (default to 8 if not provided)
+					var sizeVal hir.Value = hir.ConstInt{Text: "8", Type: "i64"}
+					if len(x.Args) > 0 {
+						sizeVal = ls.lowerExpr(x.Args[0])
+					}
+
+					ls.b.Emit(&hir.ArenaAlloc{Dst: dst, Arena: arenaVal, Args: []hir.Value{sizeVal}})
+					ls.tempsFromArenaAlloc[dst.Name] = true
+					return dst
+				}
+			}
 		}
 	}
 
