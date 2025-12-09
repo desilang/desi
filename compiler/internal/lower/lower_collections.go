@@ -84,14 +84,39 @@ func lowerType(t types.T) string {
 	}
 	name := t.String()
 	switch name {
-	case "int", "i32", "u32":
+	// Signed integers
+	case "int", "i32":
 		return "i32"
-	case "i64", "u64", "isize", "usize":
+	case "i8":
+		return "i8"
+	case "i16":
+		return "i16"
+	case "i64", "isize":
 		return "i64"
+	case "i128":
+		return "i128"
+
+	// Unsigned integers (LLVM uses same iN types, signedness is in ops)
+	case "u8":
+		return "i8"
+	case "u16":
+		return "i16"
+	case "u32":
+		return "i32"
+	case "u64", "usize":
+		return "i64"
+	case "u128":
+		return "i128"
+
+	// Floats
+	case "float", "f64":
+		return "double"
+	case "f32":
+		return "float"
+
+	// Other primitives
 	case "bool":
 		return "i1"
-	case "float":
-		return "double"
 	case "str":
 		return "ptr"
 	case "none":

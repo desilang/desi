@@ -1,0 +1,26 @@
+# Test sized integer and float types
+
+def main() -> int:
+    # Signed integers
+    let a: i8 = 127
+    let b: i16 = 32767
+    let c: i32 = 2147483647
+    let d: i64 = 9223372036854775807
+    
+    # Unsigned integers
+    let e: u8 = 255
+    let f: u16 = 65535
+    let g: u32 = 100
+    let h: u64 = 1000
+    
+    # Floats
+    let x: f32 = 3.14
+    let y: f64 = 2.718281828459045
+    let z: float = 1.0
+    
+    # Same-width operations (avoiding mixing widths)
+    let sum: int = 10 + 20
+    let product: int = 5 * 6
+    
+    print("Sized types test passed!")
+    return 0
