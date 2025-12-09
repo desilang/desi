@@ -328,7 +328,54 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 
 	case *ast.ForStmt:
-		_ = c.typ(st.Iter)
+		// Get the iterable type
+		iterType := c.typ(st.Iter)
+
+		// Determine element type from iterable
+		var elemType types.T
+		if iterType != nil {
+			switch it := iterType.(type) {
+			case *types.List:
+				elemType = it.Elem
+			case *types.Set:
+				elemType = it.Elem
+			default:
+				// For range() and other iterables, assume int for now
+				elemType = types.Int
+			}
+		}
+
+		// Bind loop variables from Targets
+		if len(st.Targets) > 0 {
+			for _, tgt := range st.Targets {
+				var varType types.T
+				if tgt.Type != nil {
+					// Explicit type annotation
+					varType = c.resolveType(tgt.Type)
+					// Validate against element type
+					if elemType != nil && varType != nil && !types.Assignable(varType, elemType) {
+						c.add(diagAt("DTE0004", tgt.Name.Span, "loop variable type '"+varType.String()+"' does not match element type '"+elemType.String()+"'"))
+					}
+				} else {
+					// Infer from collection element type
+					varType = elemType
+				}
+
+				if tgt.Name != nil {
+					sym := &Symbol{
+						Name: tgt.Name.Name,
+						Kind: SymVar,
+						Type: varType,
+					}
+					_ = c.scope.Define(sym)
+					c.info.Idents[tgt.Name] = sym
+					if varType != nil {
+						c.info.Types[tgt.Name] = varType
+					}
+				}
+			}
+		}
+
 		if st.Body != nil {
 			c.checkBlock(st.Body)
 		}
