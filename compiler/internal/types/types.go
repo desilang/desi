@@ -85,6 +85,9 @@ var (
 	// M9A: size-specific integers (Tier-0: treated as part of the int family)
 	USize = &basic{kind: IntKind, name: "usize"}
 	ISize = &basic{kind: IntKind, name: "isize"}
+
+	// File I/O: opaque file handle type
+	File = &basic{kind: TypeKind, name: "File"}
 )
 
 // ----- Parameterized/container types -----
@@ -519,6 +522,8 @@ func FromName(name string) (T, bool) {
 		return None, true
 	case "Any":
 		return Any, true
+	case "File":
+		return File, true
 
 	// Pointer-sized ints (Tier-0: still IntKind)
 	case "usize":

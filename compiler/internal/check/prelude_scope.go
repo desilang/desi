@@ -20,6 +20,7 @@ var preludeBuiltinNames = map[string]struct{}{
 	"str":   {},
 	"len":   {},
 	"bool":  {},
+	"open":  {},
 }
 
 // isPreludeBuiltinName reports whether 'name' is one of the always-available builtins.

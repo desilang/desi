@@ -236,6 +236,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			if types.Equal(receiverType, types.Str) {
 				isBuiltinCollection = true
 			}
+			// Also check for File type (for read, write, close methods)
+			if types.Equal(receiverType, types.File) {
+				isBuiltinCollection = true
+			}
 
 			if isBuiltinCollection {
 				// Get the method type from the field expression

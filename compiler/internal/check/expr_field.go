@@ -181,6 +181,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveStrMethod(x)
 	}
 
+	// Handle File methods: read, write, close, is_open
+	if types.Equal(t, types.File) {
+		return c.resolveFileMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -742,6 +747,33 @@ func (c *checker) resolveStrMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf([]types.T{types.Str, types.Str}, types.Str, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on str"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveFileMethod handles File.read(), File.write(), File.close(), File.is_open()
+func (c *checker) resolveFileMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "read":
+		// read() -> str
+		methodType = types.FuncOf(nil, types.Str, false)
+	case "write":
+		// write(data: str) -> none
+		methodType = types.FuncOf([]types.T{types.Str}, types.None, false)
+	case "close":
+		// close() -> none
+		methodType = types.FuncOf(nil, types.None, false)
+	case "is_open":
+		// is_open() -> bool
+		methodType = types.FuncOf(nil, types.Bool, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on File"))
 		return nil
 	}
 
