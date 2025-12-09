@@ -176,6 +176,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveListMethod(x, l)
 	}
 
+	// Handle str methods: split, replace
+	if types.Equal(t, types.Str) {
+		return c.resolveStrMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -642,6 +647,14 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "to_str":
 		// to_str() -> str
 		methodType = types.FuncOf(nil, types.Str, false)
+	case "join":
+		// join(delim: str) -> str (only for list<str>)
+		if l.Elem == types.Str {
+			methodType = types.FuncOf([]types.T{types.Str}, types.Str, false)
+		} else {
+			c.add(diagAt("DTE0001", x.Name.Span, "join() is only available on list<str>"))
+			return nil
+		}
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil
@@ -708,6 +721,27 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 		methodType = types.FuncOf(nil, errType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveStrMethod handles str.split() and str.replace() methods
+func (c *checker) resolveStrMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "split":
+		// split(delim: str) -> list<str>
+		methodType = types.FuncOf([]types.T{types.Str}, types.ListOf(types.Str), false)
+	case "replace":
+		// replace(old: str, new: str) -> str
+		methodType = types.FuncOf([]types.T{types.Str, types.Str}, types.Str, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on str"))
 		return nil
 	}
 

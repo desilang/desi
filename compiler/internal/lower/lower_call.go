@@ -113,7 +113,20 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				return ls.lowerSetMethod(fe, x.Args, t)
 			}
 			if t, ok := feXType.(*types.List); ok {
+				// Check for join method on list<str>
+				if fe.Name.Name == "join" && t.Elem == types.Str {
+					if res := ls.lowerListJoin(fe, x.Args, t); res != nil {
+						return res
+					}
+				}
 				return ls.lowerListMethod(fe, x.Args, t)
+			}
+
+			// String methods: split, replace
+			if feXType == types.Str {
+				if res := ls.lowerStringMethod(fe, x.Args); res != nil {
+					return res
+				}
 			}
 
 			if types.IsOption(feXType) {

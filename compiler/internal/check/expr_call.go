@@ -232,6 +232,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			case *types.Set, *types.Dict, *types.List:
 				isBuiltinCollection = true
 			}
+			// Also check for str type (for split, replace methods)
+			if types.Equal(receiverType, types.Str) {
+				isBuiltinCollection = true
+			}
 
 			if isBuiltinCollection {
 				// Get the method type from the field expression
