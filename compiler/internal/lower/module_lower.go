@@ -113,25 +113,29 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 			}
 
 			if typeName != "" {
-				// Check if this type has __str__ defined (skip default to_str synthesis)
-				hasStr := false
+				// Check if this type has __str__ or __repr__ defined
+				hasStrMethod := false
+				reprFuncName := "" // If __repr__ is defined, we'll delegate to it
 				if c, ok := d.(*ast.ClassDecl); ok {
 					for _, m := range c.Methods {
 						if m.Name.Name == "__str__" {
-							hasStr = true
+							hasStrMethod = true
 							break
+						}
+						if m.Name.Name == "__repr__" {
+							reprFuncName = fmt.Sprintf("%s___repr__", typeName)
 						}
 					}
 				}
 
-				if !hasStr {
+				if !hasStrMethod {
 					if impls, ok := info.Impls[typeName]; ok {
 						if methods, ok := impls["Display"]; ok {
 							for _, m := range methods {
 								// If body is nil, it's the synthesized default
 								if m.Name.Name == "to_str" && m.Body == nil {
 									name := fmt.Sprintf("%s_to_str", typeName)
-									out.Funcs = append(out.Funcs, LowerDefaultToStr(name, typeName))
+									out.Funcs = append(out.Funcs, LowerDefaultToStr(name, typeName, reprFuncName))
 								}
 							}
 						}

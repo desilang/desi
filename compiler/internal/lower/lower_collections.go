@@ -19,13 +19,17 @@ func resolveToStrFunc(t types.T) hir.Value {
 		return hir.ConstStr{Text: "null"}
 	}
 
-	// For classes with to_str or __str__
+	// For classes with __str__, __repr__, or to_str
 	if cls, ok := t.(*types.Class); ok {
-		// Check for __str__ first (preferred)
+		// Check for __str__ first (preferred for human-readable)
 		if _, found := cls.Dunders["__str__"]; found {
 			return hir.Var{Name: "@" + cls.Name + "___str__"}
 		}
-		// Check for to_str
+		// Check for __repr__ (Python-style fallback)
+		if _, found := cls.Dunders["__repr__"]; found {
+			return hir.Var{Name: "@" + cls.Name + "___repr__"}
+		}
+		// Check for to_str (legacy Desi-style)
 		if _, found := cls.Methods["to_str"]; found {
 			return hir.Var{Name: "@" + cls.Name + "_to_str"}
 		}
