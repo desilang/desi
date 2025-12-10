@@ -97,16 +97,59 @@ func (p *Parser) parseWhile() ast.Stmt {
 }
 
 // for target in iter (block and one-line)
-// Target is parsed as an Expr (identifier, tuple-like, or list-like); semantics deferred.
+// Supports: for x in iter:
+//
+//	for x: T in iter:
+//	for k, v in iter:
+//	for k: K, v: V in iter:
 func (p *Parser) parseFor() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'for'
 	p.next()
 
-	// Parse <target> with "in as operator" disabled.
-	var target ast.Expr
-	withInAsOperator(false, func() {
-		target = p.parseExpr()
-	})
+	// Parse typed targets: x: T or x: T, y: U or just x, y
+	var targets []ast.ForTarget
+	var legacyTarget ast.Expr // fallback for backward compat
+
+	// First, try to parse as typed binding(s)
+	for {
+		// Must start with identifier
+		if p.cur.Tok != token.IDENT {
+			// Fallback to expression-based parsing for complex patterns
+			withInAsOperator(false, func() {
+				legacyTarget = p.parseExpr()
+			})
+			break
+		}
+
+		nameSpan := spanPos(p.file, p.cur)
+		name := &ast.Ident{Name: p.cur.Lexeme, Span: nameSpan}
+		p.next()
+
+		var typeAnnotation *ast.TypeName
+
+		// Check for type annotation `: T`
+		if p.cur.Tok == token.COLON {
+			p.next()
+			// Peek: if next is 'in', this is not a type but the loop syntax
+			// Actually we need to check if we're at `in` keyword
+			if p.cur.Tok == token.KW_in {
+				// No type annotation, rewind
+				targets = append(targets, ast.ForTarget{Name: name, Type: nil})
+				break
+			}
+			// Parse type - but stop before 'in' or ','
+			typeAnnotation = p.parseTypeName()
+		}
+
+		targets = append(targets, ast.ForTarget{Name: name, Type: typeAnnotation})
+
+		// Check for comma (more targets)
+		if p.cur.Tok == token.COMMA {
+			p.next()
+			continue
+		}
+		break
+	}
 
 	if !p.expect(token.KW_in, "in") {
 		p.syncStmt()
@@ -128,10 +171,11 @@ func (p *Parser) parseFor() ast.Stmt {
 		body = &ast.Block{Stmts: []ast.Stmt{s}, Span: ast.JoinSpan(s.SpanOf(), s.SpanOf())}
 	}
 	return &ast.ForStmt{
-		Target: target,
-		Iter:   iter,
-		Body:   body,
-		Span:   ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		Target:  legacyTarget,
+		Targets: targets,
+		Iter:    iter,
+		Body:    body,
+		Span:    ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
 }
 

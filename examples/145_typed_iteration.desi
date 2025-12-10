@@ -1,0 +1,11 @@
+# Test typed for-loop iteration
+
+def main() -> int:
+    let items: list[int] = [1, 2, 3, 4, 5]
+    
+    # Typed loop variable
+    for x: int in items:
+        print(x)
+    
+    print("Typed iteration test passed!")
+    return 0
