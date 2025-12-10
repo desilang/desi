@@ -2,6 +2,7 @@ package lower
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/hir"
@@ -303,6 +304,40 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.b.Emit(&hir.Assign{LHS: lhs, RHS: rhs})
 				ls.consumeTemp(rhs) // Assign consumes the value
 			}
+		}
+
+	case *ast.AugAssignStmt:
+		// Lower aug-assign: x += y becomes x = x + y
+		// For mutable stack variables: load, binop, store
+		if id, ok := s.Left.(*ast.Ident); ok {
+			varName := id.Name
+
+			// Load current value
+			loadTemp := ls.b.FreshTemp("aug_load")
+			if ls.isMutable(varName) {
+				ls.b.Emit(&hir.Load{Type: "i32", Src: hir.Var{Name: varName}, Dst: loadTemp, DesiType: nil})
+			} else {
+				// For SSA-style variables, use the current value directly
+				loadTemp = hir.Temp{Name: "%" + varName}
+			}
+
+			// Lower the RHS
+			rhs := ls.lowerExpr(s.Right)
+
+			// Extract operator from aug op (e.g., "+=" -> "+")
+			op := strings.TrimSuffix(s.Op, "=")
+
+			// Emit binary operation
+			resultTemp := ls.b.FreshTemp("aug_result")
+			ls.b.Emit(&hir.BinaryOp{Dst: resultTemp, Op: op, LHS: loadTemp, RHS: rhs, Type: "i32"})
+
+			// Store result back
+			if ls.isMutable(varName) {
+				ls.b.Emit(&hir.Store{Dst: hir.Var{Name: varName}, Val: resultTemp})
+			} else {
+				ls.b.Emit(&hir.Assign{LHS: varName, RHS: resultTemp})
+			}
+			ls.consumeTemp(rhs)
 		}
 
 	case *ast.ExprStmt:

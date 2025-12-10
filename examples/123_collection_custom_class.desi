@@ -6,7 +6,7 @@ class Person:
     pub def __new__(self, name: str):
         self.name = name
     
-    pub def __str__(self) -> str:
+    pub def __repr__(self) -> str:
         return self.name
 
 def main():
@@ -19,9 +19,11 @@ def main():
     print("People list:")
     print(people)
     
-    print("\nManual iteration:")
-    for i in range(0, len(people)):
+    print("\nManual iteration with while loop:")
+    let mut i = 0
+    while i < len(people):
         let person = people.get(i)
         print(person)
+        i += 1
     
     print("\nTest passed!")
