@@ -33,8 +33,9 @@ type Info struct {
 	Funcs  map[string]*OverloadSet // function overload sets by name
 
 	// M5: imports bridge
-	ImportPaths map[string]string // local import binding -> dotted module path (e.g., "math" -> "math")
-	R           *resolve.Info     // resolver results (exports table, etc.)
+	ImportPaths   map[string]string // local import binding -> dotted module path (e.g., "math" -> "math")
+	ImportAliases map[string]string // local alias name -> actual function name (e.g., "sum" -> "add")
+	R             *resolve.Info     // resolver results (exports table, etc.)
 
 	// M6-P2-B: per-function move tracking for identifiers.
 	Moved map[string]diag.Span
@@ -91,6 +92,7 @@ func NewInfo() *Info {
 		Idents:              make(map[*ast.Ident]*Symbol),
 		Funcs:               make(map[string]*OverloadSet),
 		ImportPaths:         make(map[string]string),
+		ImportAliases:       make(map[string]string),
 		R:                   nil,
 		Moved:               make(map[string]diag.Span),
 		Impls:               make(map[string]map[string][]*ast.FuncDecl),

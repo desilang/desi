@@ -57,6 +57,13 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 			}
 			set := setFor(local)
 
+			// Record alias mapping: local name -> actual function name
+			// This helps the backend resolve calls to aliased imports
+			actualName := it.Name.Name
+			if local != actualName {
+				info.ImportAliases[local] = actualName
+			}
+
 			// Append exported candidates, if any
 			if ex != nil {
 				name := it.Name.Name

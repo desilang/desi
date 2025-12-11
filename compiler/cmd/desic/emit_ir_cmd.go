@@ -378,8 +378,8 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 	// (LowerModuleFromSource can work without source for most cases)
 	var src []byte
 
-	// Lower to HIR
-	hm := lower.LowerModuleFromSource(mod, info, src)
+	// Lower to HIR - skip built-in enums since they're emitted from entry module
+	hm := lower.LowerModuleFromSourceWithOptions(mod, info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true})
 
 	return hm, src, mod, nil
 }

@@ -96,9 +96,13 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 		}
 	}
 
-	// Fallback: use default types
+	// Fallback: use AST type annotations when type info is not available
 	for _, p := range fd.Params {
-		f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: "ptr"})
+		paramType := "ptr" // default
+		if p.Type != nil {
+			paramType = llvmTypeFromAST(p.Type.Name)
+		}
+		f.Params = append(f.Params, hir.Param{Name: p.Name.Name, Type: paramType})
 	}
 	if fd.RetType != nil {
 		switch fd.RetType.Name {
@@ -118,6 +122,32 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 	}
 
 	return f
+}
+
+// llvmTypeFromAST converts an AST type name to an LLVM type string.
+func llvmTypeFromAST(name string) string {
+	switch name {
+	case "int":
+		return "i32"
+	case "bool":
+		return "i1"
+	case "float", "f64":
+		return "double"
+	case "f32":
+		return "float"
+	case "str":
+		return "ptr"
+	case "usize", "isize", "i64", "u64":
+		return "i64"
+	case "i8", "u8":
+		return "i8"
+	case "i16", "u16":
+		return "i16"
+	case "i32", "u32":
+		return "i32"
+	default:
+		return "ptr" // custom types are pointers
+	}
 }
 
 // LowerBlockFromSource lowers just a block with a given name (for compatibility with existing code).
@@ -337,8 +367,25 @@ func (ls *lowerState) nameOf(e ast.Expr) string {
 func (ls *lowerState) calleeName(e ast.Expr) string {
 	switch x := e.(type) {
 	case *ast.Ident:
+		// Check if this is an aliased import (e.g., "sum" from "from math import add as sum")
+		if ls.info != nil && ls.info.ImportAliases != nil {
+			if actualName, ok := ls.info.ImportAliases[x.Name]; ok {
+				return actualName
+			}
+		}
 		return x.Name
 	case *ast.FieldExpr:
+		// Check if this is a module-qualified call (e.g., "math.add")
+		if ls.info != nil && ls.info.R != nil {
+			// Check if the receiver (X) is a module name
+			if id, ok := x.X.(*ast.Ident); ok {
+				if _, isModule := ls.info.R.Imports[id.Name]; isModule {
+					// It's a qualified call like math.add
+					// Return just the function name since we're emitting it with that name
+					return x.Name.Name
+				}
+			}
+		}
 		return ls.fieldName(x)
 	default:
 		var buf bytes.Buffer

@@ -9,6 +9,11 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// LowerModuleOptions controls module lowering behavior.
+type LowerModuleOptions struct {
+	SkipBuiltinEnums bool // Don't generate Option/Result constructors
+}
+
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
 // - Synchronous def: 1 HIR func with the same name
 // - Async def:       2 HIR funcs: wrapper "<name>" and poll "<name>$poll"
@@ -16,6 +21,11 @@ import (
 // 'src' is used for literal materialization (strings).
 // NOTE: For M9B, we also skip functions decorated with @extern(...), even if a body is present.
 func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.Module {
+	return LowerModuleFromSourceWithOptions(mod, info, src, LowerModuleOptions{})
+}
+
+// LowerModuleFromSourceWithOptions is like LowerModuleFromSource but accepts options.
+func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []byte, opts LowerModuleOptions) *hir.Module {
 	// Rewrite async lambdas into hidden async functions before lowering.
 	DesugarAsyncLambdas(mod)
 
@@ -61,18 +71,18 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 		}
 	}
 
-	// Generate constructors for built-in Option and Result types.
-	// These are generated unconditionally for now; later we could analyze usage.
-	// We generate them once using "str" as the placeholder type because it lowers to "ptr".
+	// Generate constructors for built-in Option and Result types (unless skipped).
+	// These are generated once using "str" as the placeholder type because it lowers to "ptr".
 	// This matches the type erasure strategy where generic enum constructors take "ptr".
+	if !opts.SkipBuiltinEnums {
+		// Option<T> has variants: Some(T), Nothing
+		optionGeneric := types.OptionOf(types.Str)
+		out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Option", optionGeneric)...)
 
-	// Option<T> has variants: Some(T), Nothing
-	optionGeneric := types.OptionOf(types.Str)
-	out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Option", optionGeneric)...)
-
-	// Result<T, E> has variants: Ok(T), Err(E)
-	resultGeneric := types.ResultOf(types.Str, types.Str)
-	out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Result", resultGeneric)...)
+		// Result<T, E> has variants: Ok(T), Err(E)
+		resultGeneric := types.ResultOf(types.Str, types.Str)
+		out.Funcs = append(out.Funcs, LowerEnumConstructorsFromType("Result", resultGeneric)...)
+	}
 
 	// Generate constructors and methods for class declarations
 	for _, d := range mod.Decls {
