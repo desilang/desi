@@ -287,10 +287,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						shouldCallToStr = true
 						toStrFuncName = "set_to_str"
 					case *types.Class:
-						// Case 3: Custom class with __str__ or to_str dunder
+						// Case 3: Custom class with __str__, __repr__, or to_str dunder
 						if _, found := t.Dunders["__str__"]; found {
 							shouldCallToStr = true
 							toStrFuncName = fmt.Sprintf("%s___str__", t.Name)
+						} else if _, found := t.Dunders["__repr__"]; found {
+							// Python-style: __repr__ as fallback for __str__
+							shouldCallToStr = true
+							toStrFuncName = fmt.Sprintf("%s___repr__", t.Name)
 						} else if _, found := t.Dunders["to_str"]; found {
 							shouldCallToStr = true
 							toStrFuncName = fmt.Sprintf("%s_to_str", t.Name)

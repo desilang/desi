@@ -136,15 +136,24 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	return b.Func()
 }
 
-// LowerDefaultToStr generates a default to_str implementation that returns the type name.
-func LowerDefaultToStr(name, typeName string) *hir.Func {
+// LowerDefaultToStr generates a default to_str implementation.
+// If reprFuncName is non-empty, delegate to that function (e.g., __repr__).
+// Otherwise, return the type name as a string.
+func LowerDefaultToStr(name, typeName string, reprFuncName string) *hir.Func {
 	b := hir.NewFunc(name)
 	f := b.Func()
 	f.Params = []hir.Param{{Name: "self", Type: "ptr"}}
 	f.RetType = "ptr"
-	// For M14, just return the type name as a string.
-	// TODO: Generate "TypeName(field=val, ...)"
-	b.Emit(&hir.Ret{Val: hir.ConstStr{Text: typeName}})
+
+	if reprFuncName != "" {
+		// Delegate to __repr__
+		res := b.FreshTemp("repr_result")
+		b.Emit(&hir.Call{Dst: res, Fn: reprFuncName, Args: []hir.Value{hir.Var{Name: "self"}}, Type: "ptr"})
+		b.Emit(&hir.Ret{Val: res})
+	} else {
+		// Fall back to returning the type name
+		b.Emit(&hir.Ret{Val: hir.ConstStr{Text: typeName}})
+	}
 	return f
 }
 
