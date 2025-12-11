@@ -302,6 +302,48 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.IndexExpr:
 		return c.typIndexExpr(x)
 
+	case *ast.TryExpr:
+		// ? operator unwraps Result[T, E] -> T or Option[T] -> T
+		t := c.typ(x.X)
+		if t == nil {
+			c.add(diagAt("DTE0004", x.Span, "cannot use ? on expression with unknown type"))
+			return nil
+		}
+
+		// Check for Generic enum type (Result[T,E] or Option[T])
+		if g, ok := t.(*types.Generic); ok {
+			if enum, ok := g.Base.(*types.Enum); ok {
+				switch enum.Name {
+				case "Result":
+					// Result[T, E] -> T (first type argument is success type)
+					if len(g.Args) >= 1 {
+						c.info.Types[x] = g.Args[0]
+						return g.Args[0]
+					}
+				case "Option":
+					// Option[T] -> T (first type argument is wrapped type)
+					if len(g.Args) >= 1 {
+						c.info.Types[x] = g.Args[0]
+						return g.Args[0]
+					}
+				}
+				c.add(diagAt("DTE0004", x.Span, "? operator requires Result or Option type, got "+enum.Name))
+				return nil
+			}
+		}
+
+		// Check for unparameterized Enum named Result/Option
+		if enum, ok := t.(*types.Enum); ok {
+			if enum.Name == "Result" || enum.Name == "Option" {
+				// For now, return types.Any for unparameterized Result/Option
+				c.info.Types[x] = types.Any
+				return types.Any
+			}
+		}
+
+		c.add(diagAt("DTE0004", x.Span, "? operator can only be applied to Result or Option types, got "+t.String()))
+		return nil
+
 	case *ast.LambdaExpr:
 		// require typed params in M4
 		params := make([]types.T, len(x.Params))

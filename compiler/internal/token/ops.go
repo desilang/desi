@@ -56,6 +56,7 @@ var operators = []struct {
 	{".", DOT},
 	{"@", AT},
 	{"#", HASH},
+	{"?", QUESTION},
 }
 
 // IsOperator reports whether a token is an operator (not punctuation).
@@ -65,7 +66,8 @@ func IsOperator(t Token) bool {
 		PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
 		POW, POW_EQ, XOR, XOR_EQ,
 		EQEQ, NEQ, LT, LTE, GT, GTE, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW,
-		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ:
+		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ,
+		QUESTION:
 		return true
 	default:
 		return false
