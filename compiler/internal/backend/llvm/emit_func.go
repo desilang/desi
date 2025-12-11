@@ -679,9 +679,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 					// Clean up loop condition map
 					delete(m.cfLoopConds, label)
+					lifetimesClosed = true // Don't emit lifetime.end after branch
 				} else {
 					// Regular control flow block: unconditional branch
 					wprintf(&m.funcs, "  br label %%%s\n", mergeLabel)
+					lifetimesClosed = true // Don't emit lifetime.end after branch
 				}
 			}
 			// Remove from map
