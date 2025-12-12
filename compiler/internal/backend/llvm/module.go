@@ -49,6 +49,7 @@ type Module struct {
 	info               *check.Info       // type checker info for move analysis
 	currentMoves       map[string]bool   // moved variables in current function
 	staticFieldGlobals map[string]string // name -> LLVM type (e.g., "@Counter_count" -> "i32")
+	nameVersions       map[string]int    // track name usage for unique SSA names
 }
 
 func NewModule(name string) *Module {
@@ -60,12 +61,25 @@ func NewModule(name string) *Module {
 		cfBlocks:           make(map[string]string),
 		cfLoopConds:        make(map[string]hir.Value),
 		staticFieldGlobals: make(map[string]string),
+		nameVersions:       make(map[string]int),
 	}
 }
 
 // MarkAsyncWrapper records that calls to 'name' return a ptr (future handle).
 func (m *Module) MarkAsyncWrapper(name string) {
 	m.asyncWrappers[name] = true
+}
+
+// uniqueName generates a unique SSA name by appending a version suffix if needed.
+// This handles variables with the same name appearing in multiple scopes (e.g., loop variables).
+// Call once per variable definition, then use the returned name consistently.
+func (m *Module) uniqueName(name string) string {
+	ver := m.nameVersions[name]
+	m.nameVersions[name] = ver + 1
+	if ver == 0 {
+		return name
+	}
+	return fmt.Sprintf("%s_%d", name, ver)
 }
 
 func (m *Module) nextStrName() string {

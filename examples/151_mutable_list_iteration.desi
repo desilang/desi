@@ -7,6 +7,13 @@ def main() -> int:
     for x: int in items:
         print(x)
     
-    # Print count using len
-    print("Mutable list iteration test - parsing OK!")
+    # Mutate elements in-place using :=
+    for mut x: int in items:
+        x := x * 2
+    
+    print("After mutation:")
+    for x: int in items:
+        print(x)
+    
+    print("Mutable list iteration test passed!")
     return 0
