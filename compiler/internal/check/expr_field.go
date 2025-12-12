@@ -522,6 +522,11 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 	case "values":
 		// values() -> list[V]
 		methodType = types.FuncOf(nil, types.ListOf(d.Val), false)
+	case "items":
+		// items() -> iterable of (K, V) pairs
+		// For dict iteration lowering, we return a marker type
+		// The lowering handles this specially for `for k, v in dict.items():`
+		methodType = types.FuncOf(nil, d, false) // Returns the dict itself as marker
 	case "free":
 		// free() -> none (manual memory management)
 		methodType = types.FuncOf(nil, types.None, false)

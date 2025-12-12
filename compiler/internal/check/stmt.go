@@ -331,46 +331,99 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Get the iterable type
 		iterType := c.typ(st.Iter)
 
-		// Determine element type from iterable
-		var elemType types.T
-		if iterType != nil {
-			switch it := iterType.(type) {
-			case *types.List:
-				elemType = it.Elem
-			case *types.Set:
-				elemType = it.Elem
-			default:
-				// For range() and other iterables, assume int for now
-				elemType = types.Int
+		// Check if this is dict.items() iteration
+		isDictItems := false
+		var dictType *types.Dict
+		if callExpr, ok := st.Iter.(*ast.CallExpr); ok {
+			if fieldExpr, ok := callExpr.Callee.(*ast.FieldExpr); ok {
+				if fieldExpr.Name.Name == "items" {
+					if dt, ok := c.info.Types[fieldExpr.X].(*types.Dict); ok {
+						isDictItems = true
+						dictType = dt
+					}
+				}
 			}
 		}
 
-		// Bind loop variables from Targets
-		if len(st.Targets) > 0 {
-			for _, tgt := range st.Targets {
-				var varType types.T
-				if tgt.Type != nil {
-					// Explicit type annotation
-					varType = c.resolveType(tgt.Type)
-					// Validate against element type
-					if elemType != nil && varType != nil && !types.Assignable(varType, elemType) {
-						c.add(diagAt("DTE0004", tgt.Name.Span, "loop variable type '"+varType.String()+"' does not match element type '"+elemType.String()+"'"))
-					}
-				} else {
-					// Infer from collection element type
-					varType = elemType
+		// Handle dict.items() with two targets
+		if isDictItems && len(st.Targets) == 2 && dictType != nil {
+			// First target: key type
+			keyType := dictType.Key
+			if st.Targets[0].Type != nil {
+				keyType = c.resolveType(st.Targets[0].Type)
+			}
+			if st.Targets[0].Name != nil {
+				sym := &Symbol{
+					Name: st.Targets[0].Name.Name,
+					Kind: SymVar,
+					Type: keyType,
 				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[0].Name] = sym
+				if keyType != nil {
+					c.info.Types[st.Targets[0].Name] = keyType
+				}
+			}
 
-				if tgt.Name != nil {
-					sym := &Symbol{
-						Name: tgt.Name.Name,
-						Kind: SymVar,
-						Type: varType,
+			// Second target: value type
+			valType := dictType.Val
+			if st.Targets[1].Type != nil {
+				valType = c.resolveType(st.Targets[1].Type)
+			}
+			if st.Targets[1].Name != nil {
+				sym := &Symbol{
+					Name: st.Targets[1].Name.Name,
+					Kind: SymVar,
+					Type: valType,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[1].Name] = sym
+				if valType != nil {
+					c.info.Types[st.Targets[1].Name] = valType
+				}
+			}
+		} else {
+			// Standard list/set iteration
+			var elemType types.T
+			if iterType != nil {
+				switch it := iterType.(type) {
+				case *types.List:
+					elemType = it.Elem
+				case *types.Set:
+					elemType = it.Elem
+				default:
+					// For range() and other iterables, assume int for now
+					elemType = types.Int
+				}
+			}
+
+			// Bind loop variables from Targets
+			if len(st.Targets) > 0 {
+				for _, tgt := range st.Targets {
+					var varType types.T
+					if tgt.Type != nil {
+						// Explicit type annotation
+						varType = c.resolveType(tgt.Type)
+						// Validate against element type
+						if elemType != nil && varType != nil && !types.Assignable(varType, elemType) {
+							c.add(diagAt("DTE0004", tgt.Name.Span, "loop variable type '"+varType.String()+"' does not match element type '"+elemType.String()+"'"))
+						}
+					} else {
+						// Infer from collection element type
+						varType = elemType
 					}
-					_ = c.scope.Define(sym)
-					c.info.Idents[tgt.Name] = sym
-					if varType != nil {
-						c.info.Types[tgt.Name] = varType
+
+					if tgt.Name != nil {
+						sym := &Symbol{
+							Name: tgt.Name.Name,
+							Kind: SymVar,
+							Type: varType,
+						}
+						_ = c.scope.Define(sym)
+						c.info.Idents[tgt.Name] = sym
+						if varType != nil {
+							c.info.Types[tgt.Name] = varType
+						}
 					}
 				}
 			}
