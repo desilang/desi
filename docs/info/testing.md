@@ -25,13 +25,25 @@ def test_comparison() -> none:
     assert(2 < 4)
 
 def main() -> int:
-    print("Run with: desic test test_math.desi")
+    # Call all test functions
+    test_addition()
+    test_comparison()
     return 0
 ```
 
 Run with:
 ```bash
 desic test test_math.desi
+```
+
+Output:
+```
+==> Type-checking test_math.desi ...
+==> Generating LLVM IR...
+==> Compiling to object file...
+==> Linking executable...
+==> Running tests...
+✓ All tests passed!
 ```
 
 ---
@@ -58,24 +70,6 @@ def assert(condition: bool) -> none
 def assert(condition: bool, message: str) -> none
 ```
 
-### Examples
-
-```desi
-def main() -> int:
-    let x: int = 5
-    
-    # Basic assertions
-    assert(x == 5)
-    assert(x > 0, "x should be positive")
-    
-    # Expression conditions
-    assert(1 + 1 == 2)
-    assert(len("hello") == 5)
-    
-    print("All assertions passed!")
-    return 0
-```
-
 ---
 
 ## @test Decorator
@@ -85,17 +79,17 @@ Mark test functions with the `@test` decorator:
 ```desi
 @test
 def test_something() -> none:
-    # Test code with assertions
     assert(condition)
 ```
 
 **Rules:**
 1. Test functions should return `none`
-2. Test functions should take no parameters
+2. Test functions take no parameters
 3. Use `assert` for test conditions
-4. Function names conventionally start with `test_`
+4. Function names start with `test_`
+5. **Call test functions from `main()`**
 
-### Multiple Tests
+### Complete Pattern
 
 ```desi
 @test
@@ -106,10 +100,10 @@ def test_addition() -> none:
 def test_subtraction() -> none:
     assert(5 - 3 == 2)
 
-@test
-def test_edge_cases() -> none:
-    assert(0 + 0 == 0)
-    assert(-1 + 1 == 0)
+def main() -> int:
+    test_addition()
+    test_subtraction()
+    return 0
 ```
 
 ---
@@ -119,24 +113,47 @@ def test_edge_cases() -> none:
 ### Command Line
 
 ```bash
-# Run tests in a file
+# Run tests
 desic test myfile.desi
 
 # Verbose mode
 desic test myfile.desi -v
-desic test myfile.desi --verbose
 ```
 
-### Output
+### What Happens
+
+1. **Type-check** - Validates syntax and types
+2. **Generate IR** - Produces LLVM IR
+3. **Compile** - Uses `llc` for object file
+4. **Link** - Uses `clang` for executable
+5. **Execute** - Runs the test
+
+### Success Output
 
 ```
-✓ Test file type-checked successfully: myfile.desi
+==> Type-checking myfile.desi ...
+==> Generating LLVM IR...
+==> Compiling to object file...
+==> Linking executable...
+==> Running tests...
+✓ All tests passed!
 ```
 
-If a test fails (assertion fails):
+### Failure Output
+
 ```
 Assertion failed: expected x to be positive
+
+✗ TEST FAILED
 ```
+
+### Exit Codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | All tests passed |
+| 1 | Test failure |
+| 2 | Compilation error |
 
 ---
 
@@ -145,57 +162,46 @@ Assertion failed: expected x to be positive
 ### ✅ DO
 
 ```desi
-# DO: Use descriptive test names
+# Descriptive names
 @test
-def test_user_login_with_valid_credentials() -> none:
+def test_user_login_valid() -> none:
     # ...
 
-# DO: Test one thing per test
-@test
-def test_addition() -> none:
-    assert(1 + 1 == 2)
-
-# DO: Use helpful assertion messages
+# Helpful messages
 @test
 def test_bounds() -> none:
-    let x: int = get_value()
-    assert(x >= 0, "value should not be negative")
-    assert(x <= 100, "value should not exceed 100")
+    assert(x >= 0, "should not be negative")
+
+# Call all tests from main()
+def main() -> int:
+    test_user_login_valid()
+    test_bounds()
+    return 0
 ```
 
 ### ❌ DON'T
 
 ```desi
-# DON'T: Test many unrelated things in one test
-@test
-def test_everything() -> none:
-    assert(login_works())
-    assert(database_works())
-    assert(api_works())
-
-# DON'T: Skip assertion messages for complex conditions
-@test
-def test_complex() -> none:
-    assert(complicated_calculation() == expected)  # ❌ No message
+# Don't forget to call tests
+def main() -> int:
+    return 0  # ❌ Tests won't run!
 ```
 
 ---
 
-## Implementation Status
+## Prerequisites
 
-| Feature | Status |
-|---------|--------|
-| `assert(bool)` | ✅ Implemented |
-| `assert(bool, str)` | ✅ Implemented |
-| `@test` decorator | ✅ Implemented |
-| `desic test` command | ✅ Basic (type-check only) |
-| Test execution | 🔄 Coming soon |
-| Test discovery | 🔄 Coming soon |
+```bash
+# macOS
+brew install llvm
+
+# Ubuntu/Debian
+sudo apt install llvm clang
+```
 
 ---
 
 ## Examples
 
-See working examples:
 - `examples/147_testing_assert.desi` - Assert usage
 - `examples/148_testing_test_decorator.desi` - @test decorator
