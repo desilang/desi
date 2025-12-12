@@ -1,0 +1,16 @@
+# Test file for ? operator (Phase 4)
+# The ? operator should:
+# - For Result[T, E]: return T on Ok, early return Err on Err
+# - For Option[T]: return T on Some, early return Nothing on Nothing
+
+def main() -> int:
+    # Test ? operator on Result
+    let x: Result<int, str> = Result.Ok(42)
+    
+    # Using ? to unwrap - if Err, would early return
+    # For now just test parsing and type checking
+    let val = x?
+    
+    print(f"Unwrapped: {val}")
+    print("Test passed!")
+    return 0

@@ -534,6 +534,47 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Unknown unary: just print-through for now.
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
+	case *ast.TryExpr:
+		// ? operator: for now, evaluate the inner expression and call unwrap()
+		// Full semantics (match + early return) can be added later
+		inner := ls.lowerExpr(x.X)
+
+		// Get the type to determine if Result or Option
+		var typeName string
+		if ls.info != nil {
+			if t := ls.info.Types[x.X]; t != nil {
+				if g, ok := t.(*types.Generic); ok {
+					if enum, ok := g.Base.(*types.Enum); ok {
+						typeName = enum.Name
+					}
+				}
+			}
+		}
+
+		// Call the appropriate unwrap method
+		// Result and Option both have unwrap() -> T
+		dst := ls.b.FreshTemp("try_result")
+		unwrapFn := typeName + "_unwrap"
+		if typeName == "" {
+			unwrapFn = "Result_unwrap" // fallback
+		}
+
+		// Get result type from type checker
+		retType := "ptr"
+		if ls.info != nil {
+			if t := ls.info.Types[x]; t != nil {
+				retType = lowerType(t)
+			}
+		}
+
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   unwrapFn,
+			Args: []hir.Value{inner},
+			Type: retType,
+		})
+		return dst
+
 	case *ast.CallExpr:
 		return ls.lowerCall(x)
 

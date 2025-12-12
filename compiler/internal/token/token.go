@@ -129,6 +129,7 @@ const (
 
 	ARROW     // ->
 	FAT_ARROW // =>
+	QUESTION  // ? (try/propagate operator for Result/Option)
 )
 
 // Category classifies tokens into broad kinds (for scanning/parsing/pretty dumps).
@@ -162,7 +163,7 @@ func TokenCategory(t Token) Category {
 		return CatKeyword
 	case ASSIGN, DECLARE, PLUS, MINUS, STAR, SLASH, PERCENT, PLUS_EQ, MINUS_EQ, STAR_EQ, SLASH_EQ, PERCENT_EQ,
 		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, IN, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW,
-		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ:
+		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ, QUESTION:
 		return CatOperator
 	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH:
 		return CatPunct

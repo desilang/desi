@@ -501,6 +501,11 @@ func (p *pp) node(n Node, d int) {
 		p.node(n.X, 0)
 		p.wr(".%s", n.Name.Name)
 
+	case *TryExpr:
+		p.wr("Try ")
+		p.node(n.X, 0)
+		p.wr("?")
+
 	case *LambdaExpr:
 		p.wr("Lambda(")
 		for i, prm := range n.Params {

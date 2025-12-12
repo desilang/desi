@@ -325,6 +325,12 @@ func (p *Parser) parsePostfix() ast.Expr {
 			e = &ast.FieldExpr{X: e, Name: name, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
 			p.next()
 
+		case token.QUESTION:
+			// Postfix ? operator for error propagation (Result/Option)
+			qSpan := spanPos(p.file, p.cur)
+			p.next()
+			e = &ast.TryExpr{X: e, Span: ast.JoinSpan(e.SpanOf(), qSpan)}
+
 		default:
 			return e
 		}
