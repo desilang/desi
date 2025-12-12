@@ -54,6 +54,23 @@ func (p *Parser) parseFromImport() ast.Stmt {
 		return nil
 	}
 
+	// Check for wildcard import: from X import *
+	if p.cur.Tok == token.STAR {
+		starSpan := spanPos(p.file, p.cur)
+		p.next() // consume '*'
+
+		// End of statement
+		if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+			p.errExpected(spanPos(p.file, p.cur), "newline")
+		}
+
+		return &ast.FromImportStmt{
+			Path: segments,
+			Star: true,
+			Span: ast.JoinSpan(start, starSpan),
+		}
+	}
+
 	var items []ast.FromImportItem
 	for {
 		if p.cur.Tok != token.IDENT {
