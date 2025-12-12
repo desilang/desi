@@ -1,0 +1,24 @@
+# Example test file using @test decorator
+
+@test
+def test_addition() -> none:
+	assert(1 + 1 == 2, "1 + 1 should equal 2")
+	assert(2 + 3 == 5, "2 + 3 should equal 5")
+
+@test
+def test_comparison() -> none:
+	assert(5 > 3, "5 should be greater than 3")
+	assert(2 < 4, "2 should be less than 4")
+
+@test
+def test_equality() -> none:
+	let x: int = 10
+	assert(x == 10, "x should equal 10")
+
+def helper_function() -> int:
+	# This is not a test - no @test decorator
+	return 42
+
+def main() -> int:
+	print("Run with: desic test <file>")
+	return 0

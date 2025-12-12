@@ -243,13 +243,72 @@ func buildCmd(argv []string) int {
 }
 
 func testCmd(argv []string) int {
-	// Placeholder: run `go test ./...` from current repo
-	cmd := exec.Command("go", "test", "./...")
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
+	// Parse arguments: desic test [file.desi] [-v|--verbose]
+	var testFile string
+	verbose := false
+
+	for _, a := range argv {
+		switch {
+		case a == "-v" || a == "--verbose":
+			verbose = true
+		case !strings.HasPrefix(a, "-"):
+			if testFile == "" {
+				testFile = a
+			}
+		}
+	}
+
+	if testFile == "" {
+		term.Eprintln("test: no test file specified")
+		term.Eprintln("usage: desic test <file.desi> [-v|--verbose]")
+		return 2
+	}
+
+	// Check file exists
+	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+		term.Eprintln("test: file not found:", testFile)
+		return 2
+	}
+
+	// Call self with emit-ir to type-check and discover tests
+	// For now, we'll parse and check the file to find @test functions
+	exe, _ := os.Executable()
+	checkArgs := []string{"check", testFile}
+	checkCmd := exec.Command(exe, checkArgs...)
+	checkCmd.Stdout = nil
+	checkCmd.Stderr = os.Stderr
+	if err := checkCmd.Run(); err != nil {
+		term.Eprintln("test: type check failed")
 		return exitCode(err)
 	}
+
+	// Emit IR for the test file
+	emitArgs := []string{"emit-ir", testFile}
+	var irBuf bytes.Buffer
+	emitCmd := exec.Command(exe, emitArgs...)
+	emitCmd.Stdout = &irBuf
+	emitCmd.Stderr = os.Stderr
+	if err := emitCmd.Run(); err != nil {
+		term.Eprintln("test: emit-ir failed")
+		return exitCode(err)
+	}
+
+	if verbose {
+		term.Println("Generated IR for", testFile)
+	}
+
+	// For a minimal implementation, we'll:
+	// 1. Generate a test harness that calls each @test function
+	// 2. Compile and run it
+
+	// TODO: For now, print success if we get here
+	// Full implementation would:
+	// - Parse check.Info.TestFuncs from the type-checked module
+	// - Generate a test main() that calls each test function
+	// - Compile and execute the harness
+
+	term.Println("✓ Test file type-checked successfully:", testFile)
+	term.Println("Note: Full test execution coming soon. Use assert() in your code for now.")
 	return 0
 }
 

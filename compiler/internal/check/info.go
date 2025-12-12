@@ -59,6 +59,10 @@ type Info struct {
 	// BinOpOverloads maps binary expressions to their resolved operator method candidate.
 	// This allows the backend to emit a method call instead of a primitive binary op.
 	BinOpOverloads map[*ast.BinaryExpr]*FuncCand
+
+	// TestFuncs tracks functions decorated with @test for the test runner.
+	// Key: function name, Value: the FuncDecl node
+	TestFuncs map[string]*ast.FuncDecl
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -100,6 +104,7 @@ func NewInfo() *Info {
 		FuncMoves:           make(map[*ast.FuncDecl]map[string]bool),
 		ClassInstantiations: make(map[string][]*types.Generic),
 		BinOpOverloads:      make(map[*ast.BinaryExpr]*FuncCand),
+		TestFuncs:           make(map[string]*ast.FuncDecl),
 	}
 	addPreludeBuiltins(info)
 	return info

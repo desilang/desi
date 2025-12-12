@@ -264,6 +264,11 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		Defaults: defaults,         // M14: record which params have defaults
 	})
 
+	// Track @test decorated functions for the test runner
+	if hasDecorator(fd, "test") {
+		c.info.TestFuncs[name] = fd
+	}
+
 	// Bind the function name in the OUTER scope (not the temp scope)
 	_ = saved.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
