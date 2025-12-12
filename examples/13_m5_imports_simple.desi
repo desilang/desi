@@ -1,0 +1,9 @@
+# Test simplified import syntax (no redundant 'as')
+
+from math import add
+from math import sub
+
+def main() -> int:
+	print("add(2, 3) = " + str(add(2, 3)))
+	print("sub(5, 2) = " + str(sub(5, 2)))
+	return 0

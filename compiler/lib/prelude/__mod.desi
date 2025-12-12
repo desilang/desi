@@ -1,37 +1,16 @@
 # Prelude export hub
 
 # Re-export the existing 'print' surface from the root io module.
-from io import print as print
+from io import print
 
 # Numeric conversion surfaces (runtime shims for now; see numeric.desi)
-from prelude.numeric import to_u8 as to_u8
-from prelude.numeric import to_f32 as to_f32
-from prelude.numeric import to_f64 as to_f64
+from prelude.numeric import to_u8, to_f32, to_f64
 
 # Memory helpers (skeletal, to grow later)
-from prelude.memory import as_ptr as as_ptr
-from prelude.memory import as_mut_ptr as as_mut_ptr
-from prelude.memory import zeroed as zeroed
+from prelude.memory import as_ptr, as_mut_ptr, zeroed
 
 # Dict runtime operations
-from prelude.dict import dict_new as dict_new
-from prelude.dict import dict_free as dict_free
-from prelude.dict import dict_insert as dict_insert
-from prelude.dict import dict_get as dict_get
-from prelude.dict import dict_has_key as dict_has_key
-from prelude.dict import dict_pop as dict_pop
-from prelude.dict import dict_clear as dict_clear
-from prelude.dict import dict_keys as dict_keys
-from prelude.dict import dict_values as dict_values
+from prelude.dict import *
 
 # Set runtime operations
-from prelude.set import set_new as set_new
-from prelude.set import set_free as set_free
-from prelude.set import set_add as set_add
-from prelude.set import set_contains as set_contains
-from prelude.set import set_remove as set_remove
-from prelude.set import set_clear as set_clear
-from prelude.set import set_to_array as set_to_array
-from prelude.set import set_union as set_union
-from prelude.set import set_intersection as set_intersection
-from prelude.set import set_difference as set_difference
+from prelude.set import *
