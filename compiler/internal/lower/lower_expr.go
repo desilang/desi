@@ -535,45 +535,42 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
 	case *ast.TryExpr:
-		// ? operator: for now, evaluate the inner expression and call unwrap()
-		// Full semantics (match + early return) can be added later
+		// ? operator: unwrap Result/Option by loading payload directly
+		// Full semantics (match + early return on Err/Nothing) can be added later
 		inner := ls.lowerExpr(x.X)
 
-		// Get the type to determine if Result or Option
-		var typeName string
+		// Get payload ptr at offset 4 (same as unwrap() method)
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    inner,
+			Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		// Load value from payload ptr
+		// Get the element type from the Result/Option generic type
+		var elemType types.T
 		if ls.info != nil {
-			if t := ls.info.Types[x.X]; t != nil {
-				if g, ok := t.(*types.Generic); ok {
-					if enum, ok := g.Base.(*types.Enum); ok {
-						typeName = enum.Name
+			if recvType := ls.info.Types[x.X]; recvType != nil {
+				if g, ok := recvType.(*types.Generic); ok {
+					if len(g.Args) > 0 {
+						elemType = g.Args[0] // T from Result[T,E] or Option[T]
 					}
 				}
 			}
 		}
 
-		// Call the appropriate unwrap method
-		// Result and Option both have unwrap() -> T
-		dst := ls.b.FreshTemp("try_result")
-		unwrapFn := typeName + "_unwrap"
-		if typeName == "" {
-			unwrapFn = "Result_unwrap" // fallback
+		valType := "ptr" // default
+		if elemType != nil {
+			valType = lowerType(elemType)
 		}
 
-		// Get result type from type checker
-		retType := "ptr"
-		if ls.info != nil {
-			if t := ls.info.Types[x]; t != nil {
-				retType = lowerType(t)
-			}
-		}
-
-		ls.b.Emit(&hir.Call{
-			Dst:  dst,
-			Fn:   unwrapFn,
-			Args: []hir.Value{inner},
-			Type: retType,
-		})
-		return dst
+		val := ls.b.FreshTemp("try_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+		return val
 
 	case *ast.CallExpr:
 		return ls.lowerCall(x)
