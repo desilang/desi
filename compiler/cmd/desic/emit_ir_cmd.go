@@ -49,16 +49,13 @@ func init() {
 		os.Exit(2)
 	}
 
-	// NEW: resolve imports with a filesystem loader and register LLVM
-	// function signature overrides from the full import closure.
+	// Build import roots with auto-detection (Phase 5A)
+	// Priority: 1) Entry file directory, 2) Stdlib, 3) DESI_PATH, 4) User -I roots
+	autoRoots := buildImportRoots(file, roots)
 	var loader resolve.Loader
-	if roots != "" {
-		rs := splitRoots(roots)
-		if len(rs) > 0 && rs[0] != "" {
-			loader = resolve.NewFSLoaderMulti(rs)
-		}
-	}
-	if loader == nil {
+	if len(autoRoots) > 0 {
+		loader = resolve.NewFSLoaderMulti(autoRoots)
+	} else {
 		loader = resolve.NewMemLoader(nil)
 	}
 
@@ -382,4 +379,72 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 	hm := lower.LowerModuleFromSourceWithOptions(mod, info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true})
 
 	return hm, src, mod, nil
+}
+
+// buildImportRoots builds the list of import roots with auto-detection.
+// Priority order:
+//  1. Entry file's directory (for project-relative imports)
+//  2. Standard library (compiler/lib relative to executable or source)
+//  3. DESI_PATH environment variable (colon-separated paths)
+//  4. User-specified -I roots
+func buildImportRoots(entryFile string, userRoots string) []string {
+	seen := make(map[string]bool)
+	var roots []string
+
+	addRoot := func(path string) {
+		path = filepath.Clean(path)
+		if path != "" && !seen[path] {
+			if _, err := os.Stat(path); err == nil {
+				seen[path] = true
+				roots = append(roots, path)
+			}
+		}
+	}
+
+	// 1. Entry file's directory
+	if entryFile != "" {
+		entryDir := filepath.Dir(entryFile)
+		if abs, err := filepath.Abs(entryDir); err == nil {
+			addRoot(abs)
+		} else {
+			addRoot(entryDir)
+		}
+	}
+
+	// 2. Standard library paths
+	// Try to find compiler/lib relative to executable
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		// Check various possible locations
+		candidates := []string{
+			filepath.Join(exeDir, "lib"),                   // ./lib (installed)
+			filepath.Join(exeDir, "..", "lib"),             // ../lib
+			filepath.Join(exeDir, "..", "compiler", "lib"), // ../compiler/lib (dev)
+			filepath.Join(exeDir, "compiler", "lib"),       // ./compiler/lib
+		}
+		for _, c := range candidates {
+			addRoot(c)
+		}
+	}
+	// Also check relative to working directory (for development)
+	if wd, err := os.Getwd(); err == nil {
+		addRoot(filepath.Join(wd, "compiler", "lib"))
+		addRoot(filepath.Join(wd, "lib"))
+	}
+
+	// 3. DESI_PATH environment variable
+	if desiPath := os.Getenv("DESI_PATH"); desiPath != "" {
+		for _, p := range splitRoots(desiPath) {
+			addRoot(p)
+		}
+	}
+
+	// 4. User-specified -I roots (highest priority for overrides)
+	if userRoots != "" {
+		for _, p := range splitRoots(userRoots) {
+			addRoot(p)
+		}
+	}
+
+	return roots
 }
