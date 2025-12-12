@@ -219,4 +219,15 @@ func addPreludeBuiltins(info *Info) {
 		types.File,
 		[]string{"path", "mode"},
 	)
+
+	// --- Testing builtins ---
+	// assert(condition: bool) -> none
+	add1("assert", types.Bool, types.None, "condition", ast.ParamMove)
+	// assert(condition: bool, message: str) -> none
+	addN("assert",
+		[]types.T{types.Bool, types.Str},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		types.None,
+		[]string{"condition", "message"},
+	)
 }

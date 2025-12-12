@@ -1,0 +1,15 @@
+# Test assert builtin - Phase 6A
+
+def main() -> int:
+	# Test basic assert with true condition
+	assert(1 == 1)
+	
+	# Test assert with message
+	assert(2 > 1, "two should be greater than one")
+	
+	# Test variable condition
+	let x: int = 5
+	assert(x == 5)
+	
+	print("All assertions passed!")
+	return 0
