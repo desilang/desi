@@ -29,8 +29,9 @@ func (s *WhileStmt) SpanOf() diag.Span { return s.Span }
 
 // ForTarget represents a single loop variable binding (name and optional type)
 type ForTarget struct {
-	Name *Ident    // Variable name
-	Type *TypeName // Optional type annotation (nil if not specified)
+	Name  *Ident    // Variable name
+	Type  *TypeName // Optional type annotation (nil if not specified)
+	IsMut bool      // true for "for mut x: T in ..." - enables mutation of element
 }
 
 type ForStmt struct {
