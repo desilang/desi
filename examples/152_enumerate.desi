@@ -1,0 +1,13 @@
+# Test enumerate() builtin
+# enumerate(items) returns (index, element) pairs
+
+def main() -> int:
+    let items: list[str] = ["apple", "banana", "cherry"]
+    
+    print("Testing enumerate():")
+    for i: int, item: str in enumerate(items):
+        print(i)
+        print(item)
+    
+    print("Enumerate test passed!")
+    return 0
