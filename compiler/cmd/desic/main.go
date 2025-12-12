@@ -529,8 +529,8 @@ func runEmitIR(path, iroots string) error {
 		return fmt.Errorf("type check errors")
 	}
 
-	// Lower to HIR
-	hmod := lower.LowerModuleFromSource(mod, res.Info, src)
+	// Lower to HIR - include entry module and all imported modules
+	hmod := lower.LowerModuleClosure(mod, res.Info, src, loader)
 
 	// Emit LLVM IR
 	llvmMod := llvm.NewModule(mod.File)
