@@ -216,6 +216,17 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"start", "stop", "step"},
 	)
 
+	// --- enumerate builtin ---
+	// enumerate(iterable) -> iterator of (index, element) pairs
+	// The actual type checking for enumerate is handled specially in stmt.go
+	// since it produces two loop variables
+	addN("enumerate",
+		[]types.T{nil}, // Any iterable type
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Special return handled by for-loop
+		[]string{"iterable"},
+	)
+
 	// --- File I/O builtins ---
 	// open(path: str, mode: str) -> File
 	addN("open",

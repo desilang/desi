@@ -446,6 +446,24 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
+			// Built-in enumerate() function - accepts any iterable
+			if id.Name == "enumerate" && len(args) == 1 && args[0] != nil {
+				argType := args[0]
+				isIterable := false
+				switch argType.(type) {
+				case *types.List, *types.Set:
+					isIterable = true
+				}
+				if isIterable {
+					// enumerate returns an iterator - for type checking in for-loops,
+					// we mark it as returning the inner type (handled specially in stmt.go)
+					c.info.Types[call] = argType
+					return argType
+				}
+				c.add(diagAt("DTE0001", call.Span, "enumerate requires an iterable (list or set)"))
+				return nil
+			}
+
 			if id.Name == "print" && len(args) == 1 && args[0] != nil {
 				shouldAccept := false
 

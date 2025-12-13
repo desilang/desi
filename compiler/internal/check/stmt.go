@@ -338,12 +338,34 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				isSourceMutable = sym.IsMutable
 			}
 		} else if callExpr, ok := st.Iter.(*ast.CallExpr); ok {
-			// For dict.items(), check if the dict is mutable
+			// For dict.items() or enumerate(), check if the source is mutable
 			if fieldExpr, ok := callExpr.Callee.(*ast.FieldExpr); ok {
 				if id, ok := fieldExpr.X.(*ast.Ident); ok {
 					if sym := c.scope.Lookup(id.Name); sym != nil {
 						isSourceMutable = sym.IsMutable
 					}
+				}
+			} else if id, ok := callExpr.Callee.(*ast.Ident); ok {
+				// For enumerate(items), check the inner iterable
+				if id.Name == "enumerate" && len(callExpr.Args) > 0 {
+					if innerIdent, ok := callExpr.Args[0].(*ast.Ident); ok {
+						if sym := c.scope.Lookup(innerIdent.Name); sym != nil {
+							isSourceMutable = sym.IsMutable
+						}
+					}
+				}
+			}
+		}
+
+		// Check if this is enumerate() iteration
+		isEnumerate := false
+		var enumerateIterType types.T
+		if callExpr, ok := st.Iter.(*ast.CallExpr); ok {
+			if id, ok := callExpr.Callee.(*ast.Ident); ok && id.Name == "enumerate" {
+				if len(callExpr.Args) == 1 {
+					isEnumerate = true
+					// Get the type of the inner iterable
+					enumerateIterType = c.typ(callExpr.Args[0])
 				}
 			}
 		}
@@ -362,8 +384,61 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		}
 
-		// Handle dict.items() with two targets
-		if isDictItems && len(st.Targets) == 2 && dictType != nil {
+		// Handle enumerate() with two targets: (index, element)
+		if isEnumerate && len(st.Targets) == 2 {
+			// Get element type from inner iterable
+			var elemType types.T
+			if enumerateIterType != nil {
+				switch it := enumerateIterType.(type) {
+				case *types.List:
+					elemType = it.Elem
+				case *types.Set:
+					elemType = it.Elem
+				default:
+					elemType = types.Int // Fallback
+				}
+			}
+
+			// First target: index (always int)
+			if st.Targets[0].Name != nil {
+				var idxType types.T = types.Int
+				if st.Targets[0].Type != nil {
+					idxType = c.resolveType(st.Targets[0].Type)
+				}
+				sym := &Symbol{
+					Name:      st.Targets[0].Name.Name,
+					Kind:      SymVar,
+					Type:      idxType,
+					IsMutable: false, // Index is always immutable
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[0].Name] = sym
+				c.info.Types[st.Targets[0].Name] = idxType
+			}
+
+			// Second target: element (can be mutable if source is mutable)
+			if st.Targets[1].IsMut && !isSourceMutable {
+				c.add(diagAt("DTE0004", st.Targets[1].Name.Span,
+					"cannot mutate elements of immutable collection (use 'let mut' to declare the collection)"))
+			}
+			if st.Targets[1].Name != nil {
+				valType := elemType
+				if st.Targets[1].Type != nil {
+					valType = c.resolveType(st.Targets[1].Type)
+				}
+				sym := &Symbol{
+					Name:      st.Targets[1].Name.Name,
+					Kind:      SymVar,
+					Type:      valType,
+					IsMutable: st.Targets[1].IsMut && isSourceMutable,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[1].Name] = sym
+				if valType != nil {
+					c.info.Types[st.Targets[1].Name] = valType
+				}
+			}
+		} else if isDictItems && len(st.Targets) == 2 && dictType != nil {
 			// First target: key type (keys are always immutable)
 			if st.Targets[0].IsMut {
 				c.add(diagAt("DTE0004", st.Targets[0].Name.Span,
