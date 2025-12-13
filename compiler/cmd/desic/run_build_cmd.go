@@ -270,8 +270,11 @@ func testCmd(argv []string) int {
 		return 2
 	}
 
-	// Call self with emit-ir to type-check and discover tests
-	// For now, we'll parse and check the file to find @test functions
+	if verbose {
+		term.Println("==> Type-checking", testFile, "...")
+	}
+
+	// Type-check the file
 	exe, _ := os.Executable()
 	checkArgs := []string{"check", testFile}
 	checkCmd := exec.Command(exe, checkArgs...)
@@ -280,6 +283,10 @@ func testCmd(argv []string) int {
 	if err := checkCmd.Run(); err != nil {
 		term.Eprintln("test: type check failed")
 		return exitCode(err)
+	}
+
+	if verbose {
+		term.Println("==> Generating LLVM IR...")
 	}
 
 	// Emit IR for the test file
@@ -293,22 +300,83 @@ func testCmd(argv []string) int {
 		return exitCode(err)
 	}
 
-	if verbose {
-		term.Println("Generated IR for", testFile)
+	// Create temp directory for build artifacts
+	tmpDir, err := os.MkdirTemp("", "desi-test-*")
+	if err != nil {
+		term.Eprintln("test: failed to create temp dir:", err)
+		return 2
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Write IR to temp file
+	irPath := filepath.Join(tmpDir, "test.ll")
+	if err := os.WriteFile(irPath, irBuf.Bytes(), 0o644); err != nil {
+		term.Eprintln("test: failed to write IR:", err)
+		return 2
 	}
 
-	// For a minimal implementation, we'll:
-	// 1. Generate a test harness that calls each @test function
-	// 2. Compile and run it
+	if verbose {
+		term.Println("==> Compiling to object file...")
+	}
 
-	// TODO: For now, print success if we get here
-	// Full implementation would:
-	// - Parse check.Info.TestFuncs from the type-checked module
-	// - Generate a test main() that calls each test function
-	// - Compile and execute the harness
+	// Compile IR to object file using llc
+	objPath := filepath.Join(tmpDir, "test.o")
+	llcCmd := exec.Command("llc", "-filetype=obj", "-o", objPath, irPath)
+	llcCmd.Stderr = os.Stderr
+	if err := llcCmd.Run(); err != nil {
+		term.Eprintln("test: llc compilation failed:", err)
+		term.Eprintln("  Make sure LLVM is installed (brew install llvm)")
+		return exitCode(err)
+	}
 
-	term.Println("✓ Test file type-checked successfully:", testFile)
-	term.Println("Note: Full test execution coming soon. Use assert() in your code for now.")
+	if verbose {
+		term.Println("==> Linking executable...")
+	}
+
+	// Find runtime library
+	compilerDir := filepath.Dir(exe)
+	runtimeLib := filepath.Join(compilerDir, "..", "runtime", "libdesi_runtime.a")
+	// Also check in compiler/runtime from working directory
+	if _, err := os.Stat(runtimeLib); os.IsNotExist(err) {
+		// Try relative to test file
+		testDir := filepath.Dir(testFile)
+		runtimeLib = filepath.Join(testDir, "..", "runtime", "libdesi_runtime.a")
+		if _, err := os.Stat(runtimeLib); os.IsNotExist(err) {
+			// Try from current directory
+			cwd, _ := os.Getwd()
+			runtimeLib = filepath.Join(cwd, "runtime", "libdesi_runtime.a")
+		}
+	}
+
+	// Link to executable
+	exePath := filepath.Join(tmpDir, "test_runner")
+	clangArgs := []string{"-o", exePath, objPath}
+	if _, err := os.Stat(runtimeLib); err == nil {
+		clangArgs = append(clangArgs, runtimeLib)
+	}
+	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd.Stderr = os.Stderr
+	if err := clangCmd.Run(); err != nil {
+		term.Eprintln("test: linking failed:", err)
+		return exitCode(err)
+	}
+
+	if verbose {
+		term.Println("==> Running tests...")
+	}
+
+	// Run the test executable
+	testRunner := exec.Command(exePath)
+	testRunner.Stdout = os.Stdout
+	testRunner.Stderr = os.Stderr
+	if err := testRunner.Run(); err != nil {
+		// Test failed (assertion failed)
+		term.Eprintln("")
+		term.Eprintln("✗ TEST FAILED")
+		return exitCode(err)
+	}
+
+	term.Println("✓ All tests passed!")
 	return 0
 }
 

@@ -20,5 +20,8 @@ def helper_function() -> int:
 	return 42
 
 def main() -> int:
-	print("Run with: desic test <file>")
+	# Call all @test functions
+	test_addition()
+	test_comparison()
+	test_equality()
 	return 0
