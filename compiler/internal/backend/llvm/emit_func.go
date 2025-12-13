@@ -178,9 +178,10 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					// Value types without initializer
 					llvmTy, size = "i32", 4
 				}
-				wprintf(&m.funcs, "  %%%s = alloca %s\n", x.Name, llvmTy)
-				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, x.Name))
-				locals = append(locals, localInfo{name: x.Name, size: size})
+				uniqueN := m.uniqueName(x.Name)
+				wprintf(&m.funcs, "  %%%s = alloca %s\n", uniqueN, llvmTy)
+				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, uniqueN))
+				locals = append(locals, localInfo{name: uniqueN, size: size})
 
 			case *hir.Assign:
 				m.ssa[x.LHS] = x.RHS
