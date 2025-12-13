@@ -8,10 +8,10 @@ import (
 )
 
 func TestDesugar_Map_ToListComp(t *testing.T) {
-	// Build: main: map(xs, str)
+	// Build: main: map(str, xs)  -- Python order: func first
 	call := &ast.CallExpr{
 		Callee: &ast.Ident{Name: "map"},
-		Args:   []ast.Expr{&ast.Ident{Name: "xs"}, &ast.Ident{Name: "str"}},
+		Args:   []ast.Expr{&ast.Ident{Name: "str"}, &ast.Ident{Name: "xs"}},
 	}
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
@@ -68,10 +68,10 @@ func TestDesugar_Map_ToListComp(t *testing.T) {
 }
 
 func TestDesugar_Filter_ToListComp(t *testing.T) {
-	// Build: main: filter(xs, bool)
+	// Build: main: filter(bool, xs)  -- Python order: func first
 	call := &ast.CallExpr{
 		Callee: &ast.Ident{Name: "filter"},
-		Args:   []ast.Expr{&ast.Ident{Name: "xs"}, &ast.Ident{Name: "bool"}},
+		Args:   []ast.Expr{&ast.Ident{Name: "bool"}, &ast.Ident{Name: "xs"}},
 	}
 	main := &ast.FuncDecl{
 		Name: ast.Ident{Name: "main"},
@@ -160,8 +160,8 @@ func TestDesugar_Map_WrongArity_NoRewrite(t *testing.T) {
 func TestDesugar_Map_Filter_ParensVariants(t *testing.T) {
 	src := `
 def main() -> int:
-  map((xs), str)
-  filter(xs, (bool))
+  map(str, (xs))
+  filter((bool), xs)
   0
 `
 	mod, diags := parse.ParseFile("<mem>", []byte(src))

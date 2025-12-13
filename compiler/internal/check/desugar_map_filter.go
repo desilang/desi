@@ -80,15 +80,18 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		x.Callee, x.Args = callee, args
 
 		// Then, check for map/filter shapes (2-arg only).
+		// Python 3 order: map(func, iterable), filter(func, iterable)
 		if id, ok := x.Callee.(*ast.Ident); ok && len(x.Args) == 2 {
 			switch id.Name {
 			case "map":
-				lc := buildMapComp(args[0], args[1]).(*ast.ListComp)
+				// args[0] = func, args[1] = iterable (Python order)
+				lc := buildMapComp(args[1], args[0]).(*ast.ListComp)
 				// Preserve the outer call's span so diagnostics point to the call.
 				lc.Span = x.SpanOf()
 				return lc
 			case "filter":
-				lc := buildFilterComp(args[0], args[1]).(*ast.ListComp)
+				// args[0] = predicate, args[1] = iterable (Python order)
+				lc := buildFilterComp(args[1], args[0]).(*ast.ListComp)
 				lc.Span = x.SpanOf()
 				return lc
 			}
