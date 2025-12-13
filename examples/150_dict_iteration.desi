@@ -1,0 +1,12 @@
+# Test dict iteration with for key, value in dict.items()
+
+def main() -> int:
+    let prices: dict[str, int] = {"apple": 100, "banana": 50, "orange": 75}
+    
+    print("Iterating over prices:")
+    for key: str, value: int in prices.items():
+        print(key)
+        print(value)
+    
+    print("Dict iteration test passed!")
+    return 0

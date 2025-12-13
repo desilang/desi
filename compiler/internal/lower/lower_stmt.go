@@ -429,89 +429,188 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.ForStmt:
 		// Desugar for-loop to while loop with index
-		// Uses stack-allocated index variable for proper SSA semantics
+		// Supports:
+		// - List iteration: for x: int in items:
+		// - Dict iteration: for key: str, value: int in my_dict.items():
 
 		ls.push()
 
-		// Lower the iterable expression once
-		iterVal := ls.lowerExpr(s.Iter)
-
-		// Get length of collection
-		lenTemp := ls.b.FreshTemp("for_len")
-		ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
-
-		// Allocate stack space for index variable (using i64 to match length)
-		idxPtr := ls.b.FreshTemp("for_idx_ptr")
-		ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
-
-		// Initialize index to 0
-		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
-
-		// Create condition block
-		condBlk := ls.b.NewBlock("for_cond")
-		oldCur := ls.b.Block()
-
-		ls.b.SetBlock(condBlk)
-		// Load current index value
-		idxVal := ls.b.FreshTemp("for_idx")
-		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal, DesiType: nil})
-		// Compare: idx < len
-		condTemp := ls.b.FreshTemp("for_cond")
-		ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
-		ls.b.SetBlock(oldCur)
-
-		// Create body block
-		bodyBlk := ls.b.NewBlock("for_body")
-		ls.b.SetBlock(bodyBlk)
-
-		// Load index at start of body (for use in element access)
-		idxBody := ls.b.FreshTemp("for_idx_body")
-		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody, DesiType: nil})
-
-		// Cast to i32 for list_get (which expects i32 index)
-		idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
-		ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
-
-		// Bind loop variable: let x = items[idx]
-		if len(s.Targets) > 0 {
-			for _, tgt := range s.Targets {
-				if tgt.Name != nil {
-					// Get element from list
-					elemPtrTemp := ls.b.FreshTemp("elem_ptr")
-					ls.b.Emit(&hir.Call{Dst: elemPtrTemp, Fn: "list_get", Args: []hir.Value{iterVal, idxBodyI32}})
-
-					// Unbox (cast ptr to i32 for primitives)
-					elemTemp := ls.b.FreshTemp("for_elem")
-					ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtrTemp, Type: "i32"})
-
-					// Bind to variable name
-					// NOTE: Don't track as local to avoid cleanup after branch terminator
-					// For primitives, no cleanup is needed
-					ls.b.Emit(&hir.Let{Name: tgt.Name.Name, Init: elemTemp})
+		// Check if this is a dict.items() call
+		isDictItems := false
+		var dictVal hir.Value
+		if fe, ok := s.Iter.(*ast.CallExpr); ok {
+			if field, ok := fe.Callee.(*ast.FieldExpr); ok {
+				if field.Name.Name == "items" && ls.info != nil {
+					if dictType := ls.info.Types[field.X]; dictType != nil {
+						if _, isDict := dictType.(*types.Dict); isDict {
+							isDictItems = true
+							dictVal = ls.lowerExpr(field.X)
+						}
+					}
 				}
 			}
 		}
 
-		// Lower body statements
-		if s.Body != nil {
-			ls.lowerBlock(s.Body)
+		if isDictItems && len(s.Targets) == 2 {
+			// Dict iteration: for key, value in dict.items():
+			// Uses dict_keys() to get keys array, then iterates
+
+			// Get keys array and count
+			keyCountPtr := ls.b.FreshTemp("key_count_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: keyCountPtr, Type: "i64", Count: 1})
+			keysPtr := ls.b.FreshTemp("keys_ptr")
+			ls.b.Emit(&hir.Call{Dst: keysPtr, Fn: "dict_keys", Args: []hir.Value{dictVal, keyCountPtr}, Type: "ptr"})
+
+			// Load key count
+			lenTemp := ls.b.FreshTemp("dict_len")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: keyCountPtr, Dst: lenTemp})
+
+			// Allocate index variable
+			idxPtr := ls.b.FreshTemp("for_idx_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+			// Condition block
+			condBlk := ls.b.NewBlock("for_cond")
+			oldCur := ls.b.Block()
+
+			ls.b.SetBlock(condBlk)
+			idxVal := ls.b.FreshTemp("for_idx")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+			condTemp := ls.b.FreshTemp("for_cond")
+			ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+			ls.b.SetBlock(oldCur)
+
+			// Body block
+			bodyBlk := ls.b.NewBlock("for_body")
+			ls.b.SetBlock(bodyBlk)
+
+			// Load current index
+			idxBody := ls.b.FreshTemp("for_idx_body")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+			// Cast to i32 for GEP
+			idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
+			ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
+
+			// Get key: keys_ptr[idx]
+			keyPtr := ls.b.FreshTemp("key_ptr")
+			ls.b.Emit(&hir.GetElementPtr{Type: "ptr", Base: keysPtr, Indices: []hir.Value{idxBodyI32}, Dst: keyPtr})
+			keyVal := ls.b.FreshTemp("key_val")
+			ls.b.Emit(&hir.Load{Type: "ptr", Src: keyPtr, Dst: keyVal})
+
+			// Get value: dict_get(dict, key, nil)
+			// Need a null default
+			nullPtr := ls.b.FreshTemp("null_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: nullPtr, Type: "i64", Count: 1})
+			ls.b.Emit(&hir.Store{Dst: nullPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+			valuePtr := ls.b.FreshTemp("value_ptr")
+			ls.b.Emit(&hir.Call{Dst: valuePtr, Fn: "dict_get", Args: []hir.Value{dictVal, keyVal, nullPtr}, Type: "ptr"})
+
+			// Load value (as i64, then cast to i32 for int)
+			valueI64 := ls.b.FreshTemp("value_i64")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: valuePtr, Dst: valueI64})
+			valueVal := ls.b.FreshTemp("value_val")
+			ls.b.Emit(&hir.Cast{Dst: valueVal, Src: valueI64, Type: "i32"})
+
+			// Bind key variable (first target)
+			if s.Targets[0].Name != nil {
+				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: keyVal})
+			}
+			// Bind value variable (second target)
+			if s.Targets[1].Name != nil {
+				ls.b.Emit(&hir.Let{Name: s.Targets[1].Name.Name, Init: valueVal})
+			}
+
+			// Lower body
+			if s.Body != nil {
+				ls.lowerBlock(s.Body)
+			}
+
+			// Scope cleanup
+			scFor := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scFor)
+			}
+
+			// Increment index
+			incTemp := ls.b.FreshTemp("for_inc")
+			ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+			ls.b.SetBlock(oldCur)
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+			// TODO: Free keys array after loop (keys_ptr is malloc'd)
+			// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
+
+		} else {
+			// List iteration (original code)
+			iterVal := ls.lowerExpr(s.Iter)
+
+			// Get length of collection
+			lenTemp := ls.b.FreshTemp("for_len")
+			ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
+
+			// Allocate stack space for index variable
+			idxPtr := ls.b.FreshTemp("for_idx_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+			// Create condition block
+			condBlk := ls.b.NewBlock("for_cond")
+			oldCur := ls.b.Block()
+
+			ls.b.SetBlock(condBlk)
+			idxVal := ls.b.FreshTemp("for_idx")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal, DesiType: nil})
+			condTemp := ls.b.FreshTemp("for_cond")
+			ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+			ls.b.SetBlock(oldCur)
+
+			// Create body block
+			bodyBlk := ls.b.NewBlock("for_body")
+			ls.b.SetBlock(bodyBlk)
+
+			idxBody := ls.b.FreshTemp("for_idx_body")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody, DesiType: nil})
+
+			idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
+			ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
+
+			// Bind loop variable
+			if len(s.Targets) > 0 {
+				for _, tgt := range s.Targets {
+					if tgt.Name != nil {
+						elemPtrTemp := ls.b.FreshTemp("elem_ptr")
+						ls.b.Emit(&hir.Call{Dst: elemPtrTemp, Fn: "list_get", Args: []hir.Value{iterVal, idxBodyI32}})
+
+						elemTemp := ls.b.FreshTemp("for_elem")
+						ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtrTemp, Type: "i32"})
+
+						ls.b.Emit(&hir.Let{Name: tgt.Name.Name, Init: elemTemp})
+					}
+				}
+			}
+
+			// Lower body
+			if s.Body != nil {
+				ls.lowerBlock(s.Body)
+			}
+
+			scFor := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scFor)
+			}
+
+			// Increment index
+			incTemp := ls.b.FreshTemp("for_inc")
+			ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+			ls.b.SetBlock(oldCur)
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
 		}
-
-		// Emit scope drops BEFORE the increment (so they come before the branch)
-		scFor := ls.pop()
-		if !ls.terminated {
-			ls.emitScopeDrops(scFor)
-		}
-
-		// Increment index: idx = idx + 1 (use i64)
-		incTemp := ls.b.FreshTemp("for_inc")
-		ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
-		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
-
-		ls.b.SetBlock(oldCur)
-
-		// Emit While loop
-		ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
 
 	case *ast.UsingStmt:
 		// using X [= init]: body  → bind handle + defer destroy_arena(X)
