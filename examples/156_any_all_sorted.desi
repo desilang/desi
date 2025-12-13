@@ -1,0 +1,42 @@
+# Test any(), all(), and sorted() builtins
+
+def main() -> int:
+    # Test any()
+    let bools1: list[bool] = [true, false, false]
+    let bools2: list[bool] = [false, false]
+    
+    if any(bools1):
+        print("any([true, false, false]) = true ✓")
+    else:
+        print("any([true, false, false]) = false ✗")
+    
+    if any(bools2):
+        print("any([false, false]) = true ✗")
+    else:
+        print("any([false, false]) = false ✓")
+    
+    # Test all()
+    let bools3: list[bool] = [true, true]
+    let bools4: list[bool] = [true, false]
+    
+    if all(bools3):
+        print("all([true, true]) = true ✓")
+    else:
+        print("all([true, true]) = false ✗")
+    
+    if all(bools4):
+        print("all([true, false]) = true ✗")
+    else:
+        print("all([true, false]) = false ✓")
+    
+    # Test sorted()
+    let nums: list[int] = [3, 1, 4, 1, 5, 9, 2, 6]
+    let sorted_nums: list[int] = sorted(nums)
+    
+    print("Original: ")
+    print(nums)
+    print("Sorted: ")
+    print(sorted_nums)
+    
+    print("All tests passed!")
+    return 0

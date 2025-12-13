@@ -58,3 +58,28 @@ bool list_all_builtin(DesiList* l) {
     }
     return true;
 }
+
+// Comparison function for qsort (ascending order for integers)
+static int compare_int_asc(const void* a, const void* b) {
+    intptr_t ia = (intptr_t)(*(void**)a);
+    intptr_t ib = (intptr_t)(*(void**)b);
+    if (ia < ib) return -1;
+    if (ia > ib) return 1;
+    return 0;
+}
+
+// sorted - returns a new sorted list (ascending order)
+DesiList* list_sorted_int(DesiList* l) {
+    if (!l) return NULL;
+    
+    // Create a copy of the list
+    DesiList* result = list_copy(l);
+    if (!result) return NULL;
+    
+    // Sort the copy using qsort
+    if (result->length > 1) {
+        qsort(result->data, result->length, sizeof(void*), compare_int_asc);
+    }
+    
+    return result;
+}

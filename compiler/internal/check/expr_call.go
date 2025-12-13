@@ -523,7 +523,6 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[int] or list[float]"))
 				return nil
 			}
-
 			// Built-in any()/all() functions - accepts list[bool]
 			if (id.Name == "any" || id.Name == "all") && len(args) == 1 && args[0] != nil {
 				if listT, ok := args[0].(*types.List); ok {
@@ -533,6 +532,18 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					}
 				}
 				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[bool]"))
+				return nil
+			}
+
+			// Built-in sorted() function - accepts list[int], returns list[int]
+			if id.Name == "sorted" && len(args) == 1 && args[0] != nil {
+				if listT, ok := args[0].(*types.List); ok {
+					if types.Equal(listT.Elem, types.Int) {
+						c.info.Types[call] = args[0]
+						return args[0]
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, "sorted requires list[int]"))
 				return nil
 			}
 
