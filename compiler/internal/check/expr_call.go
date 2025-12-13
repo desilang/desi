@@ -480,6 +480,26 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
+			// Built-in zip() function - accepts two iterables
+			if id.Name == "zip" && len(args) == 2 && args[0] != nil && args[1] != nil {
+				isIterable1, isIterable2 := false, false
+				switch args[0].(type) {
+				case *types.List, *types.Set:
+					isIterable1 = true
+				}
+				switch args[1].(type) {
+				case *types.List, *types.Set:
+					isIterable2 = true
+				}
+				if isIterable1 && isIterable2 {
+					// Return a tuple of both types (for type checking in for-loop stmt.go)
+					c.info.Types[call] = types.TupleOf(args[0], args[1])
+					return c.info.Types[call]
+				}
+				c.add(diagAt("DTE0001", call.Span, "zip requires two iterables (list or set)"))
+				return nil
+			}
+
 			// Built-in sum() function - accepts list[int] or list[float]
 			if id.Name == "sum" && len(args) == 1 && args[0] != nil {
 				if listT, ok := args[0].(*types.List); ok {

@@ -1,0 +1,13 @@
+# Test zip() builtin for parallel iteration
+
+def main() -> int:
+    let names: list[int] = [1, 2, 3]
+    let scores: list[int] = [100, 200, 300]
+    
+    print("Zip iteration:")
+    for a: int, b: int in zip(names, scores):
+        print(a)
+        print(b)
+    
+    print("Zip test passed!")
+    return 0
