@@ -576,6 +576,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					opcode = "sext" // Assume signed integers for now
 				} else if valTy == "i1" && (x.Type == "i64" || x.Type == "i32") {
 					opcode = "zext"
+				} else if valTy == "i1" && x.Type == "ptr" {
+					// Special case: bool to ptr requires two steps: i1 -> i64 -> ptr
+					tmpName := x.Dst.Name + "_ext"
+					wprintf(&m.funcs, "  %s = zext i1 %s to i64\n", tmpName, valOp)
+					wprintf(&m.funcs, "  %s = inttoptr i64 %s to ptr\n", x.Dst.Name, tmpName)
+					m.tempTypes[x.Dst.Name] = x.Type
+					continue // Skip normal emit below
 				}
 				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type
