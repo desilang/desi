@@ -207,6 +207,43 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
+	// Built-in __assert_check(cond, msg) - conditional abort
+	if c.Fn == "__assert_check" && len(c.Args) == 2 {
+		// Get condition
+		condTy, condVal := m.operand(c.Args[0])
+
+		// Get message
+		_, msgVal := m.operand(c.Args[1])
+
+		// Generate unique labels
+		okLabel := fmt.Sprintf("assert_ok%d", m.mergeID)
+		failLabel := fmt.Sprintf("assert_fail%d", m.mergeID)
+		m.mergeID++
+
+		// Emit conditional branch: if cond goto ok else goto fail
+		wprintf(&m.funcs, "  br %s %s, label %%%s, label %%%s\n", condTy, condVal, okLabel, failLabel)
+
+		// Emit fail block: print message and abort
+		wprintf(&m.funcs, "%s:\n", failLabel)
+		m.ensureDecl("declare i32 @printf(ptr, ...)")
+		m.ensureDecl("declare void @exit(i32)")
+
+		// Print error message
+		fmtG, fmtN := m.ensureCStringGlobal("Assertion failed: %s\n", false)
+		wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+			m.tempID, fmtN, fmtN, fmtG)
+		wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
+			m.tempID+1, m.tempID, msgVal)
+		m.tempID += 2
+
+		// Call exit(1)
+		wprintf(&m.funcs, "  call void @exit(i32 1)\n")
+		wprintf(&m.funcs, "  unreachable\n")
+
+		// Emit ok block: continue
+		wprintf(&m.funcs, "%s:\n", okLabel)
+		return
+	}
 	// __future_register_poll(fut, &name$poll, frame)
 	if c.Fn == "__future_register_poll" {
 		m.ensureDecl("declare void @__future_register_poll(ptr, ptr, ptr)")
