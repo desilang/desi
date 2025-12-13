@@ -227,6 +227,60 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"iterable"},
 	)
 
+	// --- reversed builtin ---
+	// reversed(iterable) -> iterator in reverse order
+	// Handled specially in stmt.go for for-loop lowering
+	addN("reversed",
+		[]types.T{nil}, // Any iterable type
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Special return handled by for-loop
+		[]string{"iterable"},
+	)
+
+	// --- sum builtin ---
+	// sum(items: list[int]) -> int
+	// Special handling in expr_call.go
+	addN("sum",
+		[]types.T{nil}, // list[int] or list[float]
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // int or float depending on input
+		[]string{"items"},
+	)
+
+	// --- min/max builtins ---
+	// min(items: list[int]) -> int
+	// max(items: list[int]) -> int
+	// Special handling in expr_call.go
+	addN("min",
+		[]types.T{nil},
+		[]ast.ParamMode{ast.ParamMove},
+		nil,
+		[]string{"items"},
+	)
+	addN("max",
+		[]types.T{nil},
+		[]ast.ParamMode{ast.ParamMove},
+		nil,
+		[]string{"items"},
+	)
+
+	// --- any/all builtins ---
+	// any(items: list[bool]) -> bool
+	// all(items: list[bool]) -> bool
+	// Special handling in expr_call.go
+	addN("any",
+		[]types.T{nil},
+		[]ast.ParamMode{ast.ParamMove},
+		types.Bool,
+		[]string{"items"},
+	)
+	addN("all",
+		[]types.T{nil},
+		[]ast.ParamMode{ast.ParamMove},
+		types.Bool,
+		[]string{"items"},
+	)
+
 	// --- File I/O builtins ---
 	// open(path: str, mode: str) -> File
 	addN("open",

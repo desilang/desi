@@ -433,6 +433,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		// - List iteration: for x: int in items:
 		// - Dict iteration: for key: str, value: int in my_dict.items():
 		// - Enumerate: for i: int, x: str in enumerate(items):
+		// - Reversed: for x: int in reversed(items):
 
 		ls.push()
 
@@ -444,6 +445,18 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				if len(fe.Args) == 1 {
 					isEnumerate = true
 					enumerateIterVal = ls.lowerExpr(fe.Args[0])
+				}
+			}
+		}
+
+		// Check if this is a reversed() call
+		isReversed := false
+		var reversedIterVal hir.Value
+		if fe, ok := s.Iter.(*ast.CallExpr); ok {
+			if callee, ok := fe.Callee.(*ast.Ident); ok && callee.Name == "reversed" {
+				if len(fe.Args) == 1 {
+					isReversed = true
+					reversedIterVal = ls.lowerExpr(fe.Args[0])
 				}
 			}
 		}
@@ -513,6 +526,78 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			incTemp := ls.b.FreshTemp("for_inc")
 			ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+			ls.b.SetBlock(oldCur)
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			return
+		}
+
+		// Handle reversed() iteration - iterate from len-1 down to 0
+		if isReversed && len(s.Targets) >= 1 {
+			// Get list length
+			lenTemp := ls.b.FreshTemp("for_len")
+			ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{reversedIterVal}, Type: "i64"})
+
+			// Allocate index variable, start at len-1
+			idxPtr := ls.b.FreshTemp("for_idx_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+			// idx = len - 1
+			startIdx := ls.b.FreshTemp("start_idx")
+			ls.b.Emit(&hir.BinaryOp{Dst: startIdx, Op: "-", LHS: lenTemp, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: startIdx})
+
+			// Condition block: idx >= 0
+			condBlk := ls.b.NewBlock("for_cond")
+			oldCur := ls.b.Block()
+
+			ls.b.SetBlock(condBlk)
+			idxVal := ls.b.FreshTemp("for_idx")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+			condTemp := ls.b.FreshTemp("for_cond")
+			// Compare: idx >= 0
+			ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: ">=", LHS: idxVal, RHS: hir.ConstInt{Text: "0", Type: "i64"}, Type: "i1"})
+			ls.b.SetBlock(oldCur)
+
+			// Body block
+			bodyBlk := ls.b.NewBlock("for_body")
+			ls.b.SetBlock(bodyBlk)
+
+			// Load current index
+			idxBody := ls.b.FreshTemp("for_idx_body")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+			// Cast to i32 for list_get
+			idxI32 := ls.b.FreshTemp("for_idx_i32")
+			ls.b.Emit(&hir.Cast{Dst: idxI32, Src: idxBody, Type: "i32"})
+
+			// Get element
+			elemPtr := ls.b.FreshTemp("elem_ptr")
+			ls.b.Emit(&hir.Call{Dst: elemPtr, Fn: "list_get", Args: []hir.Value{reversedIterVal, idxI32}, Type: "ptr"})
+
+			// Cast to element type (i32 for int lists)
+			elemTemp := ls.b.FreshTemp("for_elem")
+			ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtr, Type: "i32"})
+
+			// Bind loop variable
+			if s.Targets[0].Name != nil {
+				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elemTemp})
+			}
+
+			// Lower body
+			if s.Body != nil {
+				ls.lowerBlock(s.Body)
+			}
+
+			// Scope cleanup
+			scFor := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scFor)
+			}
+
+			// Decrement index: idx = idx - 1
+			decTemp := ls.b.FreshTemp("for_dec")
+			ls.b.Emit(&hir.BinaryOp{Dst: decTemp, Op: "-", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: decTemp})
 
 			ls.b.SetBlock(oldCur)
 			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
