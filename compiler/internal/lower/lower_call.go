@@ -253,6 +253,42 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
+	// 1.7. assert() builtin - testing/debugging
+	// assert(condition) or assert(condition, message)
+	// Aborts with exit code 1 if condition is false
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "assert" && len(x.Args) >= 1 && len(x.Args) <= 2 {
+			// Lower the condition
+			condVal := ls.lowerExpr(x.Args[0])
+
+			// Negate condition: we want to run the fail block when condition is FALSE
+			negCond := ls.b.FreshTemp("assert_neg")
+			ls.b.Emit(&hir.BinaryOp{Dst: negCond, Op: "==", LHS: condVal, RHS: hir.ConstBool{Value: false}, Type: "i1"})
+
+			// Build the fail block with statements directly
+			failBlock := hir.NewBlock("assert_fail")
+
+			// Get optional message or use default
+			var msgVal hir.Value
+			if len(x.Args) == 2 {
+				msgVal = ls.lowerExpr(x.Args[1])
+			} else {
+				msgVal = hir.ConstStr{Text: "assertion failed"}
+			}
+
+			// Add fail statements to block
+			failBlock.Stmts = append(failBlock.Stmts, &hir.Call{Fn: "__assert_fail", Args: []hir.Value{msgVal}})
+			failBlock.Stmts = append(failBlock.Stmts, &hir.Call{Fn: "exit", Args: []hir.Value{hir.ConstInt{Text: "1", Type: "i32"}}})
+
+			// Emit the conditional: if (!condition) { fail block }
+			ls.b.Emit(&hir.If{Cond: negCond, Then: failBlock, Else: nil})
+
+			// Return none/void
+			return nil
+		}
+	}
+
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
 	// If we have type info, check if this is print(arg) where:
 	// - arg implements Display trait, OR
