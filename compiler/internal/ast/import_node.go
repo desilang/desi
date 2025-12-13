@@ -20,9 +20,12 @@ type FromImportItem struct {
 }
 
 // FromImportStmt models:   from dotted.name import a [as x], b, ...
+//
+//	or:   from dotted.name import *
 type FromImportStmt struct {
 	Path  []string         // dotted path split into segments
-	Items []FromImportItem // imported items
+	Items []FromImportItem // imported items (empty if Star is true)
+	Star  bool             // true for wildcard import (from X import *)
 	Span  diag.Span
 }
 

@@ -46,6 +46,56 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 		}
 		mpath := dotted(fi.Path)
 		ex := rinfo.ModuleExports[mpath]
+
+		// Handle wildcard import: from X import *
+		if fi.Star {
+			if ex != nil {
+				// Import all exported functions
+				for name, cands := range ex.Funcs {
+					set := setFor(name)
+					modesTab := ex.FuncModes[name]
+					namesTab := ex.ParamNames[name]
+					metaTab := ex.FuncExtern[name]
+					defaultsTab := ex.FuncDefaults[name]
+
+					for i, ft := range cands {
+						var modes []ast.ParamMode
+						if i < len(modesTab) {
+							modes = modesTab[i]
+						}
+						if modes == nil {
+							modes = make([]ast.ParamMode, len(ft.Params))
+							for j := range modes {
+								modes[j] = ast.ParamMove
+							}
+						}
+						var pnames []string
+						if i < len(namesTab) {
+							pnames = namesTab[i]
+						}
+						ext := false
+						if i < len(metaTab) {
+							ext = metaTab[i].Extern
+						}
+						var defaults []bool
+						if i < len(defaultsTab) {
+							defaults = defaultsTab[i]
+						}
+
+						set.Add(&FuncCand{
+							Decl:       nil,
+							Type:       types.FuncOf(ft.Params, ft.Ret, ft.Variadic),
+							Modes:      modes,
+							Extern:     ext,
+							ParamNames: cloneNames(pnames),
+							Defaults:   cloneBools(defaults),
+						})
+					}
+				}
+			}
+			continue
+		}
+
 		for _, it := range fi.Items {
 			// Determine the local binding name
 			local := it.Name.Name

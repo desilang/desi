@@ -1,0 +1,8 @@
+# Test wildcard import: from X import *
+
+from math import *
+
+def main() -> int:
+	print("add(2, 3) = " + str(add(2, 3)))
+	print("sub(5, 2) = " + str(sub(5, 2)))
+	return 0

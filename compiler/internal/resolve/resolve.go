@@ -105,7 +105,21 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 				}
 				// augment with re-exports declared in that module as well
 				info.ModuleExports[mpath] = reexportIntoExports(ex, tmod, ldr, info, &diags)
+				ex = info.ModuleExports[mpath] // update after re-exports
 			}
+
+			// Handle wildcard import: from X import *
+			if s.Star {
+				if tmod != nil && ex != nil {
+					// Import all exported functions
+					for name := range ex.Funcs {
+						info.FromItems[name] = tmod
+					}
+				}
+				info.Graph.AddEdge(mod.File, mpath)
+				continue // Skip normal item processing
+			}
+
 			for _, it := range s.Items {
 				local := it.Name.Name
 				if it.Alias != nil {
