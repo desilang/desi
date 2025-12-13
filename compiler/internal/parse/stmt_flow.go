@@ -102,18 +102,34 @@ func (p *Parser) parseWhile() ast.Stmt {
 //	for x: T in iter:
 //	for k, v in iter:
 //	for k: K, v: V in iter:
+//	for mut x: T in iter:  (mutable iteration)
+//	for k: str, mut v: int in dict.items():
 func (p *Parser) parseFor() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'for'
 	p.next()
 
 	// Parse typed targets: x: T or x: T, y: U or just x, y
+	// Also supports: mut x: T for mutable iteration
 	var targets []ast.ForTarget
 	var legacyTarget ast.Expr // fallback for backward compat
 
 	// First, try to parse as typed binding(s)
 	for {
-		// Must start with identifier
+		// Check for 'mut' keyword
+		isMut := false
+		if p.cur.Tok == token.KW_mut {
+			isMut = true
+			p.next()
+		}
+
+		// Must have identifier after optional 'mut'
 		if p.cur.Tok != token.IDENT {
+			if isMut {
+				// Error: 'mut' without identifier
+				p.errExpected(spanPos(p.file, p.cur), "identifier after 'mut'")
+				p.syncStmt()
+				return nil
+			}
 			// Fallback to expression-based parsing for complex patterns
 			withInAsOperator(false, func() {
 				legacyTarget = p.parseExpr()
@@ -134,14 +150,14 @@ func (p *Parser) parseFor() ast.Stmt {
 			// Actually we need to check if we're at `in` keyword
 			if p.cur.Tok == token.KW_in {
 				// No type annotation, rewind
-				targets = append(targets, ast.ForTarget{Name: name, Type: nil})
+				targets = append(targets, ast.ForTarget{Name: name, Type: nil, IsMut: isMut})
 				break
 			}
 			// Parse type - but stop before 'in' or ','
 			typeAnnotation = p.parseTypeName()
 		}
 
-		targets = append(targets, ast.ForTarget{Name: name, Type: typeAnnotation})
+		targets = append(targets, ast.ForTarget{Name: name, Type: typeAnnotation, IsMut: isMut})
 
 		// Check for comma (more targets)
 		if p.cur.Tok == token.COMMA {

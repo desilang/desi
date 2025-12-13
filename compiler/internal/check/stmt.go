@@ -331,6 +331,23 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Get the iterable type
 		iterType := c.typ(st.Iter)
 
+		// Check if source collection is mutable (needed for mutable loop targets)
+		isSourceMutable := false
+		if id, ok := st.Iter.(*ast.Ident); ok {
+			if sym := c.scope.Lookup(id.Name); sym != nil {
+				isSourceMutable = sym.IsMutable
+			}
+		} else if callExpr, ok := st.Iter.(*ast.CallExpr); ok {
+			// For dict.items(), check if the dict is mutable
+			if fieldExpr, ok := callExpr.Callee.(*ast.FieldExpr); ok {
+				if id, ok := fieldExpr.X.(*ast.Ident); ok {
+					if sym := c.scope.Lookup(id.Name); sym != nil {
+						isSourceMutable = sym.IsMutable
+					}
+				}
+			}
+		}
+
 		// Check if this is dict.items() iteration
 		isDictItems := false
 		var dictType *types.Dict
@@ -347,16 +364,21 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 		// Handle dict.items() with two targets
 		if isDictItems && len(st.Targets) == 2 && dictType != nil {
-			// First target: key type
+			// First target: key type (keys are always immutable)
+			if st.Targets[0].IsMut {
+				c.add(diagAt("DTE0004", st.Targets[0].Name.Span,
+					"dict keys cannot be mutable during iteration"))
+			}
 			keyType := dictType.Key
 			if st.Targets[0].Type != nil {
 				keyType = c.resolveType(st.Targets[0].Type)
 			}
 			if st.Targets[0].Name != nil {
 				sym := &Symbol{
-					Name: st.Targets[0].Name.Name,
-					Kind: SymVar,
-					Type: keyType,
+					Name:      st.Targets[0].Name.Name,
+					Kind:      SymVar,
+					Type:      keyType,
+					IsMutable: false, // Keys are always immutable
 				}
 				_ = c.scope.Define(sym)
 				c.info.Idents[st.Targets[0].Name] = sym
@@ -365,16 +387,21 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 			}
 
-			// Second target: value type
+			// Second target: value type (can be mutable if source is mutable)
+			if st.Targets[1].IsMut && !isSourceMutable {
+				c.add(diagAt("DTE0004", st.Targets[1].Name.Span,
+					"cannot mutate elements of immutable collection (use 'let mut' to declare the dict)"))
+			}
 			valType := dictType.Val
 			if st.Targets[1].Type != nil {
 				valType = c.resolveType(st.Targets[1].Type)
 			}
 			if st.Targets[1].Name != nil {
 				sym := &Symbol{
-					Name: st.Targets[1].Name.Name,
-					Kind: SymVar,
-					Type: valType,
+					Name:      st.Targets[1].Name.Name,
+					Kind:      SymVar,
+					Type:      valType,
+					IsMutable: st.Targets[1].IsMut && isSourceMutable,
 				}
 				_ = c.scope.Define(sym)
 				c.info.Idents[st.Targets[1].Name] = sym
@@ -400,6 +427,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			// Bind loop variables from Targets
 			if len(st.Targets) > 0 {
 				for _, tgt := range st.Targets {
+					// Validate mutable iteration
+					if tgt.IsMut && !isSourceMutable {
+						c.add(diagAt("DTE0004", tgt.Name.Span,
+							"cannot mutate elements of immutable collection (use 'let mut' to declare the collection)"))
+					}
+
 					var varType types.T
 					if tgt.Type != nil {
 						// Explicit type annotation
@@ -415,9 +448,10 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 					if tgt.Name != nil {
 						sym := &Symbol{
-							Name: tgt.Name.Name,
-							Kind: SymVar,
-							Type: varType,
+							Name:      tgt.Name.Name,
+							Kind:      SymVar,
+							Type:      varType,
+							IsMutable: tgt.IsMut && isSourceMutable,
 						}
 						_ = c.scope.Define(sym)
 						c.info.Idents[tgt.Name] = sym

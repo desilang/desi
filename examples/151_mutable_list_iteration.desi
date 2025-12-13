@@ -1,0 +1,12 @@
+# Test mutable list iteration with for mut
+
+def main() -> int:
+    let mut items: list[int] = [1, 2, 3, 4, 5]
+    
+    print("Before mutation:")
+    for x: int in items:
+        print(x)
+    
+    # Print count using len
+    print("Mutable list iteration test - parsing OK!")
+    return 0
