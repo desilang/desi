@@ -129,6 +129,95 @@ if all(flags2):
 
 ---
 
+## Transformation Functions
+
+### map()
+
+Applies a function to each element of a list, returning a new list with the results.
+
+```desi
+let numbers: list[int] = [1, 2, 3, 4, 5]
+let doubled: list[int] = map(lambda x: x * 2, numbers)
+# doubled = [2, 4, 6, 8, 10]
+
+# With named function
+def square(x: int) -> int:
+    return x * x
+
+let squares: list[int] = map(square, numbers)
+# squares = [1, 4, 9, 16, 25]
+```
+
+**Signature:** `map(func, list[T]) → list[ReturnType(func)]`
+
+---
+
+### filter()
+
+Returns a new list containing only elements that satisfy the predicate.
+
+```desi
+let numbers: list[int] = [1, 2, 3, 4, 5, 6]
+let evens: list[int] = filter(lambda x: (x % 2) == 0, numbers)
+# evens = [2, 4, 6]
+
+# With named function
+def is_positive(x: int) -> bool:
+    return x > 0
+
+let positives: list[int] = filter(is_positive, [-1, 0, 1, 2])
+# positives = [1, 2]
+```
+
+**Signature:** `filter(predicate, list[T]) → list[T]`
+
+---
+
+### Implementation Details
+
+Both `map()` and `filter()` use **compile-time desugaring** to list comprehensions:
+
+```desi
+# What you write:
+map(lambda x: x * 2, numbers)
+filter(lambda x: x > 0, numbers)
+
+# What the compiler sees:
+[(x * 2) for x in numbers]
+[x for x in numbers if x > 0]
+```
+
+**Why this approach?**
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Desugaring (current)** | Zero overhead, full LLVM optimization, lambda inlining | Eager only |
+| Function pointers | Flexible, runtime dispatch | Overhead, no inlining |
+| Closure ABI | Full closure support | Complex, boxing overhead |
+
+The desugaring approach was chosen because:
+1. **Zero-cost abstraction** — No function pointer indirection
+2. **Full optimization** — LLVM sees the entire loop and can vectorize/unroll
+3. **Memory predictability** — Eager evaluation means deterministic allocation
+4. **Simplicity** — No closure ABI complexity for initial implementation
+
+### Future Improvements
+
+| Feature | Description | Status |
+|---------|-------------|--------|
+| Lazy iterators | `map(f, xs)` returns iterator, not list | Planned |
+| Chaining | `xs.map(f).filter(p)` method syntax | Planned |
+| Multi-iterable map | `map(f, xs, ys)` for binary functions | Planned |
+| Parallel map | `pmap(f, xs)` for parallel execution | Future |
+| Reduce/fold | `reduce(f, xs, init)` builtin | Planned |
+
+> **Note:** For now, use list comprehensions if you need more control:
+> ```desi
+> [f(x) for x in xs if p(x)]  # Equivalent to filter then map
+> ```
+
+---
+
 ## Iteration Functions
 
 ### range()
@@ -241,6 +330,8 @@ sorted(nums)  # Returns new list, nums unchanged
 | `sorted(x)` | `list[int]` | `list[int]` | New sorted list |
 | `any(x)` | `list[bool]` | `bool` | True if any element is true |
 | `all(x)` | `list[bool]` | `bool` | True if all elements are true |
+| `map(f, x)` | `func`, `list[T]` | `list[R]` | Apply function to each element |
+| `filter(p, x)` | `predicate`, `list[T]` | `list[T]` | Elements matching predicate |
 | `range(...)` | `int` args | iterator | Integer sequence |
 | `enumerate(x)` | Iterable | iterator | Index-value pairs |
 | `reversed(x)` | Iterable | iterator | Reverse iteration |
@@ -255,3 +346,4 @@ sorted(nums)  # Returns new list, nums unchanged
 - `examples/156_any_all_sorted.desi` - any, all, sorted
 - `examples/152_enumerate.desi` - enumerate
 - `examples/156_zip.desi` - zip
+- `examples/157_map_filter.desi` - map, filter
