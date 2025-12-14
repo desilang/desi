@@ -1,0 +1,38 @@
+def double(x: int) -> int:
+    return x * 2
+
+def is_even(x: int) -> bool:
+    return (x % 2) == 0
+
+def main() -> int:
+    let nums: list[int] = [1, 2, 3, 4, 5]
+    
+    # Pipe style chaining
+    let a: list[int] = nums |> map(double)
+    print("pipe map:")
+    for x: int in a:
+        print(x)
+    
+    let b: list[int] = a |> filter(is_even)
+    print("pipe filter:")
+    for x: int in b:
+        print(x)
+    
+    # Dot style chaining
+    let c: list[int] = nums.map(double)
+    print("dot map:")
+    for x: int in c:
+        print(x)
+    
+    let d: list[int] = c.filter(is_even)
+    print("dot filter:")
+    for x: int in d:
+        print(x)
+    
+    # Full chaining
+    let e: list[int] = nums.map(double).filter(is_even)
+    print("dot chain:")
+    for x: int in e:
+        print(x)
+    
+    0
