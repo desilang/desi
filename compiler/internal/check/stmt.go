@@ -384,6 +384,26 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		}
 
+		// Check if this is zip(a, b) iteration
+		isZip := false
+		var zipElemType1, zipElemType2 types.T
+		if callExpr, ok := st.Iter.(*ast.CallExpr); ok {
+			if id, ok := callExpr.Callee.(*ast.Ident); ok && id.Name == "zip" {
+				if len(callExpr.Args) == 2 {
+					isZip = true
+					// Get element types from both iterables
+					iter1Type := c.typ(callExpr.Args[0])
+					iter2Type := c.typ(callExpr.Args[1])
+					if list1, ok := iter1Type.(*types.List); ok {
+						zipElemType1 = list1.Elem
+					}
+					if list2, ok := iter2Type.(*types.List); ok {
+						zipElemType2 = list2.Elem
+					}
+				}
+			}
+		}
+
 		// Handle enumerate() with two targets: (index, element)
 		if isEnumerate && len(st.Targets) == 2 {
 			// Get element type from inner iterable
@@ -482,6 +502,44 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.info.Idents[st.Targets[1].Name] = sym
 				if valType != nil {
 					c.info.Types[st.Targets[1].Name] = valType
+				}
+			}
+		} else if isZip && len(st.Targets) == 2 {
+			// First target: element from first list
+			if st.Targets[0].Name != nil {
+				elemType1 := zipElemType1
+				if st.Targets[0].Type != nil {
+					elemType1 = c.resolveType(st.Targets[0].Type)
+				}
+				sym := &Symbol{
+					Name:      st.Targets[0].Name.Name,
+					Kind:      SymVar,
+					Type:      elemType1,
+					IsMutable: st.Targets[0].IsMut && isSourceMutable,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[0].Name] = sym
+				if elemType1 != nil {
+					c.info.Types[st.Targets[0].Name] = elemType1
+				}
+			}
+
+			// Second target: element from second list
+			if st.Targets[1].Name != nil {
+				elemType2 := zipElemType2
+				if st.Targets[1].Type != nil {
+					elemType2 = c.resolveType(st.Targets[1].Type)
+				}
+				sym := &Symbol{
+					Name:      st.Targets[1].Name.Name,
+					Kind:      SymVar,
+					Type:      elemType2,
+					IsMutable: st.Targets[1].IsMut && isSourceMutable,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.Targets[1].Name] = sym
+				if elemType2 != nil {
+					c.info.Types[st.Targets[1].Name] = elemType2
 				}
 			}
 		} else {

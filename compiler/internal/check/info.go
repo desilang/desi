@@ -281,6 +281,16 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"items"},
 	)
 
+	// --- zip builtin ---
+	// zip(a, b) -> iterator of (a[i], b[i]) pairs
+	// Special handling in stmt.go for for-loop lowering
+	addN("zip",
+		[]types.T{nil, nil}, // Two iterables
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		nil, // Special return handled by for-loop
+		[]string{"a", "b"},
+	)
+
 	// --- File I/O builtins ---
 	// open(path: str, mode: str) -> File
 	addN("open",
