@@ -1,14 +1,21 @@
+def double(x: int) -> int:
+	return x * 2
+
+def is_even(x: int) -> bool:
+	return (x % 2) == 0
+
 def main() -> int:
-	# Test map() with lambda
 	let nums: list[int] = [1, 2, 3, 4, 5]
-	let doubled: list[int] = map(lambda x: x * 2, nums)
+	
+	# Test map() with named function
+	let doubled: list[int] = map(double, nums)
 	print(doubled)  # Expected: [2, 4, 6, 8, 10]
 	
-	# Test filter() with lambda
-	let evens: list[int] = filter(lambda x: (x % 2) == 0, nums)
+	# Test filter() with named function
+	let evens: list[int] = filter(is_even, nums)
 	print(evens)  # Expected: [2, 4]
 	
-	# Test with named function (via str builtin)
+	# Test with builtin function
 	let strs: list[str] = map(str, nums)
 	print(strs)  # Expected: ["1", "2", "3", "4", "5"]
 	
