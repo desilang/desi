@@ -804,6 +804,98 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
 
 		} else {
+			// Check if this is set iteration
+			isSet := false
+			if ls.info != nil {
+				iterType := ls.info.Types[s.Iter]
+				if _, ok := iterType.(*types.Set); ok {
+					isSet = true
+				}
+			}
+
+			if isSet && len(s.Targets) >= 1 {
+				// Set iteration: convert set to array and iterate
+				setVal := ls.lowerExpr(s.Iter)
+
+				// Get array and length from set: set_to_array(set, &len) -> ptr
+				lenPtr := ls.b.FreshTemp("set_len_ptr")
+				ls.b.Emit(&hir.Alloca{Dst: lenPtr, Type: "i64", Count: 1})
+				arrPtr := ls.b.FreshTemp("set_arr")
+				ls.b.Emit(&hir.Call{Dst: arrPtr, Fn: "set_to_array", Args: []hir.Value{setVal, lenPtr}, Type: "ptr"})
+
+				// Load length
+				lenTemp := ls.b.FreshTemp("set_len")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: lenPtr, Dst: lenTemp})
+
+				// Allocate index variable
+				idxPtr := ls.b.FreshTemp("for_idx_ptr")
+				ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+				// Condition block
+				condBlk := ls.b.NewBlock("for_cond")
+				oldCur := ls.b.Block()
+
+				ls.b.SetBlock(condBlk)
+				idxVal := ls.b.FreshTemp("for_idx")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+				condTemp := ls.b.FreshTemp("for_cond")
+				ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+				ls.b.SetBlock(oldCur)
+
+				// Body block
+				bodyBlk := ls.b.NewBlock("for_body")
+				ls.b.SetBlock(bodyBlk)
+
+				// Load current index
+				idxBody := ls.b.FreshTemp("for_idx_body")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+				// Cast to i32 for GEP
+				idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
+				ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
+
+				// Get element from array: arr[idx]
+				// arrPtr is int64_t*, so GEP with index
+				elemPtr := ls.b.FreshTemp("elem_ptr")
+				ls.b.Emit(&hir.GetElementPtr{Type: "i64", Base: arrPtr, Indices: []hir.Value{idxBodyI32}, Dst: elemPtr})
+				elemVal := ls.b.FreshTemp("elem_val")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: elemPtr, Dst: elemVal})
+
+				// Cast to i32 for Desi int
+				elemI32 := ls.b.FreshTemp("for_elem")
+				ls.b.Emit(&hir.Cast{Dst: elemI32, Src: elemVal, Type: "i32"})
+
+				// Bind loop variable
+				if s.Targets[0].Name != nil {
+					ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elemI32})
+				}
+
+				// Lower body
+				if s.Body != nil {
+					ls.lowerBlock(s.Body)
+				}
+
+				// Scope cleanup
+				scFor := ls.pop()
+				if !ls.terminated {
+					ls.emitScopeDrops(scFor)
+				}
+
+				// Increment index
+				incTemp := ls.b.FreshTemp("for_inc")
+				ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+				ls.b.SetBlock(oldCur)
+				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+				// TODO: Free array after loop
+				// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{arrPtr}})
+				return
+
+			}
+
 			// List iteration (original code)
 			iterVal := ls.lowerExpr(s.Iter)
 
