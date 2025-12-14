@@ -27,6 +27,52 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return nil
 
 	case *ast.ListComp:
+		// Create a child scope for the comprehension to bind loop variables
+		saved := c.scope
+		c.scope = NewScope(c.scope)
+		defer func() { c.scope = saved }()
+
+		// Process each clause: check iterable, bind loop variable
+		for _, clause := range x.Clauses {
+			// 1. Type-check the iterable expression
+			iterType := c.typ(clause.Iter)
+			if iterType == nil {
+				continue
+			}
+
+			// 2. Extract element type from iterable
+			var elemType types.T
+			switch it := iterType.(type) {
+			case *types.List:
+				elemType = it.Elem
+			case *types.Set:
+				elemType = it.Elem
+			default:
+				// For now, support list and set. Could extend to other iterables.
+				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
+				continue
+			}
+
+			// 3. Bind the loop variable into scope
+			if target, ok := clause.Target.(*ast.Ident); ok {
+				c.scope.Define(&Symbol{
+					Name: target.Name,
+					Kind: SymVar,
+					Type: elemType,
+				})
+				c.info.Types[target] = elemType
+			}
+
+			// 4. Type-check filter condition if present
+			if clause.If != nil {
+				condType := c.typ(clause.If)
+				if condType != nil && !types.Equal(condType, types.Bool) {
+					c.add(diagAt("DTE0004", clause.If.SpanOf(), "filter condition must be bool, got "+condType.String()))
+				}
+			}
+		}
+
+		// 5. Now check the element expression with loop variables in scope
 		et := c.typ(x.Elem)
 		if et != nil {
 			t := types.ListOf(et)
@@ -36,6 +82,39 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return nil
 
 	case *ast.SetComp:
+		// Create a child scope for the comprehension to bind loop variables
+		saved := c.scope
+		c.scope = NewScope(c.scope)
+		defer func() { c.scope = saved }()
+
+		// Process each clause: check iterable, bind loop variable
+		for _, clause := range x.Clauses {
+			iterType := c.typ(clause.Iter)
+			if iterType == nil {
+				continue
+			}
+			var elemType types.T
+			switch it := iterType.(type) {
+			case *types.List:
+				elemType = it.Elem
+			case *types.Set:
+				elemType = it.Elem
+			default:
+				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
+				continue
+			}
+			if target, ok := clause.Target.(*ast.Ident); ok {
+				c.scope.Define(&Symbol{Name: target.Name, Kind: SymVar, Type: elemType})
+				c.info.Types[target] = elemType
+			}
+			if clause.If != nil {
+				condType := c.typ(clause.If)
+				if condType != nil && !types.Equal(condType, types.Bool) {
+					c.add(diagAt("DTE0004", clause.If.SpanOf(), "filter condition must be bool"))
+				}
+			}
+		}
+
 		et := c.typ(x.Elem)
 		if et != nil {
 			t := types.SetOf(et)
@@ -45,6 +124,39 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return nil
 
 	case *ast.DictComp:
+		// Create a child scope for the comprehension to bind loop variables
+		saved := c.scope
+		c.scope = NewScope(c.scope)
+		defer func() { c.scope = saved }()
+
+		// Process each clause: check iterable, bind loop variable
+		for _, clause := range x.Clauses {
+			iterType := c.typ(clause.Iter)
+			if iterType == nil {
+				continue
+			}
+			var elemType types.T
+			switch it := iterType.(type) {
+			case *types.List:
+				elemType = it.Elem
+			case *types.Set:
+				elemType = it.Elem
+			default:
+				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
+				continue
+			}
+			if target, ok := clause.Target.(*ast.Ident); ok {
+				c.scope.Define(&Symbol{Name: target.Name, Kind: SymVar, Type: elemType})
+				c.info.Types[target] = elemType
+			}
+			if clause.If != nil {
+				condType := c.typ(clause.If)
+				if condType != nil && !types.Equal(condType, types.Bool) {
+					c.add(diagAt("DTE0004", clause.If.SpanOf(), "filter condition must be bool"))
+				}
+			}
+		}
+
 		kt := c.typ(x.Key)
 		vt := c.typ(x.Val)
 		if kt != nil && vt != nil {
