@@ -521,12 +521,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 			// Handle Class Methods (including generic class instances like Box[int])
 			var cls *types.Class
+			var genericArgs []types.T // Track generic args for monomorphized naming
 			if c, ok := recvT.(*types.Class); ok {
 				cls = c
 			} else if gen, ok := recvT.(*types.Generic); ok {
-				// Generic class instance: extract base class
+				// Generic class instance: extract base class and args
 				if c, ok := gen.Base.(*types.Class); ok {
 					cls = c
+					genericArgs = gen.Args
 				}
 			}
 			if cls != nil {
@@ -583,7 +585,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 				}
 
-				mangledName := fmt.Sprintf("%s_%s", definingClass.Name, methodName)
+				// Use monomorphized name for generic class instances
+				var mangledName string
+				if len(genericArgs) > 0 {
+					// Generic instantiation: use Box_int_get instead of Box_get
+					mangledName = fmt.Sprintf("%s_%s", mangleGenericClassName(definingClass.Name, genericArgs), methodName)
+				} else {
+					// Non-generic class: use Box_get
+					mangledName = fmt.Sprintf("%s_%s", definingClass.Name, methodName)
+				}
 
 				// Check if this is a static method or class method
 				isStaticMethod := false
@@ -682,6 +692,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		resT := ls.info.Types[x]
 		var st *types.Struct
 		var cls *types.Class
+		var genericArgsForCtor []types.T // Track generic args for monomorphized constructor
 
 		if s, ok := resT.(*types.Struct); ok {
 			st = s
@@ -690,6 +701,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				st = s
 			} else if c, ok := g.Base.(*types.Class); ok {
 				cls = c
+				genericArgsForCtor = g.Args // Save generic args for constructor name
 			}
 		} else if c, ok := resT.(*types.Class); ok {
 			cls = c
@@ -728,8 +740,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				// Find __new__
 				// It should be in cls.Constructors or Dunders["__new__"]
 				// We assume the checker validated arguments.
-				// Mangled name: ClassName___new__
-				ctorName := fmt.Sprintf("%s___new__", cls.Name)
+				// Mangled name: ClassName___new__ or MangledClassName___new__
+				var ctorName string
+				if len(genericArgsForCtor) > 0 {
+					// Use monomorphized constructor: Box_int___new__
+					ctorName = fmt.Sprintf("%s___new__", mangleGenericClassName(cls.Name, genericArgsForCtor))
+				} else {
+					// Use regular constructor: Box___new__
+					ctorName = fmt.Sprintf("%s___new__", cls.Name)
+				}
 
 				// Prepare args: [inst, user_args...]
 				var args []hir.Value

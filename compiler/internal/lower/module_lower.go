@@ -94,6 +94,12 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			// Methods
 			methods := LowerClassMethods(cd, info, src)
 			out.Funcs = append(out.Funcs, methods...)
+
+			// Monomorphization: Generate specialized versions for generic classes
+			if len(cd.TypeParams) > 0 {
+				monomorphized := LowerMonomorphizedClass(cd, info, src)
+				out.Funcs = append(out.Funcs, monomorphized...)
+			}
 		}
 	}
 
