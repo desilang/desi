@@ -2,6 +2,33 @@ package check
 
 import "github.com/desilang/desi/compiler/internal/ast"
 
+// =============================================================================
+// DESUGARING ARCHITECTURE - DO NOT REMOVE THIS COMMENT
+// =============================================================================
+//
+// Desugaring transforms high-level syntax into simpler forms before type-checking.
+// This happens at compile-time with ZERO runtime overhead - the generated code is
+// identical to hand-written equivalents.
+//
+// PERFORMANCE: Currently O(n) where n = number of AST nodes.
+//
+// ADDING NEW DESUGARS:
+// To maintain O(n) complexity when adding new desugar transformations:
+//
+// 1. Add your pattern to desugarExpr() switch statement (preferred)
+//    - This keeps everything in a single AST walk
+//    - Example: add a case for 'reduce', 'flatmap', etc.
+//
+// 2. If the transformation is complex, add a new case to desugarBlock()
+//    - Still O(n) as it's part of the same walk
+//
+// 3. AVOID creating separate AST walks for each desugar type
+//    - Multiple walks = O(k*n) where k = number of desugar types
+//    - Only acceptable if desugars have ordering dependencies
+//
+// See docs/internals/desugaring.md for design rationale and examples.
+// =============================================================================
+
 // desugarMapFilter rewrites map(xs,f) and filter(xs,p) into list comprehensions:
 //
 //	map(xs,f)    → [f(x) for x in xs]

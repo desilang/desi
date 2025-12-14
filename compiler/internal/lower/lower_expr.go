@@ -1015,30 +1015,190 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	}
 }
 
-// lowerListComp builds a tiny HIR shape for list comprehensions:
+// lowerListComp builds HIR for list comprehensions by expanding them to loops:
 //
-//	let %res
-//	call list_push(%res, <elem>)
+//	let %result = list_new(...)
+//	let %idx = 0
+//	while %idx < len(%iter):
+//	    let %elem = list_get(%iter, %idx)
+//	    if <filter_cond>:  // optional
+//	        list_append(%result, <transformed_elem>)
+//	    %idx = %idx + 1
 //
-// Returns %res as the value of the comprehension.
-//
-// Tier-0 note: This is a compile-only skeleton. We don't yet expand
-// the full generator chain; instead, we ensure the result handle exists
-// and we append the element once. Later passes can elaborate to real loops.
+// Returns %result as the value of the comprehension.
 func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
-	// Result handle
-	res := ls.b.FreshTemp("list")
-	ls.b.Emit(&hir.Let{Name: res.Name})
-
-	// Element value
-	elem := ls.lowerExpr(c.Elem)
-	if elem == nil {
-		// Be defensive; use a const 0 if lowering produced nothing.
-		elem = &hir.ConstInt{Text: "0"}
+	if len(c.Clauses) == 0 {
+		// Degenerate: no iteration clauses, just return empty list
+		res := ls.b.FreshTemp("list")
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{
+			hir.ConstInt{Text: "0", Type: "i32"},
+			hir.ConstStr{Text: "null"},
+		}})
+		return res
 	}
 
-	// For now: a single append with prelude stub. (Tight loop elab comes next.)
-	ls.b.Emit(&hir.Call{Fn: "list_push", Args: []hir.Value{res, elem}})
+	// For now, handle single clause comprehensions: [expr for x in iter (if cond)?]
+	clause := c.Clauses[0]
+
+	// 1. Create result list
+	res := ls.b.FreshTemp("comp_result")
+	var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+	var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+
+	// Try to get element type for proper type tag
+	if ls.info != nil {
+		if t, ok := ls.info.Types[c].(*types.List); ok {
+			typeTag = getTypeTag(t.Elem)
+			toStrFunc = resolveToStrFunc(t.Elem)
+		}
+	}
+	ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag, toStrFunc}})
+
+	// 2. Detect range(start, stop) call for efficient lowering
+	// Check BEFORE lowering the iterable to avoid emitting a range() call
+	isRange := false
+	var rangeStart, rangeStop hir.Value
+	var iterVal hir.Value
+
+	if call, ok := clause.Iter.(*ast.CallExpr); ok {
+		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "range" {
+			isRange = true
+			if len(call.Args) == 1 {
+				// range(stop): 0 to stop-1
+				rangeStart = hir.ConstInt{Text: "0", Type: "i64"}
+				rangeStop = ls.lowerExpr(call.Args[0])
+				// Cast to i64 if needed
+				stopI64 := ls.b.FreshTemp("stop_i64")
+				ls.b.Emit(&hir.Cast{Dst: stopI64, Src: rangeStop, Type: "i64"})
+				rangeStop = stopI64
+			} else if len(call.Args) >= 2 {
+				// range(start, stop)
+				rangeStart = ls.lowerExpr(call.Args[0])
+				startI64 := ls.b.FreshTemp("start_i64")
+				ls.b.Emit(&hir.Cast{Dst: startI64, Src: rangeStart, Type: "i64"})
+				rangeStart = startI64
+
+				rangeStop = ls.lowerExpr(call.Args[1])
+				stopI64 := ls.b.FreshTemp("stop_i64")
+				ls.b.Emit(&hir.Cast{Dst: stopI64, Src: rangeStop, Type: "i64"})
+				rangeStop = stopI64
+			}
+		}
+	}
+
+	// Only lower the iterable if it's not a range (range is handled inline)
+	if !isRange {
+		iterVal = ls.lowerExpr(clause.Iter)
+	}
+
+	// 3. Get iteration bounds
+	var lenTemp hir.Value
+	if isRange {
+		lenTemp = rangeStop
+	} else {
+		lenTemp = ls.b.FreshTemp("comp_len")
+		ls.b.Emit(&hir.Call{Dst: lenTemp.(hir.Temp), Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
+	}
+
+	// 4. Allocate index variable
+	idxPtr := ls.b.FreshTemp("comp_idx_ptr")
+	ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+	if isRange {
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: rangeStart})
+	} else {
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+	}
+
+	// 5. Create condition block
+	condBlk := ls.b.NewBlock("comp_cond")
+	oldCur := ls.b.Block()
+
+	ls.b.SetBlock(condBlk)
+	idxVal := ls.b.FreshTemp("comp_idx")
+	ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+	condTemp := ls.b.FreshTemp("comp_cond")
+	ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+	ls.b.SetBlock(oldCur)
+
+	// 6. Create body block
+	bodyBlk := ls.b.NewBlock("comp_body")
+	ls.b.SetBlock(bodyBlk)
+
+	// Load current index for use in body
+	idxBody := ls.b.FreshTemp("comp_idx_body")
+	ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+	// Get loop variable name from Target
+	var loopVarName string
+	if target, ok := clause.Target.(*ast.Ident); ok {
+		loopVarName = target.Name
+	} else {
+		loopVarName = "__x" // fallback
+	}
+
+	// Get element value and bind loop variable
+	var elemVal hir.Value
+	if isRange {
+		// For range, the index IS the element value (cast to i32)
+		elemI32 := ls.b.FreshTemp("range_elem")
+		ls.b.Emit(&hir.Cast{Dst: elemI32, Src: idxBody, Type: "i32"})
+		elemVal = elemI32
+	} else {
+		// Cast to i32 for list_get
+		idxI32 := ls.b.FreshTemp("comp_idx_i32")
+		ls.b.Emit(&hir.Cast{Dst: idxI32, Src: idxBody, Type: "i32"})
+
+		// Get element: list_get(iter, idx)
+		elemPtr := ls.b.FreshTemp("comp_elem_ptr")
+		ls.b.Emit(&hir.Call{Dst: elemPtr, Fn: "list_get", Args: []hir.Value{iterVal, idxI32}, Type: "ptr"})
+
+		// Cast to element type (default i32 for int lists)
+		elemTemp := ls.b.FreshTemp("comp_elem")
+		ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtr, Type: "i32"})
+		elemVal = elemTemp
+	}
+
+	// Bind loop variable for use in element expression
+	ls.b.Emit(&hir.Let{Name: loopVarName, Init: elemVal, Type: types.Int})
+
+	// 7. Evaluate element expression (the transformed value)
+	transformedElem := ls.lowerExpr(c.Elem)
+	if transformedElem == nil {
+		transformedElem = hir.ConstInt{Text: "0"}
+	}
+
+	// 8. Handle filter condition if present
+	if clause.If != nil {
+		// Evaluate filter condition
+		filterCond := ls.lowerExpr(clause.If)
+
+		// Create then block for appending
+		thenBlk := ls.b.NewBlock("comp_then")
+		ls.b.SetBlock(thenBlk)
+
+		// Cast to ptr for list_append
+		valPtr := ls.b.FreshTemp("val_ptr")
+		ls.b.Emit(&hir.Cast{Dst: valPtr, Src: transformedElem, Type: "ptr"})
+		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{res, valPtr, typeTag}})
+
+		// Switch back to body and emit conditional
+		ls.b.SetBlock(bodyBlk)
+		ls.b.Emit(&hir.If{Cond: filterCond, Then: thenBlk, Else: nil})
+	} else {
+		// No filter: always append
+		valPtr := ls.b.FreshTemp("val_ptr")
+		ls.b.Emit(&hir.Cast{Dst: valPtr, Src: transformedElem, Type: "ptr"})
+		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{res, valPtr, typeTag}})
+	}
+
+	// 9. Increment index
+	incTemp := ls.b.FreshTemp("comp_inc")
+	ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+	ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+	// 10. Back to original block and emit while loop
+	ls.b.SetBlock(oldCur)
+	ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
 
 	return res
 }

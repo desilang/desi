@@ -9,10 +9,16 @@ import (
 	"github.com/desilang/desi/compiler/internal/hir"
 )
 
-func TestLower_ListComp_EmitsListPush(t *testing.T) {
-	// ys = [1 for ...]  (we only need Elem to exercise the append path)
+func TestLower_ListComp_EmitsListAppend(t *testing.T) {
+	// ys = [1 for x in xs] - with proper clause structure
+	xvar := &ast.Ident{Name: "x"}
 	comp := &ast.ListComp{
 		Elem: &ast.IntLit{Text: "1"},
+		Clauses: []ast.CompClause{{
+			Target: xvar,
+			Iter:   &ast.Ident{Name: "xs"},
+			If:     nil,
+		}},
 	}
 	let := &ast.LetStmt{
 		Name:  ast.Ident{Name: "ys"},
@@ -29,7 +35,7 @@ func TestLower_ListComp_EmitsListPush(t *testing.T) {
 	hir.Print(&buf, fn)
 	out := buf.String()
 
-	if !strings.Contains(out, "call list_push(") {
-		t.Fatalf("HIR missing list_push append for list comprehension:\n%s", out)
+	if !strings.Contains(out, "list_append") {
+		t.Fatalf("HIR missing list_append for list comprehension:\n%s", out)
 	}
 }
