@@ -2,7 +2,6 @@ package check
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -197,7 +196,6 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.UnaryExpr:
 		t := c.typ(x.X)
-		fmt.Fprintf(os.Stderr, "DEBUG: checkUnary op=%s type=%s goType=%T\n", x.Op, t, t)
 
 		// Handle unary operators with dunder support
 		if x.Op == "await" {

@@ -17,7 +17,7 @@ pub def add(a: int, b: int = 1) -> int:
 	})
 
 	mainSrc := `
-from math import add as sum
+from math import add as total
 `
 	mod, diags := parse.ParseFile("main.desi", []byte(mainSrc))
 	if len(diags) != 0 {
@@ -32,12 +32,12 @@ from math import add as sum
 	info := NewInfo()
 	PopulateImportedFuncSigs(mod, info, rinfo)
 
-	set, ok := info.Funcs["sum"]
+	set, ok := info.Funcs["total"]
 	if !ok || set == nil {
-		t.Fatalf("missing overload set for 'sum'")
+		t.Fatalf("missing overload set for 'total'")
 	}
 	if len(set.Cands) != 1 {
-		t.Fatalf("expected 1 cand for 'sum', got %d", len(set.Cands))
+		t.Fatalf("expected 1 cand for 'total', got %d", len(set.Cands))
 	}
 	cand := set.Cands[0]
 
