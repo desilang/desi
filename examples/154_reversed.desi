@@ -1,0 +1,11 @@
+# Test reversed() builtin for iteration
+
+def main() -> int:
+    let items: list[int] = [1, 2, 3, 4, 5]
+    
+    print("Reversed iteration:")
+    for x: int in reversed(items):
+        print(x)  # Should print 5, 4, 3, 2, 1
+    
+    print("Reversed test passed!")
+    return 0

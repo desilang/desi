@@ -1,0 +1,20 @@
+# Test sum, min, max builtins
+
+def main() -> int:
+    let numbers: list[int] = [1, 2, 3, 4, 5]
+    
+    # Test sum
+    let total: int = sum(numbers)
+    print("Sum:")
+    print(total)  # Should be 15
+    
+    # Test min/max
+    let minimum: int = min(numbers)
+    let maximum: int = max(numbers)
+    print("Min:")
+    print(minimum)  # Should be 1
+    print("Max:")
+    print(maximum)  # Should be 5
+    
+    print("Builtins test passed!")
+    return 0

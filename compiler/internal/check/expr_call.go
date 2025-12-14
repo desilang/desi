@@ -464,6 +464,58 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
+			// Built-in reversed() function - accepts any iterable
+			if id.Name == "reversed" && len(args) == 1 && args[0] != nil {
+				argType := args[0]
+				isIterable := false
+				switch argType.(type) {
+				case *types.List, *types.Set:
+					isIterable = true
+				}
+				if isIterable {
+					c.info.Types[call] = argType
+					return argType
+				}
+				c.add(diagAt("DTE0001", call.Span, "reversed requires an iterable (list or set)"))
+				return nil
+			}
+
+			// Built-in sum() function - accepts list[int] or list[float]
+			if id.Name == "sum" && len(args) == 1 && args[0] != nil {
+				if listT, ok := args[0].(*types.List); ok {
+					if types.Equal(listT.Elem, types.Int) || types.Equal(listT.Elem, types.Float) {
+						c.info.Types[call] = listT.Elem
+						return listT.Elem
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, "sum requires list[int] or list[float]"))
+				return nil
+			}
+
+			// Built-in min()/max() functions - accepts list[int] or list[float]
+			if (id.Name == "min" || id.Name == "max") && len(args) == 1 && args[0] != nil {
+				if listT, ok := args[0].(*types.List); ok {
+					if types.Equal(listT.Elem, types.Int) || types.Equal(listT.Elem, types.Float) {
+						c.info.Types[call] = listT.Elem
+						return listT.Elem
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[int] or list[float]"))
+				return nil
+			}
+
+			// Built-in any()/all() functions - accepts list[bool]
+			if (id.Name == "any" || id.Name == "all") && len(args) == 1 && args[0] != nil {
+				if listT, ok := args[0].(*types.List); ok {
+					if types.Equal(listT.Elem, types.Bool) {
+						c.info.Types[call] = types.Bool
+						return types.Bool
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[bool]"))
+				return nil
+			}
+
 			if id.Name == "print" && len(args) == 1 && args[0] != nil {
 				shouldAccept := false
 

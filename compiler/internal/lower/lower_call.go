@@ -245,7 +245,44 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
-	// 1.6. open() builtin - file I/O
+	// 1.6. sum(), min(), max(), any(), all() builtins
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			switch calleeName {
+			case "sum":
+				res := ls.b.FreshTemp("sum_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_sum_int", Args: []hir.Value{argVal}, Type: "i64"})
+				// Cast to i32 for Desi int
+				res32 := ls.b.FreshTemp("sum")
+				ls.b.Emit(&hir.Cast{Dst: res32, Src: res, Type: "i32"})
+				return res32
+			case "min":
+				res := ls.b.FreshTemp("min_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_min_int", Args: []hir.Value{argVal}, Type: "i64"})
+				res32 := ls.b.FreshTemp("min")
+				ls.b.Emit(&hir.Cast{Dst: res32, Src: res, Type: "i32"})
+				return res32
+			case "max":
+				res := ls.b.FreshTemp("max_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_max_int", Args: []hir.Value{argVal}, Type: "i64"})
+				res32 := ls.b.FreshTemp("max")
+				ls.b.Emit(&hir.Cast{Dst: res32, Src: res, Type: "i32"})
+				return res32
+			case "any":
+				res := ls.b.FreshTemp("any_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_any", Args: []hir.Value{argVal}, Type: "i1"})
+				return res
+			case "all":
+				res := ls.b.FreshTemp("all_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_all", Args: []hir.Value{argVal}, Type: "i1"})
+				return res
+			}
+		}
+	}
+
+	// 1.7. open() builtin - file I/O
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
 		if calleeName == "open" && len(x.Args) == 2 {
