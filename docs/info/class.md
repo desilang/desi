@@ -798,6 +798,9 @@ class Bad:
 
 ## Generic Classes
 
+> [!IMPORTANT]
+> **Current Status:** Generic class *type checking* is fully implemented. However, runtime requires **monomorphization** (generating specialized versions like `Box_int` from `Box<T>`), which is in progress. Non-generic classes work fully.
+
 ### Basic Generic Class
 
 ```desi
@@ -805,14 +808,14 @@ class Box<T>:
     pub value: T
 
 def main() -> int:
-    let b1: Box<int> = Box()
-    let b2: Box<str> = Box()
+    let b1: Box[int] = Box()
+    let b2: Box[str] = Box()
     return 0
 ```
 
 **Type Inference:**
 ```desi
-let b: Box<int> = Box()  # Type inferred from annotation
+let b: Box[int] = Box()  # Type inferred from annotation
 ```
 
 ### Generic Methods
