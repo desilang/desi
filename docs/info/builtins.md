@@ -173,6 +173,56 @@ let positives: list[int] = filter(is_positive, [-1, 0, 1, 2])
 
 ---
 
+### reduce()
+
+Reduces a list to a single value by applying a function cumulatively from left to right.
+
+```desi
+def add(acc: int, x: int) -> int:
+    return acc + x
+
+let nums: list[int] = [1, 2, 3, 4, 5]
+let total: int = reduce(add, nums, 0)
+# Steps: ((((0+1)+2)+3)+4)+5 = 15
+
+def multiply(acc: int, x: int) -> int:
+    return acc * x
+
+let product: int = reduce(multiply, nums, 1)
+# Steps: ((((1*1)*2)*3)*4)*5 = 120
+```
+
+**Signature:** `reduce(func, list[T], initial) → AccT`
+
+**Parameters:**
+- `func` - Function `(accumulator, element) → accumulator`
+- `list[T]` - List to reduce
+- `initial` - Starting value for accumulator
+
+---
+
+### foldl()
+
+Alias for `reduce()`. Left-to-right fold.
+
+```desi
+let total: int = foldl(add, nums, 0)  # Same as reduce
+```
+
+---
+
+### foldr()
+
+Right-to-left fold. Processes elements from the end of the list.
+
+```desi
+let nums: list[int] = [1, 2, 3, 4, 5]
+let result: int = foldr(subtract, nums, 0)
+# Processes: 5, 4, 3, 2, 1 (right to left)
+```
+
+---
+
 ### Implementation Details
 
 Both `map()` and `filter()` use **compile-time desugaring** to list comprehensions:
@@ -209,7 +259,7 @@ The desugaring approach was chosen because:
 | Chaining | `xs.map(f).filter(p)` method syntax | Planned |
 | Multi-iterable map | `map(f, xs, ys)` for binary functions | Planned |
 | Parallel map | `pmap(f, xs)` for parallel execution | Future |
-| Reduce/fold | `reduce(f, xs, init)` builtin | Planned |
+| Reduce/fold | `reduce(f, xs, init)` builtin | ✅ Done |
 
 > **Note:** For now, use list comprehensions if you need more control:
 > ```desi
@@ -332,6 +382,9 @@ sorted(nums)  # Returns new list, nums unchanged
 | `all(x)` | `list[bool]` | `bool` | True if all elements are true |
 | `map(f, x)` | `func`, `list[T]` | `list[R]` | Apply function to each element |
 | `filter(p, x)` | `predicate`, `list[T]` | `list[T]` | Elements matching predicate |
+| `reduce(f, x, i)` | `func`, `list[T]`, `AccT` | `AccT` | Fold left (accumulate) |
+| `foldl(f, x, i)` | `func`, `list[T]`, `AccT` | `AccT` | Alias for reduce |
+| `foldr(f, x, i)` | `func`, `list[T]`, `AccT` | `AccT` | Fold right-to-left |
 | `range(...)` | `int` args | iterator | Integer sequence |
 | `enumerate(x)` | Iterable | iterator | Index-value pairs |
 | `reversed(x)` | Iterable | iterator | Reverse iteration |
@@ -347,3 +400,4 @@ sorted(nums)  # Returns new list, nums unchanged
 - `examples/152_enumerate.desi` - enumerate
 - `examples/156_zip.desi` - zip
 - `examples/157_map_filter.desi` - map, filter
+- `examples/158_reduce.desi` - reduce, foldl, foldr

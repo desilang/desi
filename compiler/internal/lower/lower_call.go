@@ -286,7 +286,134 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
-	// 1.7. open() builtin - file I/O
+	// 1.65. reduce(), foldl(), foldr() builtins
+	// reduce(func, iterable, initial) -> accumulated value
+	// foldl is alias for reduce (left-to-right)
+	// foldr processes right-to-left
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if (calleeName == "reduce" || calleeName == "foldl" || calleeName == "foldr") && len(x.Args) == 3 {
+			funcExpr := x.Args[0]
+			iterExpr := x.Args[1]
+			initExpr := x.Args[2]
+
+			// Get the function name to call
+			funcName := ""
+			if id, ok := funcExpr.(*ast.Ident); ok {
+				funcName = id.Name
+			} else if fe, ok := funcExpr.(*ast.FieldExpr); ok {
+				// Qualified name like mod.func
+				funcName = ls.calleeName(funcExpr)
+				_ = fe // used above
+			}
+
+			// Lower initial value -> accumulator
+			accVal := ls.lowerExpr(initExpr)
+
+			// Lower the iterable
+			iterVal := ls.lowerExpr(iterExpr)
+
+			// Get list length
+			lenTemp := ls.b.FreshTemp("reduce_len")
+			ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
+
+			// Allocate accumulator variable (mutable)
+			accPtr := ls.b.FreshTemp("acc_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: accPtr, Type: "i32", Count: 1})
+			ls.b.Emit(&hir.Store{Dst: accPtr, Val: accVal})
+
+			// Allocate index variable
+			idxPtr := ls.b.FreshTemp("reduce_idx_ptr")
+			ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+
+			// Initialize index based on direction
+			if calleeName == "foldr" {
+				// Start at len-1 for right-to-left
+				startIdx := ls.b.FreshTemp("start_idx")
+				ls.b.Emit(&hir.BinaryOp{Dst: startIdx, Op: "-", LHS: lenTemp, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: startIdx})
+			} else {
+				// Start at 0 for left-to-right
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+			}
+
+			// Create condition block
+			condBlk := ls.b.NewBlock("reduce_cond")
+			oldCur := ls.b.Block()
+
+			ls.b.SetBlock(condBlk)
+			idxVal := ls.b.FreshTemp("reduce_idx")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+
+			condTemp := ls.b.FreshTemp("reduce_cond")
+			if calleeName == "foldr" {
+				// Continue while idx >= 0
+				ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: ">=", LHS: idxVal, RHS: hir.ConstInt{Text: "0", Type: "i64"}, Type: "i1"})
+			} else {
+				// Continue while idx < len
+				ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+			}
+			ls.b.SetBlock(oldCur)
+
+			// Create body block
+			bodyBlk := ls.b.NewBlock("reduce_body")
+			ls.b.SetBlock(bodyBlk)
+
+			// Load current index
+			idxBody := ls.b.FreshTemp("reduce_idx_body")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+			// Get element: list_get(iter, idx)
+			idxI32 := ls.b.FreshTemp("reduce_idx_i32")
+			ls.b.Emit(&hir.Cast{Dst: idxI32, Src: idxBody, Type: "i32"})
+
+			elemPtr := ls.b.FreshTemp("reduce_elem_ptr")
+			ls.b.Emit(&hir.Call{Dst: elemPtr, Fn: "list_get", Args: []hir.Value{iterVal, idxI32}, Type: "ptr"})
+
+			// Cast to element type (assume i32 for now, could be improved with type info)
+			elemVal := ls.b.FreshTemp("reduce_elem")
+			ls.b.Emit(&hir.Cast{Dst: elemVal, Src: elemPtr, Type: "i32"})
+
+			// Load current accumulator
+			currAcc := ls.b.FreshTemp("curr_acc")
+			ls.b.Emit(&hir.Load{Type: "i32", Src: accPtr, Dst: currAcc})
+
+			// Call the function
+			// For reduce/foldl: f(acc, elem) - left fold
+			// For foldr: f(elem, acc) - right fold (argument order swapped)
+			newAcc := ls.b.FreshTemp("new_acc")
+			if calleeName == "foldr" {
+				ls.b.Emit(&hir.Call{Dst: newAcc, Fn: funcName, Args: []hir.Value{elemVal, currAcc}, Type: "i32"})
+			} else {
+				ls.b.Emit(&hir.Call{Dst: newAcc, Fn: funcName, Args: []hir.Value{currAcc, elemVal}, Type: "i32"})
+			}
+
+			// Store new accumulator
+			ls.b.Emit(&hir.Store{Dst: accPtr, Val: newAcc})
+
+			// Update index
+			incTemp := ls.b.FreshTemp("reduce_inc")
+			if calleeName == "foldr" {
+				// Decrement for right-to-left
+				ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "-", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			} else {
+				// Increment for left-to-right
+				ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+			}
+			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+			// Emit while loop
+			ls.b.SetBlock(oldCur)
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+			// Load final accumulator value
+			result := ls.b.FreshTemp("reduce_result")
+			ls.b.Emit(&hir.Load{Type: "i32", Src: accPtr, Dst: result})
+
+			return result
+		}
+	}
+
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
 		if calleeName == "open" && len(x.Args) == 2 {

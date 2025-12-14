@@ -547,6 +547,70 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
+			// Built-in reduce(), foldl(), foldr() functions
+			// Signature: reduce(func, iterable, initial) -> AccumulatorType
+			// foldl is alias for reduce (left-to-right)
+			// foldr processes right-to-left
+			if (id.Name == "reduce" || id.Name == "foldl" || id.Name == "foldr") && len(args) == 3 {
+				funcArg := args[0]
+				iterArg := args[1]
+				initArg := args[2]
+
+				if funcArg == nil || iterArg == nil || initArg == nil {
+					c.add(diagAt("DTE0001", call.Span, id.Name+" requires (func, iterable, initial)"))
+					return nil
+				}
+
+				// Check that second arg is iterable (list or set)
+				var elemType types.T
+				switch it := iterArg.(type) {
+				case *types.List:
+					elemType = it.Elem
+				case *types.Set:
+					elemType = it.Elem
+				default:
+					c.add(diagAt("DTE0001", call.Span, id.Name+" requires iterable as second argument"))
+					return nil
+				}
+
+				// Check that first arg is a function: (AccT, ElemT) -> AccT
+				funcType, ok := funcArg.(*types.Func)
+				if !ok {
+					c.add(diagAt("DTE0001", call.Span, id.Name+" requires function as first argument"))
+					return nil
+				}
+
+				// Function must take exactly 2 parameters
+				if len(funcType.Params) != 2 {
+					c.add(diagAt("DTE0001", call.Span, id.Name+" function must take exactly 2 parameters (acc, elem)"))
+					return nil
+				}
+
+				// The accumulator type is determined by the initial value
+				accType := initArg
+
+				// Verify function signature: (AccT, ElemT) -> AccT
+				// param[0] should be assignable from accType
+				// param[1] should be assignable from elemType
+				// return should be assignable to accType
+				if !types.Assignable(funcType.Params[0], accType) {
+					c.add(diagAt("DTE0104", call.Span, id.Name+" function first param must match initial value type"))
+					return nil
+				}
+				if !types.Assignable(funcType.Params[1], elemType) {
+					c.add(diagAt("DTE0104", call.Span, id.Name+" function second param must match element type"))
+					return nil
+				}
+				if !types.Assignable(accType, funcType.Ret) {
+					c.add(diagAt("DTE0104", call.Span, id.Name+" function return type must match accumulator type"))
+					return nil
+				}
+
+				// Result type is the accumulator type
+				c.info.Types[call] = accType
+				return accType
+			}
+
 			if id.Name == "print" && len(args) == 1 && args[0] != nil {
 				shouldAccept := false
 
