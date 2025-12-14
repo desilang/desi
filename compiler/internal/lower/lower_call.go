@@ -272,11 +272,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				return res32
 			case "any":
 				res := ls.b.FreshTemp("any_res")
-				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_any", Args: []hir.Value{argVal}, Type: "i1"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_any_builtin", Args: []hir.Value{argVal}, Type: "i1"})
 				return res
 			case "all":
 				res := ls.b.FreshTemp("all_res")
-				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_all", Args: []hir.Value{argVal}, Type: "i1"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_all_builtin", Args: []hir.Value{argVal}, Type: "i1"})
+				return res
+			case "sorted":
+				res := ls.b.FreshTemp("sorted_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_sorted_int", Args: []hir.Value{argVal}, Type: "ptr"})
 				return res
 			}
 		}

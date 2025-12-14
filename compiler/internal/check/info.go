@@ -281,6 +281,16 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"items"},
 	)
 
+	// --- sorted builtin ---
+	// sorted(items: list[int]) -> list[int]
+	// Special handling in expr_call.go
+	addN("sorted",
+		[]types.T{nil}, // list[int]
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // list[int] - determined in expr_call.go
+		[]string{"items"},
+	)
+
 	// --- zip builtin ---
 	// zip(a, b) -> iterator of (a[i], b[i]) pairs
 	// Special handling in stmt.go for for-loop lowering
