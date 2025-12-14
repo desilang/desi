@@ -158,6 +158,79 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			}
 			c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+fieldName+"' on generic struct '"+structT.Name+"'"))
 			return nil
+		} else if classT, ok := gen.Base.(*types.Class); ok {
+			// Handle field/method access on generic class (e.g., Box[int].val, Box[int].get())
+			name := x.Name.Name
+
+			// Build substitution map: TypeParam name -> Generic Arg
+			subst := make(map[string]types.T)
+			if len(classT.TypeParams) == len(gen.Args) {
+				for i, tp := range classT.TypeParams {
+					subst[tp.Name] = gen.Args[i]
+				}
+			}
+
+			// 1. Check fields (including inherited)
+			curr := classT
+			for curr != nil {
+				for _, f := range curr.Fields {
+					if f.Name == name {
+						// Apply substitution to field type
+						fieldType := substitute(f.Type, subst)
+						c.info.Types[x] = fieldType
+						return fieldType
+					}
+				}
+				curr = curr.Base
+			}
+
+			// 2. Check properties
+			curr = classT
+			for curr != nil {
+				if propFunc, exists := curr.Properties[name]; exists {
+					// Apply substitution to property return type
+					retType := substitute(propFunc.Ret, subst)
+					c.info.Types[x] = retType
+					return retType
+				}
+				curr = curr.Base
+			}
+
+			// 3. Check methods/dunders (including inherited)
+			curr = classT
+			for curr != nil {
+				var method *types.Func
+				if strings.HasPrefix(name, "__") && strings.HasSuffix(name, "__") {
+					method = curr.Dunders[name]
+				} else {
+					method = curr.Methods[name]
+				}
+
+				if method != nil {
+					// Apply substitution to method parameters and return type
+					newParams := make([]types.T, len(method.Params))
+					for i, p := range method.Params {
+						newParams[i] = substitute(p, subst)
+					}
+					newRet := substitute(method.Ret, subst)
+
+					// Create bound method type (strip self for instance access)
+					if len(newParams) > 0 {
+						boundParams := newParams[1:] // Skip self
+						boundMethod := types.FuncOf(boundParams, newRet, method.Variadic)
+						c.info.Types[x] = boundMethod
+						return boundMethod
+					}
+					// Should not happen for instance methods
+					boundMethod := types.FuncOf(newParams, newRet, method.Variadic)
+					c.info.Types[x] = boundMethod
+					return boundMethod
+				}
+				curr = curr.Base
+			}
+
+			c.add(diagAt("DTE0001", x.Name.Span, "undefined field or method '"+name+"' on generic class '"+classT.Name+"'"))
+			return nil
 		}
 	}
 

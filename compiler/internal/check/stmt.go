@@ -126,9 +126,26 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 				objType := c.typ(lhs.X)
 
-				// Check if object type is a class
-				cls, ok := objType.(*types.Class)
-				if !ok {
+				// Check if object type is a class (or generic class)
+				var cls *types.Class
+				var subst map[string]types.T
+
+				if c, ok := objType.(*types.Class); ok {
+					cls = c
+				} else if gen, ok := objType.(*types.Generic); ok {
+					if c, ok := gen.Base.(*types.Class); ok {
+						cls = c
+						// Build substitution map for generic class
+						subst = make(map[string]types.T)
+						if len(cls.TypeParams) == len(gen.Args) {
+							for i, tp := range cls.TypeParams {
+								subst[tp.Name] = gen.Args[i]
+							}
+						}
+					}
+				}
+
+				if cls == nil {
 					c.add(diagAt("DTE0004", lhs.Span, "cannot assign to field of non-class type"))
 					continue
 				}
@@ -222,11 +239,15 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					continue
 				}
 
-				// Type check
-				if !types.Assignable(field.Type, valT) {
+				// Type check (apply substitution for generic classes)
+				fieldType := field.Type
+				if subst != nil {
+					fieldType = substitute(fieldType, subst)
+				}
+				if !types.Assignable(fieldType, valT) {
 					dstStr := "?"
-					if field.Type != nil {
-						dstStr = field.Type.String()
+					if fieldType != nil {
+						dstStr = fieldType.String()
 					}
 					srcStr := "?"
 					if valT != nil {
