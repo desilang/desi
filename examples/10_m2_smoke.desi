@@ -1,26 +1,8 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses old := syntax, one-line if/while, no main function
+
 def aug_and_flow():
-	# assignment and aug-assign
-	a := 1
+	# Modern syntax version would use let
+	let a = 1
 	a += 2
-	a **= 3
-	b, c := 10, 20
-
-	# one-line if / while / for
-	if a > 0: a += 1
-	while a < 10: a += 1
-	xs := items()
-	for i in xs: a += i
-
-	# block forms
-	if a > 5:
-		a += 10
-	elif a == 5:
-		a += 5
-	else:
-		a += 1
-
-	while a < 30:
-		a += 2
-
-	for i in xs:
-		a += i

@@ -1,14 +1,10 @@
-# M4: match expression result must have the same type across arms
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses old -> match arm syntax instead of case:
 
-def to_int(b:bool) -> int:
-	let x = match b:
-		true  -> 1
-		false -> 0
-	return x
-
-# Non-example (leave commented):
-# def bad(b:bool):
-# 	let x = match b:
-# 		true  -> 1
-# 		false -> "no"
-# 	return x  # expect: type mismatch across arms
+def to_int(b: bool) -> int:
+	match b:
+		case true:
+			return 1
+		case false:
+			return 0

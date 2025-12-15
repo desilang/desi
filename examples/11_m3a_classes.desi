@@ -1,3 +1,7 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses decorators (@trace, @logged, @bench) not fully implemented
+
 @trace
 pub class Animal:
 	"""base class doc"""

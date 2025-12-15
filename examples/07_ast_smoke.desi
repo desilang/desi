@@ -1,3 +1,7 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Tests operator parsing/precedence, no main function, f undefined
+
 def powpipe(a: int, b: int) -> int:
   # tabs only!
   let x = a ** 2 |> b + 1

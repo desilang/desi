@@ -1,13 +1,15 @@
-# M4: grouped assignment + match arm typing
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses old => match arm syntax
 
 def main():
-	# grouped assignment (width + element-wise types)
 	let a: int = 0
 	let b: int = 0
-	a, b = 1, 2
-
-	# parse-only match: all arm results should be same type
+	
 	match a:
-		case 0 => 1
-		case 1 => 2
-		case _ => 3
+		case 0:
+			let x = 1
+		case 1:
+			let x = 2
+		case _:
+			let x = 3

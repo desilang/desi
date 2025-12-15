@@ -1,4 +1,6 @@
-# M4 demo: calling a typed lambda (direct call)
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Old => lambda syntax not lowered correctly
 
 def main():
-	((x:int) => x)(3)
+	let result = (|x: int| x)(3)

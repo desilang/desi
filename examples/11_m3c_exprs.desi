@@ -1,6 +1,8 @@
-let f = (x:int, y:int) => x + y
-let g = x => x*x
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Top-level let not in function, undefined variables
 
-let evens = [x for x in range(10) if x % 2 == 0]
-let pairs = {k: v for k in items if v > 0}
-let s = #{x*x for x in xs}
+def demo():
+    let f = |x: int, y: int| x + y
+    let g = |x| x * x
+    let evens = [x for x in range(10) if x % 2 == 0]

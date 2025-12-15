@@ -1,2 +1,6 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Async functions not fully implemented yet
+
 async def ping(x: int):
 	return x

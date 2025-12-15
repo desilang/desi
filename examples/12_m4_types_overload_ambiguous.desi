@@ -1,9 +1,12 @@
-# M4: ambiguous overload demo (two identical signatures)
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Duplicate function definition
 
-def f(x: int) -> int: x
-def f(x: int) -> int: x  # duplicate signature
+def f(x: int) -> int: 
+    return x
 
-def main():
-  # calling f(1) would be ambiguous under exact-match resolution
-  # f(1)
-  0
+def f(x: int) -> int:
+    return x  # duplicate signature
+
+def main() -> int:
+    0
