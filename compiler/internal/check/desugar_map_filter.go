@@ -97,6 +97,32 @@ func desugarBlock(b *ast.Block) {
 
 func desugarExpr(e ast.Expr) ast.Expr {
 	switch x := e.(type) {
+	case *ast.BinaryExpr:
+		// Recurse into both sides first
+		x.Lhs = desugarExpr(x.Lhs)
+		x.Rhs = desugarExpr(x.Rhs)
+
+		// Handle pipe operator: xs |> map(f), xs |> filter(p)
+		if x.Op == "|>" {
+			if call, ok := x.Rhs.(*ast.CallExpr); ok {
+				if id, ok := call.Callee.(*ast.Ident); ok && len(call.Args) == 1 {
+					switch id.Name {
+					case "map":
+						// xs |> map(f) → [f(__x) for __x in xs]
+						lc := buildMapComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+						lc.Span = x.SpanOf()
+						return lc
+					case "filter":
+						// xs |> filter(p) → [__x for __x in xs if p(__x)]
+						lc := buildFilterComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+						lc.Span = x.SpanOf()
+						return lc
+					}
+				}
+			}
+		}
+		return x
+
 	case *ast.CallExpr:
 		// First, desugar inside callee/args.
 		callee := desugarExpr(x.Callee)
@@ -105,6 +131,22 @@ func desugarExpr(e ast.Expr) ast.Expr {
 			args[i] = desugarExpr(a)
 		}
 		x.Callee, x.Args = callee, args
+
+		// Handle dot method syntax: xs.map(f), xs.filter(p)
+		if fe, ok := x.Callee.(*ast.FieldExpr); ok && len(x.Args) == 1 {
+			switch fe.Name.Name {
+			case "map":
+				// xs.map(f) → [f(__x) for __x in xs]
+				lc := buildMapComp(fe.X, x.Args[0]).(*ast.ListComp)
+				lc.Span = x.SpanOf()
+				return lc
+			case "filter":
+				// xs.filter(p) → [__x for __x in xs if p(__x)]
+				lc := buildFilterComp(fe.X, x.Args[0]).(*ast.ListComp)
+				lc.Span = x.SpanOf()
+				return lc
+			}
+		}
 
 		// Then, check for map/filter shapes (2-arg only).
 		// Python 3 order: map(func, iterable), filter(func, iterable)

@@ -150,6 +150,18 @@ let squares: list[int] = map(square, numbers)
 
 **Signature:** `map(func, list[T]) → list[ReturnType(func)]`
 
+**Chaining Syntax:**
+```desi
+# Dot notation
+let doubled: list[int] = numbers.map(square)
+
+# Pipe notation  
+let doubled: list[int] = numbers |> map(square)
+
+# Chained
+let result: list[int] = numbers.map(double).filter(is_even)
+```
+
 ---
 
 ### filter()
@@ -256,7 +268,7 @@ The desugaring approach was chosen because:
 | Feature | Description | Status |
 |---------|-------------|--------|
 | Lazy iterators | `map(f, xs)` returns iterator, not list | Planned |
-| Chaining | `xs.map(f).filter(p)` method syntax | Planned |
+| Chaining | `xs.map(f).filter(p)` method syntax | ✅ Done |
 | Multi-iterable map | `map(f, xs, ys)` for binary functions | Planned |
 | Parallel map | `pmap(f, xs)` for parallel execution | Future |
 | Reduce/fold | `reduce(f, xs, init)` builtin | ✅ Done |
@@ -401,3 +413,4 @@ sorted(nums)  # Returns new list, nums unchanged
 - `examples/156_zip.desi` - zip
 - `examples/157_map_filter.desi` - map, filter
 - `examples/158_reduce.desi` - reduce, foldl, foldr
+- `examples/159_method_chaining.desi` - pipe `|>` and dot `.` method chaining
