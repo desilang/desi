@@ -63,3 +63,13 @@
 [data-md-color-scheme="slate"] .md-search__input::placeholder {
   color: rgba(255, 255, 255, 0.5);
 }
+
+/* Hide "Made with Material for MkDocs" */
+.md-footer-meta__inner.md-grid {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.md-footer-copyright {
+  display: none;
+}
