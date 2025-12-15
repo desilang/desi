@@ -49,6 +49,15 @@ theme:
 extra_css:
   - stylesheets/saffron.css
 
+# Versioning support with mike
+extra:
+  version:
+    provider: mike
+    default: stable
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/desilang/desi
+
 # Navigation
 nav:
   - Home: index.md
@@ -75,6 +84,7 @@ nav:
     - Operators: reference/operators.md
     - Keywords: reference/keywords.md
   - Examples: examples/index.md
+  - Changelog: changelog.md
 
 # Markdown extensions
 markdown_extensions:
@@ -97,9 +107,3 @@ markdown_extensions:
 # Plugins
 plugins:
   - search
-
-# Extra
-extra:
-  social:
-    - icon: fontawesome/brands/github
-      link: https://github.com/desilang/desi

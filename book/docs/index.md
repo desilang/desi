@@ -2,6 +2,7 @@
 
 <div style="text-align: center; margin: 2rem 0;">
   <h2 style="color: #FF6B35;">A Modern, Python-Inspired Systems Language</h2>
+  <p><strong>Version 0.1.0</strong> (Pre-release)</p>
 </div>
 
 ---
