@@ -519,12 +519,16 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			typeName := recvT.String()
 			methodName := fe.Name.Name
 
-			// Handle Class Methods
+			// Handle Class Methods (including generic class instances like Box[int])
 			var cls *types.Class
 			if c, ok := recvT.(*types.Class); ok {
 				cls = c
+			} else if gen, ok := recvT.(*types.Generic); ok {
+				// Generic class instance: extract base class
+				if c, ok := gen.Base.(*types.Class); ok {
+					cls = c
+				}
 			}
-
 			if cls != nil {
 				// Detect if fe.X is a Type symbol (unbound method call: Parent.method(self))
 				// vs instance access (obj.method())

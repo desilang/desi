@@ -280,6 +280,18 @@ The desugaring approach was chosen because:
 
 ---
 
+## Set Iteration
+
+Sets are iterable using the `for` loop. Iteration order is undefined (implementation specific).
+
+```desi
+let numbers: set[int] = #{1, 2, 3}
+for n: int in numbers:
+    print(n)
+```
+
+---
+
 ## Iteration Functions
 
 ### range()
