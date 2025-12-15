@@ -7,7 +7,7 @@
   --md-primary-fg-color: #FF6B35;
   --md-primary-fg-color--light: #FF8F5E;
   --md-primary-fg-color--dark: #E85A2A;
-  
+
   /* Accent colors */
   --md-accent-fg-color: #FF9800;
   --md-accent-fg-color--transparent: rgba(255, 152, 0, 0.1);
@@ -32,17 +32,34 @@
   border-color: var(--md-primary-fg-color);
 }
 
-.md-typeset .admonition.note > .admonition-title,
-.md-typeset details.note > summary {
+.md-typeset .admonition.note>.admonition-title,
+.md-typeset details.note>summary {
   background-color: rgba(255, 107, 53, 0.1);
 }
 
 /* Tab styling */
-.md-typeset .tabbed-labels > label:hover {
+.md-typeset .tabbed-labels>label:hover {
   color: var(--md-primary-fg-color);
 }
 
-/* Search highlight */
+/* Search bar styling - blend with header */
+.md-search__input {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
 .md-search__input::placeholder {
-  color: rgba(255, 107, 53, 0.7);
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.md-search__input:hover {
+  background-color: rgba(255, 255, 255, 0.15);
+}
+
+/* Dark mode search */
+[data-md-color-scheme="slate"] .md-search__input {
+  background-color: rgba(0, 0, 0, 0.2);
+}
+
+[data-md-color-scheme="slate"] .md-search__input::placeholder {
+  color: rgba(255, 255, 255, 0.5);
 }

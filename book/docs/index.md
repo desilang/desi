@@ -76,21 +76,11 @@ If you need low-level control but want better ergonomics:
 
 Ready to try Desi? Start here:
 
-<div class="grid cards" markdown>
-
-- :material-download: **[Installation](getting-started/install.md)**
-  
-  Install Desi on your system
-
-- :material-rocket-launch: **[First Program](getting-started/first-program.md)**
-  
-  Write your first Desi program
-
-- :material-book-open: **[Tutorials](tutorials/intro.md)**
-  
-  Learn Desi step by step
-
-</div>
+| | |
+|---|---|
+| 📥 **[Installation](getting-started/install.md)** | Install Desi on your system |
+| 🚀 **[First Program](getting-started/first-program.md)** | Write your first Desi program |
+| 📖 **[Tutorials](tutorials/intro.md)** | Learn Desi step by step |
 
 ---
 
