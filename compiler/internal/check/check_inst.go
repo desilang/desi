@@ -161,6 +161,12 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 	if len(cls.Constructors) > 0 {
 		// Overload resolution for __new__
 		var bestCand *types.Func
+		var inferred map[string]types.T // For type parameter inference
+
+		// Initialize inference map for generic classes
+		if len(d.TypeParams) > 0 {
+			inferred = make(map[string]types.T)
+		}
 
 		// Simple score-based resolution:
 		// 0: exact match
@@ -183,13 +189,33 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 				continue
 			}
 
-			// Check types
+			// Reset inferred map for each constructor candidate
+			if len(d.TypeParams) > 0 {
+				inferred = make(map[string]types.T)
+			}
+
+			// Check types (with unification for generic classes)
 			match := true
 			for i, arg := range call.Args {
 				argType := c.typ(arg)
-				if !types.Assignable(params[i], argType) {
-					match = false
-					break
+				paramType := params[i]
+
+				// For generic classes, try to unify param type with arg type
+				if len(d.TypeParams) > 0 {
+					if !unify(paramType, argType, inferred) {
+						// Unification failed - try with substituted param type
+						substituted := substitute(paramType, inferred)
+						if !types.Assignable(substituted, argType) {
+							match = false
+							break
+						}
+					}
+				} else {
+					// Non-generic class: direct assignability check
+					if !types.Assignable(paramType, argType) {
+						match = false
+						break
+					}
 				}
 			}
 
@@ -207,8 +233,20 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 
 		// Return class type (or generic instance for generic classes)
 		if len(d.TypeParams) > 0 {
-			// TODO: Infer type arguments from call arguments
-			return &types.Generic{Base: cls, Args: nil}
+			// Infer type arguments from the inferred map
+			var args []types.T
+			for _, tp := range d.TypeParams {
+				if t, ok := inferred[tp.Name]; ok {
+					args = append(args, t)
+				} else {
+					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name+"'"))
+					args = append(args, types.Any)
+				}
+			}
+			gen := &types.Generic{Base: cls, Args: args}
+			// Record this instantiation for monomorphization
+			c.info.ClassInstantiations[cls.Name] = append(c.info.ClassInstantiations[cls.Name], gen)
+			return gen
 		}
 		return cls
 

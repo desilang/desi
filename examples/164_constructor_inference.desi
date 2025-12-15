@@ -1,0 +1,19 @@
+# Test generic constructor type inference
+
+class Box<T>:
+    pub mut val: T
+
+    pub def __new__(self, v: T):
+        self.val = v
+
+def main() -> int:
+    # Test 1: Infer Box<int>
+    let b1 = Box(42)
+    print(b1.val)
+
+    # Test 2: Infer Box<str>
+    let b2 = Box("hello")
+    print(b2.val)
+
+    print("Constructor inference passed!")
+    0
