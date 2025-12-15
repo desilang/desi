@@ -234,13 +234,23 @@ func lowerMonomorphizedMethods(cd *ast.ClassDecl, mangledName string, subst map[
 		// Specialized name: MangledName_methodName
 		fn.Name = fmt.Sprintf("%s_%s", mangledName, methodName)
 
-		// Substitute types in parameters
-		for i := range fn.Params {
-			fn.Params[i].Type = substituteHIRType(fn.Params[i].Type, subst)
+		// Get the method's semantic type from the class to apply proper substitution
+		var methodType *types.Func
+		if baseCls != nil {
+			if m, ok := baseCls.Methods[methodName]; ok {
+				methodType = m
+			} else if m, ok := baseCls.Properties[methodName]; ok {
+				methodType = m
+			}
 		}
-		fn.RetType = substituteHIRType(fn.RetType, subst)
 
-		// Handle self injection for instance methods
+		// Apply type substitution to return type
+		if methodType != nil && methodType.Ret != nil {
+			concreteRet := substituteType(methodType.Ret, subst)
+			fn.RetType = lowerType(concreteRet)
+		}
+
+		// Handle self injection and parameter types for instance methods
 		isStatic := false
 		isClassMethod := false
 		for _, dec := range method.Decorators {
@@ -254,19 +264,107 @@ func lowerMonomorphizedMethods(cd *ast.ClassDecl, mangledName string, subst map[
 		}
 
 		if !isStatic && !isClassMethod {
+			// Check if self is already present
 			hasSelf := false
-			if len(fn.Params) > 0 && fn.Params[0].Name == "self" {
-				hasSelf = true
+			selfIdx := -1
+			for i, p := range fn.Params {
+				if p.Name == "self" {
+					hasSelf = true
+					selfIdx = i
+					break
+				}
 			}
+
 			if !hasSelf {
+				// Inject self parameter at the beginning
 				fn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, fn.Params...)
+				selfIdx = 0
+			}
+
+			// Now substitute types for remaining parameters (after self)
+			// methodType.Params[0] is self (cls), so skip it
+			if methodType != nil && len(methodType.Params) > 1 {
+				for i := 1; i < len(methodType.Params); i++ {
+					paramType := substituteType(methodType.Params[i], subst)
+					hirIdx := selfIdx + i // fn.Params[selfIdx+1] matches methodType.Params[1]
+					if hirIdx < len(fn.Params) {
+						fn.Params[hirIdx].Type = lowerType(paramType)
+					}
+				}
+			}
+		} else {
+			// Static/class methods: substitute all parameter types
+			if methodType != nil {
+				for i := 0; i < len(methodType.Params) && i < len(fn.Params); i++ {
+					paramType := substituteType(methodType.Params[i], subst)
+					fn.Params[i].Type = lowerType(paramType)
+				}
 			}
 		}
+
+		// Also need to substitute types inside the function body (Load/Store operations)
+		substituteHIRFuncBody(fn, subst, baseCls)
 
 		funcs = append(funcs, fn)
 	}
 
 	return funcs
+}
+
+// substituteHIRFuncBody walks the HIR function body and substitutes types
+// in Load, Store, and other operations that involve generic types.
+func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *types.Class) {
+	if baseCls == nil || len(subst) == 0 {
+		return
+	}
+
+	// Determine the concrete type for field accesses
+	// For Box<int>.val, the field type is T which becomes int
+	var fieldTypes map[string]types.T
+	if baseCls != nil {
+		fieldTypes = make(map[string]types.T)
+		for _, f := range baseCls.Fields {
+			fieldTypes[f.Name] = substituteType(f.Type, subst)
+		}
+	}
+
+	// Walk all blocks and statements
+	for _, block := range fn.Blocks {
+		for i, stmt := range block.Stmts {
+			switch s := stmt.(type) {
+			case *hir.Load:
+				// If loading from a field of a generic class, use the concrete type
+				// Check if DesiType is a TypeParam and substitute
+				if tp, ok := s.DesiType.(*types.TypeParam); ok {
+					if concrete, ok := subst[tp.Name]; ok {
+						s.Type = lowerType(concrete)
+						s.DesiType = concrete
+					}
+				} else if s.Type == "ptr" {
+					// Check if this might be a generic field load
+					// The DesiType from checker should have the correct info
+					if dt, ok := s.DesiType.(types.T); ok {
+						concrete := substituteType(dt, subst)
+						if concrete != dt {
+							s.Type = lowerType(concrete)
+							s.DesiType = concrete
+						}
+					}
+				}
+				block.Stmts[i] = s
+
+			case *hir.Ret:
+				// Return value type is handled by function return type
+				// The value itself is already lowered correctly in most cases
+
+			case *hir.Call:
+				// Check if this is a call to a generic method and substitute return type
+				if s.Type == "ptr" {
+					// Could check if this needs substitution
+				}
+			}
+		}
+	}
 }
 
 // substituteHIRType converts a HIR type string based on the substitution map.

@@ -1,0 +1,80 @@
+# Comprehensive test for generic class monomorphization
+# Tests Box<T> with all supported data types
+
+class Box<T>:
+    pub mut val: T
+
+    pub def get(self) -> T:
+        return self.val
+
+    pub def set(self, v: T):
+        self.val = v
+
+# Custom class for testing
+class Point:
+    pub mut x: int
+    pub mut y: int
+
+def main() -> int:
+    # Test 1: Box<int>
+    print("=== Box<int> ===")
+    let b_int: Box<int> = Box()
+    b_int.val = 42
+    print(b_int.get())
+    b_int.set(100)
+    print(b_int.get())
+
+    # Test 2: Box<float>
+    print("=== Box<float> ===")
+    let b_float: Box<float> = Box()
+    b_float.val = 3.14
+    print(b_float.get())
+    b_float.set(2.71)
+    print(b_float.get())
+
+    # Test 3: Box<bool>
+    print("=== Box<bool> ===")
+    let b_bool: Box<bool> = Box()
+    b_bool.val = true
+    if b_bool.get():
+        print("true")
+    b_bool.set(false)
+    if not b_bool.get():
+        print("false")
+
+    # Test 4: Box<str>
+    print("=== Box<str> ===")
+    let b_str: Box<str> = Box()
+    b_str.val = "hello"
+    print(b_str.get())
+    b_str.set("world")
+    print(b_str.get())
+
+    # Test 5: Box<list<int>>
+    print("=== Box<list<int>> ===")
+    let b_list: Box<list<int>> = Box()
+    b_list.val = [1, 2, 3]
+    let items: list<int> = b_list.get()
+    print(len(items))
+    b_list.set([10, 20])
+    print(len(b_list.get()))
+
+    # Test 6: Box<i64> (sized int)
+    print("=== Box<i64> ===")
+    let b_i64: Box<i64> = Box()
+    b_i64.val = 9223372036854775807
+    print(b_i64.get())
+
+    # Test 7: Box with custom class (Point)
+    print("=== Box<Point> ===")
+    let b_point: Box<Point> = Box()
+    let p: Point = Point()
+    p.x = 10
+    p.y = 20
+    b_point.val = p
+    let got_p: Point = b_point.get()
+    print(got_p.x)
+    print(got_p.y)
+
+    print("All generic class tests passed!")
+    0

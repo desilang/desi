@@ -231,6 +231,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				if recvType != nil {
 					if cls, ok := recvType.(*types.Class); ok {
 						findField(cls.Fields)
+					} else if gen, ok := recvType.(*types.Generic); ok {
+						// Handle generic class instances like Box<int>
+						if cls, ok := gen.Base.(*types.Class); ok {
+							findField(cls.Fields)
+						}
 					} else if st, ok := recvType.(*types.Struct); ok {
 						findField(st.Fields)
 					}
