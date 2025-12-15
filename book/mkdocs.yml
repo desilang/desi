@@ -1,6 +1,7 @@
 site_name: The Desi Book
 site_description: Learn the Desi Programming Language - A modern, Python-inspired systems language
 site_author: Desi Team
+site_url: https://desilang.org
 
 # Repository
 repo_url: https://github.com/desilang/desi
