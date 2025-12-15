@@ -627,7 +627,20 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				// Determine return type string for LLVM
 				retType := "i32" // default
 				if targetMethod != nil && targetMethod.Ret != nil {
-					retType = lowerType(targetMethod.Ret)
+					// For generic class instances, substitute type parameters
+					if len(genericArgs) > 0 && cls != nil {
+						// Build substitution map
+						subst := make(map[string]types.T)
+						for i, tp := range cls.TypeParams {
+							if i < len(genericArgs) {
+								subst[tp.Name] = genericArgs[i]
+							}
+						}
+						concreteRet := substituteType(targetMethod.Ret, subst)
+						retType = lowerType(concreteRet)
+					} else {
+						retType = lowerType(targetMethod.Ret)
+					}
 				}
 
 				dst := ls.b.FreshTemp("call")

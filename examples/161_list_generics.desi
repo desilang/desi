@@ -1,14 +1,25 @@
-# Test generic class with monomorphization - simplified to just fields
+# Test generic class with full monomorphization including methods
 
 class Box<T>:
     pub mut val: T
 
+    pub def get(self) -> T:
+        return self.val
+
+    pub def set(self, v: T):
+        self.val = v
+
 def main() -> int:
-    # Simple generic class instance  
+    # Generic class instance with int
     let b1: Box<int> = Box()
     b1.val = 42
     
-    # Direct field access
-    print(b1.val)
+    # Test method calls
+    let v1: int = b1.get()
+    print(v1)  # Should print 42
+
+    b1.set(100)
+    let v2: int = b1.get()
+    print(v2)  # Should print 100
 
     0
