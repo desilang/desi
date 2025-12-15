@@ -1,0 +1,23 @@
+# Test generic function with type erasure
+
+def identity<T>(x: T) -> T:
+    return x
+
+def swap<A, B>(a: A, b: B) -> tuple<B, A>:
+    return (b, a)
+
+def main() -> int:
+    # Test identity with int
+    let x: int = identity(42)
+    print(x)
+    
+    # Test identity with str
+    let s: str = identity("hello")
+    print(s)
+    
+    # Test identity with float
+    let f: float = identity(3.14)
+    print(f)
+    
+    print("Generic function tests passed!")
+    0
