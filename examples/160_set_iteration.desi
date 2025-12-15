@@ -1,0 +1,9 @@
+def main() -> int:
+    let my_set: set[int] = #{1, 2, 3, 4, 5}
+    
+    print("Iterating over set:")
+    for x: int in my_set:
+        print(x)
+    
+    print("Done!")
+    0
