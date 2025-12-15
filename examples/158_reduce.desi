@@ -1,0 +1,32 @@
+def add(acc: int, x: int) -> int:
+    return acc + x
+
+def multiply(acc: int, x: int) -> int:
+    return acc * x
+
+def subtract(acc: int, x: int) -> int:
+    return acc - x
+
+def main() -> int:
+    let nums: list[int] = [1, 2, 3, 4, 5]
+    
+    # reduce: left-to-right fold
+    # ((((0 + 1) + 2) + 3) + 4) + 5 = 15
+    let sum_result: int = reduce(add, nums, 0)
+    print(f"reduce(add, [1,2,3,4,5], 0) = {sum_result}")
+    
+    # foldl: same as reduce (left-to-right)
+    # ((((1 * 1) * 2) * 3) * 4) * 5 = 120
+    let product: int = foldl(multiply, nums, 1)
+    print(f"foldl(multiply, [1,2,3,4,5], 1) = {product}")
+    
+    # foldr: right-to-left fold
+    # For subtraction, order matters!
+    # Left:  ((((0 - 1) - 2) - 3) - 4) - 5 = -15
+    # Right: 1 - (2 - (3 - (4 - (5 - 0)))) = 3
+    let left_sub: int = reduce(subtract, nums, 0)
+    let right_sub: int = foldr(subtract, nums, 0)
+    print(f"reduce(subtract, [1,2,3,4,5], 0) = {left_sub}")
+    print(f"foldr(subtract, [1,2,3,4,5], 0) = {right_sub}")
+    
+    0

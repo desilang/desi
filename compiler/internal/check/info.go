@@ -320,4 +320,28 @@ func addPreludeBuiltins(info *Info) {
 		types.None,
 		[]string{"condition", "message"},
 	)
+
+	// --- reduce/fold builtins ---
+	// reduce(func, iterable, initial) -> AccT  (left-to-right fold)
+	// foldl(func, iterable, initial) -> AccT   (alias for reduce)
+	// foldr(func, iterable, initial) -> AccT   (right-to-left fold)
+	// Special handling in expr_call.go for type checking
+	addN("reduce",
+		[]types.T{nil, nil, nil}, // func, iterable, initial
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+		nil, // AccT - determined by initial value in expr_call.go
+		[]string{"func", "iterable", "initial"},
+	)
+	addN("foldl",
+		[]types.T{nil, nil, nil},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+		nil,
+		[]string{"func", "iterable", "initial"},
+	)
+	addN("foldr",
+		[]types.T{nil, nil, nil},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+		nil,
+		[]string{"func", "iterable", "initial"},
+	)
 }
