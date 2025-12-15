@@ -31,8 +31,20 @@ func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []
 		baseCls, _ = t.(*types.Class)
 	}
 
+	// Track processed instantiations to avoid duplicates
+	processed := make(map[string]bool)
+
 	// For each instantiation, generate specialized versions
 	for _, gen := range instantiations {
+		// Generate mangled name to check for duplicates
+		mangledName := mangleGenericClassName(className, gen.Args)
+
+		// Skip if already processed
+		if processed[mangledName] {
+			continue
+		}
+		processed[mangledName] = true
+
 		// Build substitution map: TypeParam -> ConcreteType
 		subst := make(map[string]types.T)
 		if baseCls != nil && len(baseCls.TypeParams) == len(gen.Args) {
@@ -40,9 +52,6 @@ func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []
 				subst[tp.Name] = gen.Args[i]
 			}
 		}
-
-		// Generate mangled name: Box<int> -> Box_int
-		mangledName := mangleGenericClassName(className, gen.Args)
 
 		// Generate constructor
 		ctors := lowerMonomorphizedConstructor(cd, mangledName, subst, info, baseCls)
