@@ -1,5 +1,5 @@
 # Comprehensive test for generic class monomorphization
-# Tests Box<T> with all supported data types
+# Tests Box<T> with all supported data types and edge cases
 
 class Box<T>:
     pub mut val: T
@@ -14,6 +14,21 @@ class Box<T>:
 class Point:
     pub mut x: int
     pub mut y: int
+
+# Generic Pair class with two type parameters
+class Pair<A, B>:
+    pub mut first: A
+    pub mut second: B
+
+    pub def get_first(self) -> A:
+        return self.first
+
+    pub def get_second(self) -> B:
+        return self.second
+
+    pub def set_both(self, a: A, b: B):
+        self.first = a
+        self.second = b
 
 def main() -> int:
     # Test 1: Box<int>
@@ -75,6 +90,58 @@ def main() -> int:
     let got_p: Point = b_point.get()
     print(got_p.x)
     print(got_p.y)
+
+    # Test 8: Box<i32> (explicit sized int)
+    print("=== Box<i32> ===")
+    let b_i32: Box<i32> = Box()
+    b_i32.val = 2147483647
+    print(b_i32.get())
+
+    # Test 9: Pair<int, str> - Multiple type parameters
+    print("=== Pair<int, str> ===")
+    let pair1: Pair<int, str> = Pair()
+    pair1.first = 42
+    pair1.second = "answer"
+    print(pair1.get_first())
+    print(pair1.get_second())
+    pair1.set_both(100, "century")
+    print(pair1.get_first())
+    print(pair1.get_second())
+
+    # Test 10: Pair<str, float> - Different type combination
+    print("=== Pair<str, float> ===")
+    let pair2: Pair<str, float> = Pair()
+    pair2.first = "pi"
+    pair2.second = 3.14159
+    print(pair2.get_first())
+    print(pair2.get_second())
+
+    # Test 11: Pair<bool, int>
+    print("=== Pair<bool, int> ===")
+    let pair3: Pair<bool, int> = Pair()
+    pair3.first = true
+    pair3.second = 999
+    if pair3.get_first():
+        print("first is true")
+    print(pair3.get_second())
+
+    # Test 12: Nested generics - Box<Box<int>> - if supported
+    # (Uncomment if nested class generics are supported)
+    # print("=== Box<Box<int>> ===")
+    # let nested: Box<Box<int>> = Box()
+    # let inner: Box<int> = Box()
+    # inner.val = 777
+    # nested.val = inner
+    # print(nested.get().get())
+
+    # Test 13: Multiple instances of same generic type
+    print("=== Multiple Box<int> instances ===")
+    let box1: Box<int> = Box()
+    let box2: Box<int> = Box()
+    box1.val = 111
+    box2.val = 222
+    print(box1.get())
+    print(box2.get())
 
     print("All generic class tests passed!")
     0
