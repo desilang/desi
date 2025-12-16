@@ -22,9 +22,8 @@
 
 ```python
 # Hello, World in Desi
-def main() -> int:
+def main():
     print("Namaste, World!")
-    0
 ```
 
 A more interesting example:
@@ -42,12 +41,11 @@ class Counter:
     pub def get(self) -> int:
         return self.count
 
-def main() -> int:
+def main():
     let c = Counter(0)
     c.increment()
     c.increment()
     print(c.get())  # Prints: 2
-    0
 ```
 
 ---
