@@ -214,11 +214,9 @@ store i32 42, ptr %box
 
 ### Known Issues
 
-1. **Generic Structs**: Currently have type mismatch issues. Use generic classes instead.
+1. **Multi-param Constructor Inference**: May trigger "inconsistent default parameters" error in some cases.
 
-2. **Multi-param Constructor Inference**: May trigger "inconsistent default parameters" error in some cases.
-
-3. **Nested Generics**: `Box<Box<int>>` works but requires careful handling.
+2. **Nested Generics**: `Box<Box<int>>` works but requires careful handling.
 
 ### Future Work
 
@@ -234,6 +232,7 @@ The following tests cover generics:
 
 | Test | Description |
 |------|-------------|
+| `84_generics_struct.desi` | Generic structs with type erasure |
 | `162_generic_class_types.desi` | Comprehensive generic class with all types |
 | `163_generic_functions.desi` | Generic function type erasure |
 | `164_constructor_inference.desi` | Constructor type parameter inference |
@@ -249,4 +248,5 @@ The following tests cover generics:
 | Generic Classes | Monomorphization | ✅ Complete |
 | Generic Functions | Type Erasure | ✅ Complete |
 | Constructor Inference | Unification | ✅ Complete |
-| Generic Structs | Type Erasure | ⚠️ Known Issues |
+| Generic Structs | Type Erasure | ✅ Complete |
+
