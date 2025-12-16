@@ -384,6 +384,10 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return n
 
+	case token.KW_lambda:
+		// Python-style: lambda x: expr  OR  lambda x, y: expr  OR  lambda x: int, y: int: expr
+		return p.parseLambdaKeyword()
+
 	case token.KW_match:
 		return p.parseMatch()
 

@@ -382,7 +382,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc
 		isTypeSym := sym != nil && sym.Kind == SymType
-		callable := isCallableSym || isTypeSym || (set != nil && len(set.Cands) > 0)
+		// Check if variable has a Func type (e.g., lambda stored in a variable)
+		isFuncTypedVar := sym != nil && sym.Kind == SymVar && sym.Type != nil
+		var funcType *types.Func
+		if isFuncTypedVar {
+			funcType, _ = sym.Type.(*types.Func)
+			isFuncTypedVar = funcType != nil
+		}
+		callable := isCallableSym || isTypeSym || isFuncTypedVar || (set != nil && len(set.Cands) > 0)
 		if !callable {
 			if sym == nil {
 				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
@@ -390,6 +397,31 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
 			return nil
+		}
+
+		// Handle calling a Func-typed variable (lambda stored in variable)
+		if isFuncTypedVar && funcType != nil {
+			args := make([]types.T, len(argsNodes))
+			for i, a := range argsNodes {
+				args[i] = c.typ(a.Expr)
+			}
+			// Check arity
+			if len(args) != len(funcType.Params) && !funcType.Variadic {
+				c.add(diagAt("DTE0046", call.Span, "arity mismatch: wrong number of arguments"))
+				return nil
+			}
+			// Check arg types
+			for i := range funcType.Params {
+				if i >= len(args) {
+					break
+				}
+				if !types.Equal(args[i], funcType.Params[i]) {
+					c.add(diagAt("DTE0104", call.Span, fmt.Sprintf("argument type mismatch at position %d", i+1)))
+					return nil
+				}
+			}
+			c.info.Types[call] = funcType.Ret
+			return funcType.Ret
 		}
 
 		if isTypeSym {

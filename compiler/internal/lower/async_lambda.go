@@ -8,15 +8,18 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 )
 
-// DesugarAsyncLambdas finds `async lambda` expressions inside function bodies,
-// synthesizes hidden async functions named "__lam$N", and replaces the lambda
+// DesugarAsyncLambdas finds lambda expressions inside function bodies,
+// synthesizes hidden functions named "__lam$N", and replaces the lambda
 // expression with an Ident("__lam$N") at the callsite.
 //
 // The synthesized function body is a single `return <lambda-body>`; Params are
 // copied (converted) from the lambda. Names are made unique within the module.
-func DesugarAsyncLambdas(mod *ast.Module) {
+//
+// Returns a map of variable names to hidden function names for lambdas assigned to variables.
+func DesugarAsyncLambdas(mod *ast.Module) map[string]string {
+	aliases := make(map[string]string)
 	if mod == nil {
-		return
+		return aliases
 	}
 
 	// Start counter after the largest existing __lam$N to keep names stable.
@@ -40,7 +43,7 @@ func DesugarAsyncLambdas(mod *ast.Module) {
 			continue
 		}
 		for i, s := range fd.Body.Stmts {
-			fd.Body.Stmts[i] = rewriteStmtForAsyncLambda(s, mod, &synth, &next)
+			fd.Body.Stmts[i] = rewriteStmtForAsyncLambda(s, mod, &synth, &next, aliases)
 		}
 	}
 
@@ -50,10 +53,21 @@ func DesugarAsyncLambdas(mod *ast.Module) {
 			mod.Decls = append(mod.Decls, f)
 		}
 	}
+	return aliases
 }
 
-func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDecl, next *int) ast.Stmt {
+func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDecl, next *int, aliases map[string]string) ast.Stmt {
 	switch st := s.(type) {
+	case *ast.LetStmt:
+		// Handle let x = lambda<...>...
+		if st.Value != nil {
+			st.Value = rewriteExprForAsyncLambda(st.Value, mod, synth, next)
+			// If value is now a __lam$N identifier, record the alias
+			if id, ok := st.Value.(*ast.Ident); ok && strings.HasPrefix(id.Name, "__lam$") {
+				aliases[st.Name.Name] = id.Name
+			}
+		}
+		return st
 	case *ast.AssignStmt:
 		for i, e := range st.LHS {
 			st.LHS[i] = rewriteExprForAsyncLambda(e, mod, synth, next)
@@ -72,20 +86,20 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next)
 		if st.Then != nil {
 			for i, ss := range st.Then.Stmts {
-				st.Then.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next)
+				st.Then.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
 			}
 		}
 		for _, e := range st.Elifs {
 			e.Cond = rewriteExprForAsyncLambda(e.Cond, mod, synth, next)
 			if e.Body != nil {
 				for i, ss := range e.Body.Stmts {
-					e.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next)
+					e.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
 				}
 			}
 		}
 		if st.Else != nil {
 			for i, ss := range st.Else.Stmts {
-				st.Else.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next)
+				st.Else.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
 			}
 		}
 		return st
@@ -93,7 +107,7 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next)
 		if st.Body != nil {
 			for i, ss := range st.Body.Stmts {
-				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next)
+				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
 			}
 		}
 		return st
@@ -102,7 +116,7 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 		st.Init = rewriteExprForAsyncLambda(st.Init, mod, synth, next)
 		if st.Body != nil {
 			for i, ss := range st.Body.Stmts {
-				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next)
+				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
 			}
 		}
 		return st
@@ -117,28 +131,37 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 		// Recurse into body first (in case of nested lambdas).
 		x.Body = rewriteExprForAsyncLambda(x.Body, mod, synth, next)
 
-		if !x.Async {
-			return x
-		}
 		// Convert lambda params -> function params
 		params := make([]ast.Param, len(x.Params))
 		for i, lp := range x.Params {
 			params[i] = ast.Param{Name: lp.Name, Type: lp.Type}
 		}
 
-		// Synthesize: async def __lam$N(params): return <body>
+		// Synthesize: [async] def __lam$N(params) -> RetType: return <body>
 		name := fmt.Sprintf("__lam$%d", *next)
 		*next++
 
+		// Build function body based on return type
+		var bodyStmts []ast.Stmt
+		if x.RetType != nil && x.RetType.Name == "none" {
+			// For void-returning lambdas, execute body as expression and return void
+			bodyStmts = []ast.Stmt{
+				&ast.ExprStmt{Expr: x.Body},
+				&ast.ReturnStmt{Value: nil},
+			}
+		} else {
+			// For value-returning lambdas, return the body value
+			bodyStmts = []ast.Stmt{
+				&ast.ReturnStmt{Value: x.Body},
+			}
+		}
+
 		fn := &ast.FuncDecl{
-			Async:  true,
-			Name:   ast.Ident{Name: name},
-			Params: params,
-			Body: &ast.Block{
-				Stmts: []ast.Stmt{
-					&ast.ReturnStmt{Value: x.Body},
-				},
-			},
+			Async:   x.Async,
+			Name:    ast.Ident{Name: name},
+			Params:  params,
+			RetType: x.RetType, // Use the explicit return type from lambda<RetType>
+			Body:    &ast.Block{Stmts: bodyStmts},
 		}
 		*synth = append(*synth, fn)
 

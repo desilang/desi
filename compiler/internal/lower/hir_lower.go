@@ -367,6 +367,12 @@ func (ls *lowerState) nameOf(e ast.Expr) string {
 func (ls *lowerState) calleeName(e ast.Expr) string {
 	switch x := e.(type) {
 	case *ast.Ident:
+		// First check if this is a lambda variable (e.g., "double" -> "__lam$0")
+		if ls.info != nil && ls.info.LambdaAliases != nil {
+			if hiddenFunc, ok := ls.info.LambdaAliases[x.Name]; ok {
+				return hiddenFunc
+			}
+		}
 		// Check if this is an aliased import (e.g., "sum" from "from math import add as sum")
 		if ls.info != nil && ls.info.ImportAliases != nil {
 			if actualName, ok := ls.info.ImportAliases[x.Name]; ok {

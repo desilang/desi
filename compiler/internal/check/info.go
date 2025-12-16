@@ -35,6 +35,7 @@ type Info struct {
 	// M5: imports bridge
 	ImportPaths   map[string]string // local import binding -> dotted module path (e.g., "math" -> "math")
 	ImportAliases map[string]string // local alias name -> actual function name (e.g., "sum" -> "add")
+	LambdaAliases map[string]string // lambda variable name -> synthesized hidden func name (e.g., "double" -> "__lam$0")
 	R             *resolve.Info     // resolver results (exports table, etc.)
 
 	// M6-P2-B: per-function move tracking for identifiers.

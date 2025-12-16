@@ -1,0 +1,31 @@
+# Lambda comprehensive edge case test
+
+def main() -> int:
+    # Basic lambda - returns int
+    let double: int = lambda<int> x: int: x * 2
+    let result1: int = double(21)
+    print(result1)  # Should print 42
+
+    # Lambda with no params - returns str
+    let greet: str = lambda<str>: "Hello, World!"
+    print(greet())
+    
+    # Lambda with multiple params - returns int
+    let add: int = lambda<int> a: int, b: int: a + b
+    let sum: int = add(10, 20)
+    print(sum)  # Should print 30
+    
+    # Lambda returning none (side-effect only)
+    let sayHi: none = lambda<none> name: str: print(name)
+    sayHi("Desi")
+    
+    # Lambda with string operations
+    let exclaim: str = lambda<str> s: str: s + "!"
+    print(exclaim("Hello"))
+    
+    # Nested lambda usage
+    let triple: int = lambda<int> n: int: n * 3
+    let result2: int = triple(double(5))  # 5*2=10, 10*3=30
+    print(result2)
+    
+    0
