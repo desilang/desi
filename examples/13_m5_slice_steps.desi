@@ -1,5 +1,4 @@
-# EXPECTED: RUNTIME_ERROR
-# M5: String slice test - has runtime segfault in slice implementation
+# M5: String slice test - NOW PASSING
 
 def main() -> int:
   let s: str = "abcdef"

@@ -171,36 +171,69 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return dst
 
 	case *ast.SliceExpr:
-		// list[start:end] -> list_slice(list, start, end)
-		list := ls.lowerExpr(x.X)
+		// Check if we're slicing a string vs. a list
+		isStr := false
+		if ls.info != nil {
+			slicedType := ls.info.Types[x.X]
+			isStr = slicedType == types.Str
+		}
+
+		base := ls.lowerExpr(x.X)
 
 		// Start index (default 0)
 		var start hir.Value
 		if x.I != nil {
 			val := ls.lowerExpr(x.I)
-			// Cast i32 to i64 for runtime call
-			start = ls.b.FreshTemp("start_i64")
-			ls.b.Emit(&hir.Cast{Dst: start.(hir.Temp), Src: val, Type: "i64"})
+			if isStr {
+				// string_substr expects i32
+				start = val
+			} else {
+				// list_slice expects i64
+				start = ls.b.FreshTemp("start_i64")
+				ls.b.Emit(&hir.Cast{Dst: start.(hir.Temp), Src: val, Type: "i64"})
+			}
 		} else {
-			start = hir.ConstInt{Text: "0", Type: "i64"}
+			if isStr {
+				start = hir.ConstInt{Text: "0", Type: "i32"}
+			} else {
+				start = hir.ConstInt{Text: "0", Type: "i64"}
+			}
 		}
 
-		// End index (default len(list))
+		// End index (default len(x))
 		var end hir.Value
 		if x.J != nil {
 			val := ls.lowerExpr(x.J)
-			// Cast i32 to i64 for runtime call
-			end = ls.b.FreshTemp("end_i64")
-			ls.b.Emit(&hir.Cast{Dst: end.(hir.Temp), Src: val, Type: "i64"})
+			if isStr {
+				// string_substr expects i32
+				end = val
+			} else {
+				// list_slice expects i64
+				end = ls.b.FreshTemp("end_i64")
+				ls.b.Emit(&hir.Cast{Dst: end.(hir.Temp), Src: val, Type: "i64"})
+			}
 		} else {
-			// Call list_len -> i64
-			end = ls.b.FreshTemp("len_i64")
-			ls.b.Emit(&hir.Call{Dst: end.(hir.Temp), Fn: "list_len", Args: []hir.Value{list}})
+			if isStr {
+				// Call string_len -> i32
+				end = ls.b.FreshTemp("strlen")
+				ls.b.Emit(&hir.Call{Dst: end.(hir.Temp), Fn: "string_len", Args: []hir.Value{base}, Type: "i32"})
+			} else {
+				// Call list_len -> i64
+				end = ls.b.FreshTemp("len_i64")
+				ls.b.Emit(&hir.Call{Dst: end.(hir.Temp), Fn: "list_len", Args: []hir.Value{base}})
+			}
 		}
 
-		// Call list_slice
 		res := ls.b.FreshTemp("slice")
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{list, start, end}})
+		if isStr {
+			// string_substr(str, start, length) - need to compute length = end - start
+			length := ls.b.FreshTemp("slice_len")
+			ls.b.Emit(&hir.BinaryOp{Dst: length, Op: "-", LHS: end, RHS: start, Type: "i32"})
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "string_substr", Args: []hir.Value{base, start, length}, Type: "ptr"})
+		} else {
+			// Call list_slice
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{base, start, end}})
+		}
 		return res
 
 	case *ast.IndexExpr:
