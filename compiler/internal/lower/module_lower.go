@@ -27,7 +27,14 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 // LowerModuleFromSourceWithOptions is like LowerModuleFromSource but accepts options.
 func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []byte, opts LowerModuleOptions) *hir.Module {
 	// Rewrite async lambdas into hidden async functions before lowering.
-	DesugarAsyncLambdas(mod)
+	lambdaAliases := DesugarAsyncLambdas(mod)
+	// Store aliases in info for calleeName resolution
+	if info != nil && info.LambdaAliases == nil {
+		info.LambdaAliases = make(map[string]string)
+	}
+	for k, v := range lambdaAliases {
+		info.LambdaAliases[k] = v
+	}
 
 	out := &hir.Module{Name: mod.File}
 	for _, d := range mod.Decls {

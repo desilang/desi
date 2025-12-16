@@ -455,7 +455,25 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return nil
 
 	case *ast.LambdaExpr:
-		// require typed params in M4
+		// Require explicit return type via lambda<RetType>
+		var retType types.T
+		if x.RetType != nil {
+			if t, ok := types.FromName(x.RetType.Name); ok {
+				retType = t
+			} else {
+				// Try resolving as custom type
+				retType = c.resolveType(x.RetType)
+				if retType == nil {
+					c.add(diagAt("DTE0004", x.Span, "unknown lambda return type: "+x.RetType.Name))
+					return nil
+				}
+			}
+		} else {
+			c.add(diagAt("DTE0004", x.Span, "lambda requires explicit return type: lambda<RetType>"))
+			return nil
+		}
+
+		// Require typed params
 		params := make([]types.T, len(x.Params))
 		for i, p := range x.Params {
 			if p.Type == nil {
@@ -469,9 +487,30 @@ func (c *checker) typ(e ast.Expr) types.T {
 				return nil
 			}
 		}
+
+		// Create child scope for lambda body to access parameters
+		savedScope := c.scope
+		c.scope = NewScope(savedScope)
+		for i, p := range x.Params {
+			c.scope.Define(&Symbol{
+				Name: p.Name.Name,
+				Kind: SymVar,
+				Type: params[i],
+			})
+		}
 		bt := c.typ(x.Body)
-		c.info.Types[e] = types.FuncOf(params, bt, false)
-		return c.info.Types[e]
+		c.scope = savedScope // restore
+
+		// Validate body type matches declared return type
+		if bt != nil && !types.Equal(bt, retType) {
+			c.add(diagAt("DTE0004", x.Span, "lambda body type mismatch: expected "+retType.String()+", got "+bt.String()))
+			return nil
+		}
+
+		// Store the full function type for internal use
+		c.info.Types[e] = types.FuncOf(params, retType, false)
+		// Return JUST the return type so let binding matches: let x: int = lambda<int>...
+		return retType
 
 	default:
 		return nil

@@ -69,10 +69,19 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			t = rhs
 		}
 
+		// Special handling for lambdas: store the Func type (from info.Types) so variable is callable.
+		// The return type was validated earlier via type annotation check.
+		symType := t
+		if _, ok := st.Value.(*ast.LambdaExpr); ok {
+			if ft := c.info.Types[st.Value]; ft != nil {
+				symType = ft // Use the Func type, not the return type
+			}
+		}
+
 		sym := &Symbol{
 			Name:      st.Name.Name,
 			Kind:      SymVar,
-			Type:      t,
+			Type:      symType,
 			Node:      st,
 			IsMutable: st.Mutable, // Track let vs let mut
 		}
@@ -81,7 +90,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Enrich Info
 		c.info.Idents[&st.Name] = sym
 		if t != nil {
-			c.info.Types[&st.Name] = t
+			c.info.Types[&st.Name] = symType
 		}
 
 	case *ast.AssignStmt:

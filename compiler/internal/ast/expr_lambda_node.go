@@ -10,10 +10,11 @@ type LambdaParam struct {
 }
 
 type LambdaExpr struct {
-	Async  bool
-	Params []LambdaParam
-	Body   Expr
-	Span   diag.Span
+	Async   bool
+	Params  []LambdaParam
+	RetType *TypeName // explicit return type from lambda<RetType>
+	Body    Expr
+	Span    diag.Span
 }
 
 func (*LambdaExpr) isExpr()             {}
