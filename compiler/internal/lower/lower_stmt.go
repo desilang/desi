@@ -502,6 +502,70 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		// - Dict iteration: for key: str, value: int in my_dict.items():
 		// - Enumerate: for i: int, x: str in enumerate(items):
 		// - Reversed: for x: int in reversed(items):
+		// - Tuple iteration (homogeneous): for x in (1, 2, 3): (compile-time unrolled)
+
+		// Check for tuple iteration FIRST (before pushing outer scope)
+		// This is handled specially because we unroll at compile time
+		// EXCEPTION: Skip if this is a zip() call - zip returns tuple type for type-checking
+		// but should be handled by the runtime zip iteration path below
+		isZipCall := false
+		if call, ok := s.Iter.(*ast.CallExpr); ok {
+			if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "zip" {
+				isZipCall = true
+			}
+		}
+		if ls.info != nil && !isZipCall {
+			if tupType, ok := ls.info.Types[s.Iter].(*types.Tuple); ok && len(s.Targets) >= 1 && len(tupType.Elems) > 0 {
+				// Tuple iteration: compile-time loop unrolling
+				tupleVal := ls.lowerExpr(s.Iter)
+
+				// Build struct type string for the tuple
+				elemTypes := make([]string, len(tupType.Elems))
+				for i := range tupType.Elems {
+					elemTypes[i] = "ptr"
+				}
+				structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+				// Unroll: emit body once for each element
+				for idx := range tupType.Elems {
+					ls.push()
+
+					elemType := tupType.Elems[idx]
+					llvmElemType := lowerType(elemType)
+
+					elemPtr := ls.b.FreshTemp(fmt.Sprintf("tup_iter_%d_ptr", idx))
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    structType,
+						Base:    tupleVal,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", idx)}},
+						Dst:     elemPtr,
+					})
+
+					boxed := ls.b.FreshTemp(fmt.Sprintf("tup_iter_%d_boxed", idx))
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
+
+					elemVal := ls.b.FreshTemp(fmt.Sprintf("tup_iter_%d_val", idx))
+					ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: elemVal})
+
+					if s.Targets[0].Name != nil {
+						varName := s.Targets[0].Name.Name
+						ls.cur().locals = append(ls.cur().locals, varName)
+						ls.b.Emit(&hir.Let{Name: varName, Init: elemVal, Type: elemType})
+						ls.cur().types[varName] = elemType
+					}
+
+					if s.Body != nil {
+						ls.lowerBlock(s.Body)
+					}
+
+					scIter := ls.pop()
+					if !ls.terminated {
+						ls.emitScopeDrops(scIter)
+					}
+				}
+				return // Return after tuple iteration - no outer scope was pushed
+			}
+		}
 
 		ls.push()
 
@@ -532,12 +596,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		// Check if this is a zip(a, b) call
 		isZip := false
 		var zipIterVal1, zipIterVal2 hir.Value
+		var zipElemType1, zipElemType2 types.T // element types for the two lists
 		if fe, ok := s.Iter.(*ast.CallExpr); ok {
 			if callee, ok := fe.Callee.(*ast.Ident); ok && callee.Name == "zip" {
 				if len(fe.Args) == 2 {
 					isZip = true
 					zipIterVal1 = ls.lowerExpr(fe.Args[0])
 					zipIterVal2 = ls.lowerExpr(fe.Args[1])
+					// Get element types from list types
+					if ls.info != nil {
+						if list1, ok := ls.info.Types[fe.Args[0]].(*types.List); ok {
+							zipElemType1 = list1.Elem
+						}
+						if list2, ok := ls.info.Types[fe.Args[1]].(*types.List); ok {
+							zipElemType2 = list2.Elem
+						}
+					}
 				}
 			}
 		}
@@ -723,22 +797,30 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			elem1Ptr := ls.b.FreshTemp("elem1_ptr")
 			ls.b.Emit(&hir.Call{Dst: elem1Ptr, Fn: "list_get", Args: []hir.Value{zipIterVal1, idxI32}, Type: "ptr"})
 			elem1 := ls.b.FreshTemp("elem1")
-			ls.b.Emit(&hir.Cast{Dst: elem1, Src: elem1Ptr, Type: "i32"})
+			elem1Type := "i32" // default
+			if zipElemType1 != nil {
+				elem1Type = lowerType(zipElemType1)
+			}
+			ls.b.Emit(&hir.Cast{Dst: elem1, Src: elem1Ptr, Type: elem1Type})
 
 			// Get element from second list
 			elem2Ptr := ls.b.FreshTemp("elem2_ptr")
 			ls.b.Emit(&hir.Call{Dst: elem2Ptr, Fn: "list_get", Args: []hir.Value{zipIterVal2, idxI32}, Type: "ptr"})
 			elem2 := ls.b.FreshTemp("elem2")
-			ls.b.Emit(&hir.Cast{Dst: elem2, Src: elem2Ptr, Type: "i32"})
+			elem2Type := "i32" // default
+			if zipElemType2 != nil {
+				elem2Type = lowerType(zipElemType2)
+			}
+			ls.b.Emit(&hir.Cast{Dst: elem2, Src: elem2Ptr, Type: elem2Type})
 
 			// Bind first loop variable
 			if s.Targets[0].Name != nil {
-				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elem1})
+				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elem1, Type: zipElemType1})
 			}
 
 			// Bind second loop variable
 			if s.Targets[1].Name != nil {
-				ls.b.Emit(&hir.Let{Name: s.Targets[1].Name.Name, Init: elem2})
+				ls.b.Emit(&hir.Let{Name: s.Targets[1].Name.Name, Init: elem2, Type: zipElemType2})
 			}
 
 			// Lower body
@@ -872,6 +954,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
 
 		} else {
+
 			// Check if this is set iteration
 			isSet := false
 			if ls.info != nil {

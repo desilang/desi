@@ -1,11 +1,15 @@
 # Test zip() builtin for parallel iteration
+# Tests: different list lengths, stops at shorter list
 
 def main() -> int:
-    let names: list[int] = [1, 2, 3]
-    let scores: list[int] = [100, 200, 300]
+    # List 1: 3 elements
+    let a_list: list[int] = [1, 2, 3]
     
-    print("Zip iteration:")
-    for a: int, b: int in zip(names, scores):
+    # List 2: 4 elements (longer - zip should stop at 3)
+    let b_list: list[int] = [100, 200, 300, 400]
+    
+    print("Zip iteration (stops at shorter list):")
+    for a: int, b: int in zip(a_list, b_list):
         print(a)
         print(b)
     

@@ -1,0 +1,68 @@
+# Tuple Iteration Tests - Homogeneous Tuple Iteration via Compile-Time Unrolling
+# Tests for x in tuple: where all elements are the same type
+
+def main():
+    test_basic_iteration()
+    test_iteration_with_accumulator()
+    test_iteration_with_print()
+    test_len_builtin()
+    print("All tuple iteration tests passed!")
+
+def test_basic_iteration():
+    # Basic homogeneous tuple iteration
+    let nums: tuple[int, int, int] = (10, 20, 30)
+    let sum: int = 0
+    
+    for x in nums:
+        sum := sum + x
+    
+    # Sum should be 60
+    if sum == 60:
+        print("basic iteration: PASS")
+    else:
+        print("basic iteration: FAIL")
+
+def test_iteration_with_accumulator():
+    # Iteration with accumulator pattern
+    let values: tuple[int, int, int, int] = (1, 2, 3, 4)
+    let product: int = 1
+    
+    for v in values:
+        product := product * v
+    
+    # Product should be 24 (1*2*3*4)
+    if product == 24:
+        print("accumulator pattern: PASS")
+    else:
+        print("accumulator pattern: FAIL")
+
+def test_iteration_with_print():
+    # Simple iteration printing each element
+    print("Printing tuple elements:")
+    let items: tuple[int, int, int] = (100, 200, 300)
+    
+    for item in items:
+        print(item)
+    
+    print("iteration with print: PASS")
+
+def test_len_builtin():
+    # len() returns compile-time constant for tuples
+    let t2: tuple[int, int] = (1, 2)
+    let t3: tuple[int, int, int] = (1, 2, 3)
+    let t4: tuple[int, int, int, int] = (1, 2, 3, 4)
+    
+    if len(t2) == 2:
+        print("len(t2) == 2: PASS")
+    else:
+        print("len(t2): FAIL")
+    
+    if len(t3) == 3:
+        print("len(t3) == 3: PASS")
+    else:
+        print("len(t3): FAIL")
+    
+    if len(t4) == 4:
+        print("len(t4) == 4: PASS")
+    else:
+        print("len(t4): FAIL")
