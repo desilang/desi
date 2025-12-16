@@ -925,6 +925,18 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 		}
 
+		// Case 3: Generic struct constructor (e.g. Box<int>)
+		if _, ok := x.Callee.(*ast.Ident); ok && !isGeneric {
+			// Check if the result type is a Generic wrapping a Struct
+			if resT := ls.info.Types[x]; resT != nil {
+				if g, ok := resT.(*types.Generic); ok {
+					if _, ok := g.Base.(*types.Struct); ok {
+						isGeneric = true
+					}
+				}
+			}
+		}
+
 		if isGeneric {
 			// This is a call to a generic function/constructor
 			// Box all primitive arguments to ptr (allocate + store + return pointer)
