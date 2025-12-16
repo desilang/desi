@@ -85,9 +85,8 @@ Create a simple test file:
 
 ```python
 # test.desi
-def main() -> int:
+def main():
     print("Desi is working!")
-    0
 ```
 
 Compile and run:

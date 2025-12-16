@@ -174,9 +174,8 @@ def calculate_area():
     print("Area:")
     print(area)
 
-def main() -> int:
+def main():
     calculate_area()
-    0
 ```
 
 Output:

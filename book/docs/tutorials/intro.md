@@ -91,7 +91,7 @@ class Stack<T>:
     pub def is_empty(self) -> bool:
         return len(self.items) == 0
 
-def main() -> int:
+def main():
     let stack = Stack()  # Type inferred from usage
     
     stack.push(1)
@@ -100,8 +100,6 @@ def main() -> int:
     
     while not stack.is_empty():
         print(stack.pop())
-    
-    0
 ```
 
 ---

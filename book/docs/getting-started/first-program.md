@@ -10,9 +10,8 @@ Create a new file called `hello.desi`:
 
 ```python
 # hello.desi
-def main() -> int:
+def main():
     print("Namaste, World!")
-    0
 ```
 
 ### Understanding the Code
@@ -20,14 +19,12 @@ def main() -> int:
 Let's break down each part:
 
 ```python
-def main() -> int:    # (1)!
+def main():    # (1)!
     print("Namaste, World!")  # (2)!
-    0  # (3)!
 ```
 
-1. Every Desi program needs a `main` function that returns an `int` (exit code)
+1. Every Desi program needs a `main` function. The return type is optional!
 2. `print()` is a built-in function that outputs to the console
-3. The last expression in a function is its return value. `0` means success!
 
 ---
 
@@ -65,7 +62,7 @@ Let's create something more substantial - a greeting program:
 def greet(name: str) -> str:
     return "Namaste, " + name + "!"
 
-def main() -> int:
+def main():
     let message = greet("Desi Developer")
     print(message)
     
@@ -74,8 +71,6 @@ def main() -> int:
     let y = 20
     print("Sum:")
     print(x + y)
-    
-    0
 ```
 
 Compile and run:
@@ -139,19 +134,17 @@ def add(a: int, b: int) -> int:
 
 ---
 
-## Common Errors
-
-### Missing Return Type
+### Return Type (Optional)
 
 ```python
-# ❌ Wrong - main must return int
+# ✅ Simple - no return needed for most programs
 def main():
     print("Hello")
 
-# ✅ Correct
+# ✅ Also valid - return int if you need an exit code
 def main() -> int:
     print("Hello")
-    0
+    0  # Exit code 0 = success
 ```
 
 ### Type Mismatch

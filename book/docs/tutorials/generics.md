@@ -14,13 +14,12 @@ class Box<T>:
     pub def __new__(self, v: T):
         self.val = v
 
-def main() -> int:
+def main():
     let int_box = Box(42)           # Box<int>
     let str_box = Box("hello")      # Box<str>
     
     print(int_box.val)
     print(str_box.val)
-    0
 ```
 
 ---

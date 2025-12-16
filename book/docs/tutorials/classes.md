@@ -19,10 +19,9 @@ class Person:
     pub def greet(self) -> str:
         return "Namaste, I am " + self.name
 
-def main() -> int:
-    let person = Person("Arjun", 25)
+def main():
+    let person = Person(\"Arjun\", 25)
     print(person.greet())
-    0
 ```
 
 ---
