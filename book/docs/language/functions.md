@@ -318,26 +318,20 @@ def main():
 
 ## Entry Point
 
-Every executable Desi program needs a `main` function:
+Every executable Desi program needs a `main` function. It can return either `int` (exit code) or `none`:
 
-```desi
-def main() -> int:
-    print("Hello, Desi!")
-    return 0  # Exit code
-```
-
-Alternative forms:
-
-=== "With Return Value"
-    ```desi
-    def main() -> int:
-        return 0
-    ```
-
-=== "Without Return Value"
+=== "Without Return (Default)"
     ```desi
     def main():
-        print("Hello!")
+        print("Hello, Desi!")
+        # Implicitly returns none
+    ```
+
+=== "With Exit Code"
+    ```desi
+    def main() -> int:
+        print("Hello, Desi!")
+        return 0  # Exit code
     ```
 
 === "Expression Return"
@@ -345,6 +339,10 @@ Alternative forms:
     def main() -> int:
         0  # Last expression as return
     ```
+
+!!! tip "Which to use?"
+    - Use `main()` (no return) for most programs - simpler and cleaner
+    - Use `main() -> int` when you need to return an exit code to the shell
 
 ## Best Practices
 
