@@ -106,18 +106,46 @@ func (p *Parser) parseStmt() ast.Stmt {
 }
 
 // let [mut] name [: Type] = Expr
+// let [mut] (name, name, ...) = Expr  (tuple destructuring)
 func (p *Parser) parseLet() ast.Stmt {
 	start := spanPos(p.file, p.cur)
 	p.next() // 'let'
 
 	mut := p.accept(token.KW_mut)
 
-	if p.cur.Tok != token.IDENT {
-		p.errExpected(spanPos(p.file, p.cur), "identifier")
+	// Check for tuple destructuring pattern: (a, b, c)
+	var pattern []ast.Ident
+	var name ast.Ident
+
+	if p.cur.Tok == token.LPAREN {
+		// Tuple destructuring: let (a, b, c) = expr
+		p.next() // consume '('
+		for {
+			if p.cur.Tok == token.IDENT {
+				// Includes _ for ignore pattern
+				pattern = append(pattern, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+				p.next()
+			} else {
+				p.errExpected(spanPos(p.file, p.cur), "identifier or _")
+				return nil
+			}
+
+			if p.cur.Tok == token.COMMA {
+				p.next() // consume ','
+				continue
+			}
+			break
+		}
+		if !p.expect(token.RPAREN, ")") {
+			return nil
+		}
+	} else if p.cur.Tok != token.IDENT {
+		p.errExpected(spanPos(p.file, p.cur), "identifier or (pattern)")
 		return nil
+	} else {
+		name = ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+		p.next()
 	}
-	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
-	p.next()
 
 	var ty *ast.TypeName
 	if p.accept(token.COLON) {
@@ -142,6 +170,7 @@ func (p *Parser) parseLet() ast.Stmt {
 	return &ast.LetStmt{
 		Mutable: mut,
 		Name:    name,
+		Pattern: pattern,
 		Type:    ty,
 		Value:   val,
 		Span:    ast.JoinSpan(start, lastSpan(val, start)),

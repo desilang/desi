@@ -1,5 +1,5 @@
 # Tuple Phase 1 Tests - Comprehensive Examples
-# Tests: literal, indexing (bracket and dot), equality, function returns
+# Tests: literal, indexing (bracket and dot), equality, function returns, destructuring
 
 def main():
     test_basic_tuple()
@@ -8,6 +8,7 @@ def main():
     test_equality()
     test_function_return()
     test_type_annotations()
+    test_destructuring()
     print("All tuple tests passed!")
 
 def test_basic_tuple():
@@ -79,6 +80,24 @@ def test_type_annotations():
     
     print(empty.0)
     print(point.0)
+
+def test_destructuring():
+    # Basic tuple destructuring
+    let t: tuple[int, int, int] = (10, 20, 30)
+    let (a, b, c) = t
+    print(a)  # 10
+    print(b)  # 20
+    print(c)  # 30
+    
+    # Destructure from function return
+    let (quotient, remainder) = divmod(17, 5)
+    print(quotient)   # 3
+    print(remainder)  # 2
+    
+    # Ignore pattern with _
+    let (first, _, last) = (100, 200, 300)
+    print(first)  # 100
+    print(last)   # 300
 
 # Helper functions
 def get_pair() -> tuple[int, int]:

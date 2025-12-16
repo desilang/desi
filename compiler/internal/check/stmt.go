@@ -78,19 +78,53 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		}
 
-		sym := &Symbol{
-			Name:      st.Name.Name,
-			Kind:      SymVar,
-			Type:      symType,
-			Node:      st,
-			IsMutable: st.Mutable, // Track let vs let mut
-		}
-		_ = c.scope.Define(sym)
+		// Handle tuple destructuring: let (a, b, c) = tuple_expr
+		if len(st.Pattern) > 0 {
+			// Verify RHS is a tuple with matching element count
+			tupType, ok := symType.(*types.Tuple)
+			if !ok {
+				c.add(diagAt("DTE0004", st.Span, "cannot destructure non-tuple type '"+symType.String()+"'"))
+				return
+			}
+			if len(tupType.Elems) != len(st.Pattern) {
+				c.add(diagAt("DTE0004", st.Span, "tuple destructuring arity mismatch: expected "+
+					string(rune('0'+len(tupType.Elems)))+" elements, got "+string(rune('0'+len(st.Pattern)))))
+				return
+			}
 
-		// Enrich Info
-		c.info.Idents[&st.Name] = sym
-		if t != nil {
-			c.info.Types[&st.Name] = symType
+			// Define a symbol for each pattern element
+			for i, ident := range st.Pattern {
+				if ident.Name == "_" {
+					// Ignore pattern - don't bind
+					continue
+				}
+				sym := &Symbol{
+					Name:      ident.Name,
+					Kind:      SymVar,
+					Type:      tupType.Elems[i],
+					Node:      st,
+					IsMutable: st.Mutable,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[&st.Pattern[i]] = sym
+				c.info.Types[&st.Pattern[i]] = tupType.Elems[i]
+			}
+		} else {
+			// Single variable binding (normal let)
+			sym := &Symbol{
+				Name:      st.Name.Name,
+				Kind:      SymVar,
+				Type:      symType,
+				Node:      st,
+				IsMutable: st.Mutable, // Track let vs let mut
+			}
+			_ = c.scope.Define(sym)
+
+			// Enrich Info
+			c.info.Idents[&st.Name] = sym
+			if t != nil {
+				c.info.Types[&st.Name] = symType
+			}
 		}
 
 	case *ast.AssignStmt:
