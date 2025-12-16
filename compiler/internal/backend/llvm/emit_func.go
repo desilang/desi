@@ -583,6 +583,26 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					wprintf(&m.funcs, "  %s = inttoptr i64 %s to ptr\n", x.Dst.Name, tmpName)
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
+				} else if (valTy == "double" || valTy == "float") && x.Type == "ptr" {
+					// Special case: float/double to ptr requires boxing (can't bitcast float to ptr)
+					// Allocate memory for the float value and store it
+					boxSize := "8" // double is 8 bytes
+					if valTy == "float" {
+						boxSize = "4"
+					}
+					boxPtr := x.Dst.Name + "_box"
+					m.ensureDecl("declare ptr @malloc(...)")
+					wprintf(&m.funcs, "  %s = call ptr @malloc(i64 %s)\n", boxPtr, boxSize)
+					wprintf(&m.funcs, "  store %s %s, ptr %s\n", valTy, valOp, boxPtr)
+					// The destination is the box pointer
+					wprintf(&m.funcs, "  %s = bitcast ptr %s to ptr\n", x.Dst.Name, boxPtr)
+					m.tempTypes[x.Dst.Name] = "ptr"
+					continue // Skip normal emit below
+				} else if valTy == "ptr" && (x.Type == "double" || x.Type == "float") {
+					// Special case: ptr to float/double requires unboxing (load from boxed pointer)
+					wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, valOp)
+					m.tempTypes[x.Dst.Name] = x.Type
+					continue // Skip normal emit below
 				}
 				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type
