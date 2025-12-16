@@ -1,4 +1,4 @@
-# Test generic constructor type inference
+# Test generic constructor type inference with all types
 
 class Box<T>:
     pub mut val: T
@@ -15,5 +15,14 @@ def main() -> int:
     let b2 = Box("hello")
     print(b2.val)
 
-    print("Constructor inference passed!")
+    # Test 3: Infer Box<float>
+    let b3 = Box(3.14)
+    print(b3.val)
+
+    # Test 4: Infer Box<bool>
+    let b4 = Box(true)
+    if b4.val:
+        print("true")
+
+    print("All constructor inference tests passed!")
     0

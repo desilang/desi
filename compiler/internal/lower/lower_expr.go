@@ -657,9 +657,24 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			fields = c.Fields
 		} else if g, ok := baseType.(*types.Generic); ok {
 			if s, ok := g.Base.(*types.Struct); ok {
+				// Structs use type erasure - keep original field types
+				// (constructor stores ptr, field access uses unboxing)
 				fields = s.Fields
 			} else if c, ok := g.Base.(*types.Class); ok {
-				fields = c.Fields
+				// Generic classes use monomorphization - substitute concrete types
+				fields = make([]types.Field, len(c.Fields))
+				subst := make(map[string]types.T)
+				for i, tp := range c.TypeParams {
+					if i < len(g.Args) {
+						subst[tp.Name] = g.Args[i]
+					}
+				}
+				for i, f := range c.Fields {
+					fields[i] = types.Field{
+						Name: f.Name,
+						Type: substituteType(f.Type, subst),
+					}
+				}
 			}
 		}
 
@@ -702,9 +717,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				targetType := lowerType(exprType)
 
 				if storageType == "ptr" && targetType != "ptr" && targetType != "void" {
-					// Unbox: ptr -> targetType
+					// Unbox by loading from the pointer
 					unboxed := ls.b.FreshTemp("unboxed")
-					ls.b.Emit(&hir.Cast{Dst: unboxed, Src: dst, Type: targetType})
+					ls.b.Emit(&hir.Load{
+						Src:  dst,
+						Dst:  unboxed,
+						Type: targetType,
+					})
 					return unboxed
 				}
 

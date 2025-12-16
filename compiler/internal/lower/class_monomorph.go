@@ -166,11 +166,30 @@ func lowerMonomorphizedDunderNew(mangledName string, method *ast.FuncDecl, subst
 	newFn := LowerFuncFromDecl(method, info, nil)
 	newFn.Name = fmt.Sprintf("%s___new__", mangledName)
 
-	// Substitute types in parameters
-	for i := range newFn.Params {
-		newFn.Params[i].Type = substituteHIRType(newFn.Params[i].Type, subst)
+	// Get constructor's semantic type from the class for proper substitution
+	var ctorType *types.Func
+	if baseCls != nil && len(baseCls.Constructors) > 0 {
+		// Find a matching constructor by arity
+		for _, ctor := range baseCls.Constructors {
+			if len(ctor.Params) == len(newFn.Params) {
+				ctorType = ctor
+				break
+			}
+		}
 	}
-	newFn.RetType = substituteHIRType(newFn.RetType, subst)
+
+	// Substitute parameter types using semantic type info
+	if ctorType != nil && len(ctorType.Params) > 0 {
+		// ctorType.Params[0] is self (cls), params after that are user params
+		for i := 1; i < len(ctorType.Params) && i < len(newFn.Params); i++ {
+			paramType := substituteType(ctorType.Params[i], subst)
+			newFn.Params[i].Type = lowerType(paramType)
+		}
+	}
+	newFn.RetType = "void" // __new__ returns void
+
+	// Also substitute types in function body
+	substituteHIRFuncBody(newFn, subst, baseCls)
 
 	// Generate wrapper constructor: MangledName(args...) -> ptr
 	wrapper := hir.NewFunc(mangledName)
