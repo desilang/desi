@@ -220,6 +220,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					lenFunc = "dict_len"
 				} else if _, ok := argT.(*types.Set); ok {
 					lenFunc = "set_len"
+				} else if tupT, ok := argT.(*types.Tuple); ok {
+					// Tuple length is compile-time known - return constant directly
+					return hir.ConstInt{Text: fmt.Sprintf("%d", len(tupT.Elems)), Type: "i32"}
 				} else if cls, ok := argT.(*types.Class); ok {
 					// Check for __len__
 					if _, found := cls.Dunders["__len__"]; found {

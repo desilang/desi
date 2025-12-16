@@ -1,8 +1,7 @@
-# EXPECTED: COMPILE_ERROR
-# expect: compile_error
-# reason: Comprehension with bool() filter has type issue
+# Test: List comprehension with range
+# This test verifies list comprehensions work with explicit type annotation
 
 def main() -> int:
-	let items = [x for x in range(0, 3)]
+	let items: list[int] = [x for x in range(0, 3)]
 	print("done")
 	0

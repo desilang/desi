@@ -512,10 +512,16 @@ func collectLenNoLengthDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 			if t == nil {
 				continue
 			}
-			// Allow only str in this phase. Later: list[T], dict[K,V], set[T], tuple[...]
-			if !types.Equal(t, types.Str) {
-				out = append(out, diagAt("DCO0001", id.Span, "type has no length"))
+			// Allow str, list, dict, set, tuple
+			switch t.(type) {
+			case *types.Tuple, *types.List, *types.Dict, *types.Set:
+				// These types support len()
+				continue
 			}
+			if types.Equal(t, types.Str) {
+				continue
+			}
+			out = append(out, diagAt("DCO0001", id.Span, "type has no length"))
 		}
 	}
 	for _, d := range mod.Decls {
