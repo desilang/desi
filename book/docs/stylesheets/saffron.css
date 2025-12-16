@@ -1,0 +1,48 @@
+/* Saffron/Bhagwa Theme Colors
+ * Representing Sanatan Dharma - the sacred color of Lord Rama's exile
+ */
+
+:root {
+  /* Primary saffron colors */
+  --md-primary-fg-color: #FF6B35;
+  --md-primary-fg-color--light: #FF8F5E;
+  --md-primary-fg-color--dark: #E85A2A;
+  
+  /* Accent colors */
+  --md-accent-fg-color: #FF9800;
+  --md-accent-fg-color--transparent: rgba(255, 152, 0, 0.1);
+}
+
+/* Dark mode adjustments */
+[data-md-color-scheme="slate"] {
+  --md-primary-fg-color: #FF7043;
+  --md-primary-fg-color--light: #FF8A65;
+  --md-primary-fg-color--dark: #F4511E;
+}
+
+/* Code block styling */
+.highlight {
+  background: var(--md-code-bg-color);
+  border-left: 3px solid var(--md-primary-fg-color);
+}
+
+/* Admonition styling with saffron accents */
+.md-typeset .admonition.note,
+.md-typeset details.note {
+  border-color: var(--md-primary-fg-color);
+}
+
+.md-typeset .admonition.note > .admonition-title,
+.md-typeset details.note > summary {
+  background-color: rgba(255, 107, 53, 0.1);
+}
+
+/* Tab styling */
+.md-typeset .tabbed-labels > label:hover {
+  color: var(--md-primary-fg-color);
+}
+
+/* Search highlight */
+.md-search__input::placeholder {
+  color: rgba(255, 107, 53, 0.7);
+}
