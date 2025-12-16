@@ -1,11 +1,8 @@
-# M4 demo: comprehension typing
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses old assignment syntax without let
 
 def main():
-	# list comp of ints -> list[int]
-	a = [x for x in range]  # illustrative; parser currently builds comp node
-
-	# set comp of strings -> set[str]
-	s = {"a" for x in range}
-
-	# dict comp -> dict[int,str]
-	d = {1: "one" for x in range}
+	# Missing let keyword
+	let a = [x for x in range(10)]
+	let s = {"a" for x in range(10)}

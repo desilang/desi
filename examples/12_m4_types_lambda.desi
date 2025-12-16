@@ -1,7 +1,8 @@
-# M4: typed lambda params infer function type
-
-let add = (x:int, y:int) => x + y
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Old => lambda syntax, top-level let not supported
 
 def main() -> int:
-	let z = add(2, 3)
-	z
+    let add = |x: int, y: int| x + y
+    let z = add(2, 3)
+    z

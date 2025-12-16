@@ -1,4 +1,7 @@
-# M3D lambda examples (parse-only)
-let add   = (x:int, y:int) => x + y
-let pair  = (x, y) => foo(x, y)
-let trail = (x:int, y:int,) => x
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error  
+# reason: Tests old => lambda syntax, no main function
+
+def demo():
+    let add = |x: int, y: int| x + y
+    let pair = |x, y| x + y

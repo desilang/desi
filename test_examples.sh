@@ -1,5 +1,10 @@
 #!/bin/bash
 # Test all .desi example files
+# Usage: ./test_examples.sh [start] or ./test_examples.sh [start,end]
+#   Examples:
+#     ./test_examples.sh        # Run all tests
+#     ./test_examples.sh 26     # Run tests from 26 to end
+#     ./test_examples.sh 0,25   # Run tests from 0 to 25 (inclusive)
 # Exit codes:
 #   0 - All tests passed
 #   1 - Some tests failed
@@ -12,13 +17,26 @@ mkdir -p "$BUILD_DIR"
 # Expected failure tests: Add "# EXPECTED: COMPILE_ERROR" or "# EXPECTED: RUNTIME_ERROR"
 # as the first line of the test file
 
-START_NUM=${1:-0}
+# Parse arguments - support comma syntax for range
+if [[ -z "$1" ]]; then
+    START_NUM=0
+    END_NUM=9999
+elif [[ "$1" == *","* ]]; then
+    # Comma syntax: 0,25
+    START_NUM=$(echo "$1" | cut -d',' -f1)
+    END_NUM=$(echo "$1" | cut -d',' -f2)
+else
+    # Single number: start from there, go to end
+    START_NUM=$1
+    END_NUM=${2:-9999}
+fi
+
 FAILED_TESTS=()
 PASSED_COUNT=0
 TOTAL_COUNT=0
 
 echo "=========================================="
-echo "Running Desi Example Tests (from $START_NUM)"
+echo "Running Desi Example Tests ($START_NUM to $END_NUM)"
 echo "=========================================="
 echo ""
 
@@ -42,8 +60,11 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     num=$(basename "$f" | grep -o '^[0-9]*' | sed 's/^0*//')
     if [[ -z "$num" ]]; then num=0; fi
     
-    # Skip if below start number
+    # Skip if below start number or above end number
     if [[ $num -lt $START_NUM ]]; then
+        continue
+    fi
+    if [[ $num -gt $END_NUM ]]; then
         continue
     fi
     

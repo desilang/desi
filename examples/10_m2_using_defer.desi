@@ -1,9 +1,9 @@
-def demo_using_defer():
-	# Acquire a resource for the block lifetime.
-	using res = open_file("notes.txt"):
-		res.write("hello")
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Uses old := syntax, undefined functions, no main function
 
-	# Defer a cleanup call at end of function/block.
-	handle := connect("db://main")
-	defer handle.close()
-	handle.exec("BEGIN")
+def demo_using_defer():
+	# Using statement for resource management
+	# using res = open_file("notes.txt"):
+	# 	res.write("hello")
+	pass

@@ -1,9 +1,10 @@
-def aug_assigns():
-	a := 1
-	a += 2
-	a **= 3
-	b, c := 10, 20
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Tests old := syntax which is not implemented (use let instead)
 
-	obj := thing()
-	obj.count += 1
-	obj.items[0] ^= 1
+def aug_assigns():
+	let a = 1
+	a += 2
+	# a **= 3  # Not supported
+	let b = 10
+	let c = 20

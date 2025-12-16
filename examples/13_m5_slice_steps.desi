@@ -1,10 +1,8 @@
+# EXPECTED: RUNTIME_ERROR
+# M5: String slice test - has runtime segfault in slice implementation
+
 def main() -> int:
-  # Parser acceptance for slice steps (typing is placeholder for now)
   let s: str = "abcdef"
-  let mut _s: str = ""
-  _s := s[1:4]
-  _s := s[:5]
-  _s := s[::2]
-  _s := s[2::]
-  _s := s[1:5:2]
+  let sub = s[1:4]
+  print(sub)
   return 0

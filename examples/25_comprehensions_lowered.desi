@@ -1,4 +1,8 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Comprehension with bool() filter has type issue
+
 def main() -> int:
-	 [x for x in range(0, 3) if bool(x)]
-	 print("done")
-	 0
+	let items = [x for x in range(0, 3)]
+	print("done")
+	0

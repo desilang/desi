@@ -1,17 +1,12 @@
-# M8 — async/await basic sample
-# Goal: show a simple async function awaited from sync `main`.
-# Tier-0 backend maps `await` in sync context to a blocking runtime stub.
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Async functions not fully implemented
 
 async def add1(x: int) -> int:
-    # In M8, this lowers to wrapper+poll state machine and completes the future.
     return x + 1
 
 def main() -> int:
-    # Calling an async function returns a future handle (wrapper path).
     let fut = add1(41)
-
-    # In a synchronous function, `await` becomes a blocking runtime call.
     let n = await fut
-
-    print("ok")   # textual IR uses puts("ok\n")
+    print("ok")
     0

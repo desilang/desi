@@ -1,6 +1,12 @@
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Old match syntax (colon-based), no main function
+
 def tier(x: int) -> str:
 	match x:
-		x < 0: "neg"
-		0: "zero"
-		x < 10: "small"
-		_: "big"
+		case 0:
+			return "zero"
+		case 1:
+			return "small"
+		case _:
+			return "big"

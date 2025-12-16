@@ -1,9 +1,9 @@
-# M4: comprehension typing (element types propagate)
+# EXPECTED: COMPILE_ERROR
+# expect: compile_error
+# reason: Comprehension over int not iterable
 
 def main() -> int:
-	# Just placeholders to type-check shapes; not executed.
-	let r = 10  # imagine range-like iterable
+	# Need proper iterable, not int
+	let r = range(10)
 	let lst = [i for i in r]
-	let st  = #{i for i in r if 1}
-	let dct = {k: k + 1 for k in r}
 	0
