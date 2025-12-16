@@ -17,6 +17,26 @@ The Desi Book is built with:
 
 ## Prerequisites
 
+### Optional: Create Conda Environment
+
+To avoid installing dependencies in your main Python environment, create a dedicated conda environment:
+
+```bash
+# Create environment
+conda create -n desi-docs python=3.11 -y
+
+# Activate environment
+conda activate desi-docs
+```
+
+!!! tip "Remember to activate"
+Always activate the environment before working on docs:
+```bash
+conda activate desi-docs
+```
+
+### Install Dependencies
+
 ```bash
 pip install mkdocs-material mike
 ```
