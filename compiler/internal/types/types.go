@@ -95,7 +95,10 @@ var (
 type List struct{ Elem T }
 type Set struct{ Elem T }
 type Dict struct{ Key, Val T }
-type Tuple struct{ Elems []T }
+type Tuple struct {
+	Elems []T
+	Names []string // nil for positional tuples, populated for named tuples
+}
 type Future struct{ Elem T }
 type Func struct {
 	Name       string      // Optional name (for debugging/diagnostics)
@@ -263,6 +266,31 @@ func TupleOf(elems ...T) *Tuple {
 	copy(cp, elems)
 	return &Tuple{Elems: cp}
 }
+
+// NamedTupleOf creates a named tuple with field names
+func NamedTupleOf(names []string, elems []T) *Tuple {
+	cpElems := make([]T, len(elems))
+	copy(cpElems, elems)
+	cpNames := make([]string, len(names))
+	copy(cpNames, names)
+	return &Tuple{Elems: cpElems, Names: cpNames}
+}
+
+// IsNamed returns true if this tuple has named fields
+func (t *Tuple) IsNamed() bool {
+	return len(t.Names) > 0
+}
+
+// FieldIndex returns the index of a named field, or -1 if not found
+func (t *Tuple) FieldIndex(name string) int {
+	for i, n := range t.Names {
+		if n == name {
+			return i
+		}
+	}
+	return -1
+}
+
 func FutureOf(elem T) *Future { return &Future{Elem: elem} }
 func FuncOf(params []T, ret T, variadic bool) *Func {
 	cp := make([]T, len(params))

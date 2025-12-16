@@ -472,6 +472,48 @@ func (p *Parser) parsePrimary() ast.Expr {
 			}
 		*/
 
+		// Detect named tuple: (name: value, ...)
+		// Check if first element is IDENT followed by COLON (not type annotation for lambda)
+		isNamed := false
+		if p.cur.Tok == token.IDENT && p.peek.Tok == token.COLON {
+			// Could be named tuple - look ahead to verify it's not a lambda param
+			// In named tuple: (x: 10, y: 20) - after IDENT:, we get an expression
+			// Not a lambda because parenLambdaAhead() already returned false
+			isNamed = true
+		}
+
+		if isNamed {
+			// Parse named tuple: (name: value, ...)
+			var names []string
+			var elems []ast.Expr
+			for p.cur.Tok != token.RPAREN && p.cur.Tok != token.EOF {
+				if p.cur.Tok != token.IDENT {
+					p.errExpected(spanPos(p.file, p.cur), "field name")
+					break
+				}
+				name := p.cur.Lexeme
+				p.next() // consume name
+
+				if !p.expect(token.COLON, ":") {
+					break
+				}
+
+				value := p.parseExpr()
+				names = append(names, name)
+				elems = append(elems, value)
+
+				if p.cur.Tok == token.COMMA {
+					p.next()
+				} else {
+					break
+				}
+			}
+			end := spanPos(p.file, p.cur)
+			p.expectClose(token.RPAREN, ")", open)
+			return &ast.TupleLit{Elems: elems, Names: names, Span: ast.JoinSpan(open, end)}
+		}
+
+		// Regular expression or positional tuple
 		e := p.parseExpr()
 
 		// Check for comma to distinguish tuple from paren expr
