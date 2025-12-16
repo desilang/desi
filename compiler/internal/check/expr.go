@@ -401,6 +401,15 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.FieldExpr:
 		return c.typFieldExpr(x)
 	case *ast.TupleLit:
+		// Desi does not support single-element tuples - just use the value directly
+		if len(x.Elems) == 1 {
+			c.add(diagAt("DTE0050", x.Span, "single-element tuples are not supported; use the value directly"))
+			// Still return the inner type so type checking can continue
+			innerType := c.typ(x.Elems[0])
+			c.info.Types[e] = innerType
+			return innerType
+		}
+
 		var elems []types.T
 		for _, el := range x.Elems {
 			elems = append(elems, c.typ(el))

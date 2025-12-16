@@ -372,6 +372,22 @@
       "title": "incompatible enum assignment",
       "help": "assign a value of the same enum type/variant"
     },
+    "single_element_tuple": {
+      "id": "DTE0050",
+      "title": "single-element tuples are not supported",
+      "help": "use the value directly instead of wrapping it in a tuple; single-element tuples add no value",
+      "suggestions": [
+        {
+          "where": {
+            "kind": "at",
+            "role": "primary"
+          },
+          "label": "remove tuple wrapper",
+          "message": "Use the value directly instead of (value,)",
+          "applicability": "machine-applicable"
+        }
+      ]
+    },
     "defaults_overload_inconsistent": {
       "id": "DDF0005",
       "title": "inconsistent default parameters across overloads",

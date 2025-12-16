@@ -11,11 +11,10 @@ def main():
     print(tup2[0])
     print(tup2[1])
 
-    # 3. Single Element Tuple
-    let tup3: tuple[int] = (42,)
-    print(tup3[0])
+    # Note: Single-element tuples are not supported (use the value directly)
+    # This is by design - see DTE0050 error
 
-    # 4. Explicit Type Annotation
+    # 3. Explicit Type Annotation
     let tup4: tuple[int, int] = (100, 200)
     print(tup4[0])
     print(tup4[1])
