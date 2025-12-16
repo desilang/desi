@@ -82,6 +82,7 @@ nav:
     - Types: language/types.md
     - Control Flow: language/control-flow.md
     - Functions: language/functions.md
+    - Lambda Functions: language/lambdas.md
     - Classes: language/classes.md
     - Generics: language/generics.md
     - Error Handling: language/error-handling.md
