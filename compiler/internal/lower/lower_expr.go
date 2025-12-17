@@ -688,6 +688,39 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			fields = s.Fields
 		} else if c, ok := baseType.(*types.Class); ok {
 			fields = c.Fields
+		} else if tupType, ok := baseType.(*types.Tuple); ok {
+			// Tuple index access: t.0, t.1, etc.
+			idx, err := strconv.Atoi(name)
+			if err == nil && idx >= 0 && idx < len(tupType.Elems) {
+				elemType := tupType.Elems[idx]
+				llvmElemType := lowerType(elemType)
+
+				// Build struct type for GEP (all elements are ptr due to boxing)
+				var elemTypes []string
+				for range tupType.Elems {
+					elemTypes = append(elemTypes, "ptr")
+				}
+				structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+				// Get pointer to element
+				elemPtr := ls.b.FreshTemp("tuple_elem_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    structType,
+					Base:    base,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", idx)}},
+					Dst:     elemPtr,
+				})
+
+				// Load boxed pointer
+				boxed := ls.b.FreshTemp("tuple_elem_boxed")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
+
+				// Unbox: load actual value from boxed pointer
+				val := ls.b.FreshTemp("tuple_elem_val")
+				ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: val})
+
+				return val
+			}
 		} else if g, ok := baseType.(*types.Generic); ok {
 			if s, ok := g.Base.(*types.Struct); ok {
 				// Structs use type erasure - keep original field types
@@ -1015,6 +1048,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle tuple equality: compare elements, not pointers
+		if (x.Op == "==" || x.Op == "!=") && ls.info != nil {
+			if tupType, ok := ls.info.Types[x.Lhs].(*types.Tuple); ok {
+				return ls.lowerTupleComparison(lhs, rhs, tupType, x.Op == "!=")
+			}
+		}
+
 		// Determine result type based on operation
 		var resultType string
 		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" {
@@ -1065,6 +1105,106 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Print-through placeholder for anything not wired yet.
 		return hir.Var{Name: fmt.Sprintf("<expr:%T>", e)}
 	}
+}
+
+// lowerTupleComparison generates element-wise comparison for tuples.
+// For (a, b) == (c, d), generates: a == c && b == d
+// If negate is true, returns the negation for != operator.
+func (ls *lowerState) lowerTupleComparison(lhs, rhs hir.Value, tupType *types.Tuple, negate bool) hir.Value {
+	numElems := len(tupType.Elems)
+	if numElems == 0 {
+		// Empty tuples are always equal
+		if negate {
+			return hir.ConstBool{Value: false}
+		}
+		return hir.ConstBool{Value: true}
+	}
+
+	// Build struct type for GEP (all elements are ptr due to boxing)
+	var elemTypes []string
+	for range tupType.Elems {
+		elemTypes = append(elemTypes, "ptr")
+	}
+	structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+	// Start with true, AND each element comparison
+	result := hir.ConstBool{Value: true}
+	var lastResult hir.Value = result
+
+	for i, elemType := range tupType.Elems {
+		// Get element pointer from LHS tuple
+		lhsElemPtr := ls.b.FreshTemp(fmt.Sprintf("lhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    structType,
+			Base:    lhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     lhsElemPtr,
+		})
+
+		// Load boxed pointer
+		lhsBoxed := ls.b.FreshTemp(fmt.Sprintf("lhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: lhsElemPtr, Dst: lhsBoxed})
+
+		// Unbox: load actual value from boxed pointer
+		llvmType := lowerType(elemType)
+		lhsVal := ls.b.FreshTemp(fmt.Sprintf("lhs_elem%d", i))
+		ls.b.Emit(&hir.Load{Type: llvmType, Src: lhsBoxed, Dst: lhsVal})
+
+		// Get element from RHS tuple
+		rhsElemPtr := ls.b.FreshTemp(fmt.Sprintf("rhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    structType,
+			Base:    rhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     rhsElemPtr,
+		})
+
+		rhsBoxed := ls.b.FreshTemp(fmt.Sprintf("rhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: rhsElemPtr, Dst: rhsBoxed})
+
+		rhsVal := ls.b.FreshTemp(fmt.Sprintf("rhs_elem%d", i))
+		ls.b.Emit(&hir.Load{Type: llvmType, Src: rhsBoxed, Dst: rhsVal})
+
+		// Compare elements
+		cmp := ls.b.FreshTemp(fmt.Sprintf("cmp%d", i))
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  lhsVal,
+			RHS:  rhsVal,
+			Dst:  cmp,
+			Type: "i1",
+		})
+
+		// AND with previous result
+		if i == 0 {
+			lastResult = cmp
+		} else {
+			andResult := ls.b.FreshTemp(fmt.Sprintf("and%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "and",
+				LHS:  lastResult,
+				RHS:  cmp,
+				Dst:  andResult,
+				Type: "i1",
+			})
+			lastResult = andResult
+		}
+	}
+
+	// Negate if != operator
+	if negate {
+		negResult := ls.b.FreshTemp("tuple_neq")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  lastResult,
+			RHS:  hir.ConstBool{Value: false},
+			Dst:  negResult,
+			Type: "i1",
+		})
+		return negResult
+	}
+
+	return lastResult
 }
 
 // lowerListComp builds HIR for list comprehensions by expanding them to loops:

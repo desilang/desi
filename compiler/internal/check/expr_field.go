@@ -1,6 +1,7 @@
 package check
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -98,6 +99,24 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 	t := c.typ(x.X)
 	if t == nil {
 		return nil
+	}
+
+	// Handle tuple index access: t.0, t.1, etc.
+	if tupType, ok := t.(*types.Tuple); ok {
+		fieldName := x.Name.Name
+		// Check if field name is a valid integer index
+		idx, err := strconv.Atoi(fieldName)
+		if err != nil {
+			c.add(diagAt("DTE0006", x.Name.Span, "tuple field must be an integer index"))
+			return nil
+		}
+		if idx < 0 || idx >= len(tupType.Elems) {
+			c.add(diagAt("DTE0007", x.Name.Span, "tuple index out of bounds"))
+			return nil
+		}
+		res := tupType.Elems[idx]
+		c.info.Types[x] = res
+		return res
 	}
 
 	// Handle Generic types (e.g. Option[int].Some or Box[int].val)

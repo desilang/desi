@@ -316,20 +316,51 @@ func (p *Parser) parsePostfix() ast.Expr {
 		case token.DOT:
 			dot := p.cur
 			p.next()
-			if p.cur.Tok != token.IDENT {
-				p.errExpected(spanPos(p.file, p.cur), "identifier")
+			// Support both .name (field access) and .0/.1 (tuple index)
+			if p.cur.Tok == token.INT_DEC {
+				// Tuple index access: t.0, t.1, etc.
+				idx := ast.Ident{Name: p.cur.Lexeme, Span: joinTok(p.file, dot, p.cur)}
+				e = &ast.FieldExpr{X: e, Name: idx, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
+				p.next()
+			} else if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "identifier or integer index")
 				return e
-
+			} else {
+				name := ast.Ident{Name: p.cur.Lexeme, Span: joinTok(p.file, dot, p.cur)}
+				e = &ast.FieldExpr{X: e, Name: name, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
+				p.next()
 			}
-			name := ast.Ident{Name: p.cur.Lexeme, Span: joinTok(p.file, dot, p.cur)}
-			e = &ast.FieldExpr{X: e, Name: name, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
-			p.next()
 
 		case token.QUESTION:
 			// Postfix ? operator for error propagation (Result/Option)
 			qSpan := spanPos(p.file, p.cur)
 			p.next()
 			e = &ast.TryExpr{X: e, Span: ast.JoinSpan(e.SpanOf(), qSpan)}
+
+		case token.FLOAT:
+			// Handle tuple index access: scanner emits ".0" as FLOAT, but after
+			// an expression it should be treated as tuple index access (t.0)
+			lex := p.cur.Lexeme
+			if len(lex) > 1 && lex[0] == '.' {
+				// Check if the rest is all digits
+				suffix := lex[1:]
+				allDigits := true
+				for _, c := range suffix {
+					if c < '0' || c > '9' {
+						allDigits = false
+						break
+					}
+				}
+				if allDigits {
+					// Treat as tuple index access
+					idx := ast.Ident{Name: suffix, Span: spanPos(p.file, p.cur)}
+					e = &ast.FieldExpr{X: e, Name: idx, Span: ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur))}
+					p.next()
+					continue
+				}
+			}
+			// Not a tuple index, done with postfix
+			return e
 
 		default:
 			return e
