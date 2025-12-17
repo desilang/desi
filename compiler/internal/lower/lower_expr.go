@@ -1075,6 +1075,15 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle tuple concatenation: t1 + t2 => combined tuple
+		if x.Op == "+" && ls.info != nil {
+			ltup, lok := ls.info.Types[x.Lhs].(*types.Tuple)
+			rtup, rok := ls.info.Types[x.Rhs].(*types.Tuple)
+			if lok && rok {
+				return ls.lowerTupleConcatenation(lhs, rhs, ltup, rtup)
+			}
+		}
+
 		// Determine result type based on operation
 		var resultType string
 		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" {
@@ -1225,6 +1234,108 @@ func (ls *lowerState) lowerTupleComparison(lhs, rhs hir.Value, tupType *types.Tu
 	}
 
 	return lastResult
+}
+
+// lowerTupleConcatenation generates code for tuple1 + tuple2.
+// Extracts all elements from both tuples and builds a new combined tuple.
+func (ls *lowerState) lowerTupleConcatenation(lhs, rhs hir.Value, ltup, rtup *types.Tuple) hir.Value {
+	llen := len(ltup.Elems)
+	rlen := len(rtup.Elems)
+	totalLen := llen + rlen
+
+	if totalLen == 0 {
+		// Empty tuple concatenation - allocate empty struct
+		dst := ls.b.FreshTemp("concat_tuple")
+		ls.b.Emit(&hir.Alloca{
+			Dst:  dst,
+			Type: "{}",
+		})
+		return dst
+	}
+
+	// Build struct type for result (all elements are ptr due to boxing)
+	var resultElemTypes []string
+	for i := 0; i < totalLen; i++ {
+		resultElemTypes = append(resultElemTypes, "ptr")
+	}
+	resultStructType := "{" + strings.Join(resultElemTypes, ", ") + "}"
+
+	// Allocate result tuple
+	dst := ls.b.FreshTemp("concat_tuple")
+	ls.b.Emit(&hir.Alloca{
+		Dst:  dst,
+		Type: resultStructType,
+	})
+
+	// Build struct types for source tuples
+	var lElemTypes, rElemTypes []string
+	for range ltup.Elems {
+		lElemTypes = append(lElemTypes, "ptr")
+	}
+	for range rtup.Elems {
+		rElemTypes = append(rElemTypes, "ptr")
+	}
+	lStructType := "{" + strings.Join(lElemTypes, ", ") + "}"
+	rStructType := "{" + strings.Join(rElemTypes, ", ") + "}"
+
+	// Copy elements from left tuple
+	for i := 0; i < llen; i++ {
+		// Get element pointer from source
+		srcElemPtr := ls.b.FreshTemp(fmt.Sprintf("lhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    lStructType,
+			Base:    lhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     srcElemPtr,
+		})
+
+		// Load boxed pointer
+		boxedPtr := ls.b.FreshTemp(fmt.Sprintf("lhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcElemPtr, Dst: boxedPtr})
+
+		// Get destination element pointer
+		dstElemPtr := ls.b.FreshTemp(fmt.Sprintf("concat_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    resultStructType,
+			Base:    dst,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     dstElemPtr,
+		})
+
+		// Store boxed pointer into result
+		ls.b.Emit(&hir.Store{Dst: dstElemPtr, Val: boxedPtr})
+	}
+
+	// Copy elements from right tuple
+	for i := 0; i < rlen; i++ {
+		// Get element pointer from source
+		srcElemPtr := ls.b.FreshTemp(fmt.Sprintf("rhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    rStructType,
+			Base:    rhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     srcElemPtr,
+		})
+
+		// Load boxed pointer
+		boxedPtr := ls.b.FreshTemp(fmt.Sprintf("rhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcElemPtr, Dst: boxedPtr})
+
+		// Get destination element pointer (offset by llen)
+		dstIdx := llen + i
+		dstElemPtr := ls.b.FreshTemp(fmt.Sprintf("concat_elem%d_ptr", dstIdx))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    resultStructType,
+			Base:    dst,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", dstIdx)}},
+			Dst:     dstElemPtr,
+		})
+
+		// Store boxed pointer into result
+		ls.b.Emit(&hir.Store{Dst: dstElemPtr, Val: boxedPtr})
+	}
+
+	return dst
 }
 
 // lowerListComp builds HIR for list comprehensions by expanding them to loops:
