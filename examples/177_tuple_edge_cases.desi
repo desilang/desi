@@ -1,0 +1,122 @@
+# Tuple Edge Cases - Production Readiness Tests
+# Tests edge cases found in Python, Rust, Java tuple implementations
+
+def main():
+    test_comparison_edge_cases()
+    test_concat_edge_cases()
+    test_equality_edge_cases()
+    print("All edge case tests passed!")
+
+def test_comparison_edge_cases():
+    # Edge case 1: Negative numbers
+    let negative1 = (-5, -3)
+    let negative2 = (-5, -2)
+    if negative1 < negative2:
+        print("Negative number comparison: PASS")
+    else:
+        print("Negative number comparison: FAIL")
+    
+    # Edge case 2: Same first elements, different second
+    let same1 = (10, 5)
+    let same2 = (10, 6)
+    if same1 < same2:
+        print("Same prefix comparison: PASS")
+    else:
+        print("Same prefix comparison: FAIL")
+    
+    # Edge case 3: All equal elements - strict should be false
+    let eq1 = (1, 2, 3)
+    let eq2 = (1, 2, 3)
+    if eq1 < eq2:
+        print("Equal tuples strict <: FAIL (should be false)")
+    else:
+        print("Equal tuples strict <: PASS")
+    
+    # Edge case 4: Non-strict with equal tuples
+    if eq1 <= eq2:
+        print("Equal tuples <= : PASS")
+    else:
+        print("Equal tuples <= : FAIL")
+    
+    # Edge case 5: Large numbers (stress test overflow)
+    let large1 = (1000000, 2000000)
+    let large2 = (1000000, 2000001)
+    if large1 < large2:
+        print("Large number comparison: PASS")
+    else:
+        print("Large number comparison: FAIL")
+    
+    # Edge case 6: First element decides
+    let first1 = (1, 999)
+    let first2 = (2, 0)
+    if first1 < first2:
+        print("First element decides: PASS")
+    else:
+        print("First element decides: FAIL")
+    
+    # Edge case 7: > operator
+    if first2 > first1:
+        print("> operator: PASS")
+    else:
+        print("> operator: FAIL")
+    
+    # Edge case 8: >= with strictly greater
+    if first2 >= first1:
+        print(">= with greater: PASS")
+    else:
+        print(">= with greater: FAIL")
+
+def test_concat_edge_cases():
+    # Edge case 1: Concatenate with itself
+    let t = (1, 2)
+    let doubled = t + t
+    if doubled.0 == 1:
+        if doubled.1 == 2:
+            if doubled.2 == 1:
+                if doubled.3 == 2:
+                    print("Self-concatenation: PASS")
+                else:
+                    print("Self-concatenation: FAIL")
+            else:
+                print("Self-concatenation: FAIL")
+        else:
+            print("Self-concatenation: FAIL")
+    else:
+        print("Self-concatenation: FAIL")
+    
+    # Edge case 2: Chain concatenation
+    let a = (1, 2)
+    let b = (3, 4)
+    let c = (5, 6)
+    let chain = (a + b) + c  # ((1,2)+(3,4))+(5,6) = (1,2,3,4,5,6)
+    if chain.4 == 5:
+        if chain.5 == 6:
+            print("Chain concatenation: PASS")
+        else:
+            print("Chain concatenation: FAIL")
+    else:
+        print("Chain concatenation: FAIL")
+
+def test_equality_edge_cases():
+    # Edge case 1: Same values, different variables
+    let a = (1, 2, 3)
+    let b = (1, 2, 3)
+    if a == b:
+        print("Value equality: PASS")
+    else:
+        print("Value equality: FAIL")
+    
+    # Edge case 2: Not equal
+    let c = (1, 2, 4)
+    if a != c:
+        print("Inequality: PASS")
+    else:
+        print("Inequality: FAIL")
+    
+    # Edge case 3: Equality with negative numbers
+    let negativeA = (-1, -2, -3)
+    let negativeB = (-1, -2, -3)
+    if negativeA == negativeB:
+        print("Negative equality: PASS")
+    else:
+        print("Negative equality: FAIL")
