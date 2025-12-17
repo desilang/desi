@@ -603,6 +603,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, valOp)
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
+				} else if valTy == "ptr" && x.Type == "i1" {
+					// Special case: ptr to bool requires ptrtoint then trunc
+					tmpName := x.Dst.Name + "_i64"
+					wprintf(&m.funcs, "  %s = ptrtoint ptr %s to i64\n", tmpName, valOp)
+					wprintf(&m.funcs, "  %s = trunc i64 %s to i1\n", x.Dst.Name, tmpName)
+					m.tempTypes[x.Dst.Name] = "i1"
+					continue // Skip normal emit below
 				}
 				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type

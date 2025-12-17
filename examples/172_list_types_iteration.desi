@@ -1,0 +1,99 @@
+# Comprehensive List/Zip/Iteration Tests
+# Tests iteration with all supported types: int, float, bool, str, custom struct
+
+struct Point:
+    x: int
+    y: int
+
+struct Person:
+    name: str
+    age: int
+
+def main():
+    test_int_list()
+    test_float_list()
+    test_bool_list()
+    test_str_list()
+    test_struct_list()
+    test_zip_same_types()
+    test_zip_different_types()
+    test_zip_with_structs()
+    print("All comprehensive tests passed!")
+
+def test_int_list():
+    let nums: list[int] = [10, 20, 30, 40]
+    print("Int iteration:")
+    for n: int in nums:
+        print(n)
+    print("int list: PASS")
+
+def test_float_list():
+    # Desi 'float' maps to LLVM double (64-bit floating point)
+    let vals: list[float] = [1.5, 2.5, 3.0]
+    print("Float iteration:")
+    for v: float in vals:
+        print(v)
+    print("float list: PASS")
+
+def test_bool_list():
+    let flags: list[bool] = [true, false, true]
+    print("Bool iteration:")
+    for b: bool in flags:
+        if b:
+            print("true")
+        else:
+            print("false")
+    print("bool list: PASS")
+
+def test_str_list():
+    let names: list[str] = ["alice", "bob", "carol"]
+    print("String iteration:")
+    for name: str in names:
+        print(name)
+    print("str list: PASS")
+
+def test_struct_list():
+    let p1: Point = Point(x=1, y=10)
+    let p2: Point = Point(x=2, y=20)
+    let p3: Point = Point(x=3, y=30)
+    let points: list[Point] = [p1, p2, p3]
+    
+    print("Struct iteration:")
+    for p: Point in points:
+        print(p.x)
+        print(p.y)
+    print("struct list: PASS")
+
+def test_zip_same_types():
+    let a: list[int] = [1, 2, 3]
+    let b: list[int] = [100, 200, 300]
+    
+    print("Zip same types:")
+    for x: int, y: int in zip(a, b):
+        print(x)
+        print(y)
+    print("zip same: PASS")
+
+def test_zip_different_types():
+    # Zip with different element types (int + float)
+    let ints: list[int] = [1, 2, 3]
+    let floats: list[float] = [1.5, 2.5, 3.5, 4.5]
+    
+    print("Zip different types (stops at shorter):")
+    for i: int, f: float in zip(ints, floats):
+        print(i)
+        print(f)
+    print("zip hetero: PASS")
+
+def test_zip_with_structs():
+    let alice: Person = Person(name="Alice", age=30)
+    let bob: Person = Person(name="Bob", age=25)
+    
+    let people: list[Person] = [alice, bob]
+    let scores: list[int] = [95, 87]
+    
+    print("Zip with structs:")
+    for p: Person, s: int in zip(people, scores):
+        print(p.name)
+        print(s)
+    print("zip struct: PASS")
