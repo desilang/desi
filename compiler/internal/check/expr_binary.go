@@ -468,6 +468,50 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		c.add(diagAt("DTE0004", x.Span, "logical operators require bool operands"))
 		return nil
 
+	case "in":
+		// Membership operator: x in collection
+		lt := c.typ(x.Lhs)
+		rt := c.typ(x.Rhs)
+
+		// str in str -> bool (substring check)
+		if lt != nil && rt != nil && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
+			c.info.Types[x] = types.Bool
+			return types.Bool
+		}
+
+		// x in tuple (homogeneous tuple only)
+		if lt != nil && rt != nil {
+			if tupT, ok := rt.(*types.Tuple); ok {
+				if len(tupT.Elems) > 0 {
+					// Check if tuple is homogeneous and element type matches LHS
+					firstType := tupT.Elems[0]
+					allSame := true
+					for _, e := range tupT.Elems {
+						if !types.Equal(e, firstType) {
+							allSame = false
+							break
+						}
+					}
+					if allSame && types.Equal(lt, firstType) {
+						c.info.Types[x] = types.Bool
+						return types.Bool
+					}
+					if !allSame {
+						c.add(diagAt("DTE0004", x.Span, "'in' requires homogeneous tuple"))
+						return nil
+					}
+					c.add(diagAt("DTE0004", x.Span, "element type '"+lt.String()+"' doesn't match tuple element type '"+firstType.String()+"'"))
+					return nil
+				}
+				// Empty tuple: always returns false but is valid
+				c.info.Types[x] = types.Bool
+				return types.Bool
+			}
+		}
+
+		c.add(diagAt("DTE0004", x.Span, "unsupported 'in' operands"))
+		return nil
+
 	default:
 		return nil
 	}

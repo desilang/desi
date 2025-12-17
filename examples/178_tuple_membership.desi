@@ -1,0 +1,55 @@
+# Test tuple membership operator: x in tuple
+
+def main() -> int:
+    # Basic membership tests
+    let nums = (1, 2, 3, 4, 5)
+    
+    # Test finding elements
+    if 3 in nums:
+        print("3 in (1,2,3,4,5): PASS")
+    else:
+        print("FAIL: 3 should be in tuple")
+    
+    if 1 in nums:
+        print("1 in (1,2,3,4,5): PASS")
+    else:
+        print("FAIL: 1 should be in tuple")
+    
+    if 5 in nums:
+        print("5 in (1,2,3,4,5): PASS")
+    else:
+        print("FAIL: 5 should be in tuple")
+    
+    # Test not finding elements
+    if 10 in nums:
+        print("FAIL: 10 should NOT be in tuple")
+    else:
+        print("10 not in (1,2,3,4,5): PASS")
+    
+    if 0 in nums:
+        print("FAIL: 0 should NOT be in tuple")
+    else:
+        print("0 not in (1,2,3,4,5): PASS")
+    
+    # Test with string tuple
+    let words = ("hello", "world", "desi")
+    
+    if "world" in words:
+        print("'world' in words: PASS")
+    else:
+        print("FAIL: 'world' should be in tuple")
+    
+    if "python" in words:
+        print("FAIL: 'python' should NOT be in tuple")
+    else:
+        print("'python' not in words: PASS")
+    
+    # Test two-element tuple (smallest valid)
+    let pair = (10, 20)
+    if 10 in pair:
+        print("10 in (10, 20): PASS")
+    else:
+        print("FAIL: 10 should be in pair")
+    
+    print("All tuple membership tests passed!")
+    return 0
