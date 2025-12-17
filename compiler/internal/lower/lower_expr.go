@@ -684,6 +684,11 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Unwrap TypeAlias to access underlying type for field access
+		if alias, ok := baseType.(*types.TypeAlias); ok {
+			baseType = alias.Target
+		}
+
 		if s, ok := baseType.(*types.Struct); ok {
 			fields = s.Fields
 		} else if c, ok := baseType.(*types.Class); ok {

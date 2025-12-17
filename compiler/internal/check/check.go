@@ -71,6 +71,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 			c.collectTrait(dd)
 		case *ast.ImplDecl:
 			c.collectImpl(dd)
+		case *ast.TypeAliasDecl:
+			c.collectTypeAlias(dd)
 		}
 	}
 

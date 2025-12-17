@@ -101,6 +101,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return nil
 	}
 
+	// Unwrap TypeAlias to access underlying type for field access
+	if alias, ok := t.(*types.TypeAlias); ok {
+		t = alias.Target
+	}
+
 	// Handle tuple index access: t.0, t.1, etc. or named field access: t.x, t.y
 	if tupType, ok := t.(*types.Tuple); ok {
 		fieldName := x.Name.Name

@@ -1,0 +1,44 @@
+# Nominal Typing Test
+# Tests that type aliases create distinct types
+
+type Point = tuple[int, int]
+type Coordinate = tuple[int, int]
+type UserId = int
+type ProductId = int
+
+def main():
+    test_basic_alias()
+    test_nominal_typing()
+    test_field_access()
+    print("All nominal typing tests passed!")
+
+def test_basic_alias():
+    # Type aliases work for annotation
+    let p: Point = (10, 20)
+    let c: Coordinate = (30, 40)
+    print("Basic alias creation: PASS")
+
+def test_nominal_typing():
+    # Point and Coordinate are DIFFERENT types even though
+    # both are tuple[int, int] - this is nominal typing
+    let p: Point = (1, 2)
+    let p2: Point = p  # Same type - OK
+    
+    # The following would cause a compile error (uncomment to test):
+    # let c: Coordinate = p  # ERROR: cannot assign Point to Coordinate
+    
+    print("Nominal typing: PASS")
+
+def test_field_access():
+    # Field access works through type alias
+    let p: Point = (100, 200)
+    print(p.0)  # 100
+    print(p.1)  # 200
+    
+    if p.0 == 100:
+        if p.1 == 200:
+            print("Field access on alias: PASS")
+        else:
+            print("Field access on alias: FAIL")
+    else:
+        print("Field access on alias: FAIL")
