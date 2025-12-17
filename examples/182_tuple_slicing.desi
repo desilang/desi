@@ -1,0 +1,42 @@
+# Test tuple slicing: t[i:j]
+
+def main() -> int:
+    let t = (10, 20, 30, 40, 50)
+    
+    # Multi-element slices return new tuples
+    let middle = t[1:4]  # (20, 30, 40)
+    if len(middle) == 3:
+        print("t[1:4] => 3 elements: PASS")
+    else:
+        print("FAIL: middle should have 3 elements")
+    
+    # Single-element slice returns the element (no single-element tuple)
+    let single = t[2:3]  # 30
+    if single == 30:
+        print("t[2:3] => 30: PASS")
+    else:
+        print("FAIL: single should be 30")
+    
+    # Slice from start
+    let first_two = t[0:2]  # (10, 20)
+    if len(first_two) == 2:
+        print("t[0:2] => 2 elements: PASS")
+    else:
+        print("FAIL: first_two should have 2 elements")
+    
+    # Slice to end
+    let last_two = t[3:5]  # (40, 50)
+    if len(last_two) == 2:
+        print("t[3:5] => 2 elements: PASS")
+    else:
+        print("FAIL: last_two should have 2 elements")
+    
+    # Destructure sliced tuple
+    let (a, b, c) = middle
+    if a == 20 and c == 40:
+        print("Destructure sliced tuple: PASS")
+    else:
+        print("FAIL: destructure should work")
+    
+    print("All tuple slicing tests passed!")
+    return 0

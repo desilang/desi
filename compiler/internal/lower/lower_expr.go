@@ -228,11 +228,111 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return dst
 
 	case *ast.SliceExpr:
-		// Check if we're slicing a string vs. a list
-		isStr := false
+		// Check if we're slicing a string vs. a list vs. a tuple
+		var slicedType types.T
 		if ls.info != nil {
-			slicedType := ls.info.Types[x.X]
-			isStr = slicedType == types.Str
+			slicedType = ls.info.Types[x.X]
+		}
+		isStr := slicedType == types.Str
+
+		// Handle tuple slicing (compile-time)
+		if tupType, ok := slicedType.(*types.Tuple); ok {
+			base := ls.lowerExpr(x.X)
+
+			// Get compile-time indices (type checker already validated these)
+			iVal := 0
+			jVal := len(tupType.Elems)
+			if x.I != nil {
+				if lit, ok := x.I.(*ast.IntLit); ok {
+					iVal, _ = strconv.Atoi(lit.Text)
+				}
+			}
+			if x.J != nil {
+				if lit, ok := x.J.(*ast.IntLit); ok {
+					jVal, _ = strconv.Atoi(lit.Text)
+				}
+			}
+
+			sliceCount := jVal - iVal
+			if sliceCount == 1 {
+				// Single element - just return the element value (no tuple)
+				elemType := tupType.Elems[iVal]
+				llvmElemType := lowerType(elemType)
+
+				// Build source tuple struct type
+				var srcElemTypes []string
+				for range tupType.Elems {
+					srcElemTypes = append(srcElemTypes, "ptr")
+				}
+				srcStructType := "{" + strings.Join(srcElemTypes, ", ") + "}"
+
+				// Get element from source tuple
+				elemPtr := ls.b.FreshTemp("slice_elem_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    srcStructType,
+					Base:    base,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", iVal)}},
+					Dst:     elemPtr,
+				})
+				elemBoxed := ls.b.FreshTemp("slice_elem_boxed")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+
+				// Return unboxed value (or boxed for ptr types)
+				if llvmElemType == "ptr" {
+					return elemBoxed
+				}
+				elemVal := ls.b.FreshTemp("slice_elem_val")
+				ls.b.Emit(&hir.Load{Type: llvmElemType, Src: elemBoxed, Dst: elemVal})
+				return elemVal
+			}
+
+			// Multi-element slice - create new tuple
+			// Build source tuple struct type
+			var srcElemTypes []string
+			for range tupType.Elems {
+				srcElemTypes = append(srcElemTypes, "ptr")
+			}
+			srcStructType := "{" + strings.Join(srcElemTypes, ", ") + "}"
+
+			// Build destination tuple struct type
+			var dstElemTypes []string
+			for i := 0; i < sliceCount; i++ {
+				dstElemTypes = append(dstElemTypes, "ptr")
+			}
+			dstStructType := "{" + strings.Join(dstElemTypes, ", ") + "}"
+
+			// Allocate new tuple
+			dstSize := sliceCount * 8
+			dst := ls.b.FreshTemp("slice_tuple")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", dstSize), Type: "i64"}}, Type: "ptr"})
+
+			// Copy elements from source to destination
+			for i := 0; i < sliceCount; i++ {
+				srcIdx := iVal + i
+
+				// Get boxed ptr from source tuple
+				srcPtr := ls.b.FreshTemp("slice_src_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    srcStructType,
+					Base:    base,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", srcIdx)}},
+					Dst:     srcPtr,
+				})
+				srcBoxed := ls.b.FreshTemp("slice_src_boxed")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPtr, Dst: srcBoxed})
+
+				// Store in destination tuple
+				dstPtr := ls.b.FreshTemp("slice_dst_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    dstStructType,
+					Base:    dst,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+					Dst:     dstPtr,
+				})
+				ls.b.Emit(&hir.Store{Dst: dstPtr, Val: srcBoxed})
+			}
+
+			return dst
 		}
 
 		base := ls.lowerExpr(x.X)
