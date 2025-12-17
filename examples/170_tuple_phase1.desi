@@ -1,0 +1,90 @@
+# Tuple Phase 1 Tests - Comprehensive Examples
+# Tests: literal, indexing (bracket and dot), equality, function returns
+
+def main():
+    test_basic_tuple()
+    test_dot_indexing()
+    test_bracket_indexing()
+    test_equality()
+    test_function_return()
+    test_type_annotations()
+    print("All tuple tests passed!")
+
+def test_basic_tuple():
+    # Basic tuple creation with type annotation
+    let t: tuple[int, int, int] = (1, 2, 3)
+    print(t[0])  # 1
+    
+    # Heterogeneous tuple (different types)
+    let mixed: tuple[int, bool] = (42, true)
+    print(mixed[0])  # 42
+
+def test_dot_indexing():
+    # Tuple dot indexing: t.0, t.1, t.2
+    let point: tuple[int, int, int] = (10, 20, 30)
+    
+    let x: int = point.0
+    let y: int = point.1
+    let z: int = point.2
+    
+    print(x)  # 10
+    print(y)  # 20
+    print(z)  # 30
+
+def test_bracket_indexing():
+    # Bracket indexing with compile-time constant index
+    let t: tuple[int, int, int] = (100, 200, 300)
+    
+    print(t[0])  # 100
+    print(t[1])  # 200
+    print(t[2])  # 300
+
+def test_equality():
+    # Tuple equality is element-wise, not pointer comparison
+    let a: tuple[int, int] = (1, 2)
+    let b: tuple[int, int] = (1, 2)
+    let c: tuple[int, int] = (1, 3)
+    
+    # Equal tuples
+    if a == b:
+        print("a == b: equal")
+    else:
+        print("a == b: NOT equal - BUG!")
+    
+    # Different tuples
+    if a == c:
+        print("a == c: equal - BUG!")
+    else:
+        print("a == c: different")
+    
+    # Not equal operator
+    if a != c:
+        print("a != c: different")
+    else:
+        print("a != c: equal - BUG!")
+
+def test_function_return():
+    let pair: tuple[int, int] = get_pair()
+    print(pair.0)  # 42
+    print(pair.1)  # 100
+    
+    let result: tuple[int, int] = divmod(17, 5)
+    print(result.0)  # 3 (quotient)
+    print(result.1)  # 2 (remainder)
+
+def test_type_annotations():
+    # All tuples should have explicit type annotations (best practice)
+    let empty: tuple[int, int] = (0, 0)
+    let point: tuple[int, int, int] = (1, 2, 3)
+    
+    print(empty.0)
+    print(point.0)
+
+# Helper functions
+def get_pair() -> tuple[int, int]:
+    return (42, 100)
+
+def divmod(a: int, b: int) -> tuple[int, int]:
+    let quotient: int = a / b
+    let remainder: int = a % b
+    return (quotient, remainder)
