@@ -607,7 +607,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 			}
 		} else {
-			// Standard list/set iteration
+			// Standard list/set/tuple iteration
 			var elemType types.T
 			if iterType != nil {
 				switch it := iterType.(type) {
@@ -615,6 +615,26 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					elemType = it.Elem
 				case *types.Set:
 					elemType = it.Elem
+				case *types.Tuple:
+					// Homogeneous tuple iteration: all elements must be same type
+					if len(it.Elems) == 0 {
+						c.add(diagAt("DTE0004", st.Iter.SpanOf(), "cannot iterate over empty tuple"))
+						return
+					}
+					firstType := it.Elems[0]
+					isHomogeneous := true
+					for i := 1; i < len(it.Elems); i++ {
+						if !types.Equal(it.Elems[i], firstType) {
+							isHomogeneous = false
+							break
+						}
+					}
+					if !isHomogeneous {
+						c.add(diagAt("DTE0004", st.Iter.SpanOf(),
+							"tuple iteration requires all elements to be the same type"))
+						return
+					}
+					elemType = firstType
 				default:
 					// For range() and other iterables, assume int for now
 					elemType = types.Int
