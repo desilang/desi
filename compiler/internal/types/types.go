@@ -129,6 +129,13 @@ type TypeParam struct {
 // M9A: C-ABI pointer type cptr[T]
 type CPtr struct{ Elem T }
 
+// TypeAlias represents a named type alias for nominal typing.
+// Two TypeAlias with different Names are distinct types even if Target is the same.
+type TypeAlias struct {
+	Name   string // The alias name (e.g., "Point", "UserId")
+	Target T      // The underlying type
+}
+
 type Field struct {
 	Name  string
 	Type  T
@@ -198,6 +205,7 @@ func (*Func) isType()      {}
 func (*Multi) isType()     {}
 func (*Union) isType()     {}
 func (*CPtr) isType()      {}
+func (*TypeAlias) isType() {}
 func (*Struct) isType()    {}
 func (*Enum) isType()      {}
 func (*Class) isType()     {}
@@ -251,10 +259,11 @@ func (t *Generic) String() string {
 func (t *TypeParam) String() string {
 	return t.Name
 }
-func (t *CPtr) String() string   { return "cptr[" + t.Elem.String() + "]" }
-func (t *Struct) String() string { return t.Name }
-func (t *Enum) String() string   { return t.Name }
-func (t *Class) String() string  { return t.Name }
+func (t *CPtr) String() string      { return "cptr[" + t.Elem.String() + "]" }
+func (t *TypeAlias) String() string { return t.Name } // Nominal: display alias name, not underlying type
+func (t *Struct) String() string    { return t.Name }
+func (t *Enum) String() string      { return t.Name }
+func (t *Class) String() string     { return t.Name }
 
 // ----- Constructors -----
 
@@ -506,6 +515,21 @@ func Assignable(dst, src T) bool {
 		if srcTP, ok := src.(*TypeParam); ok {
 			return dstTP.Name == srcTP.Name
 		}
+	}
+
+	// TypeAlias nominal typing: two aliases are only equal if names match
+	if dstAlias, ok := dst.(*TypeAlias); ok {
+		if srcAlias, ok := src.(*TypeAlias); ok {
+			// Both are aliases - must have same name (nominal)
+			return dstAlias.Name == srcAlias.Name
+		}
+		// src is not an alias - check if it matches the underlying target type
+		// This allows: let p: Point = (1, 2) where Point = tuple[int, int]
+		return Assignable(dstAlias.Target, src)
+	}
+	// If src is an alias but dst is not, unwrap src's target
+	if srcAlias, ok := src.(*TypeAlias); ok {
+		return Assignable(dst, srcAlias.Target)
 	}
 
 	// Class inheritance: src is assignable to dst if src is subclass of dst

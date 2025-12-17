@@ -80,8 +80,14 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 		// Handle tuple destructuring: let (a, b, c) = tuple_expr
 		if len(st.Pattern) > 0 {
+			// Unwrap TypeAlias for destructuring
+			destType := symType
+			if alias, ok := destType.(*types.TypeAlias); ok {
+				destType = alias.Target
+			}
+
 			// Verify RHS is a tuple with matching element count
-			tupType, ok := symType.(*types.Tuple)
+			tupType, ok := destType.(*types.Tuple)
 			if !ok {
 				c.add(diagAt("DTE0004", st.Span, "cannot destructure non-tuple type '"+symType.String()+"'"))
 				return

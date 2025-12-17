@@ -31,6 +31,57 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 	c.ensureDefaultDisplay(d.Name.Name)
 }
 
+// collectTypeAlias binds a type alias name to a TypeAlias wrapper for nominal typing.
+// For non-generic aliases: Two aliases with different names are distinct types.
+// For generic aliases: Currently structural (expand to target) for simplicity.
+func (c *checker) collectTypeAlias(d *ast.TypeAliasDecl) {
+	// Create a temporary scope to add type parameters (for generic type aliases)
+	saved := c.scope
+	c.scope = NewScope(c.scope)
+	defer func() { c.scope = saved }()
+
+	// Add type parameters to scope (e.g., for Box<T>)
+	for _, tp := range d.TypeParams {
+		c.scope.Define(&Symbol{
+			Name: tp.Name,
+			Kind: SymType,
+			Type: &types.TypeParam{Name: tp.Name},
+		})
+	}
+
+	// Resolve the target type
+	target := c.resolveType(d.Target)
+	if target == nil {
+		c.add(diagAt("DTE0001", d.Target.Span, "unknown type '"+d.Target.Name+"'"))
+		return
+	}
+
+	// For generic type aliases, use structural typing (just the target type)
+	// For non-generic aliases, wrap in TypeAlias for nominal typing
+	var symType types.T
+	if len(d.TypeParams) > 0 {
+		// Generic alias: structural (use target directly)
+		symType = target
+	} else {
+		// Non-generic alias: nominal  (wrap in TypeAlias)
+		symType = &types.TypeAlias{
+			Name:   d.Name.Name,
+			Target: target,
+		}
+	}
+
+	// Register the alias type name in the OUTER scope
+	saved.Define(&Symbol{
+		Name: d.Name.Name,
+		Kind: SymType,
+		Type: symType,
+		Node: d,
+	})
+
+	// Store type for backend access
+	c.info.Types[d] = symType
+}
+
 func (c *checker) collectClass(d *ast.ClassDecl) {
 	// Create Class type
 	cls := &types.Class{
