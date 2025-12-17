@@ -1,0 +1,45 @@
+# Tuple Comparison Tests
+# Tests tuple comparison operators: <, >, <=, >=
+
+def main():
+    test_less_than()
+    test_greater_than()
+    test_less_equal()
+    test_greater_equal()
+    print("All tuple comparison tests passed!")
+
+def test_less_than():
+    let a = (1, 2, 3)
+    let b = (1, 2, 4)
+    
+    if a < b:
+        print("(1,2,3) < (1,2,4): PASS")
+    else:
+        print("(1,2,3) < (1,2,4): FAIL")
+
+def test_greater_than():
+    let a = (1, 2, 3)
+    let b = (1, 2, 4)
+    
+    if b > a:
+        print("(1,2,4) > (1,2,3): PASS")
+    else:
+        print("(1,2,4) > (1,2,3): FAIL")
+
+def test_less_equal():
+    let a = (1, 2, 3)
+    let b = (1, 2, 3)
+    
+    if a <= b:
+        print("(1,2,3) <= (1,2,3): PASS")
+    else:
+        print("(1,2,3) <= (1,2,3): FAIL")
+
+def test_greater_equal():
+    let a = (1, 2, 3)
+    let b = (1, 2, 3)
+    
+    if a >= b:
+        print("(1,2,3) >= (1,2,3): PASS")
+    else:
+        print("(1,2,3) >= (1,2,3): FAIL")

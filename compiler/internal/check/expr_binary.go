@@ -406,6 +406,50 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
+		// Tuple comparison (lexicographic order requires homogeneous tuples)
+		if ltup, lok := lt.(*types.Tuple); lok {
+			if rtup, rok := rt.(*types.Tuple); rok {
+				// For <, >, <=, >= require homogeneous tuples (all elements same type)
+				if op == "<" || op == ">" || op == "<=" || op == ">=" {
+					// Check if both tuples are homogeneous and comparable
+					if len(ltup.Elems) == 0 || len(rtup.Elems) == 0 {
+						c.info.Types[x] = types.Bool
+						return types.Bool
+					}
+
+					// Verify homogeneous (all same type)
+					firstType := ltup.Elems[0]
+					allSame := true
+					for _, e := range ltup.Elems {
+						if !types.Equal(e, firstType) {
+							allSame = false
+							break
+						}
+					}
+					for _, e := range rtup.Elems {
+						if !types.Equal(e, firstType) {
+							allSame = false
+							break
+						}
+					}
+
+					if !allSame {
+						c.add(diagAt("DTE0004", x.Span, "tuple comparison requires homogeneous tuples"))
+						return nil
+					}
+
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+
+				// For == and != - already handled by tuple equality
+				if types.Equal(lt, rt) {
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+			}
+		}
+
 		// Fallback: identical non-numeric types comparable
 		if types.Equal(lt, rt) {
 			c.info.Types[x] = types.Bool

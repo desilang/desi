@@ -1084,6 +1084,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle tuple lexicographic comparison: <, >, <=, >=
+		if (x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=") && ls.info != nil {
+			if tupType, ok := ls.info.Types[x.Lhs].(*types.Tuple); ok {
+				return ls.lowerTupleLexicographic(lhs, rhs, tupType, x.Op)
+			}
+		}
+
 		// Determine result type based on operation
 		var resultType string
 		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" {
@@ -1336,6 +1343,133 @@ func (ls *lowerState) lowerTupleConcatenation(lhs, rhs hir.Value, ltup, rtup *ty
 	}
 
 	return dst
+}
+
+// lowerTupleLexicographic generates element-wise lexicographic comparison for tuples.
+// For (a, b) < (c, d), generates: (a < c) || (a == c && b < d)
+func (ls *lowerState) lowerTupleLexicographic(lhs, rhs hir.Value, tupType *types.Tuple, op string) hir.Value {
+	numElems := len(tupType.Elems)
+	if numElems == 0 {
+		// Empty tuples: < and > are false, <= and >= are true (equal tuples)
+		if op == "<" || op == ">" {
+			return hir.ConstBool{Value: false}
+		}
+		return hir.ConstBool{Value: true}
+	}
+
+	// Build struct type for GEP (all elements are ptr due to boxing)
+	var elemTypes []string
+	for range tupType.Elems {
+		elemTypes = append(elemTypes, "ptr")
+	}
+	structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+	// For lexicographic comparison, we compare element by element:
+	// (a0, a1, ..., an) < (b0, b1, ..., bn) means:
+	// a0 < b0 || (a0 == b0 && (a1 < b1 || (a1 == b1 && ...)))
+
+	// We'll simplify by iterating and building the result
+	// Start with result = false for strict (<, >), or check for equality for non-strict (<=, >=)
+	elemType := tupType.Elems[0]
+	llvmType := lowerType(elemType)
+
+	// Determine the comparison operator to use
+	var strictOp string
+	switch op {
+	case "<", "<=":
+		strictOp = "<"
+	case ">", ">=":
+		strictOp = ">"
+	}
+
+	// For each element, extract and compare
+	var lastResult hir.Value = hir.ConstBool{Value: false}
+
+	for i := numElems - 1; i >= 0; i-- {
+		// Get element from LHS
+		lhsElemPtr := ls.b.FreshTemp(fmt.Sprintf("lex_lhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    structType,
+			Base:    lhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     lhsElemPtr,
+		})
+		lhsBoxed := ls.b.FreshTemp(fmt.Sprintf("lex_lhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: lhsElemPtr, Dst: lhsBoxed})
+		lhsVal := ls.b.FreshTemp(fmt.Sprintf("lex_lhs_elem%d", i))
+		ls.b.Emit(&hir.Load{Type: llvmType, Src: lhsBoxed, Dst: lhsVal})
+
+		// Get element from RHS
+		rhsElemPtr := ls.b.FreshTemp(fmt.Sprintf("lex_rhs_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    structType,
+			Base:    rhs,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     rhsElemPtr,
+		})
+		rhsBoxed := ls.b.FreshTemp(fmt.Sprintf("lex_rhs_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: rhsElemPtr, Dst: rhsBoxed})
+		rhsVal := ls.b.FreshTemp(fmt.Sprintf("lex_rhs_elem%d", i))
+		ls.b.Emit(&hir.Load{Type: llvmType, Src: rhsBoxed, Dst: rhsVal})
+
+		if i == numElems-1 {
+			// Last element: just compare with the operator
+			cmp := ls.b.FreshTemp(fmt.Sprintf("lex_cmp%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   op, // Use the original operator for the last element
+				LHS:  lhsVal,
+				RHS:  rhsVal,
+				Dst:  cmp,
+				Type: "i1",
+			})
+			lastResult = cmp
+		} else {
+			// Not the last element: check (lhs[i] < rhs[i]) || (lhs[i] == rhs[i] && lastResult)
+			// First, strict comparison
+			strictCmp := ls.b.FreshTemp(fmt.Sprintf("lex_strict%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   strictOp,
+				LHS:  lhsVal,
+				RHS:  rhsVal,
+				Dst:  strictCmp,
+				Type: "i1",
+			})
+
+			// Equality comparison
+			eqCmp := ls.b.FreshTemp(fmt.Sprintf("lex_eq%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  lhsVal,
+				RHS:  rhsVal,
+				Dst:  eqCmp,
+				Type: "i1",
+			})
+
+			// AND: eq && lastResult
+			andResult := ls.b.FreshTemp(fmt.Sprintf("lex_and%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "and",
+				LHS:  eqCmp,
+				RHS:  lastResult,
+				Dst:  andResult,
+				Type: "i1",
+			})
+
+			// OR: strict || (eq && lastResult)
+			orResult := ls.b.FreshTemp(fmt.Sprintf("lex_or%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "or",
+				LHS:  strictCmp,
+				RHS:  andResult,
+				Dst:  orResult,
+				Type: "i1",
+			})
+
+			lastResult = orResult
+		}
+	}
+
+	return lastResult
 }
 
 // lowerListComp builds HIR for list comprehensions by expanding them to loops:
