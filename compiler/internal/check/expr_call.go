@@ -457,6 +457,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					hasLen = true
 				} else if _, ok := argType.(*types.Set); ok {
 					hasLen = true
+				} else if _, ok := argType.(*types.Tuple); ok {
+					hasLen = true
 				} else if cls, ok := argType.(*types.Class); ok {
 					// Check for __len__ method in class or base classes
 					curr := cls

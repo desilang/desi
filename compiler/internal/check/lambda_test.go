@@ -12,6 +12,7 @@ func TestM4_Lambda_TypedParams_OK(t *testing.T) {
 		Params: []ast.LambdaParam{
 			{Name: ast.Ident{Name: "x"}, Type: &ast.TypeName{Name: "int"}},
 		},
+		RetType: &ast.TypeName{Name: "int"}, // Required explicit return type
 		// Body avoids referencing param to keep M4 simple
 		Body: &ast.IntLit{},
 	}
@@ -34,7 +35,8 @@ func TestM4_Lambda_UntypedParams_Error(t *testing.T) {
 		Params: []ast.LambdaParam{
 			{Name: ast.Ident{Name: "x"}, Type: nil}, // untyped param should trigger M4 error
 		},
-		Body: &ast.IntLit{},
+		RetType: &ast.TypeName{Name: "int"}, // Include return type
+		Body:    &ast.IntLit{},
 	}
 	let := &ast.LetStmt{Name: ast.Ident{Name: "f"}, Type: &ast.TypeName{Name: "func"}, Value: l}
 	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{let}}}
@@ -49,7 +51,8 @@ func TestM4_Lambda_Call_Direct_OK(t *testing.T) {
 		Params: []ast.LambdaParam{
 			{Name: ast.Ident{Name: "x"}, Type: &ast.TypeName{Name: "int"}},
 		},
-		Body: &ast.IntLit{},
+		RetType: &ast.TypeName{Name: "int"}, // Required explicit return type
+		Body:    &ast.IntLit{},
 	}
 	call := &ast.ExprStmt{Expr: &ast.CallExpr{
 		Callee: l,
