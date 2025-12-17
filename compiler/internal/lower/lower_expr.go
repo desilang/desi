@@ -116,14 +116,71 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Tuples are heap-allocated using arena allocator to support returning from generic functions.
 		// For Tier-0 Generics (Type Erasure), ALL tuple elements are boxed to 'ptr'.
 		// This ensures layout compatibility between (T, T) -> {ptr, ptr} and (int, int).
+
+		// First, collect all elements including spread expansions
+		type elemInfo struct {
+			expr     ast.Expr
+			val      hir.Value
+			elemType types.T
+		}
+		var allElems []elemInfo
+
+		for _, e := range x.Elems {
+			if spread, ok := e.(*ast.SpreadExpr); ok {
+				// Spread expression: extract elements from the tuple
+				spreadVal := ls.lowerExpr(spread.X)
+				var spreadType *types.Tuple
+				if ls.info != nil {
+					if t := ls.info.Types[spread.X]; t != nil {
+						if tupT, ok := t.(*types.Tuple); ok {
+							spreadType = tupT
+						}
+					}
+				}
+
+				if spreadType != nil {
+					// Build struct type for spread tuple
+					var spreadElemTypes []string
+					for range spreadType.Elems {
+						spreadElemTypes = append(spreadElemTypes, "ptr")
+					}
+					spreadStructType := "{" + strings.Join(spreadElemTypes, ", ") + "}"
+
+					// Extract each element from the spread tuple
+					for j, elemT := range spreadType.Elems {
+						elemPtr := ls.b.FreshTemp(fmt.Sprintf("spread_elem%d_ptr", j))
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    spreadStructType,
+							Base:    spreadVal,
+							Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", j)}},
+							Dst:     elemPtr,
+						})
+						elemBoxed := ls.b.FreshTemp(fmt.Sprintf("spread_elem%d_boxed", j))
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+
+						allElems = append(allElems, elemInfo{expr: nil, val: elemBoxed, elemType: elemT})
+					}
+				}
+			} else {
+				// Regular element
+				val := ls.lowerExpr(e)
+				var elemT types.T
+				if ls.info != nil {
+					elemT = ls.info.Types[e]
+				}
+				allElems = append(allElems, elemInfo{expr: e, val: val, elemType: elemT})
+			}
+		}
+
+		// Now build the result tuple
 		var elemTypes []string
-		for range x.Elems {
+		for range allElems {
 			elemTypes = append(elemTypes, "ptr")
 		}
 		structType := "{" + strings.Join(elemTypes, ", ") + "}"
 
 		// Calculate struct size (ptr = 8 bytes on 64-bit, so N elements = N * 8)
-		structSize := len(x.Elems) * 8
+		structSize := len(allElems) * 8
 
 		// Allocate on heap using malloc
 		dst := ls.b.FreshTemp("tuple_ptr")
@@ -131,19 +188,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{sizeVal}, Type: "ptr"})
 
 		// Store elements
-		for i, e := range x.Elems {
-			val := ls.lowerExpr(e)
+		for i, elem := range allElems {
+			val := elem.val
 
 			// Box if necessary (allocate + store for primitives)
 			valType := "ptr" // default
-			if ls.info != nil {
-				if t := ls.info.Types[e]; t != nil {
-					valType = lowerType(t)
-				}
+			if elem.elemType != nil {
+				valType = lowerType(elem.elemType)
 			}
 
 			var boxedVal hir.Value = val
-			if valType != "ptr" && valType != "void" {
+			// For spread elements, val is already boxed (we loaded the ptr from the spread tuple)
+			// For regular elements, we need to box them
+			if elem.expr != nil && valType != "ptr" && valType != "void" {
 				// Allocate storage for the value on heap
 				boxPtr := ls.b.FreshTemp("elem_box_ptr")
 				elemSize := hir.ConstInt{Text: "8", Type: "i64"} // conservative: always 8 bytes

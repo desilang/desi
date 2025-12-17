@@ -1,0 +1,48 @@
+# Test tuple spread operator: (*a, *b)
+
+def main() -> int:
+    # Basic tuple spread concatenation
+    let a = (1, 2)
+    let b = (3, 4)
+    let combined = (*a, *b)
+    
+    if len(combined) == 4:
+        print("(*a, *b) => 4 elements: PASS")
+    else:
+        print("FAIL: combined should have 4 elements")
+    
+    # Mixed spread and regular values
+    let mixed = (0, *a, 5)
+    if len(mixed) == 4:
+        print("(0, *a, 5) => 4 elements: PASS")
+    else:
+        print("FAIL: mixed should have 4 elements")
+    
+    # String tuple spread
+    let words = ("hello", "world")
+    let more_words = (*words, "desi")
+    if len(more_words) == 3:
+        print("(*words, 'desi') => 3 elements: PASS")
+    else:
+        print("FAIL: more_words should have 3 elements")
+    
+    # Multiple spread operations
+    let x = (10, 20)
+    let z = (40, 50)
+    let all = (*x, *z)
+    if len(all) == 4:
+        print("(*x, *z) => 4 elements: PASS")
+    else:
+        print("FAIL: all should have 4 elements")
+    
+    # Spread with additional elements
+    let prefix = (100, 200)
+    let suffix = (300, 400)
+    let full = (0, *prefix, 99, *suffix, 999)
+    if len(full) == 7:
+        print("(0, *prefix, 99, *suffix, 999) => 7 elements: PASS")
+    else:
+        print("FAIL: full should have 7 elements")
+    
+    print("All tuple spread tests passed!")
+    return 0
