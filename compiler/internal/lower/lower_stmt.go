@@ -30,7 +30,7 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	switch s := s.(type) {
 	case *ast.LetStmt:
-		// Handle tuple destructuring: let (a, b, c) = tuple
+		// Handle tuple destructuring: let (a, b, c) = tuple or let (first, *rest) = tuple
 		if len(s.Pattern) > 0 {
 			// Evaluate the RHS tuple expression
 			tupleVal := ls.lowerExpr(s.Value)
@@ -49,6 +49,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 			structType := "{" + strings.Join(elemTypes, ", ") + "}"
 
+			hasRest := s.RestIndex >= 0
+
 			// Extract each element and bind to pattern variable
 			for i, ident := range s.Pattern {
 				if ident.Name == "_" {
@@ -56,38 +58,125 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					continue
 				}
 
-				elemType := tupleType.Elems[i]
-				llvmElemType := lowerType(elemType)
+				if hasRest && i == s.RestIndex {
+					// This is the rest pattern - create a new tuple with remaining elements
+					// Calculate which tuple elements go to *rest
+					beforeRest := s.RestIndex
+					afterRest := len(s.Pattern) - (s.RestIndex + 1)
+					restStart := beforeRest
+					restEnd := len(tupleType.Elems) - afterRest
+					restCount := restEnd - restStart
 
-				// Get pointer to element slot
-				elemPtr := ls.b.FreshTemp("tup_elem_ptr")
-				ls.b.Emit(&hir.GetElementPtr{
-					Type:    structType,
-					Base:    tupleVal,
-					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
-					Dst:     elemPtr,
-				})
+					if restCount == 0 {
+						// Empty rest tuple - allocate empty struct
+						dst := ls.b.FreshTemp("rest_tuple")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
 
-				// Load boxed pointer
-				boxed := ls.b.FreshTemp("tup_elem_boxed")
-				ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
+						ls.cur().locals = append(ls.cur().locals, ident.Name)
+						ls.b.Emit(&hir.Let{Name: ident.Name, Init: dst, Type: types.TupleOf()})
+						ls.cur().types[ident.Name] = types.TupleOf()
+					} else {
+						// Allocate new tuple for rest elements
+						restSize := restCount * 8
+						restTuple := ls.b.FreshTemp("rest_tuple")
+						ls.b.Emit(&hir.Call{Dst: restTuple, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", restSize), Type: "i64"}}, Type: "ptr"})
 
-				// Unbox: load actual value from boxed pointer
-				val := ls.b.FreshTemp("tup_elem_val")
-				ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: val})
+						// Build rest tuple struct type
+						var restElemTypes []string
+						for j := 0; j < restCount; j++ {
+							restElemTypes = append(restElemTypes, "ptr")
+						}
+						restStructType := "{" + strings.Join(restElemTypes, ", ") + "}"
 
-				// Bind to variable
-				ls.cur().locals = append(ls.cur().locals, ident.Name)
-				if s.Mutable {
-					ls.cur().mutable[ident.Name] = true
-					ls.b.Emit(&hir.Let{Name: ident.Name, Init: nil, Type: elemType})
-					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: ident.Name}, Val: val})
+						// Copy elements from source tuple to rest tuple
+						for j := 0; j < restCount; j++ {
+							srcIdx := restStart + j
+
+							// Get boxed ptr from source tuple
+							srcPtr := ls.b.FreshTemp("rest_src_ptr")
+							ls.b.Emit(&hir.GetElementPtr{
+								Type:    structType,
+								Base:    tupleVal,
+								Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", srcIdx)}},
+								Dst:     srcPtr,
+							})
+							srcBoxed := ls.b.FreshTemp("rest_src_boxed")
+							ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPtr, Dst: srcBoxed})
+
+							// Store in rest tuple
+							dstPtr := ls.b.FreshTemp("rest_dst_ptr")
+							ls.b.Emit(&hir.GetElementPtr{
+								Type:    restStructType,
+								Base:    restTuple,
+								Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", j)}},
+								Dst:     dstPtr,
+							})
+							ls.b.Emit(&hir.Store{Dst: dstPtr, Val: srcBoxed})
+						}
+
+						// Get rest type from type checker
+						restType := ls.info.Types[&s.Pattern[i]]
+						if restType == nil {
+							restType = types.TupleOf(tupleType.Elems[restStart:restEnd]...)
+						}
+
+						// Bind rest tuple to variable
+						ls.cur().locals = append(ls.cur().locals, ident.Name)
+						ls.b.Emit(&hir.Let{Name: ident.Name, Init: restTuple, Type: restType})
+						ls.cur().types[ident.Name] = restType
+					}
 				} else {
-					ls.b.Emit(&hir.Let{Name: ident.Name, Init: val, Type: elemType})
-				}
+					// Regular element - map to correct tuple index
+					var tupleIdx int
+					if hasRest && i > s.RestIndex {
+						// After rest: count from end
+						afterRestPos := len(s.Pattern) - i // position from end (1-based)
+						tupleIdx = len(tupleType.Elems) - afterRestPos
+					} else {
+						// Before rest (or no rest): direct index
+						tupleIdx = i
+					}
 
-				// Track type for drop
-				ls.cur().types[ident.Name] = elemType
+					elemType := tupleType.Elems[tupleIdx]
+					llvmElemType := lowerType(elemType)
+
+					// Get pointer to element slot
+					elemPtr := ls.b.FreshTemp("tup_elem_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    structType,
+						Base:    tupleVal,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", tupleIdx)}},
+						Dst:     elemPtr,
+					})
+
+					// Load boxed pointer
+					boxed := ls.b.FreshTemp("tup_elem_boxed")
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
+
+					// Unbox: load actual value from boxed pointer
+					// For ptr types (strings), the boxed ptr IS the value
+					var val hir.Value
+					if llvmElemType == "ptr" {
+						val = boxed
+					} else {
+						unboxed := ls.b.FreshTemp("tup_elem_val")
+						ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: unboxed})
+						val = unboxed
+					}
+
+					// Bind to variable
+					ls.cur().locals = append(ls.cur().locals, ident.Name)
+					if s.Mutable {
+						ls.cur().mutable[ident.Name] = true
+						ls.b.Emit(&hir.Let{Name: ident.Name, Init: nil, Type: elemType})
+						ls.b.Emit(&hir.Store{Dst: hir.Var{Name: ident.Name}, Val: val})
+					} else {
+						ls.b.Emit(&hir.Let{Name: ident.Name, Init: val, Type: elemType})
+					}
+
+					// Track type for drop
+					ls.cur().types[ident.Name] = elemType
+				}
 			}
 			return
 		}

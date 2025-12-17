@@ -1,0 +1,60 @@
+# Test rest pattern: let (first, *rest) = tuple
+
+def main() -> int:
+    let t = (1, 2, 3, 4, 5)
+    
+    # Test head/tail pattern: (first, *rest)
+    let (first, *rest) = t
+    if first == 1:
+        print("first = 1: PASS")
+    else:
+        print("FAIL: first should be 1")
+    
+    if len(rest) == 4:
+        print("rest length = 4: PASS")
+    else:
+        print("FAIL: rest should have 4 elements")
+    
+    # Test init/last pattern: (*init, last)
+    let (*init, last) = t
+    if last == 5:
+        print("last = 5: PASS")
+    else:
+        print("FAIL: last should be 5")
+    
+    if len(init) == 4:
+        print("init length = 4: PASS")
+    else:
+        print("FAIL: init should have 4 elements")
+    
+    # Test head/middle/tail pattern: (a, *middle, z)
+    let (a, *middle, z) = t
+    if a == 1:
+        print("a = 1: PASS")
+    else:
+        print("FAIL: a should be 1")
+    
+    if z == 5:
+        print("z = 5: PASS")
+    else:
+        print("FAIL: z should be 5")
+    
+    if len(middle) == 3:
+        print("middle length = 3: PASS")
+    else:
+        print("FAIL: middle should have 3 elements")
+    
+    # Test two-element with rest
+    let pair = (10, 20)
+    let (p1, *prest) = pair
+    if p1 == 10:
+        print("p1 = 10: PASS")
+    else:
+        print("FAIL: p1 should be 10")
+    if len(prest) == 1:
+        print("prest length = 1: PASS")
+    else:
+        print("FAIL: prest should have 1 element")
+    
+    print("All rest pattern tests passed!")
+    return 0

@@ -78,7 +78,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		}
 
-		// Handle tuple destructuring: let (a, b, c) = tuple_expr
+		// Handle tuple destructuring: let (a, b, c) = tuple_expr or let (first, *rest) = tuple_expr
 		if len(st.Pattern) > 0 {
 			// Unwrap TypeAlias for destructuring
 			destType := symType
@@ -92,10 +92,25 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				c.add(diagAt("DTE0004", st.Span, "cannot destructure non-tuple type '"+symType.String()+"'"))
 				return
 			}
-			if len(tupType.Elems) != len(st.Pattern) {
-				c.add(diagAt("DTE0004", st.Span, "tuple destructuring arity mismatch: expected "+
-					string(rune('0'+len(tupType.Elems)))+" elements, got "+string(rune('0'+len(st.Pattern)))))
-				return
+
+			// Check arity with rest pattern support
+			hasRest := st.RestIndex >= 0
+			if hasRest {
+				// With rest: need at least (len(pattern) - 1) elements in tuple
+				// e.g., let (first, *rest) = (1, 2, 3) - need at least 1 non-rest element
+				minRequired := len(st.Pattern) - 1
+				if len(tupType.Elems) < minRequired {
+					c.add(diagAt("DTE0004", st.Span, "tuple destructuring arity mismatch: expected at least "+
+						string(rune('0'+minRequired))+" elements for rest pattern, got "+string(rune('0'+len(tupType.Elems)))))
+					return
+				}
+			} else {
+				// Exact match required
+				if len(tupType.Elems) != len(st.Pattern) {
+					c.add(diagAt("DTE0004", st.Span, "tuple destructuring arity mismatch: expected "+
+						string(rune('0'+len(tupType.Elems)))+" elements, got "+string(rune('0'+len(st.Pattern)))))
+					return
+				}
 			}
 
 			// Define a symbol for each pattern element
@@ -104,16 +119,49 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					// Ignore pattern - don't bind
 					continue
 				}
+
+				var elemType types.T
+				if hasRest && i == st.RestIndex {
+					// This is the rest pattern - get remaining elements as tuple
+					// Calculate which tuple elements go to *rest
+					beforeRest := st.RestIndex
+					afterRest := len(st.Pattern) - (st.RestIndex + 1)
+					restStart := beforeRest
+					restEnd := len(tupType.Elems) - afterRest
+
+					restElems := tupType.Elems[restStart:restEnd]
+					if len(restElems) == 0 {
+						// Empty rest - create empty tuple type
+						elemType = types.TupleOf()
+					} else {
+						elemType = types.TupleOf(restElems...)
+					}
+				} else {
+					// Regular element - map to correct tuple index
+					var tupleIdx int
+					if hasRest && i > st.RestIndex {
+						// After rest: count from end
+						afterRestPos := len(st.Pattern) - i // position from end (1-based)
+						tupleIdx = len(tupType.Elems) - afterRestPos
+					} else {
+						// Before rest (or no rest): direct index
+						tupleIdx = i
+					}
+					if tupleIdx >= 0 && tupleIdx < len(tupType.Elems) {
+						elemType = tupType.Elems[tupleIdx]
+					}
+				}
+
 				sym := &Symbol{
 					Name:      ident.Name,
 					Kind:      SymVar,
-					Type:      tupType.Elems[i],
+					Type:      elemType,
 					Node:      st,
 					IsMutable: st.Mutable,
 				}
 				_ = c.scope.Define(sym)
 				c.info.Idents[&st.Pattern[i]] = sym
-				c.info.Types[&st.Pattern[i]] = tupType.Elems[i]
+				c.info.Types[&st.Pattern[i]] = elemType
 			}
 		} else {
 			// Single variable binding (normal let)
