@@ -193,8 +193,87 @@ If we add intrusive data structures:
 
 ---
 
+## Appendix: Historical Critical Bugs in Mature Languages
+
+### Lessons for Desi's Safety Design
+
+| Bug/CVE | Language | Root Cause | Desi Mitigation |
+|---------|----------|------------|-----------------|
+| **Heartbleed** (CVE-2014-0160) | C/OpenSSL | Buffer over-read; no bounds checking | Desi strings/lists have length; no raw buffers |
+| **Null Pointer (Billion Dollar Mistake)** | Java/C#/C++ | Uninhabited `null` value | `Option[T]` forces explicit handling |
+| **Morris Worm** (1988) | C | Stack buffer overflow | No stack-allocated arrays in user code |
+| **Use-After-Free** | C/C++ | Dangling pointer access | Reference counting; arena scoping |
+| **ARC Retain Cycles** | Swift/ObjC | Circular strong references | *(Risk exists)* - May need `weak` refs |
+| **GIL Contention** | Python | Global lock limits threading | *(Future design)* - No GIL planned |
+| **Prototype Pollution** | JavaScript | Object prototype modification | No prototype chain; static types |
+| **Pickle Deserialization RCE** | Python/Ruby | Arbitrary code in serialized data | *(Future)* - Safe serialization only |
+| **Data Races** | Go/Rust | Concurrent mutation | *(Future)* - Need Send/Sync traits |
+| **Rust Binder Race** (2025) | Rust | Lock release before data access done | See main document |
+
+### Detailed Analysis of Relevant Bugs
+
+#### 1. C Buffer Overflows (Heartbleed, Morris Worm)
+```c
+// Heartbleed: Read beyond buffer bounds
+memcpy(response, payload, payload_length);  // length not validated!
+```
+**Desi Status**: ✅ Safe - Strings/lists track length; no raw `char*` access.
+
+#### 2. Null Pointer Exceptions
+```java
+// Java: Runtime NPE
+String s = null;
+s.length();  // NullPointerException at runtime
+```
+**Desi Status**: ✅ Safe - `Option[T]` with `Some`/`None` forces handling.
+
+#### 3. Use-After-Free
+```c
+// C++: Dangling pointer
+int* ptr = new int(42);
+delete ptr;
+*ptr = 10;  // Undefined behavior!
+```
+**Desi Status**: ⚠️ Mostly safe - RC prevents this in pure Desi, but FFI can return dangling ptrs.
+
+#### 4. ARC Retain Cycles (Swift)
+```swift
+// Swift: Cycle prevents deallocation
+class A { var b: B? }
+class B { var a: A? }
+let a = A(); let b = B()
+a.b = b; b.a = a  // Memory leak - neither freed
+```
+**Desi Status**: ⚠️ Risk exists - Currently no `weak` references. Add to roadmap.
+
+#### 5. Data Races (Go)
+```go
+// Go: Data race on shared variable
+var count int
+go func() { count++ }()  // Race!
+go func() { count++ }()  // Race!
+```
+**Desi Status**: ⚠️ Future risk - When threading added, need Send/Sync traits.
+
+#### 6. Lock Scope Mismatch (Rust Binder)
+See main document above - the direct inspiration for this design document.
+
+### Potential Desi-Specific Vulnerabilities
+
+| Scenario | Current Status | Recommended Action |
+|----------|---------------|-------------------|
+| **Arena use-after-destroy** | ⚠️ Possible | Add runtime checks in debug mode |
+| **Closure captures freed variable** | ⚠️ Possible with FFI | Document closure lifetime rules |
+| **Generic boxing type confusion** | ⚠️ Possible | Add type tags to boxed values |
+| **RC cycle in user classes** | ⚠️ Possible | Add `weak[T]` reference type |
+| **FFI callback to freed Desi closure** | ⚠️ Possible | Track closure lifetimes |
+
+---
+
 ## References
 
 - [Rust Binder Bug Commit](https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/commit/?id=3e0ae02ba831da2b707905f4e602e43f8507b8cc)
+- [Heartbleed Explained](https://heartbleed.com/)
+- [Null References: The Billion Dollar Mistake](https://www.infoq.com/presentations/Null-References-The-Billion-Dollar-Mistake-Tony-Hoare/)
 - Rust [`unsafe` Guidelines](https://doc.rust-lang.org/nomicon/meet-safe-and-unsafe.html)
 - [Send and Sync Traits](https://doc.rust-lang.org/book/ch16-04-extensible-concurrency-sync-and-send.html)
