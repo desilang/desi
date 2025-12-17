@@ -30,6 +30,69 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	switch s := s.(type) {
 	case *ast.LetStmt:
+		// Handle tuple destructuring: let (a, b, c) = tuple
+		if len(s.Pattern) > 0 {
+			// Evaluate the RHS tuple expression
+			tupleVal := ls.lowerExpr(s.Value)
+
+			// Get tuple type from type checker
+			tupleType, _ := ls.info.Types[s.Value].(*types.Tuple)
+			if tupleType == nil {
+				// Fallback: shouldn't happen if type checker did its job
+				return
+			}
+
+			// Build struct type for GEP (all elements are ptr due to boxing)
+			var elemTypes []string
+			for range tupleType.Elems {
+				elemTypes = append(elemTypes, "ptr")
+			}
+			structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+			// Extract each element and bind to pattern variable
+			for i, ident := range s.Pattern {
+				if ident.Name == "_" {
+					// Ignore pattern - don't bind
+					continue
+				}
+
+				elemType := tupleType.Elems[i]
+				llvmElemType := lowerType(elemType)
+
+				// Get pointer to element slot
+				elemPtr := ls.b.FreshTemp("tup_elem_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    structType,
+					Base:    tupleVal,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+					Dst:     elemPtr,
+				})
+
+				// Load boxed pointer
+				boxed := ls.b.FreshTemp("tup_elem_boxed")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
+
+				// Unbox: load actual value from boxed pointer
+				val := ls.b.FreshTemp("tup_elem_val")
+				ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: val})
+
+				// Bind to variable
+				ls.cur().locals = append(ls.cur().locals, ident.Name)
+				if s.Mutable {
+					ls.cur().mutable[ident.Name] = true
+					ls.b.Emit(&hir.Let{Name: ident.Name, Init: nil, Type: elemType})
+					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: ident.Name}, Val: val})
+				} else {
+					ls.b.Emit(&hir.Let{Name: ident.Name, Init: val, Type: elemType})
+				}
+
+				// Track type for drop
+				ls.cur().types[ident.Name] = elemType
+			}
+			return
+		}
+
+		// Single variable binding (original logic)
 		// shadowing in same scope drops previous
 		if ls.hasLocal(s.Name.Name) {
 			ls.dropLocalByName(s.Name.Name)

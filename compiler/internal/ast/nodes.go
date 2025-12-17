@@ -72,7 +72,8 @@ func (b *Block) SpanOf() diag.Span { return b.Span }
 
 type LetStmt struct {
 	Mutable bool
-	Name    Ident
+	Name    Ident     // single variable name
+	Pattern []Ident   // tuple destructuring: (a, b, c) - if non-nil, Name is ignored
 	Type    *TypeName // optional
 	Value   Expr
 	Span    diag.Span
