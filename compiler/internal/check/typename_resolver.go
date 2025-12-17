@@ -140,7 +140,39 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 					}
 					args = append(args, arg)
 				}
-				// Create Generic instantiation
+
+				// Handle tuple type aliases (e.g., type Pair<A, B> = (A, B))
+				// We need to substitute type params inline since Tuple isn't a GenericBase
+				if tupType, ok := sym.Type.(*types.Tuple); ok {
+					// Build substitution map from TypeParams to concrete args
+					subst := make(map[string]types.T)
+					// Find TypeParams in tuple elements and map to args
+					paramIdx := 0
+					for _, elem := range tupType.Elems {
+						if tp, ok := elem.(*types.TypeParam); ok {
+							if paramIdx < len(args) {
+								subst[tp.Name] = args[paramIdx]
+								paramIdx++
+							}
+						}
+					}
+					// Substitute all elements
+					newElems := make([]types.T, len(tupType.Elems))
+					for i, elem := range tupType.Elems {
+						if tp, ok := elem.(*types.TypeParam); ok {
+							if sub, found := subst[tp.Name]; found {
+								newElems[i] = sub
+							} else {
+								newElems[i] = elem
+							}
+						} else {
+							newElems[i] = elem
+						}
+					}
+					return types.TupleOf(newElems...)
+				}
+
+				// Create Generic instantiation for other generic types
 				return &types.Generic{
 					Base: sym.Type,
 					Args: args,
