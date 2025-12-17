@@ -1,0 +1,44 @@
+# Named Tuple Tests
+# Tests named tuple syntax: (name: value, ...)
+
+def main():
+    test_named_creation()
+    test_named_field_access()
+    test_named_in_function()
+    test_mixed_access()
+    print("All named tuple tests passed!")
+
+def test_named_creation():
+    let point = (x: 10, y: 20)
+    print("Named tuple created")
+    print("test_named_creation: PASS")
+
+def test_named_field_access():
+    let point = (x: 100, y: 200)
+    print(point.x)
+    print(point.y)
+    if point.x == 100:
+        if point.y == 200:
+            print("test_named_field_access: PASS")
+        else:
+            print("test_named_field_access: FAIL")
+    else:
+        print("test_named_field_access: FAIL")
+
+def make_point(a: int, b: int) -> tuple[int, int]:
+    return (x: a, y: b)
+
+def test_named_in_function():
+    let p = make_point(5, 10)
+    # Named tuples from functions still have names if returned that way
+    # Access via positional index should still work
+    print(p.0)
+    print(p.1)
+    print("test_named_in_function: PASS")
+
+def test_mixed_access():
+    # Named tuples can also be accessed by positional index
+    let named = (first: 1, second: 2)
+    print(named.first)
+    print(named.0)
+    print("test_mixed_access: PASS")

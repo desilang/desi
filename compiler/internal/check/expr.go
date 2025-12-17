@@ -414,7 +414,14 @@ func (c *checker) typ(e ast.Expr) types.T {
 		for _, el := range x.Elems {
 			elems = append(elems, c.typ(el))
 		}
-		t := types.TupleOf(elems...)
+
+		// Use NamedTupleOf for named tuple literals
+		var t *types.Tuple
+		if len(x.Names) > 0 {
+			t = types.NamedTupleOf(x.Names, elems)
+		} else {
+			t = types.TupleOf(elems...)
+		}
 		c.info.Types[e] = t
 		return t
 

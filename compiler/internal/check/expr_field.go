@@ -101,13 +101,29 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return nil
 	}
 
-	// Handle tuple index access: t.0, t.1, etc.
+	// Handle tuple index access: t.0, t.1, etc. or named field access: t.x, t.y
 	if tupType, ok := t.(*types.Tuple); ok {
 		fieldName := x.Name.Name
+
+		// First, check for named field access (named tuples)
+		if tupType.IsNamed() {
+			idx := tupType.FieldIndex(fieldName)
+			if idx >= 0 {
+				res := tupType.Elems[idx]
+				c.info.Types[x] = res
+				return res
+			}
+			// Field name not found in named tuple - could still be integer index
+		}
+
 		// Check if field name is a valid integer index
 		idx, err := strconv.Atoi(fieldName)
 		if err != nil {
-			c.add(diagAt("DTE0006", x.Name.Span, "tuple field must be an integer index"))
+			if tupType.IsNamed() {
+				c.add(diagAt("DTE0006", x.Name.Span, "named tuple has no field '"+fieldName+"'"))
+			} else {
+				c.add(diagAt("DTE0006", x.Name.Span, "tuple field must be an integer index"))
+			}
 			return nil
 		}
 		if idx < 0 || idx >= len(tupType.Elems) {

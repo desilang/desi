@@ -689,9 +689,24 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		} else if c, ok := baseType.(*types.Class); ok {
 			fields = c.Fields
 		} else if tupType, ok := baseType.(*types.Tuple); ok {
-			// Tuple index access: t.0, t.1, etc.
-			idx, err := strconv.Atoi(name)
-			if err == nil && idx >= 0 && idx < len(tupType.Elems) {
+			// Tuple field access: t.0, t.1, etc. or named: t.x, t.y
+			idx := -1
+
+			// First, try named field lookup
+			if tupType.IsNamed() {
+				idx = tupType.FieldIndex(name)
+			}
+
+			// Fall back to integer index
+			if idx < 0 {
+				var err error
+				idx, err = strconv.Atoi(name)
+				if err != nil || idx < 0 || idx >= len(tupType.Elems) {
+					idx = -1
+				}
+			}
+
+			if idx >= 0 && idx < len(tupType.Elems) {
 				elemType := tupType.Elems[idx]
 				llvmElemType := lowerType(elemType)
 

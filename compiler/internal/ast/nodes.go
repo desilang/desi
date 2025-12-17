@@ -191,6 +191,7 @@ func (x *SetLit) SpanOf() diag.Span { return x.Span }
 
 type TupleLit struct {
 	Elems []Expr
+	Names []string // nil for positional tuples, populated for named tuples (same length as Elems)
 	Span  diag.Span
 }
 
