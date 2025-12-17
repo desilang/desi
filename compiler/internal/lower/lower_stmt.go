@@ -1050,6 +1050,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// List iteration (original code)
 			iterVal := ls.lowerExpr(s.Iter)
 
+			// Get element type from list type info
+			var elemLLVMType = "i32" // default
+			var elemDesiType types.T = types.Int
+			if ls.info != nil {
+				if listT, ok := ls.info.Types[s.Iter].(*types.List); ok {
+					elemDesiType = listT.Elem
+					elemLLVMType = lowerType(listT.Elem)
+				}
+			}
+
 			// Get length of collection
 			lenTemp := ls.b.FreshTemp("for_len")
 			ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
@@ -1088,9 +1098,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						ls.b.Emit(&hir.Call{Dst: elemPtrTemp, Fn: "list_get", Args: []hir.Value{iterVal, idxBodyI32}})
 
 						elemTemp := ls.b.FreshTemp("for_elem")
-						ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtrTemp, Type: "i32"})
+						ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtrTemp, Type: elemLLVMType})
 
-						ls.b.Emit(&hir.Let{Name: tgt.Name.Name, Init: elemTemp})
+						ls.b.Emit(&hir.Let{Name: tgt.Name.Name, Init: elemTemp, Type: elemDesiType})
 					}
 				}
 			}
