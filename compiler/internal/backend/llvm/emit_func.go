@@ -614,6 +614,15 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				wprintf(&m.funcs, "  %s = %s %s %s to %s\n", x.Dst.Name, opcode, valTy, valOp, x.Type)
 				m.tempTypes[x.Dst.Name] = x.Type
 
+			case *hir.Select:
+				// Emit LLVM select instruction: %dst = select i1 %cond, type %then, type %else
+				_, condVal := m.operand(x.Cond)
+				thenTy, thenVal := m.operand(x.Then)
+				_, elseVal := m.operand(x.Else)
+				wprintf(&m.funcs, "  %s = select i1 %s, %s %s, %s %s\n",
+					x.Dst.Name, condVal, thenTy, thenVal, thenTy, elseVal)
+				m.tempTypes[x.Dst.Name] = x.Type
+
 			// ------- control flow (elided) -------
 			case *hir.If:
 				// Emit proper LLVM control flow for If statement

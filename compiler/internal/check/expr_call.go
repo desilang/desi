@@ -539,7 +539,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
-			// Built-in sum() function - accepts list[int] or list[float]
+			// Built-in sum() function - accepts list[int], list[float], or homogeneous tuple
 			if id.Name == "sum" && len(args) == 1 && args[0] != nil {
 				if listT, ok := args[0].(*types.List); ok {
 					if types.Equal(listT.Elem, types.Int) || types.Equal(listT.Elem, types.Float) {
@@ -547,11 +547,28 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						return listT.Elem
 					}
 				}
-				c.add(diagAt("DTE0001", call.Span, "sum requires list[int] or list[float]"))
+				// Also accept homogeneous tuple of int or float
+				if tupT, ok := args[0].(*types.Tuple); ok && len(tupT.Elems) > 0 {
+					firstType := tupT.Elems[0]
+					if types.Equal(firstType, types.Int) || types.Equal(firstType, types.Float) {
+						allSame := true
+						for _, e := range tupT.Elems {
+							if !types.Equal(e, firstType) {
+								allSame = false
+								break
+							}
+						}
+						if allSame {
+							c.info.Types[call] = firstType
+							return firstType
+						}
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, "sum requires list[int], list[float], or homogeneous tuple"))
 				return nil
 			}
 
-			// Built-in min()/max() functions - accepts list[int] or list[float]
+			// Built-in min()/max() functions - accepts list[int], list[float], or homogeneous tuple
 			if (id.Name == "min" || id.Name == "max") && len(args) == 1 && args[0] != nil {
 				if listT, ok := args[0].(*types.List); ok {
 					if types.Equal(listT.Elem, types.Int) || types.Equal(listT.Elem, types.Float) {
@@ -559,7 +576,24 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						return listT.Elem
 					}
 				}
-				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[int] or list[float]"))
+				// Also accept homogeneous tuple of int or float
+				if tupT, ok := args[0].(*types.Tuple); ok && len(tupT.Elems) > 0 {
+					firstType := tupT.Elems[0]
+					if types.Equal(firstType, types.Int) || types.Equal(firstType, types.Float) {
+						allSame := true
+						for _, e := range tupT.Elems {
+							if !types.Equal(e, firstType) {
+								allSame = false
+								break
+							}
+						}
+						if allSame {
+							c.info.Types[call] = firstType
+							return firstType
+						}
+					}
+				}
+				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[int], list[float], or homogeneous tuple"))
 				return nil
 			}
 			// Built-in any()/all() functions - accepts list[bool]
