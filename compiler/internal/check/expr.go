@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -23,6 +24,50 @@ func (c *checker) typ(e ast.Expr) types.T {
 		if types.Equal(bt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
+		}
+		// Tuple slicing: t[i:j] -> requires compile-time known indices
+		if tupType, ok := bt.(*types.Tuple); ok {
+			// For now, require i and j to be integer literals for compile-time slicing
+			iVal := 0
+			jVal := len(tupType.Elems)
+
+			if x.I != nil {
+				if lit, ok := x.I.(*ast.IntLit); ok {
+					iVal, _ = strconv.Atoi(lit.Text)
+				} else {
+					c.add(diagAt("DTE0004", x.Span, "tuple slice indices must be integer literals"))
+					return nil
+				}
+			}
+			if x.J != nil {
+				if lit, ok := x.J.(*ast.IntLit); ok {
+					jVal, _ = strconv.Atoi(lit.Text)
+				} else {
+					c.add(diagAt("DTE0004", x.Span, "tuple slice indices must be integer literals"))
+					return nil
+				}
+			}
+
+			// Validate indices
+			if iVal < 0 || jVal > len(tupType.Elems) || iVal > jVal {
+				c.add(diagAt("DTE0004", x.Span, "tuple slice indices out of bounds"))
+				return nil
+			}
+
+			// Create new tuple type with sliced elements
+			slicedElems := tupType.Elems[iVal:jVal]
+			if len(slicedElems) == 0 {
+				c.add(diagAt("DTE0004", x.Span, "empty tuple slices are not supported"))
+				return nil
+			}
+			if len(slicedElems) == 1 {
+				// Single element - just return the element type (no single-element tuples)
+				c.info.Types[x] = slicedElems[0]
+				return slicedElems[0]
+			}
+			slicedTuple := types.TupleOf(slicedElems...)
+			c.info.Types[x] = slicedTuple
+			return slicedTuple
 		}
 		return nil
 
