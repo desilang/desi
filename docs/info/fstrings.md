@@ -195,6 +195,8 @@ asprintf("Hello, %s!", name)
 
 ## Examples
 
-See working examples:
-- `examples/31_fstring_test.desi` - Basic f-string usage
-- `examples/28_m14_custom_tostr.desi` - F-strings with custom Display
+All f-string examples are provided inline throughout this document:
+
+- **Quick Start**: See opening section for basic usage
+- **Expression Types**: See "Expression Interpolation" section
+- **Custom Types**: See "Custom Types with Display" section

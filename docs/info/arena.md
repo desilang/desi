@@ -547,10 +547,14 @@ for i in range(1000000):
 
 ---
 
-## Examples Repository
+## Examples
 
-**See working examples:**
-- `examples/143_arena.desi` - Basic arena usage
+All arena examples are provided inline throughout this document:
+
+- **Quick Start**: See opening section for basic usage
+- **Multiple Allocations**: See "Usage Guide" section
+- **Nested Arenas**: See "Nested Arenas" section
+- **Use Cases**: See "Use Cases" section for parsing, games, and request handling
 
 ---
 

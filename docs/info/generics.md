@@ -228,16 +228,12 @@ store i32 42, ptr %box
 
 ## Test Coverage
 
-The following tests cover generics:
+This document contains comprehensive inline examples for all generics features:
 
-| Test | Description |
-|------|-------------|
-| `84_generics_struct.desi` | Generic structs with type erasure |
-| `162_generic_class_types.desi` | Comprehensive generic class with all types |
-| `163_generic_functions.desi` | Generic function type erasure |
-| `164_constructor_inference.desi` | Constructor type parameter inference |
-| `161_list_generics.desi` | List with generic classes |
-| `96_class_generic.desi` | Basic generic class usage |
+- **Generic Classes**: See "Basic Syntax" and "Example: Comprehensive Test" sections
+- **Generic Functions**: See "Generic Functions" section
+- **Constructor Inference**: See "Constructor Type Inference" section
+- **Multi-param Classes**: See "Multiple Type Parameters" section
 
 ---
 

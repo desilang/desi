@@ -418,11 +418,8 @@ sorted(nums)  # Returns new list, nums unchanged
 
 ## Examples
 
-- `examples/153_builtins.desi` - sum, min, max
-- `examples/154_reversed.desi` - reversed iteration
-- `examples/156_any_all_sorted.desi` - any, all, sorted
-- `examples/152_enumerate.desi` - enumerate
-- `examples/156_zip.desi` - zip
-- `examples/157_map_filter.desi` - map, filter
-- `examples/158_reduce.desi` - reduce, foldl, foldr
-- `examples/159_method_chaining.desi` - pipe `|>` and dot `.` method chaining
+All builtin function examples are provided inline throughout this document:
+
+- **Collection Functions**: See "len", "sum", "min", "max", "sorted", "any", "all" sections
+- **Transformation**: See "map", "filter", "reduce", "foldl", "foldr" sections  
+- **Iteration**: See "range", "enumerate", "reversed", "zip" sections

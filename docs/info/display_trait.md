@@ -228,8 +228,10 @@ impl Display for User:
 
 ## Examples
 
-See working examples:
-- `examples/26_m14_traits.desi` - Trait definition
-- `examples/27_m14_default_tostr.desi` - Default Display
-- `examples/28_m14_custom_tostr.desi` - Custom `impl Display`
-- `examples/29_m14_print_display.desi` - Print integration
+All examples for the Display trait are provided inline throughout this document:
+
+- **Quick Start**: See the opening section for basic usage
+- **Default Display**: See "Default Display" section
+- **Custom Display**: See "Custom Display with `impl`" section
+- **Print Integration**: See "Integration with `print()`" section
+- **F-string Integration**: See "Integration with F-strings" section
