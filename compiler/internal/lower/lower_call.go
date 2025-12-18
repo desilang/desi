@@ -211,19 +211,25 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				var lenFunc string
 				retType := "i64"
 
+				// Unwrap TypeAlias to check underlying type
+				unwrappedT := argT
+				if ta, ok := argT.(*types.TypeAlias); ok {
+					unwrappedT = ta.Target
+				}
+
 				// Check if it's a string type
-				if argT == types.Str {
+				if unwrappedT == types.Str {
 					lenFunc = "string_len"
-				} else if _, ok := argT.(*types.List); ok {
+				} else if _, ok := unwrappedT.(*types.List); ok {
 					lenFunc = "list_len"
-				} else if _, ok := argT.(*types.Dict); ok {
+				} else if _, ok := unwrappedT.(*types.Dict); ok {
 					lenFunc = "dict_len"
-				} else if _, ok := argT.(*types.Set); ok {
+				} else if _, ok := unwrappedT.(*types.Set); ok {
 					lenFunc = "set_len"
-				} else if tupT, ok := argT.(*types.Tuple); ok {
+				} else if tupT, ok := unwrappedT.(*types.Tuple); ok {
 					// Tuple length is compile-time known - return constant directly
 					return hir.ConstInt{Text: fmt.Sprintf("%d", len(tupT.Elems)), Type: "i32"}
-				} else if cls, ok := argT.(*types.Class); ok {
+				} else if cls, ok := unwrappedT.(*types.Class); ok {
 					// Check for __len__
 					if _, found := cls.Dunders["__len__"]; found {
 						lenFunc = fmt.Sprintf("%s___len__", cls.Name)

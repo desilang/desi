@@ -443,6 +443,11 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					return nil
 				}
 
+				// Unwrap TypeAlias to check underlying type
+				if ta, ok := argType.(*types.TypeAlias); ok {
+					argType = ta.Target
+				}
+
 				// Special case for string
 				if types.Equal(argType, types.Str) {
 					c.info.Types[call] = types.Int
