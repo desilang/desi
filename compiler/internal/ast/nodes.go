@@ -130,6 +130,15 @@ type FloatLit struct {
 func (*FloatLit) isExpr()             {}
 func (x *FloatLit) SpanOf() diag.Span { return x.Span }
 
+// DecimalLit represents a decimal literal with 'd' suffix, e.g. 19.99d
+type DecimalLit struct {
+	Text string // includes 'd' suffix
+	Span diag.Span
+}
+
+func (*DecimalLit) isExpr()             {}
+func (x *DecimalLit) SpanOf() diag.Span { return x.Span }
+
 // StrLit tracks whether it was a triple-quoted (long) string.
 // Long == true when the token was LONGSTR (scanner recognized """...""").
 // Value is populated for F-string parts (FSTR_PART tokens) to store the literal text.

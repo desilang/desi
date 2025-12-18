@@ -1,0 +1,20 @@
+# Test: decimal type and arithmetic
+# Expected: returns 0 (success)
+
+def main() -> int:
+  # Decimal literals with 'd' suffix
+  let a: decimal = 19.99d
+  let b: decimal = 5.01d
+  
+  # Arithmetic operations
+  let sum: decimal = a + b       # 25.00
+  let diff: decimal = a - b      # 14.98  
+  let prod: decimal = a * b      # 100.1499
+  let quot: decimal = a / b      # 3.99...
+  
+  # Integer-based decimal
+  let c: decimal = 100d
+  let d: decimal = 3d
+  let whole_div: decimal = c / d  # 33.333...
+  
+  0  # Success

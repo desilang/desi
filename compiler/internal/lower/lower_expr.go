@@ -21,6 +21,16 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.ConstInt{Text: x.Text}
 	case *ast.FloatLit:
 		return hir.ConstFloat{Text: x.Text}
+	case *ast.DecimalLit:
+		// Lower decimal literal to __decimal_new() call
+		// Strip the 'd' suffix and pass as string constant
+		text := x.Text
+		if len(text) > 0 && (text[len(text)-1] == 'd' || text[len(text)-1] == 'D') {
+			text = text[:len(text)-1]
+		}
+		dst := ls.b.FreshTemp("decimal")
+		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__decimal_new", Args: []hir.Value{hir.ConstStr{Text: text}}, Type: "ptr"})
+		return dst
 	case *ast.BoolLit:
 		return hir.ConstBool{Value: x.Value}
 
@@ -1222,6 +1232,65 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerListComp(x)
 
 	case *ast.BinaryExpr:
+		// Check for decimal arithmetic first
+		if ls.info != nil {
+			lhsType := ls.info.Types[x.Lhs]
+			if types.Equal(lhsType, types.Decimal) {
+				lhs := ls.lowerExpr(x.Lhs)
+				rhs := ls.lowerExpr(x.Rhs)
+				dst := ls.b.FreshTemp("decimal_result")
+
+				var fn string
+				switch x.Op {
+				case "+":
+					fn = "__decimal_add"
+				case "-":
+					fn = "__decimal_sub"
+				case "*":
+					fn = "__decimal_mul"
+				case "/":
+					fn = "__decimal_div"
+				case "==", "!=", "<", "<=", ">", ">=":
+					// Comparison - use __decimal_cmp
+					cmpResult := ls.b.FreshTemp("decimal_cmp")
+					ls.b.Emit(&hir.Call{Dst: cmpResult, Fn: "__decimal_cmp", Args: []hir.Value{lhs, rhs}, Type: "i32"})
+
+					// Convert cmp result (-1, 0, 1) to boolean
+					var cmpOp string
+					var cmpVal string
+					switch x.Op {
+					case "==":
+						cmpOp = "=="
+						cmpVal = "0"
+					case "!=":
+						cmpOp = "!="
+						cmpVal = "0"
+					case "<":
+						cmpOp = "<"
+						cmpVal = "0"
+					case "<=":
+						cmpOp = "<="
+						cmpVal = "0"
+					case ">":
+						cmpOp = ">"
+						cmpVal = "0"
+					case ">=":
+						cmpOp = ">="
+						cmpVal = "0"
+					}
+					ls.b.Emit(&hir.BinaryOp{Op: cmpOp, LHS: cmpResult, RHS: hir.ConstInt{Text: cmpVal}, Dst: dst, Type: "i1"})
+					return dst
+				default:
+					// Unsupported operator - fall through to default handling
+					goto defaultBinaryOp
+				}
+
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: fn, Args: []hir.Value{lhs, rhs}, Type: "ptr"})
+				return dst
+			}
+		}
+
+	defaultBinaryOp:
 		// Check for operator overloading
 		if ls.info != nil {
 			if _, ok := ls.info.BinOpOverloads[x]; ok {

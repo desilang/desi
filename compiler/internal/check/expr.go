@@ -332,6 +332,9 @@ func (c *checker) typ(e ast.Expr) types.T {
 	case *ast.FloatLit:
 		c.info.Types[e] = types.Float
 		return types.Float
+	case *ast.DecimalLit:
+		c.info.Types[e] = types.Decimal
+		return types.Decimal
 	case *ast.BoolLit:
 		c.info.Types[e] = types.Bool
 		return types.Bool
