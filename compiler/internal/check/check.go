@@ -591,6 +591,27 @@ func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 				continue
 			}
 
+			// Tuple membership: x in (a, b, c) where tuple is homogeneous
+			if lt != nil && rt != nil {
+				if tupT, ok := rt.(*types.Tuple); ok {
+					if len(tupT.Elems) > 0 {
+						// Check if tuple is homogeneous and element type matches LHS
+						firstType := tupT.Elems[0]
+						allSame := true
+						for _, e := range tupT.Elems {
+							if !types.Equal(e, firstType) {
+								allSame = false
+								break
+							}
+						}
+						if allSame && types.Equal(lt, firstType) {
+							info.Types[be] = types.Bool
+							continue
+						}
+					}
+				}
+			}
+
 			out = append(out, diagAt("DCO0002", be.Span, "unsupported membership"))
 			// Best-effort type to keep downstream happy.
 			info.Types[be] = types.Bool

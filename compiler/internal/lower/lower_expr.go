@@ -1091,10 +1091,26 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle tuple membership: x in (a, b, c)
+		if x.Op == "in" && ls.info != nil {
+			// Get the tuple type - may be from Types map or from Idents (for variables)
+			var rhsType types.T
+			if t := ls.info.Types[x.Rhs]; t != nil {
+				rhsType = t
+			} else if id, ok := x.Rhs.(*ast.Ident); ok {
+				if sym := ls.info.Idents[id]; sym != nil {
+					rhsType = sym.Type
+				}
+			}
+			if tupType, ok := rhsType.(*types.Tuple); ok {
+				return ls.lowerTupleMembership(lhs, rhs, tupType)
+			}
+		}
+
 		// Determine result type based on operation
 		var resultType string
-		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" {
-			// Comparison and logical operations return boolean (i1)
+		if x.Op == "==" || x.Op == "!=" || x.Op == "<" || x.Op == ">" || x.Op == "<=" || x.Op == ">=" || x.Op == "and" || x.Op == "or" || x.Op == "in" {
+			// Comparison, logical, and membership operations return boolean (i1)
 			resultType = "i1"
 		} else {
 			// Arithmetic operations preserve operand type
@@ -1470,6 +1486,104 @@ func (ls *lowerState) lowerTupleLexicographic(lhs, rhs hir.Value, tupType *types
 	}
 
 	return lastResult
+}
+
+// lowerTupleMembership generates element-wise membership check for tuples.
+// For x in (a, b, c), generates: (x == a) || (x == b) || (x == c)
+func (ls *lowerState) lowerTupleMembership(needle, tup hir.Value, tupType *types.Tuple) hir.Value {
+	numElems := len(tupType.Elems)
+	if numElems == 0 {
+		// Empty tuple: nothing can be in it
+		return hir.ConstBool{Value: false}
+	}
+
+	// Build struct type for GEP (all elements are ptr due to boxing)
+	var elemTypes []string
+	for range tupType.Elems {
+		elemTypes = append(elemTypes, "ptr")
+	}
+	structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+	// Get element type (all elements have same type for homogeneous tuple)
+	elemType := tupType.Elems[0]
+	llvmType := lowerType(elemType)
+
+	// Unbox the needle if it's boxed
+	needleUnboxed := needle
+	// For now assume needle is already the right type
+
+	// For each element, compare with needle and OR results together
+	var result hir.Value = hir.ConstBool{Value: false}
+
+	for i := 0; i < numElems; i++ {
+		// Get element from tuple
+		elemPtr := ls.b.FreshTemp(fmt.Sprintf("member_elem%d_ptr", i))
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    structType,
+			Base:    tup,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+			Dst:     elemPtr,
+		})
+		elemBoxed := ls.b.FreshTemp(fmt.Sprintf("member_elem%d_boxed", i))
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+
+		// For ptr types (strings), the box value IS the string pointer
+		// For value types (int, float), we need to load the value from the box
+		var elemVal hir.Value
+		if llvmType == "ptr" {
+			elemVal = elemBoxed // String is already the ptr we need
+		} else {
+			val := ls.b.FreshTemp(fmt.Sprintf("member_elem%d", i))
+			ls.b.Emit(&hir.Load{Type: llvmType, Src: elemBoxed, Dst: val})
+			elemVal = val
+		}
+
+		// Compare needle with element - use string_eq for strings
+		cmp := ls.b.FreshTemp(fmt.Sprintf("member_cmp%d", i))
+		if elemType == types.Str {
+			// String comparison needs strcmp - returns 0 if equal
+			strcmpResult := ls.b.FreshTemp(fmt.Sprintf("member_strcmp%d", i))
+			ls.b.Emit(&hir.Call{
+				Fn:   "strcmp",
+				Args: []hir.Value{needleUnboxed, elemVal},
+				Dst:  strcmpResult,
+				Type: "i32",
+			})
+			// strcmp returns 0 for equal, so compare with 0
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  strcmpResult,
+				RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+				Dst:  cmp,
+				Type: "i1",
+			})
+		} else {
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  needleUnboxed,
+				RHS:  elemVal,
+				Dst:  cmp,
+				Type: "i1",
+			})
+		}
+
+		// OR with previous result
+		if i == 0 {
+			result = cmp
+		} else {
+			orResult := ls.b.FreshTemp(fmt.Sprintf("member_or%d", i))
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "or",
+				LHS:  result,
+				RHS:  cmp,
+				Dst:  orResult,
+				Type: "i1",
+			})
+			result = orResult
+		}
+	}
+
+	return result
 }
 
 // lowerListComp builds HIR for list comprehensions by expanding them to loops:
