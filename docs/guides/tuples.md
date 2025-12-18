@@ -267,6 +267,32 @@ Element-wise comparison:
 (2, 0) > (1, 100)  # true (first element wins)
 ```
 
+### Tuple Slicing
+
+Extract a portion of a tuple (compile-time indices required):
+
+```desi
+let t = (10, 20, 30, 40, 50)
+
+let middle = t[1:4]  # (20, 30, 40) - new tuple
+let first_two = t[0:2]  # (10, 20)
+let single = t[2:3]  # 30 - returns element, not tuple
+```
+
+> **Note**: Single-element slices return the element value directly (no single-element tuples).
+
+### Builtins for Tuples
+
+Homogeneous tuples support `sum`, `min`, and `max`:
+
+```desi
+let nums = (10, 20, 5, 30, 15)
+
+let total = sum(nums)  # 80
+let smallest = min(nums)  # 5
+let largest = max(nums)  # 30
+```
+
 ---
 
 ## Best Practices
@@ -294,11 +320,13 @@ Element-wise comparison:
 | `(42,)` single | ✅ | ❌ Not supported |
 | `t[0]` | ✅ Runtime | ✅ Compile-time only |
 | `t[-1]` negative | ✅ | ❌ Not supported |
-| `t[1:3]` slicing | ✅ | ❌ Not supported |
+| `t[1:3]` slicing | ✅ | ✅ Compile-time indices |
 | `for x in t` | ✅ Always | ✅ Homogeneous only |
 | `namedtuple` | ✅ Clunky | ✅ First-class |
 | `t + t2` | ✅ | ✅ |
 | `t * 3` | ✅ | ❌ Not supported |
+| `sum(t)` | ✅ | ✅ Homogeneous only |
+| `min(t)`, `max(t)` | ✅ | ✅ Homogeneous only |
 
 ---
 
