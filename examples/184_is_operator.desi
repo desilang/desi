@@ -1,26 +1,61 @@
-# Test is / is not operators
+# Comprehensive test for is / is not operators
 
 def main() -> int:
-    # Test identity comparison
+    # === Basic Identity Tests ===
     let a = 10
     let b = 10
-    let c = a
     
-    # Note: For value types, 'is' works like '=='
     if a is b:
-        print("a is b: true")
+        print("a is b: PASS")
     else:
-        print("a is b: false")
+        print("a is b: FAIL")
     
-    # Test 'is not'
     let x = 5
     let y = 10
     if x is not y:
-        print("x is not y: true")
+        print("x is not y: PASS")
     else:
-        print("x is not y: false")
+        print("x is not y: FAIL")
     
-    # Test with booleans
+    # === Option Type Tests ===
+    let opt_some: Option[int] = Option.Some(42)
+    let opt_none: Option[int] = Option.Nothing()
+    
+    # Test is_some method (existing)
+    if opt_some.is_some():
+        print("opt_some.is_some(): PASS")
+    else:
+        print("opt_some.is_some(): FAIL")
+    
+    # Test is none pattern (lowercase none)
+    if opt_none is none:
+        print("opt_none is none: PASS")
+    else:
+        print("opt_none is none: FAIL")
+    
+    # Test is not none
+    if opt_some is not none:
+        print("opt_some is not none: PASS")
+    else:
+        print("opt_some is not none: FAIL")
+    
+    # === Result Type Tests ===
+    let res_ok: Result[int, str] = Result.Ok(100)
+    let res_err: Result[int, str] = Result.Err("oops")
+    
+    # Test is_ok method (existing)
+    if res_ok.is_ok():
+        print("res_ok.is_ok(): PASS")
+    else:
+        print("res_ok.is_ok(): FAIL")
+    
+    # Test is_err method
+    if res_err.is_err():
+        print("res_err.is_err(): PASS")
+    else:
+        print("res_err.is_err(): FAIL")
+    
+    # === Boolean Identity ===
     let flag = true
     if flag is true:
         print("flag is true: PASS")
@@ -32,5 +67,13 @@ def main() -> int:
     else:
         print("flag is not false: FAIL")
     
-    print("is/is not tests complete!")
+    # === String Identity ===
+    let s1 = "hello"
+    let s2 = "hello"
+    if s1 is s2:
+        print("s1 is s2: PASS")
+    else:
+        print("s1 is s2: FAIL")
+    
+    print("All is/is not tests complete!")
     return 0

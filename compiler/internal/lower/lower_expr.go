@@ -767,18 +767,142 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		lhs := ls.lowerExpr(x.X)
 		dst := ls.b.FreshTemp("is_result")
 
-		// Check for pattern types
-		if ident, ok := x.Pattern.(*ast.Ident); ok && ident.Name == "None" {
-			// 'x is None' - check if x is null (Option.Nothing)
-			ls.b.Emit(&hir.BinaryOp{
-				Op:   "==",
-				LHS:  lhs,
-				RHS:  hir.Undef{}, // null/undef for None check
-				Dst:  dst,
-				Type: "i1",
-			})
+		// Get the type of the left-hand side
+		var lhsType types.T
+		if ls.info != nil {
+			lhsType = ls.info.Types[x.X]
+		}
+
+		// Check if we're matching against none/Nothing for Option types
+		// 'none' can be parsed as either Ident("none") or NoneLit
+		isNonePattern := false
+		if ident, ok := x.Pattern.(*ast.Ident); ok && (ident.Name == "none" || ident.Name == "Nothing") {
+			isNonePattern = true
+		}
+		if _, ok := x.Pattern.(*ast.NoneLit); ok {
+			isNonePattern = true
+		}
+
+		if isNonePattern {
+			// Check if LHS is Option type using helper
+			isOption := lhsType != nil && types.IsOption(lhsType)
+
+			if isOption {
+				// Option: check tag == 1 (Nothing)
+				tagPtr := ls.b.FreshTemp("tag_ptr")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    "i8",
+					Base:    lhs,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+					Dst:     tagPtr,
+				})
+				tag := ls.b.FreshTemp("tag")
+				ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+				ls.b.Emit(&hir.BinaryOp{
+					Op:   "==",
+					LHS:  tag,
+					RHS:  hir.ConstInt{Text: "1"},
+					Dst:  dst,
+					Type: "i1",
+				})
+			} else {
+				// Non-Option: 'is none' means compare to the none value
+				// For non-Option types, lower 'none' as expression
+				rhs := ls.lowerExpr(x.Pattern)
+				ls.b.Emit(&hir.BinaryOp{
+					Op:   "==",
+					LHS:  lhs,
+					RHS:  rhs,
+					Dst:  dst,
+					Type: "i1",
+				})
+			}
+		} else if call, ok := x.Pattern.(*ast.CallExpr); ok {
+			// Pattern like Some(x) or Ok(v) - check variant tag
+			if callee, ok := call.Callee.(*ast.Ident); ok {
+				switch callee.Name {
+				case "Some":
+					// Check tag == 0 for Option.Some
+					tagPtr := ls.b.FreshTemp("tag_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    lhs,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+						Dst:     tagPtr,
+					})
+					tag := ls.b.FreshTemp("tag")
+					ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  tag,
+						RHS:  hir.ConstInt{Text: "0"},
+						Dst:  dst,
+						Type: "i1",
+					})
+				case "Ok":
+					// Check tag == 0 for Result.Ok
+					tagPtr := ls.b.FreshTemp("tag_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    lhs,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+						Dst:     tagPtr,
+					})
+					tag := ls.b.FreshTemp("tag")
+					ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  tag,
+						RHS:  hir.ConstInt{Text: "0"},
+						Dst:  dst,
+						Type: "i1",
+					})
+				case "Err":
+					// Check tag == 1 for Result.Err
+					tagPtr := ls.b.FreshTemp("tag_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    lhs,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+						Dst:     tagPtr,
+					})
+					tag := ls.b.FreshTemp("tag")
+					ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  tag,
+						RHS:  hir.ConstInt{Text: "1"},
+						Dst:  dst,
+						Type: "i1",
+					})
+				default:
+					// Unknown pattern - fallback to identity
+					rhs := ls.lowerExpr(x.Pattern)
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  lhs,
+						RHS:  rhs,
+						Dst:  dst,
+						Type: "i1",
+					})
+				}
+			} else {
+				// FieldExpr callee like Option.Some
+				rhs := ls.lowerExpr(x.Pattern)
+				ls.b.Emit(&hir.BinaryOp{
+					Op:   "==",
+					LHS:  lhs,
+					RHS:  rhs,
+					Dst:  dst,
+					Type: "i1",
+				})
+			}
 		} else {
-			// General identity comparison: compare pointers
+			// General identity comparison: compare values/pointers
 			rhs := ls.lowerExpr(x.Pattern)
 			ls.b.Emit(&hir.BinaryOp{
 				Op:   "==",
