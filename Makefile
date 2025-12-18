@@ -8,6 +8,7 @@ GO ?= go
 BUILD_DIR = build
 BIN_DIR = bin
 RUNTIME_SRC = compiler/runtime
+DECIMAL_SRC = compiler/runtime/decimal
 RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o $(BUILD_DIR)/string.o $(BUILD_DIR)/list.o $(BUILD_DIR)/file.o $(BUILD_DIR)/arena.o $(BUILD_DIR)/builtins.o
 LIB_DESI = $(BUILD_DIR)/libdesi.a
 
@@ -23,16 +24,21 @@ all: directories runtime compiler tools
 directories:
 	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
 
-# Runtime Library
+# Runtime Library (includes decimal support)
 runtime: $(LIB_DESI)
 
-$(LIB_DESI): $(RUNTIME_OBJS)
-	@echo "==> Archiving runtime library to $@"
+$(LIB_DESI): $(RUNTIME_OBJS) $(BUILD_DIR)/desi_decimal.o
+	@echo "==> Merging runtime + libmpdec into $@"
+	cp $(DECIMAL_SRC)/lib/libmpdec.a $@
 	$(AR) rcs $@ $^
 
 $(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
 	@echo "==> Compiling $<..."
 	$(CC) -c $< -o $@
+
+$(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c
+	@echo "==> Compiling decimal wrapper..."
+	$(CC) -I$(DECIMAL_SRC) -c $< -o $@
 
 # Compiler and Tools
 compiler: $(DESIC)
