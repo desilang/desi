@@ -149,6 +149,21 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
+		// Tuple concatenation: tuple + tuple => combined tuple
+		if op == "+" {
+			ltup, lok := lt.(*types.Tuple)
+			rtup, rok := rt.(*types.Tuple)
+			if lok && rok {
+				// Create new tuple with combined elements
+				combined := make([]types.T, 0, len(ltup.Elems)+len(rtup.Elems))
+				combined = append(combined, ltup.Elems...)
+				combined = append(combined, rtup.Elems...)
+				result := types.TupleOf(combined...)
+				c.info.Types[x] = result
+				return result
+			}
+		}
+
 		// Integers: same signedness & same width, with one exception:
 		//   M9 allowance: (isize|usize) with unsized int ==> OK, result keeps pointer-sized type.
 		if ls, lw, lok := intInfo(lt); lok {
