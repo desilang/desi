@@ -402,7 +402,16 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return c.typFieldExpr(x)
 	case *ast.TupleLit:
 		// Desi does not support single-element tuples - just use the value directly
-		if len(x.Elems) == 1 {
+		// But allow spread expressions that might expand to multiple elements
+		hasSpreads := false
+		for _, el := range x.Elems {
+			if _, ok := el.(*ast.SpreadExpr); ok {
+				hasSpreads = true
+				break
+			}
+		}
+
+		if len(x.Elems) == 1 && !hasSpreads {
 			c.add(diagAt("DTE0050", x.Span, "single-element tuples are not supported; use the value directly"))
 			// Still return the inner type so type checking can continue
 			innerType := c.typ(x.Elems[0])
@@ -412,7 +421,22 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 		var elems []types.T
 		for _, el := range x.Elems {
-			elems = append(elems, c.typ(el))
+			if spread, ok := el.(*ast.SpreadExpr); ok {
+				// Spread expression: *expr - must be a tuple, flatten its elements
+				spreadType := c.typ(spread.X)
+				if spreadType == nil {
+					continue
+				}
+				if tupT, ok := spreadType.(*types.Tuple); ok {
+					// Flatten tuple elements
+					elems = append(elems, tupT.Elems...)
+					c.info.Types[spread] = spreadType
+				} else {
+					c.add(diagAt("DTE0004", spread.Span, "spread operator requires tuple type, got '"+spreadType.String()+"'"))
+				}
+			} else {
+				elems = append(elems, c.typ(el))
+			}
 		}
 
 		// Use NamedTupleOf for named tuple literals

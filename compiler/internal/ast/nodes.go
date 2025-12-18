@@ -198,6 +198,16 @@ type TupleLit struct {
 func (*TupleLit) isExpr()             {}
 func (x *TupleLit) SpanOf() diag.Span { return x.Span }
 
+// SpreadExpr represents a spread expression: *expr
+// Used in tuple literals to spread another tuple: (*a, *b)
+type SpreadExpr struct {
+	X    Expr
+	Span diag.Span
+}
+
+func (*SpreadExpr) isExpr()             {}
+func (x *SpreadExpr) SpanOf() diag.Span { return x.Span }
+
 type UnaryExpr struct {
 	Op   string // "-", "!", "not", "await"
 	X    Expr

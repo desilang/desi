@@ -514,7 +514,16 @@ func (p *Parser) parsePrimary() ast.Expr {
 		}
 
 		// Regular expression or positional tuple
-		e := p.parseExpr()
+		// Check for spread: *expr
+		var e ast.Expr
+		if p.cur.Tok == token.STAR {
+			starSpan := spanPos(p.file, p.cur)
+			p.next() // consume *
+			inner := p.parseExpr()
+			e = &ast.SpreadExpr{X: inner, Span: ast.JoinSpan(starSpan, inner.SpanOf())}
+		} else {
+			e = p.parseExpr()
+		}
 
 		// Check for comma to distinguish tuple from paren expr
 		if p.cur.Tok == token.COMMA {
@@ -530,7 +539,17 @@ func (p *Parser) parsePrimary() ast.Expr {
 			// Multi-element tuple (e1, e2, ...)
 			elems := []ast.Expr{e}
 			for p.cur.Tok != token.RPAREN && p.cur.Tok != token.EOF {
-				elems = append(elems, p.parseExpr())
+				// Check for spread: *expr
+				var elem ast.Expr
+				if p.cur.Tok == token.STAR {
+					starSpan := spanPos(p.file, p.cur)
+					p.next() // consume *
+					inner := p.parseExpr()
+					elem = &ast.SpreadExpr{X: inner, Span: ast.JoinSpan(starSpan, inner.SpanOf())}
+				} else {
+					elem = p.parseExpr()
+				}
+				elems = append(elems, elem)
 				if p.cur.Tok == token.COMMA {
 					p.next()
 				} else {
