@@ -426,8 +426,30 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 	case *ast.IfStmt:
 		_ = c.typ(st.Cond)
+
+		// If condition is IsExpr with bindings, push scope with bound variables
 		if st.Then != nil {
-			c.checkBlock(st.Then)
+			// Check for IsExpr condition with bindings
+			if isExpr, ok := st.Cond.(*ast.IsExpr); ok && !isExpr.Negated {
+				if bindings := c.info.IsBindings[isExpr]; len(bindings) > 0 {
+					// Push scope with bindings for then block
+					c.scope = NewScope(c.scope)
+					for _, b := range bindings {
+						c.scope.Define(&Symbol{
+							Name: b.Name,
+							Kind: SymVar,
+							Type: b.Type,
+							Node: b.Node,
+						})
+					}
+					c.checkBlock(st.Then)
+					c.scope = c.scope.parent // Pop scope
+				} else {
+					c.checkBlock(st.Then)
+				}
+			} else {
+				c.checkBlock(st.Then)
+			}
 		}
 		for _, arm := range st.Elifs {
 			_ = c.typ(arm.Cond)

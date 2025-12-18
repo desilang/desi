@@ -447,9 +447,68 @@ func (c *checker) typ(e ast.Expr) types.T {
 		return c.typFieldExpr(x)
 
 	case *ast.IsExpr:
-		// Type-check both sides
-		c.typ(x.X)
-		c.typ(x.Pattern)
+		// Type-check the LHS
+		lhsType := c.typ(x.X)
+
+		// Don't type-check pattern as expression if it's a call pattern with bindings
+		// Check for pattern binding: is Some(val), is Ok(v), is Err(e)
+		if call, ok := x.Pattern.(*ast.CallExpr); ok && !x.Negated {
+			// Check if callee is Some/Ok/Err
+			if callee, ok := call.Callee.(*ast.Ident); ok {
+				variantName := callee.Name
+				isEnumPattern := variantName == "Some" || variantName == "Ok" || variantName == "Err"
+
+				if isEnumPattern && len(call.Args) > 0 {
+					// Get the payload type from the LHS type
+					var payloadType types.T
+
+					if variantName == "Some" && types.IsOption(lhsType) {
+						payloadType = types.OptionSomeType(lhsType)
+					} else if variantName == "Ok" && types.IsResult(lhsType) {
+						payloadType = types.ResultOkType(lhsType)
+					} else if variantName == "Err" && types.IsResult(lhsType) {
+						payloadType = types.ResultErrType(lhsType)
+					}
+
+					if payloadType != nil {
+						// Create bindings for pattern variables
+						var bindings []MatchBinding
+						for i, arg := range call.Args {
+							if ident, ok := arg.(*ast.Ident); ok && ident.Name != "_" {
+								binding := MatchBinding{
+									Name:       ident.Name,
+									Type:       payloadType,
+									FieldIndex: i,
+									Node:       ident,
+								}
+								bindings = append(bindings, binding)
+
+								// Register binding in info
+								sym := &Symbol{
+									Name: ident.Name,
+									Kind: SymVar,
+									Type: payloadType,
+									Node: ident,
+								}
+								c.info.Idents[ident] = sym
+							}
+						}
+
+						// Store bindings for lowering
+						if len(bindings) > 0 {
+							if c.info.IsBindings == nil {
+								c.info.IsBindings = make(map[*ast.IsExpr][]MatchBinding)
+							}
+							c.info.IsBindings[x] = bindings
+						}
+					}
+				}
+			}
+		} else {
+			// Regular pattern - type check it
+			c.typ(x.Pattern)
+		}
+
 		// 'is' expression always returns bool
 		c.info.Types[e] = types.Bool
 		return types.Bool

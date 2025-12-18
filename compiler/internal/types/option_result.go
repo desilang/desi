@@ -76,6 +76,12 @@ func ResultOkType(t T) T {
 			return g.Args[0]
 		}
 	}
+	// Handle direct Enum type
+	if e, ok := t.(*Enum); ok && IsResult(e) {
+		if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+			return e.Variants[0].Fields[0].Type // Ok variant field
+		}
+	}
 	return nil
 }
 
@@ -84,6 +90,12 @@ func ResultErrType(t T) T {
 	if g, ok := t.(*Generic); ok && IsResult(g.Base) {
 		if len(g.Args) > 1 {
 			return g.Args[1]
+		}
+	}
+	// Handle direct Enum type
+	if e, ok := t.(*Enum); ok && IsResult(e) {
+		if len(e.Variants) > 1 && len(e.Variants[1].Fields) > 0 {
+			return e.Variants[1].Fields[0].Type // Err variant field
 		}
 	}
 	return nil
