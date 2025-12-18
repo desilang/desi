@@ -565,16 +565,41 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			case *hir.Cast:
 				valTy, valOp := m.operand(x.Src)
 				opcode := "bitcast"
-				// Simple heuristic for Tier-0
-				if (valTy == "i64" || valTy == "i32") && x.Type == "ptr" {
+
+				// Get bit widths for integer types
+				srcBits := intTypeBits(valTy)
+				dstBits := intTypeBits(x.Type)
+
+				// Check if types are floats
+				srcFloat := (valTy == "float" || valTy == "double")
+				dstFloat := (x.Type == "float" || x.Type == "double")
+
+				// Handle all cast combinations
+				if srcBits > 0 && dstBits > 0 {
+					// Integer to integer
+					if srcBits > dstBits {
+						opcode = "trunc"
+					} else if srcBits < dstBits {
+						opcode = "sext" // Use sext for signed integers
+					} // else same size, use bitcast (though unusual)
+				} else if srcFloat && dstFloat {
+					// Float to float
+					if valTy == "double" && x.Type == "float" {
+						opcode = "fptrunc"
+					} else if valTy == "float" && x.Type == "double" {
+						opcode = "fpext"
+					}
+				} else if srcBits > 0 && dstFloat {
+					// Integer to float
+					opcode = "sitofp"
+				} else if srcFloat && dstBits > 0 {
+					// Float to integer
+					opcode = "fptosi"
+				} else if (valTy == "i64" || valTy == "i32") && x.Type == "ptr" {
 					opcode = "inttoptr"
 				} else if valTy == "ptr" && (x.Type == "i64" || x.Type == "i32") {
 					opcode = "ptrtoint"
-				} else if valTy == "i64" && x.Type == "i32" {
-					opcode = "trunc"
-				} else if valTy == "i32" && x.Type == "i64" {
-					opcode = "sext" // Assume signed integers for now
-				} else if valTy == "i1" && (x.Type == "i64" || x.Type == "i32") {
+				} else if valTy == "i1" && (x.Type == "i64" || x.Type == "i32" || x.Type == "i16" || x.Type == "i8") {
 					opcode = "zext"
 				} else if valTy == "i1" && x.Type == "ptr" {
 					// Special case: bool to ptr requires two steps: i1 -> i64 -> ptr
@@ -746,4 +771,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	}
 	m.curFuncRetTy = ""
 	wprintf(&m.funcs, "}\n")
+}
+
+// intTypeBits returns the bit width for LLVM integer types, or 0 if not an integer
+func intTypeBits(ty string) int {
+	switch ty {
+	case "i1":
+		return 1
+	case "i8":
+		return 8
+	case "i16":
+		return 16
+	case "i32":
+		return 32
+	case "i64":
+		return 64
+	case "i128":
+		return 128
+	default:
+		return 0
+	}
 }

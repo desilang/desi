@@ -524,6 +524,35 @@ func (c *checker) typ(e ast.Expr) types.T {
 		c.info.Types[e] = types.Bool
 		return types.Bool
 
+	case *ast.CastExpr:
+		// 'as' expression: expr as type (explicit type cast)
+		fromType := c.typ(x.X)
+		toType := c.resolveType(x.Type)
+
+		// Validate the cast is allowed (numeric types only)
+		fromNumeric := types.Equal(fromType, types.Int) || types.Equal(fromType, types.Float) ||
+			types.Equal(fromType, types.Decimal) || types.Equal(fromType, types.Char) ||
+			types.Equal(fromType, types.I8) || types.Equal(fromType, types.I16) ||
+			types.Equal(fromType, types.I32) || types.Equal(fromType, types.I64) ||
+			types.Equal(fromType, types.U8) || types.Equal(fromType, types.U16) ||
+			types.Equal(fromType, types.U32) || types.Equal(fromType, types.U64) ||
+			types.Equal(fromType, types.F32) || types.Equal(fromType, types.F64)
+
+		toNumeric := types.Equal(toType, types.Int) || types.Equal(toType, types.Float) ||
+			types.Equal(toType, types.Decimal) || types.Equal(toType, types.Char) ||
+			types.Equal(toType, types.I8) || types.Equal(toType, types.I16) ||
+			types.Equal(toType, types.I32) || types.Equal(toType, types.I64) ||
+			types.Equal(toType, types.U8) || types.Equal(toType, types.U16) ||
+			types.Equal(toType, types.U32) || types.Equal(toType, types.U64) ||
+			types.Equal(toType, types.F32) || types.Equal(toType, types.F64)
+
+		if !fromNumeric || !toNumeric {
+			c.add(diagAt("DTE0004", e.SpanOf(), fmt.Sprintf("cannot cast %s to %s", fromType, toType)))
+		}
+
+		c.info.Types[e] = toType
+		return toType
+
 	case *ast.TupleLit:
 		// Desi does not support single-element tuples - just use the value directly
 		// But allow spread expressions that might expand to multiple elements
