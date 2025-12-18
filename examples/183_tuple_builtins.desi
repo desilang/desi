@@ -1,0 +1,45 @@
+# Test sum/min/max builtins with tuples
+
+def main() -> int:
+    let t = (10, 20, 5, 30, 15)
+    
+    # Test sum
+    let s = sum(t)
+    if s == 80:
+        print("sum(t) = 80: PASS")
+    else:
+        print("FAIL: sum should be 80")
+    
+    # Test min
+    let mn = min(t)
+    if mn == 5:
+        print("min(t) = 5: PASS")
+    else:
+        print("FAIL: min should be 5")
+    
+    # Test max
+    let mx = max(t)
+    if mx == 30:
+        print("max(t) = 30: PASS")
+    else:
+        print("FAIL: max should be 30")
+    
+    # Test with 2-element tuple
+    let pair = (100, 50)
+    if sum(pair) == 150:
+        print("sum(100, 50) = 150: PASS")
+    else:
+        print("FAIL: sum of pair")
+    
+    if min(pair) == 50:
+        print("min(100, 50) = 50: PASS")
+    else:
+        print("FAIL: min of pair")
+    
+    if max(pair) == 100:
+        print("max(100, 50) = 100: PASS")
+    else:
+        print("FAIL: max of pair")
+    
+    print("All tuple builtin tests passed!")
+    return 0

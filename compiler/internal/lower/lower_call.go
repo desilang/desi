@@ -258,7 +258,104 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
 		if len(x.Args) == 1 {
+			argType := ls.info.Types[x.Args[0]]
 			argVal := ls.lowerExpr(x.Args[0])
+
+			// Check if argument is a tuple (compile-time unroll)
+			if tupType, ok := argType.(*types.Tuple); ok && len(tupType.Elems) > 0 {
+				// Build struct type for GEP
+				var elemTypes []string
+				for range tupType.Elems {
+					elemTypes = append(elemTypes, "ptr")
+				}
+				structType := "{" + strings.Join(elemTypes, ", ") + "}"
+
+				switch calleeName {
+				case "sum":
+					// Unroll sum: result = e0 + e1 + e2 + ...
+					var result hir.Value
+					for i := range tupType.Elems {
+						elemPtr := ls.b.FreshTemp(fmt.Sprintf("sum_elem%d_ptr", i))
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    structType,
+							Base:    argVal,
+							Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+							Dst:     elemPtr,
+						})
+						elemBoxed := ls.b.FreshTemp(fmt.Sprintf("sum_elem%d_boxed", i))
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+						elemVal := ls.b.FreshTemp(fmt.Sprintf("sum_elem%d", i))
+						ls.b.Emit(&hir.Load{Type: "i32", Src: elemBoxed, Dst: elemVal})
+
+						if i == 0 {
+							result = elemVal
+						} else {
+							newResult := ls.b.FreshTemp(fmt.Sprintf("sum_acc%d", i))
+							ls.b.Emit(&hir.BinaryOp{Op: "+", LHS: result, RHS: elemVal, Dst: newResult, Type: "i32"})
+							result = newResult
+						}
+					}
+					return result
+
+				case "min":
+					// Unroll min: result = min(e0, min(e1, min(e2, ...)))
+					var result hir.Value
+					for i := range tupType.Elems {
+						elemPtr := ls.b.FreshTemp(fmt.Sprintf("min_elem%d_ptr", i))
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    structType,
+							Base:    argVal,
+							Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+							Dst:     elemPtr,
+						})
+						elemBoxed := ls.b.FreshTemp(fmt.Sprintf("min_elem%d_boxed", i))
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+						elemVal := ls.b.FreshTemp(fmt.Sprintf("min_elem%d", i))
+						ls.b.Emit(&hir.Load{Type: "i32", Src: elemBoxed, Dst: elemVal})
+
+						if i == 0 {
+							result = elemVal
+						} else {
+							cmp := ls.b.FreshTemp(fmt.Sprintf("min_cmp%d", i))
+							ls.b.Emit(&hir.BinaryOp{Op: "<", LHS: elemVal, RHS: result, Dst: cmp, Type: "i1"})
+							newResult := ls.b.FreshTemp(fmt.Sprintf("min_sel%d", i))
+							ls.b.Emit(&hir.Select{Cond: cmp, Then: elemVal, Else: result, Dst: newResult, Type: "i32"})
+							result = newResult
+						}
+					}
+					return result
+
+				case "max":
+					// Unroll max: result = max(e0, max(e1, max(e2, ...)))
+					var result hir.Value
+					for i := range tupType.Elems {
+						elemPtr := ls.b.FreshTemp(fmt.Sprintf("max_elem%d_ptr", i))
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    structType,
+							Base:    argVal,
+							Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: fmt.Sprintf("%d", i)}},
+							Dst:     elemPtr,
+						})
+						elemBoxed := ls.b.FreshTemp(fmt.Sprintf("max_elem%d_boxed", i))
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: elemBoxed})
+						elemVal := ls.b.FreshTemp(fmt.Sprintf("max_elem%d", i))
+						ls.b.Emit(&hir.Load{Type: "i32", Src: elemBoxed, Dst: elemVal})
+
+						if i == 0 {
+							result = elemVal
+						} else {
+							cmp := ls.b.FreshTemp(fmt.Sprintf("max_cmp%d", i))
+							ls.b.Emit(&hir.BinaryOp{Op: ">", LHS: elemVal, RHS: result, Dst: cmp, Type: "i1"})
+							newResult := ls.b.FreshTemp(fmt.Sprintf("max_sel%d", i))
+							ls.b.Emit(&hir.Select{Cond: cmp, Then: elemVal, Else: result, Dst: newResult, Type: "i32"})
+							result = newResult
+						}
+					}
+					return result
+				}
+			}
+
+			// List case - use runtime functions
 			switch calleeName {
 			case "sum":
 				res := ls.b.FreshTemp("sum_res")

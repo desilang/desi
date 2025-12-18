@@ -156,6 +156,17 @@ type Cast struct {
 
 func (*Cast) isStmt() {}
 
+// Select: dst = cond ? then : else (LLVM select instruction)
+type Select struct {
+	Dst  Temp
+	Cond Value  // i1 condition
+	Then Value  // value if true
+	Else Value  // value if false
+	Type string // result type
+}
+
+func (*Select) isStmt() {}
+
 type Drop struct {
 	Val  Value
 	Type interface{} // types.T from type checker (helps backend with cleanup)
