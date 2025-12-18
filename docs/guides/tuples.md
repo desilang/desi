@@ -353,7 +353,33 @@ Named tuples generate separate types:
 
 ### Key Files
 
-- `ast/expr_tuple.go` - TupleExpr AST node
-- `check/expr.go` - Tuple type checking
-- `lower/lower_expr.go` - Lowering to HIR
+- `ast/nodes.go` - TupleExpr, SpreadExpr, LetStmt.RestIndex AST nodes
+- `check/expr.go` - Tuple type checking, slicing validation
+- `lower/lower_expr.go` - Lowering to HIR, spread extraction
+- `lower/lower_stmt.go` - Rest pattern lowering
 - `types/tuple.go` - Tuple type representation
+
+### Design Decisions Summary (Contributor Reference)
+
+| Decision | Rationale |
+|----------|-----------|
+| No single-element tuple `(1,)` | Adds no value; use the value directly |
+| No empty tuple `()` | Use `None` or structs instead |
+| Compile-time indices only | Type safety - element types vary by position |
+| Nominal named tuples | Prevents Mars Climate Orbiter-style unit confusion |
+| Homogeneous iteration only | Avoids union types in loop variable |
+| Boxing all elements to `ptr` | Enables type erasure for generics |
+| Slicing returns element for single | Consistent with no single-element tuples |
+| min/max via LLVM `select` | Branchless, efficient code generation |
+
+### Memory Model
+
+Tuples are heap-allocated with all elements boxed to `ptr` for type erasure:
+```llvm
+; (10, 20, 30) becomes:
+%tuple_ptr = call ptr @malloc(i64 24)  ; 3 elements * 8 bytes
+; Each element is boxed: alloc + store value + store ptr in tuple
+```
+
+This enables generic functions to work with any tuple without monomorphization explosion.
+
