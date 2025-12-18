@@ -125,6 +125,20 @@ func lowerType(t types.T) string {
 		return "ptr"
 	case "none":
 		return "void"
+
+	// Unicode character (32-bit scalar)
+	case "char", "rune":
+		return "i32"
+
+	// Decimal (ptr to libmpdec struct)
+	case "decimal":
+		return "ptr"
+
+	// Aliases
+	case "byte":
+		return "i8"
+	case "uint":
+		return "i64"
 	}
 	if strings.HasPrefix(name, "list[") {
 		return "ptr" // list struct pointer
