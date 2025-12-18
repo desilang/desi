@@ -71,12 +71,13 @@ type Block struct {
 func (b *Block) SpanOf() diag.Span { return b.Span }
 
 type LetStmt struct {
-	Mutable bool
-	Name    Ident     // single variable name
-	Pattern []Ident   // tuple destructuring: (a, b, c) - if non-nil, Name is ignored
-	Type    *TypeName // optional
-	Value   Expr
-	Span    diag.Span
+	Mutable   bool
+	Name      Ident     // single variable name
+	Pattern   []Ident   // tuple destructuring: (a, b, c) - if non-nil, Name is ignored
+	RestIndex int       // -1 = no rest, otherwise index of *rest element in Pattern
+	Type      *TypeName // optional
+	Value     Expr
+	Span      diag.Span
 }
 
 func (*LetStmt) isStmt()             {}

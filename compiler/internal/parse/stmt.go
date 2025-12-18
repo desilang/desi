@@ -113,22 +113,39 @@ func (p *Parser) parseLet() ast.Stmt {
 
 	mut := p.accept(token.KW_mut)
 
-	// Check for tuple destructuring pattern: (a, b, c)
+	// Check for tuple destructuring pattern: (a, b, c) or (a, *rest)
 	var pattern []ast.Ident
 	var name ast.Ident
+	restIndex := -1 // -1 means no rest pattern
 
 	if p.cur.Tok == token.LPAREN {
-		// Tuple destructuring: let (a, b, c) = expr
+		// Tuple destructuring: let (a, b, c) = expr or let (a, *rest) = expr
 		p.next() // consume '('
+		patternIdx := 0
 		for {
-			if p.cur.Tok == token.IDENT {
+			// Check for rest pattern: *name
+			if p.cur.Tok == token.STAR {
+				if restIndex != -1 {
+					p.errExpected(spanPos(p.file, p.cur), "only one rest pattern allowed")
+					return nil
+				}
+				p.next() // consume '*'
+				if p.cur.Tok != token.IDENT {
+					p.errExpected(spanPos(p.file, p.cur), "identifier after *")
+					return nil
+				}
+				restIndex = patternIdx
+				pattern = append(pattern, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+				p.next()
+			} else if p.cur.Tok == token.IDENT {
 				// Includes _ for ignore pattern
 				pattern = append(pattern, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
 				p.next()
 			} else {
-				p.errExpected(spanPos(p.file, p.cur), "identifier or _")
+				p.errExpected(spanPos(p.file, p.cur), "identifier or *rest")
 				return nil
 			}
+			patternIdx++
 
 			if p.cur.Tok == token.COMMA {
 				p.next() // consume ','
@@ -168,12 +185,13 @@ func (p *Parser) parseLet() ast.Stmt {
 	}
 
 	return &ast.LetStmt{
-		Mutable: mut,
-		Name:    name,
-		Pattern: pattern,
-		Type:    ty,
-		Value:   val,
-		Span:    ast.JoinSpan(start, lastSpan(val, start)),
+		Mutable:   mut,
+		Name:      name,
+		Pattern:   pattern,
+		RestIndex: restIndex,
+		Type:      ty,
+		Value:     val,
+		Span:      ast.JoinSpan(start, lastSpan(val, start)),
 	}
 }
 
