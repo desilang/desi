@@ -445,6 +445,15 @@ func (c *checker) typ(e ast.Expr) types.T {
 
 	case *ast.FieldExpr:
 		return c.typFieldExpr(x)
+
+	case *ast.IsExpr:
+		// Type-check both sides
+		c.typ(x.X)
+		c.typ(x.Pattern)
+		// 'is' expression always returns bool
+		c.info.Types[e] = types.Bool
+		return types.Bool
+
 	case *ast.TupleLit:
 		// Desi does not support single-element tuples - just use the value directly
 		// But allow spread expressions that might expand to multiple elements

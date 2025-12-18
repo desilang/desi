@@ -762,6 +762,47 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
 
+	case *ast.IsExpr:
+		// 'is' operator: identity comparison or pattern matching
+		lhs := ls.lowerExpr(x.X)
+		dst := ls.b.FreshTemp("is_result")
+
+		// Check for pattern types
+		if ident, ok := x.Pattern.(*ast.Ident); ok && ident.Name == "None" {
+			// 'x is None' - check if x is null (Option.Nothing)
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  lhs,
+				RHS:  hir.Undef{}, // null/undef for None check
+				Dst:  dst,
+				Type: "i1",
+			})
+		} else {
+			// General identity comparison: compare pointers
+			rhs := ls.lowerExpr(x.Pattern)
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  lhs,
+				RHS:  rhs,
+				Dst:  dst,
+				Type: "i1",
+			})
+		}
+
+		// Handle negation ('is not')
+		if x.Negated {
+			negDst := ls.b.FreshTemp("is_not_result")
+			ls.b.Emit(&hir.BinaryOp{
+				Op:   "==",
+				LHS:  dst,
+				RHS:  hir.ConstBool{Value: false},
+				Dst:  negDst,
+				Type: "i1",
+			})
+			return negDst
+		}
+		return dst
+
 	case *ast.CallExpr:
 		return ls.lowerCall(x)
 

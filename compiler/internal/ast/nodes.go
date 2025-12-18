@@ -218,6 +218,18 @@ type UnaryExpr struct {
 func (*UnaryExpr) isExpr()             {}
 func (x *UnaryExpr) SpanOf() diag.Span { return x.Span }
 
+// IsExpr represents 'x is pattern' or 'x is not pattern' expressions
+// Used for pattern matching (is Some(x)) and identity comparison (a is b)
+type IsExpr struct {
+	X       Expr // Left-hand side value
+	Pattern Expr // Pattern to match (Ident, CallExpr for Some(x), etc.)
+	Negated bool // true for 'is not'
+	Span    diag.Span
+}
+
+func (*IsExpr) isExpr()             {}
+func (x *IsExpr) SpanOf() diag.Span { return x.Span }
+
 type BinaryExpr struct {
 	Op   string // "**", "*", "/", "%", "+", "-", "^", "|", "<", "<=", ">", ">=", "==", "!=", "|>", "and", "or"
 	Lhs  Expr
