@@ -1,0 +1,127 @@
+# Strings and F-Strings
+
+Desi provides powerful string handling with f-string interpolation.
+
+## String Basics
+
+```desi
+let name: str = "Desi"
+let greeting: str = 'Hello'
+let multiline: str = """
+    Multi-line
+    string literal
+"""
+
+# Concatenation
+let full: str = "Hello" + " " + "World"
+```
+
+---
+
+## F-Strings (Interpolation)
+
+F-strings let you embed expressions directly in strings:
+
+```desi
+let name: str = "Alice"
+let age: int = 30
+
+print(f"Hello, {name}!")          # Hello, Alice!
+print(f"{name} is {age} years old")  # Alice is 30 years old
+print(f"Sum: {1 + 2 + 3}")        # Sum: 6
+```
+
+### Variable Interpolation
+
+```desi
+let x: int = 42
+let msg: str = f"Value is {x}"
+```
+
+### Expression Interpolation
+
+```desi
+let a: int = 10
+let b: int = 20
+print(f"Sum: {a + b}")      # Sum: 30
+print(f"Product: {a * b}")  # Product: 200
+```
+
+### Function Calls
+
+```desi
+def greet(name: str) -> str:
+    return f"Hello, {name}!"
+
+print(f"Message: {greet('Bob')}")
+```
+
+### Struct Fields
+
+```desi
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    let p: Point = Point(x=5, y=10)
+    print(f"Point at ({p.x}, {p.y})")
+    return 0
+```
+
+---
+
+## Custom Display
+
+Define how your types appear in f-strings:
+
+```desi
+struct Point:
+    x: int
+    y: int
+
+impl Display for Point:
+    def to_str() -> str:
+        return f"({self.x}, {self.y})"
+
+def main() -> int:
+    let p: Point = Point(x=5, y=10)
+    print(f"Point is {p}")  # Point is (5, 10)
+    return 0
+```
+
+---
+
+## Escaping Braces
+
+Use double braces for literal `{` or `}`:
+
+```desi
+print(f"Use {{braces}} like this")
+# Output: Use {braces} like this
+```
+
+---
+
+## String Methods
+
+```desi
+let s: str = "hello world"
+
+# Common operations
+let upper: str = s.upper()      # "HELLO WORLD"
+let lower: str = s.lower()      # "hello world"
+let length: int = len(s)        # 11
+```
+
+---
+
+## Quick Reference
+
+| Syntax | Description |
+|--------|-------------|
+| `"text"` | String literal |
+| `f"Hello, {name}!"` | F-string interpolation |
+| `"{{"` / `"}}"` | Escaped braces |
+| `len(s)` | String length |
+| `s + t` | Concatenation |
