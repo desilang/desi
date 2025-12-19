@@ -289,6 +289,21 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveListMethod(x, l)
 	}
 
+	// Handle ListIter methods: map, filter, collect
+	if li, ok := t.(*types.ListIter); ok {
+		return c.resolveListIterMethod(x, li)
+	}
+
+	// Handle MapIter methods: map, filter, collect
+	if mi, ok := t.(*types.MapIter); ok {
+		return c.resolveMapIterMethod(x, mi)
+	}
+
+	// Handle FilterIter methods: map, filter, collect
+	if fi, ok := t.(*types.FilterIter); ok {
+		return c.resolveFilterIterMethod(x, fi)
+	}
+
 	// Handle str methods: split, replace
 	if types.Equal(t, types.Str) {
 		return c.resolveStrMethod(x)
@@ -783,6 +798,9 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 			c.add(diagAt("DTE0001", x.Name.Span, "join() is only available on list<str>"))
 			return nil
 		}
+	case "iter":
+		// iter() -> ListIter[T] - creates lazy iterator
+		methodType = types.FuncOf(nil, &types.ListIter{Elem: l.Elem}, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil
@@ -916,6 +934,83 @@ func (c *checker) resolveArenaMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf([]types.T{types.Int}, types.Any, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on arena"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveListIterMethod handles ListIter methods: map, filter, collect
+func (c *checker) resolveListIterMethod(x *ast.FieldExpr, li *types.ListIter) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "map":
+		// map(f: (T) -> U) -> MapIter[U]
+		// For simplicity, assume same element type (can infer from lambda later)
+		methodType = types.FuncOf([]types.T{types.Any}, &types.MapIter{Source: li, Elem: types.Any}, false)
+	case "filter":
+		// filter(p: (T) -> bool) -> FilterIter[T]
+		methodType = types.FuncOf([]types.T{types.Any}, &types.FilterIter{Source: li, Elem: li.Elem}, false)
+	case "collect":
+		// collect() -> list[T]
+		methodType = types.FuncOf(nil, &types.List{Elem: li.Elem}, false)
+	case "first":
+		// first() -> Option[T]
+		methodType = types.FuncOf(nil, types.OptionOf(li.Elem), false)
+	case "take":
+		// take(n: int) -> ListIter[T] (simplified: returns same type for chaining)
+		methodType = types.FuncOf([]types.T{types.Int}, li, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on ListIter"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveMapIterMethod handles MapIter methods: map, filter, collect
+func (c *checker) resolveMapIterMethod(x *ast.FieldExpr, mi *types.MapIter) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "map":
+		methodType = types.FuncOf([]types.T{types.Any}, &types.MapIter{Source: mi, Elem: types.Any}, false)
+	case "filter":
+		methodType = types.FuncOf([]types.T{types.Any}, &types.FilterIter{Source: mi, Elem: mi.Elem}, false)
+	case "collect":
+		methodType = types.FuncOf(nil, &types.List{Elem: mi.Elem}, false)
+	case "first":
+		methodType = types.FuncOf(nil, types.OptionOf(mi.Elem), false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on MapIter"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveFilterIterMethod handles FilterIter methods: map, filter, collect
+func (c *checker) resolveFilterIterMethod(x *ast.FieldExpr, fi *types.FilterIter) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "map":
+		methodType = types.FuncOf([]types.T{types.Any}, &types.MapIter{Source: fi, Elem: types.Any}, false)
+	case "filter":
+		methodType = types.FuncOf([]types.T{types.Any}, &types.FilterIter{Source: fi, Elem: fi.Elem}, false)
+	case "collect":
+		methodType = types.FuncOf(nil, &types.List{Elem: fi.Elem}, false)
+	case "first":
+		methodType = types.FuncOf(nil, types.OptionOf(fi.Elem), false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on FilterIter"))
 		return nil
 	}
 

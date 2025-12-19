@@ -122,6 +122,11 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				return ls.lowerListMethod(fe, x.Args, t)
 			}
 
+			// ListIter methods: collect, map, filter, first
+			if t, ok := feXType.(*types.ListIter); ok {
+				return ls.lowerListIterMethod(fe, x.Args, t)
+			}
+
 			// String methods: split, replace
 			if feXType == types.Str {
 				if res := ls.lowerStringMethod(fe, x.Args); res != nil {

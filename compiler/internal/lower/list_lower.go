@@ -159,6 +159,15 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		res := ls.b.FreshTemp("str")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_to_str", Args: []hir.Value{receiver}, Type: "ptr"})
 		return res
+
+	case "iter":
+		// iter() -> ListIter (stack-allocated iterator struct)
+		// ListIter in C = {DesiList* list, int64_t index} = {ptr, i64}
+		// For LLVM, we allocate on stack and pass address
+		iterPtr := ls.b.FreshTemp("iter_ptr")
+		ls.b.Emit(&hir.Alloca{Dst: iterPtr, Type: "{ptr, i64}", Count: 1})
+		ls.b.Emit(&hir.Call{Fn: "list_iter_init", Args: []hir.Value{iterPtr, receiver}})
+		return iterPtr
 	}
 
 	return nil

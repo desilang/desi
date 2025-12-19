@@ -157,6 +157,22 @@ type TypeParam struct {
 // M9A: C-ABI pointer type cptr[T]
 type CPtr struct{ Elem T }
 
+// Iterator types for lazy iteration
+// ListIter<T> - iterates over list elements
+type ListIter struct{ Elem T }
+
+// MapIter<T,U> - lazily transforms elements
+type MapIter struct {
+	Source T // Source iterator type
+	Elem   T // Output element type
+}
+
+// FilterIter<T> - lazily filters elements
+type FilterIter struct {
+	Source T // Source iterator type
+	Elem   T // Element type (same as source)
+}
+
 // TypeAlias represents a named type alias for nominal typing.
 // Two TypeAlias with different Names are distinct types even if Target is the same.
 type TypeAlias struct {
@@ -224,21 +240,24 @@ type ClassStaticField struct {
 	IsMut bool
 }
 
-func (*List) isType()      {}
-func (*Set) isType()       {}
-func (*Dict) isType()      {}
-func (*Tuple) isType()     {}
-func (*Future) isType()    {}
-func (*Func) isType()      {}
-func (*Multi) isType()     {}
-func (*Union) isType()     {}
-func (*CPtr) isType()      {}
-func (*TypeAlias) isType() {}
-func (*Struct) isType()    {}
-func (*Enum) isType()      {}
-func (*Class) isType()     {}
-func (*Generic) isType()   {}
-func (*TypeParam) isType() {}
+func (*List) isType()       {}
+func (*Set) isType()        {}
+func (*Dict) isType()       {}
+func (*Tuple) isType()      {}
+func (*Future) isType()     {}
+func (*Func) isType()       {}
+func (*Multi) isType()      {}
+func (*Union) isType()      {}
+func (*CPtr) isType()       {}
+func (*TypeAlias) isType()  {}
+func (*Struct) isType()     {}
+func (*Enum) isType()       {}
+func (*Class) isType()      {}
+func (*Generic) isType()    {}
+func (*TypeParam) isType()  {}
+func (*ListIter) isType()   {}
+func (*MapIter) isType()    {}
+func (*FilterIter) isType() {}
 
 func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
 func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
@@ -287,11 +306,14 @@ func (t *Generic) String() string {
 func (t *TypeParam) String() string {
 	return t.Name
 }
-func (t *CPtr) String() string      { return "cptr[" + t.Elem.String() + "]" }
-func (t *TypeAlias) String() string { return t.Name } // Nominal: display alias name, not underlying type
-func (t *Struct) String() string    { return t.Name }
-func (t *Enum) String() string      { return t.Name }
-func (t *Class) String() string     { return t.Name }
+func (t *CPtr) String() string       { return "cptr[" + t.Elem.String() + "]" }
+func (t *TypeAlias) String() string  { return t.Name } // Nominal: display alias name, not underlying type
+func (t *Struct) String() string     { return t.Name }
+func (t *Enum) String() string       { return t.Name }
+func (t *Class) String() string      { return t.Name }
+func (t *ListIter) String() string   { return "ListIter[" + t.Elem.String() + "]" }
+func (t *MapIter) String() string    { return "MapIter[" + t.Elem.String() + "]" }
+func (t *FilterIter) String() string { return "FilterIter[" + t.Elem.String() + "]" }
 
 // ----- Constructors -----
 
