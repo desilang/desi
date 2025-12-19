@@ -31,6 +31,28 @@ const (
 	ClassKind
 	EnumKind
 
+	// Sized integer kinds
+	I8Kind
+	I16Kind
+	I32Kind
+	I64Kind
+	I128Kind
+	U8Kind
+	U16Kind
+	U32Kind
+	U64Kind
+	U128Kind
+
+	// Sized float kinds
+	F32Kind
+	F64Kind
+
+	// Character kind (Unicode scalar)
+	CharKind
+
+	// Decimal kind (arbitrary precision)
+	DecimalKind
+
 	// Container kinds
 	ListKind
 	SetKind
@@ -82,7 +104,13 @@ var (
 	Any   = &basic{kind: AnyKind, name: "Any"}
 	Type  = &basic{kind: TypeKind, name: "type"}
 
-	// M9A: size-specific integers (Tier-0: treated as part of the int family)
+	// Unicode character (scalar value)
+	Char = &basic{kind: CharKind, name: "char"}
+
+	// Arbitrary precision decimal
+	Decimal = &basic{kind: DecimalKind, name: "decimal"}
+
+	// Platform-sized integers (keep IntKind for backward compatibility with types.Equal)
 	USize = &basic{kind: IntKind, name: "usize"}
 	ISize = &basic{kind: IntKind, name: "isize"}
 
@@ -562,7 +590,9 @@ func FromName(name string) (T, bool) {
 	// Legacy/unsized
 	case "int":
 		return Int, true
-	case "float", "f64":
+	case "float":
+		return Float, true
+	case "f64":
 		return F64, true
 
 	// Basic builtins
@@ -610,6 +640,20 @@ func FromName(name string) (T, bool) {
 	// Floats
 	case "f32":
 		return F32, true
+
+	// Unicode character
+	case "char", "rune":
+		return Char, true
+
+	// Decimal (arbitrary precision)
+	case "decimal":
+		return Decimal, true
+
+	// Aliases
+	case "byte":
+		return U8, true
+	case "uint":
+		return U64, true
 
 	default:
 		return nil, false
