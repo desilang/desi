@@ -85,6 +85,7 @@ nav:
     - Lambda Functions: language/lambdas.md
     - Classes: language/classes.md
     - Generics: language/generics.md
+    - Iterators: language/iterators.md
     - Error Handling: language/error-handling.md
   - Reference:
     - Builtin Functions: reference/builtins.md
