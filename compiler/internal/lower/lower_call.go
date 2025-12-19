@@ -844,6 +844,35 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 
 			if isConstructor {
+				// Special case: inside __new__ method, ClassName(field=val) should initialize self
+				// rather than allocating a new instance (which would cause infinite recursion)
+				if ls.inDunderNew && cls.Name == ls.dunderNewClass {
+					// Initialize self's fields directly
+					for i, arg := range x.Args {
+						argVal := ls.lowerExpr(arg)
+						if i < len(cls.Fields) {
+							offset := 0
+							for j := 0; j < i; j++ {
+								offset += getSize(cls.Fields[j].Type)
+							}
+							fieldPtr := ls.b.FreshTemp("field_ptr")
+							// Use GEP to get field pointer at offset
+							ls.b.Emit(&hir.GetElementPtr{
+								Type:    "i8",
+								Base:    ls.dunderNewSelf,
+								Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+								Dst:     fieldPtr,
+							})
+							// Store the value
+							ls.b.Emit(&hir.Store{Dst: fieldPtr, Val: argVal})
+						}
+					}
+					// __new__ is void - doesn't return a value
+					// The caller (wrapper) has already allocated and will return the instance
+					return nil
+				}
+
+				// Normal case: allocate new instance
 				// 1. Allocate instance
 				// Calculate size
 				size := 0

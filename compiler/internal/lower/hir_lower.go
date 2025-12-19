@@ -36,6 +36,15 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
 func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func {
+	return lowerFuncFromDeclWithContext(fd, info, src, "", nil)
+}
+
+// LowerFuncForDunderNew lowers a __new__ method with context to prevent recursive constructor calls
+func LowerFuncForDunderNew(fd *ast.FuncDecl, info *check.Info, src []byte, className string, selfPtr hir.Value) *hir.Func {
+	return lowerFuncFromDeclWithContext(fd, info, src, className, selfPtr)
+}
+
+func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value) *hir.Func {
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
@@ -45,6 +54,9 @@ func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func
 		src:                 src,
 		tempsFromArenaAlloc: map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
+		inDunderNew:         dunderNewClass != "",
+		dunderNewClass:      dunderNewClass,
+		dunderNewSelf:       selfPtr,
 	}
 	ls.lowerBlock(fd.Body)
 	f := b.Func()
@@ -196,6 +208,12 @@ type lowerState struct {
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
+
+	// __new__ method context: when inside a user-defined __new__,
+	// ClassName(field=val) should initialize self, not allocate new instance
+	inDunderNew    bool      // true when lowering inside a __new__ method body
+	dunderNewClass string    // class name for the current __new__
+	dunderNewSelf  hir.Value // the self pointer to initialize
 }
 
 type scope struct {
