@@ -48,6 +48,10 @@ type Info struct {
 	// Key: MatchExpr node, Value: map of arm index -> bindings
 	MatchBindings map[*ast.MatchExpr]map[int][]MatchBinding
 
+	// Is expression: pattern variable bindings
+	// Key: IsExpr node, Value: list of bindings (for patterns like `is Some(val)`)
+	IsBindings map[*ast.IsExpr][]MatchBinding
+
 	// FuncMoves tracks which variables are moved in each function.
 	// Key: FuncDecl, Value: Set of moved variable names.
 	// This is used by the backend to avoid double-freeing moved variables.

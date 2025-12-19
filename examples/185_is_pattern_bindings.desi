@@ -1,0 +1,23 @@
+# Test pattern matching with bindings - simple version
+
+def main() -> int:
+    # Option Some(val)
+    let opt_some: Option[int] = Option.Some(42)
+    if opt_some is Some(val):
+        print("Got Some value:")
+        print(val)
+    
+    # Result Ok(v)
+    let res_ok: Result[int, str] = Result.Ok(100)
+    if res_ok is Ok(v):
+        print("Got Ok value:")
+        print(v)
+    
+    # Result Err(e)
+    let res_err: Result[int, str] = Result.Err("error message")
+    if res_err is Err(e):
+        print("Got Err value:")
+        print(e)
+    
+    print("Done!")
+    return 0

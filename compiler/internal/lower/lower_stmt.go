@@ -526,6 +526,44 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 		ls.push()
 		ls.b.SetBlock(thenBlk)
+
+		// Check if condition is IsExpr with bindings - extract payload in then block
+		if isExpr, ok := s.Cond.(*ast.IsExpr); ok && ls.info != nil && !isExpr.Negated {
+			if bindings := ls.info.IsBindings[isExpr]; len(bindings) > 0 {
+				// Get the LHS value (previously lowered in lowerExpr)
+				lhsVal := ls.lowerExpr(isExpr.X)
+
+				// Load payload pointer from enum (offset 4, after the i32 tag)
+				payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    "i8",
+					Base:    lhsVal,
+					Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+					Dst:     payloadPtrSlot,
+				})
+
+				payloadPtr := ls.b.FreshTemp("payload_ptr")
+				ls.b.Emit(&hir.Load{
+					Type: "ptr",
+					Src:  payloadPtrSlot,
+					Dst:  payloadPtr,
+				})
+
+				// For each binding, load the field value
+				for _, binding := range bindings {
+					val := ls.b.FreshTemp(binding.Name)
+					ls.b.Emit(&hir.Load{
+						Type: lowerType(binding.Type),
+						Src:  payloadPtr,
+						Dst:  val,
+					})
+
+					// Store in matchLocals for use in then body
+					ls.matchLocals[binding.Name] = val
+				}
+			}
+		}
+
 		ls.lowerBlock(s.Then)
 		scThen := ls.pop()
 		if !ls.terminated {
