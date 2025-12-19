@@ -65,15 +65,25 @@ func LowerDefaultConstructor(className string, cls *types.Class) *hir.Func {
 func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, cls *types.Class) []*hir.Func {
 	// 1. Lower the user's __new__ method as ClassName___new__
 	// This method takes (self, args...)
-	newFn := LowerFuncFromDecl(method, info, nil)
+	// Pass className context so return ClassName(field=val) initializes self instead of allocating
+	selfPtr := hir.Temp{Name: "%self"}
+	newFn := LowerFuncForDunderNew(method, info, nil, className, selfPtr)
 	newFn.Name = fmt.Sprintf("%s___new__", className)
+
+	// Ensure __new__ returns void (it initializes self, doesn't return a new instance)
+	newFn.RetType = "void"
+
+	// Ensure first param is self: ptr
+	if len(newFn.Params) == 0 || newFn.Params[0].Name != "self" {
+		newFn.Params = append([]hir.Param{{Name: "self", Type: "ptr"}}, newFn.Params...)
+	}
 
 	// 2. Generate the constructor wrapper: ClassName(args...) -> ptr
 	// This wrapper allocates memory, calls __new__, and returns the instance
 	wrapper := hir.NewFunc(className)
 
 	// Copy params from __new__ but skip the first one (self)
-	if len(newFn.Params) > 0 {
+	if len(newFn.Params) > 1 {
 		wrapper.Func().Params = make([]hir.Param, len(newFn.Params)-1)
 		for i := 1; i < len(newFn.Params); i++ {
 			wrapper.Func().Params[i-1] = newFn.Params[i]
@@ -107,13 +117,6 @@ func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, cl
 	callArgs := make([]hir.Value, 0, len(wrapper.Func().Params)+1)
 	callArgs = append(callArgs, instancePtr)
 	for _, p := range wrapper.Func().Params {
-		// We need to use the parameter names as values
-		// In HIR, parameters are values.
-		// But wait, hir.Param is {Name, Type}.
-		// We need to use hir.Var{Name: p.Name} or hir.Temp{Name: p.Name} depending on convention.
-		// LowerFuncFromDecl uses parameter names as is.
-		// Let's assume they are temps or vars.
-		// Usually params are %name.
 		callArgs = append(callArgs, hir.Temp{Name: "%" + p.Name})
 	}
 

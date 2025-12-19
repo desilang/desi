@@ -8,7 +8,7 @@ class Simple:
 
 def main() -> int:
     print("Creating class instance...")
-    let s1 = Simple.__new__(42)
+    let s1 = Simple(42)
     print("Created!")
     
     print("Creating list...")
