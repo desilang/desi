@@ -97,6 +97,19 @@ func (p *Parser) parseRel() ast.Expr {
 				Span:    joinTok(p.file, opStart, p.cur),
 			}
 
+		case token.KW_as:
+			// 'as' operator: expr as type (explicit type cast)
+			opStart := p.cur
+			p.next()
+
+			// Parse the target type
+			targetType := p.parseTypeName()
+			e = &ast.CastExpr{
+				X:    e,
+				Type: targetType,
+				Span: joinTok(p.file, opStart, p.cur),
+			}
+
 		default:
 			return e
 		}

@@ -927,6 +927,26 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		}
 		return dst
 
+	case *ast.CastExpr:
+		// 'as' expression: explicit type cast
+		src := ls.lowerExpr(x.X)
+		dstType := ls.info.Types[e]
+
+		// Get the LLVM target type
+		dstLLVMType := lowerType(dstType)
+
+		// If same type, no-op
+		srcType := ls.info.Types[x.X]
+		srcLLVMType := lowerType(srcType)
+		if srcLLVMType == dstLLVMType {
+			return src
+		}
+
+		// Emit cast to target type
+		dst := ls.b.FreshTemp("cast")
+		ls.b.Emit(&hir.Cast{Dst: dst, Src: src, Type: dstLLVMType})
+		return dst
+
 	case *ast.CallExpr:
 		return ls.lowerCall(x)
 

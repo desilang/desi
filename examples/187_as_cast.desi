@@ -1,0 +1,16 @@
+# Test: as cast operator
+# Verifies explicit type conversions between numeric types
+# Expected: returns 1003 (1000 + 3)
+
+def main() -> int:
+  # Integer to sized integer casts
+  let x: int = 1000
+  let y: i32 = x as i32
+  
+  # Float to int cast (truncates toward zero)
+  let pi: float = 3.14159
+  let pi_int: int = pi as int
+  
+  # Cast both to int for addition
+  print((y as int) + pi_int)  # Should be 1000 + 3 = 1003
+  0

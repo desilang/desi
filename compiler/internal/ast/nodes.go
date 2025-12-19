@@ -230,6 +230,17 @@ type IsExpr struct {
 func (*IsExpr) isExpr()             {}
 func (x *IsExpr) SpanOf() diag.Span { return x.Span }
 
+// CastExpr represents 'expr as type' explicit type conversion
+// Used for converting between sized primitives: 42 as i8, x as f32, etc.
+type CastExpr struct {
+	X    Expr      // expression to cast
+	Type *TypeName // target type
+	Span diag.Span
+}
+
+func (*CastExpr) isExpr()             {}
+func (x *CastExpr) SpanOf() diag.Span { return x.Span }
+
 type BinaryExpr struct {
 	Op   string // "**", "*", "/", "%", "+", "-", "^", "|", "<", "<=", ">", ">=", "==", "!=", "|>", "and", "or"
 	Lhs  Expr
