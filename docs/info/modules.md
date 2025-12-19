@@ -258,8 +258,9 @@ pub def _internal_helper():  # Should be private
 
 ## Examples
 
-See working examples:
-- `examples/13_m5_imports_basic.desi` - Basic from-import
-- `examples/13_m5_imports_qualified.desi` - Qualified calls
-- `examples/13_m5_imports_wildcard.desi` - Wildcard import
-- `examples/13_m5_imports_simple.desi` - Simplified syntax
+All module examples are provided inline throughout this document:
+
+- **Quick Start**: See opening section for all import syntaxes
+- **Import Syntax**: See "Import Syntax" section for module, from, aliased, and wildcard imports
+- **Package Structure**: See "Package Structure" section for `__mod.desi` usage
+- **Re-exporting**: See "Re-exporting" section for package-level exports

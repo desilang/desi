@@ -267,4 +267,7 @@ If you're working on lambda-related compiler features:
 4. **Desugaring**: `compiler/internal/lower/async_lambda.go`
 5. **Aliasing**: `compiler/internal/lower/module_lower.go` and `hir_lower.go`
 
-Tests are in `examples/165_lambda_basic.desi` with comprehensive edge cases.
+All lambda examples are provided inline throughout this document. See sections above for:
+- Basic usage, multiple parameters, void return
+- Higher-order functions and closures
+- Common errors and best practices

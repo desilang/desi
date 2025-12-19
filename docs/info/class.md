@@ -1519,22 +1519,19 @@ for i in range(1000000):
 
 ## Learning Resources
 
-**Examples in Repository:**
-- `examples/90_class_basic.desi` - Basic class usage
-- `examples/91_class_new.desi` - Custom constructors
-- `examples/92_class_methods.desi` - Method definitions
-- `examples/94_class_raii.desi` - RAII with `__close__`
-- `examples/95_class_inheritance.desi` - Inheritance
-- `examples/96_class_generic.desi` - Generic classes
-- `examples/100_class_staticmethod.desi` - `@staticmethod` decorator
-- `examples/101_class_classmethod.desi` - `@classmethod` decorator
-- `examples/102_class_property.desi` - `@property` decorator
-- `examples/103_class_raii_test.desi` - Nested RAII
-- `examples/104_class_visibility.desi` - Visibility examples
-- `examples/106_class_field_assign.desi` - Field assignment
+This document contains comprehensive inline examples for all features:
+
+- **Basic Usage**: See "Defining Classes" and "Fields" sections
+- **Constructors**: See "The `__new__` Constructor" section
+- **Methods**: See "Methods" section
+- **RAII**: See "RAII and Resource Management" section
+- **Inheritance**: See "Inheritance" section
+- **Generics**: See "Generic Classes" section
+- **Decorators**: See "@staticmethod", "@classmethod", "@property" sections
+- **Operator Overloading**: See "Operator Overloading" section
 
 **Next Steps:**
-1. Try the examples above
+1. Read through the examples in each section above
 2. Build a simple data structure (Stack, Queue)
 3. Implement a resource manager with RAII
 4. Create a generic container class

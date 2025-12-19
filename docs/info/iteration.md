@@ -130,7 +130,8 @@ while j < 10:
 
 ## Examples
 
-- `examples/145_typed_iteration.desi` - Basic list iteration
-- `examples/150_dict_iteration.desi` - Dict iteration with .items()
-- `examples/151_mutable_list_iteration.desi` - Mutable list elements
-- `examples/152_mutable_dict_iteration.desi` - Mutable dict values
+All iteration examples are provided inline throughout this document:
+
+- **List Iteration**: See "For Loops" section
+- **Dict Iteration**: See "Dict Iteration" section
+- **Mutable Iteration**: See "Mutable Iteration" section

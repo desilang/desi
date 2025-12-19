@@ -203,5 +203,8 @@ sum_impl(1, __vararg)
 
 ## Examples
 
-See working examples:
-- `examples/30_m14_varargs.desi` - Basic varargs usage
+All varargs examples are provided inline throughout this document:
+
+- **Quick Start**: See opening section for basic usage
+- **Named Arguments**: See "Named Arguments with Varargs" section
+- **Common Patterns**: See "Common Patterns" section

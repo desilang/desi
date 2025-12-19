@@ -203,5 +203,8 @@ sudo apt install llvm clang
 
 ## Examples
 
-- `examples/147_testing_assert.desi` - Assert usage
-- `examples/148_testing_test_decorator.desi` - @test decorator
+All testing examples are provided inline throughout this document:
+
+- **Quick Start**: See opening section for complete test pattern
+- **Assert**: See "Assert Builtin" section
+- **@test Decorator**: See "@test Decorator" section
