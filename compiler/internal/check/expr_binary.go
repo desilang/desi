@@ -63,6 +63,14 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		lt := c.typ(x.Lhs)
 		rt := c.typ(x.Rhs)
 
+		// Decimal arithmetic: decimal + decimal, decimal - decimal, etc.
+		if types.Equal(lt, types.Decimal) && types.Equal(rt, types.Decimal) {
+			if op == "+" || op == "-" || op == "*" || op == "/" {
+				c.info.Types[x] = types.Decimal
+				return types.Decimal
+			}
+		}
+
 		// Operator overloading for classes
 		if lt != nil {
 			if cls, ok := lt.(*types.Class); ok {

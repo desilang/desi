@@ -202,7 +202,19 @@ func (s *Scanner) Next() Item {
 				s.addErr("lexer.invalid_float_exponent", "invalid float exponent", s.line, startCol)
 				return Item{Tok: token.ILLEGAL, Lexeme: "invalid float exponent", Line: s.line, Col: startCol}
 			}
+			// Check for decimal suffix 'd'
+			if s.peekIs('d') || s.peekIs('D') {
+				s.i++
+				s.col++
+				return Item{Tok: token.DECIMAL_LIT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
+			}
 			return Item{Tok: token.FLOAT_EXP, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
+		}
+		// Check for decimal suffix 'd'
+		if s.peekIs('d') || s.peekIs('D') {
+			s.i++
+			s.col++
+			return Item{Tok: token.DECIMAL_LIT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
 		}
 		return Item{Tok: token.FLOAT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
 	}
@@ -376,10 +388,22 @@ func (s *Scanner) Next() Item {
 
 			lex := string(s.src[start:s.i])
 			if isFloat {
+				// Check for decimal suffix 'd'
+				if s.peekIs('d') || s.peekIs('D') {
+					s.i++
+					s.col++
+					return Item{Tok: token.DECIMAL_LIT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
+				}
 				if hasExp {
 					return Item{Tok: token.FLOAT_EXP, Lexeme: lex, Line: s.line, Col: startCol}
 				}
 				return Item{Tok: token.FLOAT, Lexeme: lex, Line: s.line, Col: startCol}
+			}
+			// Check for decimal suffix 'd' on integer literals (e.g. 42d)
+			if s.peekIs('d') || s.peekIs('D') {
+				s.i++
+				s.col++
+				return Item{Tok: token.DECIMAL_LIT, Lexeme: string(s.src[start:s.i]), Line: s.line, Col: startCol}
 			}
 			return Item{Tok: token.INT_DEC, Lexeme: lex, Line: s.line, Col: startCol}
 		}

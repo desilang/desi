@@ -423,6 +423,11 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return it
 
+	case token.DECIMAL_LIT:
+		it := &ast.DecimalLit{Text: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+		p.next()
+		return it
+
 	case token.STR, token.LONGSTR:
 		st := &ast.StrLit{
 			Long: p.cur.Tok == token.LONGSTR,

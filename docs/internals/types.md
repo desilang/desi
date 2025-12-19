@@ -178,13 +178,21 @@ Decimal values are heap-allocated (`mpd_t*`). Memory management is ensured by:
 2. **No Implicit Copies**: Assignment moves ownership (Desi's move semantics)
 3. **Wrapper Knows Allocation**: All allocation via `__decimal_new`/`__decimal_from_int`
 
-### Future Work
+### Decimal Literals
 
-- [ ] Decimal literal syntax: `19.99d`
-- [ ] Lowering of `+`, `-`, `*`, `/` to `__decimal_*` calls
-- [ ] Integration with print/format functions
+Decimal literals use the `d`/`D` suffix:
 
-## Cross-Platform Support
+```desi
+let price: decimal = 19.99d    # Float with d suffix
+let count: decimal = 42d       # Integer with d suffix  
+let sci: decimal = 1.5e3d      # Scientific with d suffix
+```
+
+**Scanner**: `compiler/internal/lex/scanner.go` checks for `d`/`D` suffix after parsing any numeric literal and emits `DECIMAL_LIT` token.
+
+**Type Checking**: `compiler/internal/check/expr_binary.go` allows `decimal + decimal`, `decimal - decimal`, etc.
+
+### Cross-Platform Support
 
 libmpdec source is bundled and built on first compile:
 
