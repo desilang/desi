@@ -1,0 +1,37 @@
+# Test wildcard patterns and negation edge cases
+
+def main() -> int:
+    # === Test 1: Wildcard pattern Some(_) ===
+    let opt_some: Option[int] = Option.Some(42)
+    let opt_none: Option[int] = Option.Nothing()
+    
+    # Wildcard matches without binding
+    if opt_some is Some(_):
+        print("opt_some is Some (wildcard): PASS")
+    else:
+        print("opt_some is Some (wildcard): FAIL")
+    
+    if opt_none is Some(_):
+        print("opt_none is Some (wildcard): FAIL")
+    else:
+        print("opt_none is not Some (wildcard): PASS")
+    
+    # === Test 2: Result wildcards ===
+    let res_ok: Result[int, str] = Result.Ok(100)
+    let res_err: Result[int, str] = Result.Err("error")
+    
+    if res_ok is Ok(_):
+        print("res_ok is Ok (wildcard): PASS")
+    else:
+        print("res_ok is Ok (wildcard): FAIL")
+    
+    if res_err is Err(_):
+        print("res_err is Err (wildcard): PASS")
+    else:
+        print("res_err is Err (wildcard): FAIL")
+    
+    # === Test 3: Mix binding and wildcard ===
+    # (For future multi-field variants - currently single field)
+    
+    print("All wildcard tests complete!")
+    return 0
