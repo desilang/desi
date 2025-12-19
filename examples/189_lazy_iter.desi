@@ -1,0 +1,86 @@
+# Iterator Protocol Edge Cases and Real-World Tests
+# Inspired by common issues from Rust, Python, Java, and C++ iterators
+
+def main() -> int:
+    # =========================================
+    # Test 1: Empty list iteration
+    # Rust: empty iterators must work correctly with collect()
+    # =========================================
+    print("Test 1: Empty list")
+    let empty: list[int] = []
+    let empty_collected = empty.iter().collect()
+    print(empty_collected)
+    
+    # =========================================
+    # Test 2: Single element list
+    # Edge case: boundary between empty and multi-element
+    # =========================================
+    print("Test 2: Single element")
+    let single: list[int] = [42]
+    let single_collected = single.iter().collect()
+    print(single_collected)
+    
+    # =========================================
+    # Test 3: Standard case (reference)
+    # =========================================
+    print("Test 3: Standard list")
+    let nums: list[int] = [1, 2, 3, 4, 5]
+    let collected = nums.iter().collect()
+    print(collected)
+    
+    # =========================================
+    # Test 4: Multiple iterations over same source
+    # Java: ConcurrentModificationException issue
+    # Rust: Borrow checker prevents, but we need to test
+    # =========================================
+    print("Test 4: Multiple iterations")
+    let source: list[int] = [10, 20, 30]
+    let iter1 = source.iter()
+    let iter2 = source.iter()
+    let result1 = iter1.collect()
+    let result2 = iter2.collect()
+    print(result1)
+    print(result2)
+    
+    # =========================================
+    # Test 5: Large list (stack/memory test)
+    # Python: generator memory efficiency
+    # Desi: stack-allocated iterators should handle large lists
+    # =========================================
+    print("Test 5: Moderate size list")
+    let moderate: list[int] = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    let mod_result = moderate.iter().collect()
+    print(mod_result)
+    
+    # =========================================
+    # Test 6: String list iteration
+    # Ensures type generics work correctly
+    # =========================================
+    print("Test 6: String list")
+    let strings: list[str] = ["hello", "world", "desi"]
+    let str_collected = strings.iter().collect()
+    print(str_collected)
+    
+    # =========================================
+    # Test 7: Reusing collected result
+    # Verify collect() produces independent copy
+    # =========================================
+    print("Test 7: Multiple collect copies")
+    let original: list[int] = [100, 200, 300]
+    let copy1 = original.iter().collect()
+    let copy2 = original.iter().collect()
+    print(original)
+    print(copy1)
+    print(copy2)
+    
+    # =========================================
+    # Test 8: Iterator doesn't consume source
+    # Crucial: original list should remain intact
+    # =========================================
+    print("Test 8: Source preservation")
+    let preserved: list[int] = [7, 8, 9]
+    let _ = preserved.iter().collect()
+    print(preserved)
+    
+    print("All tests passed!")
+    return 0

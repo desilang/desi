@@ -1,0 +1,32 @@
+# Minimal Class Iterator Test to Debug Segfault
+
+class Simple:
+    pub val: int
+    
+    pub def __new__(v: int) -> Simple:
+        return Simple(val=v)
+
+def main() -> int:
+    print("Creating class instance...")
+    let s1 = Simple.__new__(42)
+    print("Created!")
+    
+    print("Creating list...")
+    let items: list[Simple] = [s1]
+    print("List created!")
+    
+    print("Calling iter()...")
+    let it = items.iter()
+    print("Iterator created!")
+    
+    print("Calling collect()...")
+    let collected = items.iter().collect()
+    print("Collected!")
+    
+    # Access the collected item
+    print("Accessing collected[0].val:")
+    let first = collected[0]
+    print(first.val)
+    
+    print("Done!")
+    return 0
