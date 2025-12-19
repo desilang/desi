@@ -263,37 +263,107 @@ Desi infers types when possible:
     - Ambiguous expressions without context
     - Generic type parameters without constraints
 
-## Type Conversion
+## Type Conversion with `as`
 
-Desi requires explicit type conversions:
+Desi uses the `as` keyword for explicit type conversions between numeric types:
+
+### Basic Casts
 
 ```desi
-# int <-> float
-let x: int = 42
-let y: float = float(x)    # Explicit conversion
-let z: int = int(3.14)     # Truncates to 3
+# Integer size conversions
+let x: int = 1000
+let y: i32 = x as i32          # int → i32 (may truncate)
+let z: i8 = 42 as i8           # literal → i8
 
-# int <-> str
-let num_str: str = str(42)      # "42"
-let num: int = int("123")       # 123
+# Float ↔ Integer
+let pi: float = 3.14159
+let pi_int: int = pi as int    # 3 (truncates toward zero)
+let n_float: float = 42 as float  # int → float
 
-# bool <-> int
-let b: bool = true
-let i: int = int(b)        # 1
+# Float size conversions
+let f: f32 = 3.14 as f32       # double → float
+let d: f64 = 1.5 as f64        # float → double
 ```
 
-!!! failure "No Implicit Conversions"
-    ```desi
-    # ❌ Error: type mismatch
-    let x: int = 42
-    let y: float = x
-    ```
-    
-    ```desi
-    # ✅ Correct
-    let x: int = 42
-    let y: float = float(x)
-    ```
+### Required for Mixed-Width Operations
+
+```desi
+let a: i32 = 100
+let b: int = 50
+
+# ❌ Error: mismatched numeric widths
+# let sum = a + b
+
+# ✅ Correct: cast to same type
+let sum = (a as int) + b       # Cast i32 → int
+let sum2 = a + (b as i32)      # Cast int → i32
+```
+
+!!! tip "When to Cast"
+    - **Always required** when mixing sized types (`i8`, `i32`, `i64`, etc.)
+    - **Always required** for float ↔ int conversion
+    - Use `as` instead of constructor functions like `int(x)` for numeric casts
+
+### What `as` Does Internally
+
+| Cast Type | LLVM Operation | Notes |
+|-----------|---------------|-------|
+| Large int → Small int | `trunc` | May lose bits |
+| Small int → Large int | `sext` | Sign-extends |
+| Float → Int | `fptosi` | Truncates toward zero |
+| Int → Float | `sitofp` | May lose precision |
+| Double → Float | `fptrunc` | May lose precision |
+| Float → Double | `fpext` | No precision loss |
+
+## Decimal Type
+
+The `decimal` type provides arbitrary-precision decimal arithmetic, ideal for financial calculations where floating-point errors are unacceptable:
+
+```desi
+# Create decimals from strings
+let price: decimal = decimal("19.99")
+let tax: decimal = decimal("0.0825")
+
+# Precise arithmetic
+let total: decimal = price + (price * tax)  # Exact: 21.6391175
+
+# No floating-point errors!
+let a: decimal = decimal("0.1")
+let b: decimal = decimal("0.2")
+let sum: decimal = a + b  # Exactly 0.3, not 0.30000000000000004
+```
+
+### When to Use `decimal`
+
+✅ **Use for:**
+- Currency and financial calculations
+- Scientific measurements requiring exact precision
+- Any calculation where `0.1 + 0.2 == 0.3` must be true
+
+❌ **Don't use for:**
+- Performance-critical calculations (slower than `float`)
+- Graphics or game development
+- General-purpose math where approximation is acceptable
+
+### Decimal Operations
+
+```desi
+let a: decimal = decimal("100.50")
+let b: decimal = decimal("20.25")
+
+# Arithmetic
+let sum: decimal = a + b      # 120.75
+let diff: decimal = a - b     # 80.25
+let prod: decimal = a * b     # 2035.125
+let quot: decimal = a / b     # 4.962962962962962962962962963
+
+# Comparison
+if a > b:
+    print("a is larger")
+```
+
+!!! warning "Memory Managed"
+    Decimal values are heap-allocated. The compiler automatically manages their memory through scope-based deallocation.
 
 ## Type Compatibility
 
