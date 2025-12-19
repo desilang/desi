@@ -76,6 +76,27 @@ func (p *Parser) parseRel() ast.Expr {
 			r := p.parseBitOr()
 			e = &ast.BinaryExpr{Op: "in", Lhs: e, Rhs: r, Span: joinTok(p.file, op, p.cur)}
 
+		case token.KW_is:
+			// 'is' operator: x is pattern OR x is not pattern
+			opStart := p.cur
+			p.next()
+
+			// Check for 'is not' (negated form)
+			negated := false
+			if p.cur.Tok == token.KW_not {
+				negated = true
+				p.next()
+			}
+
+			// Parse the pattern (could be: None, Some(x), ident, expr)
+			pattern := p.parseBitOr()
+			e = &ast.IsExpr{
+				X:       e,
+				Pattern: pattern,
+				Negated: negated,
+				Span:    joinTok(p.file, opStart, p.cur),
+			}
+
 		default:
 			return e
 		}

@@ -1,0 +1,36 @@
+# Test is / is not operators
+
+def main() -> int:
+    # Test identity comparison
+    let a = 10
+    let b = 10
+    let c = a
+    
+    # Note: For value types, 'is' works like '=='
+    if a is b:
+        print("a is b: true")
+    else:
+        print("a is b: false")
+    
+    # Test 'is not'
+    let x = 5
+    let y = 10
+    if x is not y:
+        print("x is not y: true")
+    else:
+        print("x is not y: false")
+    
+    # Test with booleans
+    let flag = true
+    if flag is true:
+        print("flag is true: PASS")
+    else:
+        print("flag is true: FAIL")
+    
+    if flag is not false:
+        print("flag is not false: PASS")
+    else:
+        print("flag is not false: FAIL")
+    
+    print("is/is not tests complete!")
+    return 0
