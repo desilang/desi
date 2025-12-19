@@ -196,7 +196,82 @@ Offset 4: ptr payload (pointer to boxed value)
 
 **Important**: These functions handle both `*types.Generic` (wrapper) and `*types.Enum` (direct) representations.
 
-## Test Files
+## Test Examples
 
-- `examples/184_is_operator.desi` - Basic is/is not tests
-- `examples/185_is_pattern_bindings.desi` - Pattern matching with bindings
+### Basic Is/Is Not
+
+```desi
+def main() -> int:
+    # Identity comparison
+    let a = 10
+    let b = 10
+    if a is b:
+        print("a is b: PASS")
+    
+    # Negated identity
+    let x = 5
+    let y = 10
+    if x is not y:
+        print("x is not y: PASS")
+    
+    # Option is none
+    let opt_none: Option[int] = Option.Nothing()
+    if opt_none is none:
+        print("opt_none is none: PASS")
+    
+    # Boolean identity
+    let flag = true
+    if flag is true:
+        print("flag is true: PASS")
+    
+    return 0
+```
+
+### Pattern Matching with Bindings
+
+```desi
+def main() -> int:
+    # Option Some(val) binding
+    let opt_some: Option[int] = Option.Some(42)
+    if opt_some is Some(val):
+        print("Got Some value:")
+        print(val)  # Output: 42
+    
+    # Result Ok(v) binding
+    let res_ok: Result[int, str] = Result.Ok(100)
+    if res_ok is Ok(v):
+        print("Got Ok value:")
+        print(v)  # Output: 100
+    
+    # Result Err(e) binding
+    let res_err: Result[int, str] = Result.Err("error message")
+    if res_err is Err(e):
+        print("Got Err value:")
+        print(e)  # Output: error message
+    
+    return 0
+```
+
+### Wildcard and Negated Patterns
+
+```desi
+def main() -> int:
+    let opt_some: Option[int] = Option.Some(42)
+    let opt_none: Option[int] = Option.Nothing()
+    
+    # Wildcard pattern - check without binding
+    if opt_some is Some(_):
+        print("opt_some is Some (wildcard): PASS")
+    
+    # Negated wildcard pattern
+    if opt_none is not Some(_):
+        print("opt_none is not Some: PASS")
+    
+    # Result wildcards
+    let res_ok: Result[int, str] = Result.Ok(100)
+    if res_ok is Ok(_):
+        print("res_ok is Ok (wildcard): PASS")
+    
+    return 0
+```
+
