@@ -7,7 +7,7 @@
 
 Desi supports generic types:
 
-```python
+```desi
 class Box<T>:
     pub mut val: T
     

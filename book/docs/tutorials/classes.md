@@ -7,7 +7,7 @@
 
 Desi has full object-oriented support:
 
-```python
+```desi
 class Person:
     pub mut name: str
     pub mut age: int

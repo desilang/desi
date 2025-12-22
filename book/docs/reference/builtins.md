@@ -10,7 +10,7 @@ This is a reference for all built-in functions available in Desi.
 
 Print a value to standard output.
 
-```python
+```desi
 print("Hello, World!")
 print(42)
 print(3.14)
@@ -24,7 +24,7 @@ print(3.14)
 
 Returns the length of a collection.
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 print(len(nums))  # 5
 
@@ -36,7 +36,7 @@ print(len(name))  # 4
 
 Generate a list of numbers from 0 to stop-1.
 
-```python
+```desi
 for i in range(5):
     print(i)  # 0, 1, 2, 3, 4
 ```
@@ -45,7 +45,7 @@ for i in range(5):
 
 Generate a list from start to stop-1.
 
-```python
+```desi
 for i in range(2, 6):
     print(i)  # 2, 3, 4, 5
 ```
@@ -58,7 +58,7 @@ for i in range(2, 6):
 
 Sum all elements.
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 print(sum(nums))  # 15
 ```
@@ -67,7 +67,7 @@ print(sum(nums))  # 15
 
 Find the minimum value.
 
-```python
+```desi
 let nums = [5, 2, 8, 1, 9]
 print(min(nums))  # 1
 ```
@@ -76,7 +76,7 @@ print(min(nums))  # 1
 
 Find the maximum value.
 
-```python
+```desi
 let nums = [5, 2, 8, 1, 9]
 print(max(nums))  # 9
 ```
@@ -89,7 +89,7 @@ print(max(nums))  # 9
 
 Returns `true` if any element is truthy.
 
-```python
+```desi
 let vals = [false, false, true]
 print(any(vals))  # true
 ```
@@ -98,7 +98,7 @@ print(any(vals))  # true
 
 Returns `true` if all elements are truthy.
 
-```python
+```desi
 let vals = [true, true, true]
 print(all(vals))  # true
 ```
@@ -111,7 +111,7 @@ print(all(vals))  # true
 
 Apply a function to each element.
 
-```python
+```desi
 let nums = [1, 2, 3]
 let doubled = map(|x| x * 2, nums)
 print(doubled)  # [2, 4, 6]
@@ -121,7 +121,7 @@ print(doubled)  # [2, 4, 6]
 
 Keep elements that satisfy a predicate.
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 let evens = filter(|x| x % 2 == 0, nums)
 print(evens)  # [2, 4]
@@ -131,7 +131,7 @@ print(evens)  # [2, 4]
 
 Return a sorted copy.
 
-```python
+```desi
 let nums = [3, 1, 4, 1, 5]
 let ordered = sorted(nums)
 print(ordered)  # [1, 1, 3, 4, 5]
@@ -141,7 +141,7 @@ print(ordered)  # [1, 1, 3, 4, 5]
 
 Return a reversed copy.
 
-```python
+```desi
 let nums = [1, 2, 3]
 let rev = reversed(nums)
 print(rev)  # [3, 2, 1]
@@ -155,7 +155,7 @@ print(rev)  # [3, 2, 1]
 
 Combine two lists element-wise.
 
-```python
+```desi
 let names = ["Alice", "Bob"]
 let ages = [30, 25]
 let pairs = zip(names, ages)
@@ -166,7 +166,7 @@ let pairs = zip(names, ages)
 
 Pair each element with its index.
 
-```python
+```desi
 let names = ["a", "b", "c"]
 for i, name in enumerate(names):
     print(i)
@@ -181,7 +181,7 @@ for i, name in enumerate(names):
 
 Reduce a collection to a single value.
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 let total = reduce(|acc, x| acc + x, nums, 0)
 print(total)  # 15
@@ -203,7 +203,7 @@ Right fold.
 
 Convert to integer.
 
-```python
+```desi
 let x = int(3.7)  # 3
 let y = int("42")  # 42
 ```

@@ -8,7 +8,7 @@ Let's write your first Desi program - the classic "Hello, World!"
 
 Create a new file called `hello.desi`:
 
-```python
+```desi
 # hello.desi
 def main():
     print("Namaste, World!")
@@ -18,7 +18,7 @@ def main():
 
 Let's break down each part:
 
-```python
+```desi
 def main():    # (1)!
     print("Namaste, World!")  # (2)!
 ```
@@ -56,7 +56,7 @@ Namaste, World!
 
 Let's create something more substantial - a greeting program:
 
-```python
+```desi
 # greet.desi
 
 def greet(name: str) -> str:
@@ -95,14 +95,14 @@ Sum:
 
 Use `let` for immutable variables:
 
-```python
+```desi
 let name = "Desi"       # Type inferred as str
 let count: int = 42     # Explicit type annotation
 ```
 
 Use `var` for mutable variables:
 
-```python
+```desi
 var counter = 0
 counter = counter + 1   # OK - counter is mutable
 ```
@@ -111,21 +111,21 @@ counter = counter + 1   # OK - counter is mutable
 
 Define functions with `def`:
 
-```python
+```desi
 def add(a: int, b: int) -> int:
     return a + b
 ```
 
 Or use the implicit return (last expression):
 
-```python
+```desi
 def add(a: int, b: int) -> int:
     a + b  # No return keyword needed!
 ```
 
 ### Comments
 
-```python
+```desi
 # This is a single-line comment
 
 # Multi-line comments use
@@ -136,7 +136,7 @@ def add(a: int, b: int) -> int:
 
 ### Return Type (Optional)
 
-```python
+```desi
 # ✅ Simple - no return needed for most programs
 def main():
     print("Hello")
@@ -149,7 +149,7 @@ def main() -> int:
 
 ### Type Mismatch
 
-```python
+```desi
 # ❌ Wrong - can't add str and int
 let result = "Count: " + 42
 

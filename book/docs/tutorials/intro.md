@@ -22,7 +22,7 @@ The name "Desi" (देसी) means "local" or "native" in Hindi - representing
 
 Desi uses indentation-based syntax like Python:
 
-```python
+```desi
 def factorial(n: int) -> int:
     if n <= 1:
         return 1
@@ -33,7 +33,7 @@ def factorial(n: int) -> int:
 
 Types are checked at compile time, catching errors early:
 
-```python
+```desi
 let name: str = "Desi"
 let count: int = 42
 let pi: float = 3.14159
@@ -41,7 +41,7 @@ let pi: float = 3.14159
 
 Type inference makes this less verbose:
 
-```python
+```desi
 let name = "Desi"    # Inferred as str
 let count = 42       # Inferred as int
 ```
@@ -50,7 +50,7 @@ let count = 42       # Inferred as int
 
 Desi uses arenas and RAII for memory management - no garbage collector pauses, no manual memory management:
 
-```python
+```desi
 using arena = Arena():
     let data = arena.alloc(1024)  # Allocated in arena
 # Memory automatically freed when arena goes out of scope
@@ -74,7 +74,7 @@ using arena = Arena():
 
 Here's a taste of what Desi code looks like:
 
-```python
+```desi
 # A simple class with generics
 class Stack<T>:
     pub mut items: list<T>

@@ -7,7 +7,7 @@
 
 Desi has three main collection types:
 
-```python
+```desi
 # Lists - ordered, indexed
 let numbers = [1, 2, 3, 4, 5]
 

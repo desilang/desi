@@ -21,7 +21,7 @@ This document explains every design decision, the reasoning behind it, and how i
 
 Before diving into concurrency, it's crucial to understand what Desi already provides:
 
-```python
+```desi
 # Move semantics - values are moved, not copied by default
 let data = create_large_buffer()
 process(data)        # `data` moves into `process`
@@ -107,7 +107,7 @@ Go proved that M:N is the right default for most applications. Desi follows this
 
 For embedded systems, WebAssembly, or environments where you need full control, Desi provides a compile-time opt-out:
 
-```python
+```desi
 #[no_runtime]
 module embedded_app
 
@@ -127,7 +127,7 @@ This compiles async functions to state machines without bundling any runtime, si
 
 In most languages with async/await, you end up with two separate worlds:
 
-```python
+```desi
 # Traditional approach (NOT Desi)
 async def fetch_async(url: str) -> str:
     return await http.get(url)
@@ -147,7 +147,7 @@ This leads to "function coloring" - you must duplicate APIs or add `.sync()` wra
 
 In Desi, **the same code works in both sync and async contexts**:
 
-```python
+```desi
 def fetch(url: str) -> str:
     return http.get(url)  # Blocking in sync context, awaited in async
 
@@ -186,7 +186,7 @@ With Desi, you don't. One implementation works everywhere.
 
 Desi automatically determines whether types can safely cross thread boundaries:
 
-```python
+```desi
 # Automatically derived as Send + Sync (all fields are Send + Sync)
 struct Point:
     x: int
@@ -268,7 +268,7 @@ struct ThreadSafeWrapper:
 
 Unlike Swift's `@Sendable` annotations or Rust's explicit captures, Desi automatically analyzes what a closure captures and enforces safety:
 
-```python
+```desi
 def example():
     let shared_data = Mutex.new([1, 2, 3])
     let config = Arc.new(Config.load())
@@ -291,7 +291,7 @@ def example():
 
 This is something **no mainstream language has implemented well**. Desi tracks lock acquisition order at compile time:
 
-```python
+```desi
 let mutex_a = Mutex.new(1)
 let mutex_b = Mutex.new(2)
 
@@ -321,7 +321,7 @@ spawn:
 
 Desi **guarantees at compile time** that data races cannot occur:
 
-```python
+```desi
 let data = [1, 2, 3]
 
 spawn:
@@ -348,7 +348,7 @@ spawn:
 
 Traditional `spawn` creates orphan tasks that outlive their parent:
 
-```python
+```desi
 # Unstructured (other languages)
 def problematic():
     spawn(background_task)  # Task lives forever!
@@ -363,7 +363,7 @@ def problematic():
 
 Desi uses structured concurrency inspired by Swift and Kotlin:
 
-```python
+```desi
 async def fetch_all_users(user_ids: list[int]) -> list[User]:
     async with TaskGroup() as group:
         for id in user_ids:
@@ -385,7 +385,7 @@ async def fetch_all_users(user_ids: list[int]) -> list[User]:
 
 Cancellation is **cooperative and checked at await points**:
 
-```python
+```desi
 async def download_large_file(url: str) -> bytes:
     let chunks = []
     
@@ -426,7 +426,7 @@ if (y.load(std::memory_order_acquire)) {  # Do I need acquire here?
 
 ### 6.2 Desi's Approach: Safe Default, Unsafe Opt-In
 
-```python
+```desi
 # Default: Sequential consistency (safe, predictable)
 let counter = Atomic.new(0)
 
@@ -452,7 +452,7 @@ fast_counter.store(42, ordering=Relaxed)  # You explicitly requested unsafe
 
 What happens when a spawned task fails?
 
-```python
+```desi
 # Other languages: Various bad behaviors
 spawn:
     raise SomeError("oops")  # Silent failure? Crash? Log somewhere?
@@ -460,7 +460,7 @@ spawn:
 
 ### 7.2 Desi's Solution: Result-Based Aggregation
 
-```python
+```desi
 async def fetch_many(urls: list[str]) -> Result[list[str], list[Error]]:
     async with TaskGroup() as group:
         for url in urls:
@@ -487,7 +487,7 @@ async def fetch_many(urls: list[str]) -> Result[list[str], list[Error]]:
 
 ### 8.1 Basic Channel Usage
 
-```python
+```desi
 # Create a bounded channel (backpressure when full)
 let (tx, rx) = Channel[int].new(buffer=10)
 
@@ -505,7 +505,7 @@ spawn:
 
 ### 8.2 Select for Multiplexing
 
-```python
+```desi
 let (tx1, rx1) = Channel[str].new()
 let (tx2, rx2) = Channel[int].new()
 
@@ -527,7 +527,7 @@ async def multiplexer():
 
 Channels enforce ownership - you can't accidentally share the wrong end:
 
-```python
+```desi
 let (tx, rx) = Channel[int].new()
 
 # Clone sender for multiple producers
@@ -558,7 +558,7 @@ Actors are ideal when:
 
 ### 9.2 Actor Syntax
 
-```python
+```desi
 actor BankAccount:
     var balance: decimal = 0.0
     var transaction_log: list[str] = []
@@ -606,7 +606,7 @@ async def main():
 
 Here's a comprehensive example showing all features working together:
 
-```python
+```desi
 import http
 import html
 
