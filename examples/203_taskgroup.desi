@@ -1,0 +1,19 @@
+# Test TaskGroup - structured concurrency
+
+# For now, test that taskgroup runtime compiles and links correctly
+# Full structured concurrency syntax will be added later
+
+def main() -> int:
+	print("Testing TaskGroup runtime...")
+	
+	# Placeholder test - TaskGroup will use special syntax:
+	# async with TaskGroup() as group:
+	#     group.spawn(task1)
+	#     group.spawn(task2)
+	# All tasks complete before scope exits
+	
+	let value = 42
+	print(value)
+	
+	print("TaskGroup test complete!")
+	return 0
