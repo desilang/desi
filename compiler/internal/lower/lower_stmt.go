@@ -1325,6 +1325,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 		}
+
+	case *ast.SpawnStmt:
+		// spawn: block → for now, inline the body as a placeholder
+		// Full closure capture and scheduler integration will be added later
+		// This allows the syntax to work while we build out the runtime
+
+		// TODO: Phase 2 will add:
+		// 1. Closure capture for free variables
+		// 2. scheduler_spawn(fn_ptr, captured_ctx, name) call
+		// 3. Proper task creation and scheduling
+
+		// For now, just execute the body inline (sequential, not concurrent)
+		if s.Body != nil {
+			ls.lowerBlock(s.Body)
+		}
+
 	default:
 		// other statements ignored for this phase
 	}

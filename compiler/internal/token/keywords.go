@@ -44,6 +44,7 @@ var keywords = map[string]Token{
 	"const":    KW_const,
 	"static":   KW_static,
 	"lambda":   KW_lambda,
+	"spawn":    KW_spawn,
 }
 
 // Builtin type spellings per revised grammar.

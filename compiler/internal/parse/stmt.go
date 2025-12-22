@@ -69,6 +69,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseFromImport()
 	case token.KW_unsafe: // M9C
 		return p.parseUnsafe()
+	case token.KW_spawn:
+		return p.parseSpawn()
 	default:
 		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()
@@ -192,6 +194,55 @@ func (p *Parser) parseLet() ast.Stmt {
 		Type:      ty,
 		Value:     val,
 		Span:      ast.JoinSpan(start, lastSpan(val, start)),
+	}
+}
+
+// spawn: block
+// spawn(name="..."): block
+func (p *Parser) parseSpawn() ast.Stmt {
+	start := spanPos(p.file, p.cur)
+	p.next() // consume 'spawn'
+
+	// Optional name: spawn(name="taskname")
+	var name *ast.StrLit
+	if p.accept(token.LPAREN) {
+		// Expect name="string"
+		if p.cur.Tok == token.IDENT && p.cur.Lexeme == "name" {
+			p.next() // consume 'name'
+			if !p.expect(token.ASSIGN, "=") {
+				return nil
+			}
+			if p.cur.Tok == token.STR {
+				name = &ast.StrLit{
+					Value: p.cur.Lexeme,
+					Span:  spanPos(p.file, p.cur),
+				}
+				p.next()
+			} else {
+				p.errExpected(spanPos(p.file, p.cur), "string literal")
+			}
+		}
+		if !p.expect(token.RPAREN, ")") {
+			return nil
+		}
+	}
+
+	// Expect colon followed by newline
+	if !p.expect(token.COLON, ":") {
+		return nil
+	}
+	if !p.expect(token.NL, "newline") {
+		p.syncStmt()
+		return nil
+	}
+
+	// Parse body block
+	body := p.parseBlock()
+
+	return &ast.SpawnStmt{
+		Name: name,
+		Body: body,
+		Span: ast.JoinSpan(start, body.Span),
 	}
 }
 

@@ -940,6 +940,8 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_static, true
 	case "lambda":
 		return token.KW_lambda, true
+	case "spawn":
+		return token.KW_spawn, true
 	default:
 		return token.ILLEGAL, false
 	}

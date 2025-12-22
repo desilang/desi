@@ -62,6 +62,7 @@ var tokenNames = [...]string{
 	KW_or:     "or",
 	KW_not:    "not",
 	KW_is:     "is",
+	KW_spawn:  "spawn",
 
 	// Punct/ops: symbolic names for String()
 	LPAREN: "LPAREN",
@@ -142,6 +143,7 @@ var tokenLits = map[Token]string{
 	KW_or:     "or",
 	KW_not:    "not",
 	KW_is:     "is",
+	KW_spawn:  "spawn",
 
 	// Punct
 	LPAREN: "(",
