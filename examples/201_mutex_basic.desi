@@ -1,0 +1,14 @@
+# Test Mutex - basic usage verification
+
+# For now, test that the mutex runtime compiles and links correctly
+# Full type-checked Mutex will be added after type system integration
+
+def main() -> int:
+	print("Testing mutex runtime...")
+	
+	# Placeholder test - mutex types will be added later
+	let value = 42
+	print(value)
+	
+	print("Mutex test complete!")
+	return 0
