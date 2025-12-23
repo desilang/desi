@@ -1,0 +1,32 @@
+# Test custom __contains__ dunder method
+
+class MySet:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __contains__(self, item: int) -> bool:
+        # Custom containment check - iterate through data
+        for x in self.data:
+            if x == item:
+                return true
+        return false
+
+def main() -> int:
+    let s = MySet([10, 20, 30, 40, 50])
+    
+    print("Testing custom __contains__:")
+    
+    if 20 in s:
+        print("20 is in MySet")
+    else:
+        print("20 is NOT in MySet")
+    
+    if 99 in s:
+        print("99 is in MySet")
+    else:
+        print("99 is NOT in MySet")
+    
+    print("Custom __contains__ test passed!")
+    return 0

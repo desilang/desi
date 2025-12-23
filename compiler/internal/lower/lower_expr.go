@@ -1615,6 +1615,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: foundI32, RHS: hir.ConstInt{Text: "0"}, Dst: dst, Type: "i1"})
 				return dst
 			}
+
+			// Handle custom class with __contains__ dunder: x in obj calls obj.__contains__(x)
+			if cls, ok := rhsType.(*types.Class); ok {
+				if _, found := cls.Dunders["__contains__"]; found {
+					// Call ClassName___contains__(obj, element) -> returns bool (i1)
+					mangledName := fmt.Sprintf("%s___contains__", cls.Name)
+					dst := ls.b.FreshTemp("contains")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: []hir.Value{rhs, lhs}, Type: "i1"})
+					return dst
+				}
+			}
 		}
 
 		// Determine result type based on operation
