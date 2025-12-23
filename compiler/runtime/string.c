@@ -132,6 +132,80 @@ char* string_slice(const char* s, int start, int end) {
     return result;
 }
 
+// Slice string with step (Python-style)
+// step > 0: forward iteration
+// step < 0: reverse iteration (e.g., [::-1] reverses)
+// Sentinel values: INT32_MAX for start means "use default", INT32_MIN for end means "use default"
+#define STR_SENTINEL_START 2147483647
+#define STR_SENTINEL_END   (-2147483647 - 1)
+
+char* string_slice_step(const char* s, int start, int end, int step) {
+    if (!s) return strdup("");
+    
+    if (step == 0) {
+        fprintf(stderr, "string_slice_step: step cannot be zero\n");
+        return strdup("");
+    }
+    
+    int str_len = strlen(s);
+    
+    // Handle sentinel values (omitted start/end)
+    if (step > 0) {
+        // Forward: start defaults to 0, end defaults to len
+        if (start == STR_SENTINEL_START) start = 0;
+        if (end == STR_SENTINEL_END) end = str_len;
+        // Handle negative indices
+        if (start < 0) start = str_len + start;
+        if (end < 0) end = str_len + end;
+        if (start < 0) start = 0;
+        if (end > str_len) end = str_len;
+    } else {
+        // Reverse: start defaults to len-1, end defaults to -1 (before first)
+        if (start == STR_SENTINEL_START) start = str_len - 1;
+        if (end == STR_SENTINEL_END) end = -1;
+        // Handle negative indices
+        if (start < 0) start = str_len + start;
+        if (end < -1 && end != STR_SENTINEL_END) end = str_len + end;
+        if (start >= str_len) start = str_len - 1;
+    }
+    
+    // Calculate result length
+    int count = 0;
+    if (step > 0) {
+        for (int i = start; i < end; i += step) {
+            if (i >= 0 && i < str_len) count++;
+        }
+    } else {
+        for (int i = start; i > end; i += step) {
+            if (i >= 0 && i < str_len) count++;
+        }
+    }
+    
+    char* result = (char*)malloc(count + 1);
+    if (!result) {
+        fprintf(stderr, "string_slice_step: allocation failed\n");
+        exit(1);
+    }
+    
+    int idx = 0;
+    if (step > 0) {
+        for (int i = start; i < end && idx < count; i += step) {
+            if (i >= 0 && i < str_len) {
+                result[idx++] = s[i];
+            }
+        }
+    } else {
+        for (int i = start; i > end && idx < count; i += step) {
+            if (i >= 0 && i < str_len) {
+                result[idx++] = s[i];
+            }
+        }
+    }
+    result[idx] = '\0';
+    
+    return result;
+}
+
 // Forward declare DesiList from list.h
 typedef struct {
     void** data;

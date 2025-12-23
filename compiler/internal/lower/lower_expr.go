@@ -392,12 +392,65 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		}
 
 		res := ls.b.FreshTemp("slice")
-		if isStr {
-			// Use string_slice(str, start, end) which handles negative indices
-			ls.b.Emit(&hir.Call{Dst: res, Fn: "string_slice", Args: []hir.Value{base, start, end}, Type: "ptr"})
+
+		// Check if step (K) is provided
+		if x.K != nil {
+			// Step slicing: use list_slice_step or string_slice_step
+			stepVal := ls.lowerExpr(x.K)
+
+			// For step slicing, use sentinel values for omitted start/end
+			// INT64_MAX (9223372036854775807) = use default based on step sign
+			var stepStart, stepEnd hir.Value
+			if x.I != nil {
+				val := ls.lowerExpr(x.I)
+				if isStr {
+					stepStart = val
+				} else {
+					stepStart = ls.b.FreshTemp("stepstart_i64")
+					ls.b.Emit(&hir.Cast{Dst: stepStart.(hir.Temp), Src: val, Type: "i64"})
+				}
+			} else {
+				// Sentinel value: INT64_MAX means "use default"
+				if isStr {
+					stepStart = hir.ConstInt{Text: "2147483647", Type: "i32"} // INT32_MAX
+				} else {
+					stepStart = hir.ConstInt{Text: "9223372036854775807", Type: "i64"}
+				}
+			}
+
+			if x.J != nil {
+				val := ls.lowerExpr(x.J)
+				if isStr {
+					stepEnd = val
+				} else {
+					stepEnd = ls.b.FreshTemp("stepend_i64")
+					ls.b.Emit(&hir.Cast{Dst: stepEnd.(hir.Temp), Src: val, Type: "i64"})
+				}
+			} else {
+				// Sentinel value: INT64_MIN means "use default"
+				if isStr {
+					stepEnd = hir.ConstInt{Text: "-2147483648", Type: "i32"} // INT32_MIN
+				} else {
+					stepEnd = hir.ConstInt{Text: "-9223372036854775808", Type: "i64"}
+				}
+			}
+
+			if isStr {
+				// string_slice_step(str, start, end, step)
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "string_slice_step", Args: []hir.Value{base, stepStart, stepEnd, stepVal}, Type: "ptr"})
+			} else {
+				// list_slice_step(list, start, end, step)
+				step64 := ls.b.FreshTemp("step_i64")
+				ls.b.Emit(&hir.Cast{Dst: step64, Src: stepVal, Type: "i64"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice_step", Args: []hir.Value{base, stepStart, stepEnd, step64}, Type: "ptr"})
+			}
 		} else {
-			// Call list_slice
-			ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{base, start, end}})
+			// No step - use regular slice functions
+			if isStr {
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "string_slice", Args: []hir.Value{base, start, end}, Type: "ptr"})
+			} else {
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{base, start, end}})
+			}
 		}
 		return res
 
