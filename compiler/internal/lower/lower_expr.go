@@ -1571,6 +1571,50 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			if tupType, ok := rhsType.(*types.Tuple); ok {
 				return ls.lowerTupleMembership(lhs, rhs, tupType)
 			}
+
+			// Handle list membership: x in list
+			if _, ok := rhsType.(*types.List); ok {
+				// Cast element to ptr for list_contains
+				elemPtr := ls.b.FreshTemp("elem_ptr")
+				ls.b.Emit(&hir.Cast{Dst: elemPtr, Src: lhs, Type: "ptr"})
+
+				// Call list_contains -> returns i32
+				foundI32 := ls.b.FreshTemp("found_i32")
+				ls.b.Emit(&hir.Call{Dst: foundI32, Fn: "list_contains", Args: []hir.Value{rhs, elemPtr}, Type: "i32"})
+
+				// Convert i32 to i1 (0 -> false, non-zero -> true)
+				dst := ls.b.FreshTemp("found")
+				ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: foundI32, RHS: hir.ConstInt{Text: "0"}, Dst: dst, Type: "i1"})
+				return dst
+			}
+
+			// Handle set membership: x in set
+			if _, ok := rhsType.(*types.Set); ok {
+				// Cast element to ptr for set_contains
+				elemPtr := ls.b.FreshTemp("elem_ptr")
+				ls.b.Emit(&hir.Cast{Dst: elemPtr, Src: lhs, Type: "ptr"})
+
+				// Call set_contains -> returns i32
+				foundI32 := ls.b.FreshTemp("found_i32")
+				ls.b.Emit(&hir.Call{Dst: foundI32, Fn: "set_contains", Args: []hir.Value{rhs, elemPtr}, Type: "i32"})
+
+				// Convert i32 to i1
+				dst := ls.b.FreshTemp("found")
+				ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: foundI32, RHS: hir.ConstInt{Text: "0"}, Dst: dst, Type: "i1"})
+				return dst
+			}
+
+			// Handle string membership: substr in str (substring check)
+			if types.Equal(rhsType, types.Str) {
+				// Call string_contains(haystack, needle) -> returns i32
+				foundI32 := ls.b.FreshTemp("found_i32")
+				ls.b.Emit(&hir.Call{Dst: foundI32, Fn: "string_contains", Args: []hir.Value{rhs, lhs}, Type: "i32"})
+
+				// Convert i32 to i1
+				dst := ls.b.FreshTemp("found")
+				ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: foundI32, RHS: hir.ConstInt{Text: "0"}, Dst: dst, Type: "i1"})
+				return dst
+			}
 		}
 
 		// Determine result type based on operation

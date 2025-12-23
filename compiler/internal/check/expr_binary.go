@@ -487,6 +487,30 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			return types.Bool
 		}
 
+		// x in list[T] -> bool (element T matches x)
+		if lt != nil && rt != nil {
+			if listT, ok := rt.(*types.List); ok {
+				if types.Assignable(listT.Elem, lt) {
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+				c.add(diagAt("DTE0004", x.Span, "element type '"+lt.String()+"' doesn't match list element type '"+listT.Elem.String()+"'"))
+				return nil
+			}
+		}
+
+		// x in set[T] -> bool (element T matches x)
+		if lt != nil && rt != nil {
+			if setT, ok := rt.(*types.Set); ok {
+				if types.Assignable(setT.Elem, lt) {
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+				c.add(diagAt("DTE0004", x.Span, "element type '"+lt.String()+"' doesn't match set element type '"+setT.Elem.String()+"'"))
+				return nil
+			}
+		}
+
 		// x in tuple (homogeneous tuple only)
 		if lt != nil && rt != nil {
 			if tupT, ok := rt.(*types.Tuple); ok {
@@ -514,6 +538,18 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 				// Empty tuple: always returns false but is valid
 				c.info.Types[x] = types.Bool
 				return types.Bool
+			}
+		}
+
+		// Custom class with __contains__ dunder
+		if lt != nil && rt != nil {
+			if cls, ok := rt.(*types.Class); ok {
+				if ft, found := cls.Dunders["__contains__"]; found {
+					if len(ft.Params) == 2 && types.Assignable(ft.Params[1], lt) {
+						c.info.Types[x] = types.Bool
+						return types.Bool
+					}
+				}
 			}
 		}
 
