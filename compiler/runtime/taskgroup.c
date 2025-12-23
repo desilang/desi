@@ -1,11 +1,14 @@
 /*
  * Desi Runtime TaskGroup Implementation
+ * Cross-platform: Uses platform.h macros for POSIX/Windows.
  */
 
 #include "taskgroup.h"
-#include "scheduler.h"
 #include <stdlib.h>
 #include <stdio.h>
+
+/* Forward declare scheduler_spawn - will be implemented in scheduler.c */
+extern void scheduler_spawn(void (*fn)(void* ctx), void* ctx, void* unused);
 
 #define INITIAL_CAPACITY 8
 
@@ -28,8 +31,8 @@ TaskGroup* taskgroup_new(void) {
     g->cancelled = false;
     g->error = NULL;
     
-    pthread_mutex_init(&g->lock, NULL);
-    pthread_cond_init(&g->all_done, NULL);
+    DESI_MUTEX_INIT(g->lock);
+    DESI_COND_INIT(g->all_done);
     
     return g;
 }
@@ -53,12 +56,12 @@ static void group_task_wrapper(void* arg) {
     }
     
     /* Mark task as done */
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     g->pending--;
     if (g->pending == 0) {
-        pthread_cond_broadcast(&g->all_done);
+        DESI_COND_BROADCAST(g->all_done);
     }
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
     
     free(gtc);
 }
@@ -69,14 +72,14 @@ static void group_task_wrapper(void* arg) {
 void taskgroup_spawn(TaskGroup* g, void (*fn)(void* ctx), void* ctx) {
     if (!g || !fn) return;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     
     /* Expand array if needed */
     if (g->count >= g->capacity) {
         int64_t new_cap = g->capacity * 2;
         Task** new_tasks = realloc(g->tasks, sizeof(Task*) * new_cap);
         if (!new_tasks) {
-            pthread_mutex_unlock(&g->lock);
+            DESI_MUTEX_UNLOCK(g->lock);
             return;
         }
         g->tasks = new_tasks;
@@ -86,15 +89,15 @@ void taskgroup_spawn(TaskGroup* g, void (*fn)(void* ctx), void* ctx) {
     g->count++;
     g->pending++;
     
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
     
     /* Create wrapper context */
     GroupTaskCtx* gtc = malloc(sizeof(GroupTaskCtx));
     if (!gtc) {
-        pthread_mutex_lock(&g->lock);
+        DESI_MUTEX_LOCK(g->lock);
         g->count--;
         g->pending--;
-        pthread_mutex_unlock(&g->lock);
+        DESI_MUTEX_UNLOCK(g->lock);
         return;
     }
     
@@ -112,11 +115,11 @@ void taskgroup_spawn(TaskGroup* g, void (*fn)(void* ctx), void* ctx) {
 void taskgroup_wait(TaskGroup* g) {
     if (!g) return;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     while (g->pending > 0) {
-        pthread_cond_wait(&g->all_done, &g->lock);
+        DESI_COND_WAIT(g->all_done, g->lock);
     }
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
 }
 
 /*
@@ -125,9 +128,9 @@ void taskgroup_wait(TaskGroup* g) {
 void taskgroup_cancel(TaskGroup* g) {
     if (!g) return;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     g->cancelled = true;
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
     
     /* Note: Tasks check is_cancelled() at their own await points */
 }
@@ -138,9 +141,9 @@ void taskgroup_cancel(TaskGroup* g) {
 bool taskgroup_is_cancelled(TaskGroup* g) {
     if (!g) return true;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     bool cancelled = g->cancelled;
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
     
     return cancelled;
 }
@@ -151,11 +154,11 @@ bool taskgroup_is_cancelled(TaskGroup* g) {
 void taskgroup_set_error(TaskGroup* g, void* error) {
     if (!g || !error) return;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     if (!g->error) {
         g->error = error;
     }
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
 }
 
 /*
@@ -164,9 +167,9 @@ void taskgroup_set_error(TaskGroup* g, void* error) {
 void* taskgroup_get_error(TaskGroup* g) {
     if (!g) return NULL;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     void* error = g->error;
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
     
     return error;
 }
@@ -177,12 +180,12 @@ void* taskgroup_get_error(TaskGroup* g) {
 void taskgroup_task_done(TaskGroup* g, Task* t) {
     if (!g) return;
     
-    pthread_mutex_lock(&g->lock);
+    DESI_MUTEX_LOCK(g->lock);
     g->pending--;
     if (g->pending == 0) {
-        pthread_cond_broadcast(&g->all_done);
+        DESI_COND_BROADCAST(g->all_done);
     }
-    pthread_mutex_unlock(&g->lock);
+    DESI_MUTEX_UNLOCK(g->lock);
 }
 
 /*
@@ -194,8 +197,8 @@ void taskgroup_destroy(TaskGroup* g) {
     /* Wait for any remaining tasks */
     taskgroup_wait(g);
     
-    pthread_mutex_destroy(&g->lock);
-    pthread_cond_destroy(&g->all_done);
+    DESI_MUTEX_DESTROY(g->lock);
+    DESI_COND_DESTROY(g->all_done);
     
     if (g->tasks) {
         free(g->tasks);

@@ -370,4 +370,13 @@ func addPreludeBuiltins(info *Info) {
 		nil, // Channel[T] - requires type annotation
 		[]string{"capacity"},
 	)
+
+	// --- taskgroup_new builtin ---
+	// taskgroup_new() -> TaskGroup
+	addN("taskgroup_new",
+		[]types.T{}, // No arguments
+		[]ast.ParamMode{},
+		types.TaskGroupOf(),
+		[]string{},
+	)
 }

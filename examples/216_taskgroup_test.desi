@@ -1,0 +1,18 @@
+# Test TaskGroup type syntax
+
+def worker():
+    print("Worker running")
+
+def main() -> int:
+    # Create a task group
+    let group = taskgroup_new()
+    
+    # Check if cancelled
+    let cancelled = group.is_cancelled()
+    print(cancelled)  # false
+    
+    # Wait for all tasks (should complete immediately since none spawned)
+    group.wait()
+    
+    print("TaskGroup test done!")
+    return 0

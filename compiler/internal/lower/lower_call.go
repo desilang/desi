@@ -254,6 +254,32 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					return dst
 				}
 			}
+
+			// TaskGroup methods: spawn, wait, cancel, is_cancelled
+			if _, ok := feXType.(*types.TaskGroup); ok {
+				groupVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("taskgroup_result")
+				switch fe.Name.Name {
+				case "spawn":
+					// spawn(fn) - fn is lowered as a function pointer
+					if len(x.Args) > 0 {
+						fnVal := ls.lowerExpr(x.Args[0])
+						// Pass NULL for context for now
+						nullCtx := hir.ConstInt{Text: "0", Type: "ptr"}
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "taskgroup_spawn", Args: []hir.Value{groupVal, fnVal, nullCtx}, Type: "void"})
+						return dst
+					}
+				case "wait":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "taskgroup_wait", Args: []hir.Value{groupVal}, Type: "void"})
+					return dst
+				case "cancel":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "taskgroup_cancel", Args: []hir.Value{groupVal}, Type: "void"})
+					return dst
+				case "is_cancelled":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "taskgroup_is_cancelled", Args: []hir.Value{groupVal}, Type: "i1"})
+					return dst
+				}
+			}
 		}
 	}
 
@@ -271,6 +297,16 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					return ls.lowerVariadicCall(x, cand.Type)
 				}
 			}
+		}
+	}
+
+	// taskgroup_new() -> TaskGroup*
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "taskgroup_new" && len(x.Args) == 0 {
+			res := ls.b.FreshTemp("taskgroup")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: []hir.Value{}, Type: "ptr"})
+			return res
 		}
 	}
 
