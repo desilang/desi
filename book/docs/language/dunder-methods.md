@@ -124,6 +124,22 @@ let p2 = Point(5, 10)
 let p3 = p1 + p2  # Point(15, 30)
 ```
 
+## Slicing: `__getslice__`
+
+```desi
+class MyList:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __getslice__(self, start: int, end: int) -> list[int]:
+        return self.data[start:end]
+
+let arr = MyList([10, 20, 30, 40, 50])
+let slice = arr[1:4]  # Uses __getslice__ -> [20, 30, 40]
+```
+
 ## Summary
 
 | Dunder | Syntax | Description |
@@ -131,6 +147,7 @@ let p3 = p1 + p2  # Point(15, 30)
 | `__new__` | `Class()` | Constructor |
 | `__getitem__` | `obj[i]` | Index access |
 | `__setitem__` | `obj[i] := v` | Index assignment |
+| `__getslice__` | `obj[i:j]` | Slice access |
 | `__len__` | `len(obj)` | Custom length |
 | `__contains__` | `x in obj` | Membership |
 | `__repr__` | `print(obj)` | String representation |
