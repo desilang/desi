@@ -69,6 +69,11 @@ func (c *checker) typ(e ast.Expr) types.T {
 			c.info.Types[x] = slicedTuple
 			return slicedTuple
 		}
+		// List slicing: list[i:j] -> list[T]
+		if listType, ok := bt.(*types.List); ok {
+			c.info.Types[x] = listType
+			return listType
+		}
 		return nil
 
 	case *ast.ListComp:

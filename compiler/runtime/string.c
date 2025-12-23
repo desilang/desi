@@ -70,11 +70,20 @@ int string_len(const char* s) {
 
 // Get substring (start is 0-indexed, len is character count)
 // Returns newly allocated string
+// Supports negative start (Python-style: -1 = last char)
 char* string_substr(const char* s, int start, int len) {
     if (!s) return strdup("");
     
     int str_len = strlen(s);
-    if (start < 0 || start >= str_len || len <= 0) {
+    
+    // Handle negative start (Python-style)
+    if (start < 0) {
+        start = str_len + start;
+    }
+    
+    // Clamp to bounds
+    if (start < 0) start = 0;
+    if (start >= str_len || len <= 0) {
         return strdup("");
     }
     
@@ -85,6 +94,35 @@ char* string_substr(const char* s, int start, int len) {
     char* result = (char*)malloc(len + 1);
     if (!result) {
         fprintf(stderr, "string_substr: allocation failed\n");
+        exit(1);
+    }
+    
+    memcpy(result, s + start, len);
+    result[len] = '\0';
+    
+    return result;
+}
+
+// Slice string from start (inclusive) to end (exclusive)
+// Supports negative indices like Python
+char* string_slice(const char* s, int start, int end) {
+    if (!s) return strdup("");
+    
+    int str_len = strlen(s);
+    
+    // Handle negative indices (Python-style)
+    if (start < 0) start = str_len + start;
+    if (end < 0) end = str_len + end;
+    
+    // Clamp to bounds
+    if (start < 0) start = 0;
+    if (end > str_len) end = str_len;
+    if (start >= end) return strdup("");
+    
+    int len = end - start;
+    char* result = (char*)malloc(len + 1);
+    if (!result) {
+        fprintf(stderr, "string_slice: allocation failed\n");
         exit(1);
     }
     
