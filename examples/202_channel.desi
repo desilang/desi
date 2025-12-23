@@ -1,14 +1,28 @@
-# Test Channel - basic channel operations
-
-# For now, test that channel runtime compiles and links correctly
-# Full type-checked channel will be added after type system integration
+# Test Channel - basic channel operations with implemented syntax
 
 def main() -> int:
-	print("Testing channel runtime...")
-	
-	# Placeholder test - channel types will be added with full type integration
-	let value = 42
-	print(value)
-	
-	print("Channel test complete!")
-	return 0
+    print("Testing channel...")
+    
+    # Create a bounded channel
+    let ch = channel_new(10)
+    
+    # Get sender and receiver handles
+    let sender = ch.sender()
+    let receiver = ch.receiver()
+    
+    # Send values
+    let ok1 = sender.send(1)
+    let ok2 = sender.send(2)
+    let ok3 = sender.send(3)
+    print(ok1)  # true
+    
+    # Receive values (non-blocking)
+    let v1 = receiver.try_recv()
+    let v2 = receiver.try_recv()
+    let v3 = receiver.try_recv()
+    
+    # Close the channel
+    ch.close()
+    
+    print("Channel test complete!")
+    return 0
