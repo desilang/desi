@@ -345,6 +345,49 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			return dst
 		}
 
+		// Check for custom class slicing via __getslice__
+		if ls.info != nil {
+			if cls, ok := slicedType.(*types.Class); ok {
+				if getSliceFn, found := cls.Dunders["__getslice__"]; found {
+					base := ls.lowerExpr(x.X)
+
+					// Start index (default 0)
+					var start hir.Value
+					if x.I != nil {
+						start = ls.lowerExpr(x.I)
+					} else {
+						start = hir.ConstInt{Text: "0", Type: "i32"}
+					}
+
+					// End index (default -1 meaning "to end" or call __len__)
+					var end hir.Value
+					if x.J != nil {
+						end = ls.lowerExpr(x.J)
+					} else {
+						// Call __len__ to get default end
+						if _, hasLen := cls.Dunders["__len__"]; hasLen {
+							lenMangledName := fmt.Sprintf("%s___len__", cls.Name)
+							end = ls.b.FreshTemp("slice_len")
+							ls.b.Emit(&hir.Call{Dst: end.(hir.Temp), Fn: lenMangledName, Args: []hir.Value{base}, Type: "i32"})
+						} else {
+							// Use sentinel -1 if no __len__
+							end = hir.ConstInt{Text: "-1", Type: "i32"}
+						}
+					}
+
+					// Call __getslice__(self, start, end)
+					mangledName := fmt.Sprintf("%s___getslice__", cls.Name)
+					res := ls.b.FreshTemp("slice")
+					retType := "ptr" // default return type
+					if getSliceFn.Ret != nil {
+						retType = lowerType(getSliceFn.Ret)
+					}
+					ls.b.Emit(&hir.Call{Dst: res, Fn: mangledName, Args: []hir.Value{base, start, end}, Type: retType})
+					return res
+				}
+			}
+		}
+
 		base := ls.lowerExpr(x.X)
 
 		// Start index (default 0)
