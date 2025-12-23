@@ -2,21 +2,32 @@
  * Desi Runtime Mutex Implementation
  * 
  * Provides thread-safe mutual exclusion with RAII guard pattern.
+ * Cross-platform: Uses pthreads on POSIX (Linux/macOS) and SRWLOCK on Windows.
  */
 
 #ifndef DESI_MUTEX_H
 #define DESI_MUTEX_H
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 
+#ifdef _WIN32
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+    typedef SRWLOCK PlatformMutex;
+#else
+    #include <pthread.h>
+    typedef pthread_mutex_t PlatformMutex;
+#endif
+
 /*
- * Mutex wraps a pthread_mutex_t and holds a pointer to the protected value.
+ * Mutex wraps a platform lock and holds a pointer to the protected value.
  * The value pointer allows us to return a typed guard.
  */
 typedef struct {
-    pthread_mutex_t lock;
+    PlatformMutex lock;
     void* value;           /* Pointer to the protected value */
     bool initialized;
 } DesiMutex;

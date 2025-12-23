@@ -349,4 +349,14 @@ func addPreludeBuiltins(info *Info) {
 		nil,
 		[]string{"func", "iterable", "initial"},
 	)
+
+	// --- mutex_new builtin ---
+	// mutex_new(value: T) -> Mutex[T]
+	// Special handling in expr_call.go for type inference
+	addN("mutex_new",
+		[]types.T{nil}, // Any type - Mutex[T] inferred from argument
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Mutex[T] - determined in expr_call.go
+		[]string{"value"},
+	)
 }
