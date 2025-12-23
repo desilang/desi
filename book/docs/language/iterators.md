@@ -8,7 +8,7 @@ Desi provides a **lazy iterator protocol** that enables efficient, memory-safe i
 
 Use the `.iter()` method to create an iterator from any list:
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 let it = nums.iter()  # Creates a ListIter[int]
 ```
@@ -17,14 +17,14 @@ let it = nums.iter()  # Creates a ListIter[int]
 
 Use `.collect()` to materialize an iterator back into a list:
 
-```python
+```desi
 let nums = [1, 2, 3, 4, 5]
 let collected = nums.iter().collect()  # [1, 2, 3, 4, 5]
 ```
 
 ## Complete Example
 
-```python
+```desi
 def main() -> int:
     # Create a list
     let numbers = [1, 2, 3, 4, 5]
@@ -42,7 +42,7 @@ def main() -> int:
 
 Iterators work seamlessly with all primitive types:
 
-```python
+```desi
 # Integers
 let ints = [1, 2, 3]
 let int_copy = ints.iter().collect()
@@ -56,7 +56,7 @@ let str_copy = strings.iter().collect()
 
 Iterators preserve struct data integrity:
 
-```python
+```desi
 struct Point:
     x: int
     y: int
@@ -79,7 +79,7 @@ def main() -> int:
 
 Iterators work with class instances:
 
-```python
+```desi
 class Person:
     pub name: str
     pub age: int
@@ -106,7 +106,7 @@ def main() -> int:
 
 Empty lists iterate correctly:
 
-```python
+```desi
 let empty: list[int] = []
 let result = empty.iter().collect()  # []
 ```
@@ -115,7 +115,7 @@ let result = empty.iter().collect()  # []
 
 Single-element lists work as expected:
 
-```python
+```desi
 let single = [42]
 let result = single.iter().collect()  # [42]
 ```
@@ -124,7 +124,7 @@ let result = single.iter().collect()  # [42]
 
 You can create multiple iterators from the same source:
 
-```python
+```desi
 let source = [1, 2, 3]
 let iter1 = source.iter()
 let iter2 = source.iter()
@@ -137,7 +137,7 @@ let result2 = iter2.collect()  # [1, 2, 3]
 
 The original list is never modified by iteration:
 
-```python
+```desi
 let original = [1, 2, 3]
 let _ = original.iter().collect()
 print(original)  # [1, 2, 3] - unchanged

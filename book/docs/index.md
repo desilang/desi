@@ -20,7 +20,7 @@
 
 ## Quick Example
 
-```python
+```desi
 # Hello, World in Desi
 def main():
     print("Namaste, World!")
@@ -28,7 +28,7 @@ def main():
 
 A more interesting example:
 
-```python
+```desi
 class Counter:
     pub mut count: int
     

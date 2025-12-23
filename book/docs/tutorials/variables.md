@@ -10,7 +10,7 @@ Learn how to declare variables and use Desi's type system.
 
 Use `let` for variables that won't change:
 
-```python
+```desi
 let name = "Desi"
 let age = 25
 let pi = 3.14159
@@ -18,7 +18,7 @@ let pi = 3.14159
 
 Trying to reassign a `let` variable is an error:
 
-```python
+```desi
 let x = 10
 x = 20  # ❌ Error: cannot assign to immutable variable
 ```
@@ -27,7 +27,7 @@ x = 20  # ❌ Error: cannot assign to immutable variable
 
 Use `var` when you need to modify a variable:
 
-```python
+```desi
 var counter = 0
 counter = counter + 1  # ✅ OK
 counter = counter + 1  # ✅ OK
@@ -43,7 +43,7 @@ print(counter)  # Prints: 2
 
 Desi has strong static typing with inference. You can be explicit:
 
-```python
+```desi
 let name: str = "Desi"
 let count: int = 42
 let price: float = 19.99
@@ -52,7 +52,7 @@ let active: bool = true
 
 Or let Desi infer:
 
-```python
+```desi
 let name = "Desi"     # str
 let count = 42        # int
 let price = 19.99     # float
@@ -72,7 +72,7 @@ let active = true     # bool
 | `i32` | 32-bit signed | `i32(100)` |
 | `i64` | 64-bit signed | `i64(1000000)` |
 
-```python
+```desi
 let whole = 42          # int
 let decimal = 3.14      # float
 let big = i64(9999999)  # i64
@@ -80,7 +80,7 @@ let big = i64(9999999)  # i64
 
 ### Strings
 
-```python
+```desi
 let greeting = "Hello, World!"
 let name = "Desi"
 let combined = greeting + " " + name  # String concatenation
@@ -88,7 +88,7 @@ let combined = greeting + " " + name  # String concatenation
 
 ### Booleans
 
-```python
+```desi
 let is_valid = true
 let is_empty = false
 
@@ -102,7 +102,7 @@ let result = is_valid and not is_empty
 
 Convert between types explicitly:
 
-```python
+```desi
 let x: int = 42
 let y: float = float(x)    # int -> float
 let z: str = str(x)        # int -> str
@@ -117,7 +117,7 @@ let b: int = int(a)        # float -> int (truncates to 3)
 
 By convention, use UPPER_CASE for constants:
 
-```python
+```desi
 let MAX_SIZE = 1000
 let PI = 3.14159265359
 let APP_NAME = "MyApp"
@@ -129,7 +129,7 @@ let APP_NAME = "MyApp"
 
 Declare multiple variables:
 
-```python
+```desi
 let a = 1
 let b = 2
 let c = 3
@@ -144,7 +144,7 @@ let sum = a + b + c
 
 Variables are scoped to their block:
 
-```python
+```desi
 def example():
     let x = 10
     
@@ -161,7 +161,7 @@ def example():
 
 ## Practical Example
 
-```python
+```desi
 def calculate_area():
     let width: float = 10.5
     let height: float = 20.0

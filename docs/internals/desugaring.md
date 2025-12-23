@@ -16,7 +16,7 @@ Desugaring is a compile-time transformation that rewrites high-level syntax into
 
 ### map/filter → List Comprehension
 
-```python
+```desi
 # Before desugaring
 map(double, nums)
 filter(is_even, nums)

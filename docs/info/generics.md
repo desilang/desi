@@ -17,7 +17,7 @@ Generic classes allow you to define type-safe containers and data structures tha
 
 ### Basic Syntax
 
-```python
+```desi
 class Box<T>:
     pub mut val: T
 
@@ -35,7 +35,7 @@ class Box<T>:
 
 Generic classes can be instantiated with explicit type annotations:
 
-```python
+```desi
 # Explicit type annotation
 let b: Box<int> = Box()
 b.val = 42
@@ -48,7 +48,7 @@ let b = Box(42)  # Inferred as Box<int>
 
 Classes can have multiple type parameters:
 
-```python
+```desi
 class Pair<A, B>:
     pub mut first: A
     pub mut second: B
@@ -76,7 +76,7 @@ Generic classes work with all Desi types:
 
 ### Example: Comprehensive Test
 
-```python
+```desi
 class Box<T>:
     pub mut val: T
     pub def __new__(self, v: T):
@@ -106,7 +106,7 @@ Generic functions use type erasure with boxing/unboxing at call sites.
 
 ### Basic Syntax
 
-```python
+```desi
 def identity<T>(x: T) -> T:
     return x
 
@@ -133,14 +133,14 @@ Desi can infer generic type parameters from constructor arguments.
 
 ### Without Inference (Explicit)
 
-```python
+```desi
 let b: Box<int> = Box()  # Must specify Box<int>
 b.val = 42
 ```
 
 ### With Inference
 
-```python
+```desi
 let b = Box(42)  # Inferred as Box<int> from argument type
 print(b.val)     # 42
 ```

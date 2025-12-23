@@ -7,7 +7,7 @@
 
 Functions in Desi are defined with `def`:
 
-```python
+```desi
 def greet(name: str) -> str:
     return "Namaste, " + name
 

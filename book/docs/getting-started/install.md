@@ -83,7 +83,7 @@ desi/
 
 Create a simple test file:
 
-```python
+```desi
 # test.desi
 def main():
     print("Desi is working!")
