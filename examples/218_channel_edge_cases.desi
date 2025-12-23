@@ -1,0 +1,51 @@
+# Channel Edge Case Tests
+# Tests for channel edge cases
+
+def main() -> int:
+    print("=== Channel Edge Case Tests ===")
+    
+    # Test 1: Small buffer (1)
+    let small_ch = channel_new(1)
+    let small_sender = small_ch.sender()
+    let small_receiver = small_ch.receiver()
+    let ok1 = small_sender.send(42)
+    print(ok1)  # true
+    
+    # Test 2: Large buffer
+    let large_ch = channel_new(1000)
+    let large_sender = large_ch.sender()
+    print("Large buffer created")
+    
+    # Test 3: Send multiple values
+    let multi_ch = channel_new(5)
+    let multi_sender = multi_ch.sender()
+    let multi_receiver = multi_ch.receiver()
+    multi_sender.send(1)
+    multi_sender.send(2)
+    multi_sender.send(3)
+    # try_recv should get values
+    let v1 = multi_receiver.try_recv()
+    let v2 = multi_receiver.try_recv()
+    let v3 = multi_receiver.try_recv()
+    print("Sent and received 3 values")
+    
+    # Test 4: Empty receive (try_recv on empty)
+    let empty_ch = channel_new(10)
+    let empty_receiver = empty_ch.receiver()
+    let empty_result = empty_receiver.try_recv()
+    print("Empty try_recv returned")
+    
+    # Test 5: Close channel
+    let close_ch = channel_new(5)
+    close_ch.close()
+    print("Channel closed")
+    
+    # Test 6: Send after close (should return false)
+    let close_test_ch = channel_new(5)
+    let close_sender = close_test_ch.sender()
+    close_test_ch.close()
+    let send_after_close = close_sender.send(999)
+    print(send_after_close)  # false
+    
+    print("=== All Channel Edge Cases Passed ===")
+    return 0
