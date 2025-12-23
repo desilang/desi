@@ -1,134 +1,51 @@
-# Iteration
+# Custom Class Iteration
 
-Desi provides `for` loops for iterating over collections and `while` loops for conditional iteration.
+You can create iterable custom classes by implementing `__getitem__` and `__len__`.
 
-## For Loops
+## Required Methods
 
-### Basic List Iteration
+| Method | Signature | Purpose |
+|--------|-----------|---------|
+| `__getitem__` | `(self, index: int) -> T` | Get element at index |
+| `__len__` | `(self) -> int` | Return number of elements |
 
-```desi
-let items: list[int] = [1, 2, 3, 4, 5]
-for x: int in items:
-    print(x)
-```
-
-### Dict Iteration
+## Example
 
 ```desi
-let scores: dict[str, int] = {"alice": 100, "bob": 85}
-for key: str, value: int in scores.items():
-    print(f"{key}: {value}")
+class MyList:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __getitem__(self, index: int) -> int:
+        return self.data[index]
+    
+    pub def __len__(self) -> int:
+        return len(self.data)
+
+def main() -> int:
+    let arr = MyList([10, 20, 30, 40, 50])
+    
+    for x in arr:
+        print(x)  # Prints: 10 20 30 40 50
+    
+    return 0
 ```
 
-### Range Iteration
+## How It Works
+
+When you write `for x in custom_obj:`, the compiler:
+
+1. Calls `obj.__len__()` to get the count
+2. Loops from 0 to count-1
+3. Calls `obj.__getitem__(index)` for each element
+
+## Negative Indexing
+
+Since `__getitem__` is called directly, negative indexing works if your implementation supports it:
 
 ```desi
-for i: int in range(5):
-    print(i)  # 0, 1, 2, 3, 4
-
-for i: int in range(2, 6):
-    print(i)  # 2, 3, 4, 5
-
-for i: int in range(0, 10, 2):
-    print(i)  # 0, 2, 4, 6, 8
+pub def __getitem__(self, index: int) -> int:
+    return self.data[index]  # data[-1] will work!
 ```
-
----
-
-## Mutable Iteration
-
-By default, loop variables are read-only. Use `mut` to modify elements:
-
-### Modify List Elements
-
-```desi
-let mut items: list[int] = [1, 2, 3]
-for mut x: int in items:
-    x *= 2
-# items is now [2, 4, 6]
-```
-
-### Modify Dict Values
-
-```desi
-let mut scores: dict[str, int] = {"alice": 100, "bob": 85}
-for key: str, mut value: int in scores.items():
-    value += 10
-# scores is now {"alice": 110, "bob": 95}
-```
-
-> **Note**: Dict keys cannot be modified, only values.
-
----
-
-## Iteration Helpers
-
-### enumerate()
-
-Get both index and value:
-
-```desi
-let items: list[str] = ["a", "b", "c"]
-for i: int, item: str in enumerate(items):
-    print(f"{i}: {item}")
-```
-
-### zip()
-
-Iterate over two lists in parallel:
-
-```desi
-let names: list[str] = ["alice", "bob"]
-let ages: list[int] = [30, 25]
-for name: str, age: int in zip(names, ages):
-    print(f"{name} is {age}")
-```
-
-### reversed()
-
-Iterate in reverse order:
-
-```desi
-let items: list[int] = [1, 2, 3]
-for x: int in reversed(items):
-    print(x)  # 3, 2, 1
-```
-
----
-
-## List Comprehensions
-
-Create lists with inline syntax:
-
-```desi
-# Basic comprehension
-let squares: list[int] = [x * x for x: int in range(5)]
-# [0, 1, 4, 9, 16]
-
-# With filter
-let evens: list[int] = [x for x: int in range(10) if x % 2 == 0]
-# [0, 2, 4, 6, 8]
-```
-
----
-
-## While Loops
-
-```desi
-let mut i: int = 0
-while i < 10:
-    print(i)
-    i += 1
-```
-
----
-
-## Quick Reference
-
-| Pattern | Description |
-|---------|-------------|
-| `for x in list:` | Iterate over list |
-| `for k, v in dict.items():` | Iterate over dict |
-| `for i in range(n):` | 0 to n-1 |
-| `for mut x in list:` | Modify elements |
-| `for i, x in enumerate(list):` | Index + value |
