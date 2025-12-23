@@ -1,4 +1,4 @@
-# Test custom dunder methods with correct mutability syntax
+# Test custom dunder methods with correct := syntax
 
 class MyList:
     pub mut data: list[int]
@@ -10,16 +10,16 @@ class MyList:
         return self.data[index]
     
     pub def __setitem__(self, index: int, value: int):
-        self.data[index] = value
+        self.data[index] := value  # Use := for mutation
     
     pub def __len__(self) -> int:
         return len(self.data)
 
 def main() -> int:
-    print("=== Testing list[index] = value ===")
+    print("=== Testing list[index] := value ===")
     let mut data: list[int] = [10, 20, 30]
     print(data[0])  # 10
-    data[0] = 100
+    data[0] := 100  # Use := for mutation
     print(data[0])  # 100
     
     print("=== Testing custom __getitem__ ===")
@@ -29,7 +29,7 @@ def main() -> int:
     print(arr[-1]) # 30 (negative index)
     
     print("=== Testing custom __setitem__ ===")
-    arr[0] = 999
+    arr[0] := 999  # Use := for mutation
     print(arr[0])  # 999
     
     print("=== Testing custom __len__ ===")
