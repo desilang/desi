@@ -1,0 +1,36 @@
+# Test custom __getslice__ dunder
+
+class MyList:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __getitem__(self, index: int) -> int:
+        return self.data[index]
+    
+    pub def __len__(self) -> int:
+        return len(self.data)
+    
+    pub def __getslice__(self, start: int, end: int) -> list[int]:
+        return self.data[start:end]
+
+def main() -> int:
+    let arr = MyList([10, 20, 30, 40, 50])
+    
+    print("Testing custom __getslice__:")
+    
+    # Slice from index 1 to 4
+    let slice1 = arr[1:4]
+    for x in slice1:
+        print(x)  # Should print: 20 30 40
+    
+    print("---")
+    
+    # Slice from beginning to index 3
+    let slice2 = arr[:3]
+    for x in slice2:
+        print(x)  # Should print: 10 20 30
+    
+    print("Done!")
+    return 0

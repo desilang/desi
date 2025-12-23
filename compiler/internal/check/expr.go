@@ -74,6 +74,16 @@ func (c *checker) typ(e ast.Expr) types.T {
 			c.info.Types[x] = listType
 			return listType
 		}
+		// Custom class slicing via __getslice__ dunder
+		if cls, ok := bt.(*types.Class); ok {
+			if getSliceFn, found := cls.Dunders["__getslice__"]; found {
+				// Return the __getslice__ return type
+				if getSliceFn.Ret != nil {
+					c.info.Types[x] = getSliceFn.Ret
+					return getSliceFn.Ret
+				}
+			}
+		}
 		return nil
 
 	case *ast.ListComp:
