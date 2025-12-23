@@ -40,9 +40,10 @@ func (p *Parser) maybeMakeAssign(first ast.Expr) ast.Stmt {
 		}
 		_ = ok // parser continues; checker can be stricter later
 		return &ast.AssignStmt{
-			LHS:  lhs,
-			RHS:  rhs,
-			Span: ast.JoinSpan(start, rhsSpan),
+			LHS:        lhs,
+			RHS:        rhs,
+			IsReassign: false, // '=' is initial binding
+			Span:       ast.JoinSpan(start, rhsSpan),
 		}
 
 	case token.DECLARE: // ':=' (declaration)
@@ -62,9 +63,10 @@ func (p *Parser) maybeMakeAssign(first ast.Expr) ast.Stmt {
 		}
 		_ = ok // parser continues; checker can be stricter later
 		return &ast.AssignStmt{
-			LHS:  lhs,
-			RHS:  rhs,
-			Span: ast.JoinSpan(start, rhsSpan),
+			LHS:        lhs,
+			RHS:        rhs,
+			IsReassign: true, // ':=' is mutation
+			Span:       ast.JoinSpan(start, rhsSpan),
 		}
 
 	case token.PLUS_EQ, token.MINUS_EQ, token.STAR_EQ, token.SLASH_EQ, token.PERCENT_EQ,

@@ -354,7 +354,13 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				}
 
 			case *ast.IndexExpr:
-				// Index assignment: obj[idx] = value
+				// Index assignment: obj[idx] := value (mutation)
+				// Check that := was used, not =
+				if !st.IsReassign {
+					c.add(diagAt("DTE0012", st.Span, "index mutation requires ':=' not '=' (e.g., list[0] := value)"))
+					continue
+				}
+
 				objType := c.typ(lhs.X)
 				idxType := c.typ(lhs.Idx)
 				valT := c.typ(rt)

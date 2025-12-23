@@ -1,0 +1,15 @@
+# Test := for list mutation
+
+def main() -> int:
+    let mut data: list[int] = [10, 20, 30]
+    
+    print("Before:")
+    print(data[0])  # 10
+    
+    # Use := for mutation (Desi convention)
+    data[0] := 100
+    
+    print("After:")
+    print(data[0])  # Should be 100
+    
+    return 0
