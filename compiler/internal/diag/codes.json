@@ -207,6 +207,11 @@
       "title": "public let cannot be mutable",
       "help": "remove 'mut' from public top-level let declarations"
     },
+    "mutation_requires_colon_eq": {
+      "id": "DTE0013",
+      "title": "mutation requires ':=' operator",
+      "help": "use ':=' instead of '=' when mutating an existing value (e.g., obj.field := value)"
+    },
     "use_none_not_void": {
       "id": "DTE0014",
       "title": "use 'none' instead of 'void'",
