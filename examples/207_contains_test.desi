@@ -1,0 +1,17 @@
+# Test in operator
+
+def main() -> int:
+    let nums: list[int] = [10, 20, 30]
+    
+    print("Testing in operator:")
+    if 20 in nums:
+        print("20 is in nums")
+    else:
+        print("20 is NOT in nums")
+    
+    if 99 in nums:
+        print("99 is in nums")
+    else:
+        print("99 is NOT in nums")
+    
+    return 0
