@@ -278,6 +278,65 @@ DesiList* list_slice(DesiList* list, int64_t start, int64_t end) {
     return result;
 }
 
+// Create a slice with step (Python-style)
+// step > 0: forward iteration
+// step < 0: reverse iteration (e.g., [::-1] reverses)
+// Sentinel values: INT64_MAX for start means "use default", INT64_MIN for end means "use default"
+#define SENTINEL_START 9223372036854775807LL
+#define SENTINEL_END   (-9223372036854775807LL - 1)
+
+DesiList* list_slice_step(DesiList* list, int64_t start, int64_t end, int64_t step) {
+    if (!list) {
+        fprintf(stderr, "list_slice_step: null list\n");
+        return NULL;
+    }
+    
+    if (step == 0) {
+        fprintf(stderr, "list_slice_step: step cannot be zero\n");
+        return NULL;
+    }
+    
+    int64_t len = (int64_t)list->length;
+    
+    // Handle sentinel values (omitted start/end)
+    if (step > 0) {
+        // Forward: start defaults to 0, end defaults to len
+        if (start == SENTINEL_START) start = 0;
+        if (end == SENTINEL_END) end = len;
+        // Handle negative indices
+        if (start < 0) start = len + start;
+        if (end < 0) end = len + end;
+        if (start < 0) start = 0;
+        if (end > len) end = len;
+    } else {
+        // Reverse: start defaults to len-1, end defaults to -1 (before first)
+        if (start == SENTINEL_START) start = len - 1;
+        if (end == SENTINEL_END) end = -1;
+        // Handle negative indices
+        if (start < 0) start = len + start;
+        if (end < -1 && end != SENTINEL_END) end = len + end;
+        if (start >= len) start = len - 1;
+    }
+    
+    DesiList* result = list_new(list->type_tag, list->to_str_fn);
+    
+    if (step > 0) {
+        for (int64_t i = start; i < end; i += step) {
+            if (i >= 0 && i < len) {
+                list_append(result, list->data[i], list->type_tag);
+            }
+        }
+    } else {
+        for (int64_t i = start; i > end; i += step) {
+            if (i >= 0 && i < len) {
+                list_append(result, list->data[i], list->type_tag);
+            }
+        }
+    }
+    
+    return result;
+}
+
 // Find index of first occurrence of item in range [start, end)
 int64_t list_index(DesiList* list, void* item, int64_t start, int64_t end) {
     if (!list) return -1;
