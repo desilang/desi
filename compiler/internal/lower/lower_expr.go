@@ -1146,12 +1146,15 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Handle MutexGuard.value field - get the protected value
 		if g, ok := baseType.(*types.MutexGuard); ok {
-			_ = g
 			if name == "value" {
-				// Call mutex_guard_get(guard) -> void*
-				res := ls.b.FreshTemp("guard_value")
-				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_guard_get", Args: []hir.Value{base}, Type: "ptr"})
-				return res
+				// Call mutex_guard_get(guard) -> void* (pointer to boxed value)
+				ptrVal := ls.b.FreshTemp("guard_ptr")
+				ls.b.Emit(&hir.Call{Dst: ptrVal, Fn: "mutex_guard_get", Args: []hir.Value{base}, Type: "ptr"})
+				// Load the actual value from the boxed pointer
+				loadedVal := ls.b.FreshTemp("guard_value")
+				loadType := lowerType(g.Inner) // Get the inner type (e.g., i32 for int)
+				ls.b.Emit(&hir.Load{Type: loadType, Src: ptrVal, Dst: loadedVal})
+				return loadedVal
 			}
 		}
 

@@ -1,17 +1,80 @@
-# Test Mutex type syntax with builtin function
+# Comprehensive Mutex Test - All Data Types
+
+struct Point:
+    x: int
+    y: int
+
+class Counter:
+    pub mut count: int
+    
+    pub def __new__(self, initial: int):
+        self.count = initial  # First assignment in __new__, so = is fine
+    
+    pub def get(self) -> int:
+        return self.count
 
 def main() -> int:
-    # Create a mutex protecting an integer
-    let counter = mutex_new(0)
+    # === Primitive Types ===
     
-    # Lock the mutex and get the guard
-    let guard = counter.lock()
+    # Test 1: Integer
+    let int_mutex = mutex_new(42)
+    let int_guard = int_mutex.lock()
+    let int_val = int_guard.value
+    print(int_val)  # 42
     
-    # Access the value through the guard
-    let current = guard.value
-    print(current)  # Should print 0
+    # Test 2: Float
+    let float_mutex = mutex_new(3.14)
+    let float_guard = float_mutex.lock()
+    let float_val = float_guard.value
+    print(float_val)  # 3.14
     
-    # guard.value := 1  # TODO: Mutation via guard
+    # Test 3: Bool
+    let bool_mutex = mutex_new(true)
+    let bool_guard = bool_mutex.lock()
+    let bool_val = bool_guard.value
+    print(bool_val)  # true
     
-    print("Mutex test done!")
+    # Test 4: String
+    let str_mutex = mutex_new("hello")
+    let str_guard = str_mutex.lock()
+    let str_val = str_guard.value
+    print(str_val)  # hello
+    
+    # Test 5: Zero/Edge case
+    let zero_mutex = mutex_new(0)
+    let zero_guard = zero_mutex.lock()
+    let zero_val = zero_guard.value
+    print(zero_val)  # 0
+    
+    # Test 6: Negative int
+    let neg_mutex = mutex_new(-123)
+    let neg_guard = neg_mutex.lock()
+    let neg_val = neg_guard.value
+    print(neg_val)  # -123
+
+    # === Custom Types ===
+    
+    # Test 7: Struct
+    let p = Point(x=10, y=20)
+    let point_mutex = mutex_new(p)
+    let point_guard = point_mutex.lock()
+    let point_val = point_guard.value
+    print(point_val.x)  # 10
+    print(point_val.y)  # 20
+    
+    # Test 8: Class (using __new__ constructor - proper practice)
+    let c = Counter(100)
+    let counter_mutex = mutex_new(c)
+    let counter_guard = counter_mutex.lock()
+    let counter_val = counter_guard.value
+    print(counter_val.get())  # 100
+    
+    # Test 9: List
+    let nums = [1, 2, 3]
+    let list_mutex = mutex_new(nums)
+    let list_guard = list_mutex.lock()
+    let list_val = list_guard.value
+    print(len(list_val))  # 3
+    
+    print("All mutex tests passed!")
     return 0
