@@ -1,0 +1,33 @@
+# Channel - Bounded message queue
+
+pub class Channel:
+    pub mut _handle: int
+    
+    pub def sender(self) -> int:
+        return 0
+    
+    pub def receiver(self) -> int:
+        return 0
+    
+    pub def close(self) -> int:
+        return 0
+
+
+pub class Sender:
+    pub mut _handle: int
+    
+    pub def send(self, value: int) -> bool:
+        return true
+    
+    pub def try_send(self, value: int) -> bool:
+        return true
+
+
+pub class Receiver:
+    pub mut _handle: int
+    
+    pub def recv(self) -> int:
+        return 0
+    
+    pub def try_recv(self) -> int:
+        return 0
