@@ -380,8 +380,28 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					}
 				}
 
-				// For built-in types (lists, dicts), validate normally
-				// This handles existing list/dict assignment
+				// For built-in types (lists, dicts), check mutability
+				// and validate element types
+				if _, ok := objType.(*types.List); ok {
+					// Check if the list variable is mutable
+					if ident, ok := lhs.X.(*ast.Ident); ok {
+						sym := c.scope.Lookup(ident.Name)
+						if sym != nil && !sym.IsMutable {
+							c.add(diagAt("DCL0004", ident.Span, "cannot assign to element of immutable list '"+ident.Name+"' (use 'let mut' instead of 'let')"))
+							continue
+						}
+					}
+				}
+				if _, ok := objType.(*types.Dict); ok {
+					// Check if the dict variable is mutable
+					if ident, ok := lhs.X.(*ast.Ident); ok {
+						sym := c.scope.Lookup(ident.Name)
+						if sym != nil && !sym.IsMutable {
+							c.add(diagAt("DCL0004", ident.Span, "cannot assign to element of immutable dict '"+ident.Name+"' (use 'let mut' instead of 'let')"))
+							continue
+						}
+					}
+				}
 
 			default:
 				// Unsupported LHS
