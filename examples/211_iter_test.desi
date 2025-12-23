@@ -1,0 +1,24 @@
+# Test iteration with __getitem__ + __len__
+
+class MyList:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __getitem__(self, index: int) -> int:
+        return self.data[index]
+    
+    pub def __len__(self) -> int:
+        return len(self.data)
+
+def main() -> int:
+    let arr = MyList([10, 20, 30, 40, 50])
+    
+    print("Testing iteration with __getitem__ + __len__:")
+    
+    for x in arr:
+        print(x)
+    
+    print("Done!")
+    return 0
