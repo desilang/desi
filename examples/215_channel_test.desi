@@ -1,0 +1,22 @@
+# Test Channel type syntax
+
+def main() -> int:
+    # Create a channel (Channel[Any] for now)
+    let ch = channel_new(10)
+    
+    # Get sender and receiver handles
+    let sender = ch.sender()
+    let receiver = ch.receiver()
+    
+    # Send a value (boxes as ptr)
+    let sent = sender.send(42)
+    print(sent)  # true
+    
+    # Try to receive (non-blocking)
+    let result = receiver.try_recv()
+    
+    # Close the channel
+    ch.close()
+    
+    print("Channel test done!")
+    return 0

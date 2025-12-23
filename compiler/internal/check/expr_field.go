@@ -329,6 +329,21 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveMutexGuardField(x, g)
 	}
 
+	// Handle Channel methods: sender, receiver, close
+	if ch, ok := t.(*types.Channel); ok {
+		return c.resolveChannelMethod(x, ch)
+	}
+
+	// Handle ChannelSender methods: send, try_send
+	if s, ok := t.(*types.ChannelSender); ok {
+		return c.resolveChannelSenderMethod(x, s)
+	}
+
+	// Handle ChannelReceiver methods: recv, try_recv
+	if r, ok := t.(*types.ChannelReceiver); ok {
+		return c.resolveChannelReceiverMethod(x, r)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1062,4 +1077,70 @@ func (c *checker) resolveMutexGuardField(x *ast.FieldExpr, g *types.MutexGuard) 
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on MutexGuard"))
 		return nil
 	}
+}
+
+// resolveChannelMethod resolves methods on Channel[T]: sender, receiver, close
+func (c *checker) resolveChannelMethod(x *ast.FieldExpr, ch *types.Channel) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "sender":
+		// sender() -> Sender[T]
+		methodType = types.FuncOf(nil, types.SenderOf(ch.Elem), false)
+	case "receiver":
+		// receiver() -> Receiver[T]
+		methodType = types.FuncOf(nil, types.ReceiverOf(ch.Elem), false)
+	case "close":
+		// close() -> none
+		methodType = types.FuncOf(nil, types.None, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Channel"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveChannelSenderMethod resolves methods on Sender[T]: send, try_send
+func (c *checker) resolveChannelSenderMethod(x *ast.FieldExpr, s *types.ChannelSender) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "send":
+		// send(value: T) -> bool
+		methodType = types.FuncOf([]types.T{s.Elem}, types.Bool, false)
+	case "try_send":
+		// try_send(value: T) -> bool
+		methodType = types.FuncOf([]types.T{s.Elem}, types.Bool, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Sender"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveChannelReceiverMethod resolves methods on Receiver[T]: recv, try_recv
+func (c *checker) resolveChannelReceiverMethod(x *ast.FieldExpr, r *types.ChannelReceiver) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "recv":
+		// recv() -> Option[T] (blocks, returns None if closed)
+		methodType = types.FuncOf(nil, types.OptionOf(r.Elem), false)
+	case "try_recv":
+		// try_recv() -> Option[T] (non-blocking)
+		methodType = types.FuncOf(nil, types.OptionOf(r.Elem), false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Receiver"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
 }

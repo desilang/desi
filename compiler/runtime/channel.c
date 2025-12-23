@@ -1,5 +1,6 @@
 /*
  * Desi Runtime Channel Implementation
+ * Cross-platform: Uses platform.h macros for POSIX/Windows.
  */
 
 #include "channel.h"
@@ -33,9 +34,9 @@ DesiChannel* channel_new(int64_t capacity) {
     ch->senders = 0;
     ch->receivers = 0;
     
-    pthread_mutex_init(&ch->lock, NULL);
-    pthread_cond_init(&ch->not_full, NULL);
-    pthread_cond_init(&ch->not_empty, NULL);
+    DESI_MUTEX_INIT(ch->lock);
+    DESI_COND_INIT(ch->not_full);
+    DESI_COND_INIT(ch->not_empty);
     
     return ch;
 }
@@ -49,9 +50,9 @@ ChannelSender* channel_sender(DesiChannel* ch) {
     ChannelSender* s = malloc(sizeof(ChannelSender));
     if (!s) return NULL;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     ch->senders++;
-    pthread_mutex_unlock(&ch->lock);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     s->channel = ch;
     return s;
@@ -66,9 +67,9 @@ ChannelReceiver* channel_receiver(DesiChannel* ch) {
     ChannelReceiver* r = malloc(sizeof(ChannelReceiver));
     if (!r) return NULL;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     ch->receivers++;
-    pthread_mutex_unlock(&ch->lock);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     r->channel = ch;
     return r;
@@ -89,15 +90,15 @@ bool channel_send(ChannelSender* s, void* value) {
     if (!s || !s->channel) return false;
     DesiChannel* ch = s->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     
     /* Wait while buffer is full and channel is open */
     while (ch->count >= ch->capacity && !ch->closed) {
-        pthread_cond_wait(&ch->not_full, &ch->lock);
+        DESI_COND_WAIT(ch->not_full, ch->lock);
     }
     
     if (ch->closed) {
-        pthread_mutex_unlock(&ch->lock);
+        DESI_MUTEX_UNLOCK(ch->lock);
         return false;
     }
     
@@ -106,8 +107,8 @@ bool channel_send(ChannelSender* s, void* value) {
     ch->tail = (ch->tail + 1) % ch->capacity;
     ch->count++;
     
-    pthread_cond_signal(&ch->not_empty);
-    pthread_mutex_unlock(&ch->lock);
+    DESI_COND_SIGNAL(ch->not_empty);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     return true;
 }
@@ -119,10 +120,10 @@ bool channel_try_send(ChannelSender* s, void* value) {
     if (!s || !s->channel) return false;
     DesiChannel* ch = s->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     
     if (ch->closed || ch->count >= ch->capacity) {
-        pthread_mutex_unlock(&ch->lock);
+        DESI_MUTEX_UNLOCK(ch->lock);
         return false;
     }
     
@@ -130,8 +131,8 @@ bool channel_try_send(ChannelSender* s, void* value) {
     ch->tail = (ch->tail + 1) % ch->capacity;
     ch->count++;
     
-    pthread_cond_signal(&ch->not_empty);
-    pthread_mutex_unlock(&ch->lock);
+    DESI_COND_SIGNAL(ch->not_empty);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     return true;
 }
@@ -143,16 +144,16 @@ void* channel_recv(ChannelReceiver* r) {
     if (!r || !r->channel) return NULL;
     DesiChannel* ch = r->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     
     /* Wait while buffer is empty and senders exist */
     while (ch->count == 0 && !ch->closed) {
-        pthread_cond_wait(&ch->not_empty, &ch->lock);
+        DESI_COND_WAIT(ch->not_empty, ch->lock);
     }
     
     /* If empty and closed, return NULL */
     if (ch->count == 0 && ch->closed) {
-        pthread_mutex_unlock(&ch->lock);
+        DESI_MUTEX_UNLOCK(ch->lock);
         return NULL;
     }
     
@@ -161,8 +162,8 @@ void* channel_recv(ChannelReceiver* r) {
     ch->head = (ch->head + 1) % ch->capacity;
     ch->count--;
     
-    pthread_cond_signal(&ch->not_full);
-    pthread_mutex_unlock(&ch->lock);
+    DESI_COND_SIGNAL(ch->not_full);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     return value;
 }
@@ -174,10 +175,10 @@ void* channel_try_recv(ChannelReceiver* r) {
     if (!r || !r->channel) return NULL;
     DesiChannel* ch = r->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     
     if (ch->count == 0) {
-        pthread_mutex_unlock(&ch->lock);
+        DESI_MUTEX_UNLOCK(ch->lock);
         return NULL;
     }
     
@@ -185,8 +186,8 @@ void* channel_try_recv(ChannelReceiver* r) {
     ch->head = (ch->head + 1) % ch->capacity;
     ch->count--;
     
-    pthread_cond_signal(&ch->not_full);
-    pthread_mutex_unlock(&ch->lock);
+    DESI_COND_SIGNAL(ch->not_full);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     return value;
 }
@@ -197,12 +198,12 @@ void* channel_try_recv(ChannelReceiver* r) {
 void channel_close(DesiChannel* ch) {
     if (!ch) return;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     ch->closed = true;
     /* Wake up all waiters */
-    pthread_cond_broadcast(&ch->not_full);
-    pthread_cond_broadcast(&ch->not_empty);
-    pthread_mutex_unlock(&ch->lock);
+    DESI_COND_BROADCAST(ch->not_full);
+    DESI_COND_BROADCAST(ch->not_empty);
+    DESI_MUTEX_UNLOCK(ch->lock);
 }
 
 /*
@@ -211,9 +212,9 @@ void channel_close(DesiChannel* ch) {
 bool channel_is_closed(DesiChannel* ch) {
     if (!ch) return true;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     bool closed = ch->closed;
-    pthread_mutex_unlock(&ch->lock);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     return closed;
 }
@@ -225,14 +226,14 @@ void sender_drop(ChannelSender* s) {
     if (!s || !s->channel) return;
     DesiChannel* ch = s->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     ch->senders--;
     /* If last sender, close the channel */
     if (ch->senders == 0) {
         ch->closed = true;
-        pthread_cond_broadcast(&ch->not_empty);
+        DESI_COND_BROADCAST(ch->not_empty);
     }
-    pthread_mutex_unlock(&ch->lock);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     free(s);
 }
@@ -244,9 +245,9 @@ void receiver_drop(ChannelReceiver* r) {
     if (!r || !r->channel) return;
     DesiChannel* ch = r->channel;
     
-    pthread_mutex_lock(&ch->lock);
+    DESI_MUTEX_LOCK(ch->lock);
     ch->receivers--;
-    pthread_mutex_unlock(&ch->lock);
+    DESI_MUTEX_UNLOCK(ch->lock);
     
     free(r);
 }
@@ -257,9 +258,9 @@ void receiver_drop(ChannelReceiver* r) {
 void channel_destroy(DesiChannel* ch) {
     if (!ch) return;
     
-    pthread_mutex_destroy(&ch->lock);
-    pthread_cond_destroy(&ch->not_full);
-    pthread_cond_destroy(&ch->not_empty);
+    DESI_MUTEX_DESTROY(ch->lock);
+    DESI_COND_DESTROY(ch->not_full);
+    DESI_COND_DESTROY(ch->not_empty);
     
     if (ch->buffer) {
         free(ch->buffer);
