@@ -69,6 +69,14 @@ func IsSend(t T) bool {
 	case *ListIter, *MapIter, *FilterIter:
 		return true
 
+	// Channels are Send if their element type is Send
+	case *Channel:
+		return IsSend(v.Elem)
+	case *ChannelSender:
+		return IsSend(v.Elem)
+	case *ChannelReceiver:
+		return IsSend(v.Elem)
+
 	// Generic/unknown types - assume Send for now
 	default:
 		return true
@@ -132,6 +140,14 @@ func IsSync(t T) bool {
 	// Functions are Sync
 	case *Func:
 		return true
+
+	// Channels are Sync if their element type is Sync
+	case *Channel:
+		return IsSync(v.Elem)
+	case *ChannelSender:
+		return IsSync(v.Elem)
+	case *ChannelReceiver:
+		return IsSync(v.Elem)
 
 	// Default: assume Sync
 	default:
