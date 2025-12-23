@@ -74,6 +74,7 @@ const (
 	KW_const
 	KW_static
 	KW_lambda // Python-style lambda keyword
+	KW_spawn  // spawn: block for concurrent tasks
 
 	// Delimiters / punctuators
 	LPAREN // (

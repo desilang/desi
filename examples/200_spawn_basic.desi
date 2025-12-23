@@ -1,0 +1,17 @@
+# Test spawn statement - basic syntax verification
+
+def main() -> int:
+	print("Starting main")
+	
+	# Basic spawn
+	spawn:
+		print("Hello from spawn!")
+		let x = 42
+		print(x)
+	
+	# Named spawn
+	spawn(name="worker"):
+		print("Hello from named spawn!")
+	
+	print("Main continues after spawn")
+	return 0

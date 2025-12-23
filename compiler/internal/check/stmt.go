@@ -796,6 +796,13 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// nothing to type; resolver handles validity; lints post-check
 	case *ast.FromImportStmt:
 		// nothing to type; resolver handles validity; lints post-check
+
+	case *ast.SpawnStmt:
+		// Type check the spawn body block
+		// TODO: Verify captured variables implement Send trait
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
 	}
 }
 

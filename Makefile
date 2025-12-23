@@ -10,7 +10,7 @@ BIN_DIR = bin
 RUNTIME_SRC = compiler/runtime
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
-RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o $(BUILD_DIR)/string.o $(BUILD_DIR)/list.o $(BUILD_DIR)/file.o $(BUILD_DIR)/arena.o $(BUILD_DIR)/builtins.o $(BUILD_DIR)/iterator.o
+RUNTIME_OBJS = $(BUILD_DIR)/set.o $(BUILD_DIR)/dict.o $(BUILD_DIR)/print.o $(BUILD_DIR)/string.o $(BUILD_DIR)/list.o $(BUILD_DIR)/file.o $(BUILD_DIR)/arena.o $(BUILD_DIR)/builtins.o $(BUILD_DIR)/iterator.o $(BUILD_DIR)/scheduler.o
 LIB_DESI = $(BUILD_DIR)/libdesi.a
 
 # Tools
