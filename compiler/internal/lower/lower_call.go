@@ -185,6 +185,22 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					return dst
 				}
 			}
+
+			// Mutex methods: lock, try_lock
+			if _, ok := feXType.(*types.Mutex); ok {
+				mutexVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("guard")
+				switch fe.Name.Name {
+				case "lock":
+					// mutex.lock() -> MutexGuard*
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "mutex_lock", Args: []hir.Value{mutexVal}, Type: "ptr"})
+					return dst
+				case "try_lock":
+					// mutex.try_lock() -> MutexGuard* (or null)
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "mutex_try_lock", Args: []hir.Value{mutexVal}, Type: "ptr"})
+					return dst
+				}
+			}
 		}
 	}
 
@@ -392,6 +408,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			case "sorted":
 				res := ls.b.FreshTemp("sorted_res")
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_sorted_int", Args: []hir.Value{argVal}, Type: "ptr"})
+				return res
+			case "mutex_new":
+				// mutex_new(value) -> DesiMutex*
+				// For primitive values, we pass the value directly as inttoptr
+				res := ls.b.FreshTemp("mutex")
+				// Convert primitive to ptr for mutex_new(void*) using Cast
+				ptrVal := ls.b.FreshTemp("mutex_val")
+				ls.b.Emit(&hir.Cast{Src: argVal, Dst: ptrVal, Type: "ptr"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{ptrVal}, Type: "ptr"})
 				return res
 			}
 		}
