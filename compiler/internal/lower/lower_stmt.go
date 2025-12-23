@@ -350,6 +350,32 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
+			// Handle list index assignment: list[idx] = value
+			if indexExpr, ok := s.LHS[0].(*ast.IndexExpr); ok {
+				if ls.info != nil {
+					objType := ls.info.Types[indexExpr.X]
+					if _, ok := objType.(*types.List); ok {
+						// Lower list, index, and value
+						list := ls.lowerExpr(indexExpr.X)
+						idx := ls.lowerExpr(indexExpr.Idx)
+						val := ls.lowerExpr(s.RHS[0])
+
+						// Sign-extend index to i64
+						idx64 := ls.b.FreshTemp("idx_i64")
+						ls.b.Emit(&hir.Cast{Dst: idx64, Src: idx, Type: "i64"})
+
+						// Cast value to ptr for generic storage
+						valPtr := ls.b.FreshTemp("val_ptr")
+						ls.b.Emit(&hir.Cast{Dst: valPtr, Src: val, Type: "ptr"})
+
+						// Call list_set
+						ls.b.Emit(&hir.Call{Fn: "list_set", Args: []hir.Value{list, idx64, valPtr}})
+						ls.consumeTemp(val)
+						return
+					}
+				}
+			}
+
 			// Handle field assignment: obj.field = val
 			if field, ok := s.LHS[0].(*ast.FieldExpr); ok {
 				// Lower receiver
