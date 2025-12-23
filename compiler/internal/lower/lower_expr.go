@@ -393,10 +393,8 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		res := ls.b.FreshTemp("slice")
 		if isStr {
-			// string_substr(str, start, length) - need to compute length = end - start
-			length := ls.b.FreshTemp("slice_len")
-			ls.b.Emit(&hir.BinaryOp{Dst: length, Op: "-", LHS: end, RHS: start, Type: "i32"})
-			ls.b.Emit(&hir.Call{Dst: res, Fn: "string_substr", Args: []hir.Value{base, start, length}, Type: "ptr"})
+			// Use string_slice(str, start, end) which handles negative indices
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "string_slice", Args: []hir.Value{base, start, end}, Type: "ptr"})
 		} else {
 			// Call list_slice
 			ls.b.Emit(&hir.Call{Dst: res, Fn: "list_slice", Args: []hir.Value{base, start, end}})
@@ -484,9 +482,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			list := ls.lowerExpr(x.X)
 			index := ls.lowerExpr(x.Idx)
 
+			// Sign-extend index to i64 for proper negative index handling
+			index64 := ls.b.FreshTemp("index_i64")
+			ls.b.Emit(&hir.Cast{Dst: index64, Src: index, Type: "i64"})
+
 			// list_get returns void* (ptr)
 			ptrResult := ls.b.FreshTemp("elem_ptr")
-			ls.b.Emit(&hir.Call{Dst: ptrResult, Fn: "list_get", Args: []hir.Value{list, index}})
+			ls.b.Emit(&hir.Call{Dst: ptrResult, Fn: "list_get", Args: []hir.Value{list, index64}})
 
 			// Unbox if element type is primitive
 			// Check if we need to convert ptr -> int/bool/float

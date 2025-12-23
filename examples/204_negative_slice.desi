@@ -1,0 +1,71 @@
+# Test negative indexing and slicing - comprehensive test
+
+# Custom class with __getitem__ for testing
+class MyArray:
+    pub data: list[int]
+    
+    pub def __new__(self, values: list[int]):
+        self.data = values
+    
+    pub def __getitem__(self, index: int) -> int:
+        # Forward to list indexing (which handles negative indices)
+        return self.data[index]
+
+def main() -> int:
+	# === List tests ===
+	let nums: list[int] = [10, 20, 30, 40, 50]
+	
+	print("=== List negative slicing ===")
+	let last_two = nums[-2:]
+	print(last_two)  # [40, 50]
+	
+	let all_but_last = nums[:-1]
+	print(all_but_last)  # [10, 20, 30, 40]
+	
+	let middle = nums[1:-1]
+	print(middle)  # [20, 30, 40]
+	
+	print("=== List negative indexing ===")
+	let last = nums[-1]
+	print(last)  # 50
+	
+	let second_last = nums[-2]
+	print(second_last)  # 40
+	
+	let third_last = nums[-3]
+	print(third_last)  # 30
+	
+	# === String tests ===
+	let s: str = "Hello, World!"
+	
+	print("=== String slicing ===")
+	let hello = s[0:5]
+	print(hello)  # Hello
+	
+	let world = s[7:12]
+	print(world)  # World
+	
+	print("=== String negative slicing ===")
+	let last_6 = s[-6:]
+	print(last_6)  # World!
+	
+	let without_exclaim = s[:-1]
+	print(without_exclaim)  # Hello, World
+	
+	# === Custom class with __getitem__ ===
+	print("=== Custom class indexing ===")
+	let arr = MyArray([100, 200, 300, 400, 500])
+	
+	# Test positive indexing
+	let first = arr[0]
+	print(first)  # 100
+	
+	# Test negative indexing through __getitem__
+	let last_item = arr[-1]
+	print(last_item)  # 500
+	
+	let second_last_item = arr[-2]
+	print(second_last_item)  # 400
+
+	print("All tests passed!")
+	return 0
