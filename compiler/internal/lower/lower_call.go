@@ -411,12 +411,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				return res
 			case "mutex_new":
 				// mutex_new(value) -> DesiMutex*
-				// For primitive values, we pass the value directly as inttoptr
+				// For primitive values, we need to box them (allocate + store)
 				res := ls.b.FreshTemp("mutex")
-				// Convert primitive to ptr for mutex_new(void*) using Cast
-				ptrVal := ls.b.FreshTemp("mutex_val")
-				ls.b.Emit(&hir.Cast{Src: argVal, Dst: ptrVal, Type: "ptr"})
-				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{ptrVal}, Type: "ptr"})
+				// Allocate memory for the value (8 bytes for i64/ptr)
+				boxPtr := ls.b.FreshTemp("mutex_box")
+				ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				// Store the value into the box
+				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+				// Create mutex with pointer to boxed value
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{boxPtr}, Type: "ptr"})
 				return res
 			}
 		}
