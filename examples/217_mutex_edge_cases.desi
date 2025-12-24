@@ -1,0 +1,54 @@
+# Mutex Edge Case Tests
+# Tests for edge cases with primitives and simple structs
+
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    print("=== Mutex Edge Case Tests ===")
+    
+    # Test 1: Zero value
+    let zero_mutex = mutex_new(0)
+    let zero_guard = zero_mutex.lock()
+    print(zero_guard.value)  # 0
+    
+    # Test 2: Negative value
+    let neg_mutex = mutex_new(-999)
+    let neg_guard = neg_mutex.lock()
+    print(neg_guard.value)  # -999
+    
+    # Test 3: Large value
+    let large_mutex = mutex_new(2147483647)  # Max int32
+    let large_guard = large_mutex.lock()
+    print(large_guard.value)  # 2147483647
+    
+    # Test 4: Empty string
+    let empty_mutex = mutex_new("")
+    let empty_guard = empty_mutex.lock()
+    print(len(empty_guard.value))  # 0
+    
+    # Test 5: Boolean false
+    let bool_mutex = mutex_new(false)
+    let bool_guard = bool_mutex.lock()
+    print(bool_guard.value)  # false
+    
+    # Test 6: Float zero
+    let float_mutex = mutex_new(0.0)
+    let float_guard = float_mutex.lock()
+    print(float_guard.value)  # 0.0
+    
+    # Test 7: Simple struct
+    let point = Point(x=10, y=20)
+    let point_mutex = mutex_new(point)
+    let point_guard = point_mutex.lock()
+    print(point_guard.value.x)  # 10
+    print(point_guard.value.y)  # 20
+    
+    # Test 8: List
+    let list_mutex = mutex_new([1, 2, 3, 4, 5])
+    let list_guard = list_mutex.lock()
+    print(len(list_guard.value))  # 5
+    
+    print("=== All Mutex Edge Cases Passed ===")
+    return 0

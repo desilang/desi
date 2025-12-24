@@ -1,0 +1,38 @@
+# TaskGroup Edge Case Tests
+
+def main() -> int:
+    print("=== TaskGroup Edge Case Tests ===")
+    
+    # Test 1: Create and immediately wait (no tasks)
+    let empty_group = taskgroup_new()
+    empty_group.wait()
+    print("Empty group wait completed")
+    
+    # Test 2: Check is_cancelled on fresh group
+    let fresh_group = taskgroup_new()
+    let is_cancelled = fresh_group.is_cancelled()
+    print(is_cancelled)  # false
+    
+    # Test 3: Cancel and check is_cancelled
+    let cancel_group = taskgroup_new()
+    cancel_group.cancel()
+    let after_cancel = cancel_group.is_cancelled()
+    print(after_cancel)  # true
+    
+    # Test 4: Wait after cancel (should complete immediately)
+    let wait_cancel_group = taskgroup_new()
+    wait_cancel_group.cancel()
+    wait_cancel_group.wait()
+    print("Wait after cancel completed")
+    
+    # Test 5: Multiple groups
+    let group1 = taskgroup_new()
+    let group2 = taskgroup_new()
+    let group3 = taskgroup_new()
+    group1.wait()
+    group2.wait()
+    group3.wait()
+    print("Multiple groups completed")
+    
+    print("=== All TaskGroup Edge Cases Passed ===")
+    return 0
