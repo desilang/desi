@@ -627,6 +627,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return mutexType
 			}
 
+			// Built-in channel_new(capacity) function - creates Channel[Any]
+			// For typed channels, use: let ch = channel_new_int(10) etc.
+			// or wait for generic function syntax: channel_new[int](10)
+			if id.Name == "channel_new" && len(args) == 1 {
+				// Without generic syntax, channel_new creates Channel[Any]
+				channelType := types.ChannelOf(types.Any)
+				c.info.Types[call] = channelType
+				return channelType
+			}
+
 			// Built-in reduce(), foldl(), foldr() functions
 			// Signature: reduce(func, iterable, initial) -> AccumulatorType
 			// foldl is alias for reduce (left-to-right)

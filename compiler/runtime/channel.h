@@ -2,12 +2,13 @@
  * Desi Runtime Channel Implementation
  * 
  * Bounded and unbounded channels for safe message passing between tasks.
+ * Cross-platform: Uses pthreads on POSIX (Linux/macOS) and Windows API on Windows.
  */
 
 #ifndef DESI_CHANNEL_H
 #define DESI_CHANNEL_H
 
-#include <pthread.h>
+#include "platform.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -28,9 +29,9 @@ typedef struct {
     int64_t tail;               /* Write position */
     int64_t count;              /* Current number of elements */
     
-    pthread_mutex_t lock;       /* Protects all fields */
-    pthread_cond_t not_full;    /* Signaled when space available */
-    pthread_cond_t not_empty;   /* Signaled when data available */
+    DesiPlatformMutex lock;     /* Protects all fields */
+    DesiPlatformCond not_full;  /* Signaled when space available */
+    DesiPlatformCond not_empty; /* Signaled when data available */
     
     bool closed;                /* No more sends allowed */
     int senders;                /* Number of active senders */

@@ -201,6 +201,59 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					return dst
 				}
 			}
+
+			// Channel methods: sender, receiver, close
+			if _, ok := feXType.(*types.Channel); ok {
+				channelVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("channel_result")
+				switch fe.Name.Name {
+				case "sender":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_sender", Args: []hir.Value{channelVal}, Type: "ptr"})
+					return dst
+				case "receiver":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_receiver", Args: []hir.Value{channelVal}, Type: "ptr"})
+					return dst
+				case "close":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_close", Args: []hir.Value{channelVal}, Type: "void"})
+					return dst
+				}
+			}
+
+			// ChannelSender methods: send, try_send
+			if _, ok := feXType.(*types.ChannelSender); ok {
+				senderVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("send_result")
+				if len(x.Args) > 0 {
+					argVal := ls.lowerExpr(x.Args[0])
+					// Box the value to ptr
+					boxPtr := ls.b.FreshTemp("send_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+					switch fe.Name.Name {
+					case "send":
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
+						return dst
+					case "try_send":
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_try_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
+						return dst
+					}
+				}
+			}
+
+			// ChannelReceiver methods: recv, try_recv
+			if _, ok := feXType.(*types.ChannelReceiver); ok {
+				receiverVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("recv_result")
+				switch fe.Name.Name {
+				case "recv":
+					// Returns ptr (boxed value or null)
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_recv", Args: []hir.Value{receiverVal}, Type: "ptr"})
+					return dst
+				case "try_recv":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_try_recv", Args: []hir.Value{receiverVal}, Type: "ptr"})
+					return dst
+				}
+			}
 		}
 	}
 
@@ -420,6 +473,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 				// Create mutex with pointer to boxed value
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{boxPtr}, Type: "ptr"})
+				return res
+			case "channel_new":
+				// channel_new(capacity) -> DesiChannel*
+				res := ls.b.FreshTemp("channel")
+				// Convert i32 to i64 for capacity
+				cap64 := ls.b.FreshTemp("cap64")
+				ls.b.Emit(&hir.Cast{Src: argVal, Dst: cap64, Type: "i64"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "channel_new", Args: []hir.Value{cap64}, Type: "ptr"})
 				return res
 			}
 		}

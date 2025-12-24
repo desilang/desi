@@ -359,4 +359,15 @@ func addPreludeBuiltins(info *Info) {
 		nil, // Mutex[T] - determined in expr_call.go
 		[]string{"value"},
 	)
+
+	// --- channel_new builtin ---
+	// channel_new(capacity: int) -> Channel[T]
+	// Note: Element type T must be specified via type annotation on the variable
+	// e.g., let ch: Channel[int] = channel_new(10)
+	addN("channel_new",
+		[]types.T{types.Int}, // Buffer capacity
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Channel[T] - requires type annotation
+		[]string{"capacity"},
+	)
 }
