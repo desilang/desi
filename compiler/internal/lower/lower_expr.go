@@ -1139,6 +1139,22 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			baseType = alias.Target
 		}
 
+		// Handle Mutex.lock() method - returns MutexGuard (note: call is handled in CallExpr, this is just accessing method as value)
+		if m, ok := baseType.(*types.Mutex); ok {
+			_ = m // Mutex field access - currently only .lock() which is a method call, handled in CallExpr
+		}
+
+		// Handle MutexGuard.value field - get the protected value
+		if g, ok := baseType.(*types.MutexGuard); ok {
+			_ = g
+			if name == "value" {
+				// Call mutex_guard_get(guard) -> void*
+				res := ls.b.FreshTemp("guard_value")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_guard_get", Args: []hir.Value{base}, Type: "ptr"})
+				return res
+			}
+		}
+
 		if s, ok := baseType.(*types.Struct); ok {
 			fields = s.Fields
 		} else if c, ok := baseType.(*types.Class); ok {
