@@ -319,6 +319,16 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveArenaMethod(x)
 	}
 
+	// Handle Mutex methods: lock, try_lock
+	if m, ok := t.(*types.Mutex); ok {
+		return c.resolveMutexMethod(x, m)
+	}
+
+	// Handle MutexGuard field access: value
+	if g, ok := t.(*types.MutexGuard); ok {
+		return c.resolveMutexGuardField(x, g)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1016,4 +1026,40 @@ func (c *checker) resolveFilterIterMethod(x *ast.FieldExpr, fi *types.FilterIter
 
 	c.info.Types[x] = methodType
 	return methodType
+}
+
+// resolveMutexMethod resolves methods on Mutex[T]: lock, try_lock
+func (c *checker) resolveMutexMethod(x *ast.FieldExpr, m *types.Mutex) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "lock":
+		// lock() -> MutexGuard[T]
+		methodType = types.FuncOf(nil, types.MutexGuardOf(m.Inner), false)
+	case "try_lock":
+		// try_lock() -> Option[MutexGuard[T]]
+		methodType = types.FuncOf(nil, types.OptionOf(types.MutexGuardOf(m.Inner)), false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Mutex"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveMutexGuardField resolves field access on MutexGuard[T]: value
+func (c *checker) resolveMutexGuardField(x *ast.FieldExpr, g *types.MutexGuard) types.T {
+	name := x.Name.Name
+
+	switch name {
+	case "value":
+		// value field has the inner type
+		c.info.Types[x] = g.Inner
+		return g.Inner
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on MutexGuard"))
+		return nil
+	}
 }

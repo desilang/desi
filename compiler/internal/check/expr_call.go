@@ -620,6 +620,13 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
+			// Built-in mutex_new(value) function - creates Mutex[T] from value type
+			if id.Name == "mutex_new" && len(args) == 1 && args[0] != nil {
+				mutexType := types.MutexOf(args[0])
+				c.info.Types[call] = mutexType
+				return mutexType
+			}
+
 			// Built-in reduce(), foldl(), foldr() functions
 			// Signature: reduce(func, iterable, initial) -> AccumulatorType
 			// foldl is alias for reduce (left-to-right)
