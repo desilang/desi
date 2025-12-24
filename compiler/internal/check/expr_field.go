@@ -344,6 +344,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveChannelReceiverMethod(x, r)
 	}
 
+	// Handle TaskGroup methods: spawn, wait, cancel, is_cancelled
+	if _, ok := t.(*types.TaskGroup); ok {
+		return c.resolveTaskGroupMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1138,6 +1143,34 @@ func (c *checker) resolveChannelReceiverMethod(x *ast.FieldExpr, r *types.Channe
 		methodType = types.FuncOf(nil, types.OptionOf(r.Elem), false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Receiver"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveTaskGroupMethod resolves methods on TaskGroup: spawn, wait, cancel, is_cancelled
+func (c *checker) resolveTaskGroupMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "spawn":
+		// spawn(fn: () -> none) -> none
+		// For now, accept any callable - more precise checking can be added later
+		methodType = types.FuncOf([]types.T{types.Any}, types.None, false)
+	case "wait":
+		// wait() -> none (blocks until all tasks complete)
+		methodType = types.FuncOf(nil, types.None, false)
+	case "cancel":
+		// cancel() -> none (marks group as cancelled)
+		methodType = types.FuncOf(nil, types.None, false)
+	case "is_cancelled":
+		// is_cancelled() -> bool
+		methodType = types.FuncOf(nil, types.Bool, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on TaskGroup"))
 		return nil
 	}
 

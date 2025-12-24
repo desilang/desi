@@ -3,12 +3,13 @@
  * 
  * Structured concurrency: all spawned tasks complete before scope exits.
  * Provides automatic cleanup and cancellation propagation.
+ * Cross-platform: Uses platform.h for POSIX/Windows support.
  */
 
 #ifndef DESI_TASKGROUP_H
 #define DESI_TASKGROUP_H
 
-#include <pthread.h>
+#include "platform.h"
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -25,8 +26,8 @@ typedef struct TaskGroup {
     int64_t count;              /* Number of tasks */
     
     int64_t pending;            /* Number of tasks not yet completed */
-    pthread_mutex_t lock;       /* Protects all fields */
-    pthread_cond_t all_done;    /* Signaled when pending reaches 0 */
+    DesiPlatformMutex lock;     /* Protects all fields */
+    DesiPlatformCond all_done;  /* Signaled when pending reaches 0 */
     
     bool cancelled;             /* Cancellation flag */
     void* error;                /* First error from child task (if any) */
