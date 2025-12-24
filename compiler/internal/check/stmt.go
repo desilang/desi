@@ -336,6 +336,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					continue
 				}
 
+				// Reassignment operator check: outside __new__, field assignment requires ':='
+				if c.curFuncName != "__new__" && !st.IsReassign {
+					c.add(diagAt("DTE0013", lhs.Span, "field mutation requires ':=' not '=' (e.g., obj.field := value)"))
+					continue
+				}
+
 				// Type check (apply substitution for generic classes)
 				fieldType := field.Type
 				if subst != nil {
@@ -357,7 +363,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				// Index assignment: obj[idx] := value (mutation)
 				// Check that := was used, not =
 				if !st.IsReassign {
-					c.add(diagAt("DTE0012", st.Span, "index mutation requires ':=' not '=' (e.g., list[0] := value)"))
+					c.add(diagAt("DTE0013", st.Span, "index mutation requires ':=' not '=' (e.g., list[0] := value)"))
 					continue
 				}
 
