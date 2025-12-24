@@ -1,0 +1,16 @@
+# TaskGroup - Structured concurrency
+
+pub class TaskGroup:
+    pub mut _handle: int
+    
+    pub def add_task(self) -> int:
+        return 0
+    
+    pub def wait(self) -> int:
+        return 0
+    
+    pub def cancel(self) -> int:
+        return 0
+    
+    pub def is_cancelled(self) -> bool:
+        return false

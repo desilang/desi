@@ -1,0 +1,15 @@
+# Mutex - Thread-safe value wrapper
+# Factory function approach for now (class exports not yet supported)
+
+pub def Mutex(value: int) -> int:
+    # Returns a mutex handle wrapping the value
+    # This is a stub - actual implementation comes from runtime
+    return 0
+
+pub def mutex_lock(m: int) -> int:
+    # Lock and return guard handle
+    return 0
+
+pub def mutex_try_lock(m: int) -> int:
+    # Try lock, return guard or 0
+    return 0

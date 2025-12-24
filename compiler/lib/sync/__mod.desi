@@ -1,0 +1,4 @@
+# Sync module - Concurrency primitives
+# Factory function exports (class exports not yet supported)
+
+from sync.mutex import Mutex, mutex_lock, mutex_try_lock
