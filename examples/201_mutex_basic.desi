@@ -1,14 +1,20 @@
-# Test Mutex - basic usage verification
-
-# For now, test that the mutex runtime compiles and links correctly
-# Full type-checked Mutex will be added after type system integration
+# Test Mutex - basic usage with implemented syntax
 
 def main() -> int:
-	print("Testing mutex runtime...")
-	
-	# Placeholder test - mutex types will be added later
-	let value = 42
-	print(value)
-	
-	print("Mutex test complete!")
-	return 0
+    print("Testing mutex...")
+    
+    # Create a mutex protecting an integer
+    let counter = mutex_new(42)
+    
+    # Lock the mutex to access the value
+    let guard = counter.lock()
+    let value = guard.value
+    print(value)  # 42
+    
+    # With different types
+    let str_mutex = mutex_new("hello")
+    let str_guard = str_mutex.lock()
+    print(str_guard.value)  # hello
+    
+    print("Mutex test complete!")
+    return 0

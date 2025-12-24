@@ -1,19 +1,23 @@
-# Test TaskGroup - structured concurrency
+# Test TaskGroup - structured concurrency with implemented syntax
 
-# For now, test that taskgroup runtime compiles and links correctly
-# Full structured concurrency syntax will be added later
+def worker():
+    print("Worker running")
 
 def main() -> int:
-	print("Testing TaskGroup runtime...")
-	
-	# Placeholder test - TaskGroup will use special syntax:
-	# async with TaskGroup() as group:
-	#     group.spawn(task1)
-	#     group.spawn(task2)
-	# All tasks complete before scope exits
-	
-	let value = 42
-	print(value)
-	
-	print("TaskGroup test complete!")
-	return 0
+    print("Testing TaskGroup...")
+    
+    # Create a task group
+    let group = taskgroup_new()
+    
+    # Check cancellation status
+    let is_cancelled = group.is_cancelled()
+    print(is_cancelled)  # false
+    
+    # Wait for all tasks (completes immediately since none spawned)
+    group.wait()
+    
+    # Can also cancel all tasks
+    # group.cancel()
+    
+    print("TaskGroup test complete!")
+    return 0
