@@ -456,6 +456,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.MatchExpr:
 		_ = c.checkMatchExpr(st)
 
+	case *ast.SelectStmt:
+		c.checkSelectStmt(st)
+
 	case *ast.IfStmt:
 		_ = c.typ(st.Cond)
 

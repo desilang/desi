@@ -1,0 +1,20 @@
+# Test Select statement syntax
+
+def main() -> int:
+    # Create channels
+    let ch1 = channel_new(10)
+    let ch2 = channel_new(10)
+    let rx1 = ch1.receiver()
+    let rx2 = ch2.receiver()
+    
+    # Select statement
+    select:
+        case msg = rx1.try_recv():
+            print("Got from ch1")
+        case rx2.try_recv():
+            print("Got from ch2")
+        default:
+            print("Nothing ready")
+    
+    print("Select test done!")
+    return 0

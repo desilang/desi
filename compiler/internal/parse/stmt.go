@@ -71,6 +71,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseUnsafe()
 	case token.KW_spawn:
 		return p.parseSpawn()
+	case token.KW_select:
+		return p.parseSelect()
 	default:
 		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()

@@ -529,6 +529,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	case *ast.MatchExpr:
 		_ = ls.lowerMatchExpr(s)
 
+	case *ast.SelectStmt:
+		ls.lowerSelectStmt(s)
+
 	case *ast.ReturnStmt:
 		// Before returning, run defers and drop locals from all open scopes (inner→outer).
 		ls.emitAllDefersAndDrops()
