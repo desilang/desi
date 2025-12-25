@@ -18,3 +18,6 @@ pub def main() -> int:
     
     print(f"Count: {c2.get_count()}")  # Should be 3
     return 0
+
+# EXPECTED_OUTPUT:
+# Count: 3

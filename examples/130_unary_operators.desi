@@ -38,3 +38,31 @@ def main():
     print("\n--- String Len ---")
     let s = "hello world"
     print("len('hello world'): " + str(len(s)))
+
+# EXPECTED_OUTPUT:
+# --- Primitives ---
+# -10: -10
+# +10: 10
+# ~10: -11
+# !true: false
+# not true: false
+#
+# --- Custom Class ---
+# calling __neg__
+# calling __neg__
+# calling __neg__
+# calling __neg__
+# -n: -42
+# calling __pos__
+# calling __pos__
+# calling __pos__
+# calling __pos__
+# +n: 42
+# calling __invert__
+# calling __invert__
+# calling __invert__
+# calling __invert__
+# ~n: -43
+#
+# --- String Len ---
+# len('hello world'): 11

@@ -27,3 +27,13 @@ def main():
         i += 1
     
     print("\nTest passed!")
+
+# EXPECTED_OUTPUT:
+# People list:
+# [Alice, Bob]
+#
+# Manual iteration with while loop:
+# Alice
+# Bob
+#
+# Test passed!
