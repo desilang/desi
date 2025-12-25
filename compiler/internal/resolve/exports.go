@@ -34,6 +34,10 @@ type Exports struct {
 	// FuncDefaults is index-aligned with Funcs[name]: one []bool per overload.
 	// FuncDefaults[name][i][j] is true if parameter j of overload i has a default value.
 	FuncDefaults map[string][][]bool
+
+	// Classes maps a class name to its type information.
+	// Allows "from module import ClassName" to work with class types.
+	Classes map[string]*types.Class
 }
 
 // CollectExports walks a parsed module and returns its exported function signatures.
@@ -52,6 +56,7 @@ func CollectExports(mod *ast.Module) *Exports {
 		ParamNames:   map[string][][]string{},
 		FuncExtern:   map[string][]ExternMeta{},
 		FuncDefaults: map[string][][]bool{},
+		Classes:      map[string]*types.Class{},
 	}
 	if mod == nil {
 		return out
@@ -153,6 +158,55 @@ func CollectExports(mod *ast.Module) *Exports {
 			break
 		}
 		out.FuncExtern[name] = append(out.FuncExtern[name], meta)
+	}
+
+	// Collect public class declarations
+	for _, d := range mod.Decls {
+		cls, ok := d.(*ast.ClassDecl)
+		if !ok || !cls.Pub {
+			continue
+		}
+		name := cls.Name.Name
+
+		// Create a Class type for export
+		classType := &types.Class{
+			Name:         name,
+			Constructors: []*types.Func{},
+		}
+
+		// Extract __new__ method signatures from the class methods
+		for _, method := range cls.Methods {
+			if method.Name.Name != "__new__" {
+				continue
+			}
+
+			// Build the constructor function type from parameters
+			// Skip the first parameter if it's "self" (methods have implicit self)
+			params := make([]types.T, 0, len(method.Params))
+			for _, p := range method.Params {
+				if p.Name.Name == "self" || p.Name.Name == "cls" {
+					continue // Skip self/cls parameter
+				}
+				if p.Type == nil {
+					continue
+				}
+				if t, ok := types.FromName(p.Type.Name); ok {
+					params = append(params, t)
+				}
+			}
+
+			// Return type is the class itself
+			returnType := classType
+			constructorFunc := types.FuncOf(params, returnType, false)
+			classType.Constructors = append(classType.Constructors, constructorFunc)
+		}
+
+		// If no __new__ found, add a default zero-arg constructor
+		if len(classType.Constructors) == 0 {
+			classType.Constructors = append(classType.Constructors, types.FuncOf(nil, classType, false))
+		}
+
+		out.Classes[name] = classType
 	}
 	return out
 }

@@ -115,6 +115,10 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 					for name := range ex.Funcs {
 						info.FromItems[name] = tmod
 					}
+					// Import all exported classes
+					for name := range ex.Classes {
+						info.FromItems[name] = tmod
+					}
 				}
 				info.Graph.AddEdge(mod.File, mpath)
 				continue // Skip normal item processing
@@ -128,11 +132,11 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 				if local != "" && tmod != nil {
 					info.FromItems[local] = tmod
 				}
-				// Validate that the requested item exists among exported funcs.
+				// Validate that the requested item exists among exported funcs or classes.
 				if ex != nil {
 					name := it.Name.Name
 					if name != "" {
-						if len(ex.Funcs[name]) == 0 {
+						if len(ex.Funcs[name]) == 0 && ex.Classes[name] == nil {
 							msg := mpath + " has no exported '" + name + "'"
 							diags = append(diags, diagAt("DME0003", it.Span, msg))
 						}
@@ -161,6 +165,7 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 			ParamNames:   map[string][][]string{},
 			FuncExtern:   map[string][]ExternMeta{},
 			FuncDefaults: map[string][][]bool{},
+			Classes:      map[string]*types.Class{},
 		}
 	}
 	// Find the synthetic top function to read its statements.
