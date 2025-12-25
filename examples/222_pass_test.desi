@@ -10,3 +10,6 @@ def main():
     empty_function()
     placeholder_method()
     print("pass keyword works!")
+
+# EXPECTED_OUTPUT:
+# pass keyword works!

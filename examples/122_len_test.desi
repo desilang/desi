@@ -18,3 +18,15 @@ def main():
     print(len(scores))
     
     print("\nAll len() tests passed!")
+
+# EXPECTED_OUTPUT:
+# String length:
+# 12
+#
+# List length:
+# 5
+#
+# Dict length:
+# 2
+#
+# All len() tests passed!
