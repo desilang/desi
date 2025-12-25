@@ -1,25 +1,32 @@
 # Test Option<T> type
 
-# Option<T> = Some(value) | Nothing
+# Option<T> = Some(T) | Nothing
 
 def main() -> int:
-    # Test with Option<int>
+    # Test Option<int>
     let x: Option<int> = Option.Some(42)
     
     match x:
         Option.Some(v): print(f"Got value: {v}")
-        Option.Nothing: print("Got nothing")
+        Option.Nothing: print("No value")
     
-    if x.is_some():
-        print(f"Unwrapped: {x.unwrap()}")
+    # Test unwrap
+    print(f"Unwrapped: {x.unwrap()}")
     
+    # Test Option<str>
     let y: Option<str> = Option.Nothing
     
     match y:
-        Option.Some(s): print(f"String: {s}")
+        Option.Some(s): print(f"Got string: {s}")
         Option.Nothing: print("No string")
         
     if y.is_nothing():
         print("y is nothing")
-    
+        
     return 0
+
+# EXPECTED_OUTPUT:
+# Got value: 42
+# Unwrapped: 42
+# No string
+# y is nothing

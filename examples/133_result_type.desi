@@ -23,3 +23,9 @@ def main() -> int:
         print(f"Unwrapped Err: {y.unwrap_err()}")
         
     return 0
+
+# EXPECTED_OUTPUT:
+# Success: 100
+# Unwrapped Ok: 100
+# Error: Something went wrong
+# Unwrapped Err: Something went wrong

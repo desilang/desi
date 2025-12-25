@@ -10,3 +10,8 @@ def main():
     print(scores)
     
     print("Test passed!")
+
+# EXPECTED_OUTPUT:
+# [1, 2, 3, 4]
+# {bob: 87, alice: 95}
+# Test passed!
