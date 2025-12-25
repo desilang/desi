@@ -7,3 +7,8 @@ def main():
     print("Start")
     greet()
     print("End")
+
+# EXPECTED_OUTPUT:
+# Start
+# Hello from function
+# End

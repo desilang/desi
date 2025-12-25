@@ -13,3 +13,7 @@ def main():
     #     Color.Green: print("Green")
     #     Color.Blue: print("Blue")
     print("Enum syntax exists")
+
+# EXPECTED_OUTPUT:
+# Testing enums and match
+# Enum syntax exists

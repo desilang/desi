@@ -25,3 +25,13 @@ def main():
     print(r.bottom_right.y)
     
     print("=== Done ===")
+
+# EXPECTED_OUTPUT:
+# === Nested Struct Test ===
+# Top Left:
+# 0
+# 0
+# Bottom Right:
+# 10
+# 20
+# === Done ===

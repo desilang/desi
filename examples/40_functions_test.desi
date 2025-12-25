@@ -21,3 +21,10 @@ def main():
     print(result2)
     
     print("Functions work")
+
+# EXPECTED_OUTPUT:
+# --- Float Tests ---
+# --- Function Tests ---
+# 30
+# 12
+# Functions work
