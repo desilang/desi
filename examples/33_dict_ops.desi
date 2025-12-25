@@ -14,3 +14,8 @@ def main() -> int:
     print("Dict cleared")
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Got value: 1
+# Has 'a': true
+# Dict cleared
