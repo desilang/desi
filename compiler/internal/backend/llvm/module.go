@@ -37,7 +37,8 @@ type Module struct {
 	tempID             int             // counter for %t0, %t1, ...
 	mergeID            int             // counter for merge blocks
 	asyncWrappers      map[string]bool // functions returning ptr (future handle)
-	definedFunctions   map[string]bool // track which functions we've defined
+	definedFunctions   map[string]bool // functions that will be defined (prevents extern declares)
+	emittedFunctions   map[string]bool // functions that have been emitted (prevents duplicates)
 	needPuts           bool
 	needRcDec          bool
 	needArena          bool
@@ -58,6 +59,7 @@ func NewModule(name string) *Module {
 		strLits:            make(map[string]string),
 		asyncWrappers:      make(map[string]bool),
 		definedFunctions:   make(map[string]bool),
+		emittedFunctions:   make(map[string]bool),
 		cfBlocks:           make(map[string]string),
 		cfLoopConds:        make(map[string]hir.Value),
 		staticFieldGlobals: make(map[string]string),
@@ -177,9 +179,11 @@ func escapeForCString(s string) string {
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
 //
-// RegisterFunc marks a function as defined in this module.
+// RegisterFunc pre-registers a function name (for forward declarations).
+// Note: This does NOT mark as defined - that happens in EmitFunc.
 func (m *Module) RegisterFunc(name string) {
-	m.definedFunctions[name] = true
+	// Registration is now a no-op for forward declaration purposes
+	// The actual "defined" tracking happens in EmitFunc
 }
 
 // operand infers the (type, value) pair for a generic value.
