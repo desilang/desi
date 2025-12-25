@@ -37,3 +37,9 @@ pub def main() -> int:
     print(f"length = {length}")
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing Container Protocol...
+# arr[0] := 10
+# arr[1] (after set) = 99
+# length = 3

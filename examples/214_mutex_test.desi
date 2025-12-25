@@ -78,3 +78,16 @@ def main() -> int:
     
     print("All mutex tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# 3.140000
+# true
+# hello
+# 0
+# -123
+# 10
+# 20
+# 100
+# 3
+# All mutex tests passed!

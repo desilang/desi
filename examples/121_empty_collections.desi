@@ -52,3 +52,34 @@ def main():
     print(i64_dict)  # Should show {answer: 42000000}
     
     print("Empty collections work!")
+
+# EXPECTED_OUTPUT:
+# Empty list created
+# []
+# Empty dict created
+# {}
+# List after append:
+# [42, 420]
+# Dict after insert:
+# {answer: 42}
+#
+# Str dict before insert:
+# {}
+# Str dict after insert:
+# {answer: "42"}
+#
+# Float dict before insert:
+# {}
+# Float dict after insert:
+# {answer: 3.14}
+#
+# Bool dict before insert:
+# {}
+# Bool dict after insert:
+# {answer: true}
+#
+# I64 dict before insert:
+# {}
+# I64 dict after insert:
+# {answer: 42000000}
+# Empty collections work!
