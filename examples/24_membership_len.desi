@@ -3,3 +3,6 @@ def main() -> int:
 	 len("abc")       # exercise len on str (int result is unused)
 	 print("ok")
 	 0
+
+# EXPECTED_OUTPUT:
+# ok

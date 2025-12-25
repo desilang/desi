@@ -8,14 +8,18 @@
 # Exit codes:
 #   0 - All tests passed
 #   1 - Some tests failed
+#
+# Test file markers:
+#   # EXPECTED: COMPILE_ERROR  - Test should fail to compile
+#   # EXPECTED: RUNTIME_ERROR  - Test should crash at runtime
+#   # EXPECTED_OUTPUT:         - Expected stdout (lines starting with #)
+#     # line1
+#     # line2
 
 set -e
 
 BUILD_DIR="build/output"
 mkdir -p "$BUILD_DIR"
-
-# Expected failure tests: Add "# EXPECTED: COMPILE_ERROR" or "# EXPECTED: RUNTIME_ERROR"
-# as the first line of the test file
 
 # Parse arguments - support comma syntax for range
 if [[ -z "$1" ]]; then
@@ -50,6 +54,35 @@ fi
 echo "✓ Compiler built successfully"
 echo ""
 
+# Function to extract expected output from test file
+extract_expected_output() {
+    local file="$1"
+    local in_expected=false
+    local output=""
+    
+    while IFS= read -r line; do
+        if [[ "$line" == "# EXPECTED_OUTPUT:" ]]; then
+            in_expected=true
+            continue
+        fi
+        if [[ "$in_expected" == true ]]; then
+            # Lines starting with # are expected output (strip the "# " prefix)
+            if [[ "$line" =~ ^#\  ]]; then
+                output+="${line:2}"$'\n'
+            elif [[ "$line" == "#" ]]; then
+                # Empty line in expected output
+                output+=$'\n'
+            else
+                # End of expected output section
+                break
+            fi
+        fi
+    done < "$file"
+    
+    # Remove trailing newline for comparison
+    echo -n "$output"
+}
+
 # Run tests - find all files matching [0-9]*.desi pattern and sort numerically
 for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     if [ ! -f "$f" ]; then
@@ -74,14 +107,19 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     # Check if this test is expected to fail
     EXPECTED_FAIL=$(head -n 1 "$f" | grep "# EXPECTED:" || true)
     
+    # Check if this test has expected output
+    HAS_EXPECTED_OUTPUT=$(grep -l "# EXPECTED_OUTPUT:" "$f" 2>/dev/null || true)
+    
     # Build and run
     COMPILE_SUCCESS=false
     RUNTIME_SUCCESS=false
     
-    OUTPUT_LOG="build/output/test_output.log"
-    if ./build-desi.sh "$f" "test_exec" > "$OUTPUT_LOG" 2>&1; then
+    COMPILE_LOG="build/output/compile_output.log"
+    RUNTIME_LOG="build/output/runtime_output.log"
+    
+    if ./build-desi.sh "$f" "test_exec" > "$COMPILE_LOG" 2>&1; then
         COMPILE_SUCCESS=true
-        if ./build/output/test_exec >> "$OUTPUT_LOG" 2>&1; then
+        if ./build/output/test_exec > "$RUNTIME_LOG" 2>&1; then
             RUNTIME_SUCCESS=true
         fi
     fi
@@ -109,15 +147,34 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     else
         # Expected to pass
         if [[ "$COMPILE_SUCCESS" == true && "$RUNTIME_SUCCESS" == true ]]; then
-            echo "  ✓ PASSED"
-            PASSED_COUNT=$((PASSED_COUNT + 1))
+            # Check expected output if specified
+            if [[ -n "$HAS_EXPECTED_OUTPUT" ]]; then
+                EXPECTED=$(extract_expected_output "$f")
+                ACTUAL=$(cat "$RUNTIME_LOG")
+                
+                if [[ "$EXPECTED" == "$ACTUAL" ]]; then
+                    echo "  ✓ PASSED"
+                    PASSED_COUNT=$((PASSED_COUNT + 1))
+                else
+                    echo "  ❌ FAILED (output mismatch)"
+                    echo "    Expected:"
+                    echo "$EXPECTED" | sed 's/^/      /'
+                    echo "    Actual:"
+                    echo "$ACTUAL" | sed 's/^/      /'
+                    FAILED_TESTS+=("$f (output)")
+                fi
+            else
+                # No expected output specified, just check it runs
+                echo "  ✓ PASSED"
+                PASSED_COUNT=$((PASSED_COUNT + 1))
+            fi
         elif [[ "$COMPILE_SUCCESS" == false ]]; then
             echo "  ❌ FAILED (compile error)"
-            cat "$OUTPUT_LOG" | sed 's/^/    /' # Indent output
+            cat "$COMPILE_LOG" | sed 's/^/    /' # Indent output
             FAILED_TESTS+=("$f (compile)")
         else
             echo "  ❌ FAILED (runtime error)"
-            cat "$OUTPUT_LOG" | sed 's/^/    /' # Indent output
+            cat "$COMPILE_LOG" "$RUNTIME_LOG" 2>/dev/null | sed 's/^/    /' # Indent output
             FAILED_TESTS+=("$f (runtime)")
         fi
     fi
