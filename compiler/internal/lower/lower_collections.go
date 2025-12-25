@@ -63,11 +63,30 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		key := ls.lowerExpr(d.Keys[i])
 		val := ls.lowerExpr(d.Values[i])
 
+		// Get value type to determine if float (need BitCast to preserve bits)
+		var valType types.T
+		if ls.info != nil {
+			valType = ls.info.Types[d.Values[i]]
+		}
+		isFloat := valType == types.Float || valType == types.F32 || valType == types.F64
+
 		// For Tier-0, we need to pass pointers to the values.
 		// Since 'val' might be an immediate (e.g. integer), we spill it to a temp alloca.
 		valPtr := ls.b.FreshTemp("val_ptr")
 		ls.b.Emit(&hir.Alloca{Dst: valPtr, Type: "i64", Count: 1})
-		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val})
+
+		// Cast to i64 to ensure we store full 8 bytes
+		if isFloat {
+			// For floats, use bitcast to preserve the bit pattern
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		} else {
+			// For other types, sext/cast to i64
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		}
 
 		// Emit a call to dict_insert(dict, key, &value, type_tag)
 		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, valPtr, typeTag}})
