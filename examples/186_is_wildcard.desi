@@ -35,3 +35,10 @@ def main() -> int:
     
     print("All wildcard tests complete!")
     return 0
+
+# EXPECTED_OUTPUT:
+# opt_some is Some (wildcard): PASS
+# opt_none is not Some (wildcard): PASS
+# res_ok is Ok (wildcard): PASS
+# res_err is Err (wildcard): PASS
+# All wildcard tests complete!

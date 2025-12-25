@@ -53,3 +53,14 @@ def main() -> int:
     
     print("All tuple membership tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# 3 in (1,2,3,4,5): PASS
+# 1 in (1,2,3,4,5): PASS
+# 5 in (1,2,3,4,5): PASS
+# 10 not in (1,2,3,4,5): PASS
+# 0 not in (1,2,3,4,5): PASS
+# 'world' in words: PASS
+# 'python' not in words: PASS
+# 10 in (10, 20): PASS
+# All tuple membership tests passed!
