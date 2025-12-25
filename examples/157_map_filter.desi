@@ -20,3 +20,8 @@ def main() -> int:
 	print(strs)  # Expected: ["1", "2", "3", "4", "5"]
 	
 	0
+
+# EXPECTED_OUTPUT:
+# [2, 4, 6, 8, 10]
+# [2, 4]
+# ["1", "2", "3", "4", "5"]

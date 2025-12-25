@@ -27,3 +27,14 @@ def main() -> int:
     
     print("String utilities test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Split result length:
+# 3
+# Joined:
+# one-two-three
+# Replaced:
+# hello desi desi!
+# Path split length:
+# 4
+# String utilities test passed!

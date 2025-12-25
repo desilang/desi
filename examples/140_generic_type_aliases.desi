@@ -58,3 +58,14 @@ def main() -> int:
     
     print("All type alias tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# IntList: len=5
+# StrList: len=3
+# Box<int> contains: 42
+# Box<str> contains: hello
+# Empty box is Nothing (correct)
+# Pair<str, int> created
+# Triple<int, str, bool> created
+# PointList with custom struct: len=2
+# All type alias tests passed!

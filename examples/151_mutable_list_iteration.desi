@@ -17,3 +17,18 @@ def main() -> int:
     
     print("Mutable list iteration test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Before mutation:
+# 1
+# 2
+# 3
+# 4
+# 5
+# After mutation:
+# 1
+# 2
+# 3
+# 4
+# 5
+# Mutable list iteration test passed!

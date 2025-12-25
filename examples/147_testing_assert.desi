@@ -13,3 +13,6 @@ def main() -> int:
 	
 	print("All assertions passed!")
 	return 0
+
+# EXPECTED_OUTPUT:
+# All assertions passed!

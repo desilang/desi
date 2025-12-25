@@ -10,3 +10,13 @@ def main() -> int:
     
     print("Dict iteration test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Iterating over prices:
+# banana
+# 50
+# orange
+# 75
+# apple
+# 100
+# Dict iteration test passed!

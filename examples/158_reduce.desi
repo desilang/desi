@@ -30,3 +30,9 @@ def main() -> int:
     print(f"foldr(subtract, [1,2,3,4,5], 0) = {right_sub}")
     
     0
+
+# EXPECTED_OUTPUT:
+# reduce(add, [1,2,3,4,5], 0) = 15
+# foldl(multiply, [1,2,3,4,5], 1) = 120
+# reduce(subtract, [1,2,3,4,5], 0) = -15
+# foldr(subtract, [1,2,3,4,5], 0) = 3

@@ -11,3 +11,13 @@ def main() -> int:
     
     print("Enumerate test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing enumerate():
+# 0
+# apple
+# 1
+# banana
+# 2
+# cherry
+# Enumerate test passed!

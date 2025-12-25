@@ -14,3 +14,8 @@ def main() -> int:
     
     print("Arena test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Arena test start
+# Allocated from arena
+# Arena test passed!

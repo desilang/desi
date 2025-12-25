@@ -18,3 +18,12 @@ def main() -> int:
     
     print("Builtins test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Sum:
+# 15
+# Min:
+# 1
+# Max:
+# 5
+# Builtins test passed!
