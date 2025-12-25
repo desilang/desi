@@ -12,3 +12,4 @@ def main() -> int:
         MyResult.Empty: print("empty")
 
     return 0
+

@@ -70,3 +70,16 @@ def main():
         _: print("Worker OK")
 
     print("All edge cases passed!")
+
+# EXPECTED_OUTPUT:
+# Testing Nested Structs...
+# nested
+# 42
+# Testing Nested Enums...
+# 100
+# Testing Struct inside Enum...
+# 10
+# Testing Enum inside Struct...
+# 1
+# Out of coffee
+# All edge cases passed!

@@ -13,3 +13,6 @@ def main() -> int:
     let greeting: str = "Hello, " + p
     print(greeting)
     return 0
+
+# EXPECTED_OUTPUT:
+# Hello, Alice

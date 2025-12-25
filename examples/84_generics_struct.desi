@@ -31,3 +31,15 @@ def main() -> int:
     print(nested.val.val)
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Box<int> val:
+# 42
+# Box<str> val:
+# hello
+# Pair first:
+# 10
+# Pair second:
+# world
+# Nested val:
+# 99

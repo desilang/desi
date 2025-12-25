@@ -15,3 +15,7 @@ def main():
     # When o goes out of scope, it should:
     # 1. Free o.inner (the Inner struct)
     # 2. Free o itself
+
+# EXPECTED_OUTPUT:
+# Allocating nested structs...
+# Dropping nested structs...

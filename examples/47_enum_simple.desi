@@ -10,3 +10,8 @@ def main():
   print("Created s")
   # If s has a type, this should work
   print("Done")
+
+# EXPECTED_OUTPUT:
+# Testing enum constructor
+# Created s
+# Done

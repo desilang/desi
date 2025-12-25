@@ -43,3 +43,13 @@ def main():
   print(name2)
   
   print("All N-arm tests passed!")
+
+# EXPECTED_OUTPUT:
+# Testing N-arm match expressions
+# Test 1: 3-arm color match
+# Red
+# Test 2: 4-arm status match
+# paused
+# Test 3: 3-arm color match (Blue)
+# B
+# All N-arm tests passed!

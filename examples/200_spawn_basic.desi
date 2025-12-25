@@ -15,3 +15,8 @@ def main() -> int:
 	
 	print("Main continues after spawn")
 	return 0
+
+# EXPECTED_OUTPUT:
+# Starting main
+# Hello from spawn!
+# 42
