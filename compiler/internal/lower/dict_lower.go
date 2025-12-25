@@ -35,14 +35,30 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		key := ls.lowerExpr(args[0])
 		val := ls.lowerExpr(args[1])
 
-		// Cast to i64 to ensure we store 8 bytes (Tier-0 universal value size)
-		val64 := ls.b.FreshTemp("val64")
-		ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+		// Get value type from type info
+		var valType types.T
+		if ls.info != nil {
+			valType = ls.info.Types[args[1]]
+		}
+
+		// Check if value is a float type - need BitCast to preserve bits
+		isFloat := valType == types.Float || valType == types.F32 || valType == types.F64
 
 		// Spill value to stack to pass as pointer
 		valPtr := ls.b.FreshTemp("val_ptr")
-		ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
-		ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		if isFloat {
+			// For floats, use bitcast to preserve the bit pattern
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
+			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		} else {
+			// For other types, cast to i64 to ensure we store 8 bytes (Tier-0 universal value size)
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		}
 
 		// Determine type tag
 		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
