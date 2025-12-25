@@ -8,3 +8,8 @@ def main() -> int:
     print("Created mutex handle:")
     print(m)
     return 0
+
+# EXPECTED_OUTPUT:
+# Sync import test
+# Created mutex handle:
+# 0

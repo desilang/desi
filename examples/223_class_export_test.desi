@@ -6,3 +6,8 @@ def main():
     let m: int = Mutex(42)  # Uses class constructor
     print("Created mutex:")
     print(m)
+
+# EXPECTED_OUTPUT:
+# Testing class export
+# Created mutex:
+# 0

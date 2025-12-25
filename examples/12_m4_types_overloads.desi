@@ -8,3 +8,6 @@ def main() -> int:
   let a = add(2, 3)
   print(a)
   0
+
+# EXPECTED_OUTPUT:
+# 5

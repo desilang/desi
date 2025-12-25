@@ -4,3 +4,6 @@ def main() -> int:
   let c: f32 = a + b
   print("f32 ok")
   0
+
+# EXPECTED_OUTPUT:
+# f32 ok

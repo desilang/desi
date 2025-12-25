@@ -7,3 +7,7 @@ def main() -> int:
 	print("add(2, 3) = " + str(add(2, 3)))
 	print("sub(5, 2) = " + str(sub(5, 2)))
 	return 0
+
+# EXPECTED_OUTPUT:
+# add(2, 3) = 5
+# sub(5, 2) = 3

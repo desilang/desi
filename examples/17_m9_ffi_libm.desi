@@ -6,3 +6,6 @@ def main() -> int:
     let y = sin(0.5)
   print("ffi sin ok")
   0
+
+# EXPECTED_OUTPUT:
+# ffi sin ok
