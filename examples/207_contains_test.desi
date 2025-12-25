@@ -15,3 +15,8 @@ def main() -> int:
         print("99 is NOT in nums")
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing in operator:
+# 20 is in nums
+# 99 is NOT in nums
