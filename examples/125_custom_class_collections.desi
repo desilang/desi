@@ -23,3 +23,8 @@ def main():
     
     # Test iteration
     print("Manual iteration test passed!")
+
+# EXPECTED_OUTPUT:
+# People list:
+# [Person(Alice), Person(Bob)]
+# Manual iteration test passed!

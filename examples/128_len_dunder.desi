@@ -28,3 +28,8 @@ def main():
         print("Test passed!")
     else:
         print("Test failed: expected size 3, got " + str(size))
+
+# EXPECTED_OUTPUT:
+# Stack created with 3 items
+# Size: 3
+# Test passed!

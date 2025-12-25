@@ -22,3 +22,8 @@ def main() -> int:
     
     print("Immutability tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# ys length: 4
+# scores2 has bob: true
+# Immutability tests passed!
