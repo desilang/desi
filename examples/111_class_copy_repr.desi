@@ -25,3 +25,7 @@ def main() -> int:
     print(p2.__repr__())  # Prints: Point(x=30, y=20)
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Point(x=10, y=20)
+# Point(x=30, y=20)
