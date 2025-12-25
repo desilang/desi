@@ -342,3 +342,12 @@ char* string_replace(const char* s, const char* old_str, const char* new_str) {
     
     return result;
 }
+
+// Check if needle is contained in haystack
+// Returns 1 (true) if needle is found in haystack, 0 (false) otherwise
+// Used for 'in' operator: "a" in "abc" -> true
+int string_contains(const char* haystack, const char* needle) {
+    if (!haystack || !needle) return 0;
+    if (*needle == '\0') return 1;  // Empty needle is always found
+    return strstr(haystack, needle) != NULL ? 1 : 0;
+}
