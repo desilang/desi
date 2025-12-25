@@ -8,7 +8,7 @@ class Box<T>:
         return self.val
 
     pub def set(self, v: T):
-        self.val = v
+        self.val := v
 
 # Custom class for testing
 class Point:
@@ -27,14 +27,14 @@ class Pair<A, B>:
         return self.second
 
     pub def set_both(self, a: A, b: B):
-        self.first = a
-        self.second = b
+        self.first := a
+        self.second := b
 
 def main() -> int:
     # Test 1: Box<int>
     print("=== Box<int> ===")
     let b_int: Box<int> = Box()
-    b_int.val = 42
+    b_int.val := 42
     print(b_int.get())
     b_int.set(100)
     print(b_int.get())
@@ -42,7 +42,7 @@ def main() -> int:
     # Test 2: Box<float>
     print("=== Box<float> ===")
     let b_float: Box<float> = Box()
-    b_float.val = 3.14
+    b_float.val := 3.14
     print(b_float.get())
     b_float.set(2.71)
     print(b_float.get())
@@ -50,7 +50,7 @@ def main() -> int:
     # Test 3: Box<bool>
     print("=== Box<bool> ===")
     let b_bool: Box<bool> = Box()
-    b_bool.val = true
+    b_bool.val := true
     if b_bool.get():
         print("true")
     b_bool.set(false)
@@ -60,7 +60,7 @@ def main() -> int:
     # Test 4: Box<str>
     print("=== Box<str> ===")
     let b_str: Box<str> = Box()
-    b_str.val = "hello"
+    b_str.val := "hello"
     print(b_str.get())
     b_str.set("world")
     print(b_str.get())
@@ -68,7 +68,7 @@ def main() -> int:
     # Test 5: Box<list<int>>
     print("=== Box<list<int>> ===")
     let b_list: Box<list<int>> = Box()
-    b_list.val = [1, 2, 3]
+    b_list.val := [1, 2, 3]
     let items: list<int> = b_list.get()
     print(len(items))
     b_list.set([10, 20])
@@ -77,16 +77,16 @@ def main() -> int:
     # Test 6: Box<i64> (sized int)
     print("=== Box<i64> ===")
     let b_i64: Box<i64> = Box()
-    b_i64.val = 9223372036854775807
+    b_i64.val := 9223372036854775807
     print(b_i64.get())
 
     # Test 7: Box with custom class (Point)
     print("=== Box<Point> ===")
     let b_point: Box<Point> = Box()
     let p: Point = Point()
-    p.x = 10
-    p.y = 20
-    b_point.val = p
+    p.x := 10
+    p.y := 20
+    b_point.val := p
     let got_p: Point = b_point.get()
     print(got_p.x)
     print(got_p.y)
@@ -94,14 +94,14 @@ def main() -> int:
     # Test 8: Box<i32> (explicit sized int)
     print("=== Box<i32> ===")
     let b_i32: Box<i32> = Box()
-    b_i32.val = 2147483647
+    b_i32.val := 2147483647
     print(b_i32.get())
 
     # Test 9: Pair<int, str> - Multiple type parameters
     print("=== Pair<int, str> ===")
     let pair1: Pair<int, str> = Pair()
-    pair1.first = 42
-    pair1.second = "answer"
+    pair1.first := 42
+    pair1.second := "answer"
     print(pair1.get_first())
     print(pair1.get_second())
     pair1.set_both(100, "century")
@@ -111,16 +111,16 @@ def main() -> int:
     # Test 10: Pair<str, float> - Different type combination
     print("=== Pair<str, float> ===")
     let pair2: Pair<str, float> = Pair()
-    pair2.first = "pi"
-    pair2.second = 3.14159
+    pair2.first := "pi"
+    pair2.second := 3.14159
     print(pair2.get_first())
     print(pair2.get_second())
 
     # Test 11: Pair<bool, int>
     print("=== Pair<bool, int> ===")
     let pair3: Pair<bool, int> = Pair()
-    pair3.first = true
-    pair3.second = 999
+    pair3.first := true
+    pair3.second := 999
     if pair3.get_first():
         print("first is true")
     print(pair3.get_second())
@@ -130,16 +130,16 @@ def main() -> int:
     # print("=== Box<Box<int>> ===")
     # let nested: Box<Box<int>> = Box()
     # let inner: Box<int> = Box()
-    # inner.val = 777
-    # nested.val = inner
+    # inner.val := 777
+    # nested.val := inner
     # print(nested.get().get())
 
     # Test 13: Multiple instances of same generic type
     print("=== Multiple Box<int> instances ===")
     let box1: Box<int> = Box()
     let box2: Box<int> = Box()
-    box1.val = 111
-    box2.val = 222
+    box1.val := 111
+    box2.val := 222
     print(box1.get())
     print(box2.get())
 

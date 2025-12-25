@@ -5,6 +5,6 @@ class Point:
 def main() -> int:
     # Use default zero-arg constructor (always available)
     let p = Point()
-    p.x = 10
-    p.y = 20
+    p.x := 10
+    p.y := 20
     return 0

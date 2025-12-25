@@ -4,7 +4,7 @@ class Number:
     pub val: int
     
     pub def __new__(self, v: int):
-        self.val = v
+        self.val := v
         
     pub def __neg__(self) -> int:
         print("calling __neg__")

@@ -46,11 +46,11 @@ def main() -> int:
     
     # Can instantiate concrete implementations
     let c = Circle()
-    c.radius = 5.0
+    c.radius := 5.0
     
     let r = Rectangle()
-    r.width = 10.0
-    r.height = 20.0
+    r.width := 10.0
+    r.height := 20.0
     
     # Call abstract methods (now concrete)
     let c_area = c.area()

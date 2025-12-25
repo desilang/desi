@@ -14,5 +14,5 @@ class CommentTest:
 
 def main() -> int:
     let c = CommentTest()
-    c.x = 10
+    c.x := 10
     return 0

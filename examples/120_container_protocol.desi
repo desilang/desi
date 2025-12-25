@@ -9,7 +9,7 @@ class IntArray:
     
     pub def __setitem__(self, index: int, value: int) -> none:
         # Direct list assignment works
-        self.data[index] = value
+        self.data[index] := value
         return
     
     pub def __len__(self) -> int:
@@ -18,17 +18,17 @@ class IntArray:
 pub def main() -> int:
     # Manual setup
     let arr = IntArray()
-    arr.data = [10, 20, 30]
-    arr.size = 3
+    arr.data := [10, 20, 30]
+    arr.size := 3
     
     print(f"Testing Container Protocol...")
     
     # Test __getitem__
     let first = arr[0]
-    print(f"arr[0] = {first}")
+    print(f"arr[0] := {first}")
     
     # Test __setitem__
-    arr[1] = 99
+    arr[1] := 99
     let second = arr[1]
     print(f"arr[1] (after set) = {second}")
     

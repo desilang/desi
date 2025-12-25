@@ -4,17 +4,17 @@ class Point:
     
     pub def __copy__(self) -> Point:
         let p = Point()
-        p.x = self.x
-        p.y = self.y
+        p.x := self.x
+        p.y := self.y
         return p
 
 def main() -> int:
     let p1 = Point()
-    p1.x = 10
-    p1.y = 20
+    p1.x := 10
+    p1.y := 20
     
     let p2 = p1.__copy__()  # Explicit copy
-    p2.x = 30  # Modify copy
+    p2.x := 30  # Modify copy
     
     # p1 should still be (10, 20)
     # p2 should be (30, 20)
