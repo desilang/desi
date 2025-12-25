@@ -48,6 +48,7 @@ const (
 	KW_let
 	KW_mut
 	KW_return
+	KW_pass
 	KW_if
 	KW_elif
 	KW_else

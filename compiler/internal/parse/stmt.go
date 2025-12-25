@@ -51,6 +51,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseLet()
 	case token.KW_return:
 		return p.parseReturn()
+	case token.KW_pass:
+		return p.parsePass()
 	case token.KW_if:
 		return p.parseIf()
 	case token.KW_while:

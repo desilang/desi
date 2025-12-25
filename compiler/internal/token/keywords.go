@@ -18,6 +18,7 @@ var keywords = map[string]Token{
 	"let":      KW_let,
 	"mut":      KW_mut,
 	"return":   KW_return,
+	"pass":     KW_pass,
 	"if":       KW_if,
 	"elif":     KW_elif,
 	"else":     KW_else,

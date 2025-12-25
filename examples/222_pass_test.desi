@@ -1,0 +1,12 @@
+# Test file for pass keyword
+
+def empty_function():
+    pass
+
+def placeholder_method():
+    pass  # TODO: implement later
+
+def main():
+    empty_function()
+    placeholder_method()
+    print("pass keyword works!")

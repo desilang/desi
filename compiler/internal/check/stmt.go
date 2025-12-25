@@ -437,6 +437,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			}
 		}
 
+	case *ast.PassStmt:
+		// pass is a no-op - nothing to type check
+
 	case *ast.ReturnStmt:
 		if st.Value == nil {
 			// returning none is always fine if declared none

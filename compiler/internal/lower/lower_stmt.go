@@ -207,6 +207,20 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if _, isIndexExpr := s.Value.(*ast.IndexExpr); isIndexExpr {
 				skipDrop = true
 			}
+			// Also skip drop for MutexGuard.value field access - it's borrowed from the mutex
+			if field, isFieldExpr := s.Value.(*ast.FieldExpr); isFieldExpr {
+				if ls.info != nil {
+					if baseType := ls.info.Types[field.X]; baseType != nil {
+						if _, isMutexGuard := baseType.(*types.MutexGuard); isMutexGuard {
+							skipDrop = true
+							if ls.cur().borrowed == nil {
+								ls.cur().borrowed = map[string]bool{}
+							}
+							ls.cur().borrowed[s.Name.Name] = true
+						}
+					}
+				}
+			}
 		}
 
 		if varType != nil && !skipDrop {
@@ -531,6 +545,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.SelectStmt:
 		ls.lowerSelectStmt(s)
+
+	case *ast.PassStmt:
+		// pass is a no-op - nothing to emit
 
 	case *ast.ReturnStmt:
 		// Before returning, run defers and drop locals from all open scopes (inner→outer).
