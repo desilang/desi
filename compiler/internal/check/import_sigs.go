@@ -92,6 +92,19 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 						})
 					}
 				}
+				// Import all exported classes as callable constructors
+				for name, cls := range ex.Classes {
+					set := setFor(name)
+					// Add all constructors from the class
+					for _, constructor := range cls.Constructors {
+						set.Add(&FuncCand{
+							Decl:   nil,
+							Type:   constructor,
+							Modes:  nil,
+							Extern: false,
+						})
+					}
+				}
 			}
 			continue
 		}
@@ -156,6 +169,19 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 							ParamNames: cloneNames(pnames),
 							Defaults:   cloneBools(defaults),
 						})
+					}
+
+					// Check if it's a class export
+					if cls := ex.Classes[name]; cls != nil {
+						// Add all constructors from the class
+						for _, constructor := range cls.Constructors {
+							set.Add(&FuncCand{
+								Decl:   nil,
+								Type:   constructor,
+								Modes:  nil,
+								Extern: false,
+							})
+						}
 					}
 				}
 			}

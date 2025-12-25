@@ -1,0 +1,8 @@
+# Test class export from sync module
+from sync import Mutex
+
+def main():
+    print("Testing class export")
+    let m: int = Mutex(42)  # Uses class constructor
+    print("Created mutex:")
+    print(m)
