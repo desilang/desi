@@ -10,7 +10,7 @@ class IntBox(Box<int>):
 
 def main() -> int:
     let b = IntBox()
-    b.val = 10  # Type checker should allow this (val is int)
+    b.val := 10  # Type checker should allow this (val is int)
     
     print(f"b.val: {b.val}")
     

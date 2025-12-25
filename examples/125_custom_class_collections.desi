@@ -4,7 +4,7 @@ class Person:
     pub name: str
     
     pub def __new__(self, name: str):
-        self.name = name
+        self.name := name
     
     pub def __str__(self) -> str:
         return "Person(" + self.name + ")"

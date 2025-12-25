@@ -21,7 +21,7 @@ class StrBox(Box<str>):
 
 def main() -> int:
     let ib = IntBox()
-    ib.value = 10
+    ib.value := 10
     print("IntBox created")
     print(ib.get())
     if ib.get() != 10:
@@ -41,7 +41,7 @@ def main() -> int:
     print("IntBox tests passed")
 
     let sb = StrBox()
-    sb.value = "hello"
+    sb.value := "hello"
     print("StrBox created")
     print(sb.get())
     if sb.get() != "hello":

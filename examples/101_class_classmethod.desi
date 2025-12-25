@@ -5,7 +5,7 @@ class Counter:
     @classmethod
     pub def zero() -> Counter:
         let c = Counter()
-        c.count = 0
+        c.count := 0
         return c
 
 def main() -> int:

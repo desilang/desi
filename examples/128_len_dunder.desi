@@ -4,7 +4,7 @@ class Stack:
     pub mut items: list[int]
     
     pub def __new__(self):
-        self.items = []
+        self.items := []
         
     pub def push(self, val: int):
         self.items.append(val)

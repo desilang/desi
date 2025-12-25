@@ -1,9 +1,10 @@
+# EXPECTED: COMPILE_ERROR
 # Test mutability enforcement - this should produce an error
 
 def main() -> int:
     let data: list[int] = [10, 20, 30]  # NOT mutable
     
     # This should error: cannot assign to element of immutable list
-    data[0] = 100
+    data[0] := 100
     
     return 0

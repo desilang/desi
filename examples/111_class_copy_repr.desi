@@ -4,8 +4,8 @@ class Point:
     
     pub def __copy__(self) -> Point:
         let p = Point()
-        p.x = self.x
-        p.y = self.y
+        p.x := self.x
+        p.y := self.y
         return p
     
     pub def __repr__(self) -> str:
@@ -14,13 +14,13 @@ class Point:
 
 def main() -> int:
     let p1 = Point()
-    p1.x = 10
-    p1.y = 20
+    p1.x := 10
+    p1.y := 20
     
     print(p1.__repr__())  # Prints: Point(x=10, y=20)
     
     let p2 = p1.__copy__()
-    p2.x = 30
+    p2.x := 30
     
     print(p2.__repr__())  # Prints: Point(x=30, y=20)
     

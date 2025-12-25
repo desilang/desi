@@ -7,12 +7,12 @@ class Box<T>:
         return self.val
 
     pub def set(self, v: T):
-        self.val = v
+        self.val := v
 
 def main() -> int:
     # Generic class instance with int
     let b1: Box<int> = Box()
-    b1.val = 42
+    b1.val := 42
     
     # Test method calls
     let v1: int = b1.get()

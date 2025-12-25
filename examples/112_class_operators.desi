@@ -4,14 +4,14 @@ class Vector:
     
     pub def __add__(self, other: Vector) -> Vector:
         let v = Vector()
-        v.x = self.x + other.x
-        v.y = self.y + other.y
+        v.x := self.x + other.x
+        v.y := self.y + other.y
         return v
     
     pub def __sub__(self, other: Vector) -> Vector:
         let v = Vector()
-        v.x = self.x - other.x
-        v.y = self.y - other.y
+        v.x := self.x - other.x
+        v.y := self.y - other.y
         return v
     
     pub def __eq__(self, other: Vector) -> bool:
@@ -22,12 +22,12 @@ class Vector:
 
 def main() -> int:
     let v1 = Vector()
-    v1.x = 1.0
-    v1.y = 2.0
+    v1.x := 1.0
+    v1.y := 2.0
     
     let v2 = Vector()
-    v2.x = 3.0
-    v2.y = 4.0
+    v2.x := 3.0
+    v2.y := 4.0
     
     # Test operator methods
     let v3 = v1 + v2

@@ -2,7 +2,7 @@
 class Bitwise:
     pub val: int
     pub def __new__(self, v: int):
-        self.val = v
+        self.val := v
 
     pub def __and__(self, other: Bitwise) -> int:
         print("calling __and__")

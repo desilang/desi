@@ -3,11 +3,11 @@ class Point:
     pub mut y: int
     
     pub def move(self, dx: int, dy: int) -> none:
-        self.x = self.x  # Allowed inside methods
+        self.x := self.x  # Allowed inside methods
         return
 
 def main() -> int:
     let mut p = Point()
-    p.x = 10
-    p.y = 20
+    p.x := 10
+    p.y := 20
     return 0
