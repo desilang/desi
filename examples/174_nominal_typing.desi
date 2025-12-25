@@ -42,3 +42,11 @@ def test_field_access():
             print("Field access on alias: FAIL")
     else:
         print("Field access on alias: FAIL")
+
+# EXPECTED_OUTPUT:
+# Basic alias creation: PASS
+# Nominal typing: PASS
+# 100
+# 200
+# Field access on alias: PASS
+# All nominal typing tests passed!
