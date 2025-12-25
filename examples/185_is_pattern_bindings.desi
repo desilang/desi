@@ -21,3 +21,12 @@ def main() -> int:
     
     print("Done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Got Some value:
+# 42
+# Got Ok value:
+# 100
+# Got Err value:
+# error message
+# Done!
