@@ -185,6 +185,18 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 			if len(g.Args) > 0 {
 				elemType = g.Args[0] // T
 			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			// Fall back to Enum variant fields (Ok variant = index 0)
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				elemType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		if elemType == nil {
+			// Last resort: use the passed in enum type
+			if t != nil && len(t.Variants) > 0 && len(t.Variants[0].Fields) > 0 {
+				elemType = t.Variants[0].Fields[0].Type
+			}
 		}
 
 		if elemType == nil {
@@ -215,6 +227,18 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		if g, ok := recvType.(*types.Generic); ok {
 			if len(g.Args) > 1 {
 				errType = g.Args[1] // E
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			// Fall back to Enum variant fields (Err variant = index 1)
+			if len(e.Variants) > 1 && len(e.Variants[1].Fields) > 0 {
+				errType = e.Variants[1].Fields[0].Type
+			}
+		}
+
+		if errType == nil {
+			// Last resort: use the passed in enum type
+			if t != nil && len(t.Variants) > 1 && len(t.Variants[1].Fields) > 0 {
+				errType = t.Variants[1].Fields[0].Type
 			}
 		}
 
