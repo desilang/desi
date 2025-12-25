@@ -33,3 +33,13 @@ def test_empty_concat():
     print(c.3)  # 4
     print(c.4)  # 5
     print("test_empty_concat: PASS")
+
+# EXPECTED_OUTPUT:
+# test_basic_concat: PASS
+# 1
+# 2
+# 3
+# 4
+# 5
+# test_empty_concat: PASS
+# All tuple concatenation tests passed!
