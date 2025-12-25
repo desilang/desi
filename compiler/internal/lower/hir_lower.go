@@ -220,6 +220,7 @@ type scope struct {
 	locals     []string        // in declaration order
 	rcLike     map[string]bool // locals that are rc/arc
 	moved      map[string]bool // locals moved-from; skip drop
+	borrowed   map[string]bool // locals that are borrowed/aliased; skip drop
 	defers     []hir.Value
 	arenas     map[string]bool    // names that are arena handles in this scope
 	arenaOwned map[string]bool    // locals whose storage originates from arena.alloc
@@ -234,6 +235,7 @@ func (ls *lowerState) push() {
 		locals:     []string{},
 		rcLike:     map[string]bool{},
 		moved:      map[string]bool{},
+		borrowed:   map[string]bool{},
 		tempDrops:  map[string]bool{},
 		defers:     []hir.Value{},
 		arenas:     map[string]bool{},
@@ -456,6 +458,9 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		}
 		if sc.arenaOwned[name] {
 			continue // arena-backed values are freed by destroy_arena only
+		}
+		if sc.borrowed[name] {
+			continue // borrowed/aliased values are owned elsewhere; don't free
 		}
 		if sc.rcLike[name] {
 			ls.b.Emit(&hir.DecRef{Val: hir.Var{Name: name}})
