@@ -40,3 +40,11 @@ def main() -> int:
     
     print("All tuple slicing tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# t[1:4] => 3 elements: PASS
+# t[2:3] => 30: PASS
+# t[0:2] => 2 elements: PASS
+# t[3:5] => 2 elements: PASS
+# Destructure sliced tuple: PASS
+# All tuple slicing tests passed!

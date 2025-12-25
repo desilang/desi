@@ -46,3 +46,11 @@ def main() -> int:
     
     print("All tuple spread tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# (*a, *b) => 4 elements: PASS
+# (0, *a, 5) => 4 elements: PASS
+# (*words, 'desi') => 3 elements: PASS
+# (*x, *z) => 4 elements: PASS
+# (0, *prefix, 99, *suffix, 999) => 7 elements: PASS
+# All tuple spread tests passed!

@@ -58,3 +58,15 @@ def main() -> int:
     
     print("All rest pattern tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# first = 1: PASS
+# rest length = 4: PASS
+# last = 5: PASS
+# init length = 4: PASS
+# a = 1: PASS
+# z = 5: PASS
+# middle length = 3: PASS
+# p1 = 10: PASS
+# prest length = 1: PASS
+# All rest pattern tests passed!

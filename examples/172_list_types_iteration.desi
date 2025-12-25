@@ -97,3 +97,57 @@ def test_zip_with_structs():
         print(p.name)
         print(s)
     print("zip struct: PASS")
+
+# EXPECTED_OUTPUT:
+# Int iteration:
+# 10
+# 20
+# 30
+# 40
+# int list: PASS
+# Float iteration:
+# 1.500000
+# 2.500000
+# 3.000000
+# float list: PASS
+# Bool iteration:
+# true
+# false
+# true
+# bool list: PASS
+# String iteration:
+# alice
+# bob
+# carol
+# str list: PASS
+# Struct iteration:
+# 1
+# 10
+# 2
+# 20
+# 3
+# 30
+# struct list: PASS
+# Zip same types:
+# 1
+# 100
+# 2
+# 200
+# 3
+# 300
+# zip same: PASS
+# Zip different types (stops at shorter):
+# 1
+# 1.500000
+# 2
+# 2.500000
+# 3
+# 3.500000
+# zip hetero: PASS
+# Zip with structs:
+# Alice
+# 95
+# Bob
+# 87
+# zip struct: PASS
+# All comprehensive tests passed!

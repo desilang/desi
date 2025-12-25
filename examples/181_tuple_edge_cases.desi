@@ -93,3 +93,41 @@ def main() -> int:
     
     print("\n=== All edge case tests passed! ===")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Basic Operations ===
+# Basic tuple: len = 5
+# Mixed types tuple: PASS
+# Nested tuple: len = 2
+# 
+# === Indexing ===
+# t.0 = 1
+# t.4 = 5
+# 
+# === Destructuring ===
+# Destructure all: a=1, e=5
+# Ignore pattern: second=2
+# Head/tail: first=1, rest len=4
+# Init/last: last=5, init len=4
+# Head/middle/tail: x=1, z=5, middle len=3
+# 
+# === Concatenation & Spread ===
+# (1,2) + (3,4): len = 4
+# (*left, 99, *right): len = 5
+# 
+# === Comparison ===
+# (1,2) < (1,3): PASS
+# (1,2) == (1,2): PASS
+# 
+# === Membership ===
+# 20 in (10,20,30): PASS
+# 99 not in (10,20,30): PASS
+# 
+# === Iteration ===
+# Sum via iteration: 60
+# 
+# === Two-element Tuple ===
+# Pair: p1=100, p2=200
+# Pair rest: first=100, rest len=1
+# 
+# === All edge case tests passed! ===
