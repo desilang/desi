@@ -6,3 +6,6 @@ def main() -> int:
   let b: u8 = id_u8(a)
   print("u8 param ok")
   0
+
+# EXPECTED_OUTPUT:
+# u8 param ok

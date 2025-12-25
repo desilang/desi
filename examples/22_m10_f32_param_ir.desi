@@ -6,3 +6,6 @@ def main() -> int:
   let b: f32 = id_f32(a)
   print("f32 param ok")
   0
+
+# EXPECTED_OUTPUT:
+# f32 param ok
