@@ -55,3 +55,11 @@ def main() -> int:
          
     print("StrBox tests passed")
     return 0
+
+# EXPECTED_OUTPUT:
+# IntBox created
+# 10
+# IntBox tests passed
+# StrBox created
+# hello
+# StrBox tests passed
