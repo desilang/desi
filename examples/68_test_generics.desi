@@ -31,3 +31,5 @@ def main():
         Option.None(): print("no string")
     
     print("Generic test complete")
+
+# SKIPPED: No runtime output - compile-only generics test

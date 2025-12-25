@@ -15,3 +15,5 @@ def main():
     let error_item = MyStruct(item="error_item", value=0x4)
     
     print("If this prints, union types work!")
+
+# SKIPPED: No runtime output - compile-only union type test

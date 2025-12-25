@@ -13,3 +13,5 @@ def main():
         Color.Red(): print("Red")
         Color.Green(): print("Green")
         # Missing Blue - should trigger DW0007 warning
+
+# SKIPPED: Compile-error test - tests exhaustiveness checking

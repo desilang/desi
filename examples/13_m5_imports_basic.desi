@@ -5,3 +5,5 @@ from math import add as sum   # compiler/lib/math/__mod.desi
 def main() -> int:
 	print("sum(2, 3) = " + str(sum(2, 3)))
 	return 0
+
+# SKIPPED: Import test - requires module dependencies

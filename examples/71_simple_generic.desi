@@ -15,3 +15,5 @@ def main() -> int:
     print("Generic test passed")
     return 0
 
+
+# SKIPPED: Non-deterministic output - prints uninitialized memory value

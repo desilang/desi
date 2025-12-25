@@ -6,3 +6,5 @@ import math
 def main() -> int:
   print(math.sqrt(9))
   return 0
+
+# SKIPPED: Import test - tests import error handling
