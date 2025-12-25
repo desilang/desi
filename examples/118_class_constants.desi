@@ -26,3 +26,10 @@ pub def main():
 
     # This should fail if uncommented:
     # print(Math.SECRET)
+
+# EXPECTED_OUTPUT:
+# PI: 3.141590
+# E: 2.718280
+# Area of radius 2: 12.566360
+# Circle.PI: 3.141590
+# Secret: 42

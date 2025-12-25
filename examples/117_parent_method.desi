@@ -16,3 +16,8 @@ pub def main():
     print("--- Testing Parent.method(self) ---")
     let c = Child()
     c.greet()
+
+# EXPECTED_OUTPUT:
+# --- Testing Parent.method(self) ---
+# Hello from Child
+# Hello from Parent
