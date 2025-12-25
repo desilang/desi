@@ -13,3 +13,9 @@ def main() -> int:
     print(data[0])  # Should be 100
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Before:
+# 10
+# After:
+# 100

@@ -24,3 +24,9 @@ def main() -> int:
     
     print("Multiple type parameters test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# swap(42, 'hello') called successfully
+# pair('world', 100) called successfully
+# triple(1, 'two', 3.14) called successfully
+# Multiple type parameters test passed!

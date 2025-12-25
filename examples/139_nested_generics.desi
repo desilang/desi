@@ -18,3 +18,9 @@ def main() -> int:
     
     print("Nested generics test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Created list<Option<int>>
+# First value: 1
+# Inner list length: 3
+# Nested generics test passed!

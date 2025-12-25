@@ -18,3 +18,9 @@ def main() -> int:
     
     print("Mutex test complete!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing mutex...
+# 42
+# hello
+# Mutex test complete!
