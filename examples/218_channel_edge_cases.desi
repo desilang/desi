@@ -49,3 +49,13 @@ def main() -> int:
     
     print("=== All Channel Edge Cases Passed ===")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Channel Edge Case Tests ===
+# true
+# Large buffer created
+# Sent and received 3 values
+# Empty try_recv returned
+# Channel closed
+# false
+# === All Channel Edge Cases Passed ===

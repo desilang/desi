@@ -22,3 +22,12 @@ def main() -> int:
     
     print("Done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing iteration with __getitem__ + __len__:
+# 10
+# 20
+# 30
+# 40
+# 50
+# Done!

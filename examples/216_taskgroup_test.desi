@@ -16,3 +16,7 @@ def main() -> int:
     
     print("TaskGroup test done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# false
+# TaskGroup test done!
