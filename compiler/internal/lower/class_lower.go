@@ -229,6 +229,25 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 			emitted[m.Name.Name] = true
 		}
 
+		// Build substitution map if inheriting from a generic class instantiation
+		// e.g., IntBox(Box<int>) -> subst["T"] = int
+		// We use the AST base type args (cd.Bases[0].Params) and match them
+		// to the base class type params (cls.Base.TypeParams)
+		var subst map[string]types.T
+		if len(cd.Bases) > 0 && cls.Base != nil && len(cls.Base.TypeParams) > 0 {
+			baseTypeName := cd.Bases[0]
+			if len(baseTypeName.Params) == len(cls.Base.TypeParams) {
+				subst = make(map[string]types.T)
+				for i, tp := range cls.Base.TypeParams {
+					// Resolve the AST type name to a types.T
+					argType := resolveASTTypeNameToT(baseTypeName.Params[i], info)
+					if argType != nil {
+						subst[tp.Name] = argType
+					}
+				}
+			}
+		}
+
 		// Iterate over all semantic methods (including inherited)
 		for name := range cls.Methods {
 			// Skip if already emitted (overridden or defined locally)
@@ -249,10 +268,22 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 			}
 
 			// Lower the inherited method as if it belongs to this class
-			// M15 TODO: This re-lowering does NOT substitute generic types in the body.
-			// It relies on implicit compatibility (e.g. pointers) or that the layout matches.
-			// For full generics, we need a Monomorphizer that replaces T with concrete types in HIR.
 			fn := LowerFuncFromDecl(astDecl, info, src)
+
+			// Apply type substitution if inheriting from a generic class
+			// This replaces T with concrete types (e.g., int) in method body
+			if subst != nil && cls.Base != nil {
+				substituteHIRFuncBody(fn, subst, cls.Base)
+			}
+
+			// Update return type and parameter types using the already-substituted
+			// method type from cls.Methods (type checker already applied substitution)
+			if methodType := cls.Methods[name]; methodType != nil {
+				// Update return type
+				if methodType.Ret != nil {
+					fn.RetType = lowerType(methodType.Ret)
+				}
+			}
 
 			// Relabel it for THIS class: IntBox_get
 			fn.Name = fmt.Sprintf("%s_%s", className, name)
@@ -284,6 +315,7 @@ func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.F
 			}
 
 			funcs = append(funcs, fn)
+
 		}
 	}
 
@@ -305,4 +337,88 @@ func findMethodDecl(cls *types.Class, name string) *ast.FuncDecl {
 	}
 	// Recurse up
 	return findMethodDecl(cls.Base, name)
+}
+
+// resolveASTTypeNameToT converts an AST TypeName to a types.T for substitution.
+// This handles common built-in types and class types.
+func resolveASTTypeNameToT(tn *ast.TypeName, info *check.Info) types.T {
+	if tn == nil {
+		return nil
+	}
+
+	// Handle basic types
+	switch tn.Name {
+	case "int":
+		return types.Int
+	case "float":
+		return types.Float
+	case "bool":
+		return types.Bool
+	case "str":
+		return types.Str
+	case "none":
+		return types.None
+	case "any":
+		return types.Any
+	case "i8":
+		return types.I8
+	case "i16":
+		return types.I16
+	case "i32":
+		return types.I32
+	case "i64":
+		return types.I64
+	case "u8":
+		return types.U8
+	case "u16":
+		return types.U16
+	case "u32":
+		return types.U32
+	case "u64":
+		return types.U64
+	case "f32":
+		return types.F32
+	case "f64":
+		return types.F64
+	case "list":
+		if len(tn.Params) > 0 {
+			elem := resolveASTTypeNameToT(tn.Params[0], info)
+			return &types.List{Elem: elem}
+		}
+		return &types.List{Elem: types.Any}
+	case "dict":
+		if len(tn.Params) >= 2 {
+			key := resolveASTTypeNameToT(tn.Params[0], info)
+			val := resolveASTTypeNameToT(tn.Params[1], info)
+			return &types.Dict{Key: key, Val: val}
+		}
+		return &types.Dict{Key: types.Any, Val: types.Any}
+	case "set":
+		if len(tn.Params) > 0 {
+			elem := resolveASTTypeNameToT(tn.Params[0], info)
+			return &types.Set{Elem: elem}
+		}
+		return &types.Set{Elem: types.Any}
+	}
+
+	// Try to find the type in Info.Types by looking up known class declarations
+	// This handles user-defined classes
+	for node, t := range info.Types {
+		switch decl := node.(type) {
+		case *ast.ClassDecl:
+			if decl.Name.Name == tn.Name {
+				return t
+			}
+		case *ast.StructDecl:
+			if decl.Name.Name == tn.Name {
+				return t
+			}
+		case *ast.EnumDecl:
+			if decl.Name.Name == tn.Name {
+				return t
+			}
+		}
+	}
+
+	return nil
 }

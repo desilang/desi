@@ -1,0 +1,29 @@
+# Test Send trait verification in spawn blocks
+# Spawn should work with Send types (primitives, channels)
+
+def main() -> int:
+    print("Testing spawn with Send types...")
+    
+    # Send types work fine in spawn
+    let x = 42
+    let msg = "hello"
+    let nums = [1, 2, 3]
+    
+    spawn:
+        # These are all Send types - should compile fine
+        print(x)
+        print(msg)
+        for n in nums:
+            print(n)
+    
+    print("Spawn test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing spawn with Send types...
+# 42
+# hello
+# 1
+# 2
+# 3
+

@@ -1123,8 +1123,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.SetBlock(oldCur)
 			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
 
-			// TODO: Free keys array after loop (keys_ptr is malloc'd)
-			// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
+			// Free keys array after loop (keys_ptr was malloc'd by dict_keys)
+			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
 
 		} else {
 
@@ -1214,8 +1214,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.b.SetBlock(oldCur)
 				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
 
-				// TODO: Free array after loop
-				// ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{arrPtr}})
+				// Free array after loop (arrPtr was malloc'd by set_to_array)
+				ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{arrPtr}})
 				return
 
 			}
