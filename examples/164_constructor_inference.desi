@@ -26,3 +26,10 @@ def main() -> int:
 
     print("All constructor inference tests passed!")
     0
+
+# EXPECTED_OUTPUT:
+# 42
+# hello
+# 3.140000
+# true
+# All constructor inference tests passed!
