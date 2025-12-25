@@ -52,3 +52,16 @@ def main() -> int:
     
     print("=== All Mutex Edge Cases Passed ===")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Mutex Edge Case Tests ===
+# 0
+# -999
+# 2147483647
+# 0
+# false
+# 0.000000
+# 10
+# 20
+# 5
+# === All Mutex Edge Cases Passed ===

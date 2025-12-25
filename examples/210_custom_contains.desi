@@ -30,3 +30,9 @@ def main() -> int:
     
     print("Custom __contains__ test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing custom __contains__:
+# 20 is in MySet
+# 99 is NOT in MySet
+# Custom __contains__ test passed!

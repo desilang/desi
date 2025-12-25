@@ -34,3 +34,14 @@ def main() -> int:
     
     print("Done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing custom __getslice__:
+# 20
+# 30
+# 40
+# ---
+# 10
+# 20
+# 30
+# Done!
