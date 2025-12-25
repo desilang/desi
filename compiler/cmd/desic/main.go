@@ -467,14 +467,12 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		return true, nil
 	}
 
-	// Build loader from -I roots (colon-separated).
+	// Build loader from -I roots + stdlib.
 	var loader resolve.Loader
 	roots := splitRoots(iroots)
-	if len(roots) > 0 && roots[0] != "" {
-		loader = resolve.NewFSLoaderMulti(roots)
-	} else {
-		loader = resolve.NewMemLoader(nil)
-	}
+	// Always include stdlib (compiler/lib) as a default root
+	roots = append(roots, "compiler/lib")
+	loader = resolve.NewFSLoaderMulti(roots)
 
 	res := check.CheckWithLoader(mod, loader)
 	if len(res.Diags) == 0 {
@@ -511,14 +509,12 @@ func runEmitIR(path, iroots string) error {
 		return fmt.Errorf("parse errors")
 	}
 
-	// Build loader from -I roots
+	// Build loader from -I roots + stdlib
 	var loader resolve.Loader
 	roots := splitRoots(iroots)
-	if len(roots) > 0 && roots[0] != "" {
-		loader = resolve.NewFSLoaderMulti(roots)
-	} else {
-		loader = resolve.NewMemLoader(nil)
-	}
+	// Always include stdlib (compiler/lib) as a default root
+	roots = append(roots, "compiler/lib")
+	loader = resolve.NewFSLoaderMulti(roots)
 
 	// Run type checker
 	res := check.CheckWithLoader(mod, loader)
@@ -534,10 +530,11 @@ func runEmitIR(path, iroots string) error {
 
 	// Emit LLVM IR
 	llvmMod := llvm.NewModule(mod.File)
-	// Pre-register all functions to prevent forward-declaration conflicts
+	// Pre-register all functions
 	for _, fn := range hmod.Funcs {
 		llvmMod.RegisterFunc(fn.Name)
 	}
+	// Emit functions
 	for _, fn := range hmod.Funcs {
 		llvmMod.EmitFunc(fn)
 	}

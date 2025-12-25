@@ -49,6 +49,8 @@ func LowerModuleClosure(
 			emittedFuncs[fn.Name] = true
 		}
 	}
+	// Mark __top__ as emitted to prevent import modules from emitting it
+	emittedFuncs["__top__"] = true
 
 	// 2. Lower imported modules
 	if info != nil && info.R != nil {

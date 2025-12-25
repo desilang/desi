@@ -144,16 +144,25 @@ func init() {
 	// Emit struct/enum type definitions before functions
 	lm.EmitTypeDefs(allStructDecls, allEnumDecls, res.Info)
 
-	// Mark all functions as defined to avoid unnecessary declarations
+	// Pre-register all function names to prevent extern declarations for functions we'll define
+	emittedFuncs := make(map[string]bool)
 	for _, hirMod := range allModules {
 		for _, f := range hirMod.Funcs {
-			lm.MarkDefined(f.Name)
+			if !emittedFuncs[f.Name] {
+				lm.MarkDefined(f.Name) // Mark as "will be defined" to prevent extern declare
+				emittedFuncs[f.Name] = true
+			}
 		}
 	}
 
-	// Emit all functions from all modules
+	// Emit all functions from all modules, using same duplicate tracking
+	emittedFuncs = make(map[string]bool) // Reset for emit phase
 	for _, hirMod := range allModules {
 		for _, f := range hirMod.Funcs {
+			if emittedFuncs[f.Name] {
+				continue // Skip duplicates (e.g., __top__ from imports)
+			}
+			emittedFuncs[f.Name] = true
 			lm.EmitFunc(f)
 		}
 	}

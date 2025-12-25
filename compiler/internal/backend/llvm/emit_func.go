@@ -11,7 +11,13 @@ import (
 )
 
 func (m *Module) EmitFunc(fn *hir.Func) {
-	// Mark this function as defined to avoid emitting a declare for it
+	// Skip if already emitted (prevent duplicates like __top__ from imports)
+	if m.emittedFunctions[fn.Name] {
+		return
+	}
+	// Mark this function as emitted
+	m.emittedFunctions[fn.Name] = true
+	// Also mark as defined (for call emit to avoid extern declares)
 	m.definedFunctions[fn.Name] = true
 
 	// Reset per-function state.
