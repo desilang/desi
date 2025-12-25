@@ -658,4 +658,19 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			}
 		}
 	}
+
+	// M14: If Display trait is auto-generated but to_str not explicit, add to Dunders
+	// so that field access (obj.to_str()) can be resolved correctly
+	if _, hasToStr := cls.Dunders["to_str"]; !hasToStr {
+		if _, hasMethod := cls.Methods["to_str"]; !hasMethod {
+			// Check if Display was auto-generated
+			if impls, ok := c.info.Impls[cls.Name]; ok {
+				if _, hasDisplay := impls["Display"]; hasDisplay {
+					// Add synthetic to_str method type to Dunders
+					// Signature: (self) -> str
+					cls.Dunders["to_str"] = types.FuncOf([]types.T{cls}, types.Str, false)
+				}
+			}
+		}
+	}
 }

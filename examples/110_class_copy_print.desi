@@ -25,4 +25,5 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # Point
+#
 # Point
