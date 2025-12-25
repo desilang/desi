@@ -1009,10 +1009,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 
 				inst := ls.b.FreshTemp("inst")
-				// Use GC malloc if available, or stack alloca for now?
-				// Structs use alloca. Let's use alloca for consistency in Tier-0.
-				// TODO: Switch to heap allocation for classes.
-				ls.b.Emit(&hir.Alloca{Type: "i8", Count: size, Dst: inst})
+				// Use heap allocation (malloc) for classes since they may escape
+				// the current scope (e.g., returned from functions like __copy__)
+				ls.b.Emit(&hir.Call{
+					Dst:  inst,
+					Fn:   "malloc",
+					Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
+					Type: "ptr",
+				})
 
 				// 2. Call __new__
 				// Find __new__
