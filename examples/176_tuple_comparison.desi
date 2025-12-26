@@ -43,3 +43,10 @@ def test_greater_equal():
         print("(1,2,3) >= (1,2,3): PASS")
     else:
         print("(1,2,3) >= (1,2,3): FAIL")
+
+# EXPECTED_OUTPUT:
+# (1,2,3) < (1,2,4): PASS
+# (1,2,4) > (1,2,3): PASS
+# (1,2,3) <= (1,2,3): PASS
+# (1,2,3) >= (1,2,3): PASS
+# All tuple comparison tests passed!
