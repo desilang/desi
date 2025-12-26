@@ -77,3 +77,16 @@ def main() -> int:
     
     print("All is/is not tests complete!")
     return 0
+
+# EXPECTED_OUTPUT:
+# a is b: PASS
+# x is not y: PASS
+# opt_some.is_some(): PASS
+# opt_none is none: PASS
+# opt_some is not none: PASS
+# res_ok.is_ok(): PASS
+# res_err.is_err(): PASS
+# flag is true: PASS
+# flag is not false: PASS
+# s1 is s2: PASS
+# All is/is not tests complete!
