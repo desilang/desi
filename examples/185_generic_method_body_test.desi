@@ -1,0 +1,58 @@
+# Test generic method body type substitution
+# This tests the scenarios that are currently problematic per Task 1
+
+class Box<T>:
+    pub mut value: T
+
+    pub def __new__(self, v: T):
+        self.value := v
+
+    pub def get(self) -> T:
+        return self.value
+
+    pub def set(self, v: T):
+        self.value := v
+
+    # Method that uses T in a local variable
+    pub def get_with_local(self) -> T:
+        let local: T = self.value
+        return local
+
+    # Method that returns a modified version
+    pub def set_and_get(self, v: T) -> T:
+        self.value := v
+        return self.value
+
+
+def main() -> int:
+    print("=== Basic Box<int> ===")
+    let b: Box<int> = Box(42)
+    print(b.get())
+
+    print("=== get_with_local test ===")
+    print(b.get_with_local())
+
+    print("=== set_and_get test ===")
+    print(b.set_and_get(100))
+
+    print("=== Box<str> ===")
+    let s: Box<str> = Box("hello")
+    print(s.get())
+    print(s.get_with_local())
+    print(s.set_and_get("world"))
+
+    print("All tests passed!")
+    0
+
+# EXPECTED_OUTPUT:
+# === Basic Box<int> ===
+# 42
+# === get_with_local test ===
+# 42
+# === set_and_get test ===
+# 100
+# === Box<str> ===
+# hello
+# hello
+# world
+# All tests passed!

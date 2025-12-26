@@ -837,11 +837,24 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 	case *ast.SpawnStmt:
 		// Type check the spawn body block
-		// TODO: Verify captured variables implement Send trait
+		// Also verify captured variables implement Send trait
 		if st.Body != nil {
+			// Collect free variables used in the spawn block
+			// that are defined in the outer scope
+			captured := c.collectCapturedVariables(st.Body)
+
+			// Check each captured variable for Send safety
+			for varName, sym := range captured {
+				if sym.Type != nil && !types.IsSend(sym.Type) {
+					c.add(diagAt("DTE0020", st.Span,
+						"cannot spawn with captured variable '"+varName+"' of non-Send type '"+sym.Type.String()+"'"))
+				}
+			}
+
 			c.checkBlock(st.Body)
 		}
 	}
+
 }
 
 // beResultType returns (resultType, ok) for a binary operator (op) applied to (lt, rt).
@@ -920,4 +933,130 @@ func isPrimitive(t types.T) bool {
 		types.Equal(t, types.Float) ||
 		types.Equal(t, types.Bool) ||
 		types.Equal(t, types.Str)
+}
+
+// collectCapturedVariables walks an AST block and finds identifiers that reference
+// variables from outer scopes (free variables / captures).
+// Returns a map of variable name -> Symbol for captured variables.
+func (c *checker) collectCapturedVariables(block *ast.Block) map[string]*Symbol {
+	captured := make(map[string]*Symbol)
+	defined := make(map[string]bool)
+
+	// Walk all statements in the block
+	var walkExpr func(e ast.Expr)
+	var walkStmt func(s ast.Stmt)
+
+	walkExpr = func(e ast.Expr) {
+		if e == nil {
+			return
+		}
+		switch x := e.(type) {
+		case *ast.Ident:
+			// If not locally defined and exists in outer scope, it's captured
+			if !defined[x.Name] {
+				if sym := c.scope.Lookup(x.Name); sym != nil && sym.Kind == SymVar {
+					captured[x.Name] = sym
+				}
+			}
+		case *ast.BinaryExpr:
+			walkExpr(x.Lhs)
+			walkExpr(x.Rhs)
+		case *ast.UnaryExpr:
+			walkExpr(x.X)
+		case *ast.CallExpr:
+			walkExpr(x.Callee)
+			for _, arg := range x.Args {
+				walkExpr(arg)
+			}
+			for _, arg := range x.ArgNodes {
+				walkExpr(arg.Expr)
+			}
+		case *ast.FieldExpr:
+			walkExpr(x.X)
+		case *ast.IndexExpr:
+			walkExpr(x.X)
+			walkExpr(x.Idx)
+		case *ast.ListLit:
+			for _, el := range x.Elems {
+				walkExpr(el)
+			}
+		case *ast.DictLit:
+			for _, k := range x.Keys {
+				walkExpr(k)
+			}
+			for _, v := range x.Values {
+				walkExpr(v)
+			}
+		case *ast.TupleLit:
+			for _, el := range x.Elems {
+				walkExpr(el)
+			}
+		}
+	}
+
+	walkStmt = func(s ast.Stmt) {
+		if s == nil {
+			return
+		}
+		switch x := s.(type) {
+		case *ast.LetStmt:
+			// First walk RHS to find captures, then mark name as defined
+			walkExpr(x.Value)
+			defined[x.Name.Name] = true
+			for _, p := range x.Pattern {
+				defined[p.Name] = true
+			}
+		case *ast.AssignStmt:
+			for _, lhs := range x.LHS {
+				walkExpr(lhs)
+			}
+			for _, rhs := range x.RHS {
+				walkExpr(rhs)
+			}
+		case *ast.ExprStmt:
+			walkExpr(x.Expr)
+		case *ast.ReturnStmt:
+			walkExpr(x.Value)
+		case *ast.IfStmt:
+			walkExpr(x.Cond)
+			if x.Then != nil {
+				for _, stmt := range x.Then.Stmts {
+					walkStmt(stmt)
+				}
+			}
+			if x.Else != nil {
+				for _, stmt := range x.Else.Stmts {
+					walkStmt(stmt)
+				}
+			}
+		case *ast.WhileStmt:
+			walkExpr(x.Cond)
+			if x.Body != nil {
+				for _, stmt := range x.Body.Stmts {
+					walkStmt(stmt)
+				}
+			}
+		case *ast.ForStmt:
+			walkExpr(x.Iter)
+			for _, tgt := range x.Targets {
+				if tgt.Name != nil {
+					defined[tgt.Name.Name] = true
+				}
+			}
+			if x.Body != nil {
+				for _, stmt := range x.Body.Stmts {
+					walkStmt(stmt)
+				}
+			}
+		}
+	}
+
+	// Walk all statements in the block
+	if block != nil {
+		for _, stmt := range block.Stmts {
+			walkStmt(stmt)
+		}
+	}
+
+	return captured
 }
