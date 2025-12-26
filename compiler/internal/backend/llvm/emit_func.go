@@ -459,8 +459,6 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 				m.emitRet(x)
 
-			case *hir.Drop:
-				m.emitDrop(x)
 			case *hir.IncRef:
 				// Tier-0 no-op
 			case *hir.DecRef:
@@ -715,6 +713,27 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 				// Emit exit label immediately to split the block
 				wprintf(&m.funcs, "%s:\n", exitLabel)
+
+			// ------- Drop (RAII cleanup) -------
+			case *hir.Drop:
+				// Resolve variable through SSA map if it's alised
+				var actualVal hir.Value = x.Val
+				if v, ok := x.Val.(hir.Var); ok {
+					if alias, exists := m.ssa[v.Name]; exists {
+						actualVal = alias
+					}
+				}
+				valOp := m.ptrOperand(actualVal)
+				if x.Type != nil {
+					if classType, ok := x.Type.(*types.Class); ok {
+						// Emit __del__ calls for class and all base classes (child → parent order)
+						m.emitDestructorChain(classType, valOp)
+					}
+				}
+
+				// Emit free for the variable (if it's a pointer)
+				wprintf(&m.funcs, "  call void @free(ptr %s)\n", valOp)
+				m.ensureDecl("declare void @free(ptr)")
 
 			// ------- M8 async/futures -------
 			case *hir.FutureNew:
