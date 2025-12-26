@@ -107,3 +107,30 @@ def divmod(a: int, b: int) -> tuple[int, int]:
     let quotient: int = a / b
     let remainder: int = a % b
     return (quotient, remainder)
+
+# EXPECTED_OUTPUT:
+# 1
+# 42
+# 10
+# 20
+# 30
+# 100
+# 200
+# 300
+# a == b: equal
+# a == c: different
+# a != c: different
+# 42
+# 100
+# 3
+# 2
+# 0
+# 1
+# 10
+# 20
+# 30
+# 3
+# 2
+# 100
+# 300
+# All tuple tests passed!

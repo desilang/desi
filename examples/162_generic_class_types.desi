@@ -145,3 +145,42 @@ def main() -> int:
 
     print("All generic class tests passed!")
     0
+
+# EXPECTED_OUTPUT:
+# === Box<int> ===
+# 42
+# 100
+# === Box<float> ===
+# 3.140000
+# 2.710000
+# === Box<bool> ===
+# true
+# false
+# === Box<str> ===
+# hello
+# world
+# === Box<list<int>> ===
+# 3
+# 2
+# === Box<i64> ===
+# 4294967295
+# === Box<Point> ===
+# 10
+# 20
+# === Box<i32> ===
+# 2147483647
+# === Pair<int, str> ===
+# 42
+# answer
+# 100
+# century
+# === Pair<str, float> ===
+# pi
+# 3.141590
+# === Pair<bool, int> ===
+# first is true
+# 999
+# === Multiple Box<int> instances ===
+# 111
+# 222
+# All generic class tests passed!

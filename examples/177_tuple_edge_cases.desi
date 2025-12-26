@@ -120,3 +120,19 @@ def test_equality_edge_cases():
         print("Negative equality: PASS")
     else:
         print("Negative equality: FAIL")
+
+# EXPECTED_OUTPUT:
+# Negative number comparison: PASS
+# Same prefix comparison: PASS
+# Equal tuples strict <: PASS
+# Equal tuples <= : PASS
+# Large number comparison: PASS
+# First element decides: PASS
+# > operator: PASS
+# >= with greater: PASS
+# Self-concatenation: PASS
+# Chain concatenation: PASS
+# Value equality: PASS
+# Inequality: PASS
+# Negative equality: PASS
+# All edge case tests passed!
