@@ -9,3 +9,11 @@ def main() -> int:
     
     print("Typed iteration test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# 1
+# 2
+# 3
+# 4
+# 5
+# Typed iteration test passed!

@@ -17,3 +17,10 @@ def main() -> int:
     
     print("File I/O test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# File written!
+# Read content:
+# Hello from Desi!
+# Second line
+# File I/O test passed!

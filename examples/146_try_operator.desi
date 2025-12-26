@@ -14,3 +14,7 @@ def main() -> int:
     print(f"Unwrapped: {val}")
     print("Test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Unwrapped: <?>
+# Test passed!

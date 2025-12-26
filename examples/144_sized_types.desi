@@ -24,3 +24,6 @@ def main() -> int:
     
     print("Sized types test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Sized types test passed!
