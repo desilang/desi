@@ -30,3 +30,16 @@ def main() -> int:
     
     print("Done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Creating class instance...
+# Created!
+# Creating list...
+# List created!
+# Calling iter()...
+# Iterator created!
+# Calling collect()...
+# Collected!
+# Accessing collected[0].val:
+# 42
+# Done!

@@ -14,3 +14,6 @@ def main() -> int:
   # Cast both to int for addition
   print((y as int) + pi_int)  # Should be 1000 + 3 = 1003
   0
+
+# EXPECTED_OUTPUT:
+# 1003

@@ -18,3 +18,11 @@ def main():
     let tup4: tuple[int, int] = (100, 200)
     print(tup4[0])
     print(tup4[1])
+
+# EXPECTED_OUTPUT:
+# 10
+# 20
+# 1
+# hello
+# 100
+# 200
