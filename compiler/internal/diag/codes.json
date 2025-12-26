@@ -694,6 +694,16 @@
       "id": "DCL0004",
       "title": "cannot assign to immutable field",
       "help": "declare the field as 'pub mut field: Type' to allow mutation"
+    },
+    "del_wrong_params": {
+      "id": "DTC0020",
+      "title": "__del__ must have zero parameters",
+      "help": "__del__ is a destructor and takes only 'self' (no other parameters)"
+    },
+    "del_wrong_return": {
+      "id": "DTC0021",
+      "title": "__del__ must not have a return type",
+      "help": "__del__ is a destructor and must return void (no return type annotation)"
     }
   }
 }
