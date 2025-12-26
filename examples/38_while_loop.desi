@@ -4,3 +4,11 @@ def main():
         print(count)
         count := count + 1
     print("Done")
+
+# EXPECTED_OUTPUT:
+# 0
+# 1
+# 2
+# 3
+# 4
+# Done

@@ -77,3 +77,38 @@ def main():
         count := count + 1
     
     print("All basics verified")
+
+# EXPECTED_OUTPUT:
+# --- Primitives ---
+# 42
+# -10
+# True works
+# False works
+# Hello Desi
+# --- Arithmetic ---
+# 15
+# 5
+# 50
+# 5
+# 1
+# --- Comparisons ---
+# 10 > 5
+# 5 < 10
+# 10 == 10
+# 10 != 5
+# 10 >= 10
+# 5 <= 5
+# --- Tuples ---
+# 1
+# 2
+# 3
+# --- Sets ---
+# 1 in set
+# 4 not in set
+# --- Dicts ---
+# Has key a
+# --- Control Flow ---
+# 0
+# 1
+# 2
+# All basics verified
