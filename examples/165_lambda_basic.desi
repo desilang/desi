@@ -29,3 +29,12 @@ def main() -> int:
     print(result2)
     
     0
+
+# EXPECTED_OUTPUT:
+# 42
+# Hello, World!
+#
+# 30
+# Desi
+# Hello!
+# 30

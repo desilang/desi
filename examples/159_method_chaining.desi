@@ -36,3 +36,35 @@ def main() -> int:
         print(x)
     
     0
+
+# EXPECTED_OUTPUT:
+# pipe map:
+# 2
+# 4
+# 6
+# 8
+# 10
+# pipe filter:
+# 2
+# 4
+# 6
+# 8
+# 10
+# dot map:
+# 2
+# 4
+# 6
+# 8
+# 10
+# dot filter:
+# 2
+# 4
+# 6
+# 8
+# 10
+# dot chain:
+# 2
+# 4
+# 6
+# 8
+# 10

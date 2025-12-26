@@ -7,3 +7,12 @@ def main() -> int:
     
     print("Done!")
     0
+
+# EXPECTED_OUTPUT:
+# Iterating over set:
+# 5
+# 3
+# 4
+# 2
+# 1
+# Done!

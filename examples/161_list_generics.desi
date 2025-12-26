@@ -23,3 +23,7 @@ def main() -> int:
     print(v2)  # Should print 100
 
     0
+
+# EXPECTED_OUTPUT:
+# 42
+# 100
