@@ -42,3 +42,17 @@ def test_mixed_access():
     print(named.first)
     print(named.0)
     print("test_mixed_access: PASS")
+
+# EXPECTED_OUTPUT:
+# Named tuple created
+# test_named_creation: PASS
+# 100
+# 200
+# test_named_field_access: PASS
+# 5
+# 10
+# test_named_in_function: PASS
+# 1
+# 1
+# test_mixed_access: PASS
+# All named tuple tests passed!
