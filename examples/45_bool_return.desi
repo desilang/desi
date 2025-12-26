@@ -17,3 +17,9 @@ def main():
         print("5 is odd")
     
     print("Bool return works!")
+
+# EXPECTED_OUTPUT:
+# Testing bool return
+# 4 is even
+# 5 is odd
+# Bool return works!
