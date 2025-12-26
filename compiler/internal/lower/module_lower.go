@@ -107,6 +107,17 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 				monomorphized := LowerMonomorphizedClass(cd, info, src)
 				out.Funcs = append(out.Funcs, monomorphized...)
 			}
+
+			// Lower nested classes (constructors + methods)
+			for _, nested := range cd.Nested {
+				// Use qualified name: Parent_Nested
+				qualifiedName := fmt.Sprintf("%s_%s", cd.Name.Name, nested.Name.Name)
+				nestedConstructors := LowerClassConstructorWithName(nested, info, qualifiedName)
+				out.Funcs = append(out.Funcs, nestedConstructors...)
+
+				nestedMethods := LowerClassMethodsWithName(nested, info, src, qualifiedName)
+				out.Funcs = append(out.Funcs, nestedMethods...)
+			}
 		}
 	}
 

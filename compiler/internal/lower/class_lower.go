@@ -13,8 +13,12 @@ import (
 // POLICY: If no __new__, generate zero-arg constructor with default initialization
 // POLICY: If __new__ exists, lower the user-defined __new__ method
 func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) []*hir.Func {
-	className := cd.Name.Name
+	return LowerClassConstructorWithName(cd, info, cd.Name.Name)
+}
 
+// LowerClassConstructorWithName is like LowerClassConstructor but uses an explicit name.
+// This is needed for nested classes where the name should be Parent_Child instead of just Child.
+func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, className string) []*hir.Func {
 	var cls *types.Class
 	if t := info.Types[cd]; t != nil {
 		cls, _ = t.(*types.Class)
@@ -35,30 +39,65 @@ func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) []*hir.Func {
 		// Lower user-defined __new__
 		return LowerDunderNew(className, newMethod, info, cls)
 	} else {
-		// Generate default zero-arg constructor
-		return []*hir.Func{LowerDefaultConstructor(className, cls)}
+		// Generate default zero-arg constructor (returns slice of [wrapper, __new__])
+		return LowerDefaultConstructor(className, cls)
 	}
 }
 
 // LowerDefaultConstructor generates a zero-arg constructor
-// Allocates class instance and zero-initializes all fields
-// The function is named ClassName___new__ to match call site expectations
-func LowerDefaultConstructor(className string, cls *types.Class) *hir.Func {
+// Returns TWO functions:
+// 1. ClassName___new__(self) - the initializer
+// 2. ClassName() -> ptr - the allocator wrapper that mallocs + calls __new__
+func LowerDefaultConstructor(className string, cls *types.Class) []*hir.Func {
+	// 1. Generate the __new__ method
 	ctorName := fmt.Sprintf("%s___new__", className)
-	b := hir.NewFunc(ctorName)
-	// Zero-arg default constructor still takes self as first param for consistency
-	b.Func().Params = []hir.Param{{Name: "self", Type: "ptr"}}
-	b.Func().RetType = "void" // __new__ doesn't return, it initializes self
+	newFn := hir.NewFunc(ctorName)
+	newFn.Func().Params = []hir.Param{{Name: "self", Type: "ptr"}}
+	newFn.Func().RetType = "void"
 
 	entry := hir.NewBlock("entry")
-
-	// Default __new__ does nothing - self is already allocated by caller
-	// and fields are zero-initialized by default
-	// Just return (void)
 	entry.Stmts = append(entry.Stmts, &hir.Ret{})
+	newFn.Func().Blocks = []*hir.Block{entry}
 
-	b.Func().Blocks = []*hir.Block{entry}
-	return b.Func()
+	// 2. Generate the allocator wrapper
+	wrapper := hir.NewFunc(className)
+	wrapper.Func().Params = nil // zero-arg
+	wrapper.Func().RetType = "ptr"
+
+	wrapperEntry := hir.NewBlock("entry")
+
+	// Calculate size
+	totalSize := 0
+	if cls != nil {
+		for _, field := range cls.Fields {
+			totalSize += getSize(field.Type)
+		}
+	}
+	if totalSize == 0 {
+		totalSize = 1
+	}
+
+	// Allocate
+	instancePtr := hir.Temp{Name: "%instance"}
+	wrapperEntry.Stmts = append(wrapperEntry.Stmts, &hir.Call{
+		Dst:  instancePtr,
+		Fn:   "malloc",
+		Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", totalSize)}},
+		Type: "ptr",
+	})
+
+	// Call __new__
+	wrapperEntry.Stmts = append(wrapperEntry.Stmts, &hir.Call{
+		Fn:   ctorName,
+		Args: []hir.Value{instancePtr},
+	})
+
+	// Return instance
+	wrapperEntry.Stmts = append(wrapperEntry.Stmts, &hir.Ret{Val: instancePtr})
+
+	wrapper.Func().Blocks = []*hir.Block{wrapperEntry}
+
+	return []*hir.Func{wrapper.Func(), newFn.Func()}
 }
 
 // LowerDunderNew lowers a user-defined __new__ method
@@ -136,7 +175,12 @@ func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, cl
 // LowerClassMethods generates HIR functions for all class methods
 // POLICY: Methods have implicit self, so we inject it as first parameter in HIR
 func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
-	className := cd.Name.Name
+	return LowerClassMethodsWithName(cd, info, src, cd.Name.Name)
+}
+
+// LowerClassMethodsWithName is like LowerClassMethods but uses an explicit name.
+// This is needed for nested classes where the name should be Parent_Child.
+func LowerClassMethodsWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string) []*hir.Func {
 	var funcs []*hir.Func
 
 	for _, method := range cd.Methods {

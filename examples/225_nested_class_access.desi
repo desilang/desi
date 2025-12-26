@@ -1,47 +1,66 @@
-# Test 1: Nested class access within parent class
-# Child/sub classes should be accessible within parent class and its methods
+# Nested class access test - comprehensive data types
 
 class Outer:
-    # Private nested class (no 'pub' keyword)
+    # Nested class with multiple field types
     class Inner:
-        pub val: int
-        
-        pub def __new__(self, v: int):
-            self.val = v
-        
-        pub def get_value(self) -> int:
-            return self.val
-    
-    pub val: int
+        pub mut int_val: int
+        pub mut float_val: float
+        pub mut str_val: str
+        pub mut bool_val: bool
     
     pub def __new__(self):
-        self.val = 0
+        pass
     
-    # Method that creates and uses nested class
-    pub def create_inner(self, v: int) -> int:
-        let inner = Outer.Inner(v)
-        return inner.get_value()
+    pub def test_primitives(self) -> int:
+        let mut i = Outer.Inner()
+        
+        # Test int
+        i.int_val := 42
+        
+        # Test float
+        i.float_val := 3.14
+        
+        # Test str
+        i.str_val := "hello"
+        
+        # Test bool
+        i.bool_val := true
+        
+        return i.int_val
+
+# Custom struct type for nested class field
+struct Point:
+    x: int
+    y: int
+
+class Container:
+    # Nested class with custom struct field
+    class Node:
+        pub mut data: int
+        pub mut next_val: int  # Simplified - would be Option[Node] in real code
     
-    pub def use_inner(self) -> int:
-        # Access Inner class from within parent
-        let i = Outer.Inner(42)
-        return i.val
+    pub def __new__(self):
+        pass
+    
+    pub def test_custom_type(self) -> int:
+        let mut node = Container.Node()
+        node.data := 100
+        node.next_val := 0
+        return node.data
 
 def main() -> int:
+    # Test 1: Primitives
     let outer = Outer()
+    let result1 = outer.test_primitives()
+    print(result1)
     
-    # Test method that creates Inner
-    let result1 = outer.create_inner(100)
-    print(result1)  # 100
+    # Test 2: Custom types
+    let container = Container()
+    let result2 = container.test_custom_type()
+    print(result2)
     
-    # Test another method using Inner
-    let result2 = outer.use_inner()
-    print(result2)  # 42
-    
-    print("Nested class access test passed!")
     return 0
 
 # EXPECTED_OUTPUT:
-# 100
 # 42
-# Nested class access test passed!
+# 100

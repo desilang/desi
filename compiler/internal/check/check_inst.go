@@ -15,6 +15,16 @@ func (c *checker) checkTypeCall(call *ast.CallExpr, sym *Symbol) types.T {
 		t = c.checkStructInit(call, d)
 	case *ast.ClassDecl:
 		t = c.checkClassInit(call, d)
+		// Fallback: if checkClassInit returned types.Any (lookup failed for nested class),
+		// use the class type from sym directly since we already have it
+		if t == types.Any && sym.Type != nil {
+			if cls, ok := sym.Type.(*types.Class); ok {
+				// For zero-arg constructors without __new__, just return the class type
+				if len(call.Args) == 0 {
+					t = cls
+				}
+			}
+		}
 	case *ast.EnumDecl:
 		// For enum, T() is not valid - must use T.Variant()
 		// This case shouldn't normally be hit since enums use T.Variant() syntax
@@ -140,14 +150,22 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 }
 
 func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
-	// Look up the class type
+	var cls *types.Class
+
+	// Try scope lookup first (for top-level classes)
 	sym := c.scope.Lookup(d.Name.Name)
-	if sym == nil {
-		return types.Any
+	if sym != nil {
+		cls, _ = sym.Type.(*types.Class)
 	}
 
-	cls, ok := sym.Type.(*types.Class)
-	if !ok {
+	// Fallback to c.info.Types for nested classes
+	if cls == nil {
+		if t, ok := c.info.Types[d]; ok {
+			cls, _ = t.(*types.Class)
+		}
+	}
+
+	if cls == nil {
 		return types.Any
 	}
 

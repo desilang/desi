@@ -1273,6 +1273,16 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		}
 	}
 
+	// Fix for class constructor calls (nested classes etc)
+	// When the result type is a Class, force ptr return type
+	if ls.info != nil {
+		if t := ls.info.Types[x]; t != nil {
+			if _, ok := t.(*types.Class); ok {
+				retType = "ptr"
+			}
+		}
+	}
+
 	// Fix for Option/Result constructors (built-in enums)
 	// These are not always in ls.info.Funcs, so we force ptr return type.
 	if strings.HasPrefix(callee, "Option.") || strings.HasPrefix(callee, "Result.") {
