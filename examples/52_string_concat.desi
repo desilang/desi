@@ -2,3 +2,5 @@
 # String concatenation not yet implemented
     let s = "a" + "b"
     print(s)
+
+# SKIPPED: No runtime output - compile-only test

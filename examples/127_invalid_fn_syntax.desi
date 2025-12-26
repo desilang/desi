@@ -20,3 +20,5 @@ def main():
     
     # Test iteration (if for loop is implemented)
     print("Manual iteration test passed!")
+
+# SKIPPED: Compile-error test - intentionally contains invalid syntax

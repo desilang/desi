@@ -21,3 +21,5 @@ def main():
     # Test 4: Using none for a non-nullable field
     let none_count = TestTypes(name="none_test", count=none, ratio=1.5)
     print("None for count - should have failed!")
+
+# SKIPPED: No runtime output - compile-only type checking test

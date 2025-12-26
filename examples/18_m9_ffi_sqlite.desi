@@ -6,3 +6,5 @@ from sqlite3 import db_open, db_exec, db_errmsg
 
 def demo_sqlite_cleaner() -> none:
   print("ffi sqlite demo (compile-only)")
+
+# SKIPPED: FFI test - requires external SQLite library

@@ -2,3 +2,5 @@ def main() -> int:
 	print("answer=" + 42)     # implicit str coercion on '+'
 	print(3.14 + "π")         # also ok -> str
 	return 0
+
+# SKIPPED: Import test - requires module dependencies

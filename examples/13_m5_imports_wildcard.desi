@@ -6,3 +6,5 @@ def main() -> int:
 	print("add(2, 3) = " + str(add(2, 3)))
 	print("sub(5, 2) = " + str(sub(5, 2)))
 	return 0
+
+# SKIPPED: Import test - requires module dependencies
