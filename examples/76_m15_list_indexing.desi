@@ -18,3 +18,7 @@ def main() -> int:
         
     print("List indexing test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Length: 5, First: 1
+# List indexing test passed!

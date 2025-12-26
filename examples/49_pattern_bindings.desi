@@ -35,3 +35,13 @@ def main() -> int:
   
   print("All binding tests passed!")
   return 0
+
+# EXPECTED_OUTPUT:
+# Testing pattern variable bindings
+# Test 1: Extract int payload
+# Got: 42
+# Test 2: Extract str payload
+# Message: success
+# Test 3: Use binding in match result
+# Doubled: 10
+# All binding tests passed!

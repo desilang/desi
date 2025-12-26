@@ -24,3 +24,12 @@ def main() -> int:
     print(p[1])
     
     return 0
+
+# EXPECTED_OUTPUT:
+# identity(42):
+# 42
+# identity('hello'):
+# hello
+# swap(1, 2):
+# 2
+# 1

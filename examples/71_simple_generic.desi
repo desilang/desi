@@ -14,3 +14,4 @@ def main() -> int:
     
     print("Generic test passed")
     return 0
+

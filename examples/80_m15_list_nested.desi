@@ -20,3 +20,7 @@ def main() -> int:
         
     print("Nested list test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Middle element: 5
+# Nested list test passed!

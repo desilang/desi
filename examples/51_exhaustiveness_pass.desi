@@ -14,3 +14,7 @@ def main():
         Color.Blue(): print("Blue")
 
     print("Exhaustiveness check passed!")
+
+# EXPECTED_OUTPUT:
+# Red
+# Exhaustiveness check passed!

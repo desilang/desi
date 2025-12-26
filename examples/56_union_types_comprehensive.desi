@@ -52,3 +52,19 @@ def main():
     print("---")
     test_multi_variant()
     print("\nAll union type tests passed! ✅")
+
+# EXPECTED_OUTPUT:
+# int accepted
+# float accepted
+# Basic union test passed!
+# ---
+# int accepted
+# none accepted
+# Nullable test passed!
+# ---
+# int accepted
+# float accepted
+# str accepted
+# Multi-variant test passed!
+# 
+# All union type tests passed! ✅

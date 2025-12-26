@@ -10,3 +10,25 @@ def main():
         print("a" + "b" + "c")
         
         i := i + 1
+
+# EXPECTED_OUTPUT:
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc
+# prefixsuffix
+# abc

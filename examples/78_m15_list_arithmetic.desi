@@ -16,3 +16,8 @@ def main() -> int:
         
     print("List arithmetic test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# first: 10, second: 20
+# Sum: 30
+# List arithmetic test passed!

@@ -23,3 +23,6 @@ class Container<T>:
 
 def main():
     print("Parser test for all generic types")
+
+# EXPECTED_OUTPUT:
+# Parser test for all generic types

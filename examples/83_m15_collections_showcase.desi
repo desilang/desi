@@ -57,3 +57,16 @@ def main() -> int:
     print(f"Matrix[1][0] (should be 3): {val}")
     
     return 0
+
+# EXPECTED_OUTPUT:
+# --- List Showcase ---
+# Initial list len: 5
+# After append(60), last element: 60
+# --- Dict Showcase ---
+# Alice score: 95
+# Added Dave. Has Dave: true
+# --- Set Showcase ---
+# Set has green: true
+# Added yellow. Has yellow: true
+# --- Nested Collections ---
+# Matrix[1][0] (should be 3): 3

@@ -33,3 +33,11 @@ def main():
     _: print("Wildcard matched for Running")
 
   print("Done")
+
+# EXPECTED_OUTPUT:
+# Testing enums and match
+# Created Status.Pending
+# matched
+# Wildcard matched for number
+# Wildcard matched for Running
+# Done

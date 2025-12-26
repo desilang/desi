@@ -63,3 +63,23 @@ def main():
     
     # All tests
     print("=== ALL TESTS PASSED ===")
+
+# EXPECTED_OUTPUT:
+# === COMPREHENSIVE LANGUAGE TEST ===
+# --- Functions ---
+# 40
+# 42
+# --- Complex Expressions ---
+# 26
+# --- Comparisons ---
+# 10 is positive
+# -5 is not positive
+# --- Loops with Mutable State ---
+# 120
+# --- Tuples ---
+# 300
+# --- Sets ---
+# Set contains 20
+# --- Dicts ---
+# Alice is in scores
+# === ALL TESTS PASSED ===

@@ -25,3 +25,7 @@ def main() -> int:
         
     print("List structs test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# First point x: 10
+# List structs test passed!

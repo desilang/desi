@@ -13,3 +13,7 @@ def main() -> int:
     
     print("Generic string test passed")
     return 0
+
+# EXPECTED_OUTPUT:
+# Got: hello
+# Generic string test passed
