@@ -28,3 +28,11 @@ def main() -> int:
         print("String set works")
 
     return 0
+
+# EXPECTED_OUTPUT:
+# Set created
+# Contains 1
+# Added 4
+# Removed 2
+# Cleared set
+# String set works

@@ -1,3 +1,6 @@
 def main():
 	let x: int = 10
 	print(f"x is {x}")
+
+# EXPECTED_OUTPUT:
+# x is 10

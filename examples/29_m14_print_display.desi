@@ -10,3 +10,6 @@ def main():
 	let p: Point = Point(x=10, y=20)
 	# This should now work! print accepts Display types
 	print(p)
+
+# EXPECTED_OUTPUT:
+# Point
