@@ -19,3 +19,6 @@ def main():
 
 	
 	print("Advanced set operations test completed successfully!")
+
+# EXPECTED_OUTPUT:
+# Advanced set operations test completed successfully!

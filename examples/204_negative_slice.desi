@@ -69,3 +69,24 @@ def main() -> int:
 
 	print("All tests passed!")
 	return 0
+
+# EXPECTED_OUTPUT:
+# === List negative slicing ===
+# [40, 50]
+# [10, 20, 30, 40]
+# [20, 30, 40]
+# === List negative indexing ===
+# 50
+# 40
+# 30
+# === String slicing ===
+# Hello
+# World
+# === String negative slicing ===
+# World!
+# Hello, World
+# === Custom class indexing ===
+# 100
+# 500
+# 400
+# All tests passed!
