@@ -4,3 +4,6 @@ def main() -> int:
   let c: u8 = a + b
   print("u8 ok")
   0
+
+# EXPECTED_OUTPUT:
+# u8 ok

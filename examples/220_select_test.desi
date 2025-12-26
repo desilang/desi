@@ -24,3 +24,7 @@ def main() -> int:
     
     print("Select test done!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Got from ch1
+# Select test done!

@@ -3,3 +3,6 @@ def main() -> int:
 	 let b: list[int] = [x for x in range(0, 5) if ((x % 2) == 0)]
 	 print("ok")
 	 0
+
+# EXPECTED_OUTPUT:
+# ok
