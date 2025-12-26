@@ -1,0 +1,47 @@
+# Test 1: Nested class access within parent class
+# Child/sub classes should be accessible within parent class and its methods
+
+class Outer:
+    # Private nested class (no 'pub' keyword)
+    class Inner:
+        pub val: int
+        
+        pub def __new__(self, v: int):
+            self.val = v
+        
+        pub def get_value(self) -> int:
+            return self.val
+    
+    pub val: int
+    
+    pub def __new__(self):
+        self.val = 0
+    
+    # Method that creates and uses nested class
+    pub def create_inner(self, v: int) -> int:
+        let inner = Outer.Inner(v)
+        return inner.get_value()
+    
+    pub def use_inner(self) -> int:
+        # Access Inner class from within parent
+        let i = Outer.Inner(42)
+        return i.val
+
+def main() -> int:
+    let outer = Outer()
+    
+    # Test method that creates Inner
+    let result1 = outer.create_inner(100)
+    print(result1)  # 100
+    
+    # Test another method using Inner
+    let result2 = outer.use_inner()
+    print(result2)  # 42
+    
+    print("Nested class access test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 100
+# 42
+# Nested class access test passed!
