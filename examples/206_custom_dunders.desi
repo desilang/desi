@@ -38,3 +38,17 @@ def main() -> int:
     
     print("All dunder tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Testing list[index] := value ===
+# 10
+# 100
+# === Testing custom __getitem__ ===
+# 10
+# 20
+# 30
+# === Testing custom __setitem__ ===
+# 999
+# === Testing custom __len__ ===
+# 3
+# All dunder tests passed!
