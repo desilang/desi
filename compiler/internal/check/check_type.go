@@ -638,8 +638,8 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 						c.add(diagAt("DTC0020", method.Name.Span,
 							"__del__ must have zero parameters (only self)"))
 					}
-					// Return type must be void (nil)
-					if ft.Ret != nil {
+					// Return type must be void (nil or types.None)
+					if ft.Ret != nil && !types.Equal(ft.Ret, types.None) {
 						c.add(diagAt("DTC0021", method.Name.Span,
 							"__del__ must not have a return type (should be void)"))
 					}
