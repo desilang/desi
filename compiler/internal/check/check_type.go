@@ -632,6 +632,17 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 					if !found {
 						cls.Constructors = append(cls.Constructors, ft)
 					}
+				} else if methodName == "__del__" {
+					// Validate __del__ signature: zero params (only self), void return
+					if len(ft.Params) != 1 {
+						c.add(diagAt("DTC0020", method.Name.Span,
+							"__del__ must have zero parameters (only self)"))
+					}
+					// Return type must be void (nil)
+					if ft.Ret != nil {
+						c.add(diagAt("DTC0021", method.Name.Span,
+							"__del__ must not have a return type (should be void)"))
+					}
 				}
 			} else {
 				cls.Methods[methodName] = ft

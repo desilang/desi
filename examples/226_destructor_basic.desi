@@ -1,0 +1,28 @@
+# Test: __del__ destructor with RAII cleanup
+
+class FileHandle:
+    path: str
+    _handle: int
+    
+    pub def __new__(self, path: str):
+        self.path := path
+        self._handle := 42  # Simulated file handle
+        print("Opening file: " + path)
+    
+    pub def __del__(self):
+        print("Closing file: " + self.path)
+
+def main() -> int:
+    print("Start")
+    let f = FileHandle("test.txt")
+    print("Using file")
+    # __del__ should be called HERE at scope exit
+    print("End")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Start
+# Opening file: test.txt
+# Using file
+# Closing file: test.txt
+# End
