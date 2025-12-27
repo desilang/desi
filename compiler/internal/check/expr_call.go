@@ -46,7 +46,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 	}
 
-	// --- Case 1: module-qualified call: mod.fn(...)
+	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
 			if !hasNamed {
@@ -372,8 +372,22 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.info.Types[call] = retType
 				return retType
 			}
+
+			// Handle nested class constructor calls: Outer.Inner()
+			// typFieldExpr returns *types.Class for nested class access
+			if classType, ok := constructorType.(*types.Class); ok {
+				// Create a synthetic symbol for the nested class and delegate to checkTypeCall
+				nestedSym := &Symbol{
+					Name: fe.Name.Name,
+					Kind: SymType,
+					Type: classType,
+					Node: classType.Decl,
+				}
+				return c.checkTypeCall(call, nestedSym)
+			}
 		}
 		return nil
+
 	}
 
 	// --- Case 2: plain identifier call: f(...)

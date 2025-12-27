@@ -196,6 +196,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					ls.cur().rcLike[s.Name.Name] = true
 				}
 			}
+			// Fallback: if sym is nil, get type from RHS expression (for nested class calls etc)
+			if varType == nil && s.Value != nil {
+				if t := ls.info.Types[s.Value]; t != nil {
+					varType = t
+				}
+			}
 		}
 		ls.cur().locals = append(ls.cur().locals, s.Name.Name)
 

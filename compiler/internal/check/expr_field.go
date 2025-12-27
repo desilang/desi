@@ -33,7 +33,43 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 					c.info.Types[x] = classMethod
 					return classMethod
 				}
-				// If not found in static/class methods, fall through to check constructors/variants
+				// Check for nested class access: Outer.Inner
+				if classType.Decl != nil {
+					for _, nested := range classType.Decl.Nested {
+						if nested.Name.Name == methodName {
+							// Check visibility: nested classes are private by default
+							if !nested.Pub {
+								// Check if we are within the parent class (family access)
+								inFamily := false
+								if selfSym := c.scope.Lookup("self"); selfSym != nil {
+									if selfType, ok := selfSym.Type.(*types.Class); ok {
+										// If self is of type Outer or a subclass, allow access
+										if types.Equal(selfType, classType) || types.IsSubclass(selfType, classType) {
+											inFamily = true
+										}
+									}
+								}
+								if !inFamily {
+									c.add(diagAt("DTE0010", x.Name.Span,
+										"nested class '"+methodName+"' is private (use 'pub class' to make it public)"))
+									return nil
+								}
+							}
+							// Get nested class type from c.info.Types where it was stored during collectClass
+							if nestedType := c.info.Types[nested]; nestedType != nil {
+								c.info.Types[x] = nestedType
+								return nestedType
+							}
+							// Fallback: try scope lookup
+							nestedSym := c.scope.Lookup(methodName)
+							if nestedSym != nil && nestedSym.Kind == SymType {
+								c.info.Types[x] = nestedSym.Type
+								return nestedSym.Type
+							}
+						}
+					}
+				}
+				// If not found in static/class methods/nested, fall through to check constructors/variants
 			}
 
 			// Check for enum variant constructor (existing logic)

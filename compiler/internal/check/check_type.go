@@ -133,6 +133,36 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		c.collectFunc(m)
 	}
 
+	// Collect nested classes
+	for _, nested := range d.Nested {
+		// Create Class type for nested class with IsNested=true
+		nestedCls := &types.Class{
+			Name:          nested.Name.Name,
+			TypeParams:    make([]types.TypeParam, 0, len(nested.TypeParams)),
+			Methods:       make(map[string]*types.Func),
+			StaticMethods: make(map[string]*types.Func),
+			ClassMethods:  make(map[string]*types.Func),
+			Properties:    make(map[string]*types.Func),
+			Constants:     make(map[string]*types.ClassConstant),
+			StaticFields:  make(map[string]*types.ClassStaticField),
+			Dunders:       make(map[string]*types.Func),
+			IsNested:      true,
+			Decl:          nested,
+		}
+		// Add type parameters
+		for _, tp := range nested.TypeParams {
+			nestedCls.TypeParams = append(nestedCls.TypeParams, types.TypeParam{Name: tp.Name})
+		}
+		// Register in outer scope (not the inner scope created for type params)
+		c.scope.parent.Define(&Symbol{
+			Name: nested.Name.Name,
+			Kind: SymType,
+			Type: nestedCls,
+			Node: nested,
+		})
+		c.info.Types[nested] = nestedCls
+	}
+
 	// M14 Stage 2: Auto-generate default Display impl if not provided
 	c.ensureDefaultDisplay(d.Name.Name)
 }
@@ -202,13 +232,22 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 }
 
 func (c *checker) checkClass(d *ast.ClassDecl) {
+	var cls *types.Class
+
+	// Try scope lookup first (for top-level classes)
 	sym := c.scope.Lookup(d.Name.Name)
-	if sym == nil {
-		return
+	if sym != nil {
+		cls, _ = sym.Type.(*types.Class)
 	}
 
-	cls, ok := sym.Type.(*types.Class)
-	if !ok {
+	// Fallback to c.info.Types for nested classes
+	if cls == nil {
+		if t, ok := c.info.Types[d]; ok {
+			cls, _ = t.(*types.Class)
+		}
+	}
+
+	if cls == nil {
 		return
 	}
 
@@ -313,6 +352,11 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			IsPub: field.Pub,
 			IsMut: field.Mut,
 		})
+	}
+
+	// Check nested classes EARLY (before method bodies need them)
+	for _, nested := range d.Nested {
+		c.checkClass(nested)
 	}
 
 	// Resolve constants
@@ -673,4 +717,5 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			}
 		}
 	}
+
 }
