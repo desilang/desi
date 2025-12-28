@@ -402,6 +402,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				recv := ls.lowerExpr(field.X)
 				rhs := ls.lowerExpr(s.RHS[0])
 
+				// Mark RHS variable as moved - field now owns it
+				if id, ok := s.RHS[0].(*ast.Ident); ok {
+					ls.cur().moved[id.Name] = true
+				}
+
 				// Get field info
 				fieldName := field.Name.Name
 				var recvType types.T
