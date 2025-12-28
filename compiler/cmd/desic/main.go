@@ -17,6 +17,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/token"
+	"github.com/desilang/desi/compiler/lib"
 )
 
 var (
@@ -467,7 +468,7 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		return true, nil
 	}
 
-	// Build loader from -I roots + stdlib + file's directory.
+	// Build loader from -I roots + embedded stdlib + file's directory.
 	var loader resolve.Loader
 	roots := splitRoots(iroots)
 	// Include the file's parent directory for relative imports (e.g., from bar import greet)
@@ -476,11 +477,9 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		fileDir, _ = os.Getwd()
 	}
 	roots = append(roots, fileDir)
-	// Stdlib starts at this index
-	stdlibIdx := len(roots)
-	// Always include stdlib (compiler/lib) as a default root
-	roots = append(roots, "compiler/lib")
-	loader = resolve.NewFSLoaderMultiWithStdlib(roots, stdlibIdx)
+	// Use embedded stdlib from the binary
+	embedStdlib := resolve.NewEmbedFSLoader(lib.StdlibFS)
+	loader = resolve.NewFSLoaderMultiWithStdlib(roots, embedStdlib)
 
 	res := check.CheckWithLoader(mod, loader)
 	if len(res.Diags) == 0 {
