@@ -718,12 +718,26 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			case *hir.Drop:
 				// Resolve variable through SSA map if it's aliased
 				var actualVal hir.Value = x.Val
+				needsLoad := false
 				if v, ok := x.Val.(hir.Var); ok {
 					if alias, exists := m.ssa[v.Name]; exists {
 						actualVal = alias
+					} else {
+						// No SSA alias means variable uses alloca - need to load before free
+						needsLoad = true
 					}
 				}
 				valOp := m.ptrOperand(actualVal)
+
+				// If variable is stored via alloca, load the actual heap pointer first
+				if needsLoad {
+					loadTemp := fmt.Sprintf("%%drop_load_%d", m.tempID)
+					m.tempID++
+					// valOp already contains "ptr %varname", extract just the %varname part
+					wprintf(&m.funcs, "  %s = load ptr, %s\n", loadTemp, valOp)
+					valOp = "ptr " + loadTemp
+				}
+
 				if x.Type != nil {
 					if classType, ok := x.Type.(*types.Class); ok {
 						// Emit __del__ calls for class and all base classes (child → parent order)
