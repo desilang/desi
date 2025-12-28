@@ -365,6 +365,16 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveMutexGuardField(x, g)
 	}
 
+	// Handle Rc[T] methods: get, clone
+	if rc, ok := t.(*types.Rc); ok {
+		return c.resolveRcMethod(x, rc)
+	}
+
+	// Handle Arc[T] methods: get, clone (same as Rc)
+	if arc, ok := t.(*types.Arc); ok {
+		return c.resolveArcMethod(x, arc)
+	}
+
 	// Handle Channel methods: sender, receiver, close
 	if ch, ok := t.(*types.Channel); ok {
 		return c.resolveChannelMethod(x, ch)
@@ -1207,6 +1217,48 @@ func (c *checker) resolveTaskGroupMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf(nil, types.Bool, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on TaskGroup"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveRcMethod resolves methods on Rc[T]: get, clone
+func (c *checker) resolveRcMethod(x *ast.FieldExpr, rc *types.Rc) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "get":
+		// get() -> T (returns the inner value)
+		methodType = types.FuncOf(nil, rc.Inner, false)
+	case "clone":
+		// clone() -> Rc[T] (increments refcount, returns same Rc)
+		methodType = types.FuncOf(nil, rc, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Rc"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveArcMethod resolves methods on Arc[T]: get, clone (same as Rc)
+func (c *checker) resolveArcMethod(x *ast.FieldExpr, arc *types.Arc) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "get":
+		// get() -> T (returns the inner value)
+		methodType = types.FuncOf(nil, arc.Inner, false)
+	case "clone":
+		// clone() -> Arc[T] (increments refcount, returns same Arc)
+		methodType = types.FuncOf(nil, arc, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Arc"))
 		return nil
 	}
 
