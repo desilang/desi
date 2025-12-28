@@ -95,7 +95,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 	for _, d := range mod.Decls {
 		if cd, ok := d.(*ast.ClassDecl); ok {
 			// Constructor
-			constructors := LowerClassConstructor(cd, info)
+			constructors := LowerClassConstructor(cd, info, src)
 			out.Funcs = append(out.Funcs, constructors...)
 
 			// Methods
@@ -112,7 +112,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			for _, nested := range cd.Nested {
 				// Use qualified name: Parent_Nested
 				qualifiedName := fmt.Sprintf("%s_%s", cd.Name.Name, nested.Name.Name)
-				nestedConstructors := LowerClassConstructorWithName(nested, info, qualifiedName)
+				nestedConstructors := LowerClassConstructorWithName(nested, info, src, qualifiedName)
 				out.Funcs = append(out.Funcs, nestedConstructors...)
 
 				nestedMethods := LowerClassMethodsWithName(nested, info, src, qualifiedName)

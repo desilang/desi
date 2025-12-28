@@ -12,13 +12,13 @@ import (
 // LowerClassConstructor generates the constructor function for a class
 // POLICY: If no __new__, generate zero-arg constructor with default initialization
 // POLICY: If __new__ exists, lower the user-defined __new__ method
-func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info) []*hir.Func {
-	return LowerClassConstructorWithName(cd, info, cd.Name.Name)
+func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
+	return LowerClassConstructorWithName(cd, info, src, cd.Name.Name)
 }
 
 // LowerClassConstructorWithName is like LowerClassConstructor but uses an explicit name.
 // This is needed for nested classes where the name should be Parent_Child instead of just Child.
-func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, className string) []*hir.Func {
+func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string) []*hir.Func {
 	var cls *types.Class
 	if t := info.Types[cd]; t != nil {
 		cls, _ = t.(*types.Class)
@@ -37,7 +37,7 @@ func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, classNam
 
 	if hasNew {
 		// Lower user-defined __new__
-		return LowerDunderNew(className, newMethod, info, cls)
+		return LowerDunderNew(className, newMethod, info, src, cls)
 	} else {
 		// Generate default zero-arg constructor (returns slice of [wrapper, __new__])
 		return LowerDefaultConstructor(className, cls)
@@ -101,12 +101,12 @@ func LowerDefaultConstructor(className string, cls *types.Class) []*hir.Func {
 }
 
 // LowerDunderNew lowers a user-defined __new__ method
-func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, cls *types.Class) []*hir.Func {
+func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, src []byte, cls *types.Class) []*hir.Func {
 	// 1. Lower the user's __new__ method as ClassName___new__
 	// This method takes (self, args...)
 	// Pass className context so return ClassName(field=val) initializes self instead of allocating
 	selfPtr := hir.Temp{Name: "%self"}
-	newFn := LowerFuncForDunderNew(method, info, nil, className, selfPtr)
+	newFn := LowerFuncForDunderNew(method, info, src, className, selfPtr)
 	newFn.Name = fmt.Sprintf("%s___new__", className)
 
 	// Ensure __new__ returns void (it initializes self, doesn't return a new instance)
