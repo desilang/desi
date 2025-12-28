@@ -144,11 +144,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					}
 				}
 
-				// If type is a reference type (set, dict, list, str) with an initializer,
-				// use SSA directly without alloca (immutable variables)
-				if isReferenceType(x.Type) && x.Init != nil {
+				// If type is a reference type (set, dict, list, str, class) with an initializer,
+				// use SSA directly without alloca (immutable variables / class instances)
+				if x.Init != nil && isReferenceType(x.Type) {
 					m.ssa[x.Name] = x.Init
-					// Skip alloca for immutable reference types - they're already pointers
+					// Skip alloca for reference types and classes - they're already pointers
 					continue
 				}
 
@@ -716,7 +716,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- Drop (RAII cleanup) -------
 			case *hir.Drop:
-				// Resolve variable through SSA map if it's alised
+				// Resolve variable through SSA map if it's aliased
 				var actualVal hir.Value = x.Val
 				if v, ok := x.Val.(hir.Var); ok {
 					if alias, exists := m.ssa[v.Name]; exists {
@@ -728,12 +728,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					if classType, ok := x.Type.(*types.Class); ok {
 						// Emit __del__ calls for class and all base classes (child → parent order)
 						m.emitDestructorChain(classType, valOp)
+						// Free the class instance after destructor
+						wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
+						m.ensureDecl("declare void @free(ptr)")
 					}
 				}
-
-				// Emit free for the variable (if it's a pointer)
-				wprintf(&m.funcs, "  call void @free(ptr %s)\n", valOp)
-				m.ensureDecl("declare void @free(ptr)")
 
 			// ------- M8 async/futures -------
 			case *hir.FutureNew:

@@ -25,9 +25,10 @@ func (m *Module) emitDestructorChain(cls *types.Class, valOperand string) {
 	for _, c := range chain {
 		// Generate the mangled __del__ name
 		delName := fmt.Sprintf("%s___del__", c.Name)
-		// Emit call: ClassName___del__(ptr %valOperand)
-		wprintf(&m.funcs, "  call void @%s(ptr %s)\n", delName, valOperand)
+		// Emit call: ClassName___del__(valOperand) - valOperand already includes "ptr "
+		// Use i32 return type to match actual lowered function
+		wprintf(&m.funcs, "  call i32 @%s(%s)\n", delName, valOperand)
 		// Ensure declaration
-		m.ensureDecl(fmt.Sprintf("declare void @%s(ptr)", delName))
+		m.ensureDecl(fmt.Sprintf("declare i32 @%s(ptr)", delName))
 	}
 }
