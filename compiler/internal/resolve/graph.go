@@ -16,6 +16,15 @@ func (g *Graph) AddEdge(from, to string) {
 	g.edges[from] = append(g.edges[from], to)
 }
 
+// EdgeCount returns the number of edges in the graph (for debugging)
+func (g *Graph) EdgeCount() int {
+	count := 0
+	for _, tos := range g.edges {
+		count += len(tos)
+	}
+	return count
+}
+
 // Cycles returns all back-edge cycles detected with a DFS.
 // For Phase-1, it’s fine to return the first cycle discovered; but we surface all simple cycles we hit.
 func (g *Graph) Cycles() [][]string {

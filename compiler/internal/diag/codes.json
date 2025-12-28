@@ -440,6 +440,11 @@
       "title": "entry not found",
       "help": "Make sure the entry file exists and isn’t a directory."
     },
+    "circular_import": {
+      "id": "DME0008",
+      "title": "circular import detected",
+      "help": "Circular imports are not allowed. Refactor to break the dependency cycle."
+    },
     "internal": {
       "id": "DME0099",
       "title": "internal error",

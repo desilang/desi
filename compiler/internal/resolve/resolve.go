@@ -46,6 +46,35 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 		ModuleExports: map[string]*Exports{},
 	}
 	var diags []diag.Diagnostic
+	visited := map[string]bool{} // track visited modules for cycle detection
+
+	// Normalize file path to module name (e.g., "/path/foo.desi" -> "foo")
+	srcModule := mod.File
+	if srcModule != "" {
+		// Extract basename and remove .desi extension
+		base := srcModule
+		if idx := strings.LastIndex(srcModule, "/"); idx >= 0 {
+			base = srcModule[idx+1:]
+		}
+		if strings.HasSuffix(base, ".desi") {
+			base = strings.TrimSuffix(base, ".desi")
+		}
+		srcModule = base
+	}
+	if srcModule == "" {
+		srcModule = "main"
+	}
+
+	resolveImportsRecursive(mod, srcModule, ldr, info, &diags, visited)
+	return diags, info
+}
+
+// resolveImportsRecursive resolves imports for a module and recursively resolves imported modules
+func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info *Info, diags *[]diag.Diagnostic, visited map[string]bool) {
+	if visited[srcModule] {
+		return // Already processed
+	}
+	visited[srcModule] = true
 
 	// Find the synthetic top function "__top__" and walk its Block.
 	var top *ast.FuncDecl
@@ -56,8 +85,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 		}
 	}
 	if top == nil || top.Body == nil {
-		// Nothing to resolve; return empty info.
-		return diags, info
+		return
 	}
 
 	for _, st := range top.Body.Stmts {
@@ -67,7 +95,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 			// Load the module; surface any parse diags but keep going.
 			tmod, pdiags, _ := ldr.Load(mpath)
 			if len(pdiags) > 0 {
-				diags = append(diags, pdiags...)
+				*diags = append(*diags, pdiags...)
 			}
 			// Collect exports once per module path (if load succeeded).
 			if tmod != nil {
@@ -75,7 +103,9 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 					info.ModuleExports[mpath] = CollectExports(tmod)
 				}
 				// augment with re-exports declared in the imported module itself
-				info.ModuleExports[mpath] = reexportIntoExports(info.ModuleExports[mpath], tmod, ldr, info, &diags)
+				info.ModuleExports[mpath] = reexportIntoExports(info.ModuleExports[mpath], tmod, ldr, info, diags)
+				// Recursively resolve imports from this module
+				resolveImportsRecursive(tmod, mpath, ldr, info, diags, visited)
 			}
 			local := ""
 			if s.Alias != nil {
@@ -86,14 +116,14 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 			if local != "" && tmod != nil {
 				info.Imports[local] = tmod
 			}
-			info.Graph.AddEdge(mod.File, mpath)
+			info.Graph.AddEdge(srcModule, mpath)
 
 		case *ast.FromImportStmt:
 			mpath := dotted(s.Path)
 			// Load the module and capture its exports.
 			tmod, pdiags, _ := ldr.Load(mpath)
 			if len(pdiags) > 0 {
-				diags = append(diags, pdiags...)
+				*diags = append(*diags, pdiags...)
 			}
 			var ex *Exports
 			if tmod != nil {
@@ -104,8 +134,10 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 					info.ModuleExports[mpath] = ex
 				}
 				// augment with re-exports declared in that module as well
-				info.ModuleExports[mpath] = reexportIntoExports(ex, tmod, ldr, info, &diags)
+				info.ModuleExports[mpath] = reexportIntoExports(ex, tmod, ldr, info, diags)
 				ex = info.ModuleExports[mpath] // update after re-exports
+				// Recursively resolve imports from this module
+				resolveImportsRecursive(tmod, mpath, ldr, info, diags, visited)
 			}
 
 			// Handle wildcard import: from X import *
@@ -120,7 +152,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 						info.FromItems[name] = tmod
 					}
 				}
-				info.Graph.AddEdge(mod.File, mpath)
+				info.Graph.AddEdge(srcModule, mpath)
 				continue // Skip normal item processing
 			}
 
@@ -138,16 +170,14 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 					if name != "" {
 						if len(ex.Funcs[name]) == 0 && ex.Classes[name] == nil {
 							msg := mpath + " has no exported '" + name + "'"
-							diags = append(diags, diagAt("DME0003", it.Span, msg))
+							*diags = append(*diags, diagAt("DME0003", it.Span, msg))
 						}
 					}
 				}
 			}
-			info.Graph.AddEdge(mod.File, mpath)
+			info.Graph.AddEdge(srcModule, mpath)
 		}
 	}
-
-	return diags, info
 }
 
 // reexportIntoExports augments 'ex' with function exports re-exported by 'mod' via
