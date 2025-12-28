@@ -476,9 +476,11 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		fileDir, _ = os.Getwd()
 	}
 	roots = append(roots, fileDir)
+	// Stdlib starts at this index
+	stdlibIdx := len(roots)
 	// Always include stdlib (compiler/lib) as a default root
 	roots = append(roots, "compiler/lib")
-	loader = resolve.NewFSLoaderMulti(roots)
+	loader = resolve.NewFSLoaderMultiWithStdlib(roots, stdlibIdx)
 
 	res := check.CheckWithLoader(mod, loader)
 	if len(res.Diags) == 0 {

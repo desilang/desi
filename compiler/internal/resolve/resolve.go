@@ -34,6 +34,28 @@ func diagAt(codeID string, span diag.Span, msg string) diag.Diagnostic {
 	}
 }
 
+// stdPrefix is the reserved namespace prefix for stdlib.
+const stdPrefix = "std."
+
+// loadModule loads a module, handling std.* prefix for stdlib-only imports.
+// Returns the module, diagnostics, actual path (without std. prefix if any), and whether it was stdlib-only.
+func loadModule(mpath string, ldr Loader) (*ast.Module, []diag.Diagnostic, string, bool) {
+	// Check for std. prefix - load from stdlib only
+	if strings.HasPrefix(mpath, stdPrefix) {
+		actualPath := strings.TrimPrefix(mpath, stdPrefix)
+		if sl, ok := ldr.(StdlibLoader); ok {
+			mod, diags, _ := sl.LoadStdlib(actualPath)
+			return mod, diags, actualPath, true
+		}
+		// Fall back to regular load if not a StdlibLoader
+		mod, diags, _ := ldr.Load(actualPath)
+		return mod, diags, actualPath, true
+	}
+	// Regular local-first load
+	mod, diags, _ := ldr.Load(mpath)
+	return mod, diags, mpath, false
+}
+
 // Resolve walks top-level imports in 'mod', loads targets via 'ldr', binds local
 // names, and records edges in the module graph. It also collects typed function
 // exports for each imported module and validates that from-items exist in that
@@ -92,20 +114,20 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 		switch s := st.(type) {
 		case *ast.ImportStmt:
 			mpath := dotted(s.Path)
-			// Load the module; surface any parse diags but keep going.
-			tmod, pdiags, _ := ldr.Load(mpath)
+			// Load the module (handles std.* prefix for stdlib-only imports)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}
 			// Collect exports once per module path (if load succeeded).
 			if tmod != nil {
-				if _, seen := info.ModuleExports[mpath]; !seen {
-					info.ModuleExports[mpath] = CollectExports(tmod)
+				if _, seen := info.ModuleExports[actualPath]; !seen {
+					info.ModuleExports[actualPath] = CollectExports(tmod)
 				}
 				// augment with re-exports declared in the imported module itself
-				info.ModuleExports[mpath] = reexportIntoExports(info.ModuleExports[mpath], tmod, ldr, info, diags)
+				info.ModuleExports[actualPath] = reexportIntoExports(info.ModuleExports[actualPath], tmod, ldr, info, diags)
 				// Recursively resolve imports from this module
-				resolveImportsRecursive(tmod, mpath, ldr, info, diags, visited)
+				resolveImportsRecursive(tmod, actualPath, ldr, info, diags, visited)
 			}
 			local := ""
 			if s.Alias != nil {
@@ -116,28 +138,28 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 			if local != "" && tmod != nil {
 				info.Imports[local] = tmod
 			}
-			info.Graph.AddEdge(srcModule, mpath)
+			info.Graph.AddEdge(srcModule, actualPath)
 
 		case *ast.FromImportStmt:
 			mpath := dotted(s.Path)
-			// Load the module and capture its exports.
-			tmod, pdiags, _ := ldr.Load(mpath)
+			// Load the module (handles std.* prefix for stdlib-only imports)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}
 			var ex *Exports
 			if tmod != nil {
-				if cur, seen := info.ModuleExports[mpath]; seen {
+				if cur, seen := info.ModuleExports[actualPath]; seen {
 					ex = cur
 				} else {
 					ex = CollectExports(tmod)
-					info.ModuleExports[mpath] = ex
+					info.ModuleExports[actualPath] = ex
 				}
 				// augment with re-exports declared in that module as well
-				info.ModuleExports[mpath] = reexportIntoExports(ex, tmod, ldr, info, diags)
-				ex = info.ModuleExports[mpath] // update after re-exports
+				info.ModuleExports[actualPath] = reexportIntoExports(ex, tmod, ldr, info, diags)
+				ex = info.ModuleExports[actualPath] // update after re-exports
 				// Recursively resolve imports from this module
-				resolveImportsRecursive(tmod, mpath, ldr, info, diags, visited)
+				resolveImportsRecursive(tmod, actualPath, ldr, info, diags, visited)
 			}
 
 			// Handle wildcard import: from X import *
@@ -152,7 +174,7 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 						info.FromItems[name] = tmod
 					}
 				}
-				info.Graph.AddEdge(srcModule, mpath)
+				info.Graph.AddEdge(srcModule, actualPath)
 				continue // Skip normal item processing
 			}
 
@@ -169,13 +191,13 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 					name := it.Name.Name
 					if name != "" {
 						if len(ex.Funcs[name]) == 0 && ex.Classes[name] == nil {
-							msg := mpath + " has no exported '" + name + "'"
+							msg := actualPath + " has no exported '" + name + "'"
 							*diags = append(*diags, diagAt("DME0003", it.Span, msg))
 						}
 					}
 				}
 			}
-			info.Graph.AddEdge(srcModule, mpath)
+			info.Graph.AddEdge(srcModule, actualPath)
 		}
 	}
 }
