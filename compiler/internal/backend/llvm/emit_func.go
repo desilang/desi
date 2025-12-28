@@ -748,11 +748,16 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 				if x.Type != nil {
 					if classType, ok := x.Type.(*types.Class); ok {
-						// Emit __del__ calls for class and all base classes (child → parent order)
-						m.emitDestructorChain(classType, valOp)
-						// Free the class instance after destructor
-						wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
-						m.ensureDecl("declare void @free(ptr)")
+						// Verify the value is actually a pointer before freeing
+						// Some class-typed values might be primitive results (e.g., operator calls)
+						llvmTy, _ := m.operand(actualVal)
+						if llvmTy == "ptr" {
+							// Emit __del__ calls for class and all base classes (child → parent order)
+							m.emitDestructorChain(classType, valOp)
+							// Free the class instance after destructor
+							wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
+							m.ensureDecl("declare void @free(ptr)")
+						}
 					}
 				}
 
