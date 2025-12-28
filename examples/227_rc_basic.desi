@@ -1,0 +1,14 @@
+# Basic reference counting test
+
+def main() -> int:
+    # Create an rc-wrapped integer
+    let shared = rc(42)
+    
+    # The value should be accessible (need to add .get() or field access)
+    print("Reference count test")
+    
+    # At scope exit, __rc_dec will be called automatically
+    return 0
+
+# EXPECTED_OUTPUT:
+# Reference count test

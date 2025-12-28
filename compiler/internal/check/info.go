@@ -379,4 +379,21 @@ func addPreludeBuiltins(info *Info) {
 		types.TaskGroupOf(),
 		[]string{},
 	)
+
+	// --- rc/arc builtins for reference counting ---
+	// rc(value: T) -> Rc[T]  (single-threaded refcount)
+	// arc(value: T) -> Arc[T] (thread-safe refcount)
+	// Special handling in expr_call.go for type inference
+	addN("rc",
+		[]types.T{nil}, // Any type - Rc[T] inferred from argument
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Rc[T] - determined in expr_call.go
+		[]string{"value"},
+	)
+	addN("arc",
+		[]types.T{nil}, // Any type - Arc[T] inferred from argument
+		[]ast.ParamMode{ast.ParamMove},
+		nil, // Arc[T] - determined in expr_call.go
+		[]string{"value"},
+	)
 }

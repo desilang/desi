@@ -518,6 +518,30 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				ls.b.Emit(&hir.Cast{Src: argVal, Dst: cap64, Type: "i64"})
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "channel_new", Args: []hir.Value{cap64}, Type: "ptr"})
 				return res
+			case "rc":
+				// rc(value) -> Rc* (reference-counted wrapper)
+				// Box the value and wrap it in an Rc
+				res := ls.b.FreshTemp("rc")
+				// Allocate memory for the inner value (8 bytes for ptr/i64)
+				innerPtr := ls.b.FreshTemp("rc_inner")
+				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				// Store the value into the inner allocation
+				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
+				// Create Rc with pointer to inner value
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "__rc_new", Args: []hir.Value{innerPtr}, Type: "ptr"})
+				// Mark result as rc-like so it gets DecRef at scope exit
+				ls.cur().rcLike[res.Name] = true
+				return res
+			case "arc":
+				// arc(value) -> Arc* (thread-safe reference-counted wrapper)
+				// Same as rc for now (Arc runtime not yet implemented)
+				res := ls.b.FreshTemp("arc")
+				innerPtr := ls.b.FreshTemp("arc_inner")
+				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "__rc_new", Args: []hir.Value{innerPtr}, Type: "ptr"})
+				ls.cur().rcLike[res.Name] = true
+				return res
 			}
 		}
 	}

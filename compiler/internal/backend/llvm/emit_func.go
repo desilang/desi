@@ -463,7 +463,18 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Tier-0 no-op
 			case *hir.DecRef:
 				if v, ok := x.Val.(hir.Var); ok {
-					wprintf(&m.funcs, "  call void @__rc_dec(ptr %%%s)\n", v.Name)
+					// Check if variable is in SSA map (aliased to temp)
+					var valOp string
+					if alias, exists := m.ssa[v.Name]; exists {
+						valOp = m.ptrOperand(alias)
+					} else {
+						// Variable uses alloca - need to load the actual pointer first
+						loadTemp := fmt.Sprintf("%%decref_load_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %s = load ptr, ptr %%%s\n", loadTemp, v.Name)
+						valOp = "ptr " + loadTemp
+					}
+					wprintf(&m.funcs, "  call void @__rc_dec(%s)\n", valOp)
 					m.needRcDec = true
 				}
 
