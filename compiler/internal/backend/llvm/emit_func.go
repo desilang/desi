@@ -716,6 +716,14 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 
 			// ------- Drop (RAII cleanup) -------
 			case *hir.Drop:
+				// Check if variable was moved (returned, passed by ownership, etc.)
+				// Moved variables are handled elsewhere - skip drop
+				if v, ok := x.Val.(hir.Var); ok {
+					if m.currentMoves != nil && m.currentMoves[v.Name] {
+						continue // Skip drop for moved variable
+					}
+				}
+
 				// Resolve variable through SSA map if it's aliased
 				var actualVal hir.Value = x.Val
 				needsLoad := false
