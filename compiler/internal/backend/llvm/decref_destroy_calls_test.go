@@ -14,7 +14,9 @@ func TestEmit_DeclAndCall_DecRef(t *testing.T) {
 		Blocks: []*hir.Block{{
 			Name: "entry",
 			Stmts: []hir.Stmt{
-				&hir.Let{Name: "x", Init: hir.ConstInt{Text: "1"}},
+				// Create an alloca for the Rc value
+				&hir.Alloca{Type: "ptr", Dst: hir.Temp{Name: "%x"}},
+				// DecRef on the alloca - should load the value first
 				&hir.DecRef{Val: hir.Var{Name: "x"}},
 				&hir.Ret{Val: hir.ConstInt{Text: "0"}},
 			},
@@ -27,9 +29,10 @@ func TestEmit_DeclAndCall_DecRef(t *testing.T) {
 	if !strings.Contains(ir, "declare void @__rc_dec(ptr)") {
 		t.Fatalf("missing declaration for __rc_dec:\n%s", ir)
 	}
-	if !strings.Contains(ir, "call void @__rc_dec(ptr %x)") {
-		// Escape %x in the message
-		t.Fatalf("missing call to __rc_dec(ptr %%x):\n%s", ir)
+	// DecRef should load from alloca then call __rc_dec
+	if !strings.Contains(ir, "call void @__rc_dec(ptr %decref_load_") {
+		// Escape % in the message
+		t.Fatalf("missing call to __rc_dec(ptr %%decref_load_...):\n%s", ir)
 	}
 }
 
