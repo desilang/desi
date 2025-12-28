@@ -28,7 +28,9 @@ func (m *Module) emitDestructorChain(cls *types.Class, valOperand string) {
 		// Emit call: ClassName___del__(valOperand) - valOperand already includes "ptr "
 		// Use i32 return type to match actual lowered function
 		wprintf(&m.funcs, "  call i32 @%s(%s)\n", delName, valOperand)
-		// Ensure declaration
-		m.ensureDecl(fmt.Sprintf("declare i32 @%s(ptr)", delName))
+		// Only add declaration if function isn't already defined in this module
+		if !m.definedFunctions[delName] {
+			m.ensureDecl(fmt.Sprintf("declare i32 @%s(ptr)", delName))
+		}
 	}
 }

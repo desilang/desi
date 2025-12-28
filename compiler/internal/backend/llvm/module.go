@@ -179,11 +179,11 @@ func escapeForCString(s string) string {
 //   - Emit lifetime.end for block locals immediately *before* an unconditional 'ret'.
 //   - Do NOT emit lifetime.end *after* the 'ret'.
 //
-// RegisterFunc pre-registers a function name (for forward declarations).
-// Note: This does NOT mark as defined - that happens in EmitFunc.
+// RegisterFunc pre-registers a function name so calls to it won't get
+// incorrect variadic declarations. Call this for all functions before
+// emitting any function bodies.
 func (m *Module) RegisterFunc(name string) {
-	// Registration is now a no-op for forward declaration purposes
-	// The actual "defined" tracking happens in EmitFunc
+	m.definedFunctions[name] = true
 }
 
 // operand infers the (type, value) pair for a generic value.
