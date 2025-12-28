@@ -12,8 +12,13 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 
 	switch method {
 	case "append":
-		// append(elem)
+		// append(elem) - list takes ownership of elem
 		elem := ls.lowerExpr(args[0])
+
+		// Mark variable as moved if it's an identifier (ownership transferred to list)
+		if id, ok := args[0].(*ast.Ident); ok {
+			ls.cur().moved[id.Name] = true
+		}
 
 		// Cast to ptr for generic storage (void*)
 		elemPtr := ls.b.FreshTemp("val_ptr")

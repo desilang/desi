@@ -1321,9 +1321,14 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag, toStrFunc}})
 
-		// Append elements
+		// Append elements - list takes ownership
 		for _, e := range x.Elems {
 			val := ls.lowerExpr(e)
+
+			// Mark variable as moved if it's an identifier (ownership transferred to list)
+			if id, ok := e.(*ast.Ident); ok {
+				ls.cur().moved[id.Name] = true
+			}
 
 			// Cast to ptr for generic storage (void*)
 			// This handles both pointers (bitcast) and integers (inttoptr)
