@@ -556,23 +556,24 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		// pass is a no-op - nothing to emit
 
 	case *ast.ReturnStmt:
-		// If returning a variable, mark it as moved BEFORE emitting drops
-		// to prevent double-free (we don't want to free something we're returning)
+		// IMPORTANT: Evaluate return expression FIRST, before any drops!
+		// If return expression references a local that gets freed, we need
+		// to capture its value before freeing.
+		var v hir.Value
 		if s.Value != nil {
+			v = ls.lowerExpr(s.Value)
+			ls.consumeTemp(v) // Return consumes the value
+
+			// If returning a variable (not a field or expression), mark it moved
 			if id, ok := s.Value.(*ast.Ident); ok {
-				// Mark variable as moved in all scopes from current to root
 				for i := len(ls.scopes) - 1; i >= 0; i-- {
 					ls.scopes[i].moved[id.Name] = true
 				}
 			}
 		}
-		// Before returning, run defers and drop locals from all open scopes (inner→outer).
+		// THEN run defers and drop locals from all open scopes (inner→outer).
+		// The return value is already captured, so we can safely free locals.
 		ls.emitAllDefersAndDrops()
-		var v hir.Value
-		if s.Value != nil {
-			v = ls.lowerExpr(s.Value)
-			ls.consumeTemp(v) // Return consumes the value
-		}
 		ls.b.Emit(&hir.Ret{Val: v})
 		ls.terminated = true
 
