@@ -1,0 +1,23 @@
+# Variable Naming Rules
+# - Must start with letter or underscore
+# - Can contain letters, digits, underscores
+
+def main() -> int:
+	# Valid local variable names
+	let foo: int = 1
+	let bar: int = 2
+	let baz: int = 3
+	let var123: int = 4
+	let camelCase: int = 6
+	let snake_case: int = 7
+	let PascalCase: int = 8
+	
+	print(f"{foo}")
+	print(f"{bar}")
+	print(f"{var123}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# 1
+# 2
+# 4
