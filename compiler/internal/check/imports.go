@@ -23,13 +23,28 @@ func injectImports(top *Scope, info *resolve.Info) {
 		isClass := false
 		var classType *types.Class
 		if mod != nil && info.ModuleExports != nil {
+			// Get the qualified path for this import (e.g., "Container.Inner" for nested classes)
+			qualifiedPath := local
+			if info.FromItemPaths != nil {
+				if qp, ok := info.FromItemPaths[local]; ok {
+					qualifiedPath = qp
+				}
+			}
 			// Get the module path from the module file
 			for mpath, ex := range info.ModuleExports {
 				if ex != nil && ex.Classes != nil {
-					if cls, ok := ex.Classes[local]; ok {
+					// First try qualified path (for nested classes like Container.Inner)
+					if cls, ok := ex.Classes[qualifiedPath]; ok {
 						isClass = true
 						classType = cls
 						_ = mpath // module path for debugging
+						break
+					}
+					// Fall back to local name (for simple classes)
+					if cls, ok := ex.Classes[local]; ok {
+						isClass = true
+						classType = cls
+						_ = mpath
 						break
 					}
 				}

@@ -1,7 +1,7 @@
 # Cross-File Multiple Class Import Test
 # Verify that multiple classes can be imported from same module
 
-from nested_class_helper import PublicItem, AnotherItem
+from multi_class_helper import PublicItem, AnotherItem
 
 def main() -> int:
 	# Test first class

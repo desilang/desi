@@ -11,9 +11,10 @@ import (
 // Info holds bindings and a module graph summary produced by Resolve.
 type Info struct {
 	// Local name -> module that defines it (Phase-1: just module-level)
-	Imports   map[string]*ast.Module // "import a.b [as x]" => key x or "b"
-	FromItems map[string]*ast.Module // "from a.b import y [as z]" => key z or "y"
-	Graph     *Graph                 // edges: thisModule -> importedModule (dotted)
+	Imports       map[string]*ast.Module // "import a.b [as x]" => key x or "b"
+	FromItems     map[string]*ast.Module // "from a.b import y [as z]" => key z or "y"
+	FromItemPaths map[string]string      // local name -> qualified path (e.g., "Inner" -> "Container.Inner")
+	Graph         *Graph                 // edges: thisModule -> importedModule (dotted)
 
 	// Phase-2: typed export surface per module (functions only for now),
 	// keyed by dotted module path (e.g., "math", "util.math").
@@ -88,6 +89,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 	info := &Info{
 		Imports:       map[string]*ast.Module{},
 		FromItems:     map[string]*ast.Module{},
+		FromItemPaths: map[string]string{},
 		Graph:         NewGraph(),
 		ModuleExports: map[string]*Exports{},
 	}
@@ -209,6 +211,12 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 				}
 				if local != "" && tmod != nil {
 					info.FromItems[local] = tmod
+					// Store qualified path for nested class lookup (e.g., "Inner" -> "Container.Inner")
+					if len(it.Path) > 1 {
+						info.FromItemPaths[local] = strings.Join(it.Path, ".")
+					} else {
+						info.FromItemPaths[local] = it.Name.Name
+					}
 				}
 				// Validate that the requested item exists among exported funcs or classes.
 				if ex != nil {

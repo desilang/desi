@@ -139,6 +139,7 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		nestedCls := &types.Class{
 			Name:          nested.Name.Name,
 			TypeParams:    make([]types.TypeParam, 0, len(nested.TypeParams)),
+			Fields:        make([]types.Field, 0, len(nested.Fields)),
 			Methods:       make(map[string]*types.Func),
 			StaticMethods: make(map[string]*types.Func),
 			ClassMethods:  make(map[string]*types.Func),
@@ -152,6 +153,25 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		// Add type parameters
 		for _, tp := range nested.TypeParams {
 			nestedCls.TypeParams = append(nestedCls.TypeParams, types.TypeParam{Name: tp.Name})
+		}
+		// Collect fields for nested class (so self.field works in methods)
+		for _, field := range nested.Fields {
+			var fieldType types.T = types.Any
+			if field.Type != nil {
+				if ft := c.resolveType(field.Type); ft != nil {
+					fieldType = ft
+				}
+			}
+			nestedCls.Fields = append(nestedCls.Fields, types.Field{
+				Name:  field.Name.Name,
+				Type:  fieldType,
+				IsPub: field.Pub,
+				IsMut: field.Mut,
+			})
+		}
+		// Collect methods for nested class (so they are in c.info.Funcs for checkFunc)
+		for _, m := range nested.Methods {
+			c.collectFunc(m)
 		}
 		// Register in outer scope (not the inner scope created for type params)
 		c.scope.parent.Define(&Symbol{

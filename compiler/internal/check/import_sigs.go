@@ -172,7 +172,14 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 					}
 
 					// Check if it's a class export
-					if cls := ex.Classes[name]; cls != nil {
+					// For nested classes, use qualified path (e.g., "Container.Inner")
+					lookupName := name
+					if rinfo.FromItemPaths != nil {
+						if qp, ok := rinfo.FromItemPaths[name]; ok {
+							lookupName = qp
+						}
+					}
+					if cls := ex.Classes[lookupName]; cls != nil {
 						// Add all constructors from the class
 						for _, constructor := range cls.Constructors {
 							set.Add(&FuncCand{

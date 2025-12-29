@@ -891,8 +891,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					// Generic instantiation: use Box_int_get instead of Box_get
 					mangledName = fmt.Sprintf("%s_%s", mangleGenericClassName(definingClass.Name, genericArgs), methodName)
 				} else {
-					// Non-generic class: use Box_get
-					mangledName = fmt.Sprintf("%s_%s", definingClass.Name, methodName)
+					// Non-generic class: use Box_get (mangleGenericClassName handles nested class dots)
+					mangledName = fmt.Sprintf("%s_%s", mangleGenericClassName(definingClass.Name, nil), methodName)
 				}
 
 				// Check if this is a static method or class method
@@ -974,7 +974,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 				if found {
 					// Rewrite to TypeName_MethodName(obj, args...)
-					mangledName := fmt.Sprintf("%s_%s", typeName, methodName)
+					mangledName := fmt.Sprintf("%s_%s", mangleGenericClassName(typeName, nil), methodName)
 
 					// Lower receiver
 					recvVal := ls.lowerExpr(fe.X)
@@ -1092,8 +1092,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					// Use monomorphized constructor: Box_int___new__
 					ctorName = fmt.Sprintf("%s___new__", mangleGenericClassName(cls.Name, genericArgsForCtor))
 				} else {
-					// Use regular constructor: Box___new__
-					ctorName = fmt.Sprintf("%s___new__", cls.Name)
+					// Use regular constructor: Box___new__ (mangleGenericClassName handles nested class dots)
+					ctorName = fmt.Sprintf("%s___new__", mangleGenericClassName(cls.Name, nil))
 				}
 
 				// Prepare args: [inst, user_args...]
@@ -1338,11 +1338,13 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	// Fix for class constructor calls (nested classes etc)
-	// When the result type is a Class, force ptr return type
+	// When the result type is a Class, force ptr return type and use mangled class name
 	if ls.info != nil {
 		if t := ls.info.Types[x]; t != nil {
-			if _, ok := t.(*types.Class); ok {
+			if cls, ok := t.(*types.Class); ok {
 				retType = "ptr"
+				// Use mangled class name for nested classes (Container.Inner -> Container_Inner)
+				callee = mangleGenericClassName(cls.Name, nil)
 			}
 		}
 	}

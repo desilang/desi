@@ -252,6 +252,92 @@ func CollectExports(mod *ast.Module) *Exports {
 		}
 
 		out.Classes[name] = classType
+
+		// Export public nested classes with qualified name (Container.Inner)
+		for _, nested := range cls.Nested {
+			if !nested.Pub {
+				continue // Skip private nested classes
+			}
+			qualifiedName := name + "." + nested.Name.Name
+			nestedType := &types.Class{
+				Name:         qualifiedName,
+				Constructors: []*types.Func{},
+				Fields:       []types.Field{},
+				Methods:      map[string]*types.Func{},
+				IsNested:     true,
+			}
+
+			// Extract nested class fields
+			for _, field := range nested.Fields {
+				if field.Type == nil {
+					continue
+				}
+				fieldType, ok := types.FromName(field.Type.Name)
+				if !ok {
+					continue
+				}
+				nestedType.Fields = append(nestedType.Fields, types.Field{
+					Name:  field.Name.Name,
+					Type:  fieldType,
+					IsPub: field.Pub,
+					IsMut: field.Mut,
+				})
+			}
+
+			// Extract nested class methods
+			for _, method := range nested.Methods {
+				methodName := method.Name.Name
+				if methodName == "__new__" {
+					// Handle constructor
+					params := make([]types.T, 0, len(method.Params))
+					for _, p := range method.Params {
+						if p.Name.Name == "self" || p.Name.Name == "cls" {
+							continue
+						}
+						if p.Type == nil {
+							continue
+						}
+						if t, ok := types.FromName(p.Type.Name); ok {
+							params = append(params, t)
+						}
+					}
+					constructorFunc := types.FuncOf(params, nestedType, false)
+					nestedType.Constructors = append(nestedType.Constructors, constructorFunc)
+					continue
+				}
+				if !method.Pub {
+					continue
+				}
+				params := make([]types.T, 0, len(method.Params))
+				for _, p := range method.Params {
+					if p.Name.Name == "self" {
+						continue
+					}
+					if p.Type == nil {
+						continue
+					}
+					if t, ok := types.FromName(p.Type.Name); ok {
+						params = append(params, t)
+					}
+				}
+				var retType types.T = types.None
+				if method.RetType != nil {
+					if t, ok := types.FromName(method.RetType.Name); ok {
+						retType = t
+					}
+				}
+				methodFunc := types.FuncOf(params, retType, false)
+				methodFunc.IsPub = true
+				nestedType.Methods[methodName] = methodFunc
+			}
+
+			// Add default constructor if none found
+			if len(nestedType.Constructors) == 0 {
+				nestedType.Constructors = append(nestedType.Constructors, types.FuncOf(nil, nestedType, false))
+			}
+
+			out.Classes[qualifiedName] = nestedType
+		}
 	}
 	return out
 }

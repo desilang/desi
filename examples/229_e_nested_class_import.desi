@@ -1,0 +1,13 @@
+# Nested Class Import Test
+# Test importing public nested class with dotted syntax
+
+from nested_class_helper import Container.Inner
+
+def main() -> int:
+	let inner: Inner = Inner()
+	inner.value := 42
+	print(f"{inner.get_value()}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# 42

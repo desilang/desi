@@ -1,12 +1,16 @@
-# Multiple Class Helper Module
-# Tests public class (default for top-level) visibility
+# Nested Class Helper Module
+# Tests public and private nested classes
 
-class PublicItem:
-	pub mut value: int
-	
-	pub def get_value(self) -> int:
-		return self.value
+class Container:
+	# Public nested class (explicit pub)
+	pub class Inner:
+		pub mut value: int
+		
+		pub def get_value(self) -> int:
+			return self.value
 
-class AnotherItem:
-	pub mut name: str
-	pub mut count: int
+	# Private nested class (no pub keyword)
+	class PrivateInner:
+		mut secret: int
+
+	pub mut data: int
