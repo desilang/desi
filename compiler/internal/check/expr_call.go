@@ -651,6 +651,20 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return channelType
 			}
 
+			// Built-in rc(value) function - creates Rc[T] from value type
+			if id.Name == "rc" && len(args) == 1 && args[0] != nil {
+				rcType := types.RcOf(args[0])
+				c.info.Types[call] = rcType
+				return rcType
+			}
+
+			// Built-in arc(value) function - creates Arc[T] from value type
+			if id.Name == "arc" && len(args) == 1 && args[0] != nil {
+				arcType := types.ArcOf(args[0])
+				c.info.Types[call] = arcType
+				return arcType
+			}
+
 			// Built-in reduce(), foldl(), foldr() functions
 			// Signature: reduce(func, iterable, initial) -> AccumulatorType
 			// foldl is alias for reduce (left-to-right)
