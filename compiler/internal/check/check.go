@@ -56,6 +56,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	injectPreludeIntoScope(top, res.Info)
 	// Resolver-provided imports (modules and from-items) become top-scope names.
 	injectImports(top, rinfo)
+	// Top-level let statements become module-scope globals.
+	injectGlobals(top, mod)
 
 	desugarMapFilter(mod)
 

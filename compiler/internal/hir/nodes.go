@@ -240,8 +240,17 @@ func (*FrameGet) isStmt() {}
 // ----- module/function/block containers -----
 
 type Module struct {
-	Name  string
-	Funcs []*Func
+	Name    string
+	Funcs   []*Func
+	Globals map[string]Global // Global constants: name -> value/type
+}
+
+// Global represents a module-level constant
+type Global struct {
+	Name    string
+	Type    string // LLVM type (e.g., "i32", "ptr")
+	Value   string // Initial value (e.g., "42", "3.14")
+	IsConst bool   // true for immutable globals
 }
 
 type Func struct {
