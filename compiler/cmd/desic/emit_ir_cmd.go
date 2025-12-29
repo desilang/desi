@@ -15,6 +15,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
+	"github.com/desilang/desi/compiler/lib"
 )
 
 // init() runs before main(). We intercept "emit-ir" here and exit after handling it.
@@ -49,15 +50,18 @@ func init() {
 		os.Exit(2)
 	}
 
-	// Build import roots with auto-detection (Phase 5A)
-	// Priority: 1) Entry file directory, 2) Stdlib, 3) DESI_PATH, 4) User -I roots
-	autoRoots := buildImportRoots(file, roots)
-	var loader resolve.Loader
-	if len(autoRoots) > 0 {
-		loader = resolve.NewFSLoaderMulti(autoRoots)
-	} else {
-		loader = resolve.NewMemLoader(nil)
+	// Build loader from -I roots + embedded stdlib + file's directory
+	// Match the approach used by the check command (main.go:471-482)
+	userRoots := splitRoots(roots)
+	// Include the file's parent directory for relative imports
+	fileDir := filepath.Dir(file)
+	if fileDir == "" || fileDir == "." {
+		fileDir, _ = os.Getwd()
 	}
+	userRoots = append(userRoots, fileDir)
+	// Use embedded stdlib from the binary
+	embedStdlib := resolve.NewEmbedFSLoader(lib.StdlibFS)
+	loader := resolve.NewFSLoaderMultiWithStdlib(userRoots, embedStdlib)
 
 	// Run full type checker (M14: needed for struct/trait info)
 	res := check.CheckWithLoader(mod, loader)
@@ -375,6 +379,12 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 		return nil, nil, nil, fmt.Errorf("parse errors in module %s", path)
 	}
 
+	// TYPE-CHECK the imported module separately so its class fields are resolved
+	// This is necessary because class field access in methods needs the class type info
+	impRes := check.CheckWithLoader(mod, loader)
+	// Ignore type errors from imported modules for now - they may have been checked already
+	_ = impRes.Diags
+
 	// Read the source file for lowering
 	// The loader returns a parsed module but we need the source bytes
 	// For now, we'll try to read the file again if we can determine the path
@@ -384,8 +394,8 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 	// (LowerModuleFromSource can work without source for most cases)
 	var src []byte
 
-	// Lower to HIR - skip built-in enums since they're emitted from entry module
-	hm := lower.LowerModuleFromSourceWithOptions(mod, info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true})
+	// Lower to HIR using the IMPORTED module's type info (not the main module's info)
+	hm := lower.LowerModuleFromSourceWithOptions(mod, impRes.Info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true})
 
 	return hm, src, mod, nil
 }

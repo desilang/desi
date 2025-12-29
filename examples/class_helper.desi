@@ -1,0 +1,8 @@
+# Cross-file class import helper module
+# This class should be importable from another file
+
+class Item:
+	pub mut value: int
+	
+	pub def get_value(self) -> int:
+		return self.value

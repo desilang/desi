@@ -37,8 +37,10 @@ func injectImports(top *Scope, info *resolve.Info) {
 		}
 
 		if isClass && classType != nil {
-			// Register as SymType so type resolution works
-			top.Define(&Symbol{Name: local, Kind: SymType, Type: classType})
+			// Register as SymFunc so constructor calls work
+			// PopulateImportedFuncSigs will add constructor to Funcs map
+			// The classType is stored in Type for type annotations
+			top.Define(&Symbol{Name: local, Kind: SymFunc, Type: classType})
 		} else {
 			// Register as SymFunc for function imports
 			top.Define(&Symbol{Name: local, Kind: SymFunc})

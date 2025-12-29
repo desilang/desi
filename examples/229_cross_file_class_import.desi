@@ -1,0 +1,14 @@
+# Cross-File Class Import Test
+# Import a class from another module and use it
+
+from class_helper import Item
+
+def main() -> int:
+	let item: Item = Item()
+	item.value := 42
+	let v: int = item.get_value()
+	print(f"{v}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# 42

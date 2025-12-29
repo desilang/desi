@@ -64,8 +64,9 @@ func loadModule(mpath string, ldr Loader, relative bool, span diag.Span) (*ast.M
 	mod, diags, _ := ldr.Load(mpath)
 
 	// Check for shadow warning: local module found AND stdlib has same name
+	// Only warn if LOCAL module exists (not if only stdlib has it)
 	if mod != nil && !relative {
-		if sl, ok := ldr.(StdlibLoader); ok && sl.HasStdlibModule(mpath) {
+		if sl, ok := ldr.(StdlibLoader); ok && sl.HasLocalModule(mpath) && sl.HasStdlibModule(mpath) {
 			warnings = append(warnings, diag.Diagnostic{
 				CodeID:  "DME0010",
 				Domain:  "module",

@@ -22,6 +22,8 @@ type StdlibLoader interface {
 	LoadStdlib(dotted string) (*ast.Module, []diag.Diagnostic, error)
 	// HasStdlibModule checks if a module exists in stdlib (for shadow warnings).
 	HasStdlibModule(dotted string) bool
+	// HasLocalModule checks if a module exists in local/project loaders (not stdlib).
+	HasLocalModule(dotted string) bool
 }
 
 /***************
@@ -106,4 +108,16 @@ func (m *multiLoader) HasStdlibModule(dotted string) bool {
 	}
 	mod, _, err := m.embedStdlib.Load(dotted)
 	return err == nil && mod != nil
+}
+
+// HasLocalModule checks if a module exists in local/project loaders (not stdlib).
+// Used to ensure shadow warning only triggers when BOTH local and stdlib have the module.
+func (m *multiLoader) HasLocalModule(dotted string) bool {
+	for _, l := range m.inners {
+		mod, _, err := l.Load(dotted)
+		if err == nil && mod != nil {
+			return true
+		}
+	}
+	return false
 }
