@@ -22,7 +22,7 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # Start
-# <lit>test.txt
+# Opening file: test.txt
 # Using file
 # End
 # Closing file: test.txt
