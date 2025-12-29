@@ -16,11 +16,33 @@ func injectImports(top *Scope, info *resolve.Info) {
 	for local := range info.Imports {
 		top.Define(&Symbol{Name: local, Kind: SymVar})
 	}
-	// `from a.b import y [as z]` -> bind local name as a callable alias in Phase-1.
-	// We don't yet have cross-module signatures, but marking it SymFunc lets typCall
-	// take the Phase-1 permissive path (same-primitive passthrough).
-	for local := range info.FromItems {
-		top.Define(&Symbol{Name: local, Kind: SymFunc})
+	// `from a.b import y [as z]` -> bind local name.
+	// Check if it's a class (SymType) or function (SymFunc).
+	for local, mod := range info.FromItems {
+		// Try to find if this is a class in any of the module exports
+		isClass := false
+		var classType *types.Class
+		if mod != nil && info.ModuleExports != nil {
+			// Get the module path from the module file
+			for mpath, ex := range info.ModuleExports {
+				if ex != nil && ex.Classes != nil {
+					if cls, ok := ex.Classes[local]; ok {
+						isClass = true
+						classType = cls
+						_ = mpath // module path for debugging
+						break
+					}
+				}
+			}
+		}
+
+		if isClass && classType != nil {
+			// Register as SymType so type resolution works
+			top.Define(&Symbol{Name: local, Kind: SymType, Type: classType})
+		} else {
+			// Register as SymFunc for function imports
+			top.Define(&Symbol{Name: local, Kind: SymFunc})
+		}
 	}
 }
 
