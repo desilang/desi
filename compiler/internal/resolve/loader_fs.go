@@ -39,14 +39,33 @@ func (l *FSLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error) {
 	}
 
 	// Leaf resolution: prefer subpackage leaf, else leaf file module.
+	// If BOTH exist, that's an ambiguity error.
 	leaf := parts[len(parts)-1]
 	leafPkg := filepath.Join(cur, leaf, "__mod.desi")
 	leafFile := filepath.Join(cur, leaf+".desi")
 
-	var path string
+	pkgExists := false
+	fileExists := false
 	if st, err := os.Stat(leafPkg); err == nil && !st.IsDir() {
+		pkgExists = true
+	}
+	if st, err := os.Stat(leafFile); err == nil && !st.IsDir() {
+		fileExists = true
+	}
+
+	// Check for ambiguity: both bar.desi and bar/__mod.desi exist
+	if pkgExists && fileExists {
+		return nil, []diag.Diagnostic{{
+			CodeID:  "DME0011",
+			Domain:  "module",
+			Message: "ambiguous module '" + leaf + "' - both " + leaf + ".desi and " + leaf + "/ exist",
+		}}, fmt.Errorf("ambiguous module: %s", dotted)
+	}
+
+	var path string
+	if pkgExists {
 		path = leafPkg
-	} else if st, err := os.Stat(leafFile); err == nil && !st.IsDir() {
+	} else if fileExists {
 		path = leafFile
 	} else {
 		return nil, nil, fmt.Errorf("module not found: %s", dotted)

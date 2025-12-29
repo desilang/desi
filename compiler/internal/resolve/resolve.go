@@ -39,7 +39,15 @@ const stdPrefix = "std."
 
 // loadModule loads a module, handling std.* prefix and relative imports.
 // Returns the module, diagnostics, actual path, and whether it was stdlib-only.
-func loadModule(mpath string, ldr Loader, relative bool) (*ast.Module, []diag.Diagnostic, string, bool) {
+func loadModule(mpath string, ldr Loader, relative bool, span diag.Span) (*ast.Module, []diag.Diagnostic, string, bool) {
+	var warnings []diag.Diagnostic
+
+	// Check for reserved "std" namespace (user trying to import "std" module)
+	if mpath == "std" {
+		warnings = append(warnings, diagAt("DME0009", span, "'std' is a reserved namespace"))
+		return nil, warnings, mpath, false
+	}
+
 	// Check for std. prefix - load from stdlib only
 	if strings.HasPrefix(mpath, stdPrefix) {
 		actualPath := strings.TrimPrefix(mpath, stdPrefix)
@@ -51,8 +59,23 @@ func loadModule(mpath string, ldr Loader, relative bool) (*ast.Module, []diag.Di
 		mod, diags, _ := ldr.Load(actualPath)
 		return mod, diags, actualPath, true
 	}
-	// Regular local-first load (file dir is first root, so relative works)
+
+	// Regular local-first load
 	mod, diags, _ := ldr.Load(mpath)
+
+	// Check for shadow warning: local module found AND stdlib has same name
+	if mod != nil && !relative {
+		if sl, ok := ldr.(StdlibLoader); ok && sl.HasStdlibModule(mpath) {
+			warnings = append(warnings, diag.Diagnostic{
+				CodeID:  "DME0010",
+				Domain:  "module",
+				Message: "'" + mpath + "' shadows stdlib module",
+				Primary: diag.Label{Span: span, Primary: true},
+			})
+		}
+	}
+
+	diags = append(diags, warnings...)
 	return mod, diags, mpath, false
 }
 
@@ -115,7 +138,7 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 		case *ast.ImportStmt:
 			mpath := dotted(s.Path)
 			// Load the module (handles std.* prefix and relative imports)
-			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative, s.Span)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}
@@ -143,7 +166,7 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 		case *ast.FromImportStmt:
 			mpath := dotted(s.Path)
 			// Load the module (handles std.* prefix and relative imports)
-			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative, s.Span)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}

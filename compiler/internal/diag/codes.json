@@ -445,6 +445,21 @@
       "title": "circular import detected",
       "help": "Circular imports are not allowed. Refactor to break the dependency cycle."
     },
+    "reserved_std": {
+      "id": "DME0009",
+      "title": "reserved namespace",
+      "help": "'std' is reserved for the standard library. Rename your module."
+    },
+    "shadow_stdlib": {
+      "id": "DME0010",
+      "title": "module shadows stdlib",
+      "help": "Local module shadows a stdlib module. Rename it or use 'from std.X import ...' for stdlib."
+    },
+    "ambiguous_module": {
+      "id": "DME0011",
+      "title": "ambiguous module",
+      "help": "Both a file (X.desi) and package (X/__mod.desi) exist. Remove one to resolve ambiguity."
+    },
     "internal": {
       "id": "DME0099",
       "title": "internal error",
