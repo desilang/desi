@@ -72,13 +72,13 @@ from math import add, sub as minus
 	got := sb.String()
 	var mainLine string
 	for _, ln := range strings.Split(got, "\n") {
-		if strings.HasPrefix(ln, "main.desi:") {
+		if strings.HasPrefix(ln, "main:") {
 			mainLine = ln
 			break
 		}
 	}
 	if mainLine == "" {
-		t.Fatalf("no graph line for main.desi; got:\n%s", got)
+		t.Fatalf("no graph line for main; got:\n%s", got)
 	}
 	if !strings.Contains(mainLine, "->math") {
 		t.Fatalf("graph missing edge to math:\n%s", got)
