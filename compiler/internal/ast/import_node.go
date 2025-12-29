@@ -15,9 +15,11 @@ func (*ImportStmt) isStmt()             {}
 func (s *ImportStmt) SpanOf() diag.Span { return s.Span }
 
 // FromImportItem is a single item in:   from dotted.name import a [as x], b, ...
+// For nested items like Outer.Inner, Path contains ["Outer", "Inner"]
 type FromImportItem struct {
-	Name  Ident  // imported item name (identifier)
-	Alias *Ident // optional local alias
+	Name  Ident    // imported item name (last segment for display)
+	Path  []string // full path for nested items (e.g., ["Container", "Item"])
+	Alias *Ident   // optional local alias
 	Span  diag.Span
 }
 

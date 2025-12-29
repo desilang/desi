@@ -211,10 +211,16 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 				}
 				// Validate that the requested item exists among exported funcs or classes.
 				if ex != nil {
-					name := it.Name.Name
-					if name != "" {
-						if len(ex.Funcs[name]) == 0 && ex.Classes[name] == nil {
-							msg := actualPath + " has no exported '" + name + "'"
+					// For nested imports like Container.Item, check the first segment
+					var rootName string
+					if len(it.Path) > 0 {
+						rootName = it.Path[0] // Use first segment (e.g., "Container")
+					} else {
+						rootName = it.Name.Name
+					}
+					if rootName != "" {
+						if len(ex.Funcs[rootName]) == 0 && ex.Classes[rootName] == nil {
+							msg := actualPath + " has no exported '" + rootName + "'"
 							*diags = append(*diags, diagAt("DME0003", it.Span, msg))
 						}
 					}

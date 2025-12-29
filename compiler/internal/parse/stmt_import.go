@@ -95,8 +95,27 @@ func (p *Parser) parseFromImport() ast.Stmt {
 			p.errExpected(spanPos(p.file, p.cur), "identifier")
 			break
 		}
-		n := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+
+		// Parse dotted name (e.g., Container.Item)
+		var path []string
+		startSpan := spanPos(p.file, p.cur)
+		path = append(path, p.cur.Lexeme)
 		p.next()
+
+		// Continue parsing if there's a DOT
+		for p.cur.Tok == token.DOT {
+			p.next() // consume '.'
+			if p.cur.Tok != token.IDENT {
+				p.errExpected(spanPos(p.file, p.cur), "identifier")
+				break
+			}
+			path = append(path, p.cur.Lexeme)
+			p.next()
+		}
+
+		// Name is the last segment (for display/alias purposes)
+		lastName := path[len(path)-1]
+		n := ast.Ident{Name: lastName, Span: startSpan}
 
 		var alias *ast.Ident
 		if p.accept(token.KW_as) {
@@ -115,6 +134,7 @@ func (p *Parser) parseFromImport() ast.Stmt {
 		}
 		items = append(items, ast.FromImportItem{
 			Name:  n,
+			Path:  path,
 			Alias: alias,
 			Span:  ast.JoinSpan(n.Span, itemEnd),
 		})
