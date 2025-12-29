@@ -8,6 +8,27 @@ class Point:
         self.x := x
         self.y := y
 
+def test_multiple_refs() -> int:
+    # Create an rc and clone it multiple times
+    # All clones should share the same value
+    let original = rc(42)
+    let clone1 = original.clone()  # refcount = 2
+    let clone2 = clone1.clone()    # refcount = 3
+    
+    # All should return the same value
+    let v1 = original.get()
+    let v2 = clone1.get()
+    let v3 = clone2.get()
+    
+    if v1 != 42:
+        return 1
+    if v2 != 42:
+        return 2
+    if v3 != 42:
+        return 3
+    return 0
+    # At scope exit: all 3 decremented, value freed
+
 def main() -> int:
     # Test 1: Rc[int]
     print("=== Rc[int] ===")
@@ -37,7 +58,16 @@ def main() -> int:
     print(original.get())  # 100
     print(cloned.get())    # 100 (same value)
     
-    print("Rc tests passed!")
+    # Test 6: Multiple references
+    print("=== Multiple refs ===")
+    let result = test_multiple_refs()
+    if result == 0:
+        print("OK")
+    else:
+        print("FAILED")
+        return result
+    
+    print("All Rc tests passed!")
     return 0
 
 # EXPECTED_OUTPUT:
@@ -52,4 +82,6 @@ def main() -> int:
 # === Clone test ===
 # 100
 # 100
-# Rc tests passed!
+# === Multiple refs ===
+# OK
+# All Rc tests passed!
