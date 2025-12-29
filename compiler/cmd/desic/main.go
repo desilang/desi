@@ -467,9 +467,15 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		return true, nil
 	}
 
-	// Build loader from -I roots + stdlib.
+	// Build loader from -I roots + stdlib + file's directory.
 	var loader resolve.Loader
 	roots := splitRoots(iroots)
+	// Include the file's parent directory for relative imports (e.g., from bar import greet)
+	fileDir := filepath.Dir(path)
+	if fileDir == "" || fileDir == "." {
+		fileDir, _ = os.Getwd()
+	}
+	roots = append(roots, fileDir)
 	// Always include stdlib (compiler/lib) as a default root
 	roots = append(roots, "compiler/lib")
 	loader = resolve.NewFSLoaderMulti(roots)

@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/resolve"
@@ -31,6 +33,18 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// 1) Resolve imports up-front (Phase-2 brings typed exports in rinfo).
 	rdiags, rinfo := resolve.Resolve(mod, ldr)
 	res.Diags = append(res.Diags, rdiags...)
+
+	// Check for circular imports
+	if rinfo != nil && rinfo.Graph != nil {
+		for _, cycle := range rinfo.Graph.Cycles() {
+			msg := "circular import detected: " + strings.Join(cycle, " → ")
+			res.Diags = append(res.Diags, diag.Diagnostic{
+				CodeID:  "DME0008",
+				Domain:  "module",
+				Message: msg,
+			})
+		}
+	}
 
 	// Bridge resolver info and pre-computed import-name -> module-path map for qualified calls.
 	res.Info.R = rinfo
