@@ -202,6 +202,46 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// Rc methods: get, clone
+			if rcType, ok := feXType.(*types.Rc); ok {
+				rcVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("rc_result")
+				switch fe.Name.Name {
+				case "get":
+					// rc.get() -> T (get inner pointer, then load value)
+					innerPtr := ls.b.FreshTemp("rc_inner_ptr")
+					ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "__rc_get", Args: []hir.Value{rcVal}, Type: "ptr"})
+					// Load the actual value from the inner pointer
+					innerType := lowerType(rcType.Inner)
+					ls.b.Emit(&hir.Load{Src: innerPtr, Dst: dst, Type: innerType})
+					return dst
+				case "clone":
+					// rc.clone() -> Rc[T] (increments refcount, returns same ptr)
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__rc_clone", Args: []hir.Value{rcVal}, Type: "ptr"})
+					// Mark result as rcLike for cleanup
+					ls.cur().rcLike[dst.Name] = true
+					return dst
+				}
+			}
+
+			// Arc methods: get, clone (same runtime as Rc for now)
+			if arcType, ok := feXType.(*types.Arc); ok {
+				arcVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("arc_result")
+				switch fe.Name.Name {
+				case "get":
+					innerPtr := ls.b.FreshTemp("arc_inner_ptr")
+					ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "__rc_get", Args: []hir.Value{arcVal}, Type: "ptr"})
+					innerType := lowerType(arcType.Inner)
+					ls.b.Emit(&hir.Load{Src: innerPtr, Dst: dst, Type: innerType})
+					return dst
+				case "clone":
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__rc_clone", Args: []hir.Value{arcVal}, Type: "ptr"})
+					ls.cur().rcLike[dst.Name] = true
+					return dst
+				}
+			}
+
 			// Channel methods: sender, receiver, close
 			if _, ok := feXType.(*types.Channel); ok {
 				channelVal := ls.lowerExpr(fe.X)

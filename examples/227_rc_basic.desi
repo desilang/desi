@@ -1,14 +1,55 @@
-# Basic reference counting test
+# Comprehensive Rc<T> reference counting test
+
+class Point:
+    pub mut x: int
+    pub mut y: int
+    
+    pub def __new__(self, x: int, y: int):
+        self.x := x
+        self.y := y
 
 def main() -> int:
-    # Create an rc-wrapped integer
-    let shared = rc(42)
+    # Test 1: Rc[int]
+    print("=== Rc[int] ===")
+    let shared_int = rc(42)
+    let val = shared_int.get()
+    print(val)  # Should print 42
     
-    # The value should be accessible (need to add .get() or field access)
-    print("Reference count test")
+    # Test 2: Rc[str]
+    print("=== Rc[str] ===")
+    let shared_str = rc("hello")
+    print(shared_str.get())  # Should print hello
     
-    # At scope exit, __rc_dec will be called automatically
+    # Test 3: Rc[float]
+    print("=== Rc[float] ===")
+    let shared_float = rc(3.14)
+    print(shared_float.get())  # Should print 3.140000
+    
+    # Test 4: Rc[bool]
+    print("=== Rc[bool] ===")
+    let shared_bool = rc(true)
+    print(shared_bool.get())  # Should print true
+    
+    # Test 5: Clone functionality
+    print("=== Clone test ===")
+    let original = rc(100)
+    let cloned = original.clone()
+    print(original.get())  # 100
+    print(cloned.get())    # 100 (same value)
+    
+    print("Rc tests passed!")
     return 0
 
 # EXPECTED_OUTPUT:
-# Reference count test
+# === Rc[int] ===
+# 42
+# === Rc[str] ===
+# hello
+# === Rc[float] ===
+# 3.140000
+# === Rc[bool] ===
+# true
+# === Clone test ===
+# 100
+# 100
+# Rc tests passed!
