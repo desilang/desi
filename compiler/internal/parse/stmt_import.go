@@ -8,9 +8,17 @@ import (
 )
 
 // import dotted.name [as alias]
+// import .relative_module [as alias]  (relative import)
 func (p *Parser) parseImport() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'import'
 	p.next()                        // consume 'import'
+
+	// Check for relative import: import .module
+	relative := false
+	if p.cur.Tok == token.DOT {
+		relative = true
+		p.next() // consume leading '.'
+	}
 
 	// dotted.name
 	dotted, nameSpan := p.parseDottedName()
@@ -34,16 +42,25 @@ func (p *Parser) parseImport() ast.Stmt {
 	}
 
 	return &ast.ImportStmt{
-		Path:  segments,
-		Alias: alias,
-		Span:  ast.JoinSpan(start, lastSpan(alias, nameSpan)),
+		Path:     segments,
+		Alias:    alias,
+		Relative: relative,
+		Span:     ast.JoinSpan(start, lastSpan(alias, nameSpan)),
 	}
 }
 
 // from dotted.name import a [as x], b, ...
+// from .relative_module import a [as x], ...  (relative import)
 func (p *Parser) parseFromImport() ast.Stmt {
 	start := spanPos(p.file, p.cur) // 'from'
 	p.next()                        // consume 'from'
+
+	// Check for relative import: from .module import ...
+	relative := false
+	if p.cur.Tok == token.DOT {
+		relative = true
+		p.next() // consume leading '.'
+	}
 
 	// dotted.name
 	dotted, nameSpan := p.parseDottedName()
@@ -65,9 +82,10 @@ func (p *Parser) parseFromImport() ast.Stmt {
 		}
 
 		return &ast.FromImportStmt{
-			Path: segments,
-			Star: true,
-			Span: ast.JoinSpan(start, starSpan),
+			Path:     segments,
+			Star:     true,
+			Relative: relative,
+			Span:     ast.JoinSpan(start, starSpan),
 		}
 	}
 
@@ -121,8 +139,9 @@ func (p *Parser) parseFromImport() ast.Stmt {
 		end = last.Span
 	}
 	return &ast.FromImportStmt{
-		Path:  segments,
-		Items: items,
-		Span:  ast.JoinSpan(start, end),
+		Path:     segments,
+		Items:    items,
+		Relative: relative,
+		Span:     ast.JoinSpan(start, end),
 	}
 }

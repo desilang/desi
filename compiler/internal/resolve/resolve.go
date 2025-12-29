@@ -37,9 +37,9 @@ func diagAt(codeID string, span diag.Span, msg string) diag.Diagnostic {
 // stdPrefix is the reserved namespace prefix for stdlib.
 const stdPrefix = "std."
 
-// loadModule loads a module, handling std.* prefix for stdlib-only imports.
-// Returns the module, diagnostics, actual path (without std. prefix if any), and whether it was stdlib-only.
-func loadModule(mpath string, ldr Loader) (*ast.Module, []diag.Diagnostic, string, bool) {
+// loadModule loads a module, handling std.* prefix and relative imports.
+// Returns the module, diagnostics, actual path, and whether it was stdlib-only.
+func loadModule(mpath string, ldr Loader, relative bool) (*ast.Module, []diag.Diagnostic, string, bool) {
 	// Check for std. prefix - load from stdlib only
 	if strings.HasPrefix(mpath, stdPrefix) {
 		actualPath := strings.TrimPrefix(mpath, stdPrefix)
@@ -51,7 +51,7 @@ func loadModule(mpath string, ldr Loader) (*ast.Module, []diag.Diagnostic, strin
 		mod, diags, _ := ldr.Load(actualPath)
 		return mod, diags, actualPath, true
 	}
-	// Regular local-first load
+	// Regular local-first load (file dir is first root, so relative works)
 	mod, diags, _ := ldr.Load(mpath)
 	return mod, diags, mpath, false
 }
@@ -114,8 +114,8 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 		switch s := st.(type) {
 		case *ast.ImportStmt:
 			mpath := dotted(s.Path)
-			// Load the module (handles std.* prefix for stdlib-only imports)
-			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr)
+			// Load the module (handles std.* prefix and relative imports)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}
@@ -142,8 +142,8 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 
 		case *ast.FromImportStmt:
 			mpath := dotted(s.Path)
-			// Load the module (handles std.* prefix for stdlib-only imports)
-			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr)
+			// Load the module (handles std.* prefix and relative imports)
+			tmod, pdiags, actualPath, _ := loadModule(mpath, ldr, s.Relative)
 			if len(pdiags) > 0 {
 				*diags = append(*diags, pdiags...)
 			}
