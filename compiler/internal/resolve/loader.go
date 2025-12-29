@@ -28,10 +28,10 @@ type StdlibLoader interface {
  * MultiLoader *
  ***************/
 
-// multiLoader tries a list of filesystem loaders in order until one succeeds.
+// multiLoader tries a list of loaders in order until one succeeds.
 type multiLoader struct {
-	inners    []*FSLoader
-	stdlibIdx int // index where stdlib roots start (-1 if none)
+	inners      []Loader // file system loaders for local/project modules
+	embedStdlib Loader   // embedded stdlib loader (nil if none)
 }
 
 func NewFSLoader(root string) *FSLoader {
@@ -41,13 +41,12 @@ func NewFSLoader(root string) *FSLoader {
 // NewFSLoaderMulti accepts roots in order. Use this for CLI.
 // The last roots should be stdlib paths.
 func NewFSLoaderMulti(roots []string) Loader {
-	return NewFSLoaderMultiWithStdlib(roots, -1)
+	return NewFSLoaderMultiWithStdlib(roots, nil)
 }
 
-// NewFSLoaderMultiWithStdlib creates a loader with explicit stdlib index.
-// stdlibIdx is the index in roots where stdlib begins (-1 for no stdlib).
-func NewFSLoaderMultiWithStdlib(roots []string, stdlibIdx int) *multiLoader {
-	ml := &multiLoader{stdlibIdx: stdlibIdx}
+// NewFSLoaderMultiWithStdlib creates a loader with embedded stdlib.
+func NewFSLoaderMultiWithStdlib(roots []string, embedStdlib Loader) *multiLoader {
+	ml := &multiLoader{embedStdlib: embedStdlib}
 	for _, r := range roots {
 		if r == "" {
 			continue
@@ -60,8 +59,22 @@ func NewFSLoaderMultiWithStdlib(roots []string, stdlibIdx int) *multiLoader {
 func (m *multiLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error) {
 	var allDiags []diag.Diagnostic
 	var lastErr error
+	// Try local/project loaders first
 	for _, l := range m.inners {
 		mod, diags, err := l.Load(dotted)
+		if err == nil && mod != nil {
+			return mod, diags, nil
+		}
+		if len(diags) > 0 {
+			allDiags = append(allDiags, diags...)
+		}
+		if err != nil {
+			lastErr = err
+		}
+	}
+	// Try embedded stdlib last
+	if m.embedStdlib != nil {
+		mod, diags, err := m.embedStdlib.Load(dotted)
 		if err == nil && mod != nil {
 			return mod, diags, nil
 		}
@@ -77,39 +90,20 @@ func (m *multiLoader) Load(dotted string) (*ast.Module, []diag.Diagnostic, error
 	return nil, allDiags, lastErr
 }
 
-// LoadStdlib loads from stdlib roots only (for std.* imports).
+// LoadStdlib loads from embedded stdlib only (for std.* imports).
 func (m *multiLoader) LoadStdlib(dotted string) (*ast.Module, []diag.Diagnostic, error) {
-	if m.stdlibIdx < 0 || m.stdlibIdx >= len(m.inners) {
+	if m.embedStdlib == nil {
 		// No stdlib configured, fall back to regular load
 		return m.Load(dotted)
 	}
-	var allDiags []diag.Diagnostic
-	var lastErr error
-	for i := m.stdlibIdx; i < len(m.inners); i++ {
-		mod, diags, err := m.inners[i].Load(dotted)
-		if err == nil && mod != nil {
-			return mod, diags, nil
-		}
-		if len(diags) > 0 {
-			allDiags = append(allDiags, diags...)
-		}
-		if err != nil {
-			lastErr = err
-		}
-	}
-	return nil, allDiags, lastErr
+	return m.embedStdlib.Load(dotted)
 }
 
-// HasStdlibModule checks if a module exists in stdlib (for shadow warnings).
+// HasStdlibModule checks if a module exists in embedded stdlib (for shadow errors).
 func (m *multiLoader) HasStdlibModule(dotted string) bool {
-	if m.stdlibIdx < 0 || m.stdlibIdx >= len(m.inners) {
+	if m.embedStdlib == nil {
 		return false
 	}
-	for i := m.stdlibIdx; i < len(m.inners); i++ {
-		mod, _, err := m.inners[i].Load(dotted)
-		if err == nil && mod != nil {
-			return true
-		}
-	}
-	return false
+	mod, _, err := m.embedStdlib.Load(dotted)
+	return err == nil && mod != nil
 }
