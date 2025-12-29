@@ -17,6 +17,12 @@ import some_module as m
 
 # Import all (wildcard)
 from math import *
+
+# Relative import (current directory)
+from .utils import helper
+
+# Stdlib import (always uses stdlib, never local)
+from std.math import add
 ```
 
 ## Export Visibility
@@ -49,22 +55,34 @@ myproject/
     └── helpers.desi   # from utils.helpers import foo
 ```
 
-## Circular Imports
+## Import Errors
 
-**Not allowed!** Desi detects and reports circular dependencies:
-
+### Circular Imports (DME0008)
 ```
 # foo.desi
-from bar import greet   # ❌ Error: circular import
+from bar import greet   # ❌ Error
 
 # bar.desi  
 from foo import hello   # Creates a cycle
 ```
 
-Error:
-```
-error[DME0008] module: circular import detected
-  = help: Circular imports are not allowed. Refactor to break the dependency cycle.
+### Reserved Namespace (DME0009)
+```python
+import std   # ❌ 'std' is reserved for stdlib
 ```
 
-**Solution**: Move shared code to a third module that both can import.
+### Shadowing Stdlib (DME0010)
+```python
+# If you have local math.desi AND stdlib has math:
+from math import add   # ❌ Local shadows stdlib
+from std.math import add  # ✓ Use this instead
+```
+
+### Ambiguous Module (DME0011)
+```
+# If BOTH exist:
+# - foo.desi
+# - foo/__mod.desi
+from foo import bar   # ❌ Ambiguous, remove one
+```
+
