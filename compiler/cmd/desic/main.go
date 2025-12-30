@@ -8,11 +8,9 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
-	"github.com/desilang/desi/compiler/internal/backend/llvm"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/lex"
-	"github.com/desilang/desi/compiler/internal/lower"
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
@@ -28,7 +26,6 @@ var (
 	flagTokens      = flag.String("tokens", "", "scan the given .desi file and print tokens")
 	flagAST         = flag.String("ast", "", "parse the given .desi file and pretty-print the AST")
 	flagCheck       = flag.String("check", "", "parse + resolve/check the given .desi file")
-	flagEmitIR      = flag.String("emit-ir", "", "compile the given .desi file and print LLVM IR to stdout")
 	flagIRoots      = flag.String("I", "", "colon-separated import roots (e.g., 'examples:compiler/lib')")
 	flagVerbose     = flag.Bool("v", false, "verbose output")
 	flagErrorFormat = flag.String("error-format", "human", "error format: human|json")
@@ -208,29 +205,6 @@ func main() {
 		goto END
 	}
 
-	if *flagEmitIR != "" {
-		if *flagVerbose {
-			if abs, err := filepath.Abs(*flagEmitIR); err == nil {
-				term.Eprintln("emit-ir:", abs)
-			} else {
-				term.Eprintln("emit-ir:", *flagEmitIR)
-			}
-			if *flagIRoots == "" {
-				term.Eprintln("roots: (none)")
-			} else {
-				term.Eprintln("roots:", *flagIRoots)
-			}
-		}
-
-		if err := runEmitIR(*flagEmitIR, *flagIRoots); err != nil {
-			term.Eprintln("emit-ir error:", err)
-			exitCode = 2
-			goto END
-		}
-		exitCode = 0
-		goto END
-	}
-
 	if *flagCheck != "" {
 		if *flagVerbose {
 			if abs, err := filepath.Abs(*flagCheck); err == nil {
@@ -259,7 +233,7 @@ func main() {
 		goto END
 	}
 
-	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, -emit-ir <file>, or `check <file>`.")
+	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, `emit-ir <file>`, or `check <file>`.")
 	exitCode = 0
 
 END:
@@ -499,56 +473,6 @@ func runCheck(path, iroots string) (hadErrors bool, err error) {
 		term.Eprintln("…", extra, "more errors suppressed")
 	}
 	return true, nil
-}
-
-func runEmitIR(path, iroots string) error {
-	src, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	mod, pdiags := parse.ParseFile(path, src)
-
-	// If parsing produced diagnostics, show them and abort
-	if len(pdiags) > 0 {
-		for _, d := range pdiags {
-			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
-		}
-		return fmt.Errorf("parse errors")
-	}
-
-	// Build loader from -I roots + stdlib
-	var loader resolve.Loader
-	roots := splitRoots(iroots)
-	// Always include stdlib (compiler/lib) as a default root
-	roots = append(roots, "compiler/lib")
-	loader = resolve.NewFSLoaderMulti(roots)
-
-	// Run type checker
-	res := check.CheckWithLoader(mod, loader)
-	if len(res.Diags) > 0 {
-		for _, d := range res.Diags {
-			d.RenderTTY(os.Stderr, diag.Theme{Color: false})
-		}
-		return fmt.Errorf("type check errors")
-	}
-
-	// Lower to HIR - include entry module and all imported modules
-	hmod := lower.LowerModuleClosure(mod, res.Info, src, loader)
-
-	// Emit LLVM IR
-	llvmMod := llvm.NewModule(mod.File)
-	// Pre-register all functions
-	for _, fn := range hmod.Funcs {
-		llvmMod.RegisterFunc(fn.Name)
-	}
-	// Emit functions
-	for _, fn := range hmod.Funcs {
-		llvmMod.EmitFunc(fn)
-	}
-
-	// Print IR to stdout
-	term.Println(llvmMod.IR())
-	return nil
 }
 
 func splitRoots(s string) []string {
