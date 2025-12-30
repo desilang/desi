@@ -16,7 +16,13 @@ import (
 // For example, if Box<T> is instantiated as Box<int> and Box<str>, this will generate:
 // - Box_int___new__, Box_int_get, Box_int_set
 // - Box_str___new__, Box_str_get, Box_str_set
-func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
+// LowerMonomorphizedClass generates specialized versions of a generic class for each
+// concrete instantiation found during type checking.
+//
+// For example, if Box<T> is instantiated as Box<int> and Box<str>, this will generate:
+// - Box_int___new__, Box_int_get, Box_int_set
+// - Box_str___new__, Box_str_get, Box_str_set
+func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte, globals map[string]bool) []*hir.Func {
 	// Get base class type for field/method info
 	var baseCls *types.Class
 	if t := info.Types[cd]; t != nil {
@@ -58,11 +64,11 @@ func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []
 		}
 
 		// Generate constructor
-		ctors := lowerMonomorphizedConstructor(cd, mangledName, subst, info, baseCls)
+		ctors := lowerMonomorphizedConstructor(cd, mangledName, subst, info, baseCls, globals)
 		funcs = append(funcs, ctors...)
 
 		// Generate methods
-		methods := lowerMonomorphizedMethods(cd, mangledName, subst, info, baseCls, src)
+		methods := lowerMonomorphizedMethods(cd, mangledName, subst, info, baseCls, src, globals)
 		funcs = append(funcs, methods...)
 	}
 
@@ -134,7 +140,7 @@ func mangleTypeName(t types.T) string {
 }
 
 // lowerMonomorphizedConstructor generates specialized constructors.
-func lowerMonomorphizedConstructor(cd *ast.ClassDecl, mangledName string, subst map[string]types.T, info *check.Info, baseCls *types.Class) []*hir.Func {
+func lowerMonomorphizedConstructor(cd *ast.ClassDecl, mangledName string, subst map[string]types.T, info *check.Info, baseCls *types.Class, globals map[string]bool) []*hir.Func {
 	// Check if __new__ is defined
 	hasNew := false
 	var newMethod *ast.FuncDecl
@@ -148,7 +154,7 @@ func lowerMonomorphizedConstructor(cd *ast.ClassDecl, mangledName string, subst 
 
 	if hasNew {
 		// Lower user-defined __new__ with substitution
-		return lowerMonomorphizedDunderNew(mangledName, newMethod, subst, info, baseCls)
+		return lowerMonomorphizedDunderNew(mangledName, newMethod, subst, info, baseCls, globals)
 	}
 
 	// Generate default zero-arg constructor
@@ -169,9 +175,9 @@ func lowerMonomorphizedDefaultConstructor(mangledName string, subst map[string]t
 }
 
 // lowerMonomorphizedDunderNew generates a specialized __new__ method.
-func lowerMonomorphizedDunderNew(mangledName string, method *ast.FuncDecl, subst map[string]types.T, info *check.Info, baseCls *types.Class) []*hir.Func {
+func lowerMonomorphizedDunderNew(mangledName string, method *ast.FuncDecl, subst map[string]types.T, info *check.Info, baseCls *types.Class, globals map[string]bool) []*hir.Func {
 	// Lower the __new__ method
-	newFn := LowerFuncFromDecl(method, info, nil)
+	newFn := LowerFuncFromDecl(method, info, nil, globals)
 	newFn.Name = fmt.Sprintf("%s___new__", mangledName)
 
 	// Get constructor's semantic type from the class for proper substitution
@@ -253,7 +259,7 @@ func lowerMonomorphizedDunderNew(mangledName string, method *ast.FuncDecl, subst
 }
 
 // lowerMonomorphizedMethods generates specialized methods for a class instantiation.
-func lowerMonomorphizedMethods(cd *ast.ClassDecl, mangledName string, subst map[string]types.T, info *check.Info, baseCls *types.Class, src []byte) []*hir.Func {
+func lowerMonomorphizedMethods(cd *ast.ClassDecl, mangledName string, subst map[string]types.T, info *check.Info, baseCls *types.Class, src []byte, globals map[string]bool) []*hir.Func {
 	var funcs []*hir.Func
 
 	for _, method := range cd.Methods {
@@ -265,7 +271,7 @@ func lowerMonomorphizedMethods(cd *ast.ClassDecl, mangledName string, subst map[
 		}
 
 		// Lower method as function
-		fn := LowerFuncFromDecl(method, info, src)
+		fn := LowerFuncFromDecl(method, info, src, globals)
 
 		// Specialized name: MangledName_methodName
 		fn.Name = fmt.Sprintf("%s_%s", mangledName, methodName)

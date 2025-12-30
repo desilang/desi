@@ -66,7 +66,7 @@ func init() {
 	// Run full type checker (M14: needed for struct/trait info)
 	res := check.CheckWithLoader(mod, loader)
 	if len(res.Diags) > 0 {
-		// Keep it simple: if check produced diagnostics, surface them and bail.
+		hasError := false
 		const maxDiags = 20
 		limit := len(res.Diags)
 		if limit > maxDiags {
@@ -74,12 +74,17 @@ func init() {
 		}
 		for i := 0; i < limit; i++ {
 			res.Diags[i].RenderTTY(os.Stderr, diag.Theme{})
+			if res.Diags[i].Domain != "warn" {
+				hasError = true
+			}
 		}
 		if extra := len(res.Diags) - limit; extra > 0 {
 			term.Eprintln("…", extra, "more errors suppressed")
 		}
-		term.Flush()
-		os.Exit(2)
+		if hasError {
+			term.Flush()
+			os.Exit(2)
+		}
 	}
 
 	// Register LLVM signatures from imports (Tier-0 compat)
@@ -162,6 +167,29 @@ func init() {
 	// Emit all functions from all modules, using same duplicate tracking
 	emittedFuncs = make(map[string]bool) // Reset for emit phase
 	for _, hirMod := range allModules {
+		// Emit global variables using the new DefineGlobal API
+		if hirMod.Globals != nil {
+			for name, g := range hirMod.Globals {
+				// Ensure @ prefix
+				globalName := name
+				if len(globalName) > 0 && globalName[0] != '@' {
+					globalName = "@" + globalName
+				}
+
+				// Map HIR type to LLVM type
+				llvmType := g.Type
+				if llvmType == "" {
+					llvmType = "i64"
+				} else if llvmType == "int" {
+					llvmType = "i64"
+				} else if llvmType == "ptr" {
+					llvmType = "ptr"
+				}
+
+				lm.DefineGlobal(globalName, llvmType, g.Value)
+			}
+		}
+
 		for _, f := range hirMod.Funcs {
 			if emittedFuncs[f.Name] {
 				continue // Skip duplicates (e.g., __top__ from imports)

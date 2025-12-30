@@ -36,7 +36,90 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 		info.LambdaAliases[k] = v
 	}
 
-	out := &hir.Module{Name: mod.File}
+	out := &hir.Module{Name: mod.File, Globals: make(map[string]hir.Global)}
+	globalNames := make(map[string]bool)
+
+	// Phase 1: Extract globals from __top__ function
+	for _, d := range mod.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Name.Name != "__top__" || fd.Body == nil {
+			continue
+		}
+		// Identify globals (LetStmt with Pub=true)
+		var keptStmts []ast.Stmt
+		for _, s := range fd.Body.Stmts {
+			ls, ok := s.(*ast.LetStmt)
+			if ok {
+				// This is a global constant
+				globalNames[ls.Name.Name] = true
+
+				// Determine type and value for HIR global
+				// For now, assume integer/string literals or simple initializers
+				// We rely on LowerIdent to emit loads from these globals
+				val := "0" // placeholder default
+				typ := "i64"
+				isConst := false
+
+				// Simple heuristic for type/value from literal
+				if ls.Value != nil {
+					switch v := ls.Value.(type) {
+					case *ast.IntLit:
+						val = v.Text
+						typ = "i64"
+					case *ast.BoolLit:
+						if v.Value {
+							val = "1"
+						} else {
+							val = "0"
+						}
+						typ = "i1"
+					case *ast.StrLit:
+						// Handle F-string parts or source-extracted strings
+						if v.Value != "" {
+							val = unescapeString(v.Value)
+						} else if src != nil {
+							text, ok := scanStringLiteral(src, v.Span.Start.Line, v.Span.Start.Col, v.Long)
+							if ok {
+								val = unescapeString(text)
+							}
+						}
+						typ = "ptr"
+					}
+				}
+
+				if ls.Type != nil {
+					typ = llvmTypeFromAST(ls.Type.Name)
+				}
+
+				out.Globals[ls.Name.Name] = hir.Global{
+					Name:    ls.Name.Name,
+					Type:    typ,
+					Value:   val,
+					IsConst: isConst,
+				}
+				// Don't keep this stmt in __top__ if we treated it as static global init?
+				// But we might need run-time init for complex exprs.
+				// For now, if we emit Global definition, we assume we don't re-declare local.
+				// We should transform it to Assignment if it has side effects.
+				// For simple constants, we can skip execution in __top__.
+				// Actually, strict globals are usually statics.
+				// Let's keep it in __top__ but transformed to Assign so it stores to global?
+				// But LowerStmt will handle Assign to global correctly if we implement it.
+				// So we should replace LetStmt with AssignStmt in the AST for __top__?
+				// Construct AssignStmt: ls.Name = ls.Value
+				assign := &ast.AssignStmt{
+					LHS:  []ast.Expr{&ls.Name},
+					RHS:  []ast.Expr{ls.Value},
+					Span: ls.Span,
+				}
+				keptStmts = append(keptStmts, assign)
+			} else {
+				keptStmts = append(keptStmts, s)
+			}
+		}
+		fd.Body.Stmts = keptStmts
+	}
+
 	for _, d := range mod.Decls {
 		fd, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -49,7 +132,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 		}
 
 		if fd.Async {
-			w, p := LowerAsyncFunc(fd, src, info)
+			w, p := LowerAsyncFunc(fd, src, info, globalNames) // Need to update signature
 			if w == nil || p == nil {
 				// Barrier or other early-abort: skip this function, continue module.
 				continue
@@ -57,7 +140,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			out.Funcs = append(out.Funcs, w, p)
 			continue
 		}
-		out.Funcs = append(out.Funcs, LowerFuncFromDecl(fd, info, src))
+		out.Funcs = append(out.Funcs, LowerFuncFromDecl(fd, info, src, globalNames))
 	}
 
 	// Generate constructors for struct declarations
@@ -95,16 +178,16 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 	for _, d := range mod.Decls {
 		if cd, ok := d.(*ast.ClassDecl); ok {
 			// Constructor
-			constructors := LowerClassConstructor(cd, info, src)
+			constructors := LowerClassConstructor(cd, info, src, globalNames)
 			out.Funcs = append(out.Funcs, constructors...)
 
 			// Methods
-			methods := LowerClassMethods(cd, info, src)
+			methods := LowerClassMethods(cd, info, src, globalNames)
 			out.Funcs = append(out.Funcs, methods...)
 
 			// Monomorphization: Generate specialized versions for generic classes
 			if len(cd.TypeParams) > 0 {
-				monomorphized := LowerMonomorphizedClass(cd, info, src)
+				monomorphized := LowerMonomorphizedClass(cd, info, src, globalNames)
 				out.Funcs = append(out.Funcs, monomorphized...)
 			}
 
@@ -112,15 +195,15 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			for _, nested := range cd.Nested {
 				// Use qualified name: Parent_Nested
 				qualifiedName := fmt.Sprintf("%s_%s", cd.Name.Name, nested.Name.Name)
-				nestedConstructors := LowerClassConstructorWithName(nested, info, src, qualifiedName)
+				nestedConstructors := LowerClassConstructorWithName(nested, info, src, qualifiedName, globalNames)
 				out.Funcs = append(out.Funcs, nestedConstructors...)
 
-				nestedMethods := LowerClassMethodsWithName(nested, info, src, qualifiedName)
+				nestedMethods := LowerClassMethodsWithName(nested, info, src, qualifiedName, globalNames)
 				out.Funcs = append(out.Funcs, nestedMethods...)
 
 				// Monomorphization for generic nested classes
 				if len(nested.TypeParams) > 0 {
-					nestedMonomorphized := LowerMonomorphizedClass(nested, info, src)
+					nestedMonomorphized := LowerMonomorphizedClass(nested, info, src, globalNames)
 					out.Funcs = append(out.Funcs, nestedMonomorphized...)
 				}
 			}
@@ -135,7 +218,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 				// Mangle: Type_Method
 				name := fmt.Sprintf("%s_%s", typeName, m.Name.Name)
 				// Use LowerFuncFromDecl to properly handle parameters and return types
-				fn := LowerFuncFromDecl(m, info, src)
+				fn := LowerFuncFromDecl(m, info, src, globalNames)
 				fn.Name = name
 				out.Funcs = append(out.Funcs, fn)
 			}

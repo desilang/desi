@@ -682,6 +682,26 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			return val
 		}
 
+		// Check if this is a global variable
+		if ls.globals != nil && ls.globals[x.Name] && !ls.hasLocal(x.Name) {
+			dst := ls.b.FreshTemp("global_load")
+
+			// Determine type
+			loadType := "i64" // default
+			if ls.info != nil {
+				if sym := ls.info.Idents[x]; sym != nil {
+					loadType = lowerType(sym.Type)
+				}
+			}
+
+			ls.b.Emit(&hir.Load{
+				Type: loadType,
+				Src:  hir.Var{Name: "@" + x.Name},
+				Dst:  dst,
+			})
+			return dst
+		}
+
 		// If this is a mutable variable, emit a Load instruction
 		if ls.isMutable(x.Name) {
 			dst := ls.b.FreshTemp("load")

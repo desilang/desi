@@ -29,7 +29,7 @@ func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
 		}},
 	}
 
-	w, p := lower.LowerAsyncFunc(fd, nil, nil)
+	w, p := lower.LowerAsyncFunc(fd, nil, nil, nil)
 
 	// Pretty-print poll HIR
 	var pout bytes.Buffer

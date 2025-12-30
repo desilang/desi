@@ -12,13 +12,16 @@ import (
 // LowerClassConstructor generates the constructor function for a class
 // POLICY: If no __new__, generate zero-arg constructor with default initialization
 // POLICY: If __new__ exists, lower the user-defined __new__ method
-func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
-	return LowerClassConstructorWithName(cd, info, src, cd.Name.Name)
+// LowerClassConstructor generates the constructor function for a class
+// POLICY: If no __new__, generate zero-arg constructor with default initialization
+// POLICY: If __new__ exists, lower the user-defined __new__ method
+func LowerClassConstructor(cd *ast.ClassDecl, info *check.Info, src []byte, globals map[string]bool) []*hir.Func {
+	return LowerClassConstructorWithName(cd, info, src, cd.Name.Name, globals)
 }
 
 // LowerClassConstructorWithName is like LowerClassConstructor but uses an explicit name.
 // This is needed for nested classes where the name should be Parent_Child instead of just Child.
-func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string) []*hir.Func {
+func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string, globals map[string]bool) []*hir.Func {
 	var cls *types.Class
 	if t := info.Types[cd]; t != nil {
 		cls, _ = t.(*types.Class)
@@ -37,7 +40,7 @@ func LowerClassConstructorWithName(cd *ast.ClassDecl, info *check.Info, src []by
 
 	if hasNew {
 		// Lower user-defined __new__
-		return LowerDunderNew(className, newMethod, info, src, cls)
+		return LowerDunderNew(className, newMethod, info, src, cls, globals)
 	} else {
 		// Generate default zero-arg constructor (returns slice of [wrapper, __new__])
 		return LowerDefaultConstructor(className, cls)
@@ -101,12 +104,12 @@ func LowerDefaultConstructor(className string, cls *types.Class) []*hir.Func {
 }
 
 // LowerDunderNew lowers a user-defined __new__ method
-func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, src []byte, cls *types.Class) []*hir.Func {
+func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, src []byte, cls *types.Class, globals map[string]bool) []*hir.Func {
 	// 1. Lower the user's __new__ method as ClassName___new__
 	// This method takes (self, args...)
 	// Pass className context so return ClassName(field=val) initializes self instead of allocating
 	selfPtr := hir.Temp{Name: "%self"}
-	newFn := LowerFuncForDunderNew(method, info, src, className, selfPtr)
+	newFn := LowerFuncForDunderNew(method, info, src, className, selfPtr, globals)
 	newFn.Name = fmt.Sprintf("%s___new__", className)
 
 	// Ensure __new__ returns void (it initializes self, doesn't return a new instance)
@@ -174,13 +177,13 @@ func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, sr
 
 // LowerClassMethods generates HIR functions for all class methods
 // POLICY: Methods have implicit self, so we inject it as first parameter in HIR
-func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
-	return LowerClassMethodsWithName(cd, info, src, cd.Name.Name)
+func LowerClassMethods(cd *ast.ClassDecl, info *check.Info, src []byte, globals map[string]bool) []*hir.Func {
+	return LowerClassMethodsWithName(cd, info, src, cd.Name.Name, globals)
 }
 
 // LowerClassMethodsWithName is like LowerClassMethods but uses an explicit name.
 // This is needed for nested classes where the name should be Parent_Child.
-func LowerClassMethodsWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string) []*hir.Func {
+func LowerClassMethodsWithName(cd *ast.ClassDecl, info *check.Info, src []byte, className string, globals map[string]bool) []*hir.Func {
 	var funcs []*hir.Func
 
 	for _, method := range cd.Methods {
@@ -192,7 +195,7 @@ func LowerClassMethodsWithName(cd *ast.ClassDecl, info *check.Info, src []byte, 
 		}
 
 		// Lower method as function
-		fn := LowerFuncFromDecl(method, info, src)
+		fn := LowerFuncFromDecl(method, info, src, globals)
 
 		// POLICY: Static dispatch with name mangling
 		fn.Name = fmt.Sprintf("%s_%s", className, methodName)
@@ -312,7 +315,7 @@ func LowerClassMethodsWithName(cd *ast.ClassDecl, info *check.Info, src []byte, 
 			}
 
 			// Lower the inherited method as if it belongs to this class
-			fn := LowerFuncFromDecl(astDecl, info, src)
+			fn := LowerFuncFromDecl(astDecl, info, src, globals)
 
 			// Apply type substitution if inheriting from a generic class
 			// This replaces T with concrete types (e.g., int) in method body

@@ -539,7 +539,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Auto-register static field globals (globals starting with @)
 				if v, ok := x.Dst.(hir.Var); ok && strings.HasPrefix(v.Name, "@") {
 					if _, exists := m.staticFieldGlobals[v.Name]; !exists {
-						m.staticFieldGlobals[v.Name] = valTy
+						val := "0"
+						if valTy == "ptr" {
+							val = "null"
+						}
+						m.staticFieldGlobals[v.Name] = GlobalDef{Type: valTy, Value: val}
 					}
 				}
 				wprintf(&m.funcs, "  store %s %s, %s\n", valTy, valOp, dstOp)
@@ -549,7 +553,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Auto-register static field globals (globals starting with @)
 				if v, ok := x.Src.(hir.Var); ok && strings.HasPrefix(v.Name, "@") {
 					if _, exists := m.staticFieldGlobals[v.Name]; !exists {
-						m.staticFieldGlobals[v.Name] = x.Type
+						val := "0"
+						if x.Type == "ptr" {
+							val = "null"
+						}
+						m.staticFieldGlobals[v.Name] = GlobalDef{Type: x.Type, Value: val}
 					}
 				}
 				wprintf(&m.funcs, "  %s = load %s, %s\n", x.Dst.Name, x.Type, ptrOp)

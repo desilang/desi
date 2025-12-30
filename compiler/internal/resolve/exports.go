@@ -38,6 +38,10 @@ type Exports struct {
 	// Classes maps a class name to its type information.
 	// Allows "from module import ClassName" to work with class types.
 	Classes map[string]*types.Class
+
+	// Globals maps exported global variable names to their types.
+	// Allows "from module import CONST" to work.
+	Globals map[string]types.T
 }
 
 // CollectExports walks a parsed module and returns its exported function signatures.
@@ -56,7 +60,9 @@ func CollectExports(mod *ast.Module) *Exports {
 		ParamNames:   map[string][][]string{},
 		FuncExtern:   map[string][]ExternMeta{},
 		FuncDefaults: map[string][][]bool{},
-		Classes:      map[string]*types.Class{},
+
+		Classes: map[string]*types.Class{},
+		Globals: map[string]types.T{},
 	}
 	if mod == nil {
 		return out
@@ -383,5 +389,29 @@ func CollectExports(mod *ast.Module) *Exports {
 			out.Classes[qualifiedName] = nestedType
 		}
 	}
+
+	// NEW: Collect exported globals from __top__
+	for _, d := range mod.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != "__top__" || fn.Body == nil {
+			continue
+		}
+		for _, s := range fn.Body.Stmts {
+			ls, ok := s.(*ast.LetStmt)
+			if !ok || !ls.Pub {
+				continue
+			}
+			// Resolve type
+			var t types.T = types.Any
+			if ls.Type != nil {
+				if tt, ok := types.FromName(ls.Type.Name); ok {
+					t = tt
+				}
+			}
+			// Add to exports
+			out.Globals[ls.Name.Name] = t
+		}
+	}
+
 	return out
 }

@@ -151,9 +151,16 @@ func RenderTTYWith(w io.Writer, d Diagnostic, src SourceProvider, opt Options) e
 	line := _max(1, d.Primary.Span.Start.Line)
 	col := _max(1, d.Primary.Span.Start.Col)
 
-	hdr := fmt.Sprintf("%s:%d:%d: error[%s] %s: %s\n", file, line, col, d.CodeID, d.Domain, title)
+	kind := "error"
+	color := ansiBoldRed
+	if d.Domain == "warn" {
+		kind = "warning"
+		color = ansiYellow
+	}
+
+	hdr := fmt.Sprintf("%s:%d:%d: %s[%s] %s: %s\n", file, line, col, kind, d.CodeID, d.Domain, title)
 	if useColor {
-		hdr = colorize(hdr, ansiBoldRed)
+		hdr = colorize(hdr, color)
 	}
 	_, _ = b.WriteString(hdr)
 

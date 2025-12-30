@@ -22,7 +22,7 @@ import (
 // Notes:
 // - Borrow barrier across `await` is enforced by the checker (M6).
 // - Frame is a lightweight symbol space via "frame.*" names; no struct layout yet.
-func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info) (wrapper *hir.Func, poll *hir.Func) {
+func LowerAsyncFunc(fd *ast.FuncDecl, _ []byte, _ *check.Info, _ map[string]bool) (wrapper *hir.Func, poll *hir.Func) {
 	// Task I: enforce barrier before producing HIR.
 	if ds := CheckAwaitBorrowBarrier(fd); len(ds) > 0 {
 		// Abort lowering for this function; caller should skip adding nils.

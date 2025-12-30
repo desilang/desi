@@ -1,0 +1,32 @@
+# Test global constants
+
+# 1. Lowercase warning (should verify this visually or via checker output)
+let small_const = 100 
+
+# 2. Uppercase (Correct)
+let MAX_RETRIES = 5
+
+# 3. Global String
+let APP_NAME = "DesiApp"
+
+def main() -> int:
+    print("Testing globals...")
+    
+    # Access globals
+    print(f"Max retries: {MAX_RETRIES}")
+    print(f"App Name: {APP_NAME}")
+    
+    # Access lowercase
+    print(f"Small: {small_const}")
+    
+    # Check if we can modify? (Should be compile error if we tried to declare it mut)
+    # But since they are immutable, we cant assign.
+    # small_const = 200 # Should be error: cannot assign to immutable
+    
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing globals...
+# Max retries: 5
+# App Name: DesiApp
+# Small: 100
