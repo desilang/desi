@@ -1356,7 +1356,6 @@ skipMethodCall:
 			var genericArgs []types.T
 
 			// Debug
-			println(fmt.Sprintf("DEBUG: lowerCall callee=%s type=%T %v", callee, t, t))
 
 			if c, ok := t.(*types.Class); ok {
 				cls = c

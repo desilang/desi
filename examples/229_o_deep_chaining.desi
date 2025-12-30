@@ -1,0 +1,33 @@
+
+class Node:
+    pub mut val: int
+    pub mut next: Node
+
+    pub def set_next(self, n: Node) -> Node:
+        self.next := n
+        return self
+
+    pub def get_next(self) -> Node:
+        return self.next
+
+    pub def get_val(self) -> int:
+        return self.val
+
+def main() -> int:
+    let n1 = Node()
+    n1.val := 1
+    let n2 = Node()
+    n2.val := 2
+    let n3 = Node()
+    n3.val := 3
+
+    # Test chaining: set_next returns self
+    # We want n1 -> n2 -> n3
+    n1.set_next(n2)
+    n2.set_next(n3)
+
+    # Test deep access
+    print(f"n1.next.val: {n1.get_next().get_val()}") # Should be 2
+    print(f"n1.next.next.val: {n1.get_next().get_next().get_val()}") # Should be 3
+
+    return 0
