@@ -135,6 +135,11 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 
 	// Collect nested classes
 	for _, nested := range d.Nested {
+		// Error if nested class has its own nested classes (only 2-level nesting allowed)
+		if len(nested.Nested) > 0 {
+			c.add(diagAt("DTE0200", nested.Nested[0].Span, "nested classes cannot contain further nested classes"))
+			continue
+		}
 		// Create Class type for nested class with IsNested=true
 		nestedCls := &types.Class{
 			Name:          nested.Name.Name,

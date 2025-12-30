@@ -1,0 +1,11 @@
+# Edge Case 3: Static method on nested class
+from edge_case_nested_helper import Container.Utils
+
+def main() -> int:
+	# Call static method without instance
+	let result: int = Utils.helper()
+	print(f"Static method result: {result}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Static method result: 42

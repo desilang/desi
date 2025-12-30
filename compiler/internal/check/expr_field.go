@@ -17,7 +17,8 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 	// x.X might be an Ident referring to a class type
 	if id, ok := x.X.(*ast.Ident); ok {
 		sym := c.scope.Lookup(id.Name)
-		if sym != nil && sym.Kind == SymType {
+		// Check both SymType and SymFunc since imported classes use SymFunc but have classType in Type field
+		if sym != nil && (sym.Kind == SymType || sym.Kind == SymFunc) {
 			// Check if it's a Class type with static methods
 			if classType, ok := sym.Type.(*types.Class); ok {
 				methodName := x.Name.Name

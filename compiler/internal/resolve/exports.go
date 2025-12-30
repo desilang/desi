@@ -260,11 +260,13 @@ func CollectExports(mod *ast.Module) *Exports {
 			}
 			qualifiedName := name + "." + nested.Name.Name
 			nestedType := &types.Class{
-				Name:         qualifiedName,
-				Constructors: []*types.Func{},
-				Fields:       []types.Field{},
-				Methods:      map[string]*types.Func{},
-				IsNested:     true,
+				Name:          qualifiedName,
+				Constructors:  []*types.Func{},
+				Fields:        []types.Field{},
+				Methods:       map[string]*types.Func{},
+				StaticMethods: map[string]*types.Func{},
+				Constants:     map[string]*types.ClassConstant{},
+				IsNested:      true,
 			}
 
 			// Extract nested class fields
@@ -308,12 +310,29 @@ func CollectExports(mod *ast.Module) *Exports {
 				if !method.Pub {
 					continue
 				}
-				// Include self (the nested class type) as first param
-				// This matches how checkClass processes methods - expr_field.go strips self when creating bound methods
-				params := []types.T{nestedType}
+
+				// Check if this is a static method (has @staticmethod decorator) BEFORE building params
+				isStatic := false
+				for _, dec := range method.Decorators {
+					if dec.Name.Name == "staticmethod" {
+						isStatic = true
+						break
+					}
+				}
+
+				// Only include self for instance methods, not static methods
+				var params []types.T
+				if !isStatic {
+					// Instance method: include self (the nested class type) as first param
+					params = []types.T{nestedType}
+				} else {
+					// Static method: no self parameter
+					params = []types.T{}
+				}
+
 				for _, p := range method.Params {
 					if p.Name.Name == "self" {
-						continue // Skip explicit self param, we already added nestedType
+						continue // Skip explicit self param, we already added nestedType for instance methods
 					}
 					if p.Type == nil {
 						continue
@@ -330,7 +349,29 @@ func CollectExports(mod *ast.Module) *Exports {
 				}
 				methodFunc := types.FuncOf(params, retType, false)
 				methodFunc.IsPub = true
-				nestedType.Methods[methodName] = methodFunc
+				if isStatic {
+					nestedType.StaticMethods[methodName] = methodFunc
+				} else {
+					nestedType.Methods[methodName] = methodFunc
+				}
+			}
+
+			// Export nested class constants
+			for _, constant := range nested.Constants {
+				if !constant.IsPub {
+					continue
+				}
+				var constType types.T = types.Any
+				if constant.Type != nil {
+					if t, ok := types.FromName(constant.Type.Name); ok {
+						constType = t
+					}
+				}
+				nestedType.Constants[constant.Name.Name] = &types.ClassConstant{
+					Name:  constant.Name.Name,
+					Type:  constType,
+					IsPub: constant.IsPub,
+				}
 			}
 
 			// Add default constructor if none found

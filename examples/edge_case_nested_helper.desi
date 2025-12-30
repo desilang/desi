@@ -1,0 +1,18 @@
+# Edge Case Helper Module
+# Tests: static methods, constants on nested classes
+
+class Container:
+	pub mut outer_val: int
+	
+	# Nested class with static method and constant
+	pub class Utils:
+		pub const MAX_VALUE: int = 100
+		
+		pub mut data: int
+		
+		pub def get_data(self) -> int:
+			return self.data
+		
+		@staticmethod
+		pub def helper() -> int:
+			return 42
