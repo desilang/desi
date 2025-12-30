@@ -1,0 +1,23 @@
+# Test chained method call with intermediate variable
+# This avoids the chained call pattern to verify the function itself works
+
+class Foo:
+	pub mut value: int
+	
+	pub def get_value(self) -> int:
+		return self.value
+
+def create_foo() -> Foo:
+	let f: Foo = Foo()
+	f.value := 42
+	return f
+
+def main() -> int:
+	# Store in variable first (should work)
+	let foo: Foo = create_foo()
+	let result: int = foo.get_value()
+	print(f"Variable call result: {result}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Variable call result: 42

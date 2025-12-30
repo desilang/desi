@@ -1028,7 +1028,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 			// Heuristic: if callee name matches class name, it's a constructor.
 			// This avoids issues where ls.info.Idents/Types lookup fails for the class name identifier.
-			if ls.calleeName(x.Callee) == cls.Name {
+			callee := ls.calleeName(x.Callee)
+			if callee == cls.Name {
 				isConstructor = true
 			}
 
@@ -1338,13 +1339,30 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	// Fix for class constructor calls (nested classes etc)
-	// When the result type is a Class, force ptr return type and use mangled class name
+	// When the result type is a Class AND callee matches class name, force ptr return type and use mangled class name
+	// NOTE: Only apply to actual constructor calls, not factory functions that return class types
 	if ls.info != nil {
 		if t := ls.info.Types[x]; t != nil {
 			if cls, ok := t.(*types.Class); ok {
 				retType = "ptr"
-				// Use mangled class name for nested classes (Container.Inner -> Container_Inner)
-				callee = mangleGenericClassName(cls.Name, nil)
+				// Check if callee IS the constructor:
+				// - callee == cls.Name (simple case: "Foo" == "Foo")
+				// - callee is last segment of qualified name (nested case: "Inner" in "Container.Inner")
+				// - callee starts with cls.Name + "." (shouldn't normally happen but for safety)
+				isConstructorCall := callee == cls.Name
+				if !isConstructorCall {
+					// For nested classes imported as "Inner" (from Container.Inner)
+					// cls.Name is "Container.Inner" but callee is "Inner"
+					if parts := strings.Split(cls.Name, "."); len(parts) > 1 {
+						lastName := parts[len(parts)-1]
+						if callee == lastName {
+							isConstructorCall = true
+						}
+					}
+				}
+				if isConstructorCall {
+					callee = mangleGenericClassName(cls.Name, nil)
+				}
 			}
 		}
 	}

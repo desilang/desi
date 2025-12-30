@@ -1,0 +1,22 @@
+# Test chained method call on returned class instance
+# This tests that create_foo().method() correctly calls create_foo() first
+
+class Foo:
+	pub mut value: int
+	
+	pub def get_value(self) -> int:
+		return self.value
+
+def create_foo() -> Foo:
+	let f: Foo = Foo()
+	f.value := 42
+	return f
+
+def main() -> int:
+	# Chained call: create_foo().get_value() should call create_foo() then get_value()
+	let result: int = create_foo().get_value()
+	print(f"Chained call result: {result}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Chained call result: 42
