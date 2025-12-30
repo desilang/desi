@@ -1,0 +1,7 @@
+# EXPECTED: COMPILE_ERROR
+# Test 3-level nested classes (should produce error DTE0200)
+
+class Outer:
+	class Inner:
+		class SubInner:
+			pub mut value: int
