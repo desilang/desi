@@ -1,0 +1,11 @@
+# Edge Case 1: Import with alias
+from nested_class_helper import Container.Inner as MyInner
+
+def main() -> int:
+	let inner: MyInner = MyInner()
+	inner.value := 99
+	print(f"Alias import: {inner.get_value()}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Alias import: 99

@@ -1,0 +1,9 @@
+# EXPECTED: COMPILE_ERROR
+# Edge Case: Private nested class import should produce error
+# Testing that private nested classes are not importable
+
+from nested_class_helper import Container.PrivateInner
+
+def main() -> int:
+	let private: PrivateInner = PrivateInner()
+	return 0

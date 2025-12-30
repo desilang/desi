@@ -173,9 +173,10 @@ func PopulateImportedFuncSigs(mod *ast.Module, info *Info, rinfo *resolve.Info) 
 
 					// Check if it's a class export
 					// For nested classes, use qualified path (e.g., "Container.Inner")
+					// Use 'local' (which includes alias) as the key for FromItemPaths
 					lookupName := name
 					if rinfo.FromItemPaths != nil {
-						if qp, ok := rinfo.FromItemPaths[name]; ok {
+						if qp, ok := rinfo.FromItemPaths[local]; ok {
 							lookupName = qp
 						}
 					}
