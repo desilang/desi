@@ -1,0 +1,18 @@
+# Edge Case 5: Nested class as field type in another class
+from edge_case_nested_helper import Container.Utils
+
+class Wrapper:
+	pub mut utils: Utils
+	
+	pub def get_utils_data(self) -> int:
+		return self.utils.get_data()
+
+def main() -> int:
+	let wrapper: Wrapper = Wrapper()
+	wrapper.utils := Utils()
+	wrapper.utils.data := 55
+	print(f"Nested as field type: {wrapper.get_utils_data()}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Nested as field type: 55
