@@ -1,0 +1,15 @@
+# Cross-File Function Import Test
+# Verify that function imports work correctly
+
+from func_helper import add
+
+def main() -> int:
+	let a: int = add(10, 20)
+	let b: int = add(a, 5)
+	print(f"{a}")
+	print(f"{b}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# 30
+# 35

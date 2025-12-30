@@ -1,0 +1,21 @@
+# Cross-File Multiple Class Import Test
+# Verify that multiple classes can be imported from same module
+
+from nested_class_helper import PublicItem, AnotherItem
+
+def main() -> int:
+	# Test first class
+	let item: PublicItem = PublicItem()
+	item.value := 42
+	print(f"{item.get_value()}")
+	
+	# Test second class
+	let another: AnotherItem = AnotherItem()
+	another.count := 10
+	print(f"{another.count}")
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# 10

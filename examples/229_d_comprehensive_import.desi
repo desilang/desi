@@ -1,0 +1,39 @@
+# Comprehensive Cross-File Import Test
+# Tests all import scenarios: class, function, multiple classes, field access, method calls
+
+from class_helper import Item
+from func_helper import add
+from nested_class_helper import PublicItem, AnotherItem
+
+def main() -> int:
+	# Test 1: Simple class import with field and method
+	let item: Item = Item()
+	item.value := 10
+	let v1: int = item.get_value()
+	print(f"Test 1 - Class import: {v1}")
+	
+	# Test 2: Function import
+	let sum: int = add(v1, 5)
+	print(f"Test 2 - Func import: {sum}")
+	
+	# Test 3: Multiple class imports from same module
+	let pub_item: PublicItem = PublicItem()
+	pub_item.value := 20
+	print(f"Test 3a - Multi-class: {pub_item.get_value()}")
+	
+	let another: AnotherItem = AnotherItem()
+	another.count := 30
+	print(f"Test 3b - Multi-class: {another.count}")
+	
+	# Test 4: Chaining - use imported func with imported class value
+	let chained: int = add(item.get_value(), pub_item.get_value())
+	print(f"Test 4 - Chained: {chained}")
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# Test 1 - Class import: 10
+# Test 2 - Func import: 15
+# Test 3a - Multi-class: 20
+# Test 3b - Multi-class: 30
+# Test 4 - Chained: 30
