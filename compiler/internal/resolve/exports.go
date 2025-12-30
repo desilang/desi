@@ -172,20 +172,61 @@ func CollectExports(mod *ast.Module) *Exports {
 		classType := &types.Class{
 			Name:         name,
 			Constructors: []*types.Func{},
+			Fields:       []types.Field{},
+			Methods:      map[string]*types.Func{},
 		}
 
-		// Extract __new__ method signatures from the class methods
+		// Extract fields from class
+		for _, field := range cls.Fields {
+			if field.Type == nil {
+				continue
+			}
+			fieldType, ok := types.FromName(field.Type.Name)
+			if !ok {
+				continue
+			}
+			classType.Fields = append(classType.Fields, types.Field{
+				Name:  field.Name.Name,
+				Type:  fieldType,
+				IsPub: field.Pub,
+				IsMut: field.Mut,
+			})
+		}
+
+		// Extract methods from class (including __new__)
 		for _, method := range cls.Methods {
-			if method.Name.Name != "__new__" {
+			methodName := method.Name.Name
+
+			// Handle __new__ as constructor
+			if methodName == "__new__" {
+				params := make([]types.T, 0, len(method.Params))
+				for _, p := range method.Params {
+					if p.Name.Name == "self" || p.Name.Name == "cls" {
+						continue
+					}
+					if p.Type == nil {
+						continue
+					}
+					if t, ok := types.FromName(p.Type.Name); ok {
+						params = append(params, t)
+					}
+				}
+				returnType := classType
+				constructorFunc := types.FuncOf(params, returnType, false)
+				classType.Constructors = append(classType.Constructors, constructorFunc)
 				continue
 			}
 
-			// Build the constructor function type from parameters
-			// Skip the first parameter if it's "self" (methods have implicit self)
+			// Skip non-public methods
+			if !method.Pub {
+				continue
+			}
+
+			// Build the method function type
 			params := make([]types.T, 0, len(method.Params))
 			for _, p := range method.Params {
-				if p.Name.Name == "self" || p.Name.Name == "cls" {
-					continue // Skip self/cls parameter
+				if p.Name.Name == "self" {
+					continue
 				}
 				if p.Type == nil {
 					continue
@@ -194,11 +235,15 @@ func CollectExports(mod *ast.Module) *Exports {
 					params = append(params, t)
 				}
 			}
-
-			// Return type is the class itself
-			returnType := classType
-			constructorFunc := types.FuncOf(params, returnType, false)
-			classType.Constructors = append(classType.Constructors, constructorFunc)
+			var retType types.T = types.None
+			if method.RetType != nil {
+				if t, ok := types.FromName(method.RetType.Name); ok {
+					retType = t
+				}
+			}
+			methodFunc := types.FuncOf(params, retType, false)
+			methodFunc.IsPub = true // Mark as public for cross-module access
+			classType.Methods[methodName] = methodFunc
 		}
 
 		// If no __new__ found, add a default zero-arg constructor
