@@ -1,0 +1,34 @@
+# Advanced Nested Class Import Test
+# Tests edge cases: method args, multiple nested classes from same outer
+
+from advanced_nested_helper import Outer.Inner, Outer.Node
+
+def main() -> int:
+	# Test 1: Create nested class instance
+	let inner: Inner = Inner()
+	inner.value := 100
+	inner.name := "test"
+	print(f"Test 1 - Fields: {inner.value}, {inner.describe()}")
+	
+	# Test 2: Method with args and field mutation
+	let new_val: int = inner.add_to_value(50)
+	print(f"Test 2 - Method with args: {new_val}")
+	
+	# Test 3: Second nested class
+	let node: Node = Node()
+	node.data := 42
+	node.set_next(8)
+	print(f"Test 3 - Second nested class: {node.sum()}")
+	
+	# Test 4: Multiple instances
+	let inner2: Inner = Inner()
+	inner2.value := 200
+	print(f"Test 4 - Multiple instances: {inner.value}, {inner2.value}")
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# Test 1 - Fields: 100, test
+# Test 2 - Method with args: 150
+# Test 3 - Second nested class: 50
+# Test 4 - Multiple instances: 150, 200

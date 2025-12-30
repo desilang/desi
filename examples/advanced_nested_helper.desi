@@ -1,0 +1,32 @@
+# Advanced Nested Class Helper Module
+# Tests edge cases: multiple nested classes, methods with args, field mutation
+
+class Outer:
+	pub mut outer_data: int
+	
+	# Public nested class with constructor args
+	pub class Inner:
+		pub mut value: int
+		pub mut name: str
+		
+		pub def describe(self) -> str:
+			return self.name
+		
+		pub def add_to_value(self, amount: int) -> int:
+			self.value := self.value + amount
+			return self.value
+	
+	# Another public nested class
+	pub class Node:
+		pub mut data: int
+		pub mut next_val: int
+		
+		pub def set_next(self, n: int):
+			self.next_val := n
+		
+		pub def sum(self) -> int:
+			return self.data + self.next_val
+	
+	# Private nested class (should NOT be importable)
+	class Secret:
+		mut hidden: int
