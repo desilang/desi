@@ -17,19 +17,23 @@ import (
 // - Box_int___new__, Box_int_get, Box_int_set
 // - Box_str___new__, Box_str_get, Box_str_set
 func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []*hir.Func {
-	className := cd.Name.Name
+	// Get base class type for field/method info
+	var baseCls *types.Class
+	if t := info.Types[cd]; t != nil {
+		baseCls, _ = t.(*types.Class)
+	}
+
+	if baseCls == nil {
+		return nil
+	}
+
+	className := baseCls.Name // Use fully qualified name from type (e.g., Container.Box)
 	instantiations := info.ClassInstantiations[className]
 	if len(instantiations) == 0 {
 		return nil
 	}
 
 	var funcs []*hir.Func
-
-	// Get base class type for field/method info
-	var baseCls *types.Class
-	if t := info.Types[cd]; t != nil {
-		baseCls, _ = t.(*types.Class)
-	}
 
 	// Track processed instantiations to avoid duplicates
 	processed := make(map[string]bool)

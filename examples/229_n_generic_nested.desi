@@ -1,0 +1,24 @@
+# Test generic nested class with constructor inference
+
+class Container:
+	pub class Box<T>:
+		pub mut val: T
+		
+		pub def __new__(self, v: T):
+			self.val = v
+		
+		pub def get(self) -> T:
+			return self.val
+
+def main() -> int:
+	# Use constructor inference
+	let b = Container.Box(42)  # Infers Container.Box<int>
+	print(f"Generic nested value: {b.get()}")
+	
+	let s = Container.Box("hello") # Infers Container.Box<str>
+	print(f"Generic nested string: {s.get()}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Generic nested value: 42
+# Generic nested string: hello
