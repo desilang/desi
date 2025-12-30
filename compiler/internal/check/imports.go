@@ -72,76 +72,80 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 		return out
 	}
 
-	// Find the synthetic __top__ function
-	var topFn *ast.FuncDecl
+	// Find ALL synthetic __top__ functions (pub let creates separate ones)
+	var topFns []*ast.FuncDecl
 	for _, d := range mod.Decls {
 		if fn, ok := d.(*ast.FuncDecl); ok && fn.Name.Name == "__top__" {
-			topFn = fn
-			break
+			topFns = append(topFns, fn)
 		}
 	}
-	if topFn == nil || topFn.Body == nil {
+	if len(topFns) == 0 {
 		return out
 	}
 
-	// Scan for LetStmt and bind globals
-	for _, st := range topFn.Body.Stmts {
-		ls, ok := st.(*ast.LetStmt)
-		if !ok || ls.Name.Name == "" {
+	// Scan ALL __top__ functions for LetStmt and bind globals
+	for _, topFn := range topFns {
+		if topFn.Body == nil {
 			continue
 		}
-
-		// Check 1: Global constants must be immutable
-		if ls.Mutable {
-			out = append(out, diagAt("DTE0051", ls.Name.Span, "global variable '"+ls.Name.Name+"' must be immutable (no 'mut')"))
-		}
-
-		// Check 2: Global constants should be UPPER_CASE (Warning)
-		// We simply check if the first letter is lowercase for a heuristic
-		if len(ls.Name.Name) > 0 {
-			first := ls.Name.Name[0]
-			if first >= 'a' && first <= 'z' {
-				out = append(out, diagAt("DW0008", ls.Name.Span, "global constant '"+ls.Name.Name+"' should be UPPER_CASE"))
+		for _, st := range topFn.Body.Stmts {
+			ls, ok := st.(*ast.LetStmt)
+			if !ok || ls.Name.Name == "" {
+				continue
 			}
-		}
 
-		// Resolve the type from annotation
-		var t types.T
-		if ls.Type != nil {
-			t = resolveSimpleTypeName(ls.Type)
-		} else if ls.Value != nil {
-			// Infer type from literal value
-			switch v := ls.Value.(type) {
-			case *ast.IntLit:
-				t = types.Int
-			case *ast.FloatLit:
-				t = types.Float
-			case *ast.StrLit, *ast.FString:
-				t = types.Str
-			case *ast.BoolLit:
-				t = types.Bool
-			case *ast.NoneLit:
-				t = types.None
-			case *ast.UnaryExpr:
-				// Handle negative numbers: -100, -3.14
-				if v.Op == "-" {
-					switch v.X.(type) {
-					case *ast.IntLit:
-						t = types.Int
-					case *ast.FloatLit:
-						t = types.Float
+			// Check 1: Global constants must be immutable
+			if ls.Mutable {
+				out = append(out, diagAt("DTE0051", ls.Name.Span, "global variable '"+ls.Name.Name+"' must be immutable (no 'mut')"))
+			}
+
+			// Check 2: Global constants should be UPPER_CASE (Warning)
+			// We simply check if the first letter is lowercase for a heuristic
+			if len(ls.Name.Name) > 0 {
+				first := ls.Name.Name[0]
+				if first >= 'a' && first <= 'z' {
+					out = append(out, diagAt("DW0008", ls.Name.Span, "global constant '"+ls.Name.Name+"' should be UPPER_CASE"))
+				}
+			}
+
+			// Resolve the type from annotation
+			var t types.T
+			if ls.Type != nil {
+				t = resolveSimpleTypeName(ls.Type)
+			} else if ls.Value != nil {
+				// Infer type from literal value
+				switch v := ls.Value.(type) {
+				case *ast.IntLit:
+					t = types.Int
+				case *ast.FloatLit:
+					t = types.Float
+				case *ast.StrLit, *ast.FString:
+					t = types.Str
+				case *ast.BoolLit:
+					t = types.Bool
+				case *ast.NoneLit:
+					t = types.None
+				case *ast.UnaryExpr:
+					// Handle negative numbers: -100, -3.14
+					if v.Op == "-" {
+						switch v.X.(type) {
+						case *ast.IntLit:
+							t = types.Int
+						case *ast.FloatLit:
+							t = types.Float
+						}
 					}
 				}
 			}
-		}
 
-		// Define the global in the top scope
-		sym := &Symbol{
-			Name: ls.Name.Name,
-			Kind: SymVar,
-			Type: t,
+			// Define the global in the top scope
+			sym := &Symbol{
+				Name: ls.Name.Name,
+				Kind: SymVar,
+				Type: t,
+			}
+			top.Define(sym)
 		}
-		top.Define(sym)
 	}
 	return out
 }

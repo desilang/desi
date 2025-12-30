@@ -1,0 +1,22 @@
+# Test non-pub globals in f-strings
+# This test verifies that non-pub globals work correctly within the same file
+
+# Non-pub globals (private to this module)
+let PRIVATE_INT = 42
+let PRIVATE_FLOAT = 3.14
+let PRIVATE_STR = "private"
+let PRIVATE_BOOL = true
+
+def main() -> int:
+	# Test non-pub globals in f-strings
+	print(f"Private int: {PRIVATE_INT}")
+	print(f"Private float: {PRIVATE_FLOAT}")
+	print(f"Private str: {PRIVATE_STR}")
+	print(f"Private bool: {PRIVATE_BOOL}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Private int: 42
+# Private float: 3.140000
+# Private str: private
+# Private bool: true
