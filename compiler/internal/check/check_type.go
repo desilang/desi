@@ -159,6 +159,19 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		for _, tp := range nested.TypeParams {
 			nestedCls.TypeParams = append(nestedCls.TypeParams, types.TypeParam{Name: tp.Name})
 		}
+
+		// Create nested scope for type parameters if any (so T is visible for fields/methods)
+		if len(nested.TypeParams) > 0 {
+			c.scope = NewScope(c.scope)
+			for i, tp := range nested.TypeParams {
+				c.scope.Define(&Symbol{
+					Name: tp.Name,
+					Kind: SymType,
+					Type: &nestedCls.TypeParams[i],
+				})
+			}
+		}
+
 		// Collect fields for nested class (so self.field works in methods)
 		for _, field := range nested.Fields {
 			var fieldType types.T = types.Any
@@ -177,6 +190,11 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		// Collect methods for nested class (so they are in c.info.Funcs for checkFunc)
 		for _, m := range nested.Methods {
 			c.collectFunc(m)
+		}
+
+		// Restore scope if we created one for type params
+		if len(nested.TypeParams) > 0 {
+			c.scope = c.scope.parent
 		}
 		// Register in outer scope (not the inner scope created for type params)
 		c.scope.parent.Define(&Symbol{
