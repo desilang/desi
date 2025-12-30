@@ -308,10 +308,12 @@ func CollectExports(mod *ast.Module) *Exports {
 				if !method.Pub {
 					continue
 				}
-				params := make([]types.T, 0, len(method.Params))
+				// Include self (the nested class type) as first param
+				// This matches how checkClass processes methods - expr_field.go strips self when creating bound methods
+				params := []types.T{nestedType}
 				for _, p := range method.Params {
 					if p.Name.Name == "self" {
-						continue
+						continue // Skip explicit self param, we already added nestedType
 					}
 					if p.Type == nil {
 						continue
