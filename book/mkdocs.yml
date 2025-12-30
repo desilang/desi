@@ -89,6 +89,7 @@ nav:
     - Iterators: language/iterators.md
     - Error Handling: language/error-handling.md
     - Reference Counting: language/rc.md
+    - Pipeline Operator: language/pipeline.md
   - Reference:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md

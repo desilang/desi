@@ -10,6 +10,9 @@ class Processor:
     pub def process(self, x: int) -> int:
          return x * self.val
 
+    pub def sub(self, a: int, b: int) -> int:
+        return a - b
+
     # Chaining method that returns self (to test p.set().process())
     pub def set_val(self, v: int) -> Processor:
         self.val := v
@@ -42,6 +45,11 @@ def main() -> int:
     # This should be equivalent to p.set_val(2).process(5)
     # p.val becomes 2. process(5) -> 5 * 2 = 10.
     
+    # Test 4: Pipeline Arg Ordering
+    # 10 |> p.sub(5) should be p.sub(10, 5) -> 5
+    let res4 = 10 |> p.sub(5)
+    print(f"Res4: {res4}")
+
     let res3 = 5 |> p.set_val(2).process()
     print(f"Res3: {res3}")
 
@@ -50,4 +58,5 @@ def main() -> int:
 # EXPECTED_OUTPUT:
 # Res1: 50
 # Res2: 150
+# Res4: 5
 # Res3: 10
