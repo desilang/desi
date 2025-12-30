@@ -22,3 +22,6 @@ def main() -> int:
     # But StrBox returns StrBox.
     
     return 0
+
+# EXPECTED_OUTPUT:
+# Result: Hello World!

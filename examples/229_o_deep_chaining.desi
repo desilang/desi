@@ -31,3 +31,7 @@ def main() -> int:
     print(f"n1.next.next.val: {n1.get_next().get_next().get_val()}") # Should be 3
 
     return 0
+
+# EXPECTED_OUTPUT:
+# n1.next.val: 2
+# n1.next.next.val: 3

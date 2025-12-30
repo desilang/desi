@@ -1,0 +1,53 @@
+
+class Processor:
+    pub mut val: int
+
+    # Adds val to x
+    pub def add(self, x: int) -> int:
+        return self.val + x
+
+    # Multiplies x by val
+    pub def process(self, x: int) -> int:
+         return x * self.val
+
+    # Chaining method that returns self (to test p.set().process())
+    pub def set_val(self, v: int) -> Processor:
+        self.val := v
+        return self
+
+def main() -> int:
+    let p = Processor()
+    p.val := 10
+    
+    # Test 1: val |> p.process() -> p.process(val)
+    # 5 * 10 = 50
+    let res1 = 5 |> p.process() 
+    print(f"Res1: {res1}") 
+
+    # Test 2: val |> p.add() |> p.process()
+    # (5 + 10) * 10 = 150
+    let res2 = 5 |> p.add() |> p.process()
+    print(f"Res2: {res2}")
+
+    # Test 3: Pipeline with method chaining on the object side?
+    # val |> obj.method() works because AST is CallExpr(obj.method).
+    # val |> obj.set(2).process() -> obj.set(2).process(val)?
+    # AST: CallExpr(Callee: CallExpr(set), Args: []). Args append val.
+    # So obj.set(2).process(val).
+    # p.set_val(2) returns p. 
+    # p.process(val).
+    
+    p.val := 10
+    # 5 |> p.set_val(2).process() 
+    # This should be equivalent to p.set_val(2).process(5)
+    # p.val becomes 2. process(5) -> 5 * 2 = 10.
+    
+    let res3 = 5 |> p.set_val(2).process()
+    print(f"Res3: {res3}")
+
+    return 0
+
+# EXPECTED_OUTPUT:
+# Res1: 50
+# Res2: 150
+# Res3: 10
