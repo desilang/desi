@@ -92,6 +92,42 @@ def main() -> int:
 
 ---
 
+## Format Specifiers
+
+Control how values are formatted using Python-style specifiers:
+
+```desi
+let pi = 3.14159265
+let count = 42
+
+# Float precision
+print(f"Pi: {pi:.2f}")      # Pi: 3.14
+
+# Zero-padded integers
+print(f"Count: {count:05d}")  # Count: 00042
+
+# Hex formatting
+print(f"Hex: {count:x}")    # Hex: 2a
+print(f"HEX: {count:X}")    # HEX: 2A
+
+# Width (right-aligned)
+print(f"Width: {count:10d}")  # Width:         42
+```
+
+### Supported Specifiers
+
+| Spec | Description | Example |
+|------|-------------|---------|
+| `.Nf` | Float with N decimal places | `{pi:.2f}` → `3.14` |
+| `Nd` | Integer width | `{x:5d}` → `   42` |
+| `0Nd` | Zero-padded integer | `{x:05d}` → `00042` |
+| `x` | Lowercase hex | `{42:x}` → `2a` |
+| `X` | Uppercase hex | `{42:X}` → `2A` |
+| `o` | Octal | `{42:o}` → `52` |
+| `#x` | Hex with prefix | `{42:#x}` → `0x2a` |
+
+---
+
 ## Escaping Braces
 
 Use double braces for literal `{` or `}`:

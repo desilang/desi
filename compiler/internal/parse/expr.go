@@ -1,6 +1,8 @@
 package parse
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/token"
@@ -649,9 +651,31 @@ func (p *Parser) parseFString() ast.Expr {
 			p.next()
 
 		case token.LBRACE:
+			exprStart := spanPos(p.file, p.cur)
 			p.next() // consume {
 			expr := p.parseExpr()
-			parts = append(parts, expr)
+
+			// Check for format spec: {expr:spec}
+			var spec string
+			if p.cur.Tok == token.COLON {
+				p.next() // consume :
+				// Parse format spec - collect characters until }
+				// The spec can contain: fill, align, sign, #, 0, width, .precision, type
+				spec = p.parseFStringSpec()
+			}
+
+			// Wrap in FStringExpr if there's a spec, otherwise use raw expr
+			var part ast.Expr
+			if spec != "" {
+				part = &ast.FStringExpr{
+					X:    expr,
+					Spec: spec,
+					Span: ast.JoinSpan(exprStart, spanPos(p.file, p.cur)),
+				}
+			} else {
+				part = expr
+			}
+			parts = append(parts, part)
 			if !p.expect(token.RBRACE, "}") {
 				return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 			}
@@ -666,6 +690,21 @@ func (p *Parser) parseFString() ast.Expr {
 			return &ast.FString{Parts: parts, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 		}
 	}
+}
+
+// parseFStringSpec parses a format specification after ':' in f-string.
+// Collects characters until '}' is encountered.
+// Grammar: [[fill]align][sign]['#']['0'][width]['.' precision][type]
+// Examples: ".2f", "05d", ">10s", "x", "#x"
+func (p *Parser) parseFStringSpec() string {
+	var spec strings.Builder
+	// Collect tokens until we hit RBRACE
+	// The lexer may give us different token types for parts of the spec
+	for p.cur.Tok != token.RBRACE && p.cur.Tok != token.EOF && p.cur.Tok != token.FSTR_END {
+		spec.WriteString(p.cur.Lexeme)
+		p.next()
+	}
+	return spec.String()
 }
 
 // parseDictLiteralOrComp disambiguates between dict literals and comprehensions.

@@ -153,12 +153,24 @@ func (*StrLit) isExpr()             {}
 func (x *StrLit) SpanOf() diag.Span { return x.Span }
 
 type FString struct {
-	Parts []Expr // StrLit or other Exprs
+	Parts []Expr // StrLit, FStringExpr, or other Exprs
 	Span  diag.Span
 }
 
 func (*FString) isExpr()             {}
 func (x *FString) SpanOf() diag.Span { return x.Span }
+
+// FStringExpr wraps an expression with an optional format spec.
+// Used inside FString.Parts when the expression has a format specifier.
+// Example: f"{value:.2f}" -> FStringExpr{X: value, Spec: ".2f"}
+type FStringExpr struct {
+	X    Expr   // The expression to format
+	Spec string // Format spec (e.g., ".2f", "05d", "x") - empty if no spec
+	Span diag.Span
+}
+
+func (*FStringExpr) isExpr()             {}
+func (x *FStringExpr) SpanOf() diag.Span { return x.Span }
 
 type BoolLit struct {
 	Value bool

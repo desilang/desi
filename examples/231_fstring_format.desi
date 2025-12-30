@@ -1,0 +1,28 @@
+# Test f-string format specifiers
+
+def main() -> int:
+	let pi = 3.14159265
+	let count = 42
+	let name = "Desi"
+	
+	# Float precision
+	print(f"Pi to 2 decimals: {pi:.2f}")
+	
+	# Zero-padded integer
+	print(f"Padded count: {count:05d}")
+	
+	# Hex formatting
+	print(f"Hex: {count:x}")
+	print(f"Hex upper: {count:X}")
+	
+	# Basic width (no alignment yet)
+	print(f"Width: {count:10d}")
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# Pi to 2 decimals: 3.14
+# Padded count: 00042
+# Hex: 2a
+# Hex upper: 2A
+# Width:         42
