@@ -327,6 +327,8 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 			}
 		}
 	}
+	if len(fd.Params) > 0 && fd.Params[0].Name.Name == "self" {
+	}
 
 	// Bind params.
 	for i := range fd.Params {

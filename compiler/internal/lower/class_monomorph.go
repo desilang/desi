@@ -67,16 +67,20 @@ func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte) []
 
 // mangleGenericClassName generates a mangled name for a generic class instantiation.
 // Box<int> -> Box_int, Pair<int, str> -> Pair_int_str
+// For nested classes like Container.Inner, the dot is replaced with underscore.
 func mangleGenericClassName(base string, args []types.T) string {
+	// Replace dots with underscores for nested classes (Container.Inner -> Container_Inner)
+	safeBase := strings.ReplaceAll(base, ".", "_")
+
 	if len(args) == 0 {
-		return base
+		return safeBase
 	}
 
 	var parts []string
 	for _, arg := range args {
 		parts = append(parts, mangleTypeName(arg))
 	}
-	return fmt.Sprintf("%s_%s", base, strings.Join(parts, "_"))
+	return fmt.Sprintf("%s_%s", safeBase, strings.Join(parts, "_"))
 }
 
 // mangleTypeName converts a type to a name-safe string for mangling.

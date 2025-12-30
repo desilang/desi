@@ -1,0 +1,12 @@
+# Multi-Class Helper Module
+# Multiple top-level public classes for import testing
+
+class PublicItem:
+	pub mut value: int
+	
+	pub def get_value(self) -> int:
+		return self.value
+
+class AnotherItem:
+	pub mut name: str
+	pub mut count: int

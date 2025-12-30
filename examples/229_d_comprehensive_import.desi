@@ -3,7 +3,7 @@
 
 from class_helper import Item
 from func_helper import add
-from nested_class_helper import PublicItem, AnotherItem
+from multi_class_helper import PublicItem, AnotherItem
 
 def main() -> int:
 	# Test 1: Simple class import with field and method
