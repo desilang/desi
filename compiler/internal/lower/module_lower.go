@@ -84,6 +84,21 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 							}
 						}
 						typ = "ptr"
+					case *ast.FloatLit:
+						val = v.Text
+						typ = "double"
+					case *ast.UnaryExpr:
+						// Handle negative numbers: -100, -3.14
+						if v.Op == "-" {
+							switch inner := v.X.(type) {
+							case *ast.IntLit:
+								val = "-" + inner.Text
+								typ = "i64"
+							case *ast.FloatLit:
+								val = "-" + inner.Text
+								typ = "double"
+							}
+						}
 					}
 				}
 

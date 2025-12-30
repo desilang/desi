@@ -1,0 +1,15 @@
+# Helper file for global visibility testing
+
+# Public global - can be imported
+pub let PUB_CONST = 100
+
+# Note: Non-pub globals work for LLVM lowering but f-string type inference
+# may not work correctly. This is a known limitation to fix later.
+
+def main() -> int:
+	# This file can use pub globals
+	print(f"Public: {PUB_CONST}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Public: 100
