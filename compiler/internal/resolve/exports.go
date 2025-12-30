@@ -370,6 +370,7 @@ func CollectExports(mod *ast.Module) *Exports {
 				nestedType.Constants[constant.Name.Name] = &types.ClassConstant{
 					Name:  constant.Name.Name,
 					Type:  constType,
+					Value: constant.Value, // Include Value for lowering to emit constant value
 					IsPub: constant.IsPub,
 				}
 			}

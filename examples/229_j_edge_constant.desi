@@ -1,0 +1,11 @@
+# Edge Case 4: Constant access on nested class
+from edge_case_nested_helper import Container.Utils
+
+def main() -> int:
+	# Access class constant
+	let max: int = Utils.MAX_VALUE
+	print(f"Class constant: {max}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Class constant: 100
