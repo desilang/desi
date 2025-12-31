@@ -71,6 +71,7 @@ type Block struct {
 func (b *Block) SpanOf() diag.Span { return b.Span }
 
 type LetStmt struct {
+	Pub       bool // true if 'pub let' (global export)
 	Mutable   bool
 	Name      Ident     // single variable name
 	Pattern   []Ident   // tuple destructuring: (a, b, c) - if non-nil, Name is ignored

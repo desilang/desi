@@ -35,16 +35,16 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
-func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte) *hir.Func {
-	return lowerFuncFromDeclWithContext(fd, info, src, "", nil)
+func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool) *hir.Func {
+	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals)
 }
 
 // LowerFuncForDunderNew lowers a __new__ method with context to prevent recursive constructor calls
-func LowerFuncForDunderNew(fd *ast.FuncDecl, info *check.Info, src []byte, className string, selfPtr hir.Value) *hir.Func {
-	return lowerFuncFromDeclWithContext(fd, info, src, className, selfPtr)
+func LowerFuncForDunderNew(fd *ast.FuncDecl, info *check.Info, src []byte, className string, selfPtr hir.Value, globals map[string]bool) *hir.Func {
+	return lowerFuncFromDeclWithContext(fd, info, src, className, selfPtr, globals)
 }
 
-func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value) *hir.Func {
+func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value, globals map[string]bool) *hir.Func {
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
@@ -52,6 +52,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		terminated:          false,
 		info:                info,
 		src:                 src,
+		globals:             globals,
 		tempsFromArenaAlloc: map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
 		inDunderNew:         dunderNewClass != "",
@@ -204,7 +205,8 @@ type lowerState struct {
 	scopes     []*scope // stack
 	terminated bool     // set once a return is emitted
 	info       *check.Info
-	src        []byte // optional: original source for literal materialization
+	src        []byte          // optional: original source for literal materialization
+	globals    map[string]bool // names of global variables
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
@@ -369,6 +371,10 @@ func scanStringLiteral(src []byte, line, col int, long bool) (string, bool) {
 func (ls *lowerState) lowerLValue(e ast.Expr) string {
 	switch e := e.(type) {
 	case *ast.Ident:
+		// Check for globals
+		if ls.globals != nil && ls.globals[e.Name] && !ls.hasLocal(e.Name) {
+			return "@" + e.Name
+		}
 		return e.Name
 	default:
 		var buf bytes.Buffer

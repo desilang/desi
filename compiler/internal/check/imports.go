@@ -2,6 +2,7 @@ package check
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -65,9 +66,10 @@ func injectImports(top *Scope, info *resolve.Info) {
 
 // injectGlobals scans the __top__ function for top-level let statements
 // and binds them to the module scope so they're visible from all functions.
-func injectGlobals(top *Scope, mod *ast.Module) {
+func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
+	var out []diag.Diagnostic
 	if top == nil || mod == nil {
-		return
+		return out
 	}
 
 	// Find the synthetic __top__ function
@@ -79,7 +81,7 @@ func injectGlobals(top *Scope, mod *ast.Module) {
 		}
 	}
 	if topFn == nil || topFn.Body == nil {
-		return
+		return out
 	}
 
 	// Scan for LetStmt and bind globals
@@ -89,10 +91,38 @@ func injectGlobals(top *Scope, mod *ast.Module) {
 			continue
 		}
 
+		// Check 1: Global constants must be immutable
+		if ls.Mutable {
+			out = append(out, diagAt("DTE0051", ls.Name.Span, "global variable '"+ls.Name.Name+"' must be immutable (no 'mut')"))
+		}
+
+		// Check 2: Global constants should be UPPER_CASE (Warning)
+		// We simply check if the first letter is lowercase for a heuristic
+		if len(ls.Name.Name) > 0 {
+			first := ls.Name.Name[0]
+			if first >= 'a' && first <= 'z' {
+				out = append(out, diagAt("DW0008", ls.Name.Span, "global constant '"+ls.Name.Name+"' should be UPPER_CASE"))
+			}
+		}
+
 		// Resolve the type from annotation
 		var t types.T
 		if ls.Type != nil {
 			t = resolveSimpleTypeName(ls.Type)
+		} else if ls.Value != nil {
+			// Infer type from literal value
+			switch ls.Value.(type) {
+			case *ast.IntLit:
+				t = types.Int
+			case *ast.FloatLit:
+				t = types.Float
+			case *ast.StrLit, *ast.FString:
+				t = types.Str
+			case *ast.BoolLit:
+				t = types.Bool
+			case *ast.NoneLit:
+				t = types.None
+			}
 		}
 
 		// Define the global in the top scope
@@ -103,6 +133,7 @@ func injectGlobals(top *Scope, mod *ast.Module) {
 		}
 		top.Define(sym)
 	}
+	return out
 }
 
 // resolveSimpleTypeName resolves basic type names for globals.

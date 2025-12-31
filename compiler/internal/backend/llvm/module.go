@@ -47,10 +47,15 @@ type Module struct {
 	cfBlocks           map[string]string    // blocks that need terminators to merge labels
 	cfLoopConds        map[string]hir.Value // loop condition blocks -> condition value
 	wroteGlob          bool
-	info               *check.Info       // type checker info for move analysis
-	currentMoves       map[string]bool   // moved variables in current function
-	staticFieldGlobals map[string]string // name -> LLVM type (e.g., "@Counter_count" -> "i32")
-	nameVersions       map[string]int    // track name usage for unique SSA names
+	info               *check.Info          // type checker info for move analysis
+	currentMoves       map[string]bool      // moved variables in current function
+	staticFieldGlobals map[string]GlobalDef // name -> definition
+	nameVersions       map[string]int       // track name usage for unique SSA names
+}
+
+type GlobalDef struct {
+	Type  string
+	Value string
 }
 
 func NewModule(name string) *Module {
@@ -60,9 +65,13 @@ func NewModule(name string) *Module {
 		asyncWrappers:      make(map[string]bool),
 		definedFunctions:   make(map[string]bool),
 		emittedFunctions:   make(map[string]bool),
+		ssa:                make(map[string]hir.Value),
+		tempTypes:          make(map[string]string),
+		varTypes:           make(map[string]types.T),
 		cfBlocks:           make(map[string]string),
 		cfLoopConds:        make(map[string]hir.Value),
-		staticFieldGlobals: make(map[string]string),
+		currentMoves:       make(map[string]bool),
+		staticFieldGlobals: make(map[string]GlobalDef),
 		nameVersions:       make(map[string]int),
 	}
 }
@@ -149,8 +158,8 @@ func (m *Module) writeGlobals() {
 	}
 
 	// Emit static field globals
-	for name, llvmType := range m.staticFieldGlobals {
-		wprintf(&m.globals, "%s = global %s 0, align 4\n", name, llvmType)
+	for name, def := range m.staticFieldGlobals {
+		wprintf(&m.globals, "%s = global %s %s, align 4\n", name, def.Type, def.Value)
 	}
 }
 
@@ -366,7 +375,24 @@ func (m *Module) callRetType(name string) string {
 	return "i32"
 }
 
-// MarkDefined marks a function as defined in this module.
+// DefineGlobal registers a global variable definition.
+// It will be emitted in the module header alongside string literals.
+func (m *Module) DefineGlobal(name, typ, val string) {
+	if val == "" {
+		val = "0"
+		if typ == "ptr" {
+			val = "null"
+		}
+	} else if typ == "ptr" && val != "null" && !strings.HasPrefix(val, "@") && !strings.HasPrefix(val, "getelementptr") {
+		// Assume val is the string content
+		// We call ensureCStringGlobal which returns the @.str global name
+		g, n := m.ensureCStringGlobal(val, false)
+		val = fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
+	}
+	m.staticFieldGlobals[name] = GlobalDef{Type: typ, Value: val}
+}
+
+// RegisterFunc declares a function that will be defined later in this module.
 func (m *Module) MarkDefined(name string) {
 	m.definedFunctions[name] = true
 }

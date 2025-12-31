@@ -397,6 +397,16 @@
       "id": "DDF0005",
       "title": "inconsistent default parameters across overloads",
       "help": "all overloads for a function name must agree on which parameters have defaults"
+    },
+    "global_must_be_immutable": {
+      "id": "DTE0051",
+      "title": "global variable must be immutable",
+      "help": "Global variables cannot be mutable (no 'mut'). Use 'let NAME = ...'."
+    },
+    "non_exhaustive_match": {
+      "id": "DTE0052",
+      "title": "non-exhaustive match",
+      "help": "add arms for the missing variants or a wildcard '_' arm"
     }
   },
   "module": {
@@ -505,10 +515,10 @@
       "id": "DW0006",
       "title": "function may fall through without an explicit return"
     },
-    "non_exhaustive_match": {
-      "id": "DW0007",
-      "title": "non-exhaustive match",
-      "help": "add arms for the missing variants or a wildcard '_' arm"
+    "global_const_case": {
+      "id": "DW0008",
+      "title": "global constant should be UPPER_CASE",
+      "help": "follow the naming convention: use UPPER_CASE for global constants (e.g., MY_CONST)"
     }
   },
   "borrow": {

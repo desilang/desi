@@ -214,7 +214,7 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 
 			if len(missing) > 0 {
 				msg := "match is not exhaustive. Missing variants: " + strings.Join(missing, ", ")
-				c.add(diagAt("DW0007", m.Span, msg))
+				c.add(diagAt("DTE0052", m.Span, msg))
 			}
 		}
 	}

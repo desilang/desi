@@ -45,7 +45,7 @@ func TestAsyncLower_TwoAwaits_StateMachineShape(t *testing.T) {
 		}},
 	}
 
-	w, p := lower.LowerAsyncFunc(fn, nil, nil)
+	w, p := lower.LowerAsyncFunc(fn, nil, nil, nil)
 
 	var buf bytes.Buffer
 	// Wrapper sanity
