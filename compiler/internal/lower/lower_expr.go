@@ -1354,6 +1354,21 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerListComp(x)
 
 	case *ast.BinaryExpr:
+		if x.Op == "|>" {
+			if call, ok := x.Rhs.(*ast.CallExpr); ok {
+				// Construct a new call expression with LHS as the first argument
+				newArgs := make([]ast.Expr, 0, len(call.Args)+1)
+				newArgs = append(newArgs, x.Lhs)
+				newArgs = append(newArgs, call.Args...)
+
+				newCall := &ast.CallExpr{
+					Callee: call.Callee,
+					Args:   newArgs,
+				}
+				return ls.lowerCall(newCall)
+			}
+		}
+
 		// Check for decimal arithmetic first
 		if ls.info != nil {
 			lhsType := ls.info.Types[x.Lhs]

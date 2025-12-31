@@ -1,0 +1,21 @@
+
+def add_one(x: int) -> int:
+    return x + 1
+
+def double(x: int) -> int:
+    return x * 2
+
+class Adder:
+    pub def add(self, x: int, y: int) -> int:
+        return x + y
+
+def main() -> int:
+    # Test basic function pipeline
+    let res = 10 |> add_one() |> double()
+    print(f"Pipeline Result: {res}") 
+    
+    # Test mixing with parens?
+    let res2 = (10 |> add_one()) |> double()
+    print(f"Pipeline Result 2: {res2}")
+
+    return 0

@@ -1,0 +1,24 @@
+
+class StrBox:
+    pub mut val: str
+
+    pub def get_val(self) -> str:
+        return self.val
+
+    pub def append(self, s: str) -> StrBox:
+        self.val := self.val + s
+        return self
+
+def main() -> int:
+    let b = StrBox()
+    b.val := "Hello"
+    
+    # Test chaining with strings (memory management check)
+    b.append(" World").append("!")
+    
+    print(f"Result: {b.get_val()}")
+    
+    # Test method chaining returning string directly (if we had such method)
+    # But StrBox returns StrBox.
+    
+    return 0
