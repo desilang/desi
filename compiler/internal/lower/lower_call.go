@@ -813,6 +813,13 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 	// 2. M14 Stage 1: Method Calls (obj.method())
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
+		// Check if this is a nested class constructor call (e.g. Container.Box())
+		if t := ls.info.Types[fe]; t != nil {
+			if _, ok := t.(*types.Class); ok {
+				goto skipMethodCall
+			}
+		}
+
 		// Check if this is a method call
 		// We need the type of the receiver (fe.X)
 		if recvT := ls.info.Types[fe.X]; recvT != nil {
@@ -997,6 +1004,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 		}
 	}
+
+skipMethodCall:
 
 	// 3. M14: Struct Instantiation
 	// Check if callee is a Type (Struct or Generic Instance)
@@ -1339,16 +1348,30 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	// Fix for class constructor calls (nested classes etc)
-	// When the result type is a Class AND callee matches class name, force ptr return type and use mangled class name
-	// NOTE: Only apply to actual constructor calls, not factory functions that return class types
+	// When the result type is a Class (or Generic instantiation of Class) AND callee matches class name,
+	// force ptr return type and use mangled class name
 	if ls.info != nil {
 		if t := ls.info.Types[x]; t != nil {
-			if cls, ok := t.(*types.Class); ok {
+			var cls *types.Class
+			var genericArgs []types.T
+
+			// Debug
+			println(fmt.Sprintf("DEBUG: lowerCall callee=%s type=%T %v", callee, t, t))
+
+			if c, ok := t.(*types.Class); ok {
+				cls = c
+			} else if g, ok := t.(*types.Generic); ok {
+				if c, ok := g.Base.(*types.Class); ok {
+					cls = c
+					genericArgs = g.Args
+				}
+			}
+
+			if cls != nil {
 				retType = "ptr"
 				// Check if callee IS the constructor:
 				// - callee == cls.Name (simple case: "Foo" == "Foo")
 				// - callee is last segment of qualified name (nested case: "Inner" in "Container.Inner")
-				// - callee starts with cls.Name + "." (shouldn't normally happen but for safety)
 				isConstructorCall := callee == cls.Name
 				if !isConstructorCall {
 					// For nested classes imported as "Inner" (from Container.Inner)
@@ -1361,7 +1384,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 				}
 				if isConstructorCall {
-					callee = mangleGenericClassName(cls.Name, nil)
+					callee = mangleGenericClassName(cls.Name, genericArgs)
 				}
 			}
 		}

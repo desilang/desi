@@ -117,6 +117,12 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 
 				nestedMethods := LowerClassMethodsWithName(nested, info, src, qualifiedName)
 				out.Funcs = append(out.Funcs, nestedMethods...)
+
+				// Monomorphization for generic nested classes
+				if len(nested.TypeParams) > 0 {
+					nestedMonomorphized := LowerMonomorphizedClass(nested, info, src)
+					out.Funcs = append(out.Funcs, nestedMonomorphized...)
+				}
 			}
 		}
 	}

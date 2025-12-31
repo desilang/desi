@@ -141,8 +141,9 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 			continue
 		}
 		// Create Class type for nested class with IsNested=true
+		// Use qualified name (Outer.Inner) to avoid collisions and allow correct mangling
 		nestedCls := &types.Class{
-			Name:          nested.Name.Name,
+			Name:          d.Name.Name + "." + nested.Name.Name,
 			TypeParams:    make([]types.TypeParam, 0, len(nested.TypeParams)),
 			Fields:        make([]types.Field, 0, len(nested.Fields)),
 			Methods:       make(map[string]*types.Func),
