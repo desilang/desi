@@ -146,3 +146,28 @@ void file_free(DesiFile* f) {
         free(f);
     }
 }
+
+// ============================================================
+// DesiStream bridge for print(file=f) support
+// ============================================================
+
+// Forward declaration of DesiStream from print.c
+typedef struct {
+    FILE* handle;
+    int is_owned;
+} DesiStream;
+
+// Static stream wrapper for user files (not owned - file manages lifetime)
+static DesiStream __file_stream = {NULL, 0};
+
+// Get a DesiStream* from a DesiFile* for print() compatibility
+// Returns a temporary stream wrapping the file's handle
+DesiStream* desifile_get_stream(DesiFile* f) {
+    if (!f || f->closed || !f->handle) {
+        return NULL;
+    }
+    // Wrap the file's handle in a static stream (not owned = won't close)
+    __file_stream.handle = f->handle;
+    __file_stream.is_owned = 0;  // Don't close - DesiFile manages lifetime
+    return &__file_stream;
+}

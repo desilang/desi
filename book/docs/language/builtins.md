@@ -45,6 +45,12 @@ print("x", "y", sep=",", end="!\n")  # → x,y!
 # Write to stderr
 print("Error: file not found", file=sys.stderr)
 
+# Write to a file
+let f = open("log.txt", "w")
+print("Log entry 1", file=f)
+print("Log entry 2", file=f)
+f.close()
+
 # Force immediate output
 print("Progress: 50%", flush=true)
 ```

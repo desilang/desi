@@ -1,0 +1,14 @@
+# Test print to user file
+def main() -> int:
+    let f = open("test_output.txt", "w")
+    print("Hello from file!", file=f)
+    print("Line 2", file=f)
+    f.close()
+    
+    # Read back to verify
+    let f2 = open("test_output.txt", "r")
+    let content = f2.read()
+    print("File contents:")
+    print(content)
+    f2.close()
+    0
