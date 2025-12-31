@@ -30,6 +30,6 @@ def main() -> int:
 # EXPECTED_OUTPUT:
 # 42
 # hello
-# 3.140000
+# 3.14
 # true
 # All constructor inference tests passed!

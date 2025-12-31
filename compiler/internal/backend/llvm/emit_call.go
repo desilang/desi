@@ -103,11 +103,11 @@ func (m *Module) emitCall(c *hir.Call) {
 			}
 			return
 		}
-		// Float arguments: call printf with %f
+		// Float arguments: call printf with %g (strips trailing zeros)
 		if ty == "double" {
 			m.ensureDecl("declare i32 @printf(ptr, ...)")
 			// Create format string global
-			g, n := m.ensureCStringGlobal("%f\n", true)
+			g, n := m.ensureCStringGlobal("%g\n", true)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, n, n, g)
 			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
@@ -201,7 +201,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		// Float arguments
 		if ty == "double" {
 			m.ensureDecl("declare i32 @printf(ptr, ...)")
-			fmtG, fmtN := m.ensureCStringGlobal("%f", false)
+			fmtG, fmtN := m.ensureCStringGlobal("%g", false)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
 				m.tempID, fmtN, fmtN, fmtG)
 			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
