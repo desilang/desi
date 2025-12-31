@@ -1,3 +1,6 @@
-# Phase-1 stub: surface only
-def print(x):
-  0
+# IO module - print function
+
+# Variadic print function - takes any number of arguments
+# Compiler magic handles the actual implementation
+pub def print(*args: Any) -> none:
+    0

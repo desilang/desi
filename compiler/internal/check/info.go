@@ -160,10 +160,19 @@ func addPreludeBuiltins(info *Info) {
 	coreKinds := []types.T{types.Int, types.Float, types.Bool, types.Str}
 
 	// --- Task A builtins (unary) ---
-	// print(value: T) -> none
-	for _, k := range coreKinds {
-		add1("print", k, types.None, "value", ast.ParamMove)
-	}
+	// print(*args: Any) -> none - variadic print for any number of arguments
+	// Uses list[Any] as the variadic parameter type
+	info.Funcs["print"] = &OverloadSet{Name: "print"}
+	info.Funcs["print"].Add(&FuncCand{
+		Type: &types.Func{
+			Params:   []types.T{types.ListOf(types.Any)},
+			Ret:      types.None,
+			Variadic: true,
+		},
+		ParamNames: []string{"args"},
+		Modes:      []ast.ParamMode{ast.ParamMove},
+		Defaults:   []bool{true}, // variadic params are implicitly optional
+	})
 	// str(value: T) -> str
 	for _, k := range coreKinds {
 		add1("str", k, types.Str, "value", ast.ParamMove)
