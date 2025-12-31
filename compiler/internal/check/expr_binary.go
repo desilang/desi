@@ -229,44 +229,92 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		// pipeline: lhs |> f(a,b)  ==>  f(lhs, a, b)
 		call, ok := x.Rhs.(*ast.CallExpr)
 		if !ok {
-			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
+			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side (DEBUG ME)"))
 			return nil
 		}
-		id, ok := call.Callee.(*ast.Ident)
-		if !ok || id == nil {
-			c.add(diagAt("DTE0103", x.Span, "pipeline target must be an identifier"))
+		// Check for Identifier (function) or FieldExpr (method)
+		var id *ast.Ident
+		var field *ast.FieldExpr
+
+		if ident, ok := call.Callee.(*ast.Ident); ok {
+			id = ident
+		} else if fe, ok := call.Callee.(*ast.FieldExpr); ok {
+			field = fe
+		} else {
+			c.add(diagAt("DTE0103", x.Span, "pipeline target must be an identifier or method call"))
 			return nil
 		}
 
-		lhsT := c.typ(x.Lhs)
-		set := c.info.Funcs[id.Name]
-		if set == nil || len(set.Cands) == 0 {
-			c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
-			return nil
-		}
+		// Case 1: Function call (Identifier)
+		if id != nil {
+			lhsT := c.typ(x.Lhs)
+			set := c.info.Funcs[id.Name]
 
-		base := callArgs(call)
-		hasNamed := false
-		for _, a := range base {
-			if a.Name != nil {
-				hasNamed = true
-				break
-			}
-		}
-
-		if !hasNamed {
-			// Legacy positional: prepend lhs, then resolve
-			args := make([]types.T, 0, 1+len(base))
-			args = append(args, lhsT)
-			for _, a := range base {
-				args = append(args, c.typ(a.Expr))
-			}
-			arityCands := filterByArity(set.Cands, len(args))
-			if len(arityCands) == 0 {
-				c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch"))
+			if set == nil || len(set.Cands) == 0 {
+				c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
 				return nil
 			}
-			exact := filterExactByTypes(arityCands, args)
+
+			base := callArgs(call)
+			hasNamed := false
+			for _, a := range base {
+				if a.Name != nil {
+					hasNamed = true
+					break
+				}
+			}
+
+			if !hasNamed {
+				// Legacy positional: prepend lhs, then resolve
+				args := make([]types.T, 0, 1+len(base))
+				args = append(args, lhsT)
+				for _, a := range base {
+					args = append(args, c.typ(a.Expr))
+				}
+				arityCands := filterByArity(set.Cands, len(args))
+				if len(arityCands) == 0 {
+					c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch"))
+					return nil
+				}
+				exact := filterExactByTypes(arityCands, args)
+				switch len(exact) {
+				case 1:
+					chosen := exact[0]
+					if chosen.Extern && c.unsafeDepth == 0 {
+						c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
+					}
+					ret := chosen.Type.Ret
+					c.info.Types[call.Callee] = chosen.Type
+					c.info.Types[x] = ret
+					return ret
+				case 0:
+					c.add(diagAt("DTE0101", x.Span, "pipeline has no matching overload for call to "+id.Name))
+					return nil
+				default:
+					c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
+					return nil
+				}
+			}
+
+			// Named-args pipeline: synthesize [lhs]+args and run per-candidate mapping
+			synth := make([]ast.CallArg, 0, 1+len(base))
+			synth = append(synth, ast.CallArg{Expr: &ast.Ident{Name: "<pipe>", Span: x.Lhs.SpanOf()}})
+			synth = append(synth, base...)
+
+			var exact []*FuncCand
+			for _, cand := range set.Cands {
+				if cand.Type == nil || len(cand.Type.Params) == 0 {
+					continue
+				}
+				vec, ok := c.canonicalizeForCandidate(cand, synth)
+				if !ok {
+					continue
+				}
+				vec[0] = lhsT // force first param to be lhsT
+				if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
+					exact = append(exact, cand)
+				}
+			}
 			switch len(exact) {
 			case 1:
 				chosen := exact[0]
@@ -284,44 +332,66 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 				c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
 				return nil
 			}
+
+		} else if field != nil {
+			// Case 2: Method call (FieldExpr)
+			lhsT := c.typ(x.Lhs)
+			recvT := c.typ(field.X)
+			if recvT == nil {
+				return nil
+			}
+
+			methodName := field.Name.Name
+
+			// Resolve method on receiver type
+			var method *types.Func
+			if cls, ok := recvT.(*types.Class); ok {
+				if m, ok := cls.Methods[methodName]; ok {
+					method = m
+				} else if m, ok := cls.StaticMethods[methodName]; ok {
+					method = m
+				}
+			}
+
+			if method == nil {
+				c.add(diagAt("DTE0001", field.Name.Span, "undefined method: "+methodName))
+				return nil
+			}
+
+			// Method Argument Matching
+			// Assume instance method (skip first 'self' param) for now.
+			paramOffset := 1
+			if len(method.Params) < paramOffset {
+				paramOffset = 0
+			}
+
+			effectiveParams := method.Params[paramOffset:]
+
+			// Collect args: [lhs] + call.Args
+			args := make([]types.T, 0, 1+len(call.Args))
+			args = append(args, lhsT)
+			for _, a := range call.Args {
+				args = append(args, c.typ(a))
+			}
+
+			if len(effectiveParams) != len(args) {
+				c.add(diagAt("DTE0046", x.Span, "pipeline method argument count mismatch"))
+				return nil
+			}
+
+			for i, param := range effectiveParams {
+				arg := args[i]
+				if !types.Assignable(param, arg) {
+					c.add(diagAt("DTE0004", x.Span, "pipeline method argument type mismatch"))
+					return nil
+				}
+			}
+
+			c.info.Types[x] = method.Ret
+			return method.Ret
 		}
 
-		// Named-args pipeline: synthesize [lhs]+args and run per-candidate mapping
-		synth := make([]ast.CallArg, 0, 1+len(base))
-		synth = append(synth, ast.CallArg{Expr: &ast.Ident{Name: "<pipe>", Span: x.Lhs.SpanOf()}})
-		synth = append(synth, base...)
-
-		var exact []*FuncCand
-		for _, cand := range set.Cands {
-			if cand.Type == nil || len(cand.Type.Params) == 0 {
-				continue
-			}
-			vec, ok := c.canonicalizeForCandidate(cand, synth)
-			if !ok {
-				continue
-			}
-			vec[0] = lhsT // force first param to be lhsT
-			if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
-				exact = append(exact, cand)
-			}
-		}
-		switch len(exact) {
-		case 1:
-			chosen := exact[0]
-			if chosen.Extern && c.unsafeDepth == 0 {
-				c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-			}
-			ret := chosen.Type.Ret
-			c.info.Types[call.Callee] = chosen.Type
-			c.info.Types[x] = ret
-			return ret
-		case 0:
-			c.add(diagAt("DTE0101", x.Span, "pipeline has no matching overload for call to "+id.Name))
-			return nil
-		default:
-			c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
-			return nil
-		}
+		return nil
 
 	case "<", "<=", ">", ">=",
 		"==", "!=":

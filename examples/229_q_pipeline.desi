@@ -19,3 +19,7 @@ def main() -> int:
     print(f"Pipeline Result 2: {res2}")
 
     return 0
+
+# EXPECTED_OUTPUT:
+# Pipeline Result: 22
+# Pipeline Result 2: 22
