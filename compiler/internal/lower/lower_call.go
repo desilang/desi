@@ -767,6 +767,7 @@ handlePrint:
 			// Default sep and end as HIR values
 			var sepHIR hir.Value = hir.ConstStr{Text: " "}
 			var endHIR hir.Value = hir.ConstStr{Text: "\n"}
+			flushOutput := false // flush=True forces output buffer flush
 
 			// Collect positional arguments and extract kwargs
 			var argExprs []ast.Expr
@@ -781,6 +782,11 @@ handlePrint:
 						} else if kwName == "end" {
 							// Lower end expression to get HIR value
 							endHIR = ls.lowerExpr(an.Expr)
+						} else if kwName == "flush" {
+							// Check for boolean true literal
+							if boolLit, ok := an.Expr.(*ast.BoolLit); ok && boolLit.Value {
+								flushOutput = true
+							}
 						}
 						// Skip kwargs from positional args list
 					} else {
@@ -795,6 +801,10 @@ handlePrint:
 				// print() with no args - just print end (default newline)
 				dst := ls.b.FreshTemp("print")
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_raw", Args: []hir.Value{endHIR}})
+				if flushOutput {
+					flushTemp := ls.b.FreshTemp("flush")
+					ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+				}
 				return dst
 			}
 
@@ -814,6 +824,10 @@ handlePrint:
 						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
 						endTemp := ls.b.FreshTemp("end")
 						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+						if flushOutput {
+							flushTemp := ls.b.FreshTemp("flush")
+							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+						}
 						return dst
 					}
 					continue
@@ -889,6 +903,10 @@ handlePrint:
 					// Print end terminator (customizable via end=)
 					endTemp := ls.b.FreshTemp("end")
 					ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+					if flushOutput {
+						flushTemp := ls.b.FreshTemp("flush")
+						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+					}
 					return dst
 				}
 			}

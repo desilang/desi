@@ -1,0 +1,12 @@
+# Test print flush parameter
+
+def main() -> int:
+    # flush=true forces immediate output
+    print("buffered output", flush=true)
+    print("more output")
+    
+    0
+
+# EXPECTED_OUTPUT:
+# buffered output
+# more output
