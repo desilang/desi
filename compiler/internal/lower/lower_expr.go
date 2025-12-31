@@ -79,8 +79,23 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					escaped := strings.ReplaceAll(unescaped, "%", "%%")
 					fmtBuilder.WriteString(escaped)
 				}
+			case *ast.FStringExpr:
+				// Expression with format spec
+				val := ls.lowerExpr(p.X)
+				fmtSpec := ls.specToPrintf(p.Spec, p.X)
+				fmtBuilder.WriteString(fmtSpec)
+				// Handle bool conversion if needed
+				if ls.info != nil {
+					typ := ls.info.Types[p.X]
+					if types.Equal(typ, types.Bool) && !strings.Contains(p.Spec, "d") {
+						res := ls.b.FreshTemp("bool_str")
+						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
+						val = res
+					}
+				}
+				args = append(args, val)
 			default:
-				// Expression - lower it and add format specifier
+				// Expression without format spec - lower it and add default format specifier
 				val := ls.lowerExpr(p)
 				if ls.info != nil {
 					typ := ls.info.Types[p]
@@ -1780,6 +1795,124 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Print-through placeholder for anything not wired yet.
 		return hir.Var{Name: fmt.Sprintf("<expr:%T>", e)}
 	}
+}
+
+// specToPrintf converts a Desi format spec to a printf format specifier.
+// Examples:
+//   - ".2f" -> "%.2f"
+//   - "05d" -> "%05lld"
+//   - "x" -> "%x"
+//   - ">10s" -> "%10s"
+//   - "#x" -> "%#x"
+func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
+	if spec == "" {
+		// No spec - use default based on type
+		if ls.info != nil {
+			typ := ls.info.Types[expr]
+			if types.Equal(typ, types.Int) {
+				return "%lld"
+			} else if types.Equal(typ, types.Str) {
+				return "%s"
+			} else if types.Equal(typ, types.Float) {
+				return "%f"
+			} else if types.Equal(typ, types.Bool) {
+				return "%s"
+			}
+		}
+		return "%s"
+	}
+
+	// Parse the spec and convert to printf format
+	// Format: [[fill]align][sign]['#']['0'][width]['.' precision][type]
+	result := "%"
+
+	// Handle common cases
+	i := 0
+
+	// Skip fill character and alignment for now (< > ^ =)
+	for i < len(spec) && (spec[i] == '<' || spec[i] == '>' || spec[i] == '^' || spec[i] == '=') {
+		i++
+	}
+
+	// Sign (+ - space)
+	if i < len(spec) && (spec[i] == '+' || spec[i] == '-' || spec[i] == ' ') {
+		result += string(spec[i])
+		i++
+	}
+
+	// Hash (#) for alternate form
+	if i < len(spec) && spec[i] == '#' {
+		result += "#"
+		i++
+	}
+
+	// Zero padding
+	if i < len(spec) && spec[i] == '0' {
+		result += "0"
+		i++
+	}
+
+	// Width
+	for i < len(spec) && spec[i] >= '0' && spec[i] <= '9' {
+		result += string(spec[i])
+		i++
+	}
+
+	// Precision
+	if i < len(spec) && spec[i] == '.' {
+		result += "."
+		i++
+		for i < len(spec) && spec[i] >= '0' && spec[i] <= '9' {
+			result += string(spec[i])
+			i++
+		}
+	}
+
+	// Type specifier
+	if i < len(spec) {
+		typeChar := spec[i]
+		switch typeChar {
+		case 'd':
+			result += "lld" // Use long long for integers
+		case 'f', 'F':
+			result += "f"
+		case 'e', 'E':
+			result += string(typeChar)
+		case 'g', 'G':
+			result += string(typeChar)
+		case 'x', 'X':
+			result += string(typeChar)
+		case 'o':
+			result += "o"
+		case 'b':
+			// Binary not supported by printf - fall back to decimal
+			result += "lld"
+		case 's':
+			result += "s"
+		case '%':
+			// Percentage - multiply value by 100 and append %
+			// For simplicity, just format as float and caller handles
+			result += "f%%"
+		default:
+			result += string(typeChar)
+		}
+	} else {
+		// No type specified - infer from expression type
+		if ls.info != nil {
+			typ := ls.info.Types[expr]
+			if types.Equal(typ, types.Int) {
+				result += "lld"
+			} else if types.Equal(typ, types.Float) {
+				result += "f"
+			} else {
+				result += "s"
+			}
+		} else {
+			result += "s"
+		}
+	}
+
+	return result
 }
 
 // lowerTupleComparison generates element-wise comparison for tuples.
