@@ -369,6 +369,40 @@ def main():
     print(r.perimeter)  # 30
 ```
 
+## Nested Classes
+
+You can define classes within other classes to group related types:
+
+```desi
+class Container:
+    pub name: str
+    
+    pub class Item:
+        pub id: int
+        pub value: str # Access to container's name requires explicit reference
+
+def main():
+    let item = Container.Item()
+    item.id = 1
+```
+
+### Generic Nested Classes
+
+Nested classes can also be generic:
+
+```desi
+class Container:
+    pub class Box<T>:
+        pub val: T
+        
+        pub def get(self) -> T:
+            return self.val
+
+def main():
+    let b = Container.Box(42)  # Infers Container.Box<int>
+    print(b.get())
+```
+
 ## Generic Classes
 
 ```desi
@@ -451,6 +485,31 @@ class User:
     @staticmethod
     pub def guest() -> User:
         return User.create("Guest", "guest@example.com")
+```
+
+### Method Chaining (Fluent Interface)
+
+Methods that return `self` allow for deep chaining of calls:
+
+```desi
+class Node:
+    pub mut next: Node
+    pub mut val: int
+    
+    pub def set_next(self, n: Node) -> Node:
+        self.next = n
+        return self
+        
+    pub def set_val(self, v: int) -> Node:
+        self.val = v
+        return self
+
+def main():
+    let n1 = Node()
+    let n2 = Node()
+    
+    # Chained calls
+    n1.set_val(1).set_next(n2).set_val(10)
 ```
 
 ### Builder Pattern
