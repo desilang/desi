@@ -110,9 +110,18 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		blockLabels[b] = uniqueName
 	}
 
+	isMainFunc := fn.Name == "main"
+	firstBlock := true
 	for _, b := range fn.Blocks {
 		label := blockLabels[b]
 		wprintf(&m.funcs, "%s:\n", label)
+
+		// Initialize runtime at start of main function
+		if isMainFunc && firstBlock {
+			m.ensureDecl("declare void @__desi_runtime_init()")
+			wprintf(&m.funcs, "  call void @__desi_runtime_init()\n")
+			firstBlock = false
+		}
 
 		// Pre-seed simple SSA aliases for Let;Assign pairs (let x; x = ...).
 		pre := make(map[string]hir.Value)

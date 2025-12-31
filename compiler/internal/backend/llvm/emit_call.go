@@ -11,6 +11,53 @@ import (
 )
 
 func (m *Module) emitCall(c *hir.Call) {
+	// Stream accessor functions: __get_stdout(), __get_stderr()
+	if c.Fn == "__get_stdout" && len(c.Args) == 0 {
+		m.ensureDecl("declare ptr @__get_stdout()")
+		dst := c.Dst.Name
+		if dst == "" {
+			dst = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+		}
+		wprintf(&m.funcs, "  %s = call ptr @__get_stdout()\n", dst)
+		return
+	}
+	if c.Fn == "__get_stderr" && len(c.Args) == 0 {
+		m.ensureDecl("declare ptr @__get_stderr()")
+		dst := c.Dst.Name
+		if dst == "" {
+			dst = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+		}
+		wprintf(&m.funcs, "  %s = call ptr @__get_stderr()\n", dst)
+		return
+	}
+
+	// Stream print: stream_print_str(stream, str)
+	if c.Fn == "stream_print_str" && len(c.Args) == 2 {
+		m.ensureDecl("declare void @stream_print_str(ptr, ptr)")
+		_, streamVal := m.operand(c.Args[0])
+		if s, ok := c.Args[1].(hir.ConstStr); ok {
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, strN, strN, strG)
+			wprintf(&m.funcs, "  call void @stream_print_str(ptr %s, ptr %%t%d)\n", streamVal, m.tempID)
+			m.tempID++
+		} else {
+			_, strVal := m.operand(c.Args[1])
+			wprintf(&m.funcs, "  call void @stream_print_str(ptr %s, ptr %s)\n", streamVal, strVal)
+		}
+		return
+	}
+
+	// Stream flush: stream_flush(stream)
+	if c.Fn == "stream_flush" && len(c.Args) == 1 {
+		m.ensureDecl("declare void @stream_flush(ptr)")
+		_, streamVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  call void @stream_flush(ptr %s)\n", streamVal)
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal
@@ -224,6 +271,52 @@ func (m *Module) emitCall(c *hir.Call) {
 		wprintf(&m.funcs, "  %%t%d = call i32 @fflush(ptr null)\n", m.tempID)
 		m.tempID++
 		return
+	}
+
+	// Built-in fflush_stream - flush specific stream (1=stdout, 2=stderr)
+	if c.Fn == "fflush_stream" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @fflush(ptr)")
+		m.ensureDecl("@stderr = external global ptr")
+		if constInt, ok := c.Args[0].(*hir.ConstInt); ok && constInt.Text == "2" {
+			// stderr
+			wprintf(&m.funcs, "  %%t%d = load ptr, ptr @stderr\n", m.tempID)
+			wprintf(&m.funcs, "  %%t%d = call i32 @fflush(ptr %%t%d)\n", m.tempID+1, m.tempID)
+			m.tempID += 2
+		} else {
+			// stdout (null)
+			wprintf(&m.funcs, "  %%t%d = call i32 @fflush(ptr null)\n", m.tempID)
+			m.tempID++
+		}
+		return
+	}
+
+	// Built-in print_raw_stream - print string to specific stream
+	if c.Fn == "print_raw_stream" && len(c.Args) == 2 {
+		m.ensureDecl("declare i32 @fputs(ptr, ptr)")
+		m.ensureDecl("@stderr = external global ptr")
+
+		streamID := "1"
+		if constInt, ok := c.Args[0].(*hir.ConstInt); ok {
+			streamID = constInt.Text
+		}
+
+		if s, ok := c.Args[1].(hir.ConstStr); ok {
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, strN, strN, strG)
+			if streamID == "2" {
+				wprintf(&m.funcs, "  %%t%d = load ptr, ptr @stderr\n", m.tempID+1)
+				wprintf(&m.funcs, "  %%t%d = call i32 @fputs(ptr %%t%d, ptr %%t%d)\n",
+					m.tempID+2, m.tempID, m.tempID+1)
+				m.tempID += 3
+			} else {
+				// stdout (null means stdout in some systems, but use fputs with stdout)
+				wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d)\n",
+					m.tempID+1, m.tempID)
+				m.tempID += 2
+			}
+			return
+		}
 	}
 
 	// Built-in str() conversion

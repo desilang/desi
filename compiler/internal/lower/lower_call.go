@@ -768,6 +768,7 @@ handlePrint:
 			var sepHIR hir.Value = hir.ConstStr{Text: " "}
 			var endHIR hir.Value = hir.ConstStr{Text: "\n"}
 			flushOutput := false // flush=True forces output buffer flush
+			fileStreamID := 1    // 1=stdout, 2=stderr (0=stdin unused)
 
 			// Collect positional arguments and extract kwargs
 			var argExprs []ast.Expr
@@ -787,6 +788,27 @@ handlePrint:
 							if boolLit, ok := an.Expr.(*ast.BoolLit); ok && boolLit.Value {
 								flushOutput = true
 							}
+						} else if kwName == "file" {
+							// Detect sys.stdout/sys.stderr from AST
+							// Look for FieldExpr with "sys" as X (the object)
+							if fe, ok := an.Expr.(*ast.FieldExpr); ok {
+								if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sys" {
+									switch fe.Name.Name {
+									case "stdout":
+										fileStreamID = 1
+									case "stderr":
+										fileStreamID = 2
+									}
+								}
+							} else if id, ok := an.Expr.(*ast.Ident); ok {
+								// Direct ident (if imported with 'from sys import stderr')
+								switch id.Name {
+								case "stdout":
+									fileStreamID = 1
+								case "stderr":
+									fileStreamID = 2
+								}
+							}
 						}
 						// Skip kwargs from positional args list
 					} else {
@@ -797,13 +819,35 @@ handlePrint:
 				argExprs = x.Args
 			}
 
+			// Get stream pointer if not stdout
+			var streamHIR hir.Value = nil
+			if fileStreamID == 2 {
+				// Get stderr stream pointer
+				streamHIR = ls.b.FreshTemp("stream")
+				ls.b.Emit(&hir.Call{Dst: streamHIR.(hir.Temp), Fn: "__get_stderr", Args: []hir.Value{}, Type: "ptr"})
+			}
+
 			if len(argExprs) == 0 {
 				// print() with no args - just print end (default newline)
 				dst := ls.b.FreshTemp("print")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_raw", Args: []hir.Value{endHIR}})
+				if streamHIR != nil {
+					// Use stream-aware print
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
+				} else if fileStreamID != 1 {
+					// Non-stdout: use stream-aware print with stream ID (legacy path)
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_raw_stream", Args: []hir.Value{&hir.ConstInt{Text: fmt.Sprintf("%d", fileStreamID)}, endHIR}})
+				} else {
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_raw", Args: []hir.Value{endHIR}})
+				}
 				if flushOutput {
 					flushTemp := ls.b.FreshTemp("flush")
-					ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+					if streamHIR != nil {
+						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
+					} else if fileStreamID != 1 {
+						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stream", Args: []hir.Value{&hir.ConstInt{Text: fmt.Sprintf("%d", fileStreamID)}}})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+					}
 				}
 				return dst
 			}
@@ -816,17 +860,37 @@ handlePrint:
 					argVal := ls.lowerExpr(arg)
 					if i < len(argExprs)-1 {
 						dst := ls.b.FreshTemp("print")
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						if streamHIR != nil {
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						}
 						sepTemp := ls.b.FreshTemp("sep")
-						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
+						if streamHIR != nil {
+							ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, sepHIR}})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
+						}
 					} else {
 						dst := ls.b.FreshTemp("print")
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						if streamHIR != nil {
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						}
 						endTemp := ls.b.FreshTemp("end")
-						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+						if streamHIR != nil {
+							ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+						}
 						if flushOutput {
 							flushTemp := ls.b.FreshTemp("flush")
-							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+							if streamHIR != nil {
+								ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
+							} else {
+								ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+							}
 						}
 						return dst
 					}
@@ -892,20 +956,40 @@ handlePrint:
 				if i < len(argExprs)-1 {
 					// Print value, then separator
 					dst := ls.b.FreshTemp("print")
-					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					if streamHIR != nil {
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					}
 					// Print separator (customizable via sep=)
 					sepTemp := ls.b.FreshTemp("sep")
-					ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
+					if streamHIR != nil {
+						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, sepHIR}})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
+					}
 				} else {
 					// Last arg - print value then end terminator
 					dst := ls.b.FreshTemp("print")
-					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					if streamHIR != nil {
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					}
 					// Print end terminator (customizable via end=)
 					endTemp := ls.b.FreshTemp("end")
-					ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+					if streamHIR != nil {
+						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+					}
 					if flushOutput {
 						flushTemp := ls.b.FreshTemp("flush")
-						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+						if streamHIR != nil {
+							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+						}
 					}
 					return dst
 				}

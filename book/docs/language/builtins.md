@@ -28,6 +28,8 @@ print()
 |-------|---------|-------------|
 | `sep` | `" "` | String inserted between arguments |
 | `end` | `"\n"` | String appended after the last argument |
+| `file` | `sys.stdout` | Output stream (`sys.stdout` or `sys.stderr`) |
+| `flush` | `false` | Force immediate output (no buffering) |
 
 ```desi
 # Custom separator
@@ -39,6 +41,12 @@ print("...")  # → loading...
 
 # Both sep and end
 print("x", "y", sep=",", end="!\n")  # → x,y!
+
+# Write to stderr
+print("Error: file not found", file=sys.stderr)
+
+# Force immediate output
+print("Progress: 50%", flush=true)
 ```
 
 **Supported Types:**
