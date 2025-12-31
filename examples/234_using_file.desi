@@ -1,0 +1,27 @@
+# Test using with file for auto-close
+def main() -> int:
+    print("Testing using with file")
+    
+    using f = open("/tmp/test_using.txt", "w"):
+        print("Writing to file", file=f)
+        print("Another line", file=f)
+    
+    # File should be auto-closed here
+    
+    # Read back to verify
+    let f2 = open("/tmp/test_using.txt", "r")
+    let content = f2.read()
+    print("File contents:")
+    print(content)
+    f2.close()
+    
+    print("Auto-close test passed!")
+    0
+
+# EXPECTED_OUTPUT:
+# Testing using with file
+# File contents:
+# Writing to file
+# Another line
+# 
+# Auto-close test passed!
