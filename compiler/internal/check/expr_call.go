@@ -392,6 +392,22 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 2: plain identifier call: f(...)
 	if id, ok := call.Callee.(*ast.Ident); ok {
+		// Special case: print() is variadic and accepts any number of args of any type
+		if id.Name == "print" {
+			// Type-check all arguments (for side effects/error detection)
+			// Handle both legacy Args and canonical ArgNodes
+			if len(call.ArgNodes) > 0 {
+				for _, a := range call.ArgNodes {
+					c.typ(a.Expr)
+				}
+			} else {
+				for _, a := range call.Args {
+					c.typ(a)
+				}
+			}
+			c.info.Types[call] = types.None
+			return types.None
+		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc
@@ -497,6 +513,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 				c.add(diagAt("DTE0001", call.Span, "type '"+argType.String()+"' has no len()"))
 				return nil
+			}
+
+			// Built-in print() function - variadic, accepts any number of arguments of any type
+			if id.Name == "print" {
+				// print() accepts any number of arguments - all are valid
+				// Return type is none
+				c.info.Types[call] = types.None
+				return types.None
 			}
 
 			// Built-in enumerate() function - accepts any iterable

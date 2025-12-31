@@ -327,6 +327,12 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// Look up the function by name to get its signature
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
+		// Special case: print() - don't use standard variadic lowering
+		// We handle print with custom print_item calls for proper formatting
+		if calleeName == "print" {
+			// Skip variadic lowering, let the print handler below handle it
+			goto handlePrint
+		}
 		if set, ok := ls.info.Funcs[calleeName]; ok && len(set.Cands) > 0 {
 			// Check if any candidate is variadic
 			// In practice, after type checking, we know which one was chosen
@@ -339,6 +345,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			}
 		}
 	}
+handlePrint:
 
 	// taskgroup_new() -> TaskGroup*
 	if ls.info != nil {
@@ -748,14 +755,49 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	}
 
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
-	// If we have type info, check if this is print(arg) where:
+	// If we have type info, check if this is print(arg...) where:
 	// - arg implements Display trait, OR
 	// - arg is a collection (list/dict/set) with to_str method, OR
 	// - arg is a custom class with to_str method
+	// Supports multiple arguments - prints each separated by space, ending with newline
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
-		if calleeName == "print" && len(x.Args) == 1 {
-			if argT := ls.info.Types[x.Args[0]]; argT != nil {
+		if calleeName == "print" {
+			// Collect arguments from either ArgNodes (canonical) or Args (legacy)
+			var argExprs []ast.Expr
+			if len(x.ArgNodes) > 0 {
+				for _, an := range x.ArgNodes {
+					argExprs = append(argExprs, an.Expr)
+				}
+			} else {
+				argExprs = x.Args
+			}
+
+			if len(argExprs) == 0 {
+				// print() with no args - just print newline
+				dst := ls.b.FreshTemp("print")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{hir.ConstStr{Text: ""}}})
+				return dst
+			}
+
+			// For each argument, convert to string representation and emit print
+			for i, arg := range argExprs {
+				argT := ls.info.Types[arg]
+				if argT == nil {
+					// Fall through to regular handling - lower arg directly
+					argVal := ls.lowerExpr(arg)
+					if i < len(argExprs)-1 {
+						dst := ls.b.FreshTemp("print")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						sepTemp := ls.b.FreshTemp("sep")
+						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_item", Args: []hir.Value{hir.ConstStr{Text: " "}}})
+					} else {
+						dst := ls.b.FreshTemp("print")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{argVal}})
+						return dst
+					}
+					continue
+				}
 				typeName := argT.String()
 				shouldCallToStr := false
 				toStrFuncName := ""
@@ -793,21 +835,42 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 							shouldCallToStr = true
 							toStrFuncName = fmt.Sprintf("%s_to_str", t.Name)
 						}
+					case *types.Struct:
+						// Structs can implement Display trait - handled in Case 1 above
+						// Or we can check for __repr__ method on the struct type
+						// For now, skip - structs need Display trait implementation
 					}
 				}
 
+				// Lower argument
+				argVal := ls.lowerExpr(arg)
+
+				// If custom to_str, call it first
 				if shouldCallToStr {
-					// 1. Lower arg
-					argVal := ls.lowerExpr(x.Args[0])
-					// 2. Emit call to to_str
 					strTemp := ls.b.FreshTemp("str")
 					ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal}, Type: "ptr"})
-					// 3. Emit call to print(str)
+					argVal = strTemp
+				}
+
+				// Emit print for this argument
+				// For multiple args, emit print_item (without newline) for all but last
+				// For last arg (or single arg), emit print (with newline)
+				if i < len(argExprs)-1 {
+					// Print without newline, then print space separator
 					dst := ls.b.FreshTemp("print")
-					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{strTemp}})
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					// Print space separator
+					sepTemp := ls.b.FreshTemp("sep")
+					ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_item", Args: []hir.Value{hir.ConstStr{Text: " "}}})
+				} else {
+					// Last arg - print with newline
+					dst := ls.b.FreshTemp("print")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{argVal}})
 					return dst
 				}
 			}
+			// If we processed all args, return
+			return nil
 		}
 	}
 

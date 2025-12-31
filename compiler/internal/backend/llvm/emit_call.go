@@ -103,6 +103,91 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
+	// Built-in print_item - print without newline (for multi-arg print)
+	if c.Fn == "print_item" && len(c.Args) == 1 {
+		// Special case for string literal
+		if s, ok := c.Args[0].(hir.ConstStr); ok {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID+1, strN, strN, strG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %%t%d)\n",
+				m.tempID+2, m.tempID, m.tempID+1)
+			m.tempID += 3
+			return
+		}
+		// Integer arguments
+		ty, val := m.operand(c.Args[0])
+		if ty == "i32" || ty == "i64" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%ld", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			if ty == "i32" {
+				wprintf(&m.funcs, "  %%t%d = sext i32 %s to i64\n", m.tempID, val)
+				wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, i64 %%t%d)\n", m.tempID+1, fmtPtr, m.tempID)
+				m.tempID += 2
+			} else {
+				wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, i64 %s)\n", m.tempID, fmtPtr, val)
+				m.tempID++
+			}
+			return
+		}
+		// Float arguments
+		if ty == "double" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%f", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, double %s)\n", m.tempID, fmtPtr, val)
+			m.tempID++
+			return
+		}
+		// Boolean arguments
+		if ty == "i1" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			trueG, trueN := m.ensureCStringGlobal("true", false)
+			falseG, falseN := m.ensureCStringGlobal("false", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, trueN, trueN, trueG)
+			truePtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, falseN, falseN, falseG)
+			falsePtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %%t%d = select i1 %s, ptr %s, ptr %s\n", m.tempID, val, truePtr, falsePtr)
+			selPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, ptr %s)\n", m.tempID, fmtPtr, selPtr)
+			m.tempID++
+			return
+		}
+		// General case: ptr (string)
+		if ty == "ptr" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
+				m.tempID+1, m.tempID, val)
+			m.tempID += 2
+			return
+		}
+	}
+
 	// Built-in str() conversion
 	if c.Fn == "str" && len(c.Args) == 1 {
 		ty, val := m.operand(c.Args[0])
