@@ -1,6 +1,33 @@
 # Built-in Functions
 
-Desi provides Python-like built-in functions for working with collections.
+Desi provides Python-like built-in functions for I/O, collections, and iteration.
+
+## I/O Functions
+
+### print()
+
+Output values to the console with automatic formatting:
+
+```desi
+# Single argument
+print("Hello, World!")
+
+# Multiple arguments (separated by spaces)
+print("Name:", name, "Age:", age)
+
+# Mixed types - automatic conversion
+print(1, true, 3.14, "text")  # → 1 true 3.140000 text
+
+# No arguments - prints empty line
+print()
+```
+
+**Supported Types:**
+- Strings, integers, floats, booleans
+- Custom classes with `__str__` or `__repr__` methods
+- Collections with Display trait implementation
+
+---
 
 ## Collection Functions
 
@@ -164,6 +191,7 @@ for name: str, score: int in zip(names, scores):
 
 | Function | Description |
 |----------|-------------|
+| `print(...)` | Output to console |
 | `len(x)` | Number of elements |
 | `sum(x)` | Sum of elements |
 | `min(x)` / `max(x)` | Min/max value |
