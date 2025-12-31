@@ -188,6 +188,35 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
+	// Built-in print_raw - print exact string without formatting (for sep/end)
+	if c.Fn == "print_raw" && len(c.Args) == 1 {
+		if s, ok := c.Args[0].(hir.ConstStr); ok {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID+1, strN, strN, strG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %%t%d)\n",
+				m.tempID+2, m.tempID, m.tempID+1)
+			m.tempID += 3
+			return
+		}
+		// Variable string
+		ty, val := m.operand(c.Args[0])
+		if ty == "ptr" {
+			m.ensureDecl("declare i32 @printf(ptr, ...)")
+			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, fmtN, fmtN, fmtG)
+			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
+				m.tempID+1, m.tempID, val)
+			m.tempID += 2
+			return
+		}
+	}
+
 	// Built-in str() conversion
 	if c.Fn == "str" && len(c.Args) == 1 {
 		ty, val := m.operand(c.Args[0])

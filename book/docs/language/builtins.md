@@ -22,6 +22,25 @@ print(1, true, 3.14, "text")  # → 1 true 3.140000 text
 print()
 ```
 
+**Keyword Arguments:**
+
+| Param | Default | Description |
+|-------|---------|-------------|
+| `sep` | `" "` | String inserted between arguments |
+| `end` | `"\n"` | String appended after the last argument |
+
+```desi
+# Custom separator
+print("a", "b", "c", sep="-")  # → a-b-c
+
+# Custom end (no newline)
+print("loading", end="")
+print("...")  # → loading...
+
+# Both sep and end
+print("x", "y", sep=",", end="!\n")  # → x,y!
+```
+
 **Supported Types:**
 - Strings, integers, floats, booleans
 - Custom classes with `__str__` or `__repr__` methods

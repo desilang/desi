@@ -393,12 +393,27 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 	// --- Case 2: plain identifier call: f(...)
 	if id, ok := call.Callee.(*ast.Ident); ok {
 		// Special case: print() is variadic and accepts any number of args of any type
+		// Also supports keyword args: sep (separator) and end (terminator)
 		if id.Name == "print" {
-			// Type-check all arguments (for side effects/error detection)
-			// Handle both legacy Args and canonical ArgNodes
+			// Type-check all arguments and validate kwargs
 			if len(call.ArgNodes) > 0 {
 				for _, a := range call.ArgNodes {
-					c.typ(a.Expr)
+					argType := c.typ(a.Expr)
+					// Check for known kwargs
+					if a.Name != nil {
+						kwName := a.Name.Name
+						if kwName == "sep" || kwName == "end" || kwName == "file" || kwName == "flush" {
+							// sep and end must be strings
+							if kwName == "sep" || kwName == "end" {
+								if argType != nil && !types.Equal(argType, types.Str) {
+									c.add(diagAt("DTE0001", a.Expr.SpanOf(), fmt.Sprintf("print() %s must be a string", kwName)))
+								}
+							}
+							// file and flush are not implemented yet - just allow them for forward compatibility
+						} else {
+							c.add(diagAt("DTE0001", a.Name.Span, fmt.Sprintf("print() got unexpected keyword argument '%s'", kwName)))
+						}
+					}
 				}
 			} else {
 				for _, a := range call.Args {

@@ -760,23 +760,41 @@ handlePrint:
 	// - arg is a collection (list/dict/set) with to_str method, OR
 	// - arg is a custom class with to_str method
 	// Supports multiple arguments - prints each separated by space, ending with newline
+	// Supports keyword args: sep (default " "), end (default "\n")
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
 		if calleeName == "print" {
-			// Collect arguments from either ArgNodes (canonical) or Args (legacy)
+			// Default sep and end as HIR values
+			var sepHIR hir.Value = hir.ConstStr{Text: " "}
+			var endHIR hir.Value = hir.ConstStr{Text: "\n"}
+
+			// Collect positional arguments and extract kwargs
 			var argExprs []ast.Expr
 			if len(x.ArgNodes) > 0 {
 				for _, an := range x.ArgNodes {
-					argExprs = append(argExprs, an.Expr)
+					if an.Name != nil {
+						// Keyword argument
+						kwName := an.Name.Name
+						if kwName == "sep" {
+							// Lower sep expression to get HIR value
+							sepHIR = ls.lowerExpr(an.Expr)
+						} else if kwName == "end" {
+							// Lower end expression to get HIR value
+							endHIR = ls.lowerExpr(an.Expr)
+						}
+						// Skip kwargs from positional args list
+					} else {
+						argExprs = append(argExprs, an.Expr)
+					}
 				}
 			} else {
 				argExprs = x.Args
 			}
 
 			if len(argExprs) == 0 {
-				// print() with no args - just print newline
+				// print() with no args - just print end (default newline)
 				dst := ls.b.FreshTemp("print")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{hir.ConstStr{Text: ""}}})
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_raw", Args: []hir.Value{endHIR}})
 				return dst
 			}
 
@@ -790,10 +808,12 @@ handlePrint:
 						dst := ls.b.FreshTemp("print")
 						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
 						sepTemp := ls.b.FreshTemp("sep")
-						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_item", Args: []hir.Value{hir.ConstStr{Text: " "}}})
+						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
 					} else {
 						dst := ls.b.FreshTemp("print")
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{argVal}})
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+						endTemp := ls.b.FreshTemp("end")
+						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
 						return dst
 					}
 					continue
@@ -853,19 +873,22 @@ handlePrint:
 				}
 
 				// Emit print for this argument
-				// For multiple args, emit print_item (without newline) for all but last
-				// For last arg (or single arg), emit print (with newline)
+				// For multiple args, emit print_item then separator
+				// For last arg, emit print_item then end terminator
 				if i < len(argExprs)-1 {
-					// Print without newline, then print space separator
+					// Print value, then separator
 					dst := ls.b.FreshTemp("print")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
-					// Print space separator
+					// Print separator (customizable via sep=)
 					sepTemp := ls.b.FreshTemp("sep")
-					ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_item", Args: []hir.Value{hir.ConstStr{Text: " "}}})
+					ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
 				} else {
-					// Last arg - print with newline
+					// Last arg - print value then end terminator
 					dst := ls.b.FreshTemp("print")
-					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print", Args: []hir.Value{argVal}})
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
+					// Print end terminator (customizable via end=)
+					endTemp := ls.b.FreshTemp("end")
+					ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
 					return dst
 				}
 			}
