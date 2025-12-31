@@ -1,6 +1,6 @@
 # Global Constants - Internals & Implementation Guide
 
-> **For Contributors**: This document covers the global constants implementation, design decisions, and known limitations.
+> **For Contributors**: Technical implementation details of the global constants system.
 
 ---
 
@@ -9,29 +9,22 @@
 1. [Design Philosophy](#design-philosophy)
 2. [Implementation Overview](#implementation-overview)
 3. [Type Inference](#type-inference)
-4. [LLVM Emission](#llvm-emission)
-5. [Known Limitations](#known-limitations)
+4. [Visibility Model](#visibility-model)
+5. [LLVM Emission](#llvm-emission)
 6. [Implementation Files](#implementation-files)
 
 ---
 
 ## Design Philosophy
 
-### Why Global Constants?
-
-Desi supports top-level `let` declarations as global constants, similar to Python's module-level variables but with:
-
-- **Immutability**: Global constants cannot use `mut`
-- **Naming Convention**: `UPPER_CASE` naming is enforced via warnings
-- **Visibility Control**: Only `pub let` globals can be imported by other modules
-
-### Design Decisions
+### Core Design Decisions
 
 | Decision | Rationale |
 |----------|-----------|
 | Immutable only | Prevents shared mutable state bugs |
 | UPPER_CASE warning | Clear visual distinction from local variables |
 | `pub` required for export | Explicit visibility control |
+| Underscore prefix allowed | Convention for internal constants |
 
 ---
 
@@ -45,12 +38,30 @@ Source → Parser → Type Checker → HIR Lowering → LLVM Emission
         __top__     injectGlobals   module_lower   DefineGlobal
 ```
 
-### Key Components
+### Parser Behavior
 
-1. **Parser** (`parser.go`): Wraps top-level `let` in synthetic `__top__` function
-2. **Type Checker** (`check/imports.go`): `injectGlobals()` adds globals to scope
-3. **HIR Lowering** (`lower/module_lower.go`): Creates `hir.Global` definitions
-4. **LLVM Emission** (`backend/llvm/module.go`): Emits LLVM global definitions
+The parser wraps top-level `let` statements in synthetic `__top__` functions:
+- `pub let X = 1` → Creates a separate `__top__` with `Pub=true` on the LetStmt
+- `let Y = 2` → Hoisted into the main `__top__` function
+
+**Important**: Multiple `pub let` statements create multiple `__top__` functions.
+
+### Type Checker (`check/imports.go`)
+
+The `injectGlobals()` function:
+1. Finds ALL `__top__` functions (not just the first)
+2. Scans for `LetStmt` nodes
+3. Infers types from literals
+4. Registers symbols in the top scope
+
+```go
+// Must iterate ALL __top__ functions
+for _, topFn := range topFns {
+    for _, st := range topFn.Body.Stmts {
+        // ... type inference and scope binding
+    }
+}
+```
 
 ---
 
@@ -58,29 +69,41 @@ Source → Parser → Type Checker → HIR Lowering → LLVM Emission
 
 ### Supported Literal Types
 
+| Literal | Inferred Type | LLVM Type |
+|---------|---------------|-----------|
+| `42` | `int` | `i64` |
+| `-100` | `int` | `i64` |
+| `3.14` | `float` | `double` |
+| `-2.5` | `float` | `double` |
+| `true`/`false` | `bool` | `i1` |
+| `"hello"` | `str` | `ptr` |
+
+### Negative Numbers
+
+Negative literals are parsed as `UnaryExpr` with `-` operator:
 ```go
-// From module_lower.go
-switch v := ls.Value.(type) {
-case *ast.IntLit:    typ = "i64"
-case *ast.FloatLit:  typ = "double"
-case *ast.BoolLit:   typ = "i1"
-case *ast.StrLit:    typ = "ptr" // Uses ensureCStringGlobal
-case *ast.UnaryExpr: // Handles -100, -3.14
-}
+case *ast.UnaryExpr:
+    if v.Op == "-" {
+        switch v.X.(type) {
+        case *ast.IntLit:  t = types.Int
+        case *ast.FloatLit: t = types.Float
+        }
+    }
 ```
 
-### Explicit Type Annotations
+---
 
-When annotations are present (e.g., `let X: u8 = 255`), `llvmTypeFromAST()` maps:
+## Visibility Model
 
-```go
-i8, u8   → "i8"
-i16, u16 → "i16"
-i32, u32 → "i32"
-i64, u64 → "i64"
-f32      → "float"
-f64      → "double"
-```
+| Syntax | Same File | Other Modules |
+|--------|-----------|---------------|
+| `let X = 1` | ✓ | ✗ |
+| `pub let X = 1` | ✓ | ✓ |
+| `let _X = 1` | ✓ | ✗ |
+
+**Export Logic** (`resolve/exports.go`):
+- Only `pub let` statements are added to `out.Globals`
+- Non-pub globals are file-private
 
 ---
 
@@ -88,42 +111,18 @@ f64      → "double"
 
 ### String Constants
 
-String globals use `ensureCStringGlobal` to create backing storage:
-
 ```llvm
-@.str.0 = private unnamed_addr constant [14 x i8] c"Hello Globals\00"
-@STRING_VAL = global ptr getelementptr inbounds ([14 x i8], [14 x i8]* @.str.0, i64 0, i64 0)
+@.str.0 = private unnamed_addr constant [6 x i8] c"hello\00"
+@MY_STR = global ptr getelementptr inbounds ([6 x i8], [6 x i8]* @.str.0, i64 0, i64 0)
 ```
 
 ### Numeric Constants
 
 ```llvm
-@INT_VAL = global i64 42, align 4
-@FLOAT_VAL = global double 3.14159, align 4
-@BOOL_TRUE = global i1 1, align 4
+@MY_INT = global i64 42, align 4
+@MY_FLOAT = global double 3.14, align 4
+@MY_BOOL = global i1 1, align 4
 ```
-
----
-
-## Known Limitations
-
-### 1. Non-Pub Globals in F-Strings
-
-**Issue**: Non-`pub` globals show `<?>` in f-strings due to missing type info.
-
-**Root Cause**: Type checker populates `info.Types` during identifier resolution, but non-pub globals may not be fully registered.
-
-**Workaround**: Use `pub let` for globals that need f-string interpolation.
-
-### 2. Struct/Enum/Class Globals
-
-**Not Supported**: `let ORIGIN = Point { x: 0, y: 0 }`
-
-**Reason**: Requires compile-time evaluation of struct literals. Planned for future.
-
-### 3. Negative Number Edge Cases
-
-**Partially Supported**: `-100` works via `UnaryExpr` handling, but deeply nested expressions may fail.
 
 ---
 
@@ -131,16 +130,21 @@ String globals use `ensureCStringGlobal` to create backing storage:
 
 | File | Purpose |
 |------|---------|
-| `check/imports.go` | `injectGlobals()` - type inference and scope binding |
-| `lower/module_lower.go` | HIR global definitions and value extraction |
-| `backend/llvm/module.go` | `DefineGlobal()` and `writeGlobals()` |
-| `diag/codes.json` | `DW0008` (naming), `DTE0051` (mutability) |
+| `parse/parser.go` | Wraps top-level `let` in `__top__` |
+| `check/imports.go` | `injectGlobals()` - type inference |
+| `lower/module_lower.go` | HIR global definitions |
+| `backend/llvm/module.go` | `DefineGlobal()`, `writeGlobals()` |
+| `resolve/exports.go` | Export filtering (pub only) |
+| `diag/codes.json` | `DW0008`, `DTE0051` |
 
 ---
 
-## Test Files
+## Test Coverage
 
-- `examples/230_global_consts.desi` - Basic primitives
-- `examples/230_b_global_types.desi` - Type coverage
-- `examples/230_c_global_privacy.desi` - Import failure test
-- `examples/230_c_global_visibility_helper.desi` - Pub global helper
+| Test File | Coverage |
+|-----------|----------|
+| `230_global_consts.desi` | Basic primitives |
+| `230_b_global_types.desi` | Type variants |
+| `230_c_global_privacy.desi` | Import failure |
+| `230_d_nonpub_fstring.desi` | Non-pub in f-strings |
+| `230_e_all_globals.desi` | Comprehensive: pub, non-pub, underscore |

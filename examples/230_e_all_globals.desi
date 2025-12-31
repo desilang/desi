@@ -1,0 +1,25 @@
+# Test all global types including pub and underscore-prefixed
+
+let PRIVATE_INT = 1
+pub let PUB_INT = 2
+let _HIDDEN_INT = 3
+let PRIVATE_FLOAT = 3.14
+pub let PUB_STR = "hello"
+let _HIDDEN_BOOL = true
+
+def main() -> int:
+	print(f"Private int: {PRIVATE_INT}")
+	print(f"Pub int: {PUB_INT}")
+	print(f"Hidden int: {_HIDDEN_INT}")
+	print(f"Private float: {PRIVATE_FLOAT}")
+	print(f"Pub str: {PUB_STR}")
+	print(f"Hidden bool: {_HIDDEN_BOOL}")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Private int: 1
+# Pub int: 2
+# Hidden int: 3
+# Private float: 3.140000
+# Pub str: hello
+# Hidden bool: true
