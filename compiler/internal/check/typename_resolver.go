@@ -193,6 +193,12 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 		if sym != nil && sym.Kind == SymType {
 			return sym.Type
 		}
+		// Also check SymFunc with classType for imported nested classes
+		if sym != nil && sym.Kind == SymFunc && sym.Type != nil {
+			if _, isClass := sym.Type.(*types.Class); isClass {
+				return sym.Type
+			}
+		}
 	}
 
 	return nil
