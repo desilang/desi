@@ -1,0 +1,21 @@
+# Test global constants with various types
+
+# Basic primitives (well-supported)
+let INT_VAL = 42
+let FLOAT_VAL = 3.14159
+let BOOL_TRUE = true
+let STRING_VAL = "Hello Globals"
+
+def main() -> int:
+	print(f"Int: {INT_VAL}")
+	print(f"Float: {FLOAT_VAL}")
+	print(f"Bool: {BOOL_TRUE}")
+	print(f"String: {STRING_VAL}")
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# Int: 42
+# Float: 3.141590
+# Bool: true
+# String: Hello Globals

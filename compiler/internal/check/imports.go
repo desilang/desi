@@ -111,7 +111,7 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 			t = resolveSimpleTypeName(ls.Type)
 		} else if ls.Value != nil {
 			// Infer type from literal value
-			switch ls.Value.(type) {
+			switch v := ls.Value.(type) {
 			case *ast.IntLit:
 				t = types.Int
 			case *ast.FloatLit:
@@ -122,6 +122,16 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 				t = types.Bool
 			case *ast.NoneLit:
 				t = types.None
+			case *ast.UnaryExpr:
+				// Handle negative numbers: -100, -3.14
+				if v.Op == "-" {
+					switch v.X.(type) {
+					case *ast.IntLit:
+						t = types.Int
+					case *ast.FloatLit:
+						t = types.Float
+					}
+				}
 			}
 		}
 

@@ -382,6 +382,8 @@ func (m *Module) DefineGlobal(name, typ, val string) {
 		val = "0"
 		if typ == "ptr" {
 			val = "null"
+		} else if typ == "float" || typ == "double" {
+			val = "0.0"
 		}
 	} else if typ == "ptr" && val != "null" && !strings.HasPrefix(val, "@") && !strings.HasPrefix(val, "getelementptr") {
 		// Assume val is the string content

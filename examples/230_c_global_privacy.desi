@@ -1,0 +1,13 @@
+# EXPECTED: COMPILE_ERROR
+# Test: Importing non-pub global should fail
+
+from 230_c_global_visibility_helper import PUB_CONST, PRIVATE_CONST
+
+def main() -> int:
+	# PUB_CONST should work
+	print(f"Pub: {PUB_CONST}")
+	
+	# PRIVATE_CONST should cause compile error
+	print(f"Private: {PRIVATE_CONST}")
+	
+	return 0
