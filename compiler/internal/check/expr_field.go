@@ -566,8 +566,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		isTypeAccess := false
 		if id, ok := x.X.(*ast.Ident); ok {
 			sym := c.scope.Lookup(id.Name)
-			if sym != nil && sym.Kind == SymType {
-				isTypeAccess = true
+			// Check both SymType and SymFunc since imported classes use SymFunc but have classType
+			if sym != nil && (sym.Kind == SymType || (sym.Kind == SymFunc && sym.Type != nil)) {
+				if _, isClass := sym.Type.(*types.Class); isClass {
+					isTypeAccess = true
+				}
 			}
 		}
 
