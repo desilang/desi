@@ -1,0 +1,23 @@
+# Test print sep and end keyword arguments
+
+def main() -> int:
+    # Custom separator
+    print("a", "b", "c", sep="-")
+    
+    # Empty separator
+    print("x", "y", sep="")
+    
+    # Custom end (no newline, then another print)
+    print("no newline", end="")
+    print("continued")
+    
+    # Both sep and end
+    print("a", "b", sep=",", end="!\n")
+    
+    0
+
+# EXPECTED_OUTPUT:
+# a-b-c
+# xy
+# no newlinecontinued
+# a,b!
