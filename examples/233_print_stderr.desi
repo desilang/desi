@@ -1,0 +1,5 @@
+# Test print to stderr - no import needed, sys.stderr is magic
+def main() -> int:
+    print("to stderr", file=sys.stderr)
+    print("to stdout")
+    0

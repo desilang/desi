@@ -1104,6 +1104,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: ctorName, Args: []hir.Value{}, Type: "ptr"})
 				return dst
 			}
+			// Special handling for sys.stdout/sys.stderr - return global stream pointers
+			if id.Name == "sys" {
+				switch x.Name.Name {
+				case "stdout":
+					dst := ls.b.FreshTemp("stdout")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__get_stdout", Args: []hir.Value{}, Type: "ptr"})
+					return dst
+				case "stderr":
+					dst := ls.b.FreshTemp("stderr")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__get_stderr", Args: []hir.Value{}, Type: "ptr"})
+					return dst
+				}
+			}
 		}
 
 		// Check for Class Constant access (ClassName.CONST)

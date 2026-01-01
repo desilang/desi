@@ -393,26 +393,40 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 	// --- Case 2: plain identifier call: f(...)
 	if id, ok := call.Callee.(*ast.Ident); ok {
 		// Special case: print() is variadic and accepts any number of args of any type
-		// Also supports keyword args: sep (separator) and end (terminator)
+		// Also supports keyword args: sep (separator), end (terminator), file (stream), flush (bool)
 		if id.Name == "print" {
 			// Type-check all arguments and validate kwargs
 			if len(call.ArgNodes) > 0 {
 				for _, a := range call.ArgNodes {
-					argType := c.typ(a.Expr)
 					// Check for known kwargs
 					if a.Name != nil {
 						kwName := a.Name.Name
 						if kwName == "sep" || kwName == "end" || kwName == "file" || kwName == "flush" {
+							// file=sys.stdout/stderr are magic - don't type-check them
+							if kwName == "file" {
+								// Check if it's sys.stdout or sys.stderr
+								if fe, ok := a.Expr.(*ast.FieldExpr); ok {
+									if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sys" {
+										if fe.Name.Name == "stdout" || fe.Name.Name == "stderr" {
+											continue // Skip type-checking for magic sys streams
+										}
+									}
+								}
+							}
 							// sep and end must be strings
+							argType := c.typ(a.Expr)
 							if kwName == "sep" || kwName == "end" {
 								if argType != nil && !types.Equal(argType, types.Str) {
 									c.add(diagAt("DTE0001", a.Expr.SpanOf(), fmt.Sprintf("print() %s must be a string", kwName)))
 								}
 							}
-							// file and flush are not implemented yet - just allow them for forward compatibility
+							// flush should be bool (validated elsewhere)
 						} else {
 							c.add(diagAt("DTE0001", a.Name.Span, fmt.Sprintf("print() got unexpected keyword argument '%s'", kwName)))
 						}
+					} else {
+						// Positional arg - type-check it
+						c.typ(a.Expr)
 					}
 				}
 			} else {
