@@ -21,7 +21,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 nil,
@@ -48,7 +48,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 	b := hir.NewFunc(fd.Name.Name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -168,7 +168,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -230,6 +230,7 @@ type scope struct {
 	types      map[string]types.T // variable types for Drop
 	tempDrops  map[string]bool    // temporaries that need to be dropped
 	closers    map[string]string  // RAII: variables that need __close__ called (mangled name)
+	files      map[string]bool    // RAII: file handles that need file_close at scope end
 }
 
 func (ls *lowerState) push() {
@@ -245,6 +246,7 @@ func (ls *lowerState) push() {
 		mutable:    map[string]bool{},
 		types:      map[string]types.T{},
 		closers:    map[string]string{},
+		files:      map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -493,6 +495,15 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		// Arena handle?
 		if varName, ok := v.(hir.Var); ok && sc.arenas[varName.Name] {
 			ls.b.Emit(&hir.DestroyArena{Arena: v})
+			continue
+		}
+		// File handle? Call file_close
+		if varName, ok := v.(hir.Var); ok && sc.files[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "file_close",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
 			continue
 		}
 		// rc-like target?
