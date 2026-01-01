@@ -71,6 +71,29 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Print style start: set ANSI color for stdout
+	if c.Fn == "print_style_start_stdout" && len(c.Args) == 1 {
+		m.ensureDecl("declare void @print_style_start_stdout(ptr)")
+		if s, ok := c.Args[0].(hir.ConstStr); ok {
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, strN, strN, strG)
+			wprintf(&m.funcs, "  call void @print_style_start_stdout(ptr %%t%d)\n", m.tempID)
+			m.tempID++
+		} else {
+			_, styleVal := m.operand(c.Args[0])
+			wprintf(&m.funcs, "  call void @print_style_start_stdout(ptr %s)\n", styleVal)
+		}
+		return
+	}
+
+	// Print style end: reset ANSI colors for stdout
+	if c.Fn == "print_style_end_stdout" && len(c.Args) == 0 {
+		m.ensureDecl("declare void @print_style_end_stdout()")
+		wprintf(&m.funcs, "  call void @print_style_end_stdout()\n")
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal

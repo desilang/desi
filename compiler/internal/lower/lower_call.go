@@ -767,9 +767,10 @@ handlePrint:
 			// Default sep and end as HIR values
 			var sepHIR hir.Value = hir.ConstStr{Text: " "}
 			var endHIR hir.Value = hir.ConstStr{Text: "\n"}
-			flushOutput := false  // flush=True forces output buffer flush
-			fileStreamID := 1     // 1=stdout, 2=stderr, 3=user file
-			var fileExpr ast.Expr // For file= with user file variable
+			flushOutput := false   // flush=True forces output buffer flush
+			fileStreamID := 1      // 1=stdout, 2=stderr, 3=user file
+			var fileExpr ast.Expr  // For file= with user file variable
+			var styleHIR hir.Value // For style= colored output
 
 			// Collect positional arguments and extract kwargs
 			var argExprs []ast.Expr
@@ -826,6 +827,9 @@ handlePrint:
 							if fileStreamID == 3 {
 								fileExpr = an.Expr
 							}
+						} else if kwName == "style" {
+							// Lower style expression for colored output
+							styleHIR = ls.lowerExpr(an.Expr)
 						}
 						// Skip kwargs from positional args list
 					} else {
@@ -847,6 +851,12 @@ handlePrint:
 				fileVal := ls.lowerExpr(fileExpr)
 				streamHIR = ls.b.FreshTemp("stream")
 				ls.b.Emit(&hir.Call{Dst: streamHIR.(hir.Temp), Fn: "desifile_get_stream", Args: []hir.Value{fileVal}, Type: "ptr"})
+			}
+
+			// If style is set, emit style start
+			if styleHIR != nil {
+				styleTmp := ls.b.FreshTemp("style_start")
+				ls.b.Emit(&hir.Call{Dst: styleTmp, Fn: "print_style_start_stdout", Args: []hir.Value{styleHIR}})
 			}
 
 			if len(argExprs) == 0 {
@@ -998,6 +1008,11 @@ handlePrint:
 					} else {
 						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
 					}
+					// Emit style end BEFORE newline to prevent color bleed
+					if styleHIR != nil {
+						styleEndTmp := ls.b.FreshTemp("style_end")
+						ls.b.Emit(&hir.Call{Dst: styleEndTmp, Fn: "print_style_end_stdout", Args: []hir.Value{}})
+					}
 					// Print end terminator (customizable via end=)
 					endTemp := ls.b.FreshTemp("end")
 					if streamHIR != nil {
@@ -1015,6 +1030,11 @@ handlePrint:
 					}
 					return dst
 				}
+			}
+			// Emit style end if style was set
+			if styleHIR != nil {
+				styleEndTmp := ls.b.FreshTemp("style_end")
+				ls.b.Emit(&hir.Call{Dst: styleEndTmp, Fn: "print_style_end_stdout", Args: []hir.Value{}})
 			}
 			// If we processed all args, return
 			return nil

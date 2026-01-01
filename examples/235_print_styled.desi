@@ -1,0 +1,13 @@
+# Test colored print output
+def main() -> int:
+    print("Normal text")
+    print("Red text", style="red")
+    print("Bold green", style="bold,green")
+    print("Back to normal")
+    0
+
+# EXPECTED_OUTPUT:
+# Normal text
+# Red text
+# Bold green
+# Back to normal

@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stdlib.h>
+#include <string.h>
 
 // ============================================================
 // DesiStream: Unified stream type for all I/O operations
@@ -62,6 +63,68 @@ void stream_print_bool(DesiStream* s, int b) {
 
 void stream_flush(DesiStream* s) {
     if (s && s->handle) fflush(s->handle);
+}
+
+// ============================================================
+// ANSI color codes for styled output
+// ============================================================
+
+// Reset code
+#define ANSI_RESET "\033[0m"
+
+// Print start color codes based on style string
+void print_style_start(FILE* stream, const char* style) {
+    if (!stream || !style) return;
+    
+    // Simple style parsing: comma-separated values
+    // Supported: red, green, yellow, blue, magenta, cyan, white, bold, underline
+    const char* p = style;
+    while (*p) {
+        // Skip whitespace and commas
+        while (*p == ' ' || *p == ',') p++;
+        if (!*p) break;
+        
+        // Match style names
+        if (strncmp(p, "red", 3) == 0) { fprintf(stream, "\033[31m"); p += 3; }
+        else if (strncmp(p, "green", 5) == 0) { fprintf(stream, "\033[32m"); p += 5; }
+        else if (strncmp(p, "yellow", 6) == 0) { fprintf(stream, "\033[33m"); p += 6; }
+        else if (strncmp(p, "blue", 4) == 0) { fprintf(stream, "\033[34m"); p += 4; }
+        else if (strncmp(p, "magenta", 7) == 0) { fprintf(stream, "\033[35m"); p += 7; }
+        else if (strncmp(p, "cyan", 4) == 0) { fprintf(stream, "\033[36m"); p += 4; }
+        else if (strncmp(p, "white", 5) == 0) { fprintf(stream, "\033[37m"); p += 5; }
+        else if (strncmp(p, "bold", 4) == 0) { fprintf(stream, "\033[1m"); p += 4; }
+        else if (strncmp(p, "underline", 9) == 0) { fprintf(stream, "\033[4m"); p += 9; }
+        else if (strncmp(p, "dim", 3) == 0) { fprintf(stream, "\033[2m"); p += 3; }
+        else { p++; } // skip unknown characters
+    }
+}
+
+void print_style_end(FILE* stream) {
+    if (stream) fprintf(stream, ANSI_RESET);
+}
+
+// Styled print: outputs text with ANSI colors
+void print_styled(const char* text, const char* style) {
+    if (!text) return;
+    print_style_start(stdout, style);
+    fputs(text, stdout);
+    print_style_end(stdout);
+}
+
+void stream_print_styled(DesiStream* s, const char* text, const char* style) {
+    if (!s || !s->handle || !text) return;
+    print_style_start(s->handle, style);
+    fputs(text, s->handle);
+    print_style_end(s->handle);
+}
+
+// Convenience wrappers for stdout
+void print_style_start_stdout(const char* style) {
+    print_style_start(stdout, style);
+}
+
+void print_style_end_stdout(void) {
+    print_style_end(stdout);
 }
 
 // ============================================================

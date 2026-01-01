@@ -401,7 +401,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					// Check for known kwargs
 					if a.Name != nil {
 						kwName := a.Name.Name
-						if kwName == "sep" || kwName == "end" || kwName == "file" || kwName == "flush" {
+						if kwName == "sep" || kwName == "end" || kwName == "file" || kwName == "flush" || kwName == "style" {
 							// file=sys.stdout/stderr are magic - don't type-check them
 							if kwName == "file" {
 								// Check if it's sys.stdout or sys.stderr
@@ -413,9 +413,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 									}
 								}
 							}
-							// sep and end must be strings
+							// sep, end, and style must be strings
 							argType := c.typ(a.Expr)
-							if kwName == "sep" || kwName == "end" {
+							if kwName == "sep" || kwName == "end" || kwName == "style" {
 								if argType != nil && !types.Equal(argType, types.Str) {
 									c.add(diagAt("DTE0001", a.Expr.SpanOf(), fmt.Sprintf("print() %s must be a string", kwName)))
 								}
