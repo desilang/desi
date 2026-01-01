@@ -771,6 +771,24 @@ handlePrint:
 				return nil
 			}
 		}
+		// Handle json.parse(), json.stringify()
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
+			method := fe.Name.Name
+			if method == "parse" && len(x.Args) >= 1 {
+				// json.parse(text) -> __json_parse(text) returns ptr
+				textVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_node")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_parse", Args: []hir.Value{textVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "stringify" && len(x.Args) >= 1 {
+				// json.stringify(node) -> __json_stringify(node) returns ptr (string)
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_str")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_stringify", Args: []hir.Value{nodeVal}, Type: "ptr"})
+				return dst
+			}
+		}
 	}
 
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections

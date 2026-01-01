@@ -24,7 +24,8 @@ RUNTIME_OBJS = \
 	$(BUILD_DIR)/mutex.o \
 	$(BUILD_DIR)/channel.o \
 	$(BUILD_DIR)/taskgroup.o \
-	$(BUILD_DIR)/rc.o
+	$(BUILD_DIR)/rc.o \
+	$(BUILD_DIR)/json.o
 LIB_DESI = $(BUILD_DIR)/libdesi.a
 
 # Tools
