@@ -1,0 +1,6 @@
+# EXPECTED: COMPILE_ERROR
+# Test that log.* without import fails with proper error
+
+def main() -> int:
+    log.info("This should fail!")
+    0
