@@ -94,6 +94,22 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Log functions: log_info, log_warn, log_error, log_debug
+	if (c.Fn == "log_info" || c.Fn == "log_warn" || c.Fn == "log_error" || c.Fn == "log_debug") && len(c.Args) == 1 {
+		m.ensureDecl(fmt.Sprintf("declare void @%s(ptr)", c.Fn))
+		if s, ok := c.Args[0].(hir.ConstStr); ok {
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, strN, strN, strG)
+			wprintf(&m.funcs, "  call void @%s(ptr %%t%d)\n", c.Fn, m.tempID)
+			m.tempID++
+		} else {
+			_, msgVal := m.operand(c.Args[0])
+			wprintf(&m.funcs, "  call void @%s(ptr %s)\n", c.Fn, msgVal)
+		}
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal

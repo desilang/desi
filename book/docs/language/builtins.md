@@ -73,6 +73,26 @@ print("Warning:", style="bold,yellow")
 
 ---
 
+## Log Module
+
+Structured logging with colored prefixes and automatic stream routing.
+
+```desi
+log.info("Server started on port 8080")
+log.debug("Loading configuration...")
+log.warn("Disk space running low")
+log.error("Connection refused")
+```
+
+| Function | Prefix | Stream | Color |
+|----------|--------|--------|-------|
+| `log.info()` | `[INFO]` | stdout | green |
+| `log.debug()` | `[DEBUG]` | stdout | dim |
+| `log.warn()` | `[WARN]` | stderr | yellow |
+| `log.error()` | `[ERROR]` | stderr | red |
+
+---
+
 ## Collection Functions
 
 ### len()

@@ -159,3 +159,23 @@ void print_float_to_stream(FILE* stream, double f) {
 void print_bool_to_stream(FILE* stream, int b) {
     if (stream) fputs(b ? "true" : "false", stream);
 }
+
+// ============================================================
+// Log functions with colored prefixes
+// ============================================================
+
+void log_info(const char* msg) {
+    fprintf(stdout, "\033[32m[INFO]\033[0m %s\n", msg ? msg : "");
+}
+
+void log_warn(const char* msg) {
+    fprintf(stderr, "\033[33m[WARN]\033[0m %s\n", msg ? msg : "");
+}
+
+void log_error(const char* msg) {
+    fprintf(stderr, "\033[31m[ERROR]\033[0m %s\n", msg ? msg : "");
+}
+
+void log_debug(const char* msg) {
+    fprintf(stdout, "\033[2m[DEBUG]\033[0m %s\n", msg ? msg : "");
+}

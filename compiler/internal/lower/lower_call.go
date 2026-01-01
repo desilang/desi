@@ -754,6 +754,25 @@ handlePrint:
 		}
 	}
 
+	// Handle log.info(), log.warn(), log.error(), log.debug()
+	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {
+			method := fe.Name.Name
+			if method == "info" || method == "warn" || method == "error" || method == "debug" {
+				// Get the message argument (if any)
+				var msgVal hir.Value = hir.ConstStr{Text: ""}
+				if len(x.Args) > 0 {
+					msgVal = ls.lowerExpr(x.Args[0])
+				}
+				// Emit call to log_info/warn/error/debug
+				dst := ls.b.FreshTemp("log")
+				funcName := "log_" + method
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: funcName, Args: []hir.Value{msgVal}, Type: "void"})
+				return nil
+			}
+		}
+	}
+
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
 	// If we have type info, check if this is print(arg...) where:
 	// - arg implements Display trait, OR
