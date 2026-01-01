@@ -205,8 +205,9 @@ type lowerState struct {
 	scopes     []*scope // stack
 	terminated bool     // set once a return is emitted
 	info       *check.Info
-	src        []byte          // optional: original source for literal materialization
-	globals    map[string]bool // names of global variables
+	src        []byte                 // optional: original source for literal materialization
+	globals    map[string]bool        // names of global variables
+	enums      map[string]*types.Enum // user-defined enum declarations
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)

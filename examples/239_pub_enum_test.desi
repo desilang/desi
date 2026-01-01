@@ -1,0 +1,14 @@
+# Test pub enum support
+pub enum JsonValue:
+    Null: none
+    Bool: bool
+    Number: float
+    String: str
+
+def main() -> int:
+    let v = JsonValue.Null
+    print("pub enum works")
+    0
+
+# EXPECTED_OUTPUT:
+# pub enum works
