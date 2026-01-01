@@ -53,7 +53,7 @@ void stream_print_int(DesiStream* s, int64_t n) {
 }
 
 void stream_print_float(DesiStream* s, double f) {
-    if (s && s->handle) fprintf(s->handle, "%f", f);
+    if (s && s->handle) fprintf(s->handle, "%g", f);
 }
 
 void stream_print_bool(DesiStream* s, int b) {
@@ -90,7 +90,7 @@ void print_int_to_stream(FILE* stream, int64_t n) {
 }
 
 void print_float_to_stream(FILE* stream, double f) {
-    if (stream) fprintf(stream, "%f", f);
+    if (stream) fprintf(stream, "%g", f);
 }
 
 void print_bool_to_stream(FILE* stream, int b) {

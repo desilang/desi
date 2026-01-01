@@ -25,5 +25,5 @@ def main() -> int:
 # EXPECTED_OUTPUT:
 # 42
 # hello
-# 3.140000
+# 3.14
 # Generic function tests passed!

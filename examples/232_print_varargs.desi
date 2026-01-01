@@ -28,7 +28,7 @@ def main() -> int:
 # hello world
 # 1 2 3
 # 1 true hello
-# 3.140000 42
+# 3.14 42
 # single
 # 
 # a b c d e

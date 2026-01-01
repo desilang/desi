@@ -25,10 +25,10 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # -5
-# -3.140000
+# -3.14
 # -
 # 999999999
 # 0
-# 0.000000
+# 0
 # true false
 # x

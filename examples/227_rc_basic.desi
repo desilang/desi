@@ -44,7 +44,7 @@ def main() -> int:
     # Test 3: Rc[float]
     print("=== Rc[float] ===")
     let shared_float = rc(3.14)
-    print(shared_float.get())  # Should print 3.140000
+    print(shared_float.get())  # Should print 3.14
     
     # Test 4: Rc[bool]
     print("=== Rc[bool] ===")
@@ -76,7 +76,7 @@ def main() -> int:
 # === Rc[str] ===
 # hello
 # === Rc[float] ===
-# 3.140000
+# 3.14
 # === Rc[bool] ===
 # true
 # === Clone test ===
