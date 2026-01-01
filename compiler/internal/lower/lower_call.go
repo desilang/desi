@@ -767,8 +767,9 @@ handlePrint:
 			// Default sep and end as HIR values
 			var sepHIR hir.Value = hir.ConstStr{Text: " "}
 			var endHIR hir.Value = hir.ConstStr{Text: "\n"}
-			flushOutput := false // flush=True forces output buffer flush
-			fileStreamID := 1    // 1=stdout, 2=stderr (0=stdin unused)
+			flushOutput := false  // flush=True forces output buffer flush
+			fileStreamID := 1     // 1=stdout, 2=stderr, 3=user file
+			var fileExpr ast.Expr // For file= with user file variable
 
 			// Collect positional arguments and extract kwargs
 			var argExprs []ast.Expr
@@ -798,16 +799,32 @@ handlePrint:
 										fileStreamID = 1
 									case "stderr":
 										fileStreamID = 2
+									default:
+										// Unknown sys.* field - treat as file variable
+										fileStreamID = 3 // 3 = user file
 									}
+								} else {
+									// Not sys.*, treat as user file
+									fileStreamID = 3
 								}
 							} else if id, ok := an.Expr.(*ast.Ident); ok {
-								// Direct ident (if imported with 'from sys import stderr')
+								// Ident - could be 'stdout'/'stderr' directly or a file variable
 								switch id.Name {
 								case "stdout":
 									fileStreamID = 1
 								case "stderr":
 									fileStreamID = 2
+								default:
+									// Regular variable - it's a file
+									fileStreamID = 3
 								}
+							} else {
+								// Other expression (function call, etc) - treat as file
+								fileStreamID = 3
+							}
+							// Store file expression for non-magic cases
+							if fileStreamID == 3 {
+								fileExpr = an.Expr
 							}
 						}
 						// Skip kwargs from positional args list
@@ -825,6 +842,11 @@ handlePrint:
 				// Get stderr stream pointer
 				streamHIR = ls.b.FreshTemp("stream")
 				ls.b.Emit(&hir.Call{Dst: streamHIR.(hir.Temp), Fn: "__get_stderr", Args: []hir.Value{}, Type: "ptr"})
+			} else if fileStreamID == 3 && fileExpr != nil {
+				// User file - lower expression and convert to stream
+				fileVal := ls.lowerExpr(fileExpr)
+				streamHIR = ls.b.FreshTemp("stream")
+				ls.b.Emit(&hir.Call{Dst: streamHIR.(hir.Temp), Fn: "desifile_get_stream", Args: []hir.Value{fileVal}, Type: "ptr"})
 			}
 
 			if len(argExprs) == 0 {

@@ -33,6 +33,19 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Convert DesiFile* to DesiStream* for print compatibility
+	if c.Fn == "desifile_get_stream" && len(c.Args) == 1 {
+		m.ensureDecl("declare ptr @desifile_get_stream(ptr)")
+		_, fileVal := m.operand(c.Args[0])
+		dst := c.Dst.Name
+		if dst == "" {
+			dst = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+		}
+		wprintf(&m.funcs, "  %s = call ptr @desifile_get_stream(ptr %s)\n", dst, fileVal)
+		return
+	}
+
 	// Stream print: stream_print_str(stream, str)
 	if c.Fn == "stream_print_str" && len(c.Args) == 2 {
 		m.ensureDecl("declare void @stream_print_str(ptr, ptr)")
