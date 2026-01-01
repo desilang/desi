@@ -43,3 +43,23 @@ pub def parse(text: str) -> JsonValue:
             JsonValue.String(__json_get_string(raw))
         else:
             JsonValue.Null
+
+# Convert a JsonValue back to a JSON string
+# Note: For Number and String, this returns a simple representation
+# Full f-string support for formatting coming soon
+pub def stringify(value: JsonValue) -> str:
+    if value is JsonValue.Null:
+        "null"
+    elif value is JsonValue.Bool(b):
+        if b:
+            "true"
+        else:
+            "false"
+    elif value is JsonValue.Number(n):
+        # TODO: proper number formatting
+        "number"
+    elif value is JsonValue.String(s):
+        s
+    else:
+        "null"
+

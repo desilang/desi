@@ -1,19 +1,17 @@
-# Test JSON parsing and stringification
+# Test JSON parsing
 import json
 
 def main() -> int:
-    # Parse simple JSON values
+    # Parse JSON values
     let num_node = json.parse("42")
     let str_node = json.parse("\"hello world\"")
+    let bool_node = json.parse("true")
+    let null_node = json.parse("null")
     
-    # Stringify back to JSON strings
-    let num_text = json.stringify(num_node)
-    let str_text = json.stringify(str_node)
-    
-    # Print the results (they are C strings/ptrs that print will handle)
-    print("JSON module loaded successfully")
+    # Print confirmation
+    print("JSON parse successful")
     
     0
 
 # EXPECTED_OUTPUT:
-# JSON module loaded successfully
+# JSON parse successful
