@@ -217,6 +217,15 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 	}
 
+	// Built-in fflush_stdout - flush stdout buffer
+	if c.Fn == "fflush_stdout" && len(c.Args) == 0 {
+		m.ensureDecl("declare i32 @fflush(ptr)")
+		// fflush(stdout) - pass null for stdout
+		wprintf(&m.funcs, "  %%t%d = call i32 @fflush(ptr null)\n", m.tempID)
+		m.tempID++
+		return
+	}
+
 	// Built-in str() conversion
 	if c.Fn == "str" && len(c.Args) == 1 {
 		ty, val := m.operand(c.Args[0])
