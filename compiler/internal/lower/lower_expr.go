@@ -1096,6 +1096,22 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.FieldExpr:
 		// Special handling for Option/Result variants accessed as fields (e.g. Option.Nothing)
 		if id, ok := x.X.(*ast.Ident); ok {
+			// Check if base is any enum type (including user-defined enums like JsonValue)
+			if ls.info != nil {
+				// Check the full FieldExpr type - if it's a func returning an enum, this is a variant constructor
+				if exprType := ls.info.Types[x]; exprType != nil {
+					// Enum variant constructors are typed as functions returning the enum type
+					if fn, ok := exprType.(*types.Func); ok {
+						if enumType, ok := fn.Ret.(*types.Enum); ok {
+							// This is an enum variant constructor (e.g. JsonValue.Null)
+							ctorName := fmt.Sprintf("%s.%s", enumType.Name, x.Name.Name)
+							dst := ls.b.FreshTemp("enum_ctor")
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: ctorName, Args: []hir.Value{}, Type: "ptr"})
+							return dst
+						}
+					}
+				}
+			}
 			if id.Name == "Option" || id.Name == "Result" {
 				// Treat as constructor call (e.g. Option.Nothing())
 				// This handles unit variants like Option.Nothing being used as values.
