@@ -367,6 +367,11 @@
       "title": "value is not callable",
       "help": "only functions can be called"
     },
+    "missing_stdlib_import": {
+      "id": "DTE0200",
+      "title": "missing stdlib import",
+      "help": "stdlib modules must be imported before use; add 'import <module>' at the top of your file"
+    },
     "incompatible_struct_assignment": {
       "id": "DTE0030",
       "title": "incompatible struct assignment",

@@ -68,6 +68,11 @@ type Info struct {
 	// TestFuncs tracks functions decorated with @test for the test runner.
 	// Key: function name, Value: the FuncDecl node
 	TestFuncs map[string]*ast.FuncDecl
+
+	// StdlibImports tracks which stdlib modules have been imported.
+	// Key: module name (e.g., "log", "json"), Value: true if imported
+	// Used for dead-code elimination and validation of stdlib usage.
+	StdlibImports map[string]bool
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -110,6 +115,7 @@ func NewInfo() *Info {
 		ClassInstantiations: make(map[string][]*types.Generic),
 		BinOpOverloads:      make(map[*ast.BinaryExpr]*FuncCand),
 		TestFuncs:           make(map[string]*ast.FuncDecl),
+		StdlibImports:       make(map[string]bool),
 	}
 	addPreludeBuiltins(info)
 	return info

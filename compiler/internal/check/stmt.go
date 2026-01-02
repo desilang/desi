@@ -831,7 +831,16 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 	// NEW (M5): imports
 	case *ast.ImportStmt:
-		// nothing to type; resolver handles validity; lints post-check
+		// Track stdlib module imports for dead-code elimination
+		// Stdlib modules: log, json, http, etc.
+		if len(st.Path) == 1 {
+			modName := st.Path[0]
+			switch modName {
+			case "log", "json", "http", "fs", "crypto":
+				c.info.StdlibImports[modName] = true
+			}
+		}
+		// nothing else to type; resolver handles validity; lints post-check
 	case *ast.FromImportStmt:
 		// nothing to type; resolver handles validity; lints post-check
 

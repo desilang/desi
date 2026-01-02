@@ -48,10 +48,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
-		// Magic log module: log.info(), log.warn(), log.error(), log.debug()
+		// Stdlib log module: log.info(), log.warn(), log.error(), log.debug()
+		// Requires: import log
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {
 			method := fe.Name.Name
 			if method == "info" || method == "warn" || method == "error" || method == "debug" {
+				// Validate import - require `import log`
+				if !c.info.StdlibImports["log"] {
+					c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'log' requires: import log"))
+					return nil
+				}
 				// Type-check the single string argument (if any)
 				for _, a := range argsNodes {
 					c.typ(a.Expr)

@@ -1,4 +1,6 @@
 # Test log functions
+import log
+
 def main() -> int:
     log.info("Application started")
     log.debug("Loading config...")
