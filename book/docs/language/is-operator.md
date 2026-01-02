@@ -136,6 +136,33 @@ match opt:
 
 Use `match` when you need exhaustive pattern matching or multiple cases.
 
+## User-Defined Enum Patterns
+
+The `is` operator works with any user-defined enum, not just `Option` and `Result`:
+
+```desi
+enum Status:
+    Pending: none
+    Running: int
+    Complete: str
+
+def check_status(s: Status) -> str:
+    # Unit variant pattern (no payload)
+    if s is Status.Pending:
+        return "pending"
+    
+    # Payload variant patterns with bindings
+    if s is Status.Running(id):
+        return f"running with id {id}"
+    
+    if s is Status.Complete(msg):
+        return f"complete: {msg}"
+    
+    return "unknown"
+```
+
+This provides a concise alternative to `match` for simple variant checks.
+
 ## Quick Reference
 
 | Pattern | Description |
@@ -148,5 +175,6 @@ Use `match` when you need exhaustive pattern matching or multiple cases.
 | `opt is not Some(_)` | Check not Some |
 | `res is Ok(v)` | Extract Ok value |
 | `res is Err(e)` | Extract Err value |
-| `res is Ok(_)` | Check Ok (no binding) |
+| `s is Enum.Variant` | Check unit variant |
+| `s is Enum.Variant(x)` | Extract payload variant |
 
