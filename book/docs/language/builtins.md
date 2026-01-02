@@ -30,6 +30,7 @@ print()
 | `end` | `"\n"` | String appended after the last argument |
 | `file` | `sys.stdout` | Output stream (`sys.stdout` or `sys.stderr`) |
 | `flush` | `false` | Force immediate output (no buffering) |
+| `style` | `""` | ANSI color/style: `red`, `green`, `bold`, etc. |
 
 ```desi
 # Custom separator
@@ -51,8 +52,18 @@ print("Log entry 1", file=f)
 print("Log entry 2", file=f)
 f.close()
 
+# With auto-close (recommended)
+using f = open("data.txt", "w"):
+    print("Auto-closed!", file=f)
+    # No need to call f.close()
+
 # Force immediate output
 print("Progress: 50%", flush=true)
+
+# Colored output
+print("Error!", style="red")
+print("Success!", style="green")
+print("Warning:", style="bold,yellow")
 ```
 
 **Supported Types:**
