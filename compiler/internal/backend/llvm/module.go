@@ -209,10 +209,6 @@ func (m *Module) operand(v hir.Value) (string, string) {
 	case hir.ConstBool:
 		return "i1", fmt.Sprintf("%v", t.Value)
 	case hir.ConstStr:
-		// Special case: "null" should be emitted as null pointer constant
-		if t.Text == "null" {
-			return "ptr", "null"
-		}
 		// Strings are pointers to globals
 		// Don't add newline here - puts() will add it if needed
 		g, n := m.ensureCStringGlobal(t.Text, false)
@@ -224,6 +220,9 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		// Hack: return the global array directly? No, need i8*.
 		// We can use `i8* getelementptr ...` constant expression!
 		return "ptr", fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", n, n, g)
+	case hir.ConstNull:
+		// Null pointer constant
+		return "ptr", "null"
 	case hir.Temp:
 		// Infer type from source
 		name := t.Name

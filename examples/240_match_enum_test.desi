@@ -4,12 +4,16 @@ pub enum TestValue:
     Bool: bool
 
 def stringify_test(value: TestValue) -> str:
-    match value:
+    let result = match value:
         TestValue.Null(): "null"
         _: "other"
+    return result
 
 def main() -> int:
     let v = TestValue.Null()
     let s = stringify_test(v)
     print("Result:", s)
     0
+
+# EXPECTED_OUTPUT:
+# Result: null

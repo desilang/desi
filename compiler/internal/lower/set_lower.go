@@ -11,7 +11,7 @@ func (ls *lowerState) lowerSetLit(x *ast.SetLit, t *types.Set) hir.Value {
 	dict := ls.b.FreshTemp("set")
 
 	// Determine to_str function for set elements
-	var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+	var toStrFunc hir.Value = hir.ConstNull{}
 	if t != nil {
 		toStrFunc = resolveToStrFunc(t.Elem)
 	}

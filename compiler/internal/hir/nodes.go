@@ -100,6 +100,12 @@ type ConstStr struct{ Text string }
 func (ConstStr) isValue()         {}
 func (c ConstStr) String() string { return "\"" + c.Text + "\"" }
 
+// ConstNull represents a null pointer constant
+type ConstNull struct{}
+
+func (ConstNull) isValue()       {}
+func (ConstNull) String() string { return "null" }
+
 type Undef struct{}
 
 func (Undef) isValue()       {}
