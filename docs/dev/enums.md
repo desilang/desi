@@ -58,7 +58,7 @@ ls.b.Emit(&hir.BinaryOp{Op: "==", LHS: tag, RHS: hir.ConstInt{Text: fmt.Sprintf(
 
 ## Common Pitfalls
 
-1. **Unit variants need parentheses**: `let v = Status.Pending()` not `Status.Pending`
+1. **Unit variants work with or without parentheses**: `let v = Status.Pending` and `Status.Pending()` both work. The type coercion in `types.Assignable()` handles `func() -> Enum` as assignable to `Enum`.
 2. **Struct field vs variant**: Always check if base is a type symbol before treating as variant
 3. **Tag extraction**: Use `i8` GEP type for opaque byte access to enum struct
 4. **ConstNull vs string "null"**: Use `hir.ConstNull{}` for null pointers, not `hir.ConstStr{Text: "null"}`. The LLVM backend correctly emits "null" for ConstNull but a string constant for ConstStr.

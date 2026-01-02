@@ -20,14 +20,19 @@ enum Shape:
 
 ## Creating Enum Values
 
-Always use parentheses when creating enum values:
+Unit variants (no payload) can be used with or without parentheses:
 
 ```desi
+# Both syntaxes work for unit variants
 let c = Color.Red()
-let shape = Shape.Circle(5.0)
+let c2 = Color.Red     # Parentheses optional for unit variants
 ```
 
-> **Note**: Even unit variants require parentheses: `Color.Red()` not `Color.Red`
+Payload variants require parentheses with the value:
+
+```desi
+let shape = Shape.Circle(5.0)
+```
 
 ## Pattern Matching
 

@@ -582,6 +582,20 @@ func Assignable(dst, src T) bool {
 		return Assignable(dst, srcAlias.Target)
 	}
 
+	// Unit enum variant coercion: func() -> Enum is assignable to Enum
+	// This enables `let v = Status.Pending` instead of `Status.Pending()`
+	if dstEnum, ok := dst.(*Enum); ok {
+		if srcFunc, ok := src.(*Func); ok {
+			if len(srcFunc.Params) == 0 && srcFunc.Ret != nil {
+				if srcRetEnum, ok := srcFunc.Ret.(*Enum); ok {
+					if dstEnum.Name == srcRetEnum.Name {
+						return true
+					}
+				}
+			}
+		}
+	}
+
 	// Class inheritance: src is assignable to dst if src is subclass of dst
 	if dstClass, ok := dst.(*Class); ok {
 		if srcClass, ok := src.(*Class); ok {

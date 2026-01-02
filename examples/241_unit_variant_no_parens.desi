@@ -1,0 +1,19 @@
+# Test unit variant without parentheses
+enum Status:
+    Pending: none
+    Running: int
+
+def check_status(s: Status) -> str:
+    let result = match s:
+        Status.Pending(): "pending"
+        _: "other"
+    return result
+
+def main() -> int:
+    let v = Status.Pending  # No parentheses
+    let msg = check_status(v)
+    print("Status:", msg)
+    0
+
+# EXPECTED_OUTPUT:
+# Status: pending
