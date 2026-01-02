@@ -691,6 +691,10 @@ func FromName(name string) (T, bool) {
 	case "uint":
 		return U64, true
 
+	// Raw pointers (opaque when used without type parameter)
+	case "ptr", "cptr":
+		return CPtrOf(None), true
+
 	default:
 		return nil, false
 	}

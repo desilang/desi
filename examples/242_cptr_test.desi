@@ -1,0 +1,21 @@
+# Test ptr type syntax
+# ptr[T] - typed pointer to T
+# ptr - opaque pointer (equivalent to void*)
+
+@extern
+def malloc(size: int) -> ptr
+
+def use_ptr(p: ptr) -> int:
+    # Function accepting opaque pointer
+    0
+
+def main() -> int:
+    # Test ptr in function signature and call
+    unsafe:
+        let buffer = malloc(1024)
+        use_ptr(buffer)
+    print("ptr type works!")
+    0
+
+# EXPECTED_OUTPUT:
+# ptr type works!
