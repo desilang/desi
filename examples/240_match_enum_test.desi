@@ -1,0 +1,15 @@
+# Test function with enum parameter
+pub enum TestValue:
+    Null: none
+    Bool: bool
+
+def stringify_test(value: TestValue) -> str:
+    match value:
+        TestValue.Null(): "null"
+        _: "other"
+
+def main() -> int:
+    let v = TestValue.Null()
+    let s = stringify_test(v)
+    print("Result:", s)
+    0

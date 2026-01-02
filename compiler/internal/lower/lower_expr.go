@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -1044,6 +1045,74 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					Type: "i1",
 				})
 			}
+		} else if fieldExpr, ok := x.Pattern.(*ast.FieldExpr); ok {
+			// FieldExpr pattern like EnumType.Variant (unit variant)
+			// Check if LHS is a user-defined enum and compare tags
+			if lhsType != nil {
+				if enumType, ok := lhsType.(*types.Enum); ok {
+					// Find the variant's tag value
+					variantName := fieldExpr.Name.Name
+					variantTag := -1
+					for _, v := range enumType.Variants {
+						if v.Name == variantName {
+							variantTag = v.Tag
+							break
+						}
+					}
+					if variantTag >= 0 {
+						// Extract tag from LHS enum struct: { i32 tag, ptr payload }
+						// Use i8 type since enum is accessed as opaque bytes
+						tagPtr := ls.b.FreshTemp("tag_ptr")
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    "i8",
+							Base:    lhs,
+							Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+							Dst:     tagPtr,
+						})
+						tag := ls.b.FreshTemp("tag")
+						ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+						// Compare tag to variant's known tag value
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "==",
+							LHS:  tag,
+							RHS:  hir.ConstInt{Text: fmt.Sprintf("%d", variantTag)},
+							Dst:  dst,
+							Type: "i1",
+						})
+					} else {
+						// Variant not found - fallback to identity comparison
+						rhs := ls.lowerExpr(x.Pattern)
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "==",
+							LHS:  lhs,
+							RHS:  rhs,
+							Dst:  dst,
+							Type: "i1",
+						})
+					}
+				} else {
+					// Not an enum - fallback to identity comparison
+					rhs := ls.lowerExpr(x.Pattern)
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  lhs,
+						RHS:  rhs,
+						Dst:  dst,
+						Type: "i1",
+					})
+				}
+			} else {
+				// No type info - fallback
+				rhs := ls.lowerExpr(x.Pattern)
+				ls.b.Emit(&hir.BinaryOp{
+					Op:   "==",
+					LHS:  lhs,
+					RHS:  rhs,
+					Dst:  dst,
+					Type: "i1",
+				})
+			}
 		} else {
 			// General identity comparison: compare values/pointers
 			rhs := ls.lowerExpr(x.Pattern)
@@ -1098,16 +1167,39 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		if id, ok := x.X.(*ast.Ident); ok {
 			// Check if base is any enum type (including user-defined enums like JsonValue)
 			if ls.info != nil {
-				// Check the full FieldExpr type - if it's a func returning an enum, this is a variant constructor
-				if exprType := ls.info.Types[x]; exprType != nil {
-					// Enum variant constructors are typed as functions returning the enum type
-					if fn, ok := exprType.(*types.Func); ok {
-						if enumType, ok := fn.Ret.(*types.Enum); ok {
-							// This is an enum variant constructor (e.g. JsonValue.Null)
-							ctorName := fmt.Sprintf("%s.%s", enumType.Name, x.Name.Name)
-							dst := ls.b.FreshTemp("enum_ctor")
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: ctorName, Args: []hir.Value{}, Type: "ptr"})
-							return dst
+				// Check if this is an enum variant access
+				// Method 1: Look up identifier in Idents map and check if it's a type symbol
+				// Method 2: Check if the FieldExpr type is a function returning an enum
+				isEnumTypeAccess := false
+				if sym := ls.info.Idents[id]; sym != nil && sym.Kind == check.SymType {
+					if _, ok := sym.Type.(*types.Enum); ok {
+						isEnumTypeAccess = true
+					}
+				}
+				// Fallback: check if FieldExpr type is a func returning an enum
+				if !isEnumTypeAccess {
+					if exprType := ls.info.Types[x]; exprType != nil {
+						if fn, ok := exprType.(*types.Func); ok {
+							if _, ok := fn.Ret.(*types.Enum); ok {
+								isEnumTypeAccess = true
+							}
+						}
+					}
+				}
+
+				if isEnumTypeAccess {
+					// The base is a type name (e.g., Status, JsonValue)
+					// Check the full FieldExpr type - if it's a func returning an enum, this is a variant constructor
+					if exprType := ls.info.Types[x]; exprType != nil {
+						// Payload variants are typed as functions returning the enum type
+						if fn, ok := exprType.(*types.Func); ok {
+							if enumType, ok := fn.Ret.(*types.Enum); ok {
+								// This is an enum variant constructor (e.g. JsonValue.Bool)
+								ctorName := fmt.Sprintf("%s.%s", enumType.Name, x.Name.Name)
+								dst := ls.b.FreshTemp("enum_ctor")
+								ls.b.Emit(&hir.Call{Dst: dst, Fn: ctorName, Args: []hir.Value{}, Type: "ptr"})
+								return dst
+							}
 						}
 					}
 				}
