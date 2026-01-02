@@ -66,6 +66,26 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return types.None
 			}
 		}
+		// Stdlib json module: json.parse(), json.stringify()
+		// Requires: import json
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
+			method := fe.Name.Name
+			if method == "parse" || method == "stringify" {
+				// Validate import - require `import json`
+				if !c.info.StdlibImports["json"] {
+					c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'json' requires: import json"))
+					return nil
+				}
+				// Type-check arguments
+				for _, a := range argsNodes {
+					c.typ(a.Expr)
+				}
+				// json.parse returns opaque ptr (JsonNode*), json.stringify returns str
+				// Use Any for opaque runtime pointers
+				c.info.Types[call] = types.Any
+				return types.Any
+			}
+		}
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
 			if !hasNamed {
 				// Legacy positional path

@@ -110,6 +110,32 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// JSON parse: __json_parse(text) -> ptr
+	if c.Fn == "__json_parse" && len(c.Args) == 1 {
+		m.ensureDecl("declare ptr @__json_parse(ptr)")
+		dst := c.Dst.Name
+		if s, ok := c.Args[0].(hir.ConstStr); ok {
+			strG, strN := m.ensureCStringGlobal(s.Text, false)
+			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+				m.tempID, strN, strN, strG)
+			wprintf(&m.funcs, "  %s = call ptr @__json_parse(ptr %%t%d)\n", dst, m.tempID)
+			m.tempID++
+		} else {
+			_, textVal := m.operand(c.Args[0])
+			wprintf(&m.funcs, "  %s = call ptr @__json_parse(ptr %s)\n", dst, textVal)
+		}
+		return
+	}
+
+	// JSON stringify: __json_stringify(node) -> ptr (string)
+	if c.Fn == "__json_stringify" && len(c.Args) == 1 {
+		m.ensureDecl("declare ptr @__json_stringify(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call ptr @__json_stringify(ptr %s)\n", dst, nodeVal)
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal
