@@ -133,6 +133,11 @@ func (m *Module) emitCall(c *hir.Call) {
 		dst := c.Dst.Name
 		_, nodeVal := m.operand(c.Args[0])
 		wprintf(&m.funcs, "  %s = call ptr @__json_stringify(ptr %s)\n", dst, nodeVal)
+		// Store return type for later type inference
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
 		return
 	}
 

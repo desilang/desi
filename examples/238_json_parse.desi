@@ -1,17 +1,26 @@
-# Test JSON parsing
+# Test JSON parsing and stringify
 import json
 
 def main() -> int:
-    # Parse JSON values
-    let num_node = json.parse("42")
-    let str_node = json.parse("\"hello world\"")
-    let bool_node = json.parse("true")
-    let null_node = json.parse("null")
+    # Parse and stringify simple values
+    let num = json.parse("42")
+    let str_val = json.parse("\"hello\"")
+    let bool_val = json.parse("true")
+    let null_val = json.parse("null")
     
-    # Print confirmation
-    print("JSON parse successful")
+    print("Parsed values:")
+    print(json.stringify(num))
+    print(json.stringify(str_val))
+    print(json.stringify(bool_val))
+    print(json.stringify(null_val))
     
+    print("JSON test complete")
     0
 
 # EXPECTED_OUTPUT:
-# JSON parse successful
+# Parsed values:
+# 42
+# "hello"
+# true
+# null
+# JSON test complete

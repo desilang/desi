@@ -1,16 +1,15 @@
 # JSON module - Parse and stringify JSON data
 # Uses hybrid C+Desi architecture per docs/dev/stdlib_architecture.md
 
-# JSON value type 
-pub enum JsonValue:
-    Null: none
-    Bool: bool
-    Number: float
-    String: str
+# ============================================================
+# C Runtime Bindings
+# ============================================================
 
-# Bind to C runtime (json.c)
 @extern("C")
 pub def __json_parse(text: str) -> Any
+
+@extern("C")
+pub def __json_free(node: Any)
 
 @extern("C")
 pub def __json_type(node: Any) -> int
@@ -24,42 +23,110 @@ pub def __json_get_number(node: Any) -> float
 @extern("C")
 pub def __json_get_string(node: Any) -> str
 
+@extern("C")
+pub def __json_array_len(node: Any) -> int
+
+@extern("C")
+pub def __json_array_get(node: Any, index: int) -> Any
+
+@extern("C")
+pub def __json_object_len(node: Any) -> int
+
+@extern("C")
+pub def __json_object_get(node: Any, key: str) -> Any
+
+@extern("C")
+pub def __json_stringify(node: Any) -> str
+
 # JSON type constants (match JsonType enum in json.c)
-let JSON_NULL = 0
-let JSON_BOOL = 1
-let JSON_NUMBER = 2
-let JSON_STRING = 3
+pub let JSON_NULL = 0
+pub let JSON_BOOL = 1
+pub let JSON_NUMBER = 2
+pub let JSON_STRING = 3
+pub let JSON_ARRAY = 4
+pub let JSON_OBJECT = 5
 
-# Parse a JSON string into a JsonValue
-pub def parse(text: str) -> JsonValue:
+# ============================================================
+# Public API
+# ============================================================
+
+# Parse a JSON string, returns the raw JSON node (Any type)
+pub def parse(text: str) -> Any:
     unsafe:
-        let raw = __json_parse(text)
-        let t = __json_type(raw)
-        if t == JSON_BOOL:
-            JsonValue.Bool(__json_get_bool(raw))
-        elif t == JSON_NUMBER:
-            JsonValue.Number(__json_get_number(raw))
-        elif t == JSON_STRING:
-            JsonValue.String(__json_get_string(raw))
-        else:
-            JsonValue.Null
+        return __json_parse(text)
 
-# Convert a JsonValue back to a JSON string
-# Note: For Number and String, this returns a simple representation
-# Full f-string support for formatting coming soon
-pub def stringify(value: JsonValue) -> str:
-    if value is JsonValue.Null:
-        "null"
-    elif value is JsonValue.Bool(b):
-        if b:
-            "true"
-        else:
-            "false"
-    elif value is JsonValue.Number(n):
-        # TODO: proper number formatting
-        "number"
-    elif value is JsonValue.String(s):
-        s
-    else:
-        "null"
+# Get the type of a JSON node (returns JSON_NULL, JSON_BOOL, etc.)
+pub def get_type(node: Any) -> int:
+    unsafe:
+        return __json_type(node)
+
+# Extract boolean value from JSON node (returns false if not a bool)
+pub def get_bool(node: Any) -> bool:
+    unsafe:
+        return __json_get_bool(node)
+
+# Extract number value from JSON node (returns 0.0 if not a number)
+pub def get_number(node: Any) -> float:
+    unsafe:
+        return __json_get_number(node)
+
+# Extract string value from JSON node (returns "" if not a string)
+pub def get_string(node: Any) -> str:
+    unsafe:
+        return __json_get_string(node)
+
+# Get array length (returns 0 if not an array)
+pub def array_len(node: Any) -> int:
+    unsafe:
+        return __json_array_len(node)
+
+# Get array element by index (returns null if out of bounds)
+pub def array_get(node: Any, index: int) -> Any:
+    unsafe:
+        return __json_array_get(node, index)
+
+# Get object length (number of keys)
+pub def object_len(node: Any) -> int:
+    unsafe:
+        return __json_object_len(node)
+
+# Get object value by key (returns null if key not found)
+pub def object_get(node: Any, key: str) -> Any:
+    unsafe:
+        return __json_object_get(node, key)
+
+# Convert JSON node to string
+pub def stringify(node: Any) -> str:
+    unsafe:
+        return __json_stringify(node)
+
+# Check if JSON node is null
+pub def is_null(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_NULL
+
+# Check if JSON node is a boolean
+pub def is_bool(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_BOOL
+
+# Check if JSON node is a number
+pub def is_number(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_NUMBER
+
+# Check if JSON node is a string
+pub def is_string(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_STRING
+
+# Check if JSON node is an array
+pub def is_array(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_ARRAY
+
+# Check if JSON node is an object
+pub def is_object(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_OBJECT
 
