@@ -1,0 +1,45 @@
+# JSON module - Parse and stringify JSON data
+# Uses hybrid C+Desi architecture per docs/dev/stdlib_architecture.md
+
+# JSON value type 
+pub enum JsonValue:
+    Null: none
+    Bool: bool
+    Number: float
+    String: str
+
+# Bind to C runtime (json.c)
+@extern("C")
+pub def __json_parse(text: str) -> Any
+
+@extern("C")
+pub def __json_type(node: Any) -> int
+
+@extern("C")
+pub def __json_get_bool(node: Any) -> bool
+
+@extern("C")
+pub def __json_get_number(node: Any) -> float
+
+@extern("C")
+pub def __json_get_string(node: Any) -> str
+
+# JSON type constants (match JsonType enum in json.c)
+let JSON_NULL = 0
+let JSON_BOOL = 1
+let JSON_NUMBER = 2
+let JSON_STRING = 3
+
+# Parse a JSON string into a JsonValue
+pub def parse(text: str) -> JsonValue:
+    unsafe:
+        let raw = __json_parse(text)
+        let t = __json_type(raw)
+        if t == JSON_BOOL:
+            JsonValue.Bool(__json_get_bool(raw))
+        elif t == JSON_NUMBER:
+            JsonValue.Number(__json_get_number(raw))
+        elif t == JSON_STRING:
+            JsonValue.String(__json_get_string(raw))
+        else:
+            JsonValue.Null
