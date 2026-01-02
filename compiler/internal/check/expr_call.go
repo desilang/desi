@@ -48,6 +48,18 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
+		// Magic log module: log.info(), log.warn(), log.error(), log.debug()
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {
+			method := fe.Name.Name
+			if method == "info" || method == "warn" || method == "error" || method == "debug" {
+				// Type-check the single string argument (if any)
+				for _, a := range argsNodes {
+					c.typ(a.Expr)
+				}
+				c.info.Types[call] = types.None
+				return types.None
+			}
+		}
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
 			if !hasNamed {
 				// Legacy positional path

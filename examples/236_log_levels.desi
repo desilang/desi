@@ -1,0 +1,11 @@
+# Test log functions
+def main() -> int:
+    log.info("Application started")
+    log.debug("Loading config...")
+    log.warn("Disk space low")
+    log.error("Connection failed")
+    log.info("Shutdown complete")
+    0
+
+# NOTE: This test uses ANSI escape codes for colored log prefixes.
+# Visual verification required - run manually to see colors.
