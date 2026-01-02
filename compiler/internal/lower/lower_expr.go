@@ -1034,8 +1034,74 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						Type: "i1",
 					})
 				}
+			} else if fieldCallee, ok := call.Callee.(*ast.FieldExpr); ok {
+				// FieldExpr callee like Status.Running(id) - user-defined enum
+				// Check if LHS is a user-defined enum and compare tags
+				if lhsType != nil {
+					if enumType, ok := lhsType.(*types.Enum); ok {
+						// Find the variant's tag value
+						variantName := fieldCallee.Name.Name
+						variantTag := -1
+						for _, v := range enumType.Variants {
+							if v.Name == variantName {
+								variantTag = v.Tag
+								break
+							}
+						}
+						if variantTag >= 0 {
+							// Extract tag from LHS enum struct
+							tagPtr := ls.b.FreshTemp("tag_ptr")
+							ls.b.Emit(&hir.GetElementPtr{
+								Type:    "i8",
+								Base:    lhs,
+								Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+								Dst:     tagPtr,
+							})
+							tag := ls.b.FreshTemp("tag")
+							ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+							// Compare tag to variant's known tag value
+							ls.b.Emit(&hir.BinaryOp{
+								Op:   "==",
+								LHS:  tag,
+								RHS:  hir.ConstInt{Text: fmt.Sprintf("%d", variantTag)},
+								Dst:  dst,
+								Type: "i1",
+							})
+						} else {
+							// Variant not found - default to false
+							ls.b.Emit(&hir.BinaryOp{
+								Op:   "==",
+								LHS:  lhs,
+								RHS:  hir.ConstNull{},
+								Dst:  dst,
+								Type: "i1",
+							})
+						}
+					} else {
+						// Non-enum type - fallback to identity comparison
+						rhs := ls.lowerExpr(x.Pattern)
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "==",
+							LHS:  lhs,
+							RHS:  rhs,
+							Dst:  dst,
+							Type: "i1",
+						})
+					}
+				} else {
+					// No type info - fallback to identity comparison
+					rhs := ls.lowerExpr(x.Pattern)
+					ls.b.Emit(&hir.BinaryOp{
+						Op:   "==",
+						LHS:  lhs,
+						RHS:  rhs,
+						Dst:  dst,
+						Type: "i1",
+					})
+				}
 			} else {
-				// FieldExpr callee like Option.Some
+				// Other callee - fallback to identity comparison
 				rhs := ls.lowerExpr(x.Pattern)
 				ls.b.Emit(&hir.BinaryOp{
 					Op:   "==",
