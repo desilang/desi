@@ -120,7 +120,7 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 				}
 
 				// Return a function type: (params...) -> EnumType
-				// But we need the enum type
+				// Even unit variants are functions returning the enum type
 				resultType := sym.Type
 				if resultType == nil && enumType != nil {
 					resultType = enumType
