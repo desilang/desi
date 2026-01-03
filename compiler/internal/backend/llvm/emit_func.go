@@ -376,15 +376,49 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 						llvmInst = "mul"
 					}
 				case "/":
+					// Division by zero check for both int and float
+					m.ensureDecl("declare void @__panic_divzero()")
+					checkLabel := fmt.Sprintf("divzero_check_%d", m.tempID)
+					okLabel := fmt.Sprintf("divzero_ok_%d", m.tempID)
+					m.tempID++
+
 					if isFloat {
+						// Float: use fcmp oeq for 0.0 comparison
+						wprintf(&m.funcs, "  %%divzero_cmp_%d = fcmp oeq %s %s, 0.0\n", m.tempID, lty, rval)
+						wprintf(&m.funcs, "  br i1 %%divzero_cmp_%d, label %%%s, label %%%s\n", m.tempID, checkLabel, okLabel)
+						m.tempID++
+						wprintf(&m.funcs, "\n%s:\n", checkLabel)
+						wprintf(&m.funcs, "  call void @__panic_divzero()\n")
+						wprintf(&m.funcs, "  unreachable\n")
+						wprintf(&m.funcs, "\n%s:\n", okLabel)
 						llvmInst = "fdiv"
 					} else {
+						// Integer: use icmp eq for 0 comparison
+						wprintf(&m.funcs, "  %%divzero_cmp_%d = icmp eq %s %s, 0\n", m.tempID, lty, rval)
+						wprintf(&m.funcs, "  br i1 %%divzero_cmp_%d, label %%%s, label %%%s\n", m.tempID, checkLabel, okLabel)
+						m.tempID++
+						wprintf(&m.funcs, "\n%s:\n", checkLabel)
+						wprintf(&m.funcs, "  call void @__panic_divzero()\n")
+						wprintf(&m.funcs, "  unreachable\n")
+						wprintf(&m.funcs, "\n%s:\n", okLabel)
 						llvmInst = "sdiv"
 					}
 				case "%":
 					if isFloat {
 						llvmInst = "frem"
 					} else {
+						// Integer modulo: also check for division by zero
+						m.ensureDecl("declare void @__panic_divzero()")
+						checkLabel := fmt.Sprintf("divzero_check_%d", m.tempID)
+						okLabel := fmt.Sprintf("divzero_ok_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %%divzero_cmp_%d = icmp eq %s %s, 0\n", m.tempID, lty, rval)
+						wprintf(&m.funcs, "  br i1 %%divzero_cmp_%d, label %%%s, label %%%s\n", m.tempID, checkLabel, okLabel)
+						m.tempID++
+						wprintf(&m.funcs, "\n%s:\n", checkLabel)
+						wprintf(&m.funcs, "  call void @__panic_divzero()\n")
+						wprintf(&m.funcs, "  unreachable\n")
+						wprintf(&m.funcs, "\n%s:\n", okLabel)
 						llvmInst = "srem"
 					}
 				case "==":

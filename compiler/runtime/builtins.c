@@ -4,7 +4,17 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include "list.h"
+
+// Panic function for integer division by zero
+// Future: When hot-reload is implemented, this becomes process-local
+// and supervisors can restart the process gracefully
+void __panic_divzero(void) {
+    fprintf(stderr, "panic: integer division by zero\n");
+    exit(1);
+}
 
 // sum - sum of all elements in a list of integers
 int64_t list_sum_int(DesiList* l) {
