@@ -468,19 +468,22 @@ func (c *checker) typ(e ast.Expr) types.T {
 		// Type-check the LHS
 		lhsType := c.typ(x.X)
 
-		// Check for enum variant patterns: is Some(val), is Ok(v), is Err(e)
-		// Also handles negated: is not Some(_), is not Ok(_), is not Err(_)
+		// Check for enum variant patterns
+		// Handles: is Some(val), is Ok(v), is Err(e) (builtins)
+		// And: is Status.Pending, is Status.Running(id) (user enums)
+		patternHandled := false
+
+		// Case 1: CallExpr pattern - is Some(val) or is Status.Running(id)
 		if call, ok := x.Pattern.(*ast.CallExpr); ok {
-			// Check if callee is Some/Ok/Err
+			// Check if callee is Some/Ok/Err (builtin shorthand)
 			if callee, ok := call.Callee.(*ast.Ident); ok {
 				variantName := callee.Name
-				isEnumPattern := variantName == "Some" || variantName == "Ok" || variantName == "Err"
+				isBuiltinPattern := variantName == "Some" || variantName == "Ok" || variantName == "Err"
 
-				if isEnumPattern {
-					// This is a valid enum pattern - don't type-check as expression
-					// Only create bindings if NOT negated
+				if isBuiltinPattern {
+					patternHandled = true
+					// Handle builtin Option/Result patterns
 					if !x.Negated && len(call.Args) > 0 {
-						// Get the payload type from the LHS type
 						var payloadType types.T
 
 						if variantName == "Some" && types.IsOption(lhsType) {
@@ -492,49 +495,38 @@ func (c *checker) typ(e ast.Expr) types.T {
 						}
 
 						if payloadType != nil {
-							// Create bindings for pattern variables
-							var bindings []MatchBinding
-							for i, arg := range call.Args {
-								if ident, ok := arg.(*ast.Ident); ok && ident.Name != "_" {
-									binding := MatchBinding{
-										Name:       ident.Name,
-										Type:       payloadType,
-										FieldIndex: i,
-										Node:       ident,
-									}
-									bindings = append(bindings, binding)
-
-									// Register binding in info
-									sym := &Symbol{
-										Name: ident.Name,
-										Kind: SymVar,
-										Type: payloadType,
-										Node: ident,
-									}
-									c.info.Idents[ident] = sym
-								}
-							}
-
-							// Store bindings for lowering
-							if len(bindings) > 0 {
-								if c.info.IsBindings == nil {
-									c.info.IsBindings = make(map[*ast.IsExpr][]MatchBinding)
-								}
-								c.info.IsBindings[x] = bindings
-							}
+							c.createIsBindings(x, call.Args, payloadType)
 						}
 					}
-					// Don't fall through to type-check as expression
-				} else {
-					// Not an enum pattern - type check as expression
-					c.typ(x.Pattern)
 				}
-			} else {
-				// Callee is not an Ident - type check as expression
-				c.typ(x.Pattern)
 			}
-		} else {
-			// Regular pattern (not CallExpr) - type check it
+
+			// Check if callee is FieldExpr (user enum: Status.Running(id))
+			if fieldExpr, ok := call.Callee.(*ast.FieldExpr); ok {
+				if enumType, variantInfo := c.getEnumVariantInfo(lhsType, fieldExpr); enumType != nil {
+					patternHandled = true
+					// Handle user-defined enum pattern with payload
+					if !x.Negated && len(call.Args) > 0 && variantInfo != nil {
+						// Get payload type from variant
+						if len(variantInfo.Fields) > 0 {
+							payloadType := variantInfo.Fields[0].Type
+							c.createIsBindings(x, call.Args, payloadType)
+						}
+					}
+				}
+			}
+		}
+
+		// Case 2: FieldExpr pattern - is Status.Pending (unit variant)
+		if fieldExpr, ok := x.Pattern.(*ast.FieldExpr); ok {
+			if enumType, _ := c.getEnumVariantInfo(lhsType, fieldExpr); enumType != nil {
+				patternHandled = true
+				// Unit variant pattern - no bindings needed
+			}
+		}
+
+		// If not an enum pattern, type-check as regular expression
+		if !patternHandled {
 			c.typ(x.Pattern)
 		}
 
@@ -745,3 +737,79 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 // IMPORTANT: We only use named-arg canonicalization when the call actually
 // contains named arguments. Purely positional calls follow the legacy path
 // to preserve existing behaviors (len diagnostics, borrow/move, etc.).
+
+// createIsBindings creates pattern bindings for IsExpr patterns
+func (c *checker) createIsBindings(isExpr *ast.IsExpr, args []ast.Expr, payloadType types.T) {
+	var bindings []MatchBinding
+	for i, arg := range args {
+		if ident, ok := arg.(*ast.Ident); ok && ident.Name != "_" {
+			binding := MatchBinding{
+				Name:       ident.Name,
+				Type:       payloadType,
+				FieldIndex: i,
+				Node:       ident,
+			}
+			bindings = append(bindings, binding)
+
+			// Register binding in info
+			sym := &Symbol{
+				Name: ident.Name,
+				Kind: SymVar,
+				Type: payloadType,
+				Node: ident,
+			}
+			c.info.Idents[ident] = sym
+		}
+	}
+
+	// Store bindings for lowering
+	if len(bindings) > 0 {
+		if c.info.IsBindings == nil {
+			c.info.IsBindings = make(map[*ast.IsExpr][]MatchBinding)
+		}
+		c.info.IsBindings[isExpr] = bindings
+	}
+}
+
+// getEnumVariantInfo checks if a FieldExpr pattern refers to a valid enum variant
+// Returns the enum type and variant info if valid, nil otherwise
+func (c *checker) getEnumVariantInfo(lhsType types.T, fieldExpr *ast.FieldExpr) (*types.Enum, *types.Variant) {
+	// Get the base identifier (should be enum type name)
+	baseIdent, ok := fieldExpr.X.(*ast.Ident)
+	if !ok {
+		return nil, nil
+	}
+
+	// Look up the enum type
+	var enumType *types.Enum
+
+	// Check if lhsType is the enum
+	if e, ok := lhsType.(*types.Enum); ok {
+		if e.Name == baseIdent.Name {
+			enumType = e
+		}
+	}
+
+	// Also check scope for the type
+	if enumType == nil {
+		if sym := c.scope.Lookup(baseIdent.Name); sym != nil && sym.Kind == SymType {
+			if e, ok := sym.Type.(*types.Enum); ok {
+				enumType = e
+			}
+		}
+	}
+
+	if enumType == nil {
+		return nil, nil
+	}
+
+	// Check if the field is a valid variant
+	variantName := fieldExpr.Name.Name
+	for i := range enumType.Variants {
+		if enumType.Variants[i].Name == variantName {
+			return enumType, &enumType.Variants[i]
+		}
+	}
+
+	return nil, nil
+}

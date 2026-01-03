@@ -1,0 +1,33 @@
+# Test is operator with user-defined enums
+enum Status:
+    Pending: none
+    Running: int
+    Complete: str
+
+def check_status(s: Status) -> str:
+    # Test is with FieldExpr pattern (unit variant)
+    if s is Status.Pending:
+        return "pending"
+    # Test is with CallExpr + FieldExpr pattern (payload variant)  
+    if s is Status.Running(id):
+        return f"running with id {id}"
+    if s is Status.Complete(msg):
+        return f"complete: {msg}"
+    return "unknown"
+
+def main() -> int:
+    let s1 = Status.Pending
+    let s2 = Status.Running(42)
+    let s3 = Status.Complete("done")
+    
+    print(check_status(s1))
+    print(check_status(s2))
+    print(check_status(s3))
+    0
+
+# EXPECTED_OUTPUT:
+# pending
+# 
+# running with id 42
+# complete: done
+
