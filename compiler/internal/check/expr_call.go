@@ -477,7 +477,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 								if fe, ok := a.Expr.(*ast.FieldExpr); ok {
 									if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sys" {
 										if fe.Name.Name == "stdout" || fe.Name.Name == "stderr" {
-											continue // Skip type-checking for magic sys streams
+											// Require import sys
+											if !c.info.StdlibImports["sys"] {
+												c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'sys' requires: import sys"))
+												continue
+											}
+											// Mark as typed so import tracker sees usage
+											c.info.Types[fe] = types.Any
+											continue // Skip further type-checking for magic sys streams
 										}
 									}
 								}
