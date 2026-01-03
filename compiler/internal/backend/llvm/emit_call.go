@@ -141,6 +141,131 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// JSON type check: __json_is_* -> i1 (bool)
+	if strings.HasPrefix(c.Fn, "__json_is_") && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @" + c.Fn + "(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		// C returns int (0 or 1), convert to i1
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @%s(ptr %s)\n", tmpInt, c.Fn, nodeVal)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		// Store result type for branch instructions
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
+	// JSON get type: __json_type(node) -> i32
+	if c.Fn == "__json_type" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__json_type(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call i32 @__json_type(ptr %s)\n", dst, nodeVal)
+		return
+	}
+
+	// JSON get bool: __json_get_bool(node) -> i1 (convert from C int)
+	if c.Fn == "__json_get_bool" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__json_get_bool(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		// C returns int (0 or 1), convert to i1 for branch compatibility
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @__json_get_bool(ptr %s)\n", tmpInt, nodeVal)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		// Store result type for branch instructions
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
+	// JSON get number: __json_get_number(node) -> double
+	if c.Fn == "__json_get_number" && len(c.Args) == 1 {
+		m.ensureDecl("declare double @__json_get_number(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call double @__json_get_number(ptr %s)\n", dst, nodeVal)
+		// Store result type for f-string formatting
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "double"
+		return
+	}
+
+	// JSON get string: __json_get_string(node) -> ptr
+	if c.Fn == "__json_get_string" && len(c.Args) == 1 {
+		m.ensureDecl("declare ptr @__json_get_string(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call ptr @__json_get_string(ptr %s)\n", dst, nodeVal)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
+	// JSON array len: __json_array_len(node) -> i32
+	if c.Fn == "__json_array_len" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__json_array_len(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call i32 @__json_array_len(ptr %s)\n", dst, nodeVal)
+		return
+	}
+
+	// JSON array get: __json_array_get(node, index) -> ptr
+	if c.Fn == "__json_array_get" && len(c.Args) == 2 {
+		m.ensureDecl("declare ptr @__json_array_get(ptr, i32)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		idxTy, idxVal := m.operand(c.Args[1])
+		// Ensure index is i32
+		if idxTy == "i64" {
+			truncIdx := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", truncIdx, idxVal)
+			idxVal = truncIdx
+		}
+		wprintf(&m.funcs, "  %s = call ptr @__json_array_get(ptr %s, i32 %s)\n", dst, nodeVal, idxVal)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
+	// JSON object len: __json_object_len(node) -> i32
+	if c.Fn == "__json_object_len" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__json_object_len(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call i32 @__json_object_len(ptr %s)\n", dst, nodeVal)
+		return
+	}
+
+	// JSON object get: __json_object_get(node, key) -> ptr
+	if c.Fn == "__json_object_get" && len(c.Args) == 2 {
+		m.ensureDecl("declare ptr @__json_object_get(ptr, ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		_, keyVal := m.operand(c.Args[1])
+		wprintf(&m.funcs, "  %s = call ptr @__json_object_get(ptr %s, ptr %s)\n", dst, nodeVal, keyVal)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal

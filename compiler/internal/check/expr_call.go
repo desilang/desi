@@ -66,7 +66,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return types.None
 			}
 		}
-		// Stdlib json module: json.parse(), json.stringify()
+		// Stdlib json module: all json.* functions
 		// Requires: import json
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
 			method := fe.Name.Name
@@ -88,6 +88,30 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			if method == "stringify" {
 				c.info.Types[call] = types.Str
 				return types.Str
+			}
+			// Type check functions - return bool
+			switch method {
+			case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object":
+				c.info.Types[call] = types.Bool
+				return types.Bool
+			}
+			// Value extract functions
+			switch method {
+			case "get_bool":
+				c.info.Types[call] = types.Bool
+				return types.Bool
+			case "get_number":
+				c.info.Types[call] = types.Float
+				return types.Float
+			case "get_string":
+				c.info.Types[call] = types.Str
+				return types.Str
+			case "get_type", "array_len", "object_len":
+				c.info.Types[call] = types.Int
+				return types.Int
+			case "array_get", "object_get":
+				c.info.Types[call] = types.Any
+				return types.Any
 			}
 		}
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {

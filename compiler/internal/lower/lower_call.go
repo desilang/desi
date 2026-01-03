@@ -771,7 +771,7 @@ handlePrint:
 				return nil
 			}
 		}
-		// Handle json.parse(), json.stringify()
+		// Handle json.* functions
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
 			method := fe.Name.Name
 			if method == "parse" && len(x.Args) >= 1 {
@@ -786,6 +786,94 @@ handlePrint:
 				nodeVal := ls.lowerExpr(x.Args[0])
 				dst := ls.b.FreshTemp("json_str")
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_stringify", Args: []hir.Value{nodeVal}, Type: "ptr"})
+				return dst
+			}
+			// Type check functions - return i1 (bool)
+			if method == "is_null" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_null")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_null", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			if method == "is_bool" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_bool")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_bool", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			if method == "is_number" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_number")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_number", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			if method == "is_string" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_string")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_string", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			if method == "is_array" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_array")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_array", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			if method == "is_object" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_object")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_object", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
+			// Value extract functions
+			if method == "get_type" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_type")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_type", Args: []hir.Value{nodeVal}, Type: "i32"})
+				return dst
+			}
+			if method == "get_bool" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_bool")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_bool", Args: []hir.Value{nodeVal}, Type: "i32"})
+				return dst
+			}
+			if method == "get_number" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_num")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_number", Args: []hir.Value{nodeVal}, Type: "double"})
+				return dst
+			}
+			if method == "get_string" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_string")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_string", Args: []hir.Value{nodeVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "array_len" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_arr_len")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_array_len", Args: []hir.Value{nodeVal}, Type: "i32"})
+				return dst
+			}
+			if method == "object_len" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_obj_len")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_len", Args: []hir.Value{nodeVal}, Type: "i32"})
+				return dst
+			}
+			if method == "array_get" && len(x.Args) >= 2 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				indexVal := ls.lowerExpr(x.Args[1])
+				dst := ls.b.FreshTemp("json_arr_elem")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_array_get", Args: []hir.Value{nodeVal, indexVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "object_get" && len(x.Args) >= 2 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				keyVal := ls.lowerExpr(x.Args[1])
+				dst := ls.b.FreshTemp("json_obj_val")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_get", Args: []hir.Value{nodeVal, keyVal}, Type: "ptr"})
 				return dst
 			}
 		}

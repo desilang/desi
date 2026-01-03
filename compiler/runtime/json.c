@@ -452,6 +452,31 @@ int __json_type(JsonNode* node) {
     return node ? node->type : JSON_NULL;
 }
 
+// Type check functions - return bool (0 or 1)
+int __json_is_null(JsonNode* node) {
+    return __json_type(node) == JSON_NULL;
+}
+
+int __json_is_bool(JsonNode* node) {
+    return __json_type(node) == JSON_BOOL;
+}
+
+int __json_is_number(JsonNode* node) {
+    return __json_type(node) == JSON_NUMBER;
+}
+
+int __json_is_string(JsonNode* node) {
+    return __json_type(node) == JSON_STRING;
+}
+
+int __json_is_array(JsonNode* node) {
+    return __json_type(node) == JSON_ARRAY;
+}
+
+int __json_is_object(JsonNode* node) {
+    return __json_type(node) == JSON_OBJECT;
+}
+
 // Get boolean value
 int __json_get_bool(JsonNode* node) {
     return (node && node->type == JSON_BOOL) ? node->bool_val : 0;
