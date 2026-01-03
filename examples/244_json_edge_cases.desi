@@ -1,0 +1,134 @@
+# Test JSON edge cases and advanced features
+# This file covers common gotchas from other languages and advanced use cases
+import json
+
+def test_nested_objects():
+    print("=== Nested Objects ===")
+    # Note: Using escaped braces for JSON object strings
+    let json_str = "{\"user\": {\"name\": \"alice\", \"age\": 30}, \"active\": true}"
+    let data = json.parse(json_str)
+    
+    # Access nested object
+    let user = json.object_get(data, "user")
+    let name = json.object_get(user, "name")
+    let age = json.object_get(user, "age")
+    
+    print("Name: " + json.get_string(name))
+    print("Age: " + str(json.get_int(age)))
+    
+    # Re-stringify preserves structure
+    print("Full: " + json.stringify(data))
+
+def test_array_of_objects():
+    print("")
+    print("=== Array of Objects ===")
+    let json_str = "[{\"id\": 1, \"val\": \"a\"}, {\"id\": 2, \"val\": \"b\"}]"
+    let data = json.parse(json_str)
+    
+    print("Array length: " + str(json.array_len(data)))
+    
+    let first = json.array_get(data, 0)
+    let first_id = json.object_get(first, "id")
+    print("First ID: " + str(json.get_int(first_id)))
+    
+    let second = json.array_get(data, 1)
+    let second_val = json.object_get(second, "val")
+    print("Second val: " + json.get_string(second_val))
+
+def test_null_handling():
+    print("")
+    print("=== Null Handling ===")
+    let json_str = "{\"name\": null, \"age\": 25}"
+    let data = json.parse(json_str)
+    
+    let name = json.object_get(data, "name")
+    let age = json.object_get(data, "age")
+    
+    if json.is_null(name):
+        print("Name is null")
+    
+    if json.is_int(age):
+        print("Age: " + str(json.get_int(age)))
+
+def test_number_types():
+    print("")
+    print("=== Number Types (Python+Rust Hybrid) ===")
+    let int_val = json.parse("42")
+    let float_val = json.parse("3.14159")
+    let neg_val = json.parse("-100")
+    
+    # is_int distinguishes whole numbers from decimals
+    if json.is_int(int_val):
+        print("Int: " + str(json.get_int(int_val)))
+    
+    if not json.is_int(float_val):
+        print("Float: " + str(json.get_float(float_val)))
+    
+    print("Negative: " + str(json.get_int(neg_val)))
+
+def test_empty_structures():
+    print("")
+    print("=== Empty Structures ===")
+    let empty_obj = json.parse("{}")
+    let empty_arr = json.parse("[]")
+    
+    print("Empty obj length: " + str(json.object_len(empty_obj)))
+    print("Empty arr length: " + str(json.array_len(empty_arr)))
+
+def test_boolean_gotcha():
+    print("")
+    print("=== Boolean Gotcha ===")
+    # In some languages, 0/1 and true/false can be confused
+    let json_str = "{\"flag\": true, \"count\": 1}"
+    let data = json.parse(json_str)
+    
+    let flag = json.object_get(data, "flag")
+    let count = json.object_get(data, "count")
+    
+    # Desi correctly distinguishes them
+    if json.is_bool(flag):
+        print("flag is bool")
+    if json.is_number(count):
+        print("count is number")
+
+def main() -> int:
+    test_nested_objects()
+    test_array_of_objects()
+    test_null_handling()
+    test_number_types()
+    test_empty_structures()
+    test_boolean_gotcha()
+    
+    print("")
+    print("=== All edge case tests complete ===")
+    0
+
+# EXPECTED_OUTPUT:
+# === Nested Objects ===
+# Name: alice
+# Age: 30
+# Full: {"user":{"name":"alice","age":30},"active":true}
+# 
+# === Array of Objects ===
+# Array length: 2
+# First ID: 1
+# Second val: b
+# 
+# === Null Handling ===
+# Name is null
+# Age: 25
+# 
+# === Number Types (Python+Rust Hybrid) ===
+# Int: 42
+# Float: 3.14159
+# Negative: -100
+# 
+# === Empty Structures ===
+# Empty obj length: 0
+# Empty arr length: 0
+# 
+# === Boolean Gotcha ===
+# flag is bool
+# count is number
+# 
+# === All edge case tests complete ===

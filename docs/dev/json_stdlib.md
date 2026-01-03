@@ -1,105 +1,148 @@
 # JSON Stdlib Implementation
 
-This document provides implementation details for the `json` stdlib module for contributors.
+This document describes the internal implementation of the `json` standard library module.
 
 ## Architecture
 
-The JSON module uses the **hybrid C+Desi pattern** (see [stdlib_architecture.md](stdlib_architecture.md)):
+The JSON module uses a **hybrid C+Desi architecture**:
 
 ```
-┌─────────────────────────────────────────┐
-│  User Code         import json          │
-│                    json.parse(text)     │
-└─────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│  compiler/lib/json.desi                 │
-│  - pub enum JsonValue                   │
-│  - pub def parse(text) -> JsonValue     │
-│  - @extern("C") bindings                │
-└─────────────────────────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────┐
-│  compiler/runtime/json.c                │
-│  - __json_parse() - fast C parser       │
-│  - __json_stringify() - serialization   │
-│  - __json_get_*() - value extractors    │
-└─────────────────────────────────────────┘
+Desi Code → Type Checker → Lowering → HIR → LLVM Emit → C Runtime
+                ↓              ↓           ↓              ↓
+         expr_call.go    lower_call.go   emit_call.go   json.c
 ```
 
-## Files
+## Components
+
+### 1. C Runtime (`compiler/runtime/json.c`)
+
+The C runtime handles all JSON parsing and stringification:
+
+**Core Types:**
+```c
+typedef enum { JSON_NULL, JSON_BOOL, JSON_NUMBER, JSON_STRING, JSON_ARRAY, JSON_OBJECT } JsonType;
+
+typedef struct JsonNode {
+    JsonType type;
+    union {
+        int bool_val;          // JSON_BOOL
+        double num_val;        // JSON_NUMBER
+        char* str_val;         // JSON_STRING
+        JsonArray array;       // JSON_ARRAY
+        JsonObject object;     // JSON_OBJECT
+    };
+} JsonNode;
+```
+
+**Key Functions:**
+| C Function | Desi API | Returns |
+|------------|----------|---------|
+| `__json_parse(ptr)` | `json.parse()` | `ptr` (JsonNode*) |
+| `__json_stringify(ptr)` | `json.stringify()` | `ptr` (string) |
+| `__json_is_null(ptr)` | `json.is_null()` | `i32` → `i1` |
+| `__json_is_int(ptr)` | `json.is_int()` | `i32` → `i1` |
+| `__json_get_int(ptr)` | `json.get_int()` | `i64` |
+| `__json_get_number(ptr)` | `json.get_number()` | `double` |
+| `__json_get_string(ptr)` | `json.get_string()` | `ptr` |
+| `__json_array_get(ptr, i32)` | `json.array_get()` | `ptr` |
+| `__json_object_get(ptr, ptr)` | `json.object_get()` | `ptr` |
+
+### 2. Type Checker (`compiler/internal/check/expr_call.go`)
+
+All `json.*` calls are handled specially around line 69-118:
+
+```go
+if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
+    method := fe.Name.Name
+    // ... validate import
+    switch method {
+    case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object", "is_int":
+        c.info.Types[call] = types.Bool
+        return types.Bool
+    case "get_int":
+        c.info.Types[call] = types.Int
+        return types.Int
+    // ... etc
+    }
+}
+```
+
+### 3. Lowering (`compiler/internal/lower/lower_call.go`)
+
+Lowers `json.*` calls to HIR Call instructions around line 774-880:
+
+```go
+if method == "get_int" && len(x.Args) >= 1 {
+    nodeVal := ls.lowerExpr(x.Args[0])
+    dst := ls.b.FreshTemp("json_int")
+    ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_int", Args: []hir.Value{nodeVal}, Type: "i64"})
+    return dst
+}
+```
+
+### 4. LLVM Emit (`compiler/internal/backend/llvm/emit_call.go`)
+
+Emits correct LLVM IR for each C function around line 130-250:
+
+```go
+if c.Fn == "__json_get_int" && len(c.Args) == 1 {
+    m.ensureDecl("declare i64 @__json_get_int(ptr)")
+    dst := c.Dst.Name
+    _, nodeVal := m.operand(c.Args[0])
+    wprintf(&m.funcs, "  %s = call i64 @__json_get_int(ptr %s)\n", dst, nodeVal)
+    // Track type for f-string formatting
+    m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"
+    return
+}
+```
+
+**Important:** Type tracking in `m.tempTypes` is critical for:
+- F-string formatting (uses correct printf format)
+- Branch instructions (uses correct LLVM type)
+
+### 5. Type Tracking Pattern
+
+For functions returning non-i32 types, store in `tempTypes`:
+
+```go
+// After emitting call:
+if m.tempTypes == nil {
+    m.tempTypes = make(map[string]string)
+}
+m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"  // or "double", "ptr", "i1"
+```
+
+This prevents `inferType()` from defaulting to `i32`.
+
+## Adding New JSON Functions
+
+1. **C Runtime:** Add function in `json.c`
+2. **Type Checker:** Add case in `expr_call.go` json switch
+3. **Lowering:** Add handler in `lower_call.go` json block
+4. **LLVM Emit:** Add emit handler in `emit_call.go`
+5. **Test:** Add test case in example file
+6. **Document:** Update learner and contributor docs
+
+## Number Handling Design
+
+The hybrid Python+Rust approach:
+
+1. **`is_int(n)`** - Checks if `floor(n) == n` (no decimal part)
+2. **`get_int(n)`** - Returns `(int64_t)num_val` 
+3. **`get_float(n)`** - Returns `num_val` as double
+
+This gives:
+- Clean integer output: `42` instead of `42.000000`
+- Type safety: explicit accessor choice
+- Flexibility: use either depending on context
+
+## Files Changed
 
 | File | Purpose |
 |------|---------|
-| `compiler/runtime/json.c` | C runtime (~500 lines) |
-| `compiler/lib/json.desi` | Desi wrapper with safe types |
-
-## C Runtime Functions
-
-```c
-// Parsing
-JsonNode* __json_parse(const char* text);
-void __json_free(JsonNode* node);
-
-// Type checking  
-int __json_type(JsonNode* node);  // Returns JSON_NULL/BOOL/NUMBER/STRING/ARRAY/OBJECT
-
-// Value extraction
-int __json_get_bool(JsonNode* node);
-double __json_get_number(JsonNode* node);
-const char* __json_get_string(JsonNode* node);
-
-// Array access
-int __json_array_len(JsonNode* node);
-JsonNode* __json_array_get(JsonNode* node, int index);
-
-// Object access
-int __json_object_len(JsonNode* node);
-const char* __json_object_key(JsonNode* node, int index);
-JsonNode* __json_object_get(JsonNode* node, const char* key);
-
-// Serialization
-char* __json_stringify(JsonNode* node);
-```
-
-## Desi API
-
-```desi
-pub enum JsonValue:
-    Null: none
-    Bool: bool
-    Number: float
-    String: str
-
-pub def parse(text: str) -> JsonValue
-pub def stringify(value: JsonValue) -> str  # TODO
-```
-
-## Adding New Functions
-
-1. **Add C function** in `json.c` with `__json_` prefix
-2. **Add @extern binding** in `json.desi`
-3. **Add Desi wrapper** that calls extern and wraps safely
-4. **Add test** in `examples/` with `EXPECTED_OUTPUT`
-5. **Update docs** in `book/docs/language/json.md`
-
-## Type Mapping
-
-| JSON Type | C Type | Desi Type |
-|-----------|--------|-----------|
-| null | JSON_NULL (0) | JsonValue.Null |
-| true/false | JSON_BOOL (1) | JsonValue.Bool |
-| number | JSON_NUMBER (2) | JsonValue.Number |
-| string | JSON_STRING (3) | JsonValue.String |
-| array | JSON_ARRAY (4) | TODO: list[JsonValue] |
-| object | JSON_OBJECT (5) | TODO: dict[str, JsonValue] |
-
-## TODO
-
-- [ ] `stringify()` - Convert JsonValue to JSON string
-- [ ] `get(key)` - Access object fields safely
-- [ ] `array_get(index)` - Access array elements safely
-- [ ] Array/Object variants in JsonValue enum
-- [ ] Result[JsonValue, str] error handling
+| `compiler/runtime/json.c` | C runtime functions |
+| `compiler/internal/check/expr_call.go` | Type checking |
+| `compiler/internal/lower/lower_call.go` | HIR lowering |
+| `compiler/internal/backend/llvm/emit_call.go` | LLVM IR emit |
+| `book/docs/stdlib/json.md` | Learner documentation |
+| `docs/dev/json_stdlib.md` | Contributor documentation |
