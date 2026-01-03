@@ -1,4 +1,4 @@
-# Test JSON parsing and stringify
+# Test JSON parsing, stringify, and accessors
 import json
 
 def main() -> int:
@@ -14,6 +14,31 @@ def main() -> int:
     print(json.stringify(bool_val))
     print(json.stringify(null_val))
     
+    # Test type checking and extractors
+    if json.is_number(num):
+        print(f"Number: {json.get_number(num)}")
+    
+    if json.is_string(str_val):
+        let s = json.get_string(str_val)
+        print(f"String: {s}")
+    
+    if json.is_bool(bool_val):
+        if json.get_bool(bool_val):
+            print("Bool: true")
+    
+    # Test array access
+    let arr = json.parse("[1, 2, 3]")
+    print(f"Array length: {json.array_len(arr)}")
+    let elem = json.array_get(arr, 1)
+    let elem_str = json.stringify(elem)
+    print(f"arr[1] = {elem_str}")
+    
+    # Test object access
+    let obj = json.parse("{\"name\": \"desi\", \"version\": 1}")
+    let name_val = json.object_get(obj, "name")
+    let name_str = json.stringify(name_val)
+    print(f"name = {name_str}")
+    
     print("JSON test complete")
     0
 
@@ -23,4 +48,10 @@ def main() -> int:
 # "hello"
 # true
 # null
+# Number: 42.000000
+# String: hello
+# Bool: true
+# Array length: 3
+# arr[1] = 2
+# name = "desi"
 # JSON test complete
