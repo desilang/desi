@@ -143,9 +143,11 @@ func (x *DecimalLit) SpanOf() diag.Span { return x.Span }
 // StrLit tracks whether it was a triple-quoted (long) string.
 // Long == true when the token was LONGSTR (scanner recognized """...""").
 // Value is populated for F-string parts (FSTR_PART tokens) to store the literal text.
+// Raw == true for raw strings (r"...", r#"..."#) where escapes are not processed.
 type StrLit struct {
 	Long  bool   // true for """...""", false for "..." or f"..."
-	Value string // populated for F-string parts, empty otherwise
+	Raw   bool   // true for raw strings (r"...", r#"..."#)
+	Value string // populated for F-string parts or raw strings, empty otherwise
 	Span  diag.Span
 }
 

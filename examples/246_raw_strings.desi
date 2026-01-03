@@ -1,0 +1,76 @@
+# Raw Strings Example - Comprehensive Test Cases
+# Tests all raw string features and edge cases
+#
+# EXPECTED_OUTPUT:
+# === Basic Raw Strings ===
+# hello\nworld
+# path\to\file
+# tab:\there
+# === Hash Delimiters ===
+# He said "hello"
+# Using r#"..."# syntax
+# === Escape Sequences (Not Processed) ===
+# \n \t \r \\ \x00 \u0041
+# === Real-World Use Cases ===
+# Regex: \d{3}-\d{3}-\d{4}
+# Windows: C:\Users\desi\Documents
+# JSON: {"key": "value"}
+# === Edge Cases ===
+# empty:
+# single char: x
+# unicode: 你好
+# === Done ===
+
+def main() -> int:
+    # Basic raw strings - escape sequences are literal
+    print("=== Basic Raw Strings ===")
+    let s1 = r"hello\nworld"
+    print(s1)
+    
+    let s2 = r"path\to\file"
+    print(s2)
+    
+    let s3 = r"tab:\there"
+    print(s3)
+    
+    # Hash delimiters for including quotes
+    print("=== Hash Delimiters ===")
+    let s4 = r#"He said "hello""#
+    print(s4)
+    
+    let s5 = r##"Using r#"..."# syntax"##
+    print(s5)
+    
+    # All escape sequences remain literal
+    print("=== Escape Sequences (Not Processed) ===")
+    let s6 = r"\n \t \r \\ \x00 \u0041"
+    print(s6)
+    
+    # Real-world use cases
+    print("=== Real-World Use Cases ===")
+    
+    # Regex patterns
+    let regex = r"\d{3}-\d{3}-\d{4}"
+    print(f"Regex: {regex}")
+    
+    # Windows file paths
+    let winpath = r"C:\Users\desi\Documents"
+    print(f"Windows: {winpath}")
+    
+    # JSON templates
+    let json = r#"{"key": "value"}"#
+    print(f"JSON: {json}")
+    
+    # Edge cases
+    print("=== Edge Cases ===")
+    let empty = r""
+    print(f"empty:{empty}")
+    
+    let single = r"x"
+    print(f"single char: {single}")
+    
+    let unicode = r"你好"
+    print(f"unicode: {unicode}")
+    
+    print("=== Done ===")
+    0

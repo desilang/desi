@@ -438,6 +438,17 @@ func (p *Parser) parsePrimary() ast.Expr {
 		p.next()
 		return st
 
+	case token.RAWSTR:
+		// Raw strings: r"...", r#"..."#, etc. - no escape processing
+		st := &ast.StrLit{
+			Long:  false,
+			Raw:   true,
+			Value: p.cur.Lexeme, // Raw content directly from lexer
+			Span:  spanPos(p.file, p.cur),
+		}
+		p.next()
+		return st
+
 	case token.FSTR_START:
 		return p.parseFString()
 

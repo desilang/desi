@@ -227,6 +227,10 @@ func (s *Scanner) Next() Item {
 	if s.peekIs('f') && s.peekRuneN(1) == '"' {
 		return s.startFString()
 	}
+	// Rust-style raw strings: r"...", r#"..."#, r##"..."##, etc.
+	if s.peekIs('r') && (s.peekRuneN(1) == '"' || s.peekRuneN(1) == '#') {
+		return s.scanRawString()
+	}
 	if s.peekIs('"') {
 		return s.scanString()
 	}
@@ -616,6 +620,79 @@ func (s *Scanner) scanString() Item {
 	// unterminated — report via diag code
 	s.addErr("lexer.unterminated_string", "string literal not closed", s.line, startCol)
 	return Item{Tok: token.ILLEGAL, Lexeme: "unterminated string", Line: s.line, Col: startCol}
+}
+
+// scanRawString scans Rust-style raw strings: r"...", r#"..."#, r##"..."##, etc.
+// No escape sequences are processed - all characters are literal.
+func (s *Scanner) scanRawString() Item {
+	startCol := s.col
+	startLine := s.line
+
+	// Consume 'r'
+	s.i++
+	s.col++
+
+	// Count leading '#' characters
+	hashCount := 0
+	for s.i < len(s.src) && s.src[s.i] == '#' {
+		hashCount++
+		s.i++
+		s.col++
+	}
+
+	// Must see opening '"' after r or r###
+	if s.i >= len(s.src) || s.src[s.i] != '"' {
+		s.addErr("lexer.invalid_raw_string", "expected '\"' after 'r' and '#' characters", s.line, s.col)
+		return Item{Tok: token.ILLEGAL, Lexeme: "invalid raw string prefix", Line: startLine, Col: startCol}
+	}
+
+	// Consume opening '"'
+	s.i++
+	s.col++
+
+	// Scan until we find closing pattern: " followed by hashCount # characters
+	contentStart := s.i
+	for s.i < len(s.src) {
+		if s.src[s.i] == '"' {
+			// Check if this is the closing quote with matching hashes
+			matchPos := s.i + 1
+			matched := true
+			for j := 0; j < hashCount; j++ {
+				if matchPos+j >= len(s.src) || s.src[matchPos+j] != '#' {
+					matched = false
+					break
+				}
+			}
+			if matched {
+				// Found closing pattern - extract content and consume
+				content := string(s.src[contentStart:s.i])
+				s.i++ // consume closing "
+				s.col++
+				for j := 0; j < hashCount; j++ {
+					s.i++ // consume trailing #
+					s.col++
+				}
+				return Item{Tok: token.RAWSTR, Lexeme: content, Line: startLine, Col: startCol}
+			}
+		}
+
+		// Handle newlines in raw strings (they're allowed and literal)
+		if s.src[s.i] == '\n' {
+			s.i++
+			s.line++
+			s.col = 1
+			continue
+		}
+
+		// Regular character - just advance
+		_, w := utf8.DecodeRune(s.src[s.i:])
+		s.i += w
+		s.col++
+	}
+
+	// Unterminated raw string
+	s.addErr("lexer.unterminated_raw_string", "raw string literal not closed", startLine, startCol)
+	return Item{Tok: token.ILLEGAL, Lexeme: "unterminated raw string", Line: startLine, Col: startCol}
 }
 
 func (s *Scanner) startFString() Item {
