@@ -836,7 +836,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		if len(st.Path) == 1 {
 			modName := st.Path[0]
 			switch modName {
-			case "log", "json", "http", "fs", "crypto":
+			case "log", "json", "http", "fs", "crypto", "sys":
 				c.info.StdlibImports[modName] = true
 			}
 		}
