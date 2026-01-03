@@ -200,6 +200,49 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// JSON get float: __json_get_float(node) -> double (alias for get_number)
+	if c.Fn == "__json_get_float" && len(c.Args) == 1 {
+		m.ensureDecl("declare double @__json_get_float(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call double @__json_get_float(ptr %s)\n", dst, nodeVal)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "double"
+		return
+	}
+
+	// JSON is int: __json_is_int(node) -> i1 (check if whole number)
+	if c.Fn == "__json_is_int" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__json_is_int(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		// C returns int (0 or 1), convert to i1
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @__json_is_int(ptr %s)\n", tmpInt, nodeVal)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
+	// JSON get int: __json_get_int(node) -> i64
+	if c.Fn == "__json_get_int" && len(c.Args) == 1 {
+		m.ensureDecl("declare i64 @__json_get_int(ptr)")
+		dst := c.Dst.Name
+		_, nodeVal := m.operand(c.Args[0])
+		wprintf(&m.funcs, "  %s = call i64 @__json_get_int(ptr %s)\n", dst, nodeVal)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"
+		return
+	}
+
 	// JSON get string: __json_get_string(node) -> ptr
 	if c.Fn == "__json_get_string" && len(c.Args) == 1 {
 		m.ensureDecl("declare ptr @__json_get_string(ptr)")

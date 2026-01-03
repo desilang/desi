@@ -825,6 +825,12 @@ handlePrint:
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_object", Args: []hir.Value{nodeVal}, Type: "i1"})
 				return dst
 			}
+			if method == "is_int" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_int")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_is_int", Args: []hir.Value{nodeVal}, Type: "i1"})
+				return dst
+			}
 			// Value extract functions
 			if method == "get_type" && len(x.Args) >= 1 {
 				nodeVal := ls.lowerExpr(x.Args[0])
@@ -842,6 +848,18 @@ handlePrint:
 				nodeVal := ls.lowerExpr(x.Args[0])
 				dst := ls.b.FreshTemp("json_num")
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_number", Args: []hir.Value{nodeVal}, Type: "double"})
+				return dst
+			}
+			if method == "get_float" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_float")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_float", Args: []hir.Value{nodeVal}, Type: "double"})
+				return dst
+			}
+			if method == "get_int" && len(x.Args) >= 1 {
+				nodeVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_int")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_int", Args: []hir.Value{nodeVal}, Type: "i64"})
 				return dst
 			}
 			if method == "get_string" && len(x.Args) >= 1 {
