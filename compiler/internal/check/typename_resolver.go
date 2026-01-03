@@ -95,7 +95,9 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 			}
 			return types.FutureOf(elem)
 
-		case "cptr":
+		case "cptr", "ptr":
+			// ptr[T] or cptr[T] - typed pointer
+			// ptr or cptr alone is invalid in this branch (has params)
 			if len(tn.Params) != 1 {
 				return nil
 			}
