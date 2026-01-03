@@ -91,7 +91,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 			// Type check functions - return bool
 			switch method {
-			case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object":
+			case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object", "is_int":
 				c.info.Types[call] = types.Bool
 				return types.Bool
 			}
@@ -100,9 +100,12 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			case "get_bool":
 				c.info.Types[call] = types.Bool
 				return types.Bool
-			case "get_number":
+			case "get_number", "get_float":
 				c.info.Types[call] = types.Float
 				return types.Float
+			case "get_int":
+				c.info.Types[call] = types.Int
+				return types.Int
 			case "get_string":
 				c.info.Types[call] = types.Str
 				return types.Str

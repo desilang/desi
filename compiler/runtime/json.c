@@ -482,9 +482,27 @@ int __json_get_bool(JsonNode* node) {
     return (node && node->type == JSON_BOOL) ? node->bool_val : 0;
 }
 
-// Get number value
+// Get number value (always returns double)
 double __json_get_number(JsonNode* node) {
     return (node && node->type == JSON_NUMBER) ? node->num_val : 0.0;
+}
+
+// Check if number is a whole integer (Python-style smart detection)
+int __json_is_int(JsonNode* node) {
+    if (!node || node->type != JSON_NUMBER) return 0;
+    double val = node->num_val;
+    return val == (double)(int64_t)val;
+}
+
+// Get number as integer (Rust-style explicit accessor)
+int64_t __json_get_int(JsonNode* node) {
+    if (!node || node->type != JSON_NUMBER) return 0;
+    return (int64_t)node->num_val;
+}
+
+// Rename get_number to get_float for clarity (alias)
+double __json_get_float(JsonNode* node) {
+    return __json_get_number(node);
 }
 
 // Get string value (borrowed pointer)

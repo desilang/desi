@@ -15,8 +15,8 @@ def main() -> int:
     print(json.stringify(null_val))
     
     # Test type checking and extractors
-    if json.is_number(num):
-        print(f"Number: {json.get_number(num)}")
+    if json.is_int(num):
+        print(f"Number: {json.get_int(num)}")
     
     if json.is_string(str_val):
         let s = json.get_string(str_val)
@@ -48,7 +48,7 @@ def main() -> int:
 # "hello"
 # true
 # null
-# Number: 42.000000
+# Number: 42
 # String: hello
 # Bool: true
 # Array length: 3
