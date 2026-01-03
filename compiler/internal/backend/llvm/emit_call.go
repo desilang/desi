@@ -309,6 +309,55 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Math module: __math_is_nan(double) -> i1
+	if c.Fn == "__math_is_nan" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__math_is_nan(double)")
+		dst := c.Dst.Name
+		_, val := m.operand(c.Args[0])
+		// C returns int, truncate to i1
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @__math_is_nan(double %s)\n", tmpInt, val)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
+	// Math module: __math_is_inf(double) -> i1
+	if c.Fn == "__math_is_inf" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__math_is_inf(double)")
+		dst := c.Dst.Name
+		_, val := m.operand(c.Args[0])
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @__math_is_inf(double %s)\n", tmpInt, val)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
+	// Math module: __math_is_finite(double) -> i1
+	if c.Fn == "__math_is_finite" && len(c.Args) == 1 {
+		m.ensureDecl("declare i32 @__math_is_finite(double)")
+		dst := c.Dst.Name
+		_, val := m.operand(c.Args[0])
+		tmpInt := fmt.Sprintf("%%t%d", m.tempID)
+		m.tempID++
+		wprintf(&m.funcs, "  %s = call i32 @__math_is_finite(double %s)\n", tmpInt, val)
+		wprintf(&m.funcs, "  %s = trunc i32 %s to i1\n", dst, tmpInt)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i1"
+		return
+	}
+
 	// Built-in print via puts (strings) or print_int (integers)
 	if c.Fn == "print" && len(c.Args) == 1 {
 		// Special case for string literal
