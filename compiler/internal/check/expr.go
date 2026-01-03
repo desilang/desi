@@ -386,6 +386,10 @@ func (c *checker) typ(e ast.Expr) types.T {
 		if x.Op == "!" || x.Op == "not" {
 			// TODO: Support __bool__ or truthiness for custom types?
 			// For now, require bool.
+			if t == nil {
+				// Error already reported upstream
+				return nil
+			}
 			if types.Equal(t, types.Bool) {
 				c.info.Types[e] = types.Bool
 				return types.Bool
