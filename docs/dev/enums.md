@@ -61,3 +61,25 @@ ls.b.Emit(&hir.BinaryOp{Op: "==", LHS: tag, RHS: hir.ConstInt{Text: fmt.Sprintf(
 1. **Unit variants need parentheses**: `let v = Status.Pending()` not `Status.Pending`
 2. **Struct field vs variant**: Always check if base is a type symbol before treating as variant
 3. **Tag extraction**: Use `i8` GEP type for opaque byte access to enum struct
+4. **ConstNull vs string "null"**: Use `hir.ConstNull{}` for null pointers, not `hir.ConstStr{Text: "null"}`. The LLVM backend correctly emits "null" for ConstNull but a string constant for ConstStr.
+
+## Match Expression Return Values
+
+Match expressions return values by storing to a result alloca and loading at merge point:
+
+```go
+// In match_lower.go
+res := ls.lowerExpr(arm.Result)
+if llvmResType != "void" {
+    ls.b.Emit(&hir.Store{Dst: resPtr, Val: res})
+}
+```
+
+To return the match value from a function, use explicit `return`:
+```desi
+def stringify(val: Status) -> str:
+    let result = match val:
+        Status.Pending(): "pending"
+        _: "other"
+    return result
+```
