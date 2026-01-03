@@ -16,6 +16,24 @@ void __panic_divzero(void) {
     exit(1);
 }
 
+// Math helper functions for float special values
+#include <math.h>
+
+// is_nan - check if float is NaN
+int __math_is_nan(double x) {
+    return isnan(x) ? 1 : 0;
+}
+
+// is_inf - check if float is infinity (positive or negative)
+int __math_is_inf(double x) {
+    return isinf(x) ? 1 : 0;
+}
+
+// is_finite - check if float is a normal number (not NaN or infinity)
+int __math_is_finite(double x) {
+    return isfinite(x) ? 1 : 0;
+}
+
 // sum - sum of all elements in a list of integers
 int64_t list_sum_int(DesiList* l) {
     if (!l) return 0;

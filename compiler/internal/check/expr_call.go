@@ -117,6 +117,26 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return types.Any
 			}
 		}
+		// Stdlib math module: math.is_nan, math.is_inf, math.is_finite
+		// Requires: import math
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "math" {
+			method := fe.Name.Name
+			// Validate import - require `import math`
+			if !c.info.StdlibImports["math"] {
+				c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'math' requires: import math"))
+				return nil
+			}
+			// Type-check float argument
+			for _, a := range argsNodes {
+				c.typ(a.Expr)
+			}
+			// Float special value check functions - return bool
+			switch method {
+			case "is_nan", "is_inf", "is_finite":
+				c.info.Types[call] = types.Bool
+				return types.Bool
+			}
+		}
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
 			if !hasNamed {
 				// Legacy positional path

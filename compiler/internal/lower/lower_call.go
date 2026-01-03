@@ -895,6 +895,29 @@ handlePrint:
 				return dst
 			}
 		}
+
+		// Handle math module functions
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "math" {
+			method := fe.Name.Name
+			if method == "is_nan" && len(x.Args) >= 1 {
+				val := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_nan")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_nan", Args: []hir.Value{val}, Type: "i1"})
+				return dst
+			}
+			if method == "is_inf" && len(x.Args) >= 1 {
+				val := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_inf")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_inf", Args: []hir.Value{val}, Type: "i1"})
+				return dst
+			}
+			if method == "is_finite" && len(x.Args) >= 1 {
+				val := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("is_finite")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_finite", Args: []hir.Value{val}, Type: "i1"})
+				return dst
+			}
+		}
 	}
 
 	// 2. M14 Stage 3: print(Display) + Auto to_str for collections
