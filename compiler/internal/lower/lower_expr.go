@@ -1466,7 +1466,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Determine type tag and to_str function
 		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
-		var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+		var toStrFunc hir.Value = hir.ConstNull{}
 
 		if ls.info != nil {
 			if t, ok := ls.info.Types[x].(*types.List); ok {
@@ -2480,7 +2480,7 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 		res := ls.b.FreshTemp("list")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{
 			hir.ConstInt{Text: "0", Type: "i32"},
-			hir.ConstStr{Text: "null"},
+			hir.ConstNull{},
 		}})
 		return res
 	}
@@ -2491,7 +2491,7 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	// 1. Create result list
 	res := ls.b.FreshTemp("comp_result")
 	var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
-	var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+	var toStrFunc hir.Value = hir.ConstNull{}
 
 	// Try to get element type for proper type tag
 	if ls.info != nil {

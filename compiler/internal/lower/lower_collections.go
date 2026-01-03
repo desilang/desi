@@ -11,12 +11,12 @@ import (
 // resolveToStrFunc returns the to_str function name for a type, or null for primitives
 func resolveToStrFunc(t types.T) hir.Value {
 	if t == nil {
-		return hir.ConstStr{Text: "null"}
+		return hir.ConstNull{}
 	}
 
 	// For primitives, use null (runtime will use type_tag)
 	if t == types.Int || t == types.Float || t == types.Bool || t == types.Str || t == types.None {
-		return hir.ConstStr{Text: "null"}
+		return hir.ConstNull{}
 	}
 
 	// For classes with __str__, __repr__, or to_str
@@ -36,7 +36,7 @@ func resolveToStrFunc(t types.T) hir.Value {
 	}
 
 	// For unknown types, use null
-	return hir.ConstStr{Text: "null"}
+	return hir.ConstNull{}
 }
 
 func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
@@ -47,7 +47,7 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 
 	// Determine type tag and to_str function
 	var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
-	var toStrFunc hir.Value = hir.ConstStr{Text: "null"}
+	var toStrFunc hir.Value = hir.ConstNull{}
 
 	if ls.info != nil {
 		if t, ok := ls.info.Types[d].(*types.Dict); ok {
