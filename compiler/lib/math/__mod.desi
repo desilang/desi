@@ -1,6 +1,44 @@
-# Phase-2 stub math — exported typed functions are pub
+# Math module - mathematical functions
+# Uses hybrid C+Desi architecture
+
+# ============================================================
+# Pure Desi Functions
+# ============================================================
+
 pub def add(x: int, y: int) -> int:
-  return x + y
+    return x + y
 
 pub def sub(x: int, y: int) -> int:
-  return x - y
+    return x - y
+
+# ============================================================
+# C Runtime Bindings for Float Special Values
+# ============================================================
+
+@extern("C")
+pub def __math_is_nan(x: float) -> bool
+
+@extern("C") 
+pub def __math_is_inf(x: float) -> bool
+
+@extern("C")
+pub def __math_is_finite(x: float) -> bool
+
+# ============================================================
+# Public API - Float Special Value Checks
+# ============================================================
+
+# Check if a float is NaN (Not a Number)
+pub def is_nan(x: float) -> bool:
+    unsafe:
+        return __math_is_nan(x)
+
+# Check if a float is infinity (positive or negative)
+pub def is_inf(x: float) -> bool:
+    unsafe:
+        return __math_is_inf(x)
+
+# Check if a float is a normal number (not NaN or infinity)
+pub def is_finite(x: float) -> bool:
+    unsafe:
+        return __math_is_finite(x)

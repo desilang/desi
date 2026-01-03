@@ -560,6 +560,15 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	case *ast.PassStmt:
 		// pass is a no-op - nothing to emit
 
+	case *ast.UnsafeBlock:
+		// unsafe block: just lower the inner statements (unsafe is a type-checker concept)
+		for _, stmt := range s.Body.Stmts {
+			if ls.terminated {
+				break
+			}
+			ls.lowerStmt(stmt)
+		}
+
 	case *ast.ReturnStmt:
 		// IMPORTANT: Evaluate return expression FIRST, before any drops!
 		// If return expression references a local that gets freed, we need

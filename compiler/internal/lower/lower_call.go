@@ -896,7 +896,7 @@ handlePrint:
 			}
 		}
 
-		// Handle math module functions
+		// Handle math module functions (hardcoded like json module)
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "math" {
 			method := fe.Name.Name
 			if method == "is_nan" && len(x.Args) >= 1 {
