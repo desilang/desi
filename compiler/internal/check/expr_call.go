@@ -459,6 +459,33 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.info.Types[call] = types.None
 			return types.None
 		}
+
+		// Special case: dbg(expr) prints [file:line] expr = value and returns the value
+		if id.Name == "dbg" {
+			if len(call.Args) != 1 {
+				c.add(diagAt("DTE0046", call.Span, "dbg() takes exactly 1 argument"))
+				return nil
+			}
+			// Type-check the argument and get its type
+			argType := c.typ(call.Args[0])
+			if argType == nil {
+				return nil
+			}
+
+			// Capture source location and expression text for lowering
+			span := call.Args[0].SpanOf()
+			exprText := c.getExprSourceText(call.Args[0])
+
+			c.info.DbgCalls[call] = &DbgCallInfo{
+				File:     span.File,
+				Line:     span.Start.Line,
+				ExprText: exprText,
+			}
+
+			// dbg() returns the same type as its argument (pass-through)
+			c.info.Types[call] = argType
+			return argType
+		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc

@@ -73,6 +73,42 @@ print("Warning:", style="bold,yellow")
 
 ---
 
+### dbg()
+
+Debug print that shows file, line, expression, and value:
+
+```desi
+let x = 42
+dbg(x)  # → [myfile.desi:2] x = 42
+
+let result = dbg(x * 2)  # → [myfile.desi:4] x * 2 = 84
+print(result)  # → 84
+```
+
+**Key Features:**
+- Shows source file and line number
+- Shows the expression text (not just the value)
+- Returns the value (can be used in assignments/expressions)
+- Works with any type
+
+**Use Cases:**
+- Quick debugging without modifying code structure
+- Inspecting intermediate values in pipelines
+- Tracking code execution with location info
+
+```desi
+# Chaining - inspect intermediate values
+let result = dbg(calculate(input))
+
+# In expressions
+let doubled = dbg(x) * 2  # prints x, then multiplies
+
+# Pipeline debugging
+let value = process(dbg(fetch(url)))
+```
+
+---
+
 ## Log Module
 
 Structured logging with colored prefixes and automatic stream routing.

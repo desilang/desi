@@ -331,6 +331,33 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			// Skip variadic lowering, let the print handler below handle it
 			goto handlePrint
 		}
+		// dbg(expr) - prints [file:line] expr = value and returns the value
+		if calleeName == "dbg" {
+			if dbgInfo := ls.info.DbgCalls[x]; dbgInfo != nil {
+				// Lower the argument to get its value
+				argVal := ls.lowerExpr(x.Args[0])
+
+				// Create prefix string: "[file:line] expr = "
+				prefix := fmt.Sprintf("[%s:%d] %s = ", dbgInfo.File, dbgInfo.Line, dbgInfo.ExprText)
+				prefixVal := hir.ConstStr{Text: prefix}
+
+				// Print the prefix
+				prefixTemp := ls.b.FreshTemp("dbg_prefix")
+				ls.b.Emit(&hir.Call{Dst: prefixTemp, Fn: "print_raw", Args: []hir.Value{prefixVal}})
+
+				// Print the value using print_item (handles all types)
+				printTemp := ls.b.FreshTemp("dbg_print")
+				ls.b.Emit(&hir.Call{Dst: printTemp, Fn: "print_item", Args: []hir.Value{argVal}})
+
+				// Print newline
+				nlVal := hir.ConstStr{Text: "\n"}
+				nlTemp := ls.b.FreshTemp("dbg_nl")
+				ls.b.Emit(&hir.Call{Dst: nlTemp, Fn: "print_raw", Args: []hir.Value{nlVal}})
+
+				// Return the original value
+				return argVal
+			}
+		}
 		if set, ok := ls.info.Funcs[calleeName]; ok && len(set.Cands) > 0 {
 			// Check if any candidate is variadic
 			// In practice, after type checking, we know which one was chosen
