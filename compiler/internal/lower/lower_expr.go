@@ -2,7 +2,6 @@ package lower
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -1812,7 +1811,6 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 							}
 						}
 						mangled := fmt.Sprintf("%s_%s", targetCls.Name, method)
-						fmt.Fprintf(os.Stderr, "DEBUG lowerBinary: op=%s method=%s mangled=%s\n", x.Op, method, mangled)
 
 						// Emit Call
 						dst := ls.b.FreshTemp("binop_call")
