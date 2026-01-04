@@ -51,11 +51,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		// First, check if the qualifier is a stdlib module name that requires import
 		if id, ok := fe.X.(*ast.Ident); ok {
 			// Check if this looks like a stdlib module call but isn't imported
-			stdlibModules := map[string]bool{
-				"log": true, "json": true, "math": true, "http": true,
-				"fs": true, "crypto": true, "sys": true, "io": true,
-			}
-			if stdlibModules[id.Name] && !c.info.StdlibImports[id.Name] {
+			if StdlibModules[id.Name] && !c.info.StdlibImports[id.Name] {
 				// Check if there's no local binding with this name
 				if sym := c.scope.Lookup(id.Name); sym == nil {
 					c.add(diagAt("DTE0200", fe.SpanOf(), fmt.Sprintf("use of '%s' requires: import %s", id.Name, id.Name)))

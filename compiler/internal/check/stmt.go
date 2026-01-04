@@ -835,8 +835,7 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Stdlib modules: log, json, http, etc.
 		if len(st.Path) == 1 {
 			modName := st.Path[0]
-			switch modName {
-			case "log", "json", "http", "fs", "crypto", "sys", "math":
+			if StdlibModules[modName] {
 				c.info.StdlibImports[modName] = true
 			}
 		}

@@ -57,7 +57,7 @@ func LowerMonomorphizedClass(cd *ast.ClassDecl, info *check.Info, src []byte, gl
 
 		// Build substitution map: TypeParam -> ConcreteType
 		subst := make(map[string]types.T)
-		if baseCls != nil && len(baseCls.TypeParams) == len(gen.Args) {
+		if len(baseCls.TypeParams) == len(gen.Args) {
 			for i, tp := range baseCls.TypeParams {
 				subst[tp.Name] = gen.Args[i]
 			}
@@ -362,12 +362,9 @@ func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *type
 
 	// Determine the concrete type for field accesses
 	// For Box<int>.val, the field type is T which becomes int
-	var fieldTypes map[string]types.T
-	if baseCls != nil {
-		fieldTypes = make(map[string]types.T)
-		for _, f := range baseCls.Fields {
-			fieldTypes[f.Name] = substituteType(f.Type, subst)
-		}
+	fieldTypes := make(map[string]types.T)
+	for _, f := range baseCls.Fields {
+		fieldTypes[f.Name] = substituteType(f.Type, subst)
 	}
 
 	// Walk all blocks and statements

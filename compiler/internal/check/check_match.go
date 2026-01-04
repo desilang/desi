@@ -165,7 +165,7 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 		if i == 0 {
 			firstResultType = resultType
 		} else {
-			if firstResultType != nil && resultType != nil && !types.Equal(firstResultType, resultType) {
+			if firstResultType != nil && !types.Equal(firstResultType, resultType) {
 				c.add(diagAt("DTE0001", arm.Result.SpanOf(),
 					"match arm result type '"+resultType.String()+"' does not match first arm type '"+firstResultType.String()+"'"))
 			}
