@@ -405,7 +405,25 @@ func (ls *lowerState) calleeName(e ast.Expr) string {
 		// Check if this is an aliased import (e.g., "sum" from "from math import add as sum")
 		if ls.info != nil && ls.info.ImportAliases != nil {
 			if actualName, ok := ls.info.ImportAliases[x.Name]; ok {
+				// Now check if the actual function is @extern - if so, use the @extern function name
+				if set, ok := ls.info.Funcs[actualName]; ok && len(set.Cands) > 0 {
+					cand := set.Cands[0]
+					if cand.Extern && cand.Decl != nil {
+						// The @extern function's declared name IS the C function name
+						return cand.Decl.Name.Name
+					}
+				}
 				return actualName
+			}
+		}
+		// Check if this function is @extern - if so, use the declared name directly
+		if ls.info != nil {
+			if set, ok := ls.info.Funcs[x.Name]; ok && len(set.Cands) > 0 {
+				cand := set.Cands[0]
+				if cand.Extern && cand.Decl != nil {
+					// The @extern function's declared name IS the C function name
+					return cand.Decl.Name.Name
+				}
 			}
 		}
 		return x.Name

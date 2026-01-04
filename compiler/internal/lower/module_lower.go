@@ -26,7 +26,6 @@ func LowerModuleFromSource(mod *ast.Module, info *check.Info, src []byte) *hir.M
 
 // LowerModuleFromSourceWithOptions is like LowerModuleFromSource but accepts options.
 func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []byte, opts LowerModuleOptions) *hir.Module {
-	// Rewrite async lambdas into hidden async functions before lowering.
 	lambdaAliases := DesugarAsyncLambdas(mod)
 	// Store aliases in info for calleeName resolution
 	if info != nil && info.LambdaAliases == nil {
