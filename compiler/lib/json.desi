@@ -38,6 +38,15 @@ pub def __json_object_get(node: Any, key: str) -> Any
 @extern("C")
 pub def __json_stringify(node: Any) -> str
 
+@extern("C")
+pub def __json_is_int(node: Any) -> bool
+
+@extern("C")
+pub def __json_get_int(node: Any) -> int
+
+@extern("C")
+pub def __json_get_float(node: Any) -> float
+
 # JSON type constants (match JsonType enum in json.c)
 pub let JSON_NULL = 0
 pub let JSON_BOOL = 1
@@ -130,3 +139,17 @@ pub def is_object(node: Any) -> bool:
     unsafe:
         return __json_type(node) == JSON_OBJECT
 
+# Check if JSON node is an integer (number with no fractional part)
+pub def is_int(node: Any) -> bool:
+    unsafe:
+        return __json_is_int(node)
+
+# Extract integer value from JSON node (returns 0 if not a number)
+pub def get_int(node: Any) -> int:
+    unsafe:
+        return __json_get_int(node)
+
+# Extract float value from JSON node (alias for get_number)
+pub def get_float(node: Any) -> float:
+    unsafe:
+        return __json_get_float(node)

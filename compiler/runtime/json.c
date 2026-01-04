@@ -495,9 +495,9 @@ int __json_is_int(JsonNode* node) {
 }
 
 // Get number as integer (Rust-style explicit accessor)
-int64_t __json_get_int(JsonNode* node) {
+int __json_get_int(JsonNode* node) {
     if (!node || node->type != JSON_NUMBER) return 0;
-    return (int64_t)node->num_val;
+    return (int)node->num_val;
 }
 
 // Rename get_number to get_float for clarity (alias)
