@@ -48,95 +48,25 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
-		// Stdlib log module: log.info(), log.warn(), log.error(), log.debug()
-		// Requires: import log
-		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {
-			method := fe.Name.Name
-			if method == "info" || method == "warn" || method == "error" || method == "debug" {
-				// Validate import - require `import log`
-				if !c.info.StdlibImports["log"] {
-					c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'log' requires: import log"))
+		// First, check if the qualifier is a stdlib module name that requires import
+		if id, ok := fe.X.(*ast.Ident); ok {
+			// Check if this looks like a stdlib module call but isn't imported
+			stdlibModules := map[string]bool{
+				"log": true, "json": true, "math": true, "http": true,
+				"fs": true, "crypto": true, "sys": true, "io": true,
+			}
+			if stdlibModules[id.Name] && !c.info.StdlibImports[id.Name] {
+				// Check if there's no local binding with this name
+				if sym := c.scope.Lookup(id.Name); sym == nil {
+					c.add(diagAt("DTE0200", fe.SpanOf(), fmt.Sprintf("use of '%s' requires: import %s", id.Name, id.Name)))
 					return nil
 				}
-				// Type-check the single string argument (if any)
-				for _, a := range argsNodes {
-					c.typ(a.Expr)
-				}
-				c.info.Types[call] = types.None
-				return types.None
 			}
 		}
-		// Stdlib json module: all json.* functions
-		// Requires: import json
-		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
-			method := fe.Name.Name
-			// Validate import - require `import json`
-			if !c.info.StdlibImports["json"] {
-				c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'json' requires: import json"))
-				return nil
-			}
-			// Type-check arguments
-			for _, a := range argsNodes {
-				c.typ(a.Expr)
-			}
-			// json.parse returns opaque ptr (JsonNode*) - use Any
-			if method == "parse" {
-				c.info.Types[call] = types.Any
-				return types.Any
-			}
-			// json.stringify returns str
-			if method == "stringify" {
-				c.info.Types[call] = types.Str
-				return types.Str
-			}
-			// Type check functions - return bool
-			switch method {
-			case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object", "is_int":
-				c.info.Types[call] = types.Bool
-				return types.Bool
-			}
-			// Value extract functions
-			switch method {
-			case "get_bool":
-				c.info.Types[call] = types.Bool
-				return types.Bool
-			case "get_number", "get_float":
-				c.info.Types[call] = types.Float
-				return types.Float
-			case "get_int":
-				c.info.Types[call] = types.Int
-				return types.Int
-			case "get_string":
-				c.info.Types[call] = types.Str
-				return types.Str
-			case "get_type", "array_len", "object_len":
-				c.info.Types[call] = types.Int
-				return types.Int
-			case "array_get", "object_get":
-				c.info.Types[call] = types.Any
-				return types.Any
-			}
-		}
-		// Stdlib math module: math.is_nan, math.is_inf, math.is_finite
-		// Requires: import math
-		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "math" {
-			method := fe.Name.Name
-			// Validate import - require `import math`
-			if !c.info.StdlibImports["math"] {
-				c.add(diagAt("DTE0200", fe.SpanOf(), "use of 'math' requires: import math"))
-				return nil
-			}
-			// Type-check float argument
-			for _, a := range argsNodes {
-				c.typ(a.Expr)
-			}
-			// Float special value check functions - return bool
-			switch method {
-			case "is_nan", "is_inf", "is_finite":
-				c.info.Types[call] = types.Bool
-				return types.Bool
-			}
-		}
+
+		// Module-qualified calls are handled by moduleQualifiedOverloadSet
+		// Stdlib modules (json, math, etc.) use @extern wrapper functions and
+		// are resolved through normal module resolution, not hardcoded handling.
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
 			if !hasNamed {
 				// Legacy positional path

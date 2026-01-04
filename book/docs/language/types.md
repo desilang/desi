@@ -82,7 +82,7 @@ let full: str = "Hello" + " " + "World"
 let msg: str = f"Hello, {name}!"
 ```
 
-### None
+### `none`
 
 ```desi
 let nothing: none = none

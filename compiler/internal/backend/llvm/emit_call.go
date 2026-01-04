@@ -230,16 +230,16 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	// JSON get int: __json_get_int(node) -> i64
+	// JSON get int: __json_get_int(node) -> i32 (Desi int = i32)
 	if c.Fn == "__json_get_int" && len(c.Args) == 1 {
-		m.ensureDecl("declare i64 @__json_get_int(ptr)")
+		m.ensureDecl("declare i32 @__json_get_int(ptr)")
 		dst := c.Dst.Name
 		_, nodeVal := m.operand(c.Args[0])
-		wprintf(&m.funcs, "  %s = call i64 @__json_get_int(ptr %s)\n", dst, nodeVal)
+		wprintf(&m.funcs, "  %s = call i32 @__json_get_int(ptr %s)\n", dst, nodeVal)
 		if m.tempTypes == nil {
 			m.tempTypes = make(map[string]string)
 		}
-		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "i32"
 		return
 	}
 
