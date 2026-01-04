@@ -40,9 +40,12 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return &hir.ConstInt{Text: "0"}
 
 	case *ast.StrLit:
-		// If Value is populated (F-string part), use it
+		// Raw strings: NO escape processing - use content as-is (even if empty)
+		if x.Raw {
+			return hir.ConstStr{Text: x.Value}
+		}
+		// If Value is populated (F-string part), use it with escape processing
 		if x.Value != "" {
-			// Unescape the string to process escape sequences like \n, \t, etc.
 			return hir.ConstStr{Text: unescapeString(x.Value)}
 		}
 		// Otherwise, extract from source
