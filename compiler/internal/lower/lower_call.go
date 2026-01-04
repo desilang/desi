@@ -103,8 +103,6 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
 		if ls.info != nil {
 			feXType := ls.info.Types[fe.X]
-			// DEBUG
-			// fmt.Printf("DEBUG lowerCall: fe.X type = %T, value = %v, method = %s\n", feXType, feXType, fe.Name.Name)
 
 			if t, ok := feXType.(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
@@ -1331,7 +1329,7 @@ handlePrint:
 				retType := "i32" // default
 				if targetMethod != nil && targetMethod.Ret != nil {
 					// For generic class instances, substitute type parameters
-					if len(genericArgs) > 0 && cls != nil {
+					if len(genericArgs) > 0 {
 						// Build substitution map
 						subst := make(map[string]types.T)
 						for i, tp := range cls.TypeParams {
