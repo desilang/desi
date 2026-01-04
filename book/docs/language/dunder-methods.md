@@ -109,6 +109,34 @@ print(p1 == p2)  # true
 print(p1 == p3)  # false
 ```
 
+## Truthiness: `__bool__`
+
+Define custom truthiness for use in `if` conditions:
+
+```desi
+class Container:
+    pub mut count: int
+    
+    pub def __new__(self, n: int):
+        self.count := n
+    
+    pub def __bool__(self) -> bool:
+        return self.count > 0
+
+let empty = Container(0)
+let filled = Container(5)
+
+if empty:
+    print("has items")  # Won't run
+else:
+    print("empty!")     # Runs
+
+if filled:
+    print("has items")  # Runs
+```
+
+This is useful for container-like classes, optional wrappers, or any object where "truthy/falsy" makes semantic sense.
+
 ## Arithmetic: `__add__`, `__sub__`, etc.
 
 ```desi
@@ -150,6 +178,7 @@ let slice = arr[1:4]  # Uses __getslice__ -> [20, 30, 40]
 | `__getslice__` | `obj[i:j]` | Slice access |
 | `__len__` | `len(obj)` | Custom length |
 | `__contains__` | `x in obj` | Membership |
+| `__bool__` | `if obj:` | Custom truthiness |
 | `__repr__` | `print(obj)` | String representation |
 | `__eq__` | `a == b` | Equality |
 | `__add__` | `a + b` | Addition |

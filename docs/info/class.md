@@ -993,6 +993,49 @@ def main() -> int:
 
 **Future:** Can be customized
 
+### Boolean Conversion ✅ Implemented
+
+#### `__bool__`
+**Signature:** `pub def __bool__(self) -> bool`
+
+**Purpose:** Define custom truthiness for use in `if` conditions
+
+**Example:**
+```desi
+class Container:
+    pub mut count: int
+    
+    pub def __new__(self, n: int):
+        self.count := n
+    
+    pub def __bool__(self) -> bool:
+        return self.count > 0
+
+def main() -> int:
+    let empty = Container(0)
+    let filled = Container(5)
+    
+    if empty:
+        print("has items")  # Won't run
+    else:
+        print("empty!")     # Runs
+    
+    if filled:
+        print("has items")  # Runs
+    return 0
+```
+
+**Rules:**
+- Must be `pub`
+- Must return `bool`
+- Takes only `self` parameter
+- Called automatically when instance is used in boolean context
+
+**Use Cases:**
+- Container-like classes (empty = falsy, non-empty = truthy)
+- Optional wrappers (present = truthy, absent = falsy)
+- Any object where "truthy/falsy" makes semantic sense
+
 ### Resource Management Methods
 
 #### `__close__`

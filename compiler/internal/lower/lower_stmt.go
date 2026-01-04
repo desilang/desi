@@ -594,6 +594,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	case *ast.IfStmt:
 		cond := ls.lowerExpr(s.Cond)
 
+		// Check if condition needs __bool__ conversion
+		if ls.info != nil {
+			if cls, needsBool := ls.info.BoolConversions[s.Cond]; needsBool {
+				// Emit call to ClassName___bool__(cond) -> i1
+				boolResult := ls.b.FreshTemp("bool_result")
+				mangledName := fmt.Sprintf("%s___bool__", cls.Name)
+				ls.b.Emit(&hir.Call{
+					Dst:  boolResult,
+					Fn:   mangledName,
+					Args: []hir.Value{cond},
+					Type: "i1",
+				})
+				cond = boolResult
+			}
+		}
+
 		thenBlk := ls.b.NewBlock("then")
 		oldCur := ls.b.Block()
 
