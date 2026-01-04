@@ -229,7 +229,7 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		// pipeline: lhs |> f(a,b)  ==>  f(lhs, a, b)
 		call, ok := x.Rhs.(*ast.CallExpr)
 		if !ok {
-			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side (DEBUG ME)"))
+			c.add(diagAt("DTE0103", x.Span, "pipeline expects a call on the right-hand side"))
 			return nil
 		}
 		// Check for Identifier (function) or FieldExpr (method)
