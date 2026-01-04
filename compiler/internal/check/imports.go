@@ -135,6 +135,27 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 							t = types.Float
 						}
 					}
+				case *ast.CallExpr:
+					// Handle struct/class constructor calls like Point(x=0, y=0)
+					// We need to look up the struct type from the callee name
+					if id, ok := v.Callee.(*ast.Ident); ok {
+						// Look up struct type by name in module declarations
+						for _, d := range mod.Decls {
+							if sd, ok := d.(*ast.StructDecl); ok && sd.Name.Name == id.Name {
+								// Build struct type from declaration
+								var fields []types.Field
+								for _, f := range sd.Fields {
+									var ft types.T
+									if f.Type != nil {
+										ft = resolveSimpleTypeName(f.Type)
+									}
+									fields = append(fields, types.Field{Name: f.Name.Name, Type: ft})
+								}
+								t = &types.Struct{Name: id.Name, Fields: fields}
+								break
+							}
+						}
+					}
 				}
 			}
 

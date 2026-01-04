@@ -705,11 +705,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			dst := ls.b.FreshTemp("global_load")
 
 			// Determine type
-			loadType := "i64" // default
+			loadType := "ptr" // default to ptr for heap-allocated types
 			if ls.info != nil {
-				if sym := ls.info.Idents[x]; sym != nil {
+				if sym := ls.info.Idents[x]; sym != nil && sym.Type != nil {
 					loadType = lowerType(sym.Type)
+				} else if t := ls.info.Types[x]; t != nil {
+					loadType = lowerType(t)
 				}
+			}
+			// Globals should never be void - fallback to ptr for heap types
+			if loadType == "void" {
+				loadType = "ptr"
 			}
 
 			ls.b.Emit(&hir.Load{
