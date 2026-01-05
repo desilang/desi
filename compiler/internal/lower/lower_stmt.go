@@ -1376,11 +1376,21 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if ls.info != nil {
 				if cls, ok := ls.info.Types[s.Iter].(*types.Class); ok {
 					_, hasIter := cls.Dunders["__iter__"]
-					_, hasNext := cls.Dunders["__next__"]
+					nextDunder, hasNext := cls.Dunders["__next__"]
 					if hasIter && hasNext {
 						// Custom iterator using __iter__/__next__ protocol
 						// 1. Call __iter__ to get iterator
 						// 2. Loop calling __next__ until it returns None/Nothing
+
+						// Extract element type from __next__ return type (Option<T> -> T)
+						var elemType types.T = types.Int // default fallback
+						var elemLLVMType = "ptr"         // default to ptr for generics
+						if nextDunder.Ret != nil {
+							if innerType := types.OptionSomeType(nextDunder.Ret); innerType != nil {
+								elemType = innerType
+								elemLLVMType = lowerType(innerType)
+							}
+						}
 
 						objVal := ls.lowerExpr(s.Iter)
 
@@ -1400,8 +1410,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						ls.b.Emit(&hir.Call{Dst: optionTemp, Fn: nextMangledName, Args: []hir.Value{iterTemp}, Type: "ptr"})
 
 						// Check is_some (Option variant tag == 0 means Some)
+						// Option layout: tag (i32 at offset 0), payload ptr (ptr at offset 4)
 						tagPtr := ls.b.FreshTemp("option_tag_ptr")
-						ls.b.Emit(&hir.GetElementPtr{Type: "%Option", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "0"}}, Dst: tagPtr})
+						ls.b.Emit(&hir.GetElementPtr{Type: "i8", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}}, Dst: tagPtr})
 						tag := ls.b.FreshTemp("option_tag")
 						ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
 						condTemp := ls.b.FreshTemp("has_value")
@@ -1414,15 +1425,17 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						ls.push()
 
-						// Extract value from Option (payload is at index 1)
+						// Extract value from Option (payload ptr is at offset 4)
+						valPtrPtr := ls.b.FreshTemp("option_val_ptr_ptr")
+						ls.b.Emit(&hir.GetElementPtr{Type: "i8", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "4"}}, Dst: valPtrPtr})
 						valPtr := ls.b.FreshTemp("option_val_ptr")
-						ls.b.Emit(&hir.GetElementPtr{Type: "%Option", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "1"}}, Dst: valPtr})
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: valPtrPtr, Dst: valPtr})
 						elemVal := ls.b.FreshTemp("iter_elem")
-						ls.b.Emit(&hir.Load{Type: "i32", Src: valPtr, Dst: elemVal})
+						ls.b.Emit(&hir.Load{Type: elemLLVMType, Src: valPtr, Dst: elemVal})
 
 						// Bind loop variable
 						if len(s.Targets) >= 1 && s.Targets[0].Name != nil {
-							ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elemVal, Type: types.Int})
+							ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elemVal, Type: elemType})
 						}
 
 						// Lower body
@@ -1437,7 +1450,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						ls.b.SetBlock(oldCur)
 						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
-						return
+						// Don't return - fall through to allow post-loop statements
 					}
 				}
 			}
