@@ -168,6 +168,42 @@ let arr = MyList([10, 20, 30, 40, 50])
 let slice = arr[1:4]  # Uses __getslice__ -> [20, 30, 40]
 ```
 
+## Iteration: `__iter__` and `__next__`
+
+Define custom iterators for use in `for` loops:
+
+```desi
+class Range:
+    pub start: int
+    pub end: int
+    pub mut current: int
+    
+    pub def __new__(self, s: int, e: int):
+        self.start := s
+        self.end := e
+        self.current := s
+    
+    pub def __iter__(self) -> Range:
+        return self
+    
+    pub def __next__(self) -> Option<int>:
+        if self.current < self.end:
+            let val = self.current
+            self.current := self.current + 1
+            let result: Option<int> = Option.Some(val)
+            return result
+        let nothing: Option<int> = Option.Nothing
+        return nothing
+
+let range = Range(0, 5)
+for i in range:
+    print(i)  # 0, 1, 2, 3, 4
+```
+
+The iterator protocol:
+- `__iter__(self)` returns an iterator object (often `self`)
+- `__next__(self)` returns `Option.Some(value)` for each element, or `Option.Nothing` when exhausted
+
 ## Summary
 
 | Dunder | Syntax | Description |
@@ -179,6 +215,8 @@ let slice = arr[1:4]  # Uses __getslice__ -> [20, 30, 40]
 | `__len__` | `len(obj)` | Custom length |
 | `__contains__` | `x in obj` | Membership |
 | `__bool__` | `if obj:` | Custom truthiness |
+| `__iter__` | `for x in obj:` | Return iterator |
+| `__next__` | `for x in obj:` | Yield next element |
 | `__repr__` | `print(obj)` | String representation |
 | `__eq__` | `a == b` | Equality |
 | `__add__` | `a + b` | Addition |
