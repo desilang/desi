@@ -816,18 +816,19 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 
 	case *ast.UsingStmt:
-		// Bind the using identifier to the scope as Arena type
+		// Bind the using identifier to the scope with the type of the Init expression
+		var bindType types.T = types.ArenaOf() // default to Arena if no init
+		if st.Init != nil {
+			bindType = c.typ(st.Init)
+		}
 		if id, ok := st.Bind.(*ast.Ident); ok {
 			sym := &Symbol{
 				Name: id.Name,
 				Kind: SymVar,
-				Type: types.ArenaOf(),
+				Type: bindType,
 			}
 			_ = c.scope.Define(sym)
 			c.info.Idents[id] = sym
-		}
-		if st.Init != nil {
-			_ = c.typ(st.Init)
 		}
 		if st.Body != nil {
 			c.checkBlock(st.Body)

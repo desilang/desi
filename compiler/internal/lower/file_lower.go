@@ -107,3 +107,9 @@ func (ls *lowerState) lowerFileOpen(args []ast.Expr) hir.Value {
 func isFileType(t types.T) bool {
 	return types.Equal(t, types.File)
 }
+
+// isMutexGuardType checks if a type is MutexGuard[T]
+func isMutexGuardType(t types.T) bool {
+	_, ok := t.(*types.MutexGuard)
+	return ok
+}

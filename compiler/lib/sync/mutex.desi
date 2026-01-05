@@ -33,3 +33,9 @@ pub class MutexGuard<T>:
     # The 'value' field is resolved by resolveMutexGuardField in type checker
     # and lowered to mutex_guard_get C call
     # Access as: guard.value
+    
+    # RAII cleanup: automatically unlock mutex when guard goes out of scope
+    # Called by 'using guard = mutex.lock():' at scope end
+    pub def __close__(self) -> none:
+        # Implemented via C runtime: mutex_unlock(guard)
+        pass

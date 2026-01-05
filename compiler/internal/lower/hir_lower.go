@@ -221,34 +221,36 @@ type lowerState struct {
 }
 
 type scope struct {
-	locals     []string        // in declaration order
-	rcLike     map[string]bool // locals that are rc/arc
-	moved      map[string]bool // locals moved-from; skip drop
-	borrowed   map[string]bool // locals that are borrowed/aliased; skip drop
-	defers     []hir.Value
-	arenas     map[string]bool    // names that are arena handles in this scope
-	arenaOwned map[string]bool    // locals whose storage originates from arena.alloc
-	mutable    map[string]bool    // variables declared with mut
-	types      map[string]types.T // variable types for Drop
-	tempDrops  map[string]bool    // temporaries that need to be dropped
-	closers    map[string]string  // RAII: variables that need __close__ called (mangled name)
-	files      map[string]bool    // RAII: file handles that need file_close at scope end
+	locals      []string        // in declaration order
+	rcLike      map[string]bool // locals that are rc/arc
+	moved       map[string]bool // locals moved-from; skip drop
+	borrowed    map[string]bool // locals that are borrowed/aliased; skip drop
+	defers      []hir.Value
+	arenas      map[string]bool    // names that are arena handles in this scope
+	arenaOwned  map[string]bool    // locals whose storage originates from arena.alloc
+	mutable     map[string]bool    // variables declared with mut
+	types       map[string]types.T // variable types for Drop
+	tempDrops   map[string]bool    // temporaries that need to be dropped
+	closers     map[string]string  // RAII: variables that need __close__ called (mangled name)
+	files       map[string]bool    // RAII: file handles that need file_close at scope end
+	mutexGuards map[string]bool    // RAII: mutex guards that need mutex_unlock at scope end
 }
 
 func (ls *lowerState) push() {
 	ls.scopes = append(ls.scopes, &scope{
-		locals:     []string{},
-		rcLike:     map[string]bool{},
-		moved:      map[string]bool{},
-		borrowed:   map[string]bool{},
-		tempDrops:  map[string]bool{},
-		defers:     []hir.Value{},
-		arenas:     map[string]bool{},
-		arenaOwned: map[string]bool{},
-		mutable:    map[string]bool{},
-		types:      map[string]types.T{},
-		closers:    map[string]string{},
-		files:      map[string]bool{},
+		locals:      []string{},
+		rcLike:      map[string]bool{},
+		moved:       map[string]bool{},
+		borrowed:    map[string]bool{},
+		tempDrops:   map[string]bool{},
+		defers:      []hir.Value{},
+		arenas:      map[string]bool{},
+		arenaOwned:  map[string]bool{},
+		mutable:     map[string]bool{},
+		types:       map[string]types.T{},
+		closers:     map[string]string{},
+		files:       map[string]bool{},
+		mutexGuards: map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -521,6 +523,15 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if varName, ok := v.(hir.Var); ok && sc.files[varName.Name] {
 			ls.b.Emit(&hir.Call{
 				Fn:   "file_close",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// MutexGuard? Call mutex_unlock to release the lock
+		if varName, ok := v.(hir.Var); ok && sc.mutexGuards[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "mutex_unlock",
 				Args: []hir.Value{v},
 				Type: "void",
 			})
