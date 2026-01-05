@@ -1372,6 +1372,76 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
+			// Check for __iter__/__next__ iterator protocol
+			if ls.info != nil {
+				if cls, ok := ls.info.Types[s.Iter].(*types.Class); ok {
+					_, hasIter := cls.Dunders["__iter__"]
+					_, hasNext := cls.Dunders["__next__"]
+					if hasIter && hasNext {
+						// Custom iterator using __iter__/__next__ protocol
+						// 1. Call __iter__ to get iterator
+						// 2. Loop calling __next__ until it returns None/Nothing
+
+						objVal := ls.lowerExpr(s.Iter)
+
+						// Call __iter__ to get iterator
+						iterMangledName := fmt.Sprintf("%s___iter__", cls.Name)
+						iterTemp := ls.b.FreshTemp("iter_obj")
+						ls.b.Emit(&hir.Call{Dst: iterTemp, Fn: iterMangledName, Args: []hir.Value{objVal}, Type: "ptr"})
+
+						// Condition block - call __next__ and check if Some
+						condBlk := ls.b.NewBlock("for_iter_cond")
+						oldCur := ls.b.Block()
+
+						ls.b.SetBlock(condBlk)
+						// Call __next__
+						nextMangledName := fmt.Sprintf("%s___next__", cls.Name)
+						optionTemp := ls.b.FreshTemp("iter_option")
+						ls.b.Emit(&hir.Call{Dst: optionTemp, Fn: nextMangledName, Args: []hir.Value{iterTemp}, Type: "ptr"})
+
+						// Check is_some (Option variant tag == 0 means Some)
+						tagPtr := ls.b.FreshTemp("option_tag_ptr")
+						ls.b.Emit(&hir.GetElementPtr{Type: "%Option", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "0"}}, Dst: tagPtr})
+						tag := ls.b.FreshTemp("option_tag")
+						ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+						condTemp := ls.b.FreshTemp("has_value")
+						ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "==", LHS: tag, RHS: hir.ConstInt{Text: "0", Type: "i32"}, Type: "i1"})
+						ls.b.SetBlock(oldCur)
+
+						// Body block
+						bodyBlk := ls.b.NewBlock("for_iter_body")
+						ls.b.SetBlock(bodyBlk)
+
+						ls.push()
+
+						// Extract value from Option (payload is at index 1)
+						valPtr := ls.b.FreshTemp("option_val_ptr")
+						ls.b.Emit(&hir.GetElementPtr{Type: "%Option", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstInt{Text: "1"}}, Dst: valPtr})
+						elemVal := ls.b.FreshTemp("iter_elem")
+						ls.b.Emit(&hir.Load{Type: "i32", Src: valPtr, Dst: elemVal})
+
+						// Bind loop variable
+						if len(s.Targets) >= 1 && s.Targets[0].Name != nil {
+							ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: elemVal, Type: types.Int})
+						}
+
+						// Lower body
+						if s.Body != nil {
+							ls.lowerBlock(s.Body)
+						}
+
+						scFor := ls.pop()
+						if !ls.terminated {
+							ls.emitScopeDrops(scFor)
+						}
+
+						ls.b.SetBlock(oldCur)
+						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+						return
+					}
+				}
+			}
+
 			// List iteration (original code)
 			iterVal := ls.lowerExpr(s.Iter)
 
