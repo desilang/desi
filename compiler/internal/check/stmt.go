@@ -463,7 +463,19 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		c.checkSelectStmt(st)
 
 	case *ast.IfStmt:
-		_ = c.typ(st.Cond)
+		condType := c.typ(st.Cond)
+
+		// Check if condition is a class type with __bool__ dunder
+		if condType != nil {
+			if cls, ok := condType.(*types.Class); ok {
+				if _, hasBool := cls.Dunders["__bool__"]; hasBool {
+					// Track this expression for lowering to emit __bool__ call
+					c.info.BoolConversions[st.Cond] = cls
+				} else if !types.Equal(condType, types.Bool) {
+					c.add(diagAt("DTE0004", st.Cond.SpanOf(), "condition must be bool or implement __bool__"))
+				}
+			}
+		}
 
 		// If condition is IsExpr with bindings, push scope with bound variables
 		if st.Then != nil {

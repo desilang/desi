@@ -73,6 +73,11 @@ type Info struct {
 	// Key: module name (e.g., "log", "json"), Value: true if imported
 	// Used for dead-code elimination and validation of stdlib usage.
 	StdlibImports map[string]bool
+
+	// BoolConversions tracks expressions that need __bool__ dunder calls.
+	// Key: expression node (condition in if/while), Value: the class type with __bool__
+	// The lowering phase uses this to emit a method call instead of using the value directly.
+	BoolConversions map[ast.Expr]*types.Class
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -116,6 +121,7 @@ func NewInfo() *Info {
 		BinOpOverloads:      make(map[*ast.BinaryExpr]*FuncCand),
 		TestFuncs:           make(map[string]*ast.FuncDecl),
 		StdlibImports:       make(map[string]bool),
+		BoolConversions:     make(map[ast.Expr]*types.Class),
 	}
 	addPreludeBuiltins(info)
 	return info

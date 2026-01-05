@@ -1,0 +1,49 @@
+# Test __bool__ dunder for custom truthiness
+# Allows using custom class instances in if conditions
+
+class Truthy:
+    pub mut value: int
+    
+    pub def __new__(self, v: int):
+        self.value := v
+    
+    pub def __bool__(self) -> bool:
+        return self.value != 0
+
+def main() -> int:
+    # Test basic truthiness
+    let t = Truthy(1)
+    let f = Truthy(0)
+    let neg = Truthy(-5)
+    
+    if t:
+        print("t is truthy")
+    if f:
+        print("f is truthy")
+    else:
+        print("f is falsy")
+    if neg:
+        print("neg is truthy")
+    
+    # Test with value 0 (false) and non-zero (true)
+    let zero = Truthy(0)
+    let hundred = Truthy(100)
+    
+    if zero:
+        print("zero is truthy")
+    else:
+        print("zero is falsy")
+    
+    if hundred:
+        print("hundred is truthy")
+    
+    print("All __bool__ tests passed!")
+    0
+
+# EXPECTED_OUTPUT:
+# t is truthy
+# f is falsy
+# neg is truthy
+# zero is falsy
+# hundred is truthy
+# All __bool__ tests passed!
