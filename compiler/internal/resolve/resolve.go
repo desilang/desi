@@ -299,20 +299,24 @@ func reexportIntoExports(ex *Exports, mod *ast.Module, ldr Loader, info *Info, d
 				continue
 			}
 			cands := subEx.Funcs[name]
-			if len(cands) == 0 {
-				continue
-			}
-			modesTab := subEx.FuncModes[name]
-			metaTab := subEx.FuncExtern[name]
-			namesTab := subEx.ParamNames[name]
-			defaultsTab := subEx.FuncDefaults[name]
+			if len(cands) > 0 {
+				modesTab := subEx.FuncModes[name]
+				metaTab := subEx.FuncExtern[name]
+				namesTab := subEx.ParamNames[name]
+				defaultsTab := subEx.FuncDefaults[name]
 
-			// Append (not overwrite) to allow multiple sources providing overloads.
-			ex.Funcs[local] = append(ex.Funcs[local], cands...)
-			ex.FuncModes[local] = append(ex.FuncModes[local], modesTab...)
-			ex.FuncExtern[local] = append(ex.FuncExtern[local], metaTab...)
-			ex.ParamNames[local] = append(ex.ParamNames[local], namesTab...)
-			ex.FuncDefaults[local] = append(ex.FuncDefaults[local], defaultsTab...)
+				// Append (not overwrite) to allow multiple sources providing overloads.
+				ex.Funcs[local] = append(ex.Funcs[local], cands...)
+				ex.FuncModes[local] = append(ex.FuncModes[local], modesTab...)
+				ex.FuncExtern[local] = append(ex.FuncExtern[local], metaTab...)
+				ex.ParamNames[local] = append(ex.ParamNames[local], namesTab...)
+				ex.FuncDefaults[local] = append(ex.FuncDefaults[local], defaultsTab...)
+			}
+
+			// Also re-export classes (e.g., from sync.mutex import Mutex)
+			if cls, ok := subEx.Classes[name]; ok {
+				ex.Classes[local] = cls
+			}
 		}
 	}
 	return ex

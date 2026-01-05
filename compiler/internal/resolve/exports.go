@@ -215,6 +215,9 @@ func CollectExports(mod *ast.Module) *Exports {
 					}
 					if t, ok := types.FromName(p.Type.Name); ok {
 						params = append(params, t)
+					} else {
+						// Unknown type (e.g., generic param T) - treat as Any
+						params = append(params, types.Any)
 					}
 				}
 				returnType := classType
@@ -237,9 +240,12 @@ func CollectExports(mod *ast.Module) *Exports {
 				if p.Type == nil {
 					continue
 				}
-				if t, ok := types.FromName(p.Type.Name); ok {
-					params = append(params, t)
+				t, ok := types.FromName(p.Type.Name)
+				if !ok {
+					// Unknown type (e.g., generic type param T) - treat as Any
+					t = types.Any
 				}
+				params = append(params, t)
 			}
 			var retType types.T = types.None
 			if method.RetType != nil {
