@@ -1,0 +1,41 @@
+# Test __iter__ / __next__ custom iteration
+# Implements Python-style iterator protocol
+
+class Range:
+    pub start: int
+    pub end: int
+    pub mut current: int
+    
+    pub def __new__(self, s: int, e: int):
+        self.start := s
+        self.end := e
+        self.current := s
+    
+    pub def __iter__(self) -> Range:
+        return self
+    
+    pub def __next__(self) -> Option<int>:
+        if self.current < self.end:
+            let val = self.current
+            self.current := self.current + 1
+            let result: Option<int> = Option.Some(val)
+            return result
+        let nothing: Option<int> = Option.Nothing
+        return nothing
+
+def main() -> int:
+    # Test for-loop with custom iterator
+    let range = Range(0, 5)
+    for i in range:
+        print(i)
+    
+    print("done")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 0
+# 1
+# 2
+# 3
+# 4
+# done
