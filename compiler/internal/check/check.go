@@ -647,3 +647,38 @@ func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 	}
 	return out
 }
+
+// getExprSourceText generates a string representation of an expression AST node
+// Used by dbg() to show the expression being debugged
+func (c *checker) getExprSourceText(expr ast.Expr) string {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		return e.Name
+	case *ast.IntLit:
+		return e.Text
+	case *ast.FloatLit:
+		return e.Text
+	case *ast.StrLit:
+		return "\"" + e.Value + "\""
+	case *ast.BoolLit:
+		if e.Value {
+			return "true"
+		}
+		return "false"
+	case *ast.BinaryExpr:
+		return c.getExprSourceText(e.Lhs) + " " + e.Op + " " + c.getExprSourceText(e.Rhs)
+	case *ast.UnaryExpr:
+		return e.Op + c.getExprSourceText(e.X)
+	case *ast.CallExpr:
+		if id, ok := e.Callee.(*ast.Ident); ok {
+			return id.Name + "(...)"
+		}
+		return "<call>"
+	case *ast.FieldExpr:
+		return c.getExprSourceText(e.X) + "." + e.Name.Name
+	case *ast.IndexExpr:
+		return c.getExprSourceText(e.X) + "[" + c.getExprSourceText(e.Idx) + "]"
+	default:
+		return "<expr>"
+	}
+}

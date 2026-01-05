@@ -1,0 +1,34 @@
+# Test dbg() builtin - debug print with file:line and expression text
+# dbg(expr) prints "[file:line] expr = value" and returns the value
+
+def main() -> int:
+    # dbg returns the value - test via assignment
+    let x = 42
+    let result = dbg(x)
+    
+    # Verify dbg() returned the correct value
+    if result != 42:
+        print("FAIL: dbg() did not return correct value")
+        return 1
+    
+    # Test with expression
+    let doubled = dbg(x * 2)
+    if doubled != 84:
+        print("FAIL: dbg() expression value incorrect")
+        return 1
+    
+    # Test chaining - use dbg() output in another expression
+    let chained = dbg(dbg(10) + 5)
+    if chained != 15:
+        print("FAIL: chained dbg() failed")
+        return 1
+    
+    print("dbg() tests passed!")
+    0
+
+# EXPECTED_OUTPUT:
+# [examples/248_dbg_builtin.desi:7] x = 42
+# [examples/248_dbg_builtin.desi:15] x * 2 = 84
+# [examples/248_dbg_builtin.desi:21] 10 = 10
+# [examples/248_dbg_builtin.desi:21] dbg(...) + 5 = 15
+# dbg() tests passed!

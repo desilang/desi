@@ -78,6 +78,17 @@ type Info struct {
 	// Key: expression node (condition in if/while), Value: the class type with __bool__
 	// The lowering phase uses this to emit a method call instead of using the value directly.
 	BoolConversions map[ast.Expr]*types.Class
+
+	// DbgCalls tracks dbg() calls with their source location and expression text.
+	// Key: the CallExpr node for dbg(), Value: debug info for emission
+	DbgCalls map[*ast.CallExpr]*DbgCallInfo
+}
+
+// DbgCallInfo stores metadata for a dbg() call to emit [file:line] expr = value
+type DbgCallInfo struct {
+	File     string // Source file name
+	Line     int    // Line number
+	ExprText string // The source text of the expression (e.g., "x + 1")
 }
 
 // MatchBinding represents a variable bound in a match pattern
@@ -122,6 +133,7 @@ func NewInfo() *Info {
 		TestFuncs:           make(map[string]*ast.FuncDecl),
 		StdlibImports:       make(map[string]bool),
 		BoolConversions:     make(map[ast.Expr]*types.Class),
+		DbgCalls:            make(map[*ast.CallExpr]*DbgCallInfo),
 	}
 	addPreludeBuiltins(info)
 	return info
@@ -195,6 +207,19 @@ func addPreludeBuiltins(info *Info) {
 	}
 	// len(s: str) -> usize
 	add1("len", types.Str, types.USize, "s", ast.ParamMove)
+
+	// dbg(value: Any) -> Any - debug print with file:line and expression text
+	// Returns the value unchanged (pass-through)
+	info.Funcs["dbg"] = &OverloadSet{Name: "dbg"}
+	info.Funcs["dbg"].Add(&FuncCand{
+		Type: &types.Func{
+			Params:   []types.T{types.Any},
+			Ret:      types.Any,
+			Variadic: false,
+		},
+		ParamNames: []string{"value"},
+		Modes:      []ast.ParamMode{ast.ParamMove},
+	})
 
 	// --- Task D stubs (compile-only, with explicit names) ---
 	// list_push(list: _, value: int) -> none
