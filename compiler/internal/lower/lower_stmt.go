@@ -1450,7 +1450,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						ls.b.SetBlock(oldCur)
 						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
-						// Don't return - fall through to allow post-loop statements
+						return // Exit to prevent fall-through to list iteration path
 					}
 				}
 			}
