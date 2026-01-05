@@ -285,11 +285,26 @@ def main() -> int:
 
 ---
 
+## Import Syntax
+
+Both import styles are fully supported:
+
+```desi
+# Full module import
+import sync
+let m = sync.Mutex(42)
+
+# Direct import
+from sync import Mutex
+let m = Mutex(42)
+```
+
+---
+
 ## Current Limitations
 
-1. **Import syntax**: Use `import sync` (not `from sync import Mutex`)
-2. **With statement**: Not yet enforced for guards (planned for M15)
-3. **Value mutation**: Requires explicit copy-back pattern
+1. **With statement**: Not yet enforced for guards (planned for M15)
+2. **Value mutation**: Requires explicit copy-back pattern
 
 ---
 
