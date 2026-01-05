@@ -492,6 +492,14 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			lhs := ls.lowerLValue(s.LHS[0])
 			rhs := ls.lowerExpr(s.RHS[0])
 
+			// Check if this is a global variable assignment
+			isGlobal := false
+			if lhsName, ok := s.LHS[0].(*ast.Ident); ok {
+				if ls.globals != nil && ls.globals[lhsName.Name] {
+					isGlobal = true
+				}
+			}
+
 			// Check if this is a mutable variable assignment
 			isMutable := false
 			if lhsName, ok := s.LHS[0].(*ast.Ident); ok {
@@ -500,7 +508,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
-			if isMutable {
+			if isGlobal {
+				// Emit Store to global variable
+				if lhsName, ok := s.LHS[0].(*ast.Ident); ok {
+					ls.b.Emit(&hir.Store{
+						Dst: hir.Var{Name: "@" + lhsName.Name},
+						Val: rhs,
+					})
+					ls.consumeTemp(rhs)
+				}
+			} else if isMutable {
 				// Emit Store for mutable variables
 				ls.b.Emit(&hir.Store{
 					Dst: hir.Var{Name: lhs},

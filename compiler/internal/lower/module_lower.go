@@ -98,6 +98,11 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 								typ = "double"
 							}
 						}
+					case *ast.CallExpr:
+						// Struct/class constructor call: Point(x=0, y=0)
+						// These are heap-allocated pointers, initialized at runtime
+						typ = "ptr"
+						val = "null"
 					}
 				}
 

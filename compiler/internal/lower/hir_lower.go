@@ -201,13 +201,14 @@ func LowerDefaultToStr(name, typeName string, reprFuncName string) *hir.Func {
 }
 
 type lowerState struct {
-	b          *hir.Builder
-	scopes     []*scope // stack
-	terminated bool     // set once a return is emitted
-	info       *check.Info
-	src        []byte                 // optional: original source for literal materialization
-	globals    map[string]bool        // names of global variables
-	enums      map[string]*types.Enum // user-defined enum declarations
+	b           *hir.Builder
+	scopes      []*scope // stack
+	terminated  bool     // set once a return is emitted
+	info        *check.Info
+	src         []byte                 // optional: original source for literal materialization
+	globals     map[string]bool        // names of global variables
+	globalTypes map[string]types.T     // types of global variables (for field access)
+	enums       map[string]*types.Enum // user-defined enum declarations
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
