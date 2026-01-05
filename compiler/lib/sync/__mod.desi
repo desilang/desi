@@ -1,4 +1,4 @@
 # Sync module - Concurrency primitives
-# Factory function exports (class exports not yet supported)
+# Exports: Mutex, MutexGuard classes
 
-from sync.mutex import Mutex, mutex_lock, mutex_try_lock
+from sync.mutex import Mutex, MutexGuard

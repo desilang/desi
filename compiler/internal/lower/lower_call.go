@@ -104,6 +104,49 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 		if ls.info != nil {
 			feXType := ls.info.Types[fe.X]
 
+			// Handle sync module constructors: sync.Mutex(value), sync.Channel(cap), sync.TaskGroup()
+			if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sync" {
+				switch fe.Name.Name {
+				case "Mutex":
+					// sync.Mutex(value) -> mutex_new(boxed_value)
+					if len(x.Args) != 1 {
+						panic("sync.Mutex requires exactly 1 argument")
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					res := ls.b.FreshTemp("mutex")
+					// Allocate memory for the value (8 bytes for i64/ptr)
+					boxPtr := ls.b.FreshTemp("mutex_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					// Store the value into the box
+					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+					// Create mutex with pointer to boxed value
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{boxPtr}, Type: "ptr"})
+					return res
+
+				case "Channel":
+					// sync.Channel(capacity) -> channel_new(capacity)
+					if len(x.Args) != 1 {
+						panic("sync.Channel requires exactly 1 argument")
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					res := ls.b.FreshTemp("channel")
+					// Convert i32 to i64 for capacity
+					cap64 := ls.b.FreshTemp("cap64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: cap64, Type: "i64"})
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "channel_new", Args: []hir.Value{cap64}, Type: "ptr"})
+					return res
+
+				case "TaskGroup":
+					// sync.TaskGroup() -> taskgroup_new()
+					if len(x.Args) != 0 {
+						panic("sync.TaskGroup takes no arguments")
+					}
+					res := ls.b.FreshTemp("taskgroup")
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: nil, Type: "ptr"})
+					return res
+				}
+			}
+
 			if t, ok := feXType.(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
 			}

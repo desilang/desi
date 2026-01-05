@@ -110,6 +110,50 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Sync module runtime functions: mutex, channel, taskgroup
+	// These have explicit declarations, mark as defined to skip variadic fallback
+	switch c.Fn {
+	case "mutex_new":
+		m.ensureDecl("declare ptr @mutex_new(ptr)")
+		m.definedFunctions["mutex_new"] = true
+	case "mutex_lock":
+		m.ensureDecl("declare ptr @mutex_lock(ptr)")
+		m.definedFunctions["mutex_lock"] = true
+	case "mutex_try_lock":
+		m.ensureDecl("declare ptr @mutex_try_lock(ptr)")
+		m.definedFunctions["mutex_try_lock"] = true
+	case "mutex_unlock":
+		m.ensureDecl("declare void @mutex_unlock(ptr)")
+		m.definedFunctions["mutex_unlock"] = true
+	case "mutex_guard_get":
+		m.ensureDecl("declare ptr @mutex_guard_get(ptr)")
+		m.definedFunctions["mutex_guard_get"] = true
+	case "channel_new":
+		m.ensureDecl("declare ptr @channel_new(i64)")
+		m.definedFunctions["channel_new"] = true
+	case "channel_sender":
+		m.ensureDecl("declare ptr @channel_sender(ptr)")
+		m.definedFunctions["channel_sender"] = true
+	case "channel_receiver":
+		m.ensureDecl("declare ptr @channel_receiver(ptr)")
+		m.definedFunctions["channel_receiver"] = true
+	case "channel_send":
+		m.ensureDecl("declare i1 @channel_send(ptr, ptr)")
+		m.definedFunctions["channel_send"] = true
+	case "channel_close":
+		m.ensureDecl("declare void @channel_close(ptr)")
+		m.definedFunctions["channel_close"] = true
+	case "taskgroup_new":
+		m.ensureDecl("declare ptr @taskgroup_new()")
+		m.definedFunctions["taskgroup_new"] = true
+	case "taskgroup_wait":
+		m.ensureDecl("declare void @taskgroup_wait(ptr)")
+		m.definedFunctions["taskgroup_wait"] = true
+	case "taskgroup_is_cancelled":
+		m.ensureDecl("declare i1 @taskgroup_is_cancelled(ptr)")
+		m.definedFunctions["taskgroup_is_cancelled"] = true
+	}
+
 	// JSON parse: __json_parse(text) -> ptr
 	if c.Fn == "__json_parse" && len(c.Args) == 1 {
 		m.ensureDecl("declare ptr @__json_parse(ptr)")

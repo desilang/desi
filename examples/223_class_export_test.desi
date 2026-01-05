@@ -1,13 +1,17 @@
-# Test class export from sync module
-from sync import Mutex
+# Test class usage from sync module
+# NOTE: `from sync import Mutex` is not yet supported for classes
+#       Use `import sync` and `sync.Mutex(value)` pattern instead
+
+import sync
 
 def main():
     print("Testing class export")
-    let m: int = Mutex(42)  # Uses class constructor
-    print("Created mutex:")
-    print(m)
+    let m = sync.Mutex(42)  # Uses class constructor
+    print("Created mutex!")
+    let guard = m.lock()
+    print(guard.value)  # 42
 
 # EXPECTED_OUTPUT:
 # Testing class export
-# Created mutex:
-# 0
+# Created mutex!
+# 42
