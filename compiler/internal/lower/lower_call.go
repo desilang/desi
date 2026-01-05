@@ -613,8 +613,8 @@ handlePrint:
 				res := ls.b.FreshTemp("sorted_res")
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_sorted_int", Args: []hir.Value{argVal}, Type: "ptr"})
 				return res
-			case "mutex_new":
-				// mutex_new(value) -> DesiMutex*
+			case "mutex_new", "Mutex":
+				// mutex_new(value) or Mutex(value) -> DesiMutex*
 				// For primitive values, we need to box them (allocate + store)
 				res := ls.b.FreshTemp("mutex")
 				// Allocate memory for the value (8 bytes for i64/ptr)

@@ -1,0 +1,32 @@
+# Test from-import syntax for sync module
+from sync import Mutex
+
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    # Test with int
+    let m1 = Mutex(42)
+    let g1 = m1.lock()
+    print(g1.value)  # 42
+    
+    # Test with string
+    let m2 = Mutex("hello")
+    let g2 = m2.lock()
+    print(g2.value)  # hello
+    
+    # Test with struct
+    let p = Point(x=10, y=20)
+    let m3 = Mutex(p)
+    let g3 = m3.lock()
+    print(g3.value.x)  # 10
+    
+    print("from-import test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# hello
+# 10
+# from-import test passed!
