@@ -1,16 +1,37 @@
-# TaskGroup - Structured concurrency
+# TaskGroup - Structured concurrency for managing spawned tasks
+# Uses C runtime implementation (taskgroup.c)
+# TaskGroup ensures all spawned tasks complete before continuing
+
+# The TaskGroup class provides structured concurrency.
+# Methods are lowered to C runtime calls.
 
 pub class TaskGroup:
-    pub mut _handle: int
+    pub mut _handle: int  # Opaque handle to C runtime task group
     
-    pub def add_task(self) -> int:
-        return 0
+    pub def __new__(self):
+        # Constructor - creates a new task group
+        # Implemented via C runtime: taskgroup_new()
+        pass
     
-    pub def wait(self) -> int:
-        return 0
+    pub def wait(self) -> none:
+        # Wait for all tasks in the group to complete
+        # Blocks until pending count reaches zero
+        # Implemented via C runtime: taskgroup_wait(tg)
+        pass
     
-    pub def cancel(self) -> int:
-        return 0
+    pub def cancel(self) -> none:
+        # Cancel all tasks in the group
+        # Tasks check is_cancelled() at their await points
+        # Implemented via C runtime: taskgroup_cancel(tg)
+        pass
     
     pub def is_cancelled(self) -> bool:
-        return false
+        # Check if the group has been cancelled
+        # Implemented via C runtime: taskgroup_is_cancelled(tg)
+        pass
+    
+    # RAII cleanup: destroy the task group
+    pub def __close__(self) -> none:
+        # Waits for remaining tasks and frees resources
+        # Implemented via C runtime: taskgroup_destroy(tg)
+        pass

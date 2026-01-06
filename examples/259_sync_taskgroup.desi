@@ -1,0 +1,41 @@
+# Test TaskGroup basic methods
+import sync
+
+def main() -> int:
+    print("Testing TaskGroup...")
+    
+    # Create task group
+    let tg = sync.TaskGroup()
+    print("Created TaskGroup")
+    
+    # Test is_cancelled (should be false initially)
+    if tg.is_cancelled():
+        print("ERROR: should not be cancelled")
+    else:
+        print("is_cancelled: false (correct)")
+    
+    # Test cancel
+    tg.cancel()
+    print("Called cancel")
+    
+    # Test is_cancelled again (should be true now)
+    if tg.is_cancelled():
+        print("is_cancelled: true (correct)")
+    else:
+        print("ERROR: should be cancelled")
+    
+    # Test wait (no tasks, should return immediately)
+    tg.wait()
+    print("Called wait")
+    
+    print("TaskGroup test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing TaskGroup...
+# Created TaskGroup
+# is_cancelled: false (correct)
+# Called cancel
+# is_cancelled: true (correct)
+# Called wait
+# TaskGroup test passed!
