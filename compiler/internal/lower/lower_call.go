@@ -709,8 +709,8 @@ handlePrint:
 				// Create mutex with pointer to boxed value
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "mutex_new", Args: []hir.Value{boxPtr}, Type: "ptr"})
 				return res
-			case "channel_new":
-				// channel_new(capacity) -> DesiChannel*
+			case "channel_new", "Channel":
+				// channel_new(capacity) or Channel(capacity) -> DesiChannel*
 				res := ls.b.FreshTemp("channel")
 				// Convert i32 to i64 for capacity
 				cap64 := ls.b.FreshTemp("cap64")

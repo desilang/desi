@@ -799,6 +799,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return mutexType
 			}
 
+			// Imported Channel class constructor: Channel(capacity) - creates Channel[Any]
+			// This handles `from sync import Channel` + `Channel(10)`
+			if id.Name == "Channel" && len(args) == 1 {
+				channelType := types.ChannelOf(types.Any)
+				c.info.Types[call] = channelType
+				return channelType
+			}
+
 			// Built-in channel_new(capacity) function - creates Channel[Any]
 			// For typed channels, use: let ch = channel_new_int(10) etc.
 			// or wait for generic function syntax: channel_new[int](10)

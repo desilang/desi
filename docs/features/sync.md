@@ -40,7 +40,9 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 |------|-------------|
 | `Mutex<T>` | Thread-safe wrapper protecting a value of type T |
 | `MutexGuard<T>` | RAII guard for safe access to mutex-protected value |
-| `Channel<T>` | Bounded message queue for thread communication (planned) |
+| `Channel<T>` | Bounded message queue for thread communication |
+| `Sender<T>` | Send handle for Channel |
+| `Receiver<T>` | Receive handle for Channel |
 | `TaskGroup` | Structured concurrency for managing spawned tasks (planned) |
 
 ---
@@ -76,6 +78,49 @@ let guard = mutex.lock()   # Acquire lock
 let val = guard.value      # Access the protected value
 # Lock released when guard goes out of scope
 ```
+
+---
+
+## Channel
+
+### Overview
+
+A `Channel<T>` provides thread-safe message passing between concurrent tasks:
+
+```desi
+import sync
+
+let ch = sync.Channel(10)   # Bounded channel with capacity 10
+let tx = ch.sender()        # Get sender handle
+let rx = ch.receiver()      # Get receiver handle
+
+tx.send(42)                 # Send value
+match rx.recv():            # Receive value
+    Option.Some(v): print(v)
+    Option.Nothing: print("Channel closed")
+```
+
+### Channel Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `sender()` | `Sender<T>` | Get a sender handle |
+| `receiver()` | `Receiver<T>` | Get a receiver handle |
+| `close()` | `none` | Close the channel |
+
+### Sender Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `send(value)` | `bool` | Send value (blocks if full) |
+| `try_send(value)` | `bool` | Try to send without blocking |
+
+### Receiver Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `recv()` | `Option<T>` | Receive value (blocks if empty) |
+| `try_recv()` | `Option<T>` | Try to receive without blocking |
 
 ---
 
@@ -316,12 +361,16 @@ let m = Mutex(42)
 - `mutex.lock()` blocking acquire
 - `mutex.try_lock()` non-blocking acquire
 - `guard.value` protected access
+- `using guard = mutex.lock():` RAII pattern
 - Generic type support (Mutex<T>)
+- `sync.Channel(capacity)` constructor
+- `ch.sender()` / `ch.receiver()` handles
+- `tx.send(v)` / `tx.try_send(v)` for sending
+- `rx.recv()` / `rx.try_recv()` for receiving
+- Both `import sync` and `from sync import` styles
 
 ### 🚧 Planned
 
-- [ ] `with mutex.lock() as guard:` syntax enforcement
-- [ ] `Channel<T>` for message passing
 - [ ] `TaskGroup` for structured concurrency
 - [ ] `RwLock<T>` for reader-writer locks
 
