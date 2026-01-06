@@ -1583,6 +1583,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if closeMangledName != "" {
 				// RAII class: register for __close__ call
 				ls.cur().closers[ident] = closeMangledName
+			} else if s.Init != nil && isMutexGuardType(ls.info.Types[s.Init]) {
+				// MutexGuard type: register for mutex_unlock at scope end
+				ls.cur().mutexGuards[ident] = true
 			} else if s.Init != nil && isFileType(ls.info.Types[s.Init]) {
 				// File type: register for file_close at scope end
 				ls.cur().files[ident] = true

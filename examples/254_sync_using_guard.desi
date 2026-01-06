@@ -1,0 +1,19 @@
+# Test RAII-style using guard for mutex
+import sync
+
+def main() -> int:
+    let m = sync.Mutex(42)
+    
+    # RAII pattern: guard is automatically unlocked at scope end
+    using guard = m.lock():
+        print("Inside using block")
+        print(guard.value)  # 42
+    
+    # Guard released here - lock is unlocked
+    print("After using block - mutex unlocked!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Inside using block
+# 42
+# After using block - mutex unlocked!
