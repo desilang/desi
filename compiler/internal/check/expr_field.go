@@ -416,6 +416,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveSemaphoreMethod(x)
 	}
 
+	// Handle Atomic methods: load, store, add, sub, inc, dec, compare_exchange, exchange
+	if _, ok := t.(*types.Atomic); ok {
+		return c.resolveAtomicMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1342,6 +1347,45 @@ func (c *checker) resolveSemaphoreMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf(nil, types.Bool, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Semaphore"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveAtomicMethod resolves methods on Atomic: load, store, add, sub, inc, dec, compare_exchange, exchange
+func (c *checker) resolveAtomicMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "load":
+		// load() -> int
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "store":
+		// store(value: int) -> none
+		methodType = types.FuncOf([]types.T{types.Int}, types.None, false)
+	case "add":
+		// add(delta: int) -> int (returns new value)
+		methodType = types.FuncOf([]types.T{types.Int}, types.Int, false)
+	case "sub":
+		// sub(delta: int) -> int (returns new value)
+		methodType = types.FuncOf([]types.T{types.Int}, types.Int, false)
+	case "inc":
+		// inc() -> int (returns new value)
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "dec":
+		// dec() -> int (returns new value)
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "compare_exchange":
+		// compare_exchange(expected: int, desired: int) -> bool
+		methodType = types.FuncOf([]types.T{types.Int, types.Int}, types.Bool, false)
+	case "exchange":
+		// exchange(new_value: int) -> int (returns old value)
+		methodType = types.FuncOf([]types.T{types.Int}, types.Int, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Atomic"))
 		return nil
 	}
 

@@ -173,6 +173,19 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					ls.b.Emit(&hir.Cast{Src: argVal, Dst: count64, Type: "i64"})
 					ls.b.Emit(&hir.Call{Dst: res, Fn: "semaphore_new", Args: []hir.Value{count64}, Type: "ptr"})
 					return res
+
+				case "Atomic":
+					// sync.Atomic(initial) -> atomic_int_new(initial)
+					if len(x.Args) != 1 {
+						panic("sync.Atomic requires exactly 1 argument")
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					res := ls.b.FreshTemp("atomic")
+					// Convert i32 to i64 for initial value
+					val64 := ls.b.FreshTemp("val64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: val64, Type: "i64"})
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "atomic_int_new", Args: []hir.Value{val64}, Type: "ptr"})
+					return res
 				}
 			}
 
@@ -325,6 +338,98 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					dst := ls.b.FreshTemp("acquired")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "semaphore_try_acquire", Args: []hir.Value{semVal}, Type: "i1"})
 					return dst
+				}
+			}
+
+			// Atomic methods: load, store, add, sub, inc, dec, compare_exchange, exchange
+			if _, ok := feXType.(*types.Atomic); ok {
+				atomicVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "load":
+					// a.load() -> int
+					dst := ls.b.FreshTemp("loaded")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_load", Args: []hir.Value{atomicVal}, Type: "i64"})
+					// Convert i64 to i32 for Desi int
+					result := ls.b.FreshTemp("load_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
+				case "store":
+					// a.store(value) -> void
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					val64 := ls.b.FreshTemp("val64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: val64, Type: "i64"})
+					ls.b.Emit(&hir.Call{Fn: "atomic_int_store", Args: []hir.Value{atomicVal, val64}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				case "add":
+					// a.add(delta) -> int (new value)
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					delta64 := ls.b.FreshTemp("delta64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: delta64, Type: "i64"})
+					dst := ls.b.FreshTemp("add_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_add", Args: []hir.Value{atomicVal, delta64}, Type: "i64"})
+					result := ls.b.FreshTemp("add_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
+				case "sub":
+					// a.sub(delta) -> int (new value)
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					delta64 := ls.b.FreshTemp("delta64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: delta64, Type: "i64"})
+					dst := ls.b.FreshTemp("sub_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_sub", Args: []hir.Value{atomicVal, delta64}, Type: "i64"})
+					result := ls.b.FreshTemp("sub_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
+				case "inc":
+					// a.inc() -> int (new value)
+					dst := ls.b.FreshTemp("inc_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_inc", Args: []hir.Value{atomicVal}, Type: "i64"})
+					result := ls.b.FreshTemp("inc_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
+				case "dec":
+					// a.dec() -> int (new value)
+					dst := ls.b.FreshTemp("dec_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_dec", Args: []hir.Value{atomicVal}, Type: "i64"})
+					result := ls.b.FreshTemp("dec_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
+				case "compare_exchange":
+					// a.compare_exchange(expected, desired) -> bool
+					if len(x.Args) != 2 {
+						return hir.ConstInt{Text: "0"}
+					}
+					expectedVal := ls.lowerExpr(x.Args[0])
+					desiredVal := ls.lowerExpr(x.Args[1])
+					exp64 := ls.b.FreshTemp("exp64")
+					des64 := ls.b.FreshTemp("des64")
+					ls.b.Emit(&hir.Cast{Src: expectedVal, Dst: exp64, Type: "i64"})
+					ls.b.Emit(&hir.Cast{Src: desiredVal, Dst: des64, Type: "i64"})
+					dst := ls.b.FreshTemp("cas_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_compare_exchange", Args: []hir.Value{atomicVal, exp64, des64}, Type: "i1"})
+					return dst
+				case "exchange":
+					// a.exchange(new_value) -> int (old value)
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					val64 := ls.b.FreshTemp("val64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: val64, Type: "i64"})
+					dst := ls.b.FreshTemp("exchange_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "atomic_int_exchange", Args: []hir.Value{atomicVal, val64}, Type: "i64"})
+					result := ls.b.FreshTemp("exchange_i32")
+					ls.b.Emit(&hir.Cast{Src: dst, Dst: result, Type: "i32"})
+					return result
 				}
 			}
 

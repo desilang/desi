@@ -134,6 +134,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				semType := types.SemaphoreOf()
 				c.info.Types[call] = semType
 				return semType
+
+			case "Atomic":
+				// sync.Atomic(initial) -> Atomic (currently only supports int)
+				if len(args) != 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Atomic requires exactly 1 argument (initial value)"))
+					return nil
+				}
+				atomicType := types.AtomicOf()
+				c.info.Types[call] = atomicType
+				return atomicType
 			}
 		}
 

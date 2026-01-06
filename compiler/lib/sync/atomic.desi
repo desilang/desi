@@ -1,0 +1,54 @@
+# Atomic - Lock-free atomic integer operations
+# Uses C runtime implementation (atomic.c) with C11 stdatomic
+
+# The Atomic class provides lock-free thread-safe integer operations.
+# Methods are resolved by the type checker and lowered to C runtime calls.
+
+pub class Atomic:
+    pub mut _handle: int  # Opaque handle to C runtime AtomicInt
+    
+    pub def __new__(self, initial: int):
+        # Constructor - creates an atomic integer with initial value
+        # Implemented via C runtime: atomic_int_new(initial)
+        pass
+    
+    pub def load(self) -> int:
+        # Atomically load and return the current value
+        # Implemented via C runtime: atomic_int_load
+        pass
+    
+    pub def store(self, value: int) -> none:
+        # Atomically store a new value
+        # Implemented via C runtime: atomic_int_store
+        pass
+    
+    pub def add(self, delta: int) -> int:
+        # Atomically add delta and return the NEW value
+        # Implemented via C runtime: atomic_int_add
+        pass
+    
+    pub def sub(self, delta: int) -> int:
+        # Atomically subtract delta and return the NEW value
+        # Implemented via C runtime: atomic_int_sub
+        pass
+    
+    pub def inc(self) -> int:
+        # Atomically increment by 1 and return the NEW value
+        # Implemented via C runtime: atomic_int_inc
+        pass
+    
+    pub def dec(self) -> int:
+        # Atomically decrement by 1 and return the NEW value
+        # Implemented via C runtime: atomic_int_dec
+        pass
+    
+    pub def compare_exchange(self, expected: int, desired: int) -> bool:
+        # Compare-and-swap: if current == expected, set to desired
+        # Returns true if exchange happened, false otherwise
+        # Implemented via C runtime: atomic_int_compare_exchange
+        pass
+    
+    pub def exchange(self, new_value: int) -> int:
+        # Atomically replace value and return the OLD value
+        # Implemented via C runtime: atomic_int_exchange
+        pass

@@ -44,6 +44,7 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 | `ReadGuard<T>` | RAII guard for shared read access |
 | `WriteGuard<T>` | RAII guard for exclusive write access |
 | `Semaphore` | Counting semaphore for limiting concurrent access |
+| `Atomic` | Lock-free atomic integer operations |
 | `Channel<T>` | Bounded message queue for thread communication |
 | `Sender<T>` | Send handle for Channel |
 | `Receiver<T>` | Receive handle for Channel |
@@ -176,6 +177,49 @@ sem.release()
 sem.acquire()
 print("Worker 2 started")
 sem.release()
+```
+
+---
+
+## Atomic
+
+### Overview
+
+An `Atomic` provides lock-free atomic integer operations using C11 atomics:
+
+```desi
+import sync
+
+let counter = sync.Atomic(0)  # Create atomic integer
+
+let val = counter.load()      # Read atomically
+counter.store(100)            # Write atomically
+let new = counter.inc()       # Increment, returns new value
+```
+
+### Atomic Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `load()` | `int` | Read the current value atomically |
+| `store(value)` | `none` | Write a new value atomically |
+| `add(delta)` | `int` | Add delta and return the NEW value |
+| `sub(delta)` | `int` | Subtract delta and return the NEW value |
+| `inc()` | `int` | Increment by 1 and return the NEW value |
+| `dec()` | `int` | Decrement by 1 and return the NEW value |
+| `compare_exchange(expected, desired)` | `bool` | CAS: if current == expected, set to desired |
+| `exchange(new_value)` | `int` | Replace value and return the OLD value |
+
+### Example: Lock-Free Counter
+
+```desi
+import sync
+
+let counter = sync.Atomic(0)
+
+let v1 = counter.inc()  # 1
+let v2 = counter.inc()  # 2
+let v3 = counter.add(10)  # 12
 ```
 
 ---
