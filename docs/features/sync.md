@@ -43,7 +43,7 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 | `Channel<T>` | Bounded message queue for thread communication |
 | `Sender<T>` | Send handle for Channel |
 | `Receiver<T>` | Receive handle for Channel |
-| `TaskGroup` | Structured concurrency for managing spawned tasks (planned) |
+| `TaskGroup` | Structured concurrency for managing spawned tasks |
 
 ---
 
@@ -121,6 +121,30 @@ match rx.recv():            # Receive value
 |--------|-------------|-------------|
 | `recv()` | `Option<T>` | Receive value (blocks if empty) |
 | `try_recv()` | `Option<T>` | Try to receive without blocking |
+
+---
+
+## TaskGroup
+
+### Overview
+
+A `TaskGroup` provides structured concurrency for managing spawned tasks:
+
+```desi
+import sync
+
+let tg = sync.TaskGroup()
+# tg.spawn() coming soon - for spawning tasks
+tg.wait()        # Wait for all tasks to complete
+```
+
+### TaskGroup Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `wait()` | `none` | Wait for all tasks to complete |
+| `cancel()` | `none` | Cancel all tasks in the group |
+| `is_cancelled()` | `bool` | Check if group is cancelled |
 
 ---
 
@@ -367,11 +391,15 @@ let m = Mutex(42)
 - `ch.sender()` / `ch.receiver()` handles
 - `tx.send(v)` / `tx.try_send(v)` for sending
 - `rx.recv()` / `rx.try_recv()` for receiving
+- `sync.TaskGroup()` constructor
+- `tg.wait()` wait for all tasks
+- `tg.cancel()` cancel all tasks
+- `tg.is_cancelled()` check cancel status
 - Both `import sync` and `from sync import` styles
 
 ### 🚧 Planned
 
-- [ ] `TaskGroup` for structured concurrency
+- [ ] `TaskGroup.spawn()` for spawning tasks in group
 - [ ] `RwLock<T>` for reader-writer locks
 
 ---

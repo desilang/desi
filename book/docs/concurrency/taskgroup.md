@@ -1,87 +1,120 @@
-# TaskGroup - Structured Concurrency
+# TaskGroup in Desi
 
-**TaskGroup** ensures all spawned tasks complete before continuing. This prevents "fire and forget" bugs where tasks might outlive their scope.
+TaskGroup provides structured concurrency for managing spawned tasks. It ensures all spawned tasks complete before the group is destroyed.
 
-## Creating a TaskGroup
-
-```desi
-let group = taskgroup_new()
-```
-
-## Spawning Tasks
-
-Use `spawn()` to add async work to the group:
+## Quick Start
 
 ```desi
-def worker():
-    print("Working...")
-
-let group = taskgroup_new()
-group.spawn(worker)
-group.spawn(worker)
-group.spawn(worker)
-```
-
-All spawned tasks run concurrently.
-
-## Waiting for Completion
-
-Use `wait()` to block until all tasks finish:
-
-```desi
-group.wait()  # Blocks until all workers complete
-print("All done!")
-```
-
-## Complete Example
-
-```desi
-def process_item(id: int):
-    print("Processing " + str(id))
+import sync
 
 def main() -> int:
-    let group = taskgroup_new()
+    let tg = sync.TaskGroup()
     
-    # Spawn multiple workers
-    group.spawn(lambda: process_item(1))
-    group.spawn(lambda: process_item(2))
-    group.spawn(lambda: process_item(3))
+    # Tasks would be spawned here (coming soon)
     
-    # Wait for all to complete
-    group.wait()
-    
-    print("All items processed!")
+    tg.wait()  # Wait for all tasks to complete
     return 0
 ```
 
-## Cancellation
-
-Cancel all tasks in a group:
+## Creating Task Groups
 
 ```desi
-group.cancel()
+import sync
 
-# Tasks can check if cancelled
-if group.is_cancelled():
-    return  # Exit early
+# Create using module import
+let tg1 = sync.TaskGroup()
+
+# Or use from-import
+from sync import TaskGroup
+let tg2 = TaskGroup()
 ```
 
-## When to Use TaskGroup
+## Methods
 
-Use TaskGroup when:
-- You need parallel work but must wait for all to finish
-- Child tasks shouldn't outlive the parent scope
-- You want automatic cleanup on errors
+### wait()
 
-## Comparison with Other Primitives
+Blocks until all tasks in the group complete:
 
-| Feature | TaskGroup | Channel | Mutex |
-|---------|-----------|---------|-------|
-| Purpose | Structured spawning | Message passing | Shared state |
-| Blocking | `wait()` | `send()`/`recv()` | `lock()` |
-| Best for | Fork-join patterns | Pipelines | Caches |
+```desi
+let tg = sync.TaskGroup()
+# ... spawn tasks ...
+tg.wait()  # Blocks until all done
+print("All tasks complete!")
+```
+
+### cancel()
+
+Marks the group as cancelled. Tasks should check `is_cancelled()` at their await points:
+
+```desi
+let tg = sync.TaskGroup()
+tg.cancel()  # Mark as cancelled
+```
+
+### is_cancelled()
+
+Check if the group has been cancelled:
+
+```desi
+let tg = sync.TaskGroup()
+
+if tg.is_cancelled():
+    print("Group was cancelled")
+else:
+    print("Group is running")
+```
+
+## Example: Cancel Pattern
+
+```desi
+import sync
+
+def main() -> int:
+    let tg = sync.TaskGroup()
+    
+    # Check initial state
+    if !tg.is_cancelled():
+        print("Group active")
+    
+    # Cancel the group
+    tg.cancel()
+    
+    if tg.is_cancelled():
+        print("Group cancelled")
+    
+    # Wait still works (returns immediately if no tasks)
+    tg.wait()
+    
+    return 0
+```
+
+## Best Practices
+
+1. **Always call wait()** before letting the TaskGroup go out of scope
+2. **Check is_cancelled()** in long-running tasks
+3. **Use cancel()** for cooperative cancellation
+
+## Limitations
+
+- `spawn()` method is not yet implemented (coming soon)
+- Currently supports wait, cancel, and is_cancelled only
+
+## Import Styles
+
+Both import styles work:
+
+```desi
+# Module import
+import sync
+let tg = sync.TaskGroup()
+
+# Direct import
+from sync import TaskGroup
+let tg = TaskGroup()
+```
 
 ## See Also
 
-- [Channels](./channels.md) - Message passing
-- [Mutex](./mutex.md) - Shared state protection
+- [Mutex](./mutex.md) - For protecting shared data
+- [Channel](./channel.md) - For message passing
+- [Spawn](./spawn.md) - For creating concurrent tasks
