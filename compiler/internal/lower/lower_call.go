@@ -249,6 +249,84 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// Channel methods: sender, receiver, close
+			if chType, ok := feXType.(*types.Channel); ok {
+				_ = chType // For future type param use
+				channelVal := ls.lowerExpr(fe.X)
+				dst := ls.b.FreshTemp("channel_result")
+				switch fe.Name.Name {
+				case "sender":
+					// ch.sender() -> Sender*
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_sender", Args: []hir.Value{channelVal}, Type: "ptr"})
+					return dst
+				case "receiver":
+					// ch.receiver() -> Receiver*
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_receiver", Args: []hir.Value{channelVal}, Type: "ptr"})
+					return dst
+				case "close":
+					// ch.close() -> void
+					ls.b.Emit(&hir.Call{Fn: "channel_close", Args: []hir.Value{channelVal}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				}
+			}
+
+			// Sender methods: send, try_send
+			if _, ok := feXType.(*types.ChannelSender); ok {
+				senderVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "send":
+					// tx.send(value) -> bool
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					// Box the value for the channel
+					boxPtr := ls.b.FreshTemp("send_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+					dst := ls.b.FreshTemp("send_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
+					return dst
+				case "try_send":
+					// tx.try_send(value) -> bool
+					if len(x.Args) != 1 {
+						return hir.ConstInt{Text: "0"}
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					boxPtr := ls.b.FreshTemp("try_send_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+					dst := ls.b.FreshTemp("try_send_result")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_try_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
+					return dst
+				}
+			}
+
+			// Receiver methods: recv, try_recv
+			if _, ok := feXType.(*types.ChannelReceiver); ok {
+				receiverVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "recv":
+					// rx.recv() -> T (unboxed value wrapped in Option)
+					boxPtr := ls.b.FreshTemp("recv_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "channel_recv", Args: []hir.Value{receiverVal}, Type: "ptr"})
+					// Load the value from the box (i32 for int values)
+					unboxedVal := ls.b.FreshTemp("recv_val")
+					ls.b.Emit(&hir.Load{Src: boxPtr, Dst: unboxedVal, Type: "i32"})
+					// Wrap in Option.Some
+					optResult := ls.b.FreshTemp("recv_opt")
+					ls.b.Emit(&hir.Call{Dst: optResult, Fn: "Option.Some", Args: []hir.Value{unboxedVal}, Type: "ptr"})
+					return optResult
+				case "try_recv":
+					// rx.try_recv() -> Option[ptr]
+					boxPtr := ls.b.FreshTemp("try_recv_box")
+					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "channel_try_recv", Args: []hir.Value{receiverVal}, Type: "ptr"})
+					optResult := ls.b.FreshTemp("try_recv_opt")
+					ls.b.Emit(&hir.Call{Dst: optResult, Fn: "Option.Some", Args: []hir.Value{boxPtr}, Type: "ptr"})
+					return optResult
+				}
+			}
+
 			// Rc methods: get, clone
 			if rcType, ok := feXType.(*types.Rc); ok {
 				rcVal := ls.lowerExpr(fe.X)

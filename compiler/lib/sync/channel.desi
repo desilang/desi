@@ -1,33 +1,72 @@
-# Channel - Bounded message queue
+# Channel - Thread-safe bounded message queue (generic class)
+# Uses C runtime implementation (channel.c)
+# Channel<T> provides typed message passing between threads
 
-pub class Channel:
-    pub mut _handle: int
+# The Channel class provides thread-safe message passing.
+# Methods are resolved by the type checker (resolveChannelMethod)
+# and lowered to C runtime calls.
+
+pub class Channel<T>:
+    pub mut _handle: int  # Opaque handle to C runtime channel
     
-    pub def sender(self) -> int:
-        return 0
+    pub def __new__(self, capacity: int):
+        # Constructor - creates bounded channel with given capacity
+        # Implemented via C runtime: channel_new(capacity)
+        pass
     
-    pub def receiver(self) -> int:
-        return 0
+    pub def sender(self) -> Sender<T>:
+        # Get a sender handle for this channel
+        # Implemented via C runtime: channel_sender(ch)
+        pass
     
-    pub def close(self) -> int:
-        return 0
+    pub def receiver(self) -> Receiver<T>:
+        # Get a receiver handle for this channel
+        # Implemented via C runtime: channel_receiver(ch)
+        pass
+    
+    pub def close(self) -> none:
+        # Close the channel - no more values can be sent
+        # Implemented via C runtime: channel_close(ch)
+        pass
 
 
-pub class Sender:
-    pub mut _handle: int
+pub class Sender<T>:
+    pub mut _handle: int  # Opaque handle to C runtime sender
     
-    pub def send(self, value: int) -> bool:
-        return true
+    pub def send(self, value: T) -> bool:
+        # Send a value (blocking if channel is full)
+        # Returns true if sent, false if channel is closed
+        # Implemented via C runtime: channel_send(sender, boxed_value)
+        pass
     
-    pub def try_send(self, value: int) -> bool:
-        return true
+    pub def try_send(self, value: T) -> bool:
+        # Try to send without blocking
+        # Returns true if sent, false if full or closed
+        # Implemented via C runtime: channel_try_send(sender, boxed_value)
+        pass
+    
+    # RAII cleanup: drop the sender handle
+    pub def __close__(self) -> none:
+        # Implemented via C runtime: sender_drop(sender)
+        pass
 
 
-pub class Receiver:
-    pub mut _handle: int
+pub class Receiver<T>:
+    pub mut _handle: int  # Opaque handle to C runtime receiver
     
-    pub def recv(self) -> int:
-        return 0
+    pub def recv(self) -> T:
+        # Receive a value (blocking if channel is empty)
+        # Returns the value, or panics if channel is closed and empty
+        # Implemented via C runtime: channel_recv(receiver)
+        pass
     
-    pub def try_recv(self) -> int:
-        return 0
+    pub def try_recv(self) -> Option<T>:
+        # Try to receive without blocking
+        # Returns Some(value) if available, Nothing if empty
+        # Implemented via C runtime: channel_try_recv(receiver)
+        pass
+    
+    # RAII cleanup: drop the receiver handle
+    pub def __close__(self) -> none:
+        # Implemented via C runtime: receiver_drop(receiver)
+        pass

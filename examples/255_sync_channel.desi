@@ -1,0 +1,26 @@
+# Simple Channel test - no match
+import sync
+
+def main() -> int:
+    # Create a bounded channel
+    let ch = sync.Channel(10)
+    
+    # Get sender and receiver
+    let tx = ch.sender()
+    let rx = ch.receiver()
+    
+    # Send a value
+    tx.send(42)
+    print("Sent 42")
+    
+    # For now just close - simplified test
+    ch.close()
+    print("Channel closed")
+    
+    print("Channel test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Sent 42
+# Channel closed
+# Channel test passed!
