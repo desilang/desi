@@ -817,6 +817,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return channelType
 			}
 
+			// Imported TaskGroup class constructor: TaskGroup() - creates TaskGroup
+			// This handles `from sync import TaskGroup` + `TaskGroup()`
+			if id.Name == "TaskGroup" && len(args) == 0 {
+				taskGroupType := types.TaskGroupOf()
+				c.info.Types[call] = taskGroupType
+				return taskGroupType
+			}
+
 			// Built-in rc(value) function - creates Rc[T] from value type
 			if id.Name == "rc" && len(args) == 1 && args[0] != nil {
 				rcType := types.RcOf(args[0])

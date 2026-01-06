@@ -327,6 +327,26 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// TaskGroup methods: wait, cancel, is_cancelled
+			if _, ok := feXType.(*types.TaskGroup); ok {
+				tgVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "wait":
+					// tg.wait() -> void
+					ls.b.Emit(&hir.Call{Fn: "taskgroup_wait", Args: []hir.Value{tgVal}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				case "cancel":
+					// tg.cancel() -> void
+					ls.b.Emit(&hir.Call{Fn: "taskgroup_cancel", Args: []hir.Value{tgVal}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				case "is_cancelled":
+					// tg.is_cancelled() -> bool
+					dst := ls.b.FreshTemp("is_cancelled")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "taskgroup_is_cancelled", Args: []hir.Value{tgVal}, Type: "i1"})
+					return dst
+				}
+			}
+
 			// Rc methods: get, clone
 			if rcType, ok := feXType.(*types.Rc); ok {
 				rcVal := ls.lowerExpr(fe.X)
@@ -566,6 +586,14 @@ handlePrint:
 	// 1.6. sum(), min(), max(), any(), all() builtins
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee)
+
+		// TaskGroup() - zero-arg constructor
+		if calleeName == "TaskGroup" && len(x.Args) == 0 {
+			res := ls.b.FreshTemp("taskgroup")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: []hir.Value{}, Type: "ptr"})
+			return res
+		}
+
 		if len(x.Args) == 1 {
 			argType := ls.info.Types[x.Args[0]]
 			argVal := ls.lowerExpr(x.Args[0])

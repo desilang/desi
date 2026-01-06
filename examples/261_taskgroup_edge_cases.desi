@@ -1,0 +1,49 @@
+# Test TaskGroup edge cases
+import sync
+
+def main() -> int:
+    print("Testing TaskGroup edge cases...")
+    
+    # Edge case 1: Wait on empty task group (no tasks spawned)
+    let tg1 = sync.TaskGroup()
+    tg1.wait()  # Should return immediately
+    print("Edge case 1: wait on empty group - passed")
+    
+    # Edge case 2: Multiple calls to is_cancelled
+    let tg2 = sync.TaskGroup()
+    let check1 = tg2.is_cancelled()
+    let check2 = tg2.is_cancelled()
+    if !check1 and !check2:
+        print("Edge case 2: multiple is_cancelled calls - passed")
+    
+    # Edge case 3: Cancel then wait
+    let tg3 = sync.TaskGroup()
+    tg3.cancel()
+    tg3.wait()  # Should return immediately (cancelled)
+    print("Edge case 3: cancel then wait - passed")
+    
+    # Edge case 4: Multiple calls to cancel
+    let tg4 = sync.TaskGroup()
+    tg4.cancel()
+    tg4.cancel()  # Should be idempotent
+    if tg4.is_cancelled():
+        print("Edge case 4: multiple cancel calls - passed")
+    
+    # Edge case 5: Multiple task groups
+    let tg5a = sync.TaskGroup()
+    let tg5b = sync.TaskGroup()
+    tg5a.cancel()
+    if tg5a.is_cancelled() and !tg5b.is_cancelled():
+        print("Edge case 5: independent task groups - passed")
+    
+    print("All edge case tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing TaskGroup edge cases...
+# Edge case 1: wait on empty group - passed
+# Edge case 2: multiple is_cancelled calls - passed
+# Edge case 3: cancel then wait - passed
+# Edge case 4: multiple cancel calls - passed
+# Edge case 5: independent task groups - passed
+# All edge case tests passed!

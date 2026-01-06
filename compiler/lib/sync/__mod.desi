@@ -1,5 +1,6 @@
 # Sync module - Concurrency primitives
-# Exports: Mutex, MutexGuard, Channel, Sender, Receiver
+# Exports: Mutex, MutexGuard, Channel, Sender, Receiver, TaskGroup
 
 from sync.mutex import Mutex, MutexGuard
 from sync.channel import Channel, Sender, Receiver
+from sync.taskgroup import TaskGroup
