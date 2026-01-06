@@ -1,5 +1,5 @@
 # Test RwLock - Comprehensive edge cases
-# Tests: primitives, custom types, write guards
+# Tests: primitives, custom types, write guards, try_read/try_write
 import sync
 
 struct Point:
@@ -39,6 +39,20 @@ def test_write() -> none:
     using wg = rw.write():
         print(wg.value)  # 0
 
+def test_try_read() -> none:
+    let rw = sync.RwLock(99)
+    # try_read should succeed when unlocked
+    match rw.try_read():
+        Option.Some(guard): print(guard.value)
+        Option.Nothing: print("FAIL: try_read returned Nothing")
+
+def test_try_write() -> none:
+    let rw = sync.RwLock(77)
+    # try_write should succeed when unlocked
+    match rw.try_write():
+        Option.Some(guard): print(guard.value)
+        Option.Nothing: print("FAIL: try_write returned Nothing")
+
 def main() -> int:
     print("Testing RwLock with various types...")
     
@@ -60,6 +74,12 @@ def main() -> int:
     print("=== write guard ===")
     test_write()
     
+    print("=== try_read ===")
+    test_try_read()
+    
+    print("=== try_write ===")
+    test_try_write()
+    
     print("All RwLock tests passed!")
     return 0
 
@@ -78,4 +98,8 @@ def main() -> int:
 # 20
 # === write guard ===
 # 0
+# === try_read ===
+# 99
+# === try_write ===
+# 77
 # All RwLock tests passed!
