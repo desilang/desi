@@ -1142,9 +1142,19 @@ func (c *checker) resolveChannelMethod(x *ast.FieldExpr, ch *types.Channel) type
 	switch name {
 	case "sender":
 		// sender() -> Sender[T]
+		// DSY0002: Sender should be used with 'using' guard
+		if !c.inUsingInit {
+			c.add(diagAt("DSY0002", x.Name.Span,
+				"consider using 'using tx = ch.sender():' for RAII cleanup"))
+		}
 		methodType = types.FuncOf(nil, types.SenderOf(ch.Elem), false)
 	case "receiver":
 		// receiver() -> Receiver[T]
+		// DSY0003: Receiver should be used with 'using' guard
+		if !c.inUsingInit {
+			c.add(diagAt("DSY0003", x.Name.Span,
+				"consider using 'using rx = ch.receiver():' for RAII cleanup"))
+		}
 		methodType = types.FuncOf(nil, types.ReceiverOf(ch.Elem), false)
 	case "close":
 		// close() -> none

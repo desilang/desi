@@ -819,7 +819,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		// Bind the using identifier to the scope with the type of the Init expression
 		var bindType types.T = types.ArenaOf() // default to Arena if no init
 		if st.Init != nil {
+			c.inUsingInit = true
 			bindType = c.typ(st.Init)
+			c.inUsingInit = false
 		}
 		if id, ok := st.Bind.(*ast.Ident); ok {
 			sym := &Symbol{

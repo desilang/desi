@@ -18,6 +18,10 @@ func diagAt(codeID string, span diag.Span, msg string) diag.Diagnostic {
 		case "DME", "DMW":
 			domain = "module"
 		}
+		// DSY0002 and DSY0003 are warnings for sender/receiver
+		if len(codeID) >= 7 && (codeID == "DSY0002" || codeID == "DSY0003") {
+			domain = "warn"
+		}
 	}
 	return diag.Diagnostic{
 		CodeID:  codeID,
