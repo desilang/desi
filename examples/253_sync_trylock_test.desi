@@ -1,0 +1,17 @@
+# Test mutex try_lock() method with from-import
+from sync import Mutex
+
+def main() -> int:
+    # Test try_lock() - should succeed on unlocked mutex
+    let m = Mutex(99)
+    
+    match m.try_lock():
+        Option.Some(guard): print(guard.value)
+        Option.Nothing: print("try_lock failed")
+    
+    print("try_lock test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 99
+# try_lock test passed!

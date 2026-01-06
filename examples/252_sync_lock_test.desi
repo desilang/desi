@@ -1,0 +1,21 @@
+# Test mutex lock() method with from-import
+from sync import Mutex
+
+def main() -> int:
+    # Test lock() with int
+    let m = Mutex(42)
+    let guard = m.lock()
+    print(guard.value)
+    
+    # Test lock() with string
+    let m2 = Mutex("hello")
+    let g2 = m2.lock()
+    print(g2.value)
+    
+    print("lock() test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# hello
+# lock() test passed!
