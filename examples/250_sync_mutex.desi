@@ -1,0 +1,21 @@
+# Test sync module - Mutex with import and with statement
+import sync
+
+def main() -> int:
+    print("Testing sync.Mutex...")
+    
+    # Create a mutex protecting an integer
+    let counter = sync.Mutex(42)
+    
+    # Lock the mutex to access the value (using with for safe auto-unlock)
+    let guard = counter.lock()
+    let value = guard.value
+    print(value)  # 42
+    
+    print("sync.Mutex test complete!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing sync.Mutex...
+# 42
+# sync.Mutex test complete!

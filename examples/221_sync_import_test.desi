@@ -1,15 +1,16 @@
 # Test importing from sync stdlib
 
-from sync import Mutex
+import sync
 
 def main() -> int:
     print("Sync import test")
-    let m = Mutex(42)
-    print("Created mutex handle:")
-    print(m)
+    let m = sync.Mutex(42)
+    print("Created mutex!")
+    let guard = m.lock()
+    print(guard.value)  # 42
     return 0
 
 # EXPECTED_OUTPUT:
 # Sync import test
-# Created mutex handle:
-# 0
+# Created mutex!
+# 42

@@ -1,15 +1,35 @@
-# Mutex - Thread-safe value wrapper
-# Factory function approach for now (class exports not yet supported)
+# Mutex - Thread-safe value wrapper (generic class)
+# Uses C runtime implementation (mutex.c)
+# Mutex<T> can wrap any type - int, str, struct, list, etc.
 
-pub def Mutex(value: int) -> int:
-    # Returns a mutex handle wrapping the value
-    # This is a stub - actual implementation comes from runtime
-    return 0
+# The Mutex class provides thread-safe value protection.
+# Methods are resolved by the type checker (resolveMutexMethod)
+# and lowered to C runtime calls (mutex_new, mutex_lock, mutex_try_lock).
 
-pub def mutex_lock(m: int) -> int:
-    # Lock and return guard handle
-    return 0
+pub class Mutex<T>:
+    pub mut _handle: int  # Opaque handle to C runtime mutex
+    
+    pub def __new__(self, value: T):
+        # Constructor - wraps the value in a thread-safe mutex
+        # Implemented via C runtime: mutex_new(boxed_value)
+        pass
+    
+    pub def lock(self) -> MutexGuard<T>:
+        # Lock and return guard for safe access to the wrapped value
+        # Blocks until lock is acquired
+        # Implemented via C runtime: mutex_lock
+        pass
+    
+    pub def try_lock(self) -> Option<MutexGuard<T>>:
+        # Try to acquire lock without blocking
+        # Returns Some(guard) if successful, Nothing otherwise
+        # Implemented via C runtime: mutex_try_lock
+        pass
 
-pub def mutex_try_lock(m: int) -> int:
-    # Try lock, return guard or 0
-    return 0
+
+pub class MutexGuard<T>:
+    pub mut _handle: int  # Opaque handle to C runtime guard
+    
+    # The 'value' field is resolved by resolveMutexGuardField in type checker
+    # and lowered to mutex_guard_get C call
+    # Access as: guard.value

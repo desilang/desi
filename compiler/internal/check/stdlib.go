@@ -11,4 +11,5 @@ var StdlibModules = map[string]bool{
 	"crypto": true,
 	"sys":    true,
 	"io":     true,
+	"sync":   true,
 }

@@ -60,6 +60,54 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 		}
 
+		// Handle sync module type constructors: sync.Mutex(value), sync.Channel<T>(cap), sync.TaskGroup()
+		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sync" && c.info.StdlibImports["sync"] {
+			typeName := fe.Name.Name
+			args := make([]types.T, len(argsNodes))
+			for i, a := range argsNodes {
+				args[i] = c.typ(a.Expr)
+			}
+
+			switch typeName {
+			case "Mutex":
+				// sync.Mutex(value) -> Mutex<T> where T is inferred from argument
+				if len(args) != 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Mutex requires exactly 1 argument"))
+					return nil
+				}
+				if args[0] == nil {
+					c.add(diagAt("DTE0001", fe.Name.Span, "cannot infer type for sync.Mutex argument"))
+					return nil
+				}
+				mutexType := types.MutexOf(args[0])
+				c.info.Types[call] = mutexType
+				return mutexType
+
+			case "Channel":
+				// sync.Channel<T>(capacity) or sync.Channel(capacity)
+				// For now, capacity is required, type inferred as Any if not specified
+				if len(args) != 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Channel requires exactly 1 argument (capacity)"))
+					return nil
+				}
+				// Check if there's a type parameter on the call (fe.TypeArgs)
+				// For now, default to Any; users can annotate: let ch: Channel<int> = sync.Channel(10)
+				channelType := types.ChannelOf(types.Any)
+				c.info.Types[call] = channelType
+				return channelType
+
+			case "TaskGroup":
+				// sync.TaskGroup() - no arguments
+				if len(args) != 0 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.TaskGroup takes no arguments"))
+					return nil
+				}
+				taskGroupType := types.TaskGroupOf()
+				c.info.Types[call] = taskGroupType
+				return taskGroupType
+			}
+		}
+
 		// Module-qualified calls are handled by moduleQualifiedOverloadSet
 		// Stdlib modules (json, math, etc.) use @extern wrapper functions and
 		// are resolved through normal module resolution, not hardcoded handling.
