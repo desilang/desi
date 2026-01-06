@@ -1,20 +1,81 @@
-# Test RwLock - Reader-Writer Lock
+# Test RwLock - Comprehensive edge cases
+# Tests: primitives, custom types, write guards
 import sync
 
-def main() -> int:
-    print("Testing RwLock...")
-    
-    # Create RwLock protecting an integer
+struct Point:
+    x: int
+    y: int
+
+def test_int() -> none:
     let rw = sync.RwLock(42)
+    using guard = rw.read():
+        print(guard.value)  # 42
+
+def test_str() -> none:
+    let rw = sync.RwLock("hello world")
+    using guard = rw.read():
+        print(guard.value)  # hello world
+
+def test_float() -> none:
+    let rw = sync.RwLock(3.14)
+    using guard = rw.read():
+        print(guard.value)  # 3.14
+
+def test_bool() -> none:
+    let rw = sync.RwLock(true)
+    using guard = rw.read():
+        print(guard.value)  # true
+
+def test_struct() -> none:
+    let rw = sync.RwLock(Point(x=10, y=20))
+    using guard = rw.read():
+        let p = guard.value
+        print(p.x)  # 10
+        print(p.y)  # 20
+
+def test_write() -> none:
+    let rw = sync.RwLock(0)
+    # Write guard for exclusive access
+    using wg = rw.write():
+        print(wg.value)  # 0
+
+def main() -> int:
+    print("Testing RwLock with various types...")
     
-    # Acquire read lock with using guard (recommended)
-    using reader = rw.read():
-        print(reader.value)  # Should print 42
+    print("=== int ===")
+    test_int()
     
-    print("RwLock test passed!")
+    print("=== str ===")
+    test_str()
+    
+    print("=== float ===")
+    test_float()
+    
+    print("=== bool ===")
+    test_bool()
+    
+    print("=== struct ===")
+    test_struct()
+    
+    print("=== write guard ===")
+    test_write()
+    
+    print("All RwLock tests passed!")
     return 0
 
 # EXPECTED_OUTPUT:
-# Testing RwLock...
+# Testing RwLock with various types...
+# === int ===
 # 42
-# RwLock test passed!
+# === str ===
+# hello world
+# === float ===
+# 3.14
+# === bool ===
+# true
+# === struct ===
+# 10
+# 20
+# === write guard ===
+# 0
+# All RwLock tests passed!
