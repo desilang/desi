@@ -234,6 +234,8 @@ type scope struct {
 	closers     map[string]string  // RAII: variables that need __close__ called (mangled name)
 	files       map[string]bool    // RAII: file handles that need file_close at scope end
 	mutexGuards map[string]bool    // RAII: mutex guards that need mutex_unlock at scope end
+	readGuards  map[string]bool    // RAII: read guards that need read_guard_unlock at scope end
+	writeGuards map[string]bool    // RAII: write guards that need write_guard_unlock at scope end
 }
 
 func (ls *lowerState) push() {
@@ -251,6 +253,8 @@ func (ls *lowerState) push() {
 		closers:     map[string]string{},
 		files:       map[string]bool{},
 		mutexGuards: map[string]bool{},
+		readGuards:  map[string]bool{},
+		writeGuards: map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -532,6 +536,24 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if varName, ok := v.(hir.Var); ok && sc.mutexGuards[varName.Name] {
 			ls.b.Emit(&hir.Call{
 				Fn:   "mutex_unlock",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// ReadGuard? Call read_guard_unlock to release the read lock
+		if varName, ok := v.(hir.Var); ok && sc.readGuards[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "read_guard_unlock",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// WriteGuard? Call write_guard_unlock to release the write lock
+		if varName, ok := v.(hir.Var); ok && sc.writeGuards[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "write_guard_unlock",
 				Args: []hir.Value{v},
 				Type: "void",
 			})

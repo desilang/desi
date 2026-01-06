@@ -1586,6 +1586,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			} else if s.Init != nil && isMutexGuardType(ls.info.Types[s.Init]) {
 				// MutexGuard type: register for mutex_unlock at scope end
 				ls.cur().mutexGuards[ident] = true
+			} else if s.Init != nil && isReadGuardType(ls.info.Types[s.Init]) {
+				// ReadGuard type: register for read_guard_unlock at scope end
+				ls.cur().readGuards[ident] = true
+			} else if s.Init != nil && isWriteGuardType(ls.info.Types[s.Init]) {
+				// WriteGuard type: register for write_guard_unlock at scope end
+				ls.cur().writeGuards[ident] = true
 			} else if s.Init != nil && isFileType(ls.info.Types[s.Init]) {
 				// File type: register for file_close at scope end
 				ls.cur().files[ident] = true

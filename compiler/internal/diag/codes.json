@@ -756,6 +756,16 @@
       "id": "DSY0003",
       "title": "Receiver should be used with 'using' guard",
       "help": "Consider using 'using rx = ch.receiver():' to ensure the receiver is properly dropped."
+    },
+    "read_guard_recommends_using": {
+      "id": "DSY0004",
+      "title": "ReadGuard should be used with 'using' guard",
+      "help": "Consider using 'using guard = rw.read():' to ensure the read lock is properly released."
+    },
+    "write_guard_recommends_using": {
+      "id": "DSY0005",
+      "title": "WriteGuard should be used with 'using' guard",
+      "help": "Consider using 'using guard = rw.write():' to ensure the write lock is properly released."
     }
   }
 }
