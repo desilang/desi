@@ -124,6 +124,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				rwlockType := types.RwLockOf(args[0])
 				c.info.Types[call] = rwlockType
 				return rwlockType
+
+			case "Semaphore":
+				// sync.Semaphore(count) -> Semaphore
+				if len(args) != 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Semaphore requires exactly 1 argument (initial count)"))
+					return nil
+				}
+				semType := types.SemaphoreOf()
+				c.info.Types[call] = semType
+				return semType
 			}
 		}
 

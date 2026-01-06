@@ -80,3 +80,15 @@ func ReadGuardOf(inner T) *ReadGuard {
 func WriteGuardOf(inner T) *WriteGuard {
 	return &WriteGuard{Inner: inner}
 }
+
+// Semaphore represents a counting semaphore.
+// Allows up to N concurrent acquires.
+type Semaphore struct{}
+
+func (*Semaphore) isType()        {}
+func (*Semaphore) String() string { return "Semaphore" }
+
+// SemaphoreOf returns the singleton Semaphore type
+func SemaphoreOf() *Semaphore {
+	return &Semaphore{}
+}
