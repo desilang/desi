@@ -4,18 +4,18 @@ from sync import TaskGroup
 def main() -> int:
     print("Testing TaskGroup with from-import...")
     
-    # Create task group using direct import
-    let tg = TaskGroup()
-    print("Created TaskGroup")
-    
-    # Test methods
-    if tg.is_cancelled():
-        print("is_cancelled: true")
-    else:
-        print("is_cancelled: false")
-    
-    tg.cancel()
-    tg.wait()
+    # Create task group using direct import with using guard
+    using tg = TaskGroup():
+        print("Created TaskGroup")
+        
+        # Test methods
+        if tg.is_cancelled():
+            print("is_cancelled: true")
+        else:
+            print("is_cancelled: false")
+        
+        tg.cancel()
+        tg.wait()
     
     print("from-import test passed!")
     return 0

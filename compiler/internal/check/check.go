@@ -205,6 +205,7 @@ type checker struct {
 	moved       MoveSet
 	unsafeDepth int
 	expected    types.T // Expected type from context (for bidirectional checking)
+	inUsingInit bool    // True when type-checking UsingStmt.Init (for sync RAII checks)
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }

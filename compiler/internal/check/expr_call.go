@@ -102,6 +102,11 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					c.add(diagAt("DTE0046", fe.Name.Span, "sync.TaskGroup takes no arguments"))
 					return nil
 				}
+				// DSY0001: TaskGroup must be used with 'using' guard
+				if !c.inUsingInit {
+					c.add(diagAt("DSY0001", call.Span,
+						"TaskGroup requires RAII cleanup - use 'using tg = sync.TaskGroup():'"))
+				}
 				taskGroupType := types.TaskGroupOf()
 				c.info.Types[call] = taskGroupType
 				return taskGroupType
@@ -820,6 +825,11 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			// Imported TaskGroup class constructor: TaskGroup() - creates TaskGroup
 			// This handles `from sync import TaskGroup` + `TaskGroup()`
 			if id.Name == "TaskGroup" && len(args) == 0 {
+				// DSY0001: TaskGroup must be used with 'using' guard
+				if !c.inUsingInit {
+					c.add(diagAt("DSY0001", call.Span,
+						"TaskGroup requires RAII cleanup - use 'using tg = sync.TaskGroup():'"))
+				}
 				taskGroupType := types.TaskGroupOf()
 				c.info.Types[call] = taskGroupType
 				return taskGroupType
