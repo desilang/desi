@@ -1,0 +1,38 @@
+# Test Channel with different data types
+import sync
+
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    print("Testing Channel with different types...")
+    
+    # Test with int
+    let ch_int = sync.Channel(5)
+    let tx_int = ch_int.sender()
+    tx_int.send(42)
+    tx_int.send(100)
+    print("Sent ints: 42, 100")
+    ch_int.close()
+    
+    # Test with string  
+    # Note: String channels not yet supported due to pointer boxing
+    # tx_str.send("hello")
+    
+    # Test try_send with full channel
+    let ch_small = sync.Channel(1)
+    let tx_small = ch_small.sender()
+    tx_small.send(1)  # Fill the buffer
+    let sent = tx_small.try_send(2)  # Should fail (buffer full)
+    print("try_send on full channel returned")
+    ch_small.close()
+    
+    print("Data type tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing Channel with different types...
+# Sent ints: 42, 100
+# try_send on full channel returned
+# Data type tests passed!

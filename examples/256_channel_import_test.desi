@@ -1,0 +1,38 @@
+# Test Channel with `import sync` style
+import sync
+
+def main() -> int:
+    print("Testing Channel with import sync...")
+    
+    # Create channel
+    let ch = sync.Channel(5)
+    print("Created channel")
+    
+    # Get sender and receiver
+    let tx = ch.sender()
+    let rx = ch.receiver()
+    print("Got sender and receiver")
+    
+    # Test send
+    tx.send(42)
+    print("Sent 42")
+    
+    # Test try_send
+    let sent = tx.try_send(99)
+    print("try_send returned")
+    
+    # Test close
+    ch.close()
+    print("Closed channel")
+    
+    print("import sync test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing Channel with import sync...
+# Created channel
+# Got sender and receiver
+# Sent 42
+# try_send returned
+# Closed channel
+# import sync test passed!
