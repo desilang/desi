@@ -327,10 +327,33 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
-			// TaskGroup methods: wait, cancel, is_cancelled
+			// TaskGroup methods: spawn, wait, cancel, is_cancelled
 			if _, ok := feXType.(*types.TaskGroup); ok {
 				tgVal := ls.lowerExpr(fe.X)
 				switch fe.Name.Name {
+				case "run":
+					// tg.run(fn) -> taskgroup_spawn(tg, fn_ptr, NULL)
+					// The argument is a function reference
+					if len(x.Args) > 0 {
+						// Check if argument is an identifier (function name)
+						var fnVal hir.Value
+						if id, ok := x.Args[0].(*ast.Ident); ok {
+							// It's a function name - emit as FuncRef
+							fnVal = hir.FuncRef{Name: id.Name}
+						} else {
+							// Lower normally (for closures in future)
+							fnVal = ls.lowerExpr(x.Args[0])
+						}
+						// taskgroup_spawn expects (TaskGroup*, fn_ptr, ctx)
+						// Pass NULL for context since we're not capturing closures yet
+						nullCtx := hir.ConstNull{}
+						ls.b.Emit(&hir.Call{
+							Fn:   "taskgroup_spawn",
+							Args: []hir.Value{tgVal, fnVal, nullCtx},
+							Type: "void",
+						})
+					}
+					return hir.ConstInt{Text: "0"}
 				case "wait":
 					// tg.wait() -> void
 					ls.b.Emit(&hir.Call{Fn: "taskgroup_wait", Args: []hir.Value{tgVal}, Type: "void"})

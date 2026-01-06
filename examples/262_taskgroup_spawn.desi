@@ -1,0 +1,31 @@
+# Test TaskGroup.run() with worker functions
+import sync
+
+# Worker function that will be spawned
+def worker1() -> none:
+    print("Worker 1 done")
+
+def worker2() -> none:
+    print("Worker 2 done")
+
+def main() -> int:
+    print("Testing TaskGroup.run()...")
+    
+    using tg = sync.TaskGroup():
+        # Spawn worker functions
+        tg.run(worker1)
+        tg.run(worker2)
+        
+        print("Workers spawned, waiting...")
+        tg.wait()
+    
+    print("TaskGroup.run() test passed!")
+    return 0
+
+# Note: Output order may vary due to concurrency
+# EXPECTED_OUTPUT:
+# Testing TaskGroup.run()...
+# Workers spawned, waiting...
+# Worker 1 done
+# Worker 2 done
+# TaskGroup.run() test passed!
