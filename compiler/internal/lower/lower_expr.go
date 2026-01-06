@@ -1388,6 +1388,34 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle ReadGuard.value field - get the protected value (read-only)
+		if rg, ok := baseType.(*types.ReadGuard); ok {
+			if name == "value" {
+				// Call read_guard_value(guard) -> void* (pointer to boxed value)
+				ptrVal := ls.b.FreshTemp("read_guard_ptr")
+				ls.b.Emit(&hir.Call{Dst: ptrVal, Fn: "read_guard_value", Args: []hir.Value{base}, Type: "ptr"})
+				// Load the actual value from the boxed pointer
+				loadedVal := ls.b.FreshTemp("read_guard_value")
+				loadType := lowerType(rg.Inner)
+				ls.b.Emit(&hir.Load{Type: loadType, Src: ptrVal, Dst: loadedVal})
+				return loadedVal
+			}
+		}
+
+		// Handle WriteGuard.value field - get the protected value (read-write)
+		if wg, ok := baseType.(*types.WriteGuard); ok {
+			if name == "value" {
+				// Call write_guard_value(guard) -> void* (pointer to boxed value)
+				ptrVal := ls.b.FreshTemp("write_guard_ptr")
+				ls.b.Emit(&hir.Call{Dst: ptrVal, Fn: "write_guard_value", Args: []hir.Value{base}, Type: "ptr"})
+				// Load the actual value from the boxed pointer
+				loadedVal := ls.b.FreshTemp("write_guard_value")
+				loadType := lowerType(wg.Inner)
+				ls.b.Emit(&hir.Load{Type: loadType, Src: ptrVal, Dst: loadedVal})
+				return loadedVal
+			}
+		}
+
 		if s, ok := baseType.(*types.Struct); ok {
 			fields = s.Fields
 		} else if c, ok := baseType.(*types.Class); ok {

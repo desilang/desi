@@ -396,6 +396,21 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveTaskGroupMethod(x)
 	}
 
+	// Handle RwLock methods: read, write, try_read, try_write
+	if rw, ok := t.(*types.RwLock); ok {
+		return c.resolveRwLockMethod(x, rw)
+	}
+
+	// Handle ReadGuard methods: value
+	if rg, ok := t.(*types.ReadGuard); ok {
+		return c.resolveReadGuardMethod(x, rg)
+	}
+
+	// Handle WriteGuard methods: value
+	if wg, ok := t.(*types.WriteGuard); ok {
+		return c.resolveWriteGuardMethod(x, wg)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1236,6 +1251,63 @@ func (c *checker) resolveTaskGroupMethod(x *ast.FieldExpr) types.T {
 
 	c.info.Types[x] = methodType
 	return methodType
+}
+
+// resolveRwLockMethod resolves methods on RwLock[T]: read, write, try_read, try_write
+func (c *checker) resolveRwLockMethod(x *ast.FieldExpr, rw *types.RwLock) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "read":
+		// read() -> ReadGuard<T>
+		methodType = types.FuncOf(nil, types.ReadGuardOf(rw.Inner), false)
+	case "write":
+		// write() -> WriteGuard<T>
+		methodType = types.FuncOf(nil, types.WriteGuardOf(rw.Inner), false)
+	case "try_read":
+		// try_read() -> Option<ReadGuard<T>>
+		methodType = types.FuncOf(nil, types.OptionOf(types.ReadGuardOf(rw.Inner)), false)
+	case "try_write":
+		// try_write() -> Option<WriteGuard<T>>
+		methodType = types.FuncOf(nil, types.OptionOf(types.WriteGuardOf(rw.Inner)), false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on RwLock"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveReadGuardMethod resolves methods/fields on ReadGuard[T]: value
+func (c *checker) resolveReadGuardMethod(x *ast.FieldExpr, rg *types.ReadGuard) types.T {
+	name := x.Name.Name
+
+	switch name {
+	case "value":
+		// value is the protected value (read-only)
+		c.info.Types[x] = rg.Inner
+		return rg.Inner
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on ReadGuard"))
+		return nil
+	}
+}
+
+// resolveWriteGuardMethod resolves methods/fields on WriteGuard[T]: value
+func (c *checker) resolveWriteGuardMethod(x *ast.FieldExpr, wg *types.WriteGuard) types.T {
+	name := x.Name.Name
+
+	switch name {
+	case "value":
+		// value is the protected value (read-write)
+		c.info.Types[x] = wg.Inner
+		return wg.Inner
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on WriteGuard"))
+		return nil
+	}
 }
 
 // resolveRcMethod resolves methods on Rc[T]: get, clone

@@ -1,0 +1,45 @@
+# RwLock - Reader-Writer Lock
+# Multiple readers can hold the lock concurrently, but writers are exclusive.
+
+class RwLock<T>:
+    """Reader-writer lock protecting a value of type T."""
+    
+    pub def __new__(value: T) -> RwLock<T>:
+        """Create a new RwLock with the given initial value."""
+        pass  # Implemented in C runtime
+    
+    pub def read(self) -> ReadGuard<T>:
+        """Acquire read lock (blocking). Multiple readers allowed."""
+        pass  # Returns ReadGuard
+    
+    pub def write(self) -> WriteGuard<T>:
+        """Acquire write lock (blocking). Exclusive access."""
+        pass  # Returns WriteGuard
+    
+    pub def try_read(self) -> Option<ReadGuard<T>>:
+        """Try to acquire read lock (non-blocking)."""
+        pass  # Returns Some(ReadGuard) or Nothing
+    
+    pub def try_write(self) -> Option<WriteGuard<T>>:
+        """Try to acquire write lock (non-blocking)."""
+        pass  # Returns Some(WriteGuard) or Nothing
+
+
+class ReadGuard<T>:
+    """RAII guard for read access. Released when dropped."""
+    
+    pub value: T  # Read-only access to protected value
+    
+    pub def __close__(self) -> none:
+        """Release the read lock."""
+        pass  # Calls read_guard_unlock
+
+
+class WriteGuard<T>:
+    """RAII guard for write access. Released when dropped."""
+    
+    pub mut value: T  # Read-write access to protected value
+    
+    pub def __close__(self) -> none:
+        """Release the write lock."""
+        pass  # Calls write_guard_unlock
