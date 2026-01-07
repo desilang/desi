@@ -1,0 +1,24 @@
+# Simple closure capture test
+import sync
+
+def simple_worker() -> none:
+    print("simple worker")
+
+def main() -> int:
+    print("Testing closure capture...")
+    
+    # Test 1: Named function (no captures) - should still work
+    print("=== Test 1: Named function ===")
+    using tg = sync.TaskGroup():
+        tg.run(simple_worker)
+    print("Test 1 passed!")
+    
+    # Test 2: Lambda with single string capture
+    print("=== Test 2: String capture ===")
+    let msg = "Hello!"
+    using tg2 = sync.TaskGroup():
+        tg2.run(lambda<none>: print(msg))
+    print("Test 2 passed!")
+    
+    print("All tests passed!")
+    return 0

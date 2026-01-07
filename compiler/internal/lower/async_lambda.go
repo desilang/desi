@@ -131,26 +131,39 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 		// Recurse into body first (in case of nested lambdas).
 		x.Body = rewriteExprForAsyncLambda(x.Body, mod, synth, next)
 
-		// Convert lambda params -> function params
-		params := make([]ast.Param, len(x.Params))
-		for i, lp := range x.Params {
-			params[i] = ast.Param{Name: lp.Name, Type: lp.Type}
+		// Build scope from lambda parameters
+		scope := make(map[string]bool)
+		for _, lp := range x.Params {
+			scope[lp.Name.Name] = true
 		}
 
-		// Synthesize: [async] def __lam$N(params) -> RetType: return <body>
-		name := fmt.Sprintf("__lam$%d", *next)
+		// Collect captured (free) variables from lambda body
+		captures := CollectFreeVars(x.Body, scope)
+
+		// Synthesize: def __lam$N(params..., captures...) -> RetType: return <body>
+		lamName := fmt.Sprintf("__lam$%d", *next)
 		*next++
+
+		// Convert lambda params -> function params (including captures as extra params)
+		params := make([]ast.Param, 0, len(x.Params)+len(captures))
+		for _, lp := range x.Params {
+			params = append(params, ast.Param{Name: lp.Name, Type: lp.Type})
+		}
+		for _, cap := range captures {
+			params = append(params, ast.Param{
+				Name: ast.Ident{Name: cap},
+				Type: nil, // Type inferred at callsite
+			})
+		}
 
 		// Build function body based on return type
 		var bodyStmts []ast.Stmt
 		if x.RetType != nil && x.RetType.Name == "none" {
-			// For void-returning lambdas, execute body as expression and return void
 			bodyStmts = []ast.Stmt{
 				&ast.ExprStmt{Expr: x.Body},
 				&ast.ReturnStmt{Value: nil},
 			}
 		} else {
-			// For value-returning lambdas, return the body value
 			bodyStmts = []ast.Stmt{
 				&ast.ReturnStmt{Value: x.Body},
 			}
@@ -158,15 +171,32 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 
 		fn := &ast.FuncDecl{
 			Async:   x.Async,
-			Name:    ast.Ident{Name: name},
+			Name:    ast.Ident{Name: lamName},
 			Params:  params,
-			RetType: x.RetType, // Use the explicit return type from lambda<RetType>
+			RetType: x.RetType,
 			Body:    &ast.Block{Stmts: bodyStmts},
 		}
 		*synth = append(*synth, fn)
 
-		// Replace the lambda node at the callsite with an identifier.
-		return &ast.Ident{Name: name}
+		// If there are captures, return capture marker with lambda name
+		// The tg.run() lowering will generate wrapper and handle ctx passing
+		if len(captures) > 0 {
+			args := make([]ast.Expr, len(captures))
+			for i, cap := range captures {
+				args[i] = &ast.Ident{Name: cap}
+			}
+			// Return: lamName.__captures__(a, b, c)
+			return &ast.CallExpr{
+				Callee: &ast.FieldExpr{
+					X:    &ast.Ident{Name: lamName},
+					Name: ast.Ident{Name: "__captures__"},
+				},
+				Args: args,
+			}
+		}
+
+		// No captures - just return lambda identifier for regular lambda calls
+		return &ast.Ident{Name: lamName}
 
 	case *ast.CallExpr:
 		x.Callee = rewriteExprForAsyncLambda(x.Callee, mod, synth, next)

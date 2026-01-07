@@ -516,24 +516,88 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				tgVal := ls.lowerExpr(fe.X)
 				switch fe.Name.Name {
 				case "run":
-					// tg.run(fn) -> taskgroup_spawn(tg, fn_ptr, NULL)
-					// The argument is a function reference
+					// tg.run(fn) -> taskgroup_spawn(tg, wrapper_fn, ctx)
+					// All spawned functions must have signature fn(void* ctx)
+					// We generate wrapper functions that unpack ctx and call target
 					if len(x.Args) > 0 {
-						// Check if argument is an identifier (function name)
-						var fnVal hir.Value
-						if id, ok := x.Args[0].(*ast.Ident); ok {
-							// It's a function name - emit as FuncRef
-							fnVal = hir.FuncRef{Name: id.Name}
-						} else {
-							// Lower normally (for closures in future)
-							fnVal = ls.lowerExpr(x.Args[0])
+						var wrapperName string
+						var ctxVal hir.Value = hir.ConstNull{}
+						var targetFnName string
+						var numCaptures int
+
+						// Check if this is a capture marker: fn.__captures__(args...)
+						if callExpr, ok := x.Args[0].(*ast.CallExpr); ok {
+							if fieldExpr, ok := callExpr.Callee.(*ast.FieldExpr); ok {
+								if fieldExpr.Name.Name == "__captures__" {
+									// Extract function name from __lam$N.__captures__
+									if fnIdent, ok := fieldExpr.X.(*ast.Ident); ok {
+										targetFnName = fnIdent.Name
+									}
+									numCaptures = len(callExpr.Args)
+
+									// Create context struct with captured values
+									if numCaptures > 0 {
+										ctxPtr := ls.b.FreshTemp("closure_ctx")
+										ctxSize := numCaptures * 8 // 8 bytes per capture
+										ls.b.Emit(&hir.Call{
+											Dst:  ctxPtr,
+											Fn:   "malloc",
+											Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", ctxSize), Type: "i64"}},
+											Type: "ptr",
+										})
+
+										// Store each captured value into context
+										for i, arg := range callExpr.Args {
+											argVal := ls.lowerExpr(arg)
+											offset := ls.b.FreshTemp("cap_ptr")
+											ls.b.Emit(&hir.GetElementPtr{
+												Dst:     offset,
+												Base:    ctxPtr,
+												Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8), Type: "i64"}},
+												Type:    "ptr",
+											})
+											ls.b.Emit(&hir.Store{Dst: offset, Val: argVal})
+										}
+										ctxVal = ctxPtr
+									}
+
+									// The targetFnName is already __tgwrap$N from desugaring
+									// Use it directly as the wrapper name
+									wrapperName = targetFnName
+									// Emit wrapper function declaration (done once per unique wrapper)
+									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
+								}
+							}
 						}
-						// taskgroup_spawn expects (TaskGroup*, fn_ptr, ctx)
-						// Pass NULL for context since we're not capturing closures yet
-						nullCtx := hir.ConstNull{}
+
+						// If not capture marker, handle named function
+						if wrapperName == "" {
+							if id, ok := x.Args[0].(*ast.Ident); ok {
+								targetFnName = id.Name
+								// If it's already a wrapper, use it directly
+								if strings.HasPrefix(targetFnName, "__tgwrap$") {
+									wrapperName = targetFnName
+								} else {
+									// Generate a simple wrapper that ignores ctx
+									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
+									ls.emitTaskGroupWrapper(wrapperName, targetFnName, 0)
+								}
+							} else {
+								// Fallback: lower expression (shouldn't happen often)
+								fnVal := ls.lowerExpr(x.Args[0])
+								ls.b.Emit(&hir.Call{
+									Fn:   "taskgroup_spawn",
+									Args: []hir.Value{tgVal, fnVal, ctxVal},
+									Type: "void",
+								})
+								return hir.ConstInt{Text: "0"}
+							}
+						}
+
+						// Call taskgroup_spawn with wrapper and context
 						ls.b.Emit(&hir.Call{
 							Fn:   "taskgroup_spawn",
-							Args: []hir.Value{tgVal, fnVal, nullCtx},
+							Args: []hir.Value{tgVal, hir.FuncRef{Name: wrapperName}, ctxVal},
 							Type: "void",
 						})
 					}
