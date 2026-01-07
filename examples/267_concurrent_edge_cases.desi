@@ -1,0 +1,161 @@
+# Test Multithreading Edge Cases
+# Tests concurrent access patterns with RwLock, Semaphore, TaskGroup
+import sync
+
+# ============= Tests =============
+
+def test_try_read_unlocked() -> none:
+    print("=== try_read unlocked ===")
+    let rw = sync.RwLock("test")
+    
+    match rw.try_read():
+        Option.Some(guard): print("try_read succeeded:", guard.value)
+        Option.Nothing: print("FAIL: try_read should succeed")
+
+def test_try_write_unlocked() -> none:
+    print("=== try_write unlocked ===")
+    let rw = sync.RwLock(42)
+    
+    match rw.try_write():
+        Option.Some(guard): print("try_write succeeded:", guard.value)
+        Option.Nothing: print("FAIL: try_write should succeed")
+
+def test_try_acquire_when_exhausted() -> none:
+    print("=== try_acquire when exhausted ===")
+    let sem = sync.Semaphore(1)
+    
+    sem.acquire()
+    
+    if sem.try_acquire():
+        print("FAIL: try_acquire should fail when exhausted")
+        sem.release()
+    else:
+        print("try_acquire correctly failed")
+    
+    sem.release()
+    
+    if sem.try_acquire():
+        print("try_acquire succeeded after release")
+        sem.release()
+    else:
+        print("FAIL: try_acquire should succeed after release")
+
+def test_zero_initial_semaphore() -> none:
+    print("=== zero initial semaphore ===")
+    let sem = sync.Semaphore(0)
+    
+    if sem.try_acquire():
+        print("FAIL: should not acquire with 0 permits")
+        sem.release()
+    else:
+        print("try_acquire on 0 permits: false (correct)")
+    
+    sem.release()  # Add a permit
+    
+    if sem.try_acquire():
+        print("After release, try_acquire: true (correct)")
+        sem.release()
+    else:
+        print("FAIL: should acquire after release")
+
+def worker1() -> none:
+    print("worker1")
+
+def worker2() -> none:
+    print("worker2")
+
+def worker3() -> none:
+    print("worker3")
+
+def test_multiple_spawns() -> none:
+    print("=== multiple spawns ===")
+    
+    using tg = sync.TaskGroup():
+        tg.run(worker1)
+        tg.run(worker2)
+        tg.run(worker3)
+        tg.wait()
+    
+    print("All workers completed")
+
+def test_closure_capture_simple() -> none:
+    print("=== closure capture simple ===")
+    let msg = "Hello from closure!"
+    
+    using tg = sync.TaskGroup():
+        tg.run(lambda<none>: print(msg))
+        tg.wait()
+
+def test_multiple_captures() -> none:
+    # Note: Currently only pointer types (strings, objects) work in captures
+    # Primitive types (int, float, bool) require boxing - TODO for later
+    print("=== multiple captures ===")
+    let a = "first"
+    let b = "second"
+    let c = "third"
+    
+    using tg = sync.TaskGroup():
+        tg.run(lambda<none>: print(a, b, c))
+        tg.wait()
+
+def test_atomic_in_tasks() -> none:
+    print("=== atomic counter ===")
+    let counter = sync.Atomic(0)
+    counter.inc()
+    counter.inc()
+    counter.inc()
+    print("Counter after 3 incs:", counter.load())
+
+# ============= Main =============
+
+def main() -> int:
+    print("Testing Multithreading Edge Cases...")
+    print("")
+    
+    test_try_read_unlocked()
+    test_try_write_unlocked()
+    
+    print("")
+    
+    test_try_acquire_when_exhausted()
+    test_zero_initial_semaphore()
+    
+    print("")
+    
+    test_multiple_spawns()
+    test_closure_capture_simple()
+    test_multiple_captures()
+    test_atomic_in_tasks()
+    
+    print("")
+    print("All edge case tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing Multithreading Edge Cases...
+# 
+# === try_read unlocked ===
+# try_read succeeded: test
+# === try_write unlocked ===
+# try_write succeeded: 42
+# 
+# === try_acquire when exhausted ===
+# try_acquire correctly failed
+# try_acquire succeeded after release
+# === zero initial semaphore ===
+# try_acquire on 0 permits: false (correct)
+# After release, try_acquire: true (correct)
+# 
+# === multiple spawns ===
+# worker1
+# worker2
+# worker3
+# All workers completed
+# === closure capture simple ===
+# Hello from closure!
+# === multiple captures ===
+# first second third
+# === atomic counter ===
+# Counter after 3 incs: 3
+# 
+# All edge case tests passed!
