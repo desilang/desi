@@ -40,6 +40,9 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 |------|-------------|
 | `Mutex<T>` | Thread-safe wrapper protecting a value of type T |
 | `MutexGuard<T>` | RAII guard for safe access to mutex-protected value |
+| `RwLock<T>` | Reader-writer lock: multiple readers OR one writer |
+| `ReadGuard<T>` | RAII guard for shared read access |
+| `WriteGuard<T>` | RAII guard for exclusive write access |
 | `Channel<T>` | Bounded message queue for thread communication |
 | `Sender<T>` | Send handle for Channel |
 | `Receiver<T>` | Receive handle for Channel |
@@ -78,6 +81,58 @@ let guard = mutex.lock()   # Acquire lock
 let val = guard.value      # Access the protected value
 # Lock released when guard goes out of scope
 ```
+
+---
+
+## RwLock
+
+### Overview
+
+An `RwLock<T>` (reader-writer lock) allows multiple readers OR one exclusive writer:
+
+```desi
+import sync
+
+let rw = sync.RwLock(42)         # RwLock<int>
+
+# Multiple readers allowed concurrently
+using reader = rw.read():
+    print(reader.value)          # 42
+
+# Only one writer at a time (exclusive)
+using writer = rw.write():
+    print(writer.value)          # Exclusive access
+```
+
+### RwLock Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `read()` | `ReadGuard<T>` | Acquire shared read lock (blocks) |
+| `write()` | `WriteGuard<T>` | Acquire exclusive write lock (blocks) |
+| `try_read()` | `Option<ReadGuard<T>>` | Try to acquire read lock without blocking |
+| `try_write()` | `Option<WriteGuard<T>>` | Try to acquire write lock without blocking |
+
+### ReadGuard and WriteGuard
+
+Guards provide safe access to the protected value:
+
+```desi
+# Read guard - shared access (read-only)
+using rg = rw.read():
+    let val = rg.value   # Read the value
+
+# Write guard - exclusive access (read-write)
+using wg = rw.write():
+    let val = wg.value   # Access exclusively
+```
+
+### Diagnostics
+
+| Code | Severity | Condition | Message |
+|------|----------|-----------|---------|
+| `DSY0004` | Warning | ReadGuard without `using` | "Consider using 'using guard = rw.read():'" |
+| `DSY0005` | Warning | WriteGuard without `using` | "Consider using 'using guard = rw.write():'" |
 
 ---
 
