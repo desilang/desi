@@ -110,6 +110,20 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				taskGroupType := types.TaskGroupOf()
 				c.info.Types[call] = taskGroupType
 				return taskGroupType
+
+			case "RwLock":
+				// sync.RwLock(value) -> RwLock<T> where T is inferred from argument
+				if len(args) != 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.RwLock requires exactly 1 argument"))
+					return nil
+				}
+				if args[0] == nil {
+					c.add(diagAt("DTE0001", fe.Name.Span, "cannot infer type for sync.RwLock argument"))
+					return nil
+				}
+				rwlockType := types.RwLockOf(args[0])
+				c.info.Types[call] = rwlockType
+				return rwlockType
 			}
 		}
 

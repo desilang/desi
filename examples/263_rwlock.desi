@@ -1,0 +1,20 @@
+# Test RwLock - Reader-Writer Lock
+import sync
+
+def main() -> int:
+    print("Testing RwLock...")
+    
+    # Create RwLock protecting an integer
+    let rw = sync.RwLock(42)
+    
+    # Acquire read lock
+    let reader = rw.read()
+    print(reader.value)  # Should print 42
+    
+    print("RwLock test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing RwLock...
+# 42
+# RwLock test passed!

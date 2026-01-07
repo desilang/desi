@@ -38,6 +38,17 @@
     typedef HANDLE DesiPlatformThread;
     typedef DWORD WINAPI (*DesiThreadFunc)(LPVOID);
     
+    /* RwLock: SRWLOCK supports read/write */
+    typedef SRWLOCK DesiPlatformRwLock;
+    #define DESI_RWLOCK_INIT(rw)         InitializeSRWLock(&(rw))
+    #define DESI_RWLOCK_DESTROY(rw)      /* SRWLOCK needs no destruction */
+    #define DESI_RWLOCK_RDLOCK(rw)       AcquireSRWLockShared(&(rw))
+    #define DESI_RWLOCK_WRLOCK(rw)       AcquireSRWLockExclusive(&(rw))
+    #define DESI_RWLOCK_RDUNLOCK(rw)     ReleaseSRWLockShared(&(rw))
+    #define DESI_RWLOCK_WRUNLOCK(rw)     ReleaseSRWLockExclusive(&(rw))
+    #define DESI_RWLOCK_TRYRDLOCK(rw)    TryAcquireSRWLockShared(&(rw))
+    #define DESI_RWLOCK_TRYWRLOCK(rw)    TryAcquireSRWLockExclusive(&(rw))
+    
 #else
     #include <pthread.h>
     
@@ -60,6 +71,17 @@
     /* Thread */
     typedef pthread_t DesiPlatformThread;
     typedef void* (*DesiThreadFunc)(void*);
+    
+    /* RwLock: pthread_rwlock_t */
+    typedef pthread_rwlock_t DesiPlatformRwLock;
+    #define DESI_RWLOCK_INIT(rw)         pthread_rwlock_init(&(rw), NULL)
+    #define DESI_RWLOCK_DESTROY(rw)      pthread_rwlock_destroy(&(rw))
+    #define DESI_RWLOCK_RDLOCK(rw)       pthread_rwlock_rdlock(&(rw))
+    #define DESI_RWLOCK_WRLOCK(rw)       pthread_rwlock_wrlock(&(rw))
+    #define DESI_RWLOCK_RDUNLOCK(rw)     pthread_rwlock_unlock(&(rw))
+    #define DESI_RWLOCK_WRUNLOCK(rw)     pthread_rwlock_unlock(&(rw))
+    #define DESI_RWLOCK_TRYRDLOCK(rw)    (pthread_rwlock_tryrdlock(&(rw)) == 0)
+    #define DESI_RWLOCK_TRYWRLOCK(rw)    (pthread_rwlock_trywrlock(&(rw)) == 0)
     
 #endif
 
