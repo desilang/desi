@@ -92,3 +92,15 @@ func (*Semaphore) String() string { return "Semaphore" }
 func SemaphoreOf() *Semaphore {
 	return &Semaphore{}
 }
+
+// Atomic represents an atomic integer.
+// Lock-free thread-safe integer operations.
+type Atomic struct{}
+
+func (*Atomic) isType()        {}
+func (*Atomic) String() string { return "Atomic" }
+
+// AtomicOf returns the singleton Atomic type
+func AtomicOf() *Atomic {
+	return &Atomic{}
+}
