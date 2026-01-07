@@ -4,45 +4,34 @@ import sync
 def test_load_store() -> none:
     print("=== load/store ===")
     let a = sync.Atomic(42)
-    let v1 = a.load()
-    print(v1)  # 42
+    print(a.load())  # 42
     a.store(100)
-    let v2 = a.load()
-    print(v2)  # 100
+    print(a.load())  # 100
 
 def test_add() -> none:
     print("=== add ===")
     let a = sync.Atomic(10)
-    let result = a.add(5)
-    print(result)     # 15 (new value)
-    let v = a.load()
-    print(v)   # 15
+    print(a.add(5))   # 15 (new value)
+    print(a.load())   # 15
 
 def test_sub() -> none:
     print("=== sub ===")
     let a = sync.Atomic(20)
-    let result = a.sub(7)
-    print(result)     # 13 (new value)
-    let v = a.load()
-    print(v)   # 13
+    print(a.sub(7))   # 13 (new value)
+    print(a.load())   # 13
 
 def test_inc() -> none:
     print("=== inc ===")
     let a = sync.Atomic(0)
-    let v1 = a.inc()
-    print(v1)  # 1
-    let v2 = a.inc()
-    print(v2)  # 2
-    let v3 = a.inc()
-    print(v3)  # 3
+    print(a.inc())  # 1
+    print(a.inc())  # 2
+    print(a.inc())  # 3
 
 def test_dec() -> none:
     print("=== dec ===")
     let a = sync.Atomic(10)
-    let v1 = a.dec()
-    print(v1)  # 9
-    let v2 = a.dec()
-    print(v2)  # 8
+    print(a.dec())  # 9
+    print(a.dec())  # 8
 
 def test_compare_exchange_success() -> none:
     print("=== compare_exchange success ===")
@@ -52,8 +41,7 @@ def test_compare_exchange_success() -> none:
         print("CAS succeeded")
     else:
         print("FAIL: CAS should have succeeded")
-    let v = a.load()
-    print(v)  # 99
+    print(a.load())  # 99
 
 def test_compare_exchange_failure() -> none:
     print("=== compare_exchange failure ===")
@@ -63,38 +51,28 @@ def test_compare_exchange_failure() -> none:
         print("FAIL: CAS should have failed")
     else:
         print("CAS failed (correct)")
-    let v = a.load()
-    print(v)  # 50 (unchanged)
+    print(a.load())  # 50 (unchanged)
 
 def test_exchange() -> none:
     print("=== exchange ===")
     let a = sync.Atomic(42)
-    let old = a.exchange(100)
-    print(old)       # 42 (old value)
-    let v = a.load()
-    print(v)  # 100 (new value)
+    print(a.exchange(100))  # 42 (old value)
+    print(a.load())         # 100 (new value)
 
 def test_edge_zero() -> none:
     print("=== zero edge case ===")
     let a = sync.Atomic(0)
-    let v1 = a.load()
-    print(v1)   # 0
-    let v2 = a.inc()
-    print(v2)    # 1
-    let v3 = a.dec()
-    print(v3)    # 0
-    let v4 = a.dec()
-    print(v4)    # -1 (negative)
+    print(a.load())   # 0
+    print(a.inc())    # 1
+    print(a.dec())    # 0
+    print(a.dec())    # -1 (negative)
 
 def test_edge_negative() -> none:
     print("=== negative values ===")
     let a = sync.Atomic(-10)
-    let v1 = a.load()
-    print(v1)       # -10
-    let v2 = a.add(20)
-    print(v2)      # 10
-    let v3 = a.sub(15)
-    print(v3)      # -5
+    print(a.load())       # -10
+    print(a.add(20))      # 10
+    print(a.sub(15))      # -5
 
 def main() -> int:
     print("Testing Atomic with all operations...")
