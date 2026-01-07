@@ -218,6 +218,9 @@ type lowerState struct {
 	inDunderNew    bool      // true when lowering inside a __new__ method body
 	dunderNewClass string    // class name for the current __new__
 	dunderNewSelf  hir.Value // the self pointer to initialize
+
+	// TaskGroup wrapper functions: wrapperName -> emitted (to avoid duplicates)
+	emittedWrappers map[string]bool
 }
 
 type scope struct {
@@ -263,6 +266,27 @@ func (ls *lowerState) pop() *scope {
 	return last
 }
 func (ls *lowerState) cur() *scope { return ls.scopes[len(ls.scopes)-1] }
+
+// emitTaskGroupWrapper tracks that a wrapper function is needed for the LLVM backend.
+// The actual wrapper generation happens during LLVM codegen.
+// For now, just emit a "call" placeholder - the wrapper will be a stub.
+func (ls *lowerState) emitTaskGroupWrapper(wrapperName, targetFnName string, numCaptures int) {
+	// Initialize map if needed
+	if ls.emittedWrappers == nil {
+		ls.emittedWrappers = make(map[string]bool)
+	}
+
+	// Skip if already tracked
+	if ls.emittedWrappers[wrapperName] {
+		return
+	}
+	ls.emittedWrappers[wrapperName] = true
+
+	// TODO: For now, we just mark this wrapper as needed.
+	// The actual wrapper function is generated in the LLVM backend
+	// or during a separate pass that creates wrapper functions.
+	// See WrapperInfo struct below for details.
+}
 
 // ---- lowering ----
 // NOTE: lowerBlock and lowerStmt have been moved to lower_stmt.go
