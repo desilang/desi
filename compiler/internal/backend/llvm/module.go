@@ -51,6 +51,15 @@ type Module struct {
 	currentMoves       map[string]bool      // moved variables in current function
 	staticFieldGlobals map[string]GlobalDef // name -> definition
 	nameVersions       map[string]int       // track name usage for unique SSA names
+
+	// TaskGroup wrapper functions: wrapperName -> WrapperInfo
+	tgWrappers map[string]WrapperInfo
+}
+
+// WrapperInfo tracks info needed to emit a TaskGroup wrapper function
+type WrapperInfo struct {
+	TargetFn    string // function to call (__lam$N or named function)
+	NumCaptures int    // number of captures to unpack from ctx
 }
 
 type GlobalDef struct {
@@ -73,6 +82,7 @@ func NewModule(name string) *Module {
 		currentMoves:       make(map[string]bool),
 		staticFieldGlobals: make(map[string]GlobalDef),
 		nameVersions:       make(map[string]int),
+		tgWrappers:         make(map[string]WrapperInfo),
 	}
 }
 
@@ -165,6 +175,7 @@ func (m *Module) writeGlobals() {
 
 func (m *Module) IR() string {
 	m.writeGlobals()
+	m.emitTGWrappers() // Emit TaskGroup wrapper functions
 	var out bytes.Buffer
 	// Use ABI layer for target information
 	abiInfo := abi.Current()
@@ -175,6 +186,75 @@ func (m *Module) IR() string {
 	out.WriteString("\n")
 	out.Write(m.funcs.Bytes())
 	return out.String()
+}
+
+// RegisterTGWrapper registers a TaskGroup wrapper function to be emitted
+func (m *Module) RegisterTGWrapper(wrapperName, targetFn string, numCaptures int) {
+	if m.tgWrappers[wrapperName].TargetFn != "" {
+		return // Already registered
+	}
+	m.tgWrappers[wrapperName] = WrapperInfo{
+		TargetFn:    targetFn,
+		NumCaptures: numCaptures,
+	}
+}
+
+// emitTGWrappers emits all registered TaskGroup wrapper functions as LLVM IR.
+// Reads from the module's local registry.
+func (m *Module) emitTGWrappers() {
+	for wrapperName, info := range m.tgWrappers {
+		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures)
+	}
+}
+
+// EmitGlobalTGWrappers emits wrappers from the global registry.
+// Called by emit_ir_cmd after all lowering is complete.
+func (m *Module) EmitGlobalTGWrappers(wrappers map[string]struct {
+	TargetFn    string
+	NumCaptures int
+}) {
+	for wrapperName, info := range wrappers {
+		// Skip if already emitted from local registry
+		if m.tgWrappers[wrapperName].TargetFn != "" {
+			continue
+		}
+		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures)
+	}
+}
+
+// emitSingleWrapper emits one wrapper function
+func (m *Module) emitSingleWrapper(wrapperName, targetFn string, numCaptures int) {
+	// Generate wrapper: define void @wrapperName(ptr %__ctx__) { ... }
+	var b bytes.Buffer
+	wprintf(&b, "define void @%s(ptr %%__ctx__) {\n", wrapperName)
+	wprintf(&b, "entry:\n")
+
+	if numCaptures == 0 {
+		// No captures: just call target function ignoring ctx
+		wprintf(&b, "  call void @%s()\n", targetFn)
+	} else {
+		// Unpack captures from ctx and call target
+		for i := 0; i < numCaptures; i++ {
+			// Get pointer to capture[i]: getelementptr i8, ptr %__ctx__, i64 (i*8)
+			wprintf(&b, "  %%cap%d_ptr = getelementptr i8, ptr %%__ctx__, i64 %d\n", i, i*8)
+			// Load the value
+			wprintf(&b, "  %%cap%d = load ptr, ptr %%cap%d_ptr\n", i, i)
+		}
+		// Call target with captures
+		wprintf(&b, "  call void @%s(", targetFn)
+		for i := 0; i < numCaptures; i++ {
+			if i > 0 {
+				wprintf(&b, ", ")
+			}
+			wprintf(&b, "ptr %%cap%d", i)
+		}
+		wprintf(&b, ")\n")
+	}
+
+	wprintf(&b, "  ret void\n")
+	wprintf(&b, "}\n")
+
+	m.funcs.Write(b.Bytes())
 }
 
 func escapeForCString(s string) string {

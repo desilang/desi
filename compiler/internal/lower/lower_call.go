@@ -561,9 +561,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 										ctxVal = ctxPtr
 									}
 
-									// The targetFnName is already __tgwrap$N from desugaring
-									// Use it directly as the wrapper name
-									wrapperName = targetFnName
+									// The targetFnName is __lam$N from desugaring
+									// Create wrapper name with prefix to avoid collision
+									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
 									// Emit wrapper function declaration (done once per unique wrapper)
 									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
 								}
