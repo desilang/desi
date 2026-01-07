@@ -223,6 +223,9 @@ func (m *Module) operand(v hir.Value) (string, string) {
 	case hir.ConstNull:
 		// Null pointer constant
 		return "ptr", "null"
+	case hir.FuncRef:
+		// Function pointer reference
+		return "ptr", "@" + t.Name
 	case hir.Temp:
 		// Infer type from source
 		name := t.Name

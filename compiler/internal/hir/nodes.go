@@ -106,6 +106,12 @@ type ConstNull struct{}
 func (ConstNull) isValue()       {}
 func (ConstNull) String() string { return "null" }
 
+// FuncRef represents a reference to a function (for function pointers)
+type FuncRef struct{ Name string }
+
+func (FuncRef) isValue()         {}
+func (f FuncRef) String() string { return "@" + f.Name }
+
 type Undef struct{}
 
 func (Undef) isValue()       {}

@@ -1216,9 +1216,9 @@ func (c *checker) resolveTaskGroupMethod(x *ast.FieldExpr) types.T {
 	var methodType types.T
 
 	switch name {
-	case "spawn":
-		// spawn(fn: () -> none) -> none
-		// For now, accept any callable - more precise checking can be added later
+	case "run":
+		// run(fn: () -> none) -> none
+		// Spawns a function in the task group
 		methodType = types.FuncOf([]types.T{types.Any}, types.None, false)
 	case "wait":
 		// wait() -> none (blocks until all tasks complete)

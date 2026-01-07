@@ -7,8 +7,19 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* Forward declare scheduler_spawn - will be implemented in scheduler.c */
+/* Forward declare scheduler functions */
 extern void scheduler_spawn(void (*fn)(void* ctx), void* ctx, void* unused);
+extern void scheduler_init(int n_workers);
+extern int scheduler_num_workers(void);
+
+/* Ensure scheduler is initialized (lazy init) */
+static void ensure_scheduler_init(void) {
+    static int initialized = 0;
+    if (!initialized) {
+        scheduler_init(4);  /* Default 4 workers */
+        initialized = 1;
+    }
+}
 
 #define INITIAL_CAPACITY 8
 
@@ -16,6 +27,8 @@ extern void scheduler_spawn(void (*fn)(void* ctx), void* ctx, void* unused);
  * Create a new task group
  */
 TaskGroup* taskgroup_new(void) {
+    /* Ensure scheduler is running */
+    ensure_scheduler_init();
     TaskGroup* g = malloc(sizeof(TaskGroup));
     if (!g) return NULL;
     
