@@ -332,8 +332,8 @@ def main() -> int:
 ### Function Requirements for `run()`
 
 Functions passed to `tg.run()` must:
-- Take **no arguments** (or future: `ctx: any` for closures)
 - Return **`none`**
+- Can be named functions or lambdas
 
 ```desi
 # Valid worker function
@@ -345,6 +345,38 @@ using tg = sync.TaskGroup():
     tg.run(my_worker)
     tg.wait()
 ```
+
+### Closure Capture in `run()`
+
+Lambdas can capture outer variables using **value-copy semantics**:
+
+```desi
+let msg = "Hello from closure!"
+let count = 42
+
+using tg = sync.TaskGroup():
+    # Lambda captures `msg` and `count` by value
+    tg.run(lambda: print(msg, count))
+    tg.wait()
+```
+
+**Key behaviors:**
+- Captured values are **copied** when `run()` is called
+- Changes to the original variable don't affect the captured copy
+- Safe for concurrent access (no data races)
+
+```desi
+# Multiple captures example
+let items = ["a", "b", "c"]
+using tg = sync.TaskGroup():
+    for i in range(len(items)):
+        let item = items[i]
+        tg.run(lambda: print("Processing:", item))
+    tg.wait()
+```
+
+> [!IMPORTANT]
+> All captured values are copied at `run()` time. For shared mutable state, use explicit synchronization primitives like `Mutex` or `Atomic`.
 
 ### Diagnostics
 

@@ -58,8 +58,8 @@ using tg = sync.TaskGroup():
 ```
 
 **Function requirements:**
-- Must take **no arguments**
 - Must return **`none`**
+- Can be named functions or lambdas (with closures!)
 
 ### wait()
 
@@ -90,6 +90,36 @@ Check if the group has been cancelled:
 using tg = sync.TaskGroup():
     if tg.is_cancelled():
         print("Group was cancelled")
+```
+
+## Closures in TaskGroup
+
+Lambdas can capture outer variables:
+
+```desi
+def main() -> int:
+    let msg = "Hello from closure!"
+    
+    using tg = sync.TaskGroup():
+        tg.run(lambda: print(msg))  # Captures `msg`
+        tg.wait()
+    
+    return 0
+```
+
+**Key points:**
+- Captured values are **copied** when `run()` is called
+- Safe for concurrent access (no data races from captures)
+- Use `Mutex` or `Atomic` for shared mutable state
+
+```desi
+# Multiple captures and loop example
+let items = ["a", "b", "c"]
+using tg = sync.TaskGroup():
+    for i in range(len(items)):
+        let item = items[i]  # Copy to local
+        tg.run(lambda: print(item))
+    tg.wait()
 ```
 
 ## Complete Example
@@ -158,5 +188,5 @@ using tg = TaskGroup():
 
 ## Current Limitations
 
-- Worker functions cannot capture outer scope variables (closures coming soon)
-- Functions must take no arguments
+- Closures use value-copy (no reference capture yet)
+- No Send trait checking for captured values
