@@ -4,23 +4,24 @@ def main() -> int:
     # Create channels
     let ch1 = channel_new(10)
     let ch2 = channel_new(10)
-    let sender1 = ch1.sender()
-    let sender2 = ch2.sender()
-    let rx1 = ch1.receiver()
-    let rx2 = ch2.receiver()
     
-    # Put values in both channels
-    sender1.send(111)
-    sender2.send(222)
-    
-    # Select should only run FIRST matching case (ch1)
-    select:
-        case msg = rx1.try_recv():
-            print("Got from ch1")  # Should print this
-        case rx2.try_recv():
-            print("Got from ch2")  # Should NOT print this
-        default:
-            print("Nothing ready")  # Should NOT print this
+    # Use using guards for proper cleanup
+    using tx1 = ch1.sender():
+        using tx2 = ch2.sender():
+            using rx1 = ch1.receiver():
+                using rx2 = ch2.receiver():
+                    # Put values in both channels
+                    tx1.send(111)
+                    tx2.send(222)
+                    
+                    # Select should only run FIRST matching case (ch1)
+                    select:
+                        case msg = rx1.try_recv():
+                            print("Got from ch1")  # Should print this
+                        case rx2.try_recv():
+                            print("Got from ch2")  # Should NOT print this
+                        default:
+                            print("Nothing ready")  # Should NOT print this
     
     print("Select test done!")
     return 0

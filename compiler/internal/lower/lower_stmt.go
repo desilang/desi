@@ -1595,6 +1595,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			} else if s.Init != nil && isFileType(ls.info.Types[s.Init]) {
 				// File type: register for file_close at scope end
 				ls.cur().files[ident] = true
+			} else if s.Init != nil && isSenderType(ls.info.Types[s.Init]) {
+				// Sender type: register for sender_drop at scope end
+				ls.cur().senders[ident] = true
+			} else if s.Init != nil && isReceiverType(ls.info.Types[s.Init]) {
+				// Receiver type: register for receiver_drop at scope end
+				ls.cur().receivers[ident] = true
 			} else {
 				// Fallback: Mark this name as an arena handle in the current scope.
 				ls.cur().arenas[ident] = true

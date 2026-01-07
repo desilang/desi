@@ -239,6 +239,8 @@ type scope struct {
 	mutexGuards map[string]bool    // RAII: mutex guards that need mutex_unlock at scope end
 	readGuards  map[string]bool    // RAII: read guards that need read_guard_unlock at scope end
 	writeGuards map[string]bool    // RAII: write guards that need write_guard_unlock at scope end
+	senders     map[string]bool    // RAII: channel senders that need sender_drop at scope end
+	receivers   map[string]bool    // RAII: channel receivers that need receiver_drop at scope end
 }
 
 func (ls *lowerState) push() {
@@ -258,6 +260,8 @@ func (ls *lowerState) push() {
 		mutexGuards: map[string]bool{},
 		readGuards:  map[string]bool{},
 		writeGuards: map[string]bool{},
+		senders:     map[string]bool{},
+		receivers:   map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -575,6 +579,24 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if varName, ok := v.(hir.Var); ok && sc.writeGuards[varName.Name] {
 			ls.b.Emit(&hir.Call{
 				Fn:   "write_guard_unlock",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// Sender? Call sender_drop to cleanup channel sender
+		if varName, ok := v.(hir.Var); ok && sc.senders[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "sender_drop",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// Receiver? Call receiver_drop to cleanup channel receiver
+		if varName, ok := v.(hir.Var); ok && sc.receivers[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "receiver_drop",
 				Args: []hir.Value{v},
 				Type: "void",
 			})
