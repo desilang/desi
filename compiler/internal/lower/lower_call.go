@@ -160,6 +160,19 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					// Create rwlock with pointer to boxed value
 					ls.b.Emit(&hir.Call{Dst: res, Fn: "rwlock_new", Args: []hir.Value{boxPtr}, Type: "ptr"})
 					return res
+
+				case "Semaphore":
+					// sync.Semaphore(count) -> semaphore_new(count)
+					if len(x.Args) != 1 {
+						panic("sync.Semaphore requires exactly 1 argument")
+					}
+					argVal := ls.lowerExpr(x.Args[0])
+					res := ls.b.FreshTemp("semaphore")
+					// Convert i32 to i64 for count
+					count64 := ls.b.FreshTemp("count64")
+					ls.b.Emit(&hir.Cast{Src: argVal, Dst: count64, Type: "i64"})
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "semaphore_new", Args: []hir.Value{count64}, Type: "ptr"})
+					return res
 				}
 			}
 
@@ -292,6 +305,26 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					optResult := ls.b.FreshTemp("opt_result")
 					ls.b.Emit(&hir.Call{Dst: optResult, Fn: "Option.Some", Args: []hir.Value{rawGuard}, Type: "ptr"})
 					return optResult
+				}
+			}
+
+			// Semaphore methods: acquire, release, try_acquire
+			if _, ok := feXType.(*types.Semaphore); ok {
+				semVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "acquire":
+					// sem.acquire() -> void (blocks)
+					ls.b.Emit(&hir.Call{Fn: "semaphore_acquire", Args: []hir.Value{semVal}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				case "release":
+					// sem.release() -> void
+					ls.b.Emit(&hir.Call{Fn: "semaphore_release", Args: []hir.Value{semVal}, Type: "void"})
+					return hir.ConstInt{Text: "0"}
+				case "try_acquire":
+					// sem.try_acquire() -> bool
+					dst := ls.b.FreshTemp("acquired")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "semaphore_try_acquire", Args: []hir.Value{semVal}, Type: "i1"})
+					return dst
 				}
 			}
 

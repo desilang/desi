@@ -1,0 +1,44 @@
+# Test Semaphore - Counting semaphore
+import sync
+
+def main() -> int:
+    print("Testing Semaphore...")
+    
+    # Create semaphore with 2 permits
+    let sem = sync.Semaphore(2)
+    
+    # Acquire first permit
+    sem.acquire()
+    print("Acquired permit 1")
+    
+    # Acquire second permit
+    sem.acquire()
+    print("Acquired permit 2")
+    
+    # Try to acquire third (should succeed after release)
+    if sem.try_acquire():
+        print("FAIL: should not have acquired (no permits)")
+    else:
+        print("try_acquire returned false (correct)")
+    
+    # Release one permit
+    sem.release()
+    print("Released permit")
+    
+    # Now try_acquire should succeed
+    if sem.try_acquire():
+        print("try_acquire returned true (correct)")
+    else:
+        print("FAIL: should have acquired")
+    
+    print("Semaphore test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing Semaphore...
+# Acquired permit 1
+# Acquired permit 2
+# try_acquire returned false (correct)
+# Released permit
+# try_acquire returned true (correct)
+# Semaphore test passed!

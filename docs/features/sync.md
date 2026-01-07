@@ -43,6 +43,7 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 | `RwLock<T>` | Reader-writer lock: multiple readers OR one writer |
 | `ReadGuard<T>` | RAII guard for shared read access |
 | `WriteGuard<T>` | RAII guard for exclusive write access |
+| `Semaphore` | Counting semaphore for limiting concurrent access |
 | `Channel<T>` | Bounded message queue for thread communication |
 | `Sender<T>` | Send handle for Channel |
 | `Receiver<T>` | Receive handle for Channel |
@@ -133,6 +134,49 @@ using wg = rw.write():
 |------|----------|-----------|---------|
 | `DSY0004` | Warning | ReadGuard without `using` | "Consider using 'using guard = rw.read():'" |
 | `DSY0005` | Warning | WriteGuard without `using` | "Consider using 'using guard = rw.write():'" |
+
+---
+
+## Semaphore
+
+### Overview
+
+A `Semaphore` is a counting semaphore that limits concurrent access:
+
+```desi
+import sync
+
+let sem = sync.Semaphore(3)  # Allow 3 concurrent accesses
+
+sem.acquire()    # Get a permit (blocks if none available)
+# ... do work ...
+sem.release()    # Return the permit
+```
+
+### Semaphore Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `acquire()` | `none` | Acquire a permit (blocks if none available) |
+| `release()` | `none` | Release a permit (wakes one waiting thread) |
+| `try_acquire()` | `bool` | Try to acquire without blocking (returns true if acquired) |
+
+### Example: Rate Limiting
+
+```desi
+import sync
+
+# Allow max 2 concurrent operations
+let sem = sync.Semaphore(2)
+
+sem.acquire()
+print("Worker 1 started")
+sem.release()
+
+sem.acquire()
+print("Worker 2 started")
+sem.release()
+```
 
 ---
 

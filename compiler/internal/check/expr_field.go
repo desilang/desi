@@ -411,6 +411,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveWriteGuardMethod(x, wg)
 	}
 
+	// Handle Semaphore methods: acquire, release, try_acquire
+	if _, ok := t.(*types.Semaphore); ok {
+		return c.resolveSemaphoreMethod(x)
+	}
+
 	// Handle Option methods
 	if types.IsOption(t) {
 		return c.checkOptionMethod(x, t)
@@ -1318,6 +1323,30 @@ func (c *checker) resolveWriteGuardMethod(x *ast.FieldExpr, wg *types.WriteGuard
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on WriteGuard"))
 		return nil
 	}
+}
+
+// resolveSemaphoreMethod resolves methods on Semaphore: acquire, release, try_acquire
+func (c *checker) resolveSemaphoreMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "acquire":
+		// acquire() -> none (blocks until permit available)
+		methodType = types.FuncOf(nil, types.None, false)
+	case "release":
+		// release() -> none (releases one permit)
+		methodType = types.FuncOf(nil, types.None, false)
+	case "try_acquire":
+		// try_acquire() -> bool (returns true if acquired)
+		methodType = types.FuncOf(nil, types.Bool, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Semaphore"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
 }
 
 // resolveRcMethod resolves methods on Rc[T]: get, clone

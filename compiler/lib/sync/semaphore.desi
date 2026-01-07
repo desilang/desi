@@ -1,0 +1,21 @@
+# Semaphore - Counting semaphore
+# Allows up to N concurrent acquires
+
+class Semaphore:
+    """Counting semaphore for controlling concurrent access."""
+    
+    pub def __new__(count: int) -> Semaphore:
+        """Create a new semaphore with initial permit count."""
+        pass  # Implemented in C runtime
+    
+    pub def acquire(self) -> none:
+        """Acquire a permit (blocks if none available)."""
+        pass  # Calls semaphore_acquire
+    
+    pub def release(self) -> none:
+        """Release a permit (wakes one waiting thread)."""
+        pass  # Calls semaphore_release
+    
+    pub def try_acquire(self) -> bool:
+        """Try to acquire without blocking. Returns true if acquired."""
+        pass  # Calls semaphore_try_acquire
