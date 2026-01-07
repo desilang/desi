@@ -122,6 +122,35 @@ match rx.recv():            # Receive value
 | `recv()` | `Option<T>` | Receive value (blocks if empty) |
 | `try_recv()` | `Option<T>` | Try to receive without blocking |
 
+### RAII Best Practices for Channels
+
+While Sender and Receiver can be used without `using`, it is **recommended** for proper cleanup:
+
+```desi
+import sync
+
+def main() -> int:
+    let ch = sync.Channel(10)
+    
+    # ✅ RECOMMENDED: using guard for sender/receiver
+    using tx = ch.sender():
+        tx.send(42)
+    # tx automatically dropped here
+    
+    ch.close()
+    return 0
+```
+
+> [!TIP]
+> Using `using tx = ch.sender():` ensures the sender handle is properly dropped, which updates reference counts.
+
+### Diagnostics
+
+| Code | Severity | Condition | Message |
+|------|----------|-----------|---------|
+| `DSY0002` | Warning | Sender without `using` | "Consider using 'using tx = ch.sender():'" |
+| `DSY0003` | Warning | Receiver without `using` | "Consider using 'using rx = ch.receiver():'" |
+
 ---
 
 ## TaskGroup
@@ -133,18 +162,52 @@ A `TaskGroup` provides structured concurrency for managing spawned tasks:
 ```desi
 import sync
 
-let tg = sync.TaskGroup()
-# tg.spawn() coming soon - for spawning tasks
-tg.wait()        # Wait for all tasks to complete
+def worker() -> none:
+    print("Working...")
+
+def main() -> int:
+    using tg = sync.TaskGroup():    # REQUIRED: using guard (DSY0001 error if not)
+        tg.run(worker)              # Spawn worker concurrently
+        tg.run(worker)              # Spawn another
+        tg.wait()                   # Wait for all tasks to complete
+    return 0
 ```
+
+> [!IMPORTANT]
+> **TaskGroup MUST be used with `using` guard.** Creating a TaskGroup without `using` is a compile error (DSY0001).
+> This ensures proper RAII cleanup and prevents resource leaks.
 
 ### TaskGroup Methods
 
 | Method | Return Type | Description |
 |--------|-------------|-------------|
+| `run(fn)` | `none` | Spawn a function in the task group |
 | `wait()` | `none` | Wait for all tasks to complete |
 | `cancel()` | `none` | Cancel all tasks in the group |
 | `is_cancelled()` | `bool` | Check if group is cancelled |
+
+### Function Requirements for `run()`
+
+Functions passed to `tg.run()` must:
+- Take **no arguments** (or future: `ctx: any` for closures)
+- Return **`none`**
+
+```desi
+# Valid worker function
+def my_worker() -> none:
+    print("I'm running concurrently!")
+
+# Usage:
+using tg = sync.TaskGroup():
+    tg.run(my_worker)
+    tg.wait()
+```
+
+### Diagnostics
+
+| Code | Severity | Condition | Message |
+|------|----------|-----------|---------|
+| `DSY0001` | **Error** | TaskGroup without `using` | "TaskGroup must be used with 'using' guard" |
 
 ---
 
