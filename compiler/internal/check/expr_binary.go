@@ -581,6 +581,18 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
+		// x in dict[K,V] -> bool (key K matches x)
+		if lt != nil && rt != nil {
+			if dictT, ok := rt.(*types.Dict); ok {
+				if types.Assignable(dictT.Key, lt) {
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+				c.add(diagAt("DTE0004", x.Span, "key type '"+lt.String()+"' doesn't match dict key type '"+dictT.Key.String()+"'"))
+				return nil
+			}
+		}
+
 		// x in tuple (homogeneous tuple only)
 		if lt != nil && rt != nil {
 			if tupT, ok := rt.(*types.Tuple); ok {
