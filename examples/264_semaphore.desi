@@ -1,44 +1,122 @@
-# Test Semaphore - Counting semaphore
+# Test Semaphore - Comprehensive edge cases
 import sync
 
-def main() -> int:
-    print("Testing Semaphore...")
-    
-    # Create semaphore with 2 permits
+def test_basic_acquire_release() -> none:
+    print("=== basic acquire/release ===")
     let sem = sync.Semaphore(2)
     
-    # Acquire first permit
     sem.acquire()
-    print("Acquired permit 1")
+    print("Acquired 1")
     
-    # Acquire second permit
     sem.acquire()
-    print("Acquired permit 2")
+    print("Acquired 2")
     
-    # Try to acquire third (should succeed after release)
+    sem.release()
+    print("Released 1")
+    
+    sem.release()
+    print("Released 2")
+
+def test_try_acquire_success() -> none:
+    print("=== try_acquire success ===")
+    let sem = sync.Semaphore(1)
+    
     if sem.try_acquire():
-        print("FAIL: should not have acquired (no permits)")
+        print("try_acquire: true (correct)")
     else:
-        print("try_acquire returned false (correct)")
+        print("FAIL: should have acquired")
+
+def test_try_acquire_failure() -> none:
+    print("=== try_acquire failure ===")
+    let sem = sync.Semaphore(1)
+    
+    # Acquire the only permit
+    sem.acquire()
+    
+    # Now try_acquire should fail
+    if sem.try_acquire():
+        print("FAIL: should not have acquired")
+    else:
+        print("try_acquire: false (correct)")
+    
+    # Release and try again
+    sem.release()
+    if sem.try_acquire():
+        print("After release, try_acquire: true (correct)")
+    else:
+        print("FAIL: should have acquired after release")
+
+def test_zero_initial() -> none:
+    print("=== zero initial count ===")
+    let sem = sync.Semaphore(0)
+    
+    # try_acquire should fail immediately
+    if sem.try_acquire():
+        print("FAIL: should not acquire with 0 permits")
+    else:
+        print("try_acquire on 0 permits: false (correct)")
     
     # Release one permit
     sem.release()
-    print("Released permit")
     
     # Now try_acquire should succeed
     if sem.try_acquire():
-        print("try_acquire returned true (correct)")
+        print("After release, try_acquire: true (correct)")
     else:
-        print("FAIL: should have acquired")
+        print("FAIL: should have acquired after release")
+
+def test_high_count() -> none:
+    print("=== high initial count ===")
+    let sem = sync.Semaphore(100)
     
-    print("Semaphore test passed!")
+    # Acquire multiple permits
+    sem.acquire()
+    sem.acquire()
+    sem.acquire()
+    print("Acquired 3 permits from 100")
+    
+    # try_acquire should still succeed
+    if sem.try_acquire():
+        print("try_acquire after 3: true (correct)")
+    else:
+        print("FAIL: should have 97 remaining")
+    
+    # Release all
+    sem.release()
+    sem.release()
+    sem.release()
+    sem.release()
+    print("Released all")
+
+def main() -> int:
+    print("Testing Semaphore with edge cases...")
+    
+    test_basic_acquire_release()
+    test_try_acquire_success()
+    test_try_acquire_failure()
+    test_zero_initial()
+    test_high_count()
+    
+    print("All Semaphore tests passed!")
     return 0
 
 # EXPECTED_OUTPUT:
-# Testing Semaphore...
-# Acquired permit 1
-# Acquired permit 2
-# try_acquire returned false (correct)
-# Released permit
-# try_acquire returned true (correct)
-# Semaphore test passed!
+# Testing Semaphore with edge cases...
+# === basic acquire/release ===
+# Acquired 1
+# Acquired 2
+# Released 1
+# Released 2
+# === try_acquire success ===
+# try_acquire: true (correct)
+# === try_acquire failure ===
+# try_acquire: false (correct)
+# After release, try_acquire: true (correct)
+# === zero initial count ===
+# try_acquire on 0 permits: false (correct)
+# After release, try_acquire: true (correct)
+# === high initial count ===
+# Acquired 3 permits from 100
+# try_acquire after 3: true (correct)
+# Released all
+# All Semaphore tests passed!
