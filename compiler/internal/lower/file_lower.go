@@ -113,3 +113,15 @@ func isMutexGuardType(t types.T) bool {
 	_, ok := t.(*types.MutexGuard)
 	return ok
 }
+
+// isReadGuardType checks if a type is ReadGuard[T]
+func isReadGuardType(t types.T) bool {
+	_, ok := t.(*types.ReadGuard)
+	return ok
+}
+
+// isWriteGuardType checks if a type is WriteGuard[T]
+func isWriteGuardType(t types.T) bool {
+	_, ok := t.(*types.WriteGuard)
+	return ok
+}

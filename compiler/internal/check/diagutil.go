@@ -1,6 +1,13 @@
 package check
 
-import "github.com/desilang/desi/compiler/internal/diag"
+import (
+	"slices"
+
+	"github.com/desilang/desi/compiler/internal/diag"
+)
+
+// Sync RAII warning codes (DSY0002-0005)
+var syncWarningCodes = []string{"DSY0002", "DSY0003", "DSY0004", "DSY0005"}
 
 // diagAt constructs a minimal Diagnostic with the given ID and primary span.
 // We set the domain to "type" so it renders in that group when mapped by the CLI.
@@ -18,8 +25,8 @@ func diagAt(codeID string, span diag.Span, msg string) diag.Diagnostic {
 		case "DME", "DMW":
 			domain = "module"
 		}
-		// DSY0002 and DSY0003 are warnings for sender/receiver
-		if len(codeID) >= 7 && (codeID == "DSY0002" || codeID == "DSY0003") {
+		// DSY0002-0005 are warnings for sync type RAII recommendations
+		if slices.Contains(syncWarningCodes, codeID) {
 			domain = "warn"
 		}
 	}

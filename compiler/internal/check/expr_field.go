@@ -1261,9 +1261,19 @@ func (c *checker) resolveRwLockMethod(x *ast.FieldExpr, rw *types.RwLock) types.
 	switch name {
 	case "read":
 		// read() -> ReadGuard<T>
+		// DSY0004: Warn if not using 'using' guard
+		if !c.inUsingInit {
+			c.add(diagAt("DSY0004", x.Name.Span,
+				"ReadGuard should use RAII - consider 'using guard = rw.read():'"))
+		}
 		methodType = types.FuncOf(nil, types.ReadGuardOf(rw.Inner), false)
 	case "write":
 		// write() -> WriteGuard<T>
+		// DSY0005: Warn if not using 'using' guard
+		if !c.inUsingInit {
+			c.add(diagAt("DSY0005", x.Name.Span,
+				"WriteGuard should use RAII - consider 'using guard = rw.write():'"))
+		}
 		methodType = types.FuncOf(nil, types.WriteGuardOf(rw.Inner), false)
 	case "try_read":
 		// try_read() -> Option<ReadGuard<T>>
