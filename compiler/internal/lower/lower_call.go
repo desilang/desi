@@ -801,7 +801,8 @@ handlePrint:
 			return res
 		}
 
-		if len(x.Args) == 1 {
+		// Skip print and str - they have their own arg handling
+		if len(x.Args) == 1 && calleeName != "print" && calleeName != "str" {
 			argType := ls.info.Types[x.Args[0]]
 			argVal := ls.lowerExpr(x.Args[0])
 

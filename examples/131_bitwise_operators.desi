@@ -55,27 +55,13 @@ def main():
 #
 # --- Custom Class ---
 # calling __and__
-# calling __and__
-# calling __and__
-# calling __and__
 # x & y: 8
-# calling __or__
-# calling __or__
-# calling __or__
 # calling __or__
 # x | y: 14
 # calling __xor__
-# calling __xor__
-# calling __xor__
-# calling __xor__
 # x ^ y: 6
-# calling __lshift__
-# calling __lshift__
-# calling __lshift__
 # calling __lshift__
 # x << z: 24
 # calling __rshift__
-# calling __rshift__
-# calling __rshift__
-# calling __rshift__
 # x >> z: 6
+
