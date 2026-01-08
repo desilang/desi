@@ -267,25 +267,22 @@ func (ls *lowerState) pop() *scope {
 }
 func (ls *lowerState) cur() *scope { return ls.scopes[len(ls.scopes)-1] }
 
-// emitTaskGroupWrapper tracks that a wrapper function is needed for the LLVM backend.
-// The actual wrapper generation happens during LLVM codegen.
-// For now, just emit a "call" placeholder - the wrapper will be a stub.
+// emitTaskGroupWrapper registers a wrapper function to be emitted.
+// Uses global registry so LLVM backend can emit the wrappers.
 func (ls *lowerState) emitTaskGroupWrapper(wrapperName, targetFnName string, numCaptures int) {
-	// Initialize map if needed
+	// Initialize map if needed (for local dedup)
 	if ls.emittedWrappers == nil {
 		ls.emittedWrappers = make(map[string]bool)
 	}
 
-	// Skip if already tracked
+	// Skip if already tracked locally
 	if ls.emittedWrappers[wrapperName] {
 		return
 	}
 	ls.emittedWrappers[wrapperName] = true
 
-	// TODO: For now, we just mark this wrapper as needed.
-	// The actual wrapper function is generated in the LLVM backend
-	// or during a separate pass that creates wrapper functions.
-	// See WrapperInfo struct below for details.
+	// Register in global registry for LLVM backend
+	RegisterTGWrapper(wrapperName, targetFnName, numCaptures)
 }
 
 // ---- lowering ----
