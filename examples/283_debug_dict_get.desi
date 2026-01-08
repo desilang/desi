@@ -1,0 +1,44 @@
+# Test dict.get with string value
+
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+    
+    pub def __hash__(self) -> u64:
+        return self.x * 31 + self.y
+    
+    pub def __eq__(self, other: Point) -> bool:
+        return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    print("Test dict.get with string value:")
+    
+    let p = Point(1, 2)
+    let cache: dict[Point, str] = {}
+    cache.insert(p, "hello")
+    
+    if p in cache:
+        print("p in cache: OK")
+    
+    let val = cache.get(p, "default")
+    print("cache.get(p):")
+    print(val)
+    
+    let p2 = Point(1, 2)
+    let val2 = cache.get(p2, "default")
+    print("cache.get(Point(1,2)):")
+    print(val2)
+    
+    return 0
+
+# EXPECTED_OUTPUT:
+# Test dict.get with string value:
+# p in cache: OK
+# cache.get(p):
+# hello
+# cache.get(Point(1,2)):
+# hello

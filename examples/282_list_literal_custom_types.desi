@@ -1,0 +1,70 @@
+# Test list and set literals with custom class elements
+
+class Item:
+    pub name: str
+    pub value: int
+    
+    pub def __new__(self, name: str, value: int):
+        self.name = name
+        self.value = value
+
+def main() -> int:
+    print("Testing collection literals with custom types:")
+    
+    # Test 1: List literal with inline constructors
+    let items: list[Item] = [
+        Item("a", 1),
+        Item("b", 2),
+        Item("c", 3)
+    ]
+    print("Created list literal with custom types")
+    print("Length:")
+    print(len(items))
+    
+    # Access elements
+    print("items[0].name:")
+    print(items[0].name)
+    print("items[1].value:")
+    print(items[1].value)
+    print("items[2].name:")
+    print(items[2].name)
+    
+    # Test 2: List literal with variables
+    let i1 = Item("x", 10)
+    let i2 = Item("y", 20)
+    let items2: list[Item] = [i1, i2]
+    print("Created list with variable elements")
+    print("items2[0].value:")
+    print(items2[0].value)
+    
+    # Test 3: Mixed - variables and inline
+    let mixed: list[Item] = [
+        i1,
+        Item("z", 30),
+        i2
+    ]
+    print("Created mixed list")
+    print("mixed[1].name:")
+    print(mixed[1].name)
+    
+    print("Collection literals with custom types test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing collection literals with custom types:
+# Created list literal with custom types
+# Length:
+# 3
+# items[0].name:
+# a
+# items[1].value:
+# 2
+# items[2].name:
+# c
+# Created list with variable elements
+# items2[0].value:
+# 10
+# Created mixed list
+# mixed[1].name:
+# z
+# Collection literals with custom types test passed!
