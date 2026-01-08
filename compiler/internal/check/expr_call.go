@@ -382,6 +382,34 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 		}
 
+		// Handle TaskGroup method calls: tg.run(fn), tg.wait(), etc.
+		// For run(fn), check that captured variables in lambda are Send trait
+		if _, ok := receiverType.(*types.TaskGroup); ok {
+			methodType := c.typFieldExpr(fe)
+			if methodType != nil {
+				// Type check arguments
+				args := make([]types.T, len(argsNodes))
+				for i, a := range argsNodes {
+					args[i] = c.typ(a.Expr)
+				}
+
+				// For tg.run() calls, check Send trait on captured variables
+				if fe.Name.Name == "run" && len(argsNodes) == 1 {
+					c.checkTaskGroupRunSend(call, argsNodes[0].Expr)
+				}
+
+				// Validate function call
+				if funcType, ok := methodType.(*types.Func); ok {
+					if len(args) != len(funcType.Params) {
+						c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch"))
+						return nil
+					}
+					c.info.Types[call] = funcType.Ret
+					return funcType.Ret
+				}
+			}
+		}
+
 		// Handle enum variant constructor calls: EnumType.Variant(...)
 		// The FieldExpr (e.g., Status.Pending) should have been resolved to a function type by typFieldExpr
 		// We hust need to extract and return the return type
