@@ -44,13 +44,15 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 	res := ls.b.FreshTemp("dict")
 	valueSize := hir.ConstInt{Text: "8", Type: "i64"}
 
-	// Determine key type tag, value type tag, and to_str function
+	// Determine key type tag, key size, value type tag, and to_str function
 	var keyTypeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"} // default int
+	var keySize hir.Value = hir.ConstInt{Text: "0", Type: "i64"}    // 0 for primitives
 	var valTypeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
 	var toStrFunc hir.Value = hir.ConstNull{}
+	var keyHashFn hir.Value = hir.ConstNull{} // For custom types
+	var keyEqFn hir.Value = hir.ConstNull{}   // For custom types
 
 	var keyType types.T
-	_ = keyType // may be nil
 
 	if ls.info != nil {
 		if t, ok := ls.info.Types[d].(*types.Dict); ok {
@@ -58,11 +60,28 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 			keyTypeTag = getTypeTag(t.Key)
 			valTypeTag = getTypeTag(t.Val)
 			toStrFunc = resolveToStrFunc(t.Val)
+
+			// Check for custom key type (class with __hash__ and __eq__)
+			if cls, ok := t.Key.(*types.Class); ok {
+				if _, hasHash := cls.Dunders["__hash__"]; hasHash {
+					if _, hasEq := cls.Dunders["__eq__"]; hasEq {
+						// TYPE_TAG_CUSTOM = 4
+						keyTypeTag = hir.ConstInt{Text: "4", Type: "i32"}
+						// Get class size (approximation: 8 bytes per field)
+						keySize = hir.ConstInt{Text: "8", Type: "i64"} // TODO: calculate actual size
+						// Function pointer names (mangled)
+						keyHashFn = hir.Var{Name: "@" + cls.Name + "___hash__"}
+						keyEqFn = hir.Var{Name: "@" + cls.Name + "___eq__"}
+					}
+				}
+			}
 		}
 	}
 
-	// dict_new(key_type_tag, value_size, value_type_tag, to_str_fn)
-	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{keyTypeTag, valueSize, valTypeTag, toStrFunc}})
+	// dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, to_str_fn)
+	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{
+		keyTypeTag, keySize, valueSize, valTypeTag, keyHashFn, keyEqFn, toStrFunc,
+	}})
 
 	// Insert each key-value pair
 	for i := range d.Keys {
@@ -79,18 +98,29 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		}
 
 		// Prepare key arguments based on key type
-		// dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
+		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
 		var keyInt hir.Value = hir.ConstInt{Text: "0", Type: "i64"}
 		var keyStr hir.Value = hir.ConstNull{}
 		var keyFloat hir.Value = hir.ConstFloat{Text: "0.0"}
+		var keyPtr hir.Value = hir.ConstNull{}
 
 		isStrKey := types.Equal(entryKeyType, types.Str)
 		isFloatKey := entryKeyType == types.Float || entryKeyType == types.F32 || entryKeyType == types.F64
+		isCustomKey := false
+		if cls, ok := entryKeyType.(*types.Class); ok {
+			if _, hasHash := cls.Dunders["__hash__"]; hasHash {
+				if _, hasEq := cls.Dunders["__eq__"]; hasEq {
+					isCustomKey = true
+				}
+			}
+		}
 
 		if isStrKey {
 			keyStr = keyVal
 		} else if isFloatKey {
 			keyFloat = keyVal
+		} else if isCustomKey {
+			keyPtr = keyVal
 		} else {
 			// int or bool - cast to i64
 			keyInt64 := ls.b.FreshTemp("key_i64")
@@ -119,8 +149,8 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 		}
 
-		// dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, keyInt, keyStr, keyFloat, valPtr, valTypeTag}})
+		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, keyInt, keyStr, keyFloat, keyPtr, valPtr, valTypeTag}})
 	}
 
 	return res

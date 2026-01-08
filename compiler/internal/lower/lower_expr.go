@@ -1952,14 +1952,25 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				var keyInt hir.Value = hir.ConstInt{Text: "0", Type: "i64"}
 				var keyStr hir.Value = hir.ConstNull{}
 				var keyFloat hir.Value = hir.ConstFloat{Text: "0.0"}
+				var keyPtr hir.Value = hir.ConstNull{}
 
 				isStrKey := types.Equal(keyType, types.Str)
 				isFloatKey := keyType == types.Float || keyType == types.F32 || keyType == types.F64
+				isCustomKey := false
+				if cls, ok := keyType.(*types.Class); ok {
+					if _, hasHash := cls.Dunders["__hash__"]; hasHash {
+						if _, hasEq := cls.Dunders["__eq__"]; hasEq {
+							isCustomKey = true
+						}
+					}
+				}
 
 				if isStrKey {
 					keyStr = lhs
 				} else if isFloatKey {
 					keyFloat = lhs
+				} else if isCustomKey {
+					keyPtr = lhs
 				} else {
 					// int or bool - cast to i64
 					keyInt64 := ls.b.FreshTemp("key_i64")
@@ -1967,9 +1978,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					keyInt = keyInt64
 				}
 
-				// Call dict_has_key(dict, key_int, key_str, key_float) -> returns i1
+				// Call dict_has_key(dict, key_int, key_str, key_float, key_ptr) -> returns i1
 				dst := ls.b.FreshTemp("has_key")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "dict_has_key", Args: []hir.Value{rhs, keyInt, keyStr, keyFloat}, Type: "i1"})
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "dict_has_key", Args: []hir.Value{rhs, keyInt, keyStr, keyFloat, keyPtr}, Type: "i1"})
 				return dst
 			}
 
