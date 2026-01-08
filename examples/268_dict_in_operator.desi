@@ -1,0 +1,64 @@
+# Test dict `in` operator for key containment
+# Note: Runtime currently only supports string keys
+
+def main() -> int:
+    print("Testing dict in operator:")
+    
+    # Test 1: String keys - existing key
+    let str_dict: dict[str, int] = {"apple": 1, "banana": 2, "cherry": 3}
+    print("Test 1: String keys")
+    if "apple" in str_dict:
+        print("  apple: found")
+    else:
+        print("  apple: NOT found")
+    
+    if "orange" in str_dict:
+        print("  orange: found")
+    else:
+        print("  orange: NOT found")
+    
+    # Test 2: Empty dict
+    let empty_dict: dict[str, int] = {}
+    print("Test 2: Empty dict")
+    if "any" in empty_dict:
+        print("  any: found")
+    else:
+        print("  any: NOT found")
+    
+    # Test 3: Dict with many entries
+    let big_dict: dict[str, int] = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}
+    print("Test 3: Multiple entries")
+    if "c" in big_dict:
+        print("  c: found")
+    else:
+        print("  c: NOT found")
+    
+    if "z" in big_dict:
+        print("  z: found")
+    else:
+        print("  z: NOT found")
+    
+    # Test 4: Dict with string values
+    let names: dict[str, str] = {"first": "Alice", "last": "Smith"}
+    print("Test 4: String values")
+    if "first" in names:
+        print("  first: found")
+    else:
+        print("  first: NOT found")
+    
+    print("All dict in operator tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing dict in operator:
+# Test 1: String keys
+#   apple: found
+#   orange: NOT found
+# Test 2: Empty dict
+#   any: NOT found
+# Test 3: Multiple entries
+#   c: found
+#   z: NOT found
+# Test 4: String values
+#   first: found
+# All dict in operator tests passed!

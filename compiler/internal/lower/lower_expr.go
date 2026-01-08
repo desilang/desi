@@ -1943,6 +1943,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				return dst
 			}
 
+			// Handle dict membership: key in dict
+			if _, ok := rhsType.(*types.Dict); ok {
+				// Cast key to ptr for dict_has_key
+				keyPtr := ls.b.FreshTemp("key_ptr")
+				ls.b.Emit(&hir.Cast{Dst: keyPtr, Src: lhs, Type: "ptr"})
+
+				// Call dict_has_key -> returns i1 directly
+				dst := ls.b.FreshTemp("has_key")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "dict_has_key", Args: []hir.Value{rhs, keyPtr}, Type: "i1"})
+				return dst
+			}
+
 			// Handle string membership: substr in str (substring check)
 			if types.Equal(rhsType, types.Str) {
 				// Call string_contains(haystack, needle) -> returns i32
