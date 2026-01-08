@@ -2,12 +2,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 
 #define INITIAL_BUCKET_COUNT 16
 #define LOAD_FACTOR_THRESHOLD 0.75
 
-// FNV-1a hash function for strings
-uint64_t dict_hash(const char* key) {
+// ==================== Hash Functions ====================
+
+// FNV-1a hash for int keys
+uint64_t dict_hash_int(int64_t key) {
+    return (uint64_t)key;
+}
+
+// FNV-1a hash for string keys
+uint64_t dict_hash_str(const char* key) {
+    if (!key) return 0;
     uint64_t hash = 14695981039346656037ULL;
     while (*key) {
         hash ^= (uint64_t)(unsigned char)(*key++);
@@ -16,8 +25,49 @@ uint64_t dict_hash(const char* key) {
     return hash;
 }
 
+// Bit-exact hash for float keys
+uint64_t dict_hash_float(double key) {
+    // Use bit representation for deterministic hashing
+    uint64_t bits;
+    memcpy(&bits, &key, sizeof(bits));
+    return bits;
+}
+
+// Type-dispatched hash
+static uint64_t hash_key(dict_t* d, int64_t key_int, const char* key_str, double key_float) {
+    switch (d->key_type_tag) {
+        case TYPE_TAG_INT:
+        case TYPE_TAG_BOOL:
+            return dict_hash_int(key_int);
+        case TYPE_TAG_STR:
+            return dict_hash_str(key_str);
+        case TYPE_TAG_FLOAT:
+            return dict_hash_float(key_float);
+        default:
+            return dict_hash_int(key_int);
+    }
+}
+
+// Type-dispatched key equality
+static bool keys_equal(dict_t* d, dict_entry_t* entry, int64_t key_int, const char* key_str, double key_float) {
+    switch (d->key_type_tag) {
+        case TYPE_TAG_INT:
+        case TYPE_TAG_BOOL:
+            return entry->key_int == key_int;
+        case TYPE_TAG_STR:
+            return entry->key_str && key_str && strcmp(entry->key_str, key_str) == 0;
+        case TYPE_TAG_FLOAT:
+            // Bit-exact comparison for floats
+            return memcmp(&entry->key_float, &key_float, sizeof(double)) == 0;
+        default:
+            return entry->key_int == key_int;
+    }
+}
+
+// ==================== Core Operations ====================
+
 // Create a new dictionary
-dict_t* dict_new(size_t value_size, int type_tag, ElemToStrFunc value_to_str_fn) {
+dict_t* dict_new(int key_type_tag, size_t value_size, int value_type_tag, ElemToStrFunc value_to_str_fn) {
     if (value_size == 0) {
         fprintf(stderr, "dict_new: value_size cannot be 0\n");
         return NULL;
@@ -35,8 +85,9 @@ dict_t* dict_new(size_t value_size, int type_tag, ElemToStrFunc value_to_str_fn)
     d->bucket_count = INITIAL_BUCKET_COUNT;
     d->entry_count = 0;
     d->value_size = value_size;
-    d->type_tag = type_tag;
-    d->value_to_str_fn = value_to_str_fn;  // Store function pointer
+    d->key_type_tag = key_type_tag;
+    d->value_type_tag = value_type_tag;
+    d->value_to_str_fn = value_to_str_fn;
     
     return d;
 }
@@ -49,7 +100,9 @@ void dict_free(dict_t* d) {
         dict_entry_t* entry = d->buckets[i];
         while (entry) {
             dict_entry_t* next = entry->next;
-            free(entry->key);
+            if (d->key_type_tag == TYPE_TAG_STR) {
+                free(entry->key_str);
+            }
             free(entry->value);
             free(entry);
             entry = next;
@@ -61,22 +114,21 @@ void dict_free(dict_t* d) {
 }
 
 // Insert or update a key-value pair
-void dict_insert(dict_t* d, const char* key, const void* value, int type_tag) {
-    if (!d || !key) return;
+void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float, const void* value, int value_type_tag) {
+    if (!d) return;
     
-    // Upgrade type tag if currently Int (0) and new tag is different
-    // This handles empty dicts (initialized as 0) becoming String/Bool dicts
-    if (d->type_tag == 0 && type_tag != 0) {
-        d->type_tag = type_tag;
+    // Upgrade value type tag if needed
+    if (d->value_type_tag == TYPE_TAG_INT && value_type_tag != TYPE_TAG_INT) {
+        d->value_type_tag = value_type_tag;
     }
     
-    uint64_t hash = dict_hash(key);
+    uint64_t hash = hash_key(d, key_int, key_str, key_float);
     size_t index = hash % d->bucket_count;
     
     // Check if key already exists
     dict_entry_t* entry = d->buckets[index];
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (keys_equal(d, entry, key_int, key_str, key_float)) {
             // Update existing value
             memcpy(entry->value, value, d->value_size);
             return;
@@ -88,16 +140,18 @@ void dict_insert(dict_t* d, const char* key, const void* value, int type_tag) {
     dict_entry_t* new_entry = malloc(sizeof(dict_entry_t));
     if (!new_entry) return;
     
-    new_entry->key = strdup(key);
-    new_entry->value = malloc(d->value_size);
-    if (!new_entry->value) {
-        free(new_entry->key);
-        free(new_entry);
-        return;
+    // Store key based on type
+    new_entry->key_int = key_int;
+    new_entry->key_float = key_float;
+    if (d->key_type_tag == TYPE_TAG_STR && key_str) {
+        new_entry->key_str = strdup(key_str);
+    } else {
+        new_entry->key_str = NULL;
     }
+    
     new_entry->value = malloc(d->value_size);
     if (!new_entry->value) {
-        free(new_entry->key);
+        if (new_entry->key_str) free(new_entry->key_str);
         free(new_entry);
         return;
     }
@@ -110,15 +164,15 @@ void dict_insert(dict_t* d, const char* key, const void* value, int type_tag) {
 }
 
 // Get value for a key, or return default if not found
-void* dict_get(dict_t* d, const char* key, const void* default_val) {
-    if (!d || !key) return (void*)default_val;
+void* dict_get(dict_t* d, int64_t key_int, const char* key_str, double key_float, const void* default_val) {
+    if (!d) return (void*)default_val;
     
-    uint64_t hash = dict_hash(key);
+    uint64_t hash = hash_key(d, key_int, key_str, key_float);
     size_t index = hash % d->bucket_count;
     
     dict_entry_t* entry = d->buckets[index];
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (keys_equal(d, entry, key_int, key_str, key_float)) {
             return entry->value;
         }
         entry = entry->next;
@@ -128,15 +182,15 @@ void* dict_get(dict_t* d, const char* key, const void* default_val) {
 }
 
 // Check if key exists in dictionary
-bool dict_has_key(dict_t* d, const char* key) {
-    if (!d || !key) return false;
+bool dict_has_key(dict_t* d, int64_t key_int, const char* key_str, double key_float) {
+    if (!d) return false;
     
-    uint64_t hash = dict_hash(key);
+    uint64_t hash = hash_key(d, key_int, key_str, key_float);
     size_t index = hash % d->bucket_count;
     
     dict_entry_t* entry = d->buckets[index];
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (keys_equal(d, entry, key_int, key_str, key_float)) {
             return true;
         }
         entry = entry->next;
@@ -146,17 +200,17 @@ bool dict_has_key(dict_t* d, const char* key) {
 }
 
 // Remove and return value for a key (caller must free)
-void* dict_pop(dict_t* d, const char* key) {
-    if (!d || !key) return NULL;
+void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float) {
+    if (!d) return NULL;
     
-    uint64_t hash = dict_hash(key);
+    uint64_t hash = hash_key(d, key_int, key_str, key_float);
     size_t index = hash % d->bucket_count;
     
     dict_entry_t* entry = d->buckets[index];
     dict_entry_t* prev = NULL;
     
     while (entry) {
-        if (strcmp(entry->key, key) == 0) {
+        if (keys_equal(d, entry, key_int, key_str, key_float)) {
             // Found it - remove from chain
             if (prev) {
                 prev->next = entry->next;
@@ -165,7 +219,9 @@ void* dict_pop(dict_t* d, const char* key) {
             }
             
             void* value = entry->value;
-            free(entry->key);
+            if (d->key_type_tag == TYPE_TAG_STR) {
+                free(entry->key_str);
+            }
             free(entry);
             d->entry_count--;
             return value;
@@ -185,8 +241,9 @@ void dict_clear(dict_t* d) {
         dict_entry_t* entry = d->buckets[i];
         while (entry) {
             dict_entry_t* next = entry->next;
-            free(entry->key);
-            // Value is stored in entry->value buffer, freed with entry
+            if (d->key_type_tag == TYPE_TAG_STR) {
+                free(entry->key_str);
+            }
             free(entry->value);
             free(entry);
             entry = next;
@@ -200,6 +257,8 @@ void dict_clear(dict_t* d) {
 int64_t dict_len(dict_t* d) {
     return d ? (int64_t)d->entry_count : 0;
 }
+
+// ==================== Collection Methods ====================
 
 // Get all keys (caller must free the array)
 char** dict_keys(dict_t* d, size_t* out_len) {
@@ -215,7 +274,18 @@ char** dict_keys(dict_t* d, size_t* out_len) {
     for (size_t i = 0; i < d->bucket_count; i++) {
         dict_entry_t* entry = d->buckets[i];
         while (entry) {
-            keys[k++] = entry->key;  // Note: shallow copy, don't free these!
+            if (d->key_type_tag == TYPE_TAG_STR) {
+                keys[k++] = entry->key_str;  // Note: shallow copy
+            } else {
+                // For non-string keys, convert to string representation
+                char* buf = malloc(32);
+                if (d->key_type_tag == TYPE_TAG_INT || d->key_type_tag == TYPE_TAG_BOOL) {
+                    snprintf(buf, 32, "%lld", (long long)entry->key_int);
+                } else if (d->key_type_tag == TYPE_TAG_FLOAT) {
+                    snprintf(buf, 32, "%g", entry->key_float);
+                }
+                keys[k++] = buf;
+            }
             entry = entry->next;
         }
     }
@@ -245,7 +315,7 @@ void** dict_values(dict_t* d, size_t* out_len) {
     return values;
 }
 
-// ========== String Representation ==========
+// ==================== String Representation ====================
 
 // Convert dict to string representation
 char* dict_to_str(dict_t* d) {
@@ -281,19 +351,36 @@ char* dict_to_str(dict_t* d) {
             }
             first = false;
             
-            // Add key
-            size_t key_len = strlen(entry->key);
+            // Format key based on type
+            char key_str[64];
+            switch (d->key_type_tag) {
+                case TYPE_TAG_INT:
+                    snprintf(key_str, sizeof(key_str), "%lld", (long long)entry->key_int);
+                    break;
+                case TYPE_TAG_STR:
+                    snprintf(key_str, sizeof(key_str), "%s", entry->key_str ? entry->key_str : "null");
+                    break;
+                case TYPE_TAG_BOOL:
+                    snprintf(key_str, sizeof(key_str), "%s", entry->key_int ? "true" : "false");
+                    break;
+                case TYPE_TAG_FLOAT:
+                    snprintf(key_str, sizeof(key_str), "%g", entry->key_float);
+                    break;
+                default:
+                    snprintf(key_str, sizeof(key_str), "%lld", (long long)entry->key_int);
+            }
+            
+            size_t key_len = strlen(key_str);
             while (pos + key_len + 10 >= bufsize) {
                 bufsize *= 2;
                 buffer = (char*)realloc(buffer, bufsize);
             }
             
-            memcpy(buffer + pos, entry->key, key_len);
+            memcpy(buffer + pos, key_str, key_len);
             pos += key_len;
             buffer[pos++] = ':';
             buffer[pos++] = ' ';
             
-            // Format key and value
             // Format value based on type
             char val_str[256];
             
@@ -305,26 +392,22 @@ char* dict_to_str(dict_t* d) {
                 } else {
                     snprintf(val_str, sizeof(val_str), "<null>");
                 }
-            } else if (d->type_tag == 1) { // String
-                // Value is char* (pointer to string)
+            } else if (d->value_type_tag == TYPE_TAG_STR) {
                 char* str_val = *(char**)entry->value;
                 snprintf(val_str, sizeof(val_str), "\"%s\"", str_val ? str_val : "null");
-            } else if (d->type_tag == 2) { // Bool
-                // Value is int64_t (0 or 1)
+            } else if (d->value_type_tag == TYPE_TAG_BOOL) {
                 int64_t bool_val = 0;
                 if (d->value_size >= sizeof(int64_t)) {
                     memcpy(&bool_val, entry->value, sizeof(int64_t));
                 }
                 snprintf(val_str, sizeof(val_str), "%s", bool_val ? "true" : "false");
-            } else if (d->type_tag == 3) { // Float
-                // Value is double
+            } else if (d->value_type_tag == TYPE_TAG_FLOAT) {
                 double float_val = 0.0;
                 if (d->value_size >= sizeof(double)) {
                     memcpy(&float_val, entry->value, sizeof(double));
                 }
                 snprintf(val_str, sizeof(val_str), "%g", float_val);
-            } else { // Int (0) or default
-                // Value is int64_t
+            } else {
                 int64_t int_val = 0;
                 if (d->value_size >= sizeof(int64_t)) {
                     memcpy(&int_val, entry->value, sizeof(int64_t));

@@ -8,11 +8,20 @@
 // Function pointer type for value-to-string conversion
 typedef char* (*ElemToStrFunc)(void*);
 
+// Type tags for dict keys and values
+// 0=int, 1=str, 2=bool, 3=float
+#define TYPE_TAG_INT   0
+#define TYPE_TAG_STR   1
+#define TYPE_TAG_BOOL  2
+#define TYPE_TAG_FLOAT 3
+
 // Simple hashmap implementation for Desi dict[K, V]
-// For Tier-0: supports string keys with generic value types
+// Phase 1: supports primitive keys (int, str, bool, float)
 
 typedef struct dict_entry {
-    char* key;                  // Owned string key
+    int64_t key_int;            // Inline storage for int/bool keys
+    char* key_str;              // String key (owned, strdup'd)
+    double key_float;           // Float key
     void* value;                // Generic value pointer
     struct dict_entry* next;    // Chaining for collisions
 } dict_entry_t;
@@ -22,17 +31,18 @@ typedef struct dict {
     size_t bucket_count;        // Number of buckets
     size_t entry_count;         // Number of entries
     size_t value_size;          // Size of each value in bytes
-    int type_tag;               // 0=int, 1=str, 2=bool, 3=other
+    int key_type_tag;           // Key type: 0=int, 1=str, 2=bool, 3=float
+    int value_type_tag;         // Value type tag for printing
     ElemToStrFunc value_to_str_fn; // Function pointer for custom types
 } dict_t;
 
-// Core operations
-dict_t* dict_new(size_t value_size, int type_tag, ElemToStrFunc value_to_str_fn);
+// Core operations - now accept generic keys as int64_t (cast from any primitive)
+dict_t* dict_new(int key_type_tag, size_t value_size, int value_type_tag, ElemToStrFunc value_to_str_fn);
 void dict_free(dict_t* d);
-void dict_insert(dict_t* d, const char* key, const void* value, int type_tag);
-void* dict_get(dict_t* d, const char* key, const void* default_val);
-bool dict_has_key(dict_t* d, const char* key);
-void* dict_pop(dict_t* d, const char* key);
+void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float, const void* value, int value_type_tag);
+void* dict_get(dict_t* d, int64_t key_int, const char* key_str, double key_float, const void* default_val);
+bool dict_has_key(dict_t* d, int64_t key_int, const char* key_str, double key_float);
+void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float);
 void dict_clear(dict_t* d);
 int64_t dict_len(dict_t* d);
 
@@ -40,10 +50,13 @@ int64_t dict_len(dict_t* d);
 char** dict_keys(dict_t* d, size_t* out_len);
 void** dict_values(dict_t* d, size_t* out_len);
 
-// Internal helper
-uint64_t dict_hash(const char* key);
+// Internal helpers
+uint64_t dict_hash_int(int64_t key);
+uint64_t dict_hash_str(const char* key);
+uint64_t dict_hash_float(double key);
 
 // String representation
 char* dict_to_str(dict_t* d);
 
 #endif // DESI_DICT_H
+

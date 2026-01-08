@@ -41,55 +41,86 @@ func resolveToStrFunc(t types.T) hir.Value {
 
 func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 	// Create new dict handle
-	// For Tier-0, assume value_size = sizeof(int) = 8 (64-bit)
 	res := ls.b.FreshTemp("dict")
 	valueSize := hir.ConstInt{Text: "8", Type: "i64"}
 
-	// Determine type tag and to_str function
-	var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+	// Determine key type tag, value type tag, and to_str function
+	var keyTypeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"} // default int
+	var valTypeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
 	var toStrFunc hir.Value = hir.ConstNull{}
+
+	var keyType types.T
+	_ = keyType // may be nil
 
 	if ls.info != nil {
 		if t, ok := ls.info.Types[d].(*types.Dict); ok {
-			typeTag = getTypeTag(t.Val)
+			keyType = t.Key
+			keyTypeTag = getTypeTag(t.Key)
+			valTypeTag = getTypeTag(t.Val)
 			toStrFunc = resolveToStrFunc(t.Val)
 		}
 	}
 
-	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{valueSize, typeTag, toStrFunc}})
+	// dict_new(key_type_tag, value_size, value_type_tag, to_str_fn)
+	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{keyTypeTag, valueSize, valTypeTag, toStrFunc}})
 
 	// Insert each key-value pair
 	for i := range d.Keys {
-		key := ls.lowerExpr(d.Keys[i])
+		keyVal := ls.lowerExpr(d.Keys[i])
 		val := ls.lowerExpr(d.Values[i])
 
-		// Get value type to determine if float (need BitCast to preserve bits)
-		var valType types.T
+		// Determine key type for this entry
+		var entryKeyType types.T
 		if ls.info != nil {
-			valType = ls.info.Types[d.Values[i]]
+			entryKeyType = ls.info.Types[d.Keys[i]]
 		}
-		isFloat := valType == types.Float || valType == types.F32 || valType == types.F64
+		if entryKeyType == nil {
+			entryKeyType = keyType
+		}
 
-		// For Tier-0, we need to pass pointers to the values.
-		// Since 'val' might be an immediate (e.g. integer), we spill it to a temp alloca.
+		// Prepare key arguments based on key type
+		// dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
+		var keyInt hir.Value = hir.ConstInt{Text: "0", Type: "i64"}
+		var keyStr hir.Value = hir.ConstNull{}
+		var keyFloat hir.Value = hir.ConstFloat{Text: "0.0"}
+
+		isStrKey := types.Equal(entryKeyType, types.Str)
+		isFloatKey := entryKeyType == types.Float || entryKeyType == types.F32 || entryKeyType == types.F64
+
+		if isStrKey {
+			keyStr = keyVal
+		} else if isFloatKey {
+			keyFloat = keyVal
+		} else {
+			// int or bool - cast to i64
+			keyInt64 := ls.b.FreshTemp("key_i64")
+			ls.b.Emit(&hir.Cast{Dst: keyInt64, Src: keyVal, Type: "i64"})
+			keyInt = keyInt64
+		}
+
+		// Get value type to determine if float (need BitCast to preserve bits)
+		var entryValType types.T
+		if ls.info != nil {
+			entryValType = ls.info.Types[d.Values[i]]
+		}
+		isFloatVal := entryValType == types.Float || entryValType == types.F32 || entryValType == types.F64
+
+		// Spill value to stack to pass as pointer
 		valPtr := ls.b.FreshTemp("val_ptr")
 		ls.b.Emit(&hir.Alloca{Dst: valPtr, Type: "i64", Count: 1})
 
-		// Cast to i64 to ensure we store full 8 bytes
-		if isFloat {
-			// For floats, use bitcast to preserve the bit pattern
+		if isFloatVal {
 			val64 := ls.b.FreshTemp("val64")
 			ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
 			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 		} else {
-			// For other types, sext/cast to i64
 			val64 := ls.b.FreshTemp("val64")
 			ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
 			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 		}
 
-		// Emit a call to dict_insert(dict, key, &value, type_tag)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, key, valPtr, typeTag}})
+		// dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, keyInt, keyStr, keyFloat, valPtr, valTypeTag}})
 	}
 
 	return res
