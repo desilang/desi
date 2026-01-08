@@ -1,0 +1,112 @@
+# Comprehensive collection combinations test
+# Tests: list, set, dict, class in all combinations
+
+class Item:
+    pub id: int
+    pub name: str
+    
+    pub def __new__(self, id: int, name: str):
+        self.id = id
+        self.name = name
+
+def main() -> int:
+    print("=== Collection Combinations Test ===")
+    
+    # 1. set[Item] - set containing class (pointer identity)
+    print("1. set[Item]:")
+    let items_set: set[Item] = #{}
+    let i1 = Item(1, "a")
+    let i2 = Item(2, "b")
+    items_set.add(i1)
+    items_set.add(i2)
+    print("set length:")
+    print(len(items_set))
+    if i1 in items_set:
+        print("i1 in set: OK")
+    
+    # 2. dict[str, list[int]]
+    print("2. dict[str, list[int]]:")
+    let groups: dict[str, list[int]] = {}
+    let nums1: list[int] = [1, 2, 3]
+    let nums2: list[int] = [4, 5, 6]
+    groups.insert("first", nums1)
+    groups.insert("second", nums2)
+    let first_list = groups.get("first", [])
+    print("first_list[0]:")
+    print(first_list[0])
+    
+    # 3. dict[str, set[int]]
+    print("3. dict[str, set[int]]:")
+    let categories: dict[str, set[int]] = {}
+    let cat1: set[int] = #{10, 20, 30}
+    categories.insert("even_tens", cat1)
+    let cat_result = categories.get("even_tens", #{})
+    print("cat_result length:")
+    print(len(cat_result))
+    if 20 in cat_result:
+        print("20 in cat_result: OK")
+    
+    # 4. list[dict[str, int]]
+    print("4. list[dict[str, int]]:")
+    let records: list[dict[str, int]] = []
+    let r1: dict[str, int] = {"x": 100, "y": 200}
+    let r2: dict[str, int] = {"x": 300, "y": 400}
+    records.append(r1)
+    records.append(r2)
+    let rec0 = records[0]
+    print("records[0]['x']:")
+    print(rec0.get("x", -1))
+    
+    # 5. dict[str, Item] - class as value
+    print("5. dict[str, Item]:")
+    let item_map: dict[str, Item] = {}
+    let obj = Item(42, "special")
+    item_map.insert("key1", obj)
+    let retrieved = item_map.get("key1", Item(0, "none"))
+    print("retrieved.id:")
+    print(retrieved.id)
+    print("retrieved.name:")
+    print(retrieved.name)
+    
+    # 6. list[list[set[int]]] - deeply nested
+    print("6. list[list[set[int]]]:")
+    let matrix: list[list[set[int]]] = []
+    let row: list[set[int]] = []
+    let cell: set[int] = #{7, 8, 9}
+    row.append(cell)
+    matrix.append(row)
+    let deep_set = matrix[0][0]
+    print("matrix[0][0] length:")
+    print(len(deep_set))
+    if 8 in deep_set:
+        print("8 in deep_set: OK")
+    
+    print("=== All collection combinations passed! ===")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Collection Combinations Test ===
+# 1. set[Item]:
+# set length:
+# 2
+# i1 in set: OK
+# 2. dict[str, list[int]]:
+# first_list[0]:
+# 1
+# 3. dict[str, set[int]]:
+# cat_result length:
+# 3
+# 20 in cat_result: OK
+# 4. list[dict[str, int]]:
+# records[0]['x']:
+# 100
+# 5. dict[str, Item]:
+# retrieved.id:
+# 42
+# retrieved.name:
+# special
+# 6. list[list[set[int]]]:
+# matrix[0][0] length:
+# 3
+# 8 in deep_set: OK
+# === All collection combinations passed! ===
