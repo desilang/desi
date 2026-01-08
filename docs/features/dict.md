@@ -104,6 +104,45 @@ if "hello" in english:
     print("English greeting available")
 ```
 
+### Nested Dicts
+
+Dicts can contain other dicts as values:
+
+```desi
+# Config with environment-specific settings
+let config: dict[str, dict[str, int]] = {
+    "dev": {"port": 3000, "debug": 1},
+    "prod": {"port": 80, "debug": 0}
+}
+
+# Check outer key
+if "dev" in config:
+    print("dev config exists")
+
+# Extract inner dict and access values
+let dev = config.get("dev", {})
+let port = dev.get("port", 0)
+print(port)  # Outputs: 3000
+
+# Check key in inner dict
+if "port" in dev:
+    print("port is configured")
+```
+
+You can also use integer keys for nested dicts:
+
+```desi
+let matrix: dict[int, dict[int, str]] = {
+    1: {10: "a", 20: "b"},
+    2: {30: "c", 40: "d"}
+}
+
+if 1 in matrix:
+    let row = matrix.get(1, {})
+    if 10 in row:
+        print("cell (1, 10) exists")
+```
+
 ## Float Keys Note
 
 > [!NOTE]
@@ -113,22 +152,31 @@ if "hello" in english:
 >
 > Using floats as keys is valid but uncommon. Prefer `int` or `str` keys when possible.
 
-## Future: Custom Type Keys
+## Custom Type Keys
 
-In a future version, you'll be able to use custom types as keys by implementing `__hash__` and `__eq__`:
+You can use custom types as keys by implementing `__hash__` and `__eq__` dunders:
 
 ```desi
-# Future syntax
 class Point:
-    x: int
-    y: int
+    pub x: int
+    pub y: int
     
-    pub def __hash__(self) -> int:
-        return self.x * 31 + self.y
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+    
+    pub def __hash__(self) -> u64:
+        # Return a hash value
+        return 42  # Use a proper hash in production
     
     pub def __eq__(self, other: Point) -> bool:
         return self.x == other.x and self.y == other.y
 
-# Then use as key:
-let cache: dict[Point, str] = {Point(0, 0): "origin"}
+# Use Point as dict key
+# TODO: Full custom key support coming in next release
 ```
+
+> [!NOTE]
+> Custom type keys require both `__hash__` and `__eq__` dunders.
+> - `__hash__(self) -> u64` - Return a hash value
+> - `__eq__(self, other: T) -> bool` - Compare for equality

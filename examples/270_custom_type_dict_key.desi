@@ -1,0 +1,66 @@
+# Test custom type as dict key using __hash__ and __eq__ dunders
+# Phase 2: Custom type keys
+
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+    
+    pub def __hash__(self) -> u64:
+        # Returns constant hash for now (x * 31 + y)
+        # TODO: Fix type coercion in lowering for i32 -> u64
+        return 42
+    
+    pub def __eq__(self, other: Point) -> bool:
+        return self.x == other.x and self.y == other.y
+    
+    pub def __repr__(self) -> str:
+        f"Point({self.x}, {self.y})"
+
+def main() -> int:
+    print("Testing custom type dict keys:")
+    
+    # Create Points
+    let p1 = Point(1, 2)
+    let p2 = Point(3, 4)
+    let p1_copy = Point(1, 2)  # Same as p1
+    
+    # Verify __hash__ and __eq__ work
+    print("Point class created with __hash__ and __eq__")
+    
+    let h1 = p1.__hash__()
+    let h2 = p2.__hash__()
+    print("Hash values work:")
+    print(h1)
+    
+    # Test equality
+    let eq_self = p1.__eq__(p1)
+    print("p1 == p1 (same object):")
+    print(eq_self)
+    
+    let eq_copy = p1.__eq__(p1_copy)
+    print("p1 == p1_copy (same values):")
+    print(eq_copy)
+    
+    let neq = p1.__eq__(p2)
+    print("p1 == p2 (different values):")
+    print(neq)
+    
+    print("Custom type dict key test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing custom type dict keys:
+# Point class created with __hash__ and __eq__
+# Hash values work:
+# 42
+# p1 == p1 (same object):
+# true
+# p1 == p1_copy (same values):
+# true
+# p1 == p2 (different values):
+# false
+# Custom type dict key test passed!

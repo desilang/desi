@@ -7,20 +7,32 @@ import (
 )
 
 // Helper to prepare key arguments based on key type
-func (ls *lowerState) prepareKeyArgs(keyExpr ast.Expr, keyType types.T) (keyInt hir.Value, keyStr hir.Value, keyFloat hir.Value) {
+// Returns keyInt, keyStr, keyFloat, keyPtr
+func (ls *lowerState) prepareKeyArgs(keyExpr ast.Expr, keyType types.T) (keyInt hir.Value, keyStr hir.Value, keyFloat hir.Value, keyPtr hir.Value) {
 	keyVal := ls.lowerExpr(keyExpr)
 
 	keyInt = hir.ConstInt{Text: "0", Type: "i64"}
 	keyStr = hir.ConstNull{}
 	keyFloat = hir.ConstFloat{Text: "0.0"}
+	keyPtr = hir.ConstNull{}
 
 	isStrKey := types.Equal(keyType, types.Str)
 	isFloatKey := keyType == types.Float || keyType == types.F32 || keyType == types.F64
+	isCustomKey := false
+	if cls, ok := keyType.(*types.Class); ok {
+		if _, hasHash := cls.Dunders["__hash__"]; hasHash {
+			if _, hasEq := cls.Dunders["__eq__"]; hasEq {
+				isCustomKey = true
+			}
+		}
+	}
 
 	if isStrKey {
 		keyStr = keyVal
 	} else if isFloatKey {
 		keyFloat = keyVal
+	} else if isCustomKey {
+		keyPtr = keyVal
 	} else {
 		// int or bool - cast to i64
 		keyInt64 := ls.b.FreshTemp("key_i64")
@@ -28,7 +40,7 @@ func (ls *lowerState) prepareKeyArgs(keyExpr ast.Expr, keyType types.T) (keyInt 
 		keyInt = keyInt64
 	}
 
-	return keyInt, keyStr, keyFloat
+	return keyInt, keyStr, keyFloat, keyPtr
 }
 
 func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictType *types.Dict) hir.Value {
@@ -39,7 +51,7 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 	switch method {
 	case "get":
 		// get(key, default)
-		keyInt, keyStr, keyFloat := ls.prepareKeyArgs(args[0], keyType)
+		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
 		defVal := ls.lowerExpr(args[1])
 
 		// Spill default value to stack to pass as pointer
@@ -48,8 +60,8 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		ls.b.Emit(&hir.Store{Dst: defPtr, Val: defVal})
 
 		resPtr := ls.b.FreshTemp("res_ptr")
-		// dict_get(dict, key_int, key_str, key_float, default)
-		ls.b.Emit(&hir.Call{Dst: resPtr, Fn: "dict_get", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, defPtr}})
+		// dict_get(dict, key_int, key_str, key_float, key_ptr, default)
+		ls.b.Emit(&hir.Call{Dst: resPtr, Fn: "dict_get", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr, defPtr}})
 
 		// Load result from pointer
 		valDst := ls.b.FreshTemp("val")
@@ -58,7 +70,7 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 
 	case "insert":
 		// insert(key, value)
-		keyInt, keyStr, keyFloat := ls.prepareKeyArgs(args[0], keyType)
+		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
 		val := ls.lowerExpr(args[1])
 
 		// Get value type from type info
@@ -90,16 +102,16 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 			typeTag = getTypeTag(ls.info.Types[args[1]])
 		}
 
-		// dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, valPtr, typeTag}})
+		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr, valPtr, typeTag}})
 		return nil
 
 	case "has_key":
 		// has_key(key)
-		keyInt, keyStr, keyFloat := ls.prepareKeyArgs(args[0], keyType)
+		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
 		res := ls.b.FreshTemp("has")
-		// dict_has_key(dict, key_int, key_str, key_float)
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_has_key", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat}, Type: "i1"})
+		// dict_has_key(dict, key_int, key_str, key_float, key_ptr)
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_has_key", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr}, Type: "i1"})
 		return res
 
 	case "clear":
