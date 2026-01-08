@@ -1,0 +1,51 @@
+# Test set containing custom class instances
+
+class Tag:
+    pub name: str
+    
+    pub def __new__(self, name: str):
+        self.name = name
+
+def main() -> int:
+    print("Testing set of custom class:")
+    
+    # Create set of Tags (use #{} for set literal)
+    let tags: set[Tag] = #{}
+    
+    let t1 = Tag("rust")
+    let t2 = Tag("go")
+    let t3 = Tag("desi")
+    
+    tags.add(t1)
+    tags.add(t2)
+    tags.add(t3)
+    print("Added 3 tags")
+    
+    # Test length
+    print("Length:")
+    print(len(tags))
+    
+    # Test membership (same pointer)
+    if t1 in tags:
+        print("t1 in tags: OK")
+    else:
+        print("ERROR: t1 not found")
+    
+    # Different pointer should not be found (pointer identity)
+    let t1_copy = Tag("rust")
+    if t1_copy in tags:
+        print("t1_copy found (unexpected)")
+    else:
+        print("t1_copy NOT found (ptr identity): OK")
+    
+    print("Set of custom class test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing set of custom class:
+# Added 3 tags
+# Length:
+# 3
+# t1 in tags: OK
+# t1_copy NOT found (ptr identity): OK
+# Set of custom class test passed!
