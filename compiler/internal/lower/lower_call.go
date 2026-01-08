@@ -556,7 +556,40 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 												Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8), Type: "i64"}},
 												Type:    "i8",
 											})
-											ls.b.Emit(&hir.Store{Dst: offset, Val: argVal})
+											// Check if value is a primitive type that needs boxing
+											// Primitives are stored as values, but we need pointers
+											// Try to get type from type checker (try both the arg and Ident lookup)
+											argType := ls.info.Types[arg]
+											// If arg is an Ident, also try looking it up by Ident key or in scope chain
+											if argType == nil {
+												if id, ok := arg.(*ast.Ident); ok {
+													argType = ls.info.Types[id]
+													// Search all scopes for the variable type
+													if argType == nil {
+														for i := len(ls.scopes) - 1; i >= 0; i-- {
+															if t, ok := ls.scopes[i].types[id.Name]; ok {
+																argType = t
+																break
+															}
+														}
+													}
+												}
+											}
+											needsBoxing := isPrimitiveType(argType)
+											if needsBoxing {
+												// Box the primitive: malloc, store value, store ptr
+												boxPtr := ls.b.FreshTemp("boxed")
+												ls.b.Emit(&hir.Call{
+													Dst:  boxPtr,
+													Fn:   "malloc",
+													Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}},
+													Type: "ptr",
+												})
+												ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
+												ls.b.Emit(&hir.Store{Dst: offset, Val: boxPtr})
+											} else {
+												ls.b.Emit(&hir.Store{Dst: offset, Val: argVal})
+											}
 										}
 										ctxVal = ctxPtr
 									}
@@ -2254,4 +2287,20 @@ skipMethodCall:
 	}
 
 	return dst
+}
+
+// isPrimitiveType returns true for primitive types that need boxing
+// when captured in closure contexts (int, float, bool, char, sized integers)
+func isPrimitiveType(t types.T) bool {
+	if t == nil {
+		return false
+	}
+	switch t {
+	case types.Int, types.Float, types.Bool, types.Char,
+		types.I8, types.I16, types.I32, types.I64,
+		types.U8, types.U16, types.U32, types.U64,
+		types.ISize, types.USize, types.F32, types.F64:
+		return true
+	}
+	return false
 }
