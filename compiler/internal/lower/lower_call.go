@@ -554,7 +554,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 												Dst:     offset,
 												Base:    ctxPtr,
 												Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8), Type: "i64"}},
-												Type:    "ptr",
+												Type:    "i8",
 											})
 											ls.b.Emit(&hir.Store{Dst: offset, Val: argVal})
 										}
