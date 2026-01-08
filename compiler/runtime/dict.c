@@ -44,9 +44,11 @@ static uint64_t hash_key(dict_t* d, int64_t key_int, const char* key_str, double
             return dict_hash_float(key_float);
         case TYPE_TAG_CUSTOM:
             if (d->key_hash_fn && key_ptr) {
+                // User-provided hash function
                 return d->key_hash_fn(key_ptr);
             }
-            return 0;
+            // Default: pointer-based hash (identity)
+            return (uint64_t)(uintptr_t)key_ptr;
         default:
             return dict_hash_int(key_int);
     }
@@ -64,9 +66,11 @@ static bool keys_equal(dict_t* d, dict_entry_t* entry, int64_t key_int, const ch
             return memcmp(&entry->key_float, &key_float, sizeof(double)) == 0;
         case TYPE_TAG_CUSTOM:
             if (d->key_eq_fn && entry->key_ptr && key_ptr) {
+                // User-provided equality function
                 return d->key_eq_fn(entry->key_ptr, key_ptr);
             }
-            return false;
+            // Default: pointer equality (identity)
+            return entry->key_ptr == key_ptr;
         default:
             return entry->key_int == key_int;
     }
@@ -115,7 +119,11 @@ void dict_free(dict_t* d) {
             if (d->key_type_tag == TYPE_TAG_STR) {
                 free(entry->key_str);
             } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                free(entry->key_ptr);
+                // Only free if we own the key (value-based with copy)
+                if (d->key_hash_fn && d->key_eq_fn) {
+                    free(entry->key_ptr);
+                }
+                // Pointer-identity keys are not owned, don't free
             }
             free(entry->value);
             free(entry);
@@ -163,11 +171,18 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
     
     if (d->key_type_tag == TYPE_TAG_STR && key_str) {
         new_entry->key_str = strdup(key_str);
-    } else if (d->key_type_tag == TYPE_TAG_CUSTOM && key_ptr && d->key_size > 0) {
-        // Copy custom key
-        new_entry->key_ptr = malloc(d->key_size);
-        if (new_entry->key_ptr) {
-            memcpy(new_entry->key_ptr, key_ptr, d->key_size);
+    } else if (d->key_type_tag == TYPE_TAG_CUSTOM && key_ptr) {
+        // For custom keys with hash/eq functions (value-based), copy the data
+        // For default pointer identity (no functions), store pointer directly
+        if (d->key_hash_fn && d->key_eq_fn && d->key_size > 0) {
+            // Value-based: copy the key data
+            new_entry->key_ptr = malloc(d->key_size);
+            if (new_entry->key_ptr) {
+                memcpy(new_entry->key_ptr, key_ptr, d->key_size);
+            }
+        } else {
+            // Pointer identity: store the pointer directly (no copy)
+            new_entry->key_ptr = key_ptr;
         }
     }
     
@@ -246,7 +261,10 @@ void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float
             if (d->key_type_tag == TYPE_TAG_STR) {
                 free(entry->key_str);
             } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                free(entry->key_ptr);
+                // Only free if we own the key (value-based with copy)
+                if (d->key_hash_fn && d->key_eq_fn) {
+                    free(entry->key_ptr);
+                }
             }
             free(entry);
             d->entry_count--;
@@ -270,7 +288,10 @@ void dict_clear(dict_t* d) {
             if (d->key_type_tag == TYPE_TAG_STR) {
                 free(entry->key_str);
             } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                free(entry->key_ptr);
+                // Only free if we own the key (value-based with copy)
+                if (d->key_hash_fn && d->key_eq_fn) {
+                    free(entry->key_ptr);
+                }
             }
             free(entry->value);
             free(entry);
