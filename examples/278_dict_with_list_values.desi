@@ -1,0 +1,54 @@
+# Test dict containing lists as values: dict[str, list[int]]
+# Access and print actual list elements
+
+def main() -> int:
+    print("Testing dict with list values:")
+    
+    # Create dict where values are lists
+    let groups: dict[str, list[int]] = {}
+    
+    let evens: list[int] = [2, 4, 6, 8]
+    let odds: list[int] = [1, 3, 5, 7]
+    let primes: list[int] = [2, 3, 5, 7]
+    
+    groups.insert("evens", evens)
+    groups.insert("odds", odds)
+    groups.insert("primes", primes)
+    print("Inserted 3 groups")
+    
+    # Access list from dict and print elements
+    let evens_list = groups.get("evens", [])
+    print("evens[0] =")
+    print(evens_list[0])
+    print("evens[2] =")
+    print(evens_list[2])
+    
+    # Access odds list
+    let odds_list = groups.get("odds", [])
+    print("odds[1] =")
+    print(odds_list[1])
+    
+    # Iterate through a list value
+    print("All primes:")
+    let primes_list = groups.get("primes", [])
+    for p: int in primes_list:
+        print(p)
+    
+    print("Dict with list values test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing dict with list values:
+# Inserted 3 groups
+# evens[0] =
+# 2
+# evens[2] =
+# 6
+# odds[1] =
+# 3
+# All primes:
+# 2
+# 3
+# 5
+# 7
+# Dict with list values test passed!

@@ -1,0 +1,64 @@
+# Test struct containing collection fields
+# Access and print nested collection values
+
+struct Record:
+    name: str
+    tags: list[str]
+    scores: dict[str, int]
+
+def main() -> int:
+    print("Testing struct with collections:")
+    
+    # Create struct with collection fields
+    let tags: list[str] = ["rust", "go", "desi"]
+    let scores: dict[str, int] = {"math": 95, "cs": 100, "physics": 88}
+    
+    let r = Record(name="Alice", tags=tags, scores=scores)
+    print("Created struct with collections")
+    
+    # Access and print struct field
+    print("Name:")
+    print(r.name)
+    
+    # Access nested list elements
+    print("r.tags[0] =")
+    print(r.tags[0])
+    print("r.tags[1] =")
+    print(r.tags[1])
+    print("r.tags[2] =")
+    print(r.tags[2])
+    
+    # Access nested dict values
+    print("r.scores['math'] =")
+    print(r.scores.get("math", 0))
+    print("r.scores['cs'] =")
+    print(r.scores.get("cs", 0))
+    
+    # Iterate through tags
+    print("All tags:")
+    for t: str in r.tags:
+        print(t)
+    
+    print("Struct with collections test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing struct with collections:
+# Created struct with collections
+# Name:
+# Alice
+# r.tags[0] =
+# rust
+# r.tags[1] =
+# go
+# r.tags[2] =
+# desi
+# r.scores['math'] =
+# 95
+# r.scores['cs'] =
+# 100
+# All tags:
+# rust
+# go
+# desi
+# Struct with collections test passed!
