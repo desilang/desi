@@ -1,24 +1,29 @@
 # Dict runtime bindings for Desi prelude
 # Provides dict[K, V] operations via C FFI
+# Phase 1: supports primitive keys (int, str, bool, float)
 
 # Core dict operations
 @extern("C")
-pub def dict_new(value_size: usize) -> cptr[void]
+pub def dict_new(key_type_tag: i32, value_size: usize, value_type_tag: i32, to_str_fn: cptr[void]) -> cptr[void]
 
 @extern("C")
 pub def dict_free(d: cptr[void]) -> none
 
+# dict_insert(dict, key_int, key_str, key_float, &value, value_type_tag)
 @extern("C")
-pub def dict_insert(d: cptr[void], key: cptr[u8], value: cptr[void]) -> none
+pub def dict_insert(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64, value: cptr[void], value_type_tag: i32) -> none
 
+# dict_get(dict, key_int, key_str, key_float, default_val)
 @extern("C")
-pub def dict_get(d: cptr[void], key: cptr[u8], default_val: cptr[void]) -> cptr[void]
+pub def dict_get(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64, default_val: cptr[void]) -> cptr[void]
 
+# dict_has_key(dict, key_int, key_str, key_float)
 @extern("C")
-pub def dict_has_key(d: cptr[void], key: cptr[u8]) -> bool
+pub def dict_has_key(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64) -> bool
 
+# dict_pop(dict, key_int, key_str, key_float)
 @extern("C")
-pub def dict_pop(d: cptr[void], key: cptr[u8]) -> cptr[void]
+pub def dict_pop(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64) -> cptr[void]
 
 @extern("C")
 pub def dict_clear(d: cptr[void]) -> none

@@ -1,10 +1,10 @@
-# Test dict `in` operator for key containment
-# Note: Runtime currently only supports string keys
+# Test dict with generic key types
+# Phase 1: int, str, bool, float keys
 
 def main() -> int:
-    print("Testing dict in operator:")
+    print("Testing generic dict keys:")
     
-    # Test 1: String keys - existing key
+    # Test 1: String keys (baseline - already worked)
     let str_dict: dict[str, int] = {"apple": 1, "banana": 2, "cherry": 3}
     print("Test 1: String keys")
     if "apple" in str_dict:
@@ -17,48 +17,70 @@ def main() -> int:
     else:
         print("  orange: NOT found")
     
-    # Test 2: Empty dict
-    let empty_dict: dict[str, int] = {}
-    print("Test 2: Empty dict")
-    if "any" in empty_dict:
-        print("  any: found")
+    # Test 2: Integer keys
+    let int_dict: dict[int, str] = {1: "one", 2: "two", 3: "three"}
+    print("Test 2: Integer keys")
+    if 2 in int_dict:
+        print("  2: found")
     else:
-        print("  any: NOT found")
+        print("  2: NOT found")
     
-    # Test 3: Dict with many entries
-    let big_dict: dict[str, int] = {"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}
-    print("Test 3: Multiple entries")
-    if "c" in big_dict:
-        print("  c: found")
+    if 99 in int_dict:
+        print("  99: found")
     else:
-        print("  c: NOT found")
+        print("  99: NOT found")
     
-    if "z" in big_dict:
-        print("  z: found")
+    # Test 3: Boolean keys
+    let bool_dict: dict[bool, str] = {true: "yes", false: "no"}
+    print("Test 3: Boolean keys")
+    if true in bool_dict:
+        print("  true: found")
     else:
-        print("  z: NOT found")
+        print("  true: NOT found")
     
-    # Test 4: Dict with string values
-    let names: dict[str, str] = {"first": "Alice", "last": "Smith"}
-    print("Test 4: String values")
-    if "first" in names:
-        print("  first: found")
+    if false in bool_dict:
+        print("  false: found")
     else:
-        print("  first: NOT found")
+        print("  false: NOT found")
     
-    print("All dict in operator tests passed!")
+    # Test 4: Float keys
+    let float_dict: dict[float, str] = {1.5: "one-half", 2.5: "two-half", 3.14: "pi"}
+    print("Test 4: Float keys")
+    if 3.14 in float_dict:
+        print("  3.14: found")
+    else:
+        print("  3.14: NOT found")
+    
+    if 9.99 in float_dict:
+        print("  9.99: found")
+    else:
+        print("  9.99: NOT found")
+    
+    # Test 5: Empty dict
+    let empty_dict: dict[int, str] = {}
+    print("Test 5: Empty dict")
+    if 1 in empty_dict:
+        print("  1: found")
+    else:
+        print("  1: NOT found")
+    
+    print("All generic dict key tests passed!")
     return 0
 
 # EXPECTED_OUTPUT:
-# Testing dict in operator:
+# Testing generic dict keys:
 # Test 1: String keys
 #   apple: found
 #   orange: NOT found
-# Test 2: Empty dict
-#   any: NOT found
-# Test 3: Multiple entries
-#   c: found
-#   z: NOT found
-# Test 4: String values
-#   first: found
-# All dict in operator tests passed!
+# Test 2: Integer keys
+#   2: found
+#   99: NOT found
+# Test 3: Boolean keys
+#   true: found
+#   false: found
+# Test 4: Float keys
+#   3.14: found
+#   9.99: NOT found
+# Test 5: Empty dict
+#   1: NOT found
+# All generic dict key tests passed!

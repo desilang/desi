@@ -1145,13 +1145,19 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			keyVal := ls.b.FreshTemp("key_val")
 			ls.b.Emit(&hir.Load{Type: "ptr", Src: keyPtr, Dst: keyVal})
 
-			// Get value: dict_get(dict, key, nil)
-			// Need a null default
+			// Get value: dict_get(dict, key_int, key_str, key_float, default)
+			// For dict.items() with string keys, keyVal is the string key
+			// Note: dict_keys() returns string representations for all key types
+			// So we use keyVal as key_str and pass 0 for key_int/key_float
 			nullPtr := ls.b.FreshTemp("null_ptr")
 			ls.b.Emit(&hir.Alloca{Dst: nullPtr, Type: "i64", Count: 1})
 			ls.b.Emit(&hir.Store{Dst: nullPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+			// For string-keyed dicts (currently only working case for dict.items())
+			keyInt := hir.ConstInt{Text: "0", Type: "i64"}
+			keyFloat := hir.ConstFloat{Text: "0.0"}
 			valuePtr := ls.b.FreshTemp("value_ptr")
-			ls.b.Emit(&hir.Call{Dst: valuePtr, Fn: "dict_get", Args: []hir.Value{dictVal, keyVal, nullPtr}, Type: "ptr"})
+			ls.b.Emit(&hir.Call{Dst: valuePtr, Fn: "dict_get", Args: []hir.Value{dictVal, keyInt, keyVal, keyFloat, nullPtr}, Type: "ptr"})
 
 			// Load value (as i64, then cast to i32 for int)
 			valueI64 := ls.b.FreshTemp("value_i64")

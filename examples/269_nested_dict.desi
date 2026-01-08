@@ -1,0 +1,81 @@
+# Test nested dict (dict with dict values)
+# dict[K, dict[K, V]] - value type is another dict
+
+def main() -> int:
+    print("Testing nested dicts:")
+    
+    # Test 1: Nested dict literal with int outer key
+    let outer: dict[int, dict[int, str]] = {
+        1: {10: "ten", 20: "twenty"},
+        2: {30: "thirty", 40: "forty"}
+    }
+    
+    print("Test 1: Outer dict lookup")
+    if 1 in outer:
+        print("  1 in outer: found")
+    
+    if 2 in outer:
+        print("  2 in outer: found")
+    
+    if 99 in outer:
+        print("  99 in outer: found")
+    else:
+        print("  99 in outer: NOT found")
+    
+    # Test 2: Nested dict with string keys - config example
+    let config: dict[str, dict[str, int]] = {
+        "dev": {"port": 3000, "debug": 1},
+        "prod": {"port": 80, "debug": 0}
+    }
+    
+    print("Test 2: String-keyed nested dict")
+    if "dev" in config:
+        print("  dev in config: found")
+    
+    if "staging" in config:
+        print("  staging in config: found")
+    else:
+        print("  staging in config: NOT found")
+    
+    # Test 3: Extract values from nested dict
+    print("Test 3: Extract inner dict values")
+    let dev_config = config.get("dev", {})
+    
+    if "port" in dev_config:
+        print("  port in dev_config: found")
+    
+    let port = dev_config.get("port", 0)
+    print("  dev port:")
+    print(port)
+    
+    let debug = dev_config.get("debug", -1)
+    print("  dev debug:")
+    print(debug)
+    
+    # Get prod config
+    let prod_config = config.get("prod", {})
+    let prod_port = prod_config.get("port", 0)
+    print("  prod port:")
+    print(prod_port)
+    
+    print("All nested dict tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing nested dicts:
+# Test 1: Outer dict lookup
+#   1 in outer: found
+#   2 in outer: found
+#   99 in outer: NOT found
+# Test 2: String-keyed nested dict
+#   dev in config: found
+#   staging in config: NOT found
+# Test 3: Extract inner dict values
+#   port in dev_config: found
+#   dev port:
+# 3000
+#   dev debug:
+# 1
+#   prod port:
+# 80
+# All nested dict tests passed!

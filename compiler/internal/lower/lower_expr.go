@@ -1944,14 +1944,32 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 
 			// Handle dict membership: key in dict
-			if _, ok := rhsType.(*types.Dict); ok {
-				// Cast key to ptr for dict_has_key
-				keyPtr := ls.b.FreshTemp("key_ptr")
-				ls.b.Emit(&hir.Cast{Dst: keyPtr, Src: lhs, Type: "ptr"})
+			if dictType, ok := rhsType.(*types.Dict); ok {
+				// Get key type
+				keyType := dictType.Key
 
-				// Call dict_has_key -> returns i1 directly
+				// Prepare key arguments based on type
+				var keyInt hir.Value = hir.ConstInt{Text: "0", Type: "i64"}
+				var keyStr hir.Value = hir.ConstNull{}
+				var keyFloat hir.Value = hir.ConstFloat{Text: "0.0"}
+
+				isStrKey := types.Equal(keyType, types.Str)
+				isFloatKey := keyType == types.Float || keyType == types.F32 || keyType == types.F64
+
+				if isStrKey {
+					keyStr = lhs
+				} else if isFloatKey {
+					keyFloat = lhs
+				} else {
+					// int or bool - cast to i64
+					keyInt64 := ls.b.FreshTemp("key_i64")
+					ls.b.Emit(&hir.Cast{Dst: keyInt64, Src: lhs, Type: "i64"})
+					keyInt = keyInt64
+				}
+
+				// Call dict_has_key(dict, key_int, key_str, key_float) -> returns i1
 				dst := ls.b.FreshTemp("has_key")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "dict_has_key", Args: []hir.Value{rhs, keyPtr}, Type: "i1"})
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "dict_has_key", Args: []hir.Value{rhs, keyInt, keyStr, keyFloat}, Type: "i1"})
 				return dst
 			}
 
