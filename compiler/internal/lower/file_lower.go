@@ -125,3 +125,15 @@ func isWriteGuardType(t types.T) bool {
 	_, ok := t.(*types.WriteGuard)
 	return ok
 }
+
+// isSenderType checks if a type is ChannelSender[T]
+func isSenderType(t types.T) bool {
+	_, ok := t.(*types.ChannelSender)
+	return ok
+}
+
+// isReceiverType checks if a type is ChannelReceiver[T]
+func isReceiverType(t types.T) bool {
+	_, ok := t.(*types.ChannelReceiver)
+	return ok
+}
