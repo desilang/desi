@@ -1,0 +1,22 @@
+# Minimal test case for double-free bug
+
+class Item:
+    pub id: int
+    
+    pub def __new__(self, id: int):
+        self.id = id
+
+def main() -> int:
+    print("Testing dict with class value:")
+    
+    # dict[str, Item] - class as value
+    let item_map: dict[str, Item] = {}
+    let obj = Item(42)
+    item_map.insert("key1", obj)
+    
+    let retrieved = item_map.get("key1", Item(0))
+    print("retrieved.id:")
+    print(retrieved.id)
+    
+    print("Done")
+    return 0
