@@ -77,14 +77,41 @@ Captures use value-copy (like Rust's `move`):
 - The spawned task sees a snapshot of the values
 - No sharing/aliasing issues with the parent task
 
+## Primitive Boxing
+
+Primitive types (int, float, bool, sized integers) need special handling because:
+- Wrapper always loads captured values as `ptr` type
+- Primitives stored directly would cause type mismatch and segfault
+
+**Solution**: Box primitives before storing in context:
+
+```
+# For primitive capture 'x: int'
+%boxed = call ptr @malloc(i64 8)    # Allocate box
+store i32 42, ptr %boxed            # Store value in box
+store ptr %boxed, ptr %ctx_slot     # Store box ptr in context
+```
+
+**Implementation** (lower_call.go):
+1. `isPrimitiveType()` - detects int/float/bool/sized ints
+2. Scope chain search - looks up variable types by name in `ls.scopes`
+3. For primitives: malloc → store value → store ptr to context
+4. For pointers (string, list, class): store directly
+
 ## Named Functions
 
 For named functions without captures (`tg.run(simple_worker)`):
 - Wrapper `__tgwrap$simple_worker(ctx)` is generated
 - Wrapper ignores `ctx` and calls `simple_worker()`
 
+## Send Trait Checking
+
+Captured variables are checked at compile time to ensure they implement the Send trait:
+- `check/check_send.go` contains `checkTaskGroupRunSend()`
+- MutexGuard is NOT Send (lock ownership can't transfer across threads)
+- Primitives, Mutex, Channel, Atomic are Send
+
 ## Future Work
 
-- Send trait checking for captured values (thread-safety)
 - Reference capture mode (for intentional sharing with locks)
 - Automatic context cleanup after task completion
