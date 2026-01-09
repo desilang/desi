@@ -1,0 +1,89 @@
+# Test dict literal with custom class keys
+# Both inline constructor and variable should work
+
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+    
+    pub def __hash__(self) -> u64:
+        return self.x * 31 + self.y
+    
+    pub def __eq__(self, other: Point) -> bool:
+        return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    print("Testing dict literal with custom keys:")
+    
+    # Test 1: Variable as key
+    let p1 = Point(1, 2)
+    let cache1: dict[Point, str] = {p1: "origin"}
+    print("Created dict with variable key")
+    
+    if p1 in cache1:
+        print("p1 in cache1: OK")
+    else:
+        print("ERROR: p1 not found")
+    
+    # Test 2: Inline constructor as key
+    let cache2: dict[Point, str] = {Point(3, 4): "other"}
+    print("Created dict with inline constructor key")
+    
+    # Lookup with same values
+    let lookup = Point(3, 4)
+    if lookup in cache2:
+        print("Point(3,4) in cache2: OK")
+    else:
+        print("ERROR: Point(3,4) not found")
+    
+    # Test 3: Multiple entries with mixed keys
+    let p2 = Point(5, 6)
+    let cache3: dict[Point, str] = {
+        Point(1, 1): "a",
+        p2: "b",
+        Point(7, 8): "c"
+    }
+    print("Created dict with mixed keys")
+    
+    if Point(1, 1) in cache3:
+        print("Point(1,1) found: OK")
+    if p2 in cache3:
+        print("p2 found: OK")
+    if Point(7, 8) in cache3:
+        print("Point(7,8) found: OK")
+    
+    # Test 4: Insert with same-value different-object key
+    # Should UPDATE the existing entry (p2 = Point(5,6))
+    print("Testing key update with value equality:")
+    cache3.insert(Point(5, 6), "d")  # New object, same values as p2
+    
+    # p2 should still be found (same key by __eq__)
+    if p2 in cache3:
+        print("p2 still found after insert: OK")
+    
+    # The value should be updated to "d"
+    let val = cache3.get(p2, "not found")
+    print("cache3[p2] after insert Point(5,6):")
+    print(val)
+    
+    print("Dict literal with custom keys test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing dict literal with custom keys:
+# Created dict with variable key
+# p1 in cache1: OK
+# Created dict with inline constructor key
+# Point(3,4) in cache2: OK
+# Created dict with mixed keys
+# Point(1,1) found: OK
+# p2 found: OK
+# Point(7,8) found: OK
+# Testing key update with value equality:
+# p2 still found after insert: OK
+# cache3[p2] after insert Point(5,6):
+# d
+# Dict literal with custom keys test passed!

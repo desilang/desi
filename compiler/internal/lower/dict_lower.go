@@ -65,6 +65,19 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		// Load result from pointer
 		valDst := ls.b.FreshTemp("val")
 		ls.b.Emit(&hir.Load{Type: "i64", Src: resPtr, Dst: valDst})
+
+		// For pointer value types (str, class, list, set, dict), convert i64 back to ptr
+		valType := dictType.Val
+		needsPtrCast := types.Equal(valType, types.Str)
+		switch valType.(type) {
+		case *types.Class, *types.List, *types.Set, *types.Dict, *types.Struct:
+			needsPtrCast = true
+		}
+		if needsPtrCast {
+			ptrDst := ls.b.FreshTemp("val_ptr")
+			ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
+			return ptrDst
+		}
 		return valDst
 
 	case "insert":
