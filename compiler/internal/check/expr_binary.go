@@ -247,91 +247,38 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 
 		// Case 1: Function call (Identifier)
 		if id != nil {
-			lhsT := c.typ(x.Lhs)
-			set := c.info.Funcs[id.Name]
+			// Ensure LHS is typed
+			_ = c.typ(x.Lhs)
 
-			if set == nil || len(set.Cands) == 0 {
-				c.add(diagAt("DTE0001", id.Span, "pipeline target undefined function: "+id.Name))
-				return nil
-			}
-
-			base := callArgs(call)
-			hasNamed := false
-			for _, a := range base {
-				if a.Name != nil {
-					hasNamed = true
-					break
+			// Get RHS arguments (ArgNodes handles names)
+			rhsArgs := call.ArgNodes
+			if len(rhsArgs) == 0 && len(call.Args) > 0 {
+				// Fallback if ArgNodes empty but Args present (should rely on parser populating ArgNodes)
+				rhsArgs = make([]ast.CallArg, len(call.Args))
+				for i, a := range call.Args {
+					rhsArgs[i] = ast.CallArg{Expr: a}
 				}
 			}
 
-			if !hasNamed {
-				// Legacy positional: prepend lhs, then resolve
-				args := make([]types.T, 0, 1+len(base))
-				args = append(args, lhsT)
-				for _, a := range base {
-					args = append(args, c.typ(a.Expr))
-				}
-				arityCands := filterByArity(set.Cands, len(args))
-				if len(arityCands) == 0 {
-					c.add(diagAt("DTE0046", x.Span, "pipeline arity mismatch"))
-					return nil
-				}
-				exact := filterExactByTypes(arityCands, args)
-				switch len(exact) {
-				case 1:
-					chosen := exact[0]
-					if chosen.Extern && c.unsafeDepth == 0 {
-						c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-					}
-					ret := chosen.Type.Ret
-					c.info.Types[call.Callee] = chosen.Type
-					c.info.Types[x] = ret
-					return ret
-				case 0:
-					c.add(diagAt("DTE0101", x.Span, "pipeline has no matching overload for call to "+id.Name))
-					return nil
-				default:
-					c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
-					return nil
-				}
+			// Synthesize argument list: LHS + RHS args
+			synthArgs := make([]ast.CallArg, 0, 1+len(rhsArgs))
+			synthArgs = append(synthArgs, ast.CallArg{Name: nil, Expr: x.Lhs})
+			synthArgs = append(synthArgs, rhsArgs...)
+
+			// Create synthetic call expression sharing the same Callee (Identifier) and updated Args
+			synthCall := &ast.CallExpr{
+				Callee:   call.Callee,
+				ArgNodes: synthArgs,
+				Span:     x.Span,
 			}
 
-			// Named-args pipeline: synthesize [lhs]+args and run per-candidate mapping
-			synth := make([]ast.CallArg, 0, 1+len(base))
-			synth = append(synth, ast.CallArg{Expr: &ast.Ident{Name: "<pipe>", Span: x.Lhs.SpanOf()}})
-			synth = append(synth, base...)
-
-			var exact []*FuncCand
-			for _, cand := range set.Cands {
-				if cand.Type == nil || len(cand.Type.Params) == 0 {
-					continue
-				}
-				vec, ok := c.canonicalizeForCandidate(cand, synth)
-				if !ok {
-					continue
-				}
-				vec[0] = lhsT // force first param to be lhsT
-				if typesMatchExactly(cand.Type.Params, vec, cand.Type.Variadic) {
-					exact = append(exact, cand)
-				}
-			}
-			switch len(exact) {
-			case 1:
-				chosen := exact[0]
-				if chosen.Extern && c.unsafeDepth == 0 {
-					c.add(diagAt("DFI0003", call.Callee.SpanOf(), ""))
-				}
-				ret := chosen.Type.Ret
-				c.info.Types[call.Callee] = chosen.Type
+			// Delegate to typCall - this handles special builtins (sorted, print), overloading, named args, etc.
+			ret := c.typCall(synthCall)
+			if ret != nil {
 				c.info.Types[x] = ret
 				return ret
-			case 0:
-				c.add(diagAt("DTE0101", x.Span, "pipeline has no matching overload for call to "+id.Name))
-				return nil
-			default:
-				c.add(diagAt("DTE0102", x.Span, "pipeline ambiguous overload for call to "+id.Name))
-				return nil
 			}
+			return nil
 
 		} else if field != nil {
 			// Case 2: Method call (FieldExpr)

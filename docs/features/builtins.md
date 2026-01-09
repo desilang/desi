@@ -64,16 +64,25 @@ let largest: int = max(numbers)   # 9
 ### sorted()
 
 Returns a **new** list with elements sorted in ascending order. The original list is unchanged.
+Supports an optional `reverse` parameter.
 
 ```desi
 let numbers: list[int] = [3, 1, 4, 1, 5, 9, 2, 6]
+
+# Standard ascending
 let ordered: list[int] = sorted(numbers)
 # ordered = [1, 1, 2, 3, 4, 5, 6, 9]
-# numbers = [3, 1, 4, 1, 5, 9, 2, 6] (unchanged)
+
+# Descending with named argument
+let desc: list[int] = sorted(numbers, reverse=true)
+# desc = [9, 6, 5, 4, 3, 2, 1, 1]
+
+# Pipeline syntax
+let piped: list[int] = numbers |> sorted(reverse=true)
 ```
 
 **Accepted Types:**
-- `list[int]` → `list[int]`
+- `list[T]` → `list[T]` (where T is orderable)
 
 > **Note:** For in-place sorting, use the `list.sort()` method (planned).
 
@@ -382,9 +391,6 @@ for i: int, val: int in enumerate(nums):
 let numbers: list[int] = [1, 2, 3]
 any(numbers)  # ❌ Error: any requires list[bool]
 
-# DON'T: Expect sorted to work on non-int lists (currently)
-let names: list[str] = ["bob", "alice"]
-sorted(names)  # ❌ Error: sorted requires list[int]
 
 # DON'T: Confuse sorted with in-place mutation
 let nums: list[int] = [3, 1, 2]
@@ -401,7 +407,7 @@ sorted(nums)  # Returns new list, nums unchanged
 | `sum(x)` | `list[int]` or `list[float]` | Element type | Sum of elements |
 | `min(x)` | `list[int]` or `list[float]` | Element type | Minimum value |
 | `max(x)` | `list[int]` or `list[float]` | Element type | Maximum value |
-| `sorted(x)` | `list[int]` | `list[int]` | New sorted list |
+| `sorted(x)` | `list[T]` | `list[T]` | New sorted list |
 | `any(x)` | `list[bool]` | `bool` | True if any element is true |
 | `all(x)` | `list[bool]` | `bool` | True if all elements are true |
 | `map(f, x)` | `func`, `list[T]` | `list[R]` | Apply function to each element |

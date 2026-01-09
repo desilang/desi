@@ -171,6 +171,12 @@ let nums: list[int] = [3, 1, 4, 1, 5]
 let ordered: list[int] = sorted(nums)
 # ordered = [1, 1, 3, 4, 5]
 # nums = [3, 1, 4, 1, 5] (unchanged)
+
+# Reverse sort
+let descending: list[int] = sorted(nums, reverse=true)
+
+# With pipeline
+let piped: list[int] = nums |> sorted(reverse=true)
 ```
 
 ### any() / all()

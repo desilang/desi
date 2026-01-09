@@ -568,6 +568,7 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 
 	// Param name lookup (maybe nil => cannot map names)
 	pnames := candParamNames(cand)
+
 	nameToIdx := map[string]int{}
 	if len(pnames) == n {
 		for i, nm := range pnames {
@@ -612,7 +613,8 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 
 		idx, ok := nameToIdx[key]
 		if !ok {
-			c.add(diagAt("DCA0001", a.Name.Span, "unknown named argument: "+key))
+			// Unknown named arg for this candidate - don't emit error yet,
+			// another candidate may have this param. Just fail this candidate.
 			return nil, false
 		}
 		if filled[idx] {

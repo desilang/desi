@@ -954,18 +954,45 @@ handlePrint:
 		}
 
 		// Skip print and str - they have their own arg handling
-		if calleeName == "sorted" && len(x.Args) >= 1 && len(x.Args) <= 2 {
-			// sorted(items) or sorted(items, reverse) -> copy list, sort in-place, return
-			argVal := ls.lowerExpr(x.Args[0])
-			res := ls.b.FreshTemp("sorted_res")
-			ls.b.Emit(&hir.Call{Dst: res, Fn: "list_copy", Args: []hir.Value{argVal}, Type: "ptr"})
-			// Get reverse arg (default to 0 = ascending)
-			var reverseArg hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
-			if len(x.Args) >= 2 {
-				reverseArg = ls.lowerExpr(x.Args[1])
+		// Skip print and str - they have their own arg handling
+		if calleeName == "sorted" {
+			// Find "items" and "reverse" arguments
+			var itemsExpr ast.Expr
+			var reverseExpr ast.Expr
+
+			for i, arg := range x.ArgNodes {
+				if arg.Name == nil {
+					// Positional
+					if i == 0 {
+						itemsExpr = arg.Expr
+					}
+					if i == 1 {
+						reverseExpr = arg.Expr
+					}
+				} else {
+					// Named
+					if arg.Name.Name == "items" {
+						itemsExpr = arg.Expr
+					}
+					if arg.Name.Name == "reverse" {
+						reverseExpr = arg.Expr
+					}
+				}
 			}
-			ls.b.Emit(&hir.Call{Fn: "list_sort", Args: []hir.Value{res, reverseArg}})
-			return res
+
+			if itemsExpr != nil {
+				// sorted(items) or sorted(items, reverse) -> copy list, sort in-place, return
+				argVal := ls.lowerExpr(itemsExpr)
+				res := ls.b.FreshTemp("sorted_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_copy", Args: []hir.Value{argVal}, Type: "ptr"})
+				// Get reverse arg (default to 0 = ascending)
+				var reverseArg hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+				if reverseExpr != nil {
+					reverseArg = ls.lowerExpr(reverseExpr)
+				}
+				ls.b.Emit(&hir.Call{Fn: "list_sort", Args: []hir.Value{res, reverseArg}})
+				return res
+			}
 		}
 
 		if len(x.Args) == 1 && calleeName != "print" && calleeName != "str" {
