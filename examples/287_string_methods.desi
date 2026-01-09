@@ -1,0 +1,36 @@
+# Test string methods: split, join, replace
+
+def main() -> int:
+    # Test str.split()
+    print("=== str.split() ===")
+    let s = "hello,world,foo,bar"
+    let parts = s.split(",")
+    for part: str in parts:
+        print(part)
+    
+    # Test list<str>.join()
+    print("=== list.join() ===")
+    let words = ["apple", "banana", "cherry"]
+    let joined = words.join(", ")
+    print(joined)
+    
+    # Test str.replace()
+    print("=== str.replace() ===")
+    let original = "Hello World"
+    let replaced = original.replace("World", "Desi")
+    print(replaced)
+    
+    print("All string method tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === str.split() ===
+# hello
+# world
+# foo
+# bar
+# === list.join() ===
+# apple, banana, cherry
+# === str.replace() ===
+# Hello Desi
+# All string method tests passed!
