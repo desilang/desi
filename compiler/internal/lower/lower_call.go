@@ -603,7 +603,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 							}
 						}
 
-						// If not capture marker, handle named function
+						// If not capture marker, handle named function or lambda identifier
 						if wrapperName == "" {
 							if id, ok := x.Args[0].(*ast.Ident); ok {
 								targetFnName = id.Name
@@ -611,9 +611,64 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 								if strings.HasPrefix(targetFnName, "__tgwrap$") {
 									wrapperName = targetFnName
 								} else {
-									// Generate a simple wrapper that ignores ctx
+									// Check if this is a lambda with captures
+									var captures []string
+									if ls.info != nil && ls.info.LambdaCaptures != nil {
+										captures = ls.info.LambdaCaptures[targetFnName]
+									}
+									numCaptures = len(captures)
+
+									// If there are captures, build context struct
+									if numCaptures > 0 {
+										ctxPtr := ls.b.FreshTemp("closure_ctx")
+										ctxSize := numCaptures * 8 // 8 bytes per capture
+										ls.b.Emit(&hir.Call{
+											Dst:  ctxPtr,
+											Fn:   "malloc",
+											Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", ctxSize), Type: "i64"}},
+											Type: "ptr",
+										})
+
+										// Store each captured value into context
+										for i, capName := range captures {
+											capVal := hir.Var{Name: capName}
+											offset := ls.b.FreshTemp("cap_ptr")
+											ls.b.Emit(&hir.GetElementPtr{
+												Dst:     offset,
+												Base:    ctxPtr,
+												Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", i*8), Type: "i64"}},
+												Type:    "i8",
+											})
+											// Check if value is a primitive type that needs boxing
+											var argType types.T
+											for j := len(ls.scopes) - 1; j >= 0; j-- {
+												if t, ok := ls.scopes[j].types[capName]; ok {
+													argType = t
+													break
+												}
+											}
+											needsBoxing := isPrimitiveType(argType)
+											if needsBoxing {
+												// Box the primitive: malloc, store value, store ptr
+												boxPtr := ls.b.FreshTemp("boxed")
+												ls.b.Emit(&hir.Call{
+													Dst:  boxPtr,
+													Fn:   "malloc",
+													Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}},
+													Type: "ptr",
+												})
+												ls.b.Emit(&hir.Store{Dst: boxPtr, Val: capVal})
+												ls.b.Emit(&hir.Store{Dst: offset, Val: boxPtr})
+											} else {
+												ls.b.Emit(&hir.Store{Dst: offset, Val: capVal})
+											}
+										}
+										ctxVal = ctxPtr
+									}
+
+									// Generate wrapper
 									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
-									ls.emitTaskGroupWrapper(wrapperName, targetFnName, 0)
+									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
 								}
 							} else {
 								// Fallback: lower expression (shouldn't happen often)
@@ -2089,8 +2144,15 @@ skipMethodCall:
 		args = append(args, ls.lowerExpr(a))
 	}
 
-	// M15: Box arguments for generic functions
-	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
+	// Append captured values for lambdas with captures
+	if ls.info != nil && ls.info.LambdaCaptures != nil {
+		if captures, ok := ls.info.LambdaCaptures[callee]; ok {
+			for _, capName := range captures {
+				args = append(args, hir.Var{Name: capName})
+			}
+		}
+	}
+
 	// M15: Box arguments for generic functions
 	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
 	if ls.info != nil {

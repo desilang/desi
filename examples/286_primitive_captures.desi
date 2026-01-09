@@ -1,0 +1,28 @@
+# Test lambda WITH captures
+# Syntax: lambda<RetType>: body (captures variables from scope)
+
+def main() -> int:
+    print("Testing lambda with captures:")
+    
+    # Capture int
+    let offset: int = 10
+    let add_offset = lambda<int> x: int: x + offset
+    print("Calling add_offset(5):")
+    print(add_offset(5))  # Should be 15
+    
+    # Capture float
+    let scale: float = 2.5
+    let scale_it = lambda<float> x: float: x * scale
+    print("Calling scale_it(4.0):")
+    print(scale_it(4.0))  # Should be 10.0
+    
+    print("Done")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing lambda with captures:
+# Calling add_offset(5):
+# 15
+# Calling scale_it(4.0):
+# 10
+# Done
