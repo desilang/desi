@@ -1,0 +1,36 @@
+# Test list containing dictionaries
+
+def main() -> int:
+    print("Testing list of dicts:")
+    
+    # Create list of dicts
+    let records: list[dict[str, int]] = []
+    
+    let r1: dict[str, int] = {"x": 10, "y": 20}
+    let r2: dict[str, int] = {"x": 30, "y": 40}
+    let r3: dict[str, int] = {"x": 50, "y": 60}
+    
+    records.append(r1)
+    records.append(r2)
+    records.append(r3)
+    print("Appended 3 dicts")
+    
+    # Test length
+    print("Length:")
+    print(len(records))
+    
+    # Test indexing and dict access
+    let first = records[0]
+    if "x" in first:
+        print("first.x exists: OK")
+    
+    print("List of dicts test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing list of dicts:
+# Appended 3 dicts
+# Length:
+# 3
+# first.x exists: OK
+# List of dicts test passed!
