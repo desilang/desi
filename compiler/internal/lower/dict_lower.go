@@ -18,13 +18,12 @@ func (ls *lowerState) prepareKeyArgs(keyExpr ast.Expr, keyType types.T) (keyInt 
 
 	isStrKey := types.Equal(keyType, types.Str)
 	isFloatKey := keyType == types.Float || keyType == types.F32 || keyType == types.F64
+
+	// Check for any custom key type (class, struct, enum, list, set)
 	isCustomKey := false
-	if cls, ok := keyType.(*types.Class); ok {
-		if _, hasHash := cls.Dunders["__hash__"]; hasHash {
-			if _, hasEq := cls.Dunders["__eq__"]; hasEq {
-				isCustomKey = true
-			}
-		}
+	switch keyType.(type) {
+	case *types.Class, *types.Struct, *types.Enum, *types.List, *types.Set:
+		isCustomKey = true
 	}
 
 	if isStrKey {

@@ -61,19 +61,42 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 			valTypeTag = getTypeTag(t.Val)
 			toStrFunc = resolveToStrFunc(t.Val)
 
-			// Check for custom key type (class with __hash__ and __eq__)
-			if cls, ok := t.Key.(*types.Class); ok {
-				if _, hasHash := cls.Dunders["__hash__"]; hasHash {
-					if _, hasEq := cls.Dunders["__eq__"]; hasEq {
-						// TYPE_TAG_CUSTOM = 4
-						keyTypeTag = hir.ConstInt{Text: "4", Type: "i32"}
-						// Get class size (approximation: 8 bytes per field)
-						keySize = hir.ConstInt{Text: "8", Type: "i64"} // TODO: calculate actual size
-						// Function pointer names (mangled)
-						keyHashFn = hir.Var{Name: "@" + cls.Name + "___hash__"}
-						keyEqFn = hir.Var{Name: "@" + cls.Name + "___eq__"}
-					}
+			// Check for custom key type (class, struct, enum, list, set)
+			// All non-primitive types use TYPE_TAG_CUSTOM with optional hash/eq functions
+			isCustomKey := false
+			var clsName string
+
+			switch kt := t.Key.(type) {
+			case *types.Class:
+				isCustomKey = true
+				clsName = kt.Name
+				// Check for optional __hash__ and __eq__ dunders
+				if _, hasHash := kt.Dunders["__hash__"]; hasHash {
+					keyHashFn = hir.Var{Name: "@" + kt.Name + "___hash__"}
 				}
+				if _, hasEq := kt.Dunders["__eq__"]; hasEq {
+					keyEqFn = hir.Var{Name: "@" + kt.Name + "___eq__"}
+				}
+			case *types.Struct:
+				isCustomKey = true
+				clsName = kt.Name
+			case *types.Enum:
+				isCustomKey = true
+				clsName = kt.Name
+			case *types.List:
+				isCustomKey = true
+				clsName = "list"
+			case *types.Set:
+				isCustomKey = true
+				clsName = "set"
+			}
+
+			if isCustomKey {
+				// TYPE_TAG_CUSTOM = 4
+				keyTypeTag = hir.ConstInt{Text: "4", Type: "i32"}
+				// Pointer size for key storage
+				keySize = hir.ConstInt{Text: "8", Type: "i64"}
+				_ = clsName // may be used for debugging
 			}
 		}
 	}
@@ -106,13 +129,12 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 
 		isStrKey := types.Equal(entryKeyType, types.Str)
 		isFloatKey := entryKeyType == types.Float || entryKeyType == types.F32 || entryKeyType == types.F64
+
+		// Check for any custom key type (class, struct, enum, list, set)
 		isCustomKey := false
-		if cls, ok := entryKeyType.(*types.Class); ok {
-			if _, hasHash := cls.Dunders["__hash__"]; hasHash {
-				if _, hasEq := cls.Dunders["__eq__"]; hasEq {
-					isCustomKey = true
-				}
-			}
+		switch entryKeyType.(type) {
+		case *types.Class, *types.Struct, *types.Enum, *types.List, *types.Set:
+			isCustomKey = true
 		}
 
 		if isStrKey {

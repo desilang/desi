@@ -1,0 +1,60 @@
+# Test class as dict key WITHOUT __hash__/__eq__ dunders
+# Uses default pointer-based identity
+
+class SimpleClass:
+    pub x: int
+    
+    pub def __new__(self, x: int):
+        self.x = x
+
+def main() -> int:
+    print("Testing class without dunders as dict key:")
+    
+    # Create instances
+    let obj1 = SimpleClass(1)
+    let obj2 = SimpleClass(2)
+    let obj1_ref = obj1  # Same object reference
+    
+    # Test dict with SimpleClass key (no dunders - uses pointer identity)
+    let cache: dict[SimpleClass, str] = {}
+    
+    cache.insert(obj1, "first")
+    cache.insert(obj2, "second")
+    print("Inserted obj1 and obj2")
+    
+    # Same object should be found
+    if obj1 in cache:
+        print("obj1 in cache: OK")
+    else:
+        print("ERROR: obj1 not found")
+    
+    if obj2 in cache:
+        print("obj2 in cache: OK")
+    else:
+        print("ERROR: obj2 not found")
+    
+    # Same reference should be found (pointer equality)
+    if obj1_ref in cache:
+        print("obj1_ref in cache (same ptr): OK")
+    else:
+        print("ERROR: obj1_ref not found")
+    
+    # Note: Different object with same value will NOT be found
+    # because we use pointer identity (no __eq__)
+    let obj1_copy = SimpleClass(1)  # Different object, same value
+    if obj1_copy in cache:
+        print("obj1_copy found (value eq)")
+    else:
+        print("obj1_copy NOT found (ptr identity): expected")
+    
+    print("Class without dunders test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing class without dunders as dict key:
+# Inserted obj1 and obj2
+# obj1 in cache: OK
+# obj2 in cache: OK
+# obj1_ref in cache (same ptr): OK
+# obj1_copy NOT found (ptr identity): expected
+# Class without dunders test passed!
