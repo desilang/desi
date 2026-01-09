@@ -954,6 +954,20 @@ handlePrint:
 		}
 
 		// Skip print and str - they have their own arg handling
+		if calleeName == "sorted" && len(x.Args) >= 1 && len(x.Args) <= 2 {
+			// sorted(items) or sorted(items, reverse) -> copy list, sort in-place, return
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("sorted_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "list_copy", Args: []hir.Value{argVal}, Type: "ptr"})
+			// Get reverse arg (default to 0 = ascending)
+			var reverseArg hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+			if len(x.Args) >= 2 {
+				reverseArg = ls.lowerExpr(x.Args[1])
+			}
+			ls.b.Emit(&hir.Call{Fn: "list_sort", Args: []hir.Value{res, reverseArg}})
+			return res
+		}
+
 		if len(x.Args) == 1 && calleeName != "print" && calleeName != "str" {
 			argType := ls.info.Types[x.Args[0]]
 			argVal := ls.lowerExpr(x.Args[0])
@@ -1082,8 +1096,15 @@ handlePrint:
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_all_builtin", Args: []hir.Value{argVal}, Type: "i1"})
 				return res
 			case "sorted":
+				// sorted(items) or sorted(items, reverse) -> copy list, sort in-place, return
 				res := ls.b.FreshTemp("sorted_res")
-				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_sorted_int", Args: []hir.Value{argVal}, Type: "ptr"})
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "list_copy", Args: []hir.Value{argVal}, Type: "ptr"})
+				// Get reverse arg (default to 0 = ascending)
+				var reverseArg hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+				if len(x.Args) >= 2 {
+					reverseArg = ls.lowerExpr(x.Args[1])
+				}
+				ls.b.Emit(&hir.Call{Fn: "list_sort", Args: []hir.Value{res, reverseArg}})
 				return res
 			case "mutex_new", "Mutex":
 				// mutex_new(value) or Mutex(value) -> DesiMutex*

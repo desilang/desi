@@ -839,15 +839,19 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return nil
 			}
 
-			// Built-in sorted() function - accepts list[int], returns list[int]
-			if id.Name == "sorted" && len(args) == 1 && args[0] != nil {
+			// Built-in sorted() function - accepts any list, optional reverse bool
+			// sorted(items) or sorted(items, reverse)
+			if id.Name == "sorted" && len(args) >= 1 && len(args) <= 2 && args[0] != nil {
 				if listT, ok := args[0].(*types.List); ok {
-					if types.Equal(listT.Elem, types.Int) {
-						c.info.Types[call] = args[0]
-						return args[0]
+					// Validate optional reverse arg is bool
+					if len(args) == 2 && args[1] != nil && !types.Equal(args[1], types.Bool) {
+						c.add(diagAt("DTE0001", call.Span, "sorted second argument must be bool (reverse)"))
+						return nil
 					}
+					c.info.Types[call] = listT
+					return listT
 				}
-				c.add(diagAt("DTE0001", call.Span, "sorted requires list[int]"))
+				c.add(diagAt("DTE0001", call.Span, "sorted requires a list"))
 				return nil
 			}
 
