@@ -595,6 +595,28 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			v = ls.lowerExpr(s.Value)
 			ls.consumeTemp(v) // Return consumes the value
 
+			// Type coercion: if return type is i64/u64 but expression type differs, cast
+			funcRetType := ls.b.Func().RetType
+			if funcRetType == "i64" {
+				// Check if expression type needs widening to i64
+				needsCast := false
+				if ls.info != nil {
+					exprType := ls.info.Types[s.Value]
+					// Cast if type is int, i32, bool, or nil (unknown, likely i32)
+					if exprType == nil || exprType == types.Int || exprType == types.I32 || exprType == types.Bool {
+						needsCast = true
+					}
+				} else {
+					// No type info - assume we need cast
+					needsCast = true
+				}
+				if needsCast {
+					casted := ls.b.FreshTemp("ret_i64")
+					ls.b.Emit(&hir.Cast{Dst: casted, Src: v, Type: "i64"})
+					v = casted
+				}
+			}
+
 			// If returning a variable (not a field or expression), mark it moved
 			if id, ok := s.Value.(*ast.Ident); ok {
 				for i := len(ls.scopes) - 1; i >= 0; i-- {

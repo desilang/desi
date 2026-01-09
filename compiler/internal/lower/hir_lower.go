@@ -59,8 +59,40 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		dunderNewClass:      dunderNewClass,
 		dunderNewSelf:       selfPtr,
 	}
-	ls.lowerBlock(fd.Body)
+
+	// Set return type BEFORE lowering body (needed for return type coercion)
 	f := b.Func()
+	if info != nil {
+		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
+			funcType := set.Cands[0].Type
+			if funcType != nil && funcType.Ret != nil {
+				retType := lowerType(funcType.Ret)
+				if retType != "void" {
+					f.RetType = retType
+				}
+			}
+		}
+	}
+	if f.RetType == "" && fd.RetType != nil {
+		switch fd.RetType.Name {
+		case "str":
+			f.RetType = "ptr"
+		case "int":
+			f.RetType = "i32"
+		case "bool":
+			f.RetType = "i1"
+		case "float":
+			f.RetType = "double"
+		case "u64", "i64":
+			f.RetType = "i64"
+		case "none":
+			f.RetType = "void"
+		default:
+			f.RetType = "ptr"
+		}
+	}
+
+	ls.lowerBlock(fd.Body)
 	f.Origin = fd // Track AST origin for move analysis lookup
 
 	// Populate parameters from AST
