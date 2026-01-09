@@ -1,0 +1,36 @@
+# Test list.sort() method
+
+def main() -> int:
+    # Test sorting integers
+    print("=== Sorting integers ===")
+    let nums = [5, 2, 8, 1, 9, 3]
+    print(nums)
+    nums.sort(false)  # ascending
+    print(nums)
+    
+    # Test reverse sorting
+    print("=== Reverse sorting ===")
+    let nums2 = [5, 2, 8, 1, 9, 3]
+    nums2.sort(true)  # reverse=true (descending)
+    print(nums2)
+    
+    # Test sorting strings
+    print("=== Sorting strings ===")
+    let words = ["banana", "apple", "cherry", "date"]
+    print(words)
+    words.sort(false)  # ascending
+    print(words)
+    
+    print("All list.sort() tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Sorting integers ===
+# [5, 2, 8, 1, 9, 3]
+# [1, 2, 3, 5, 8, 9]
+# === Reverse sorting ===
+# [9, 8, 5, 3, 2, 1]
+# === Sorting strings ===
+# ["banana", "apple", "cherry", "date"]
+# ["apple", "banana", "cherry", "date"]
+# All list.sort() tests passed!

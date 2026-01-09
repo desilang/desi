@@ -252,7 +252,72 @@ void list_reverse(DesiList* list) {
     }
 }
 
-// ========== Slicing & Search ==========
+// ========== Sorting ==========
+
+// Comparison function for integers (stored as intptr_t)
+static int cmp_int_asc(const void* a, const void* b) {
+    intptr_t ia = (intptr_t)(*(void**)a);
+    intptr_t ib = (intptr_t)(*(void**)b);
+    return (ia > ib) - (ia < ib);
+}
+
+static int cmp_int_desc(const void* a, const void* b) {
+    return -cmp_int_asc(a, b);
+}
+
+// Comparison function for strings
+static int cmp_str_asc(const void* a, const void* b) {
+    const char* sa = (const char*)(*(void**)a);
+    const char* sb = (const char*)(*(void**)b);
+    if (!sa && !sb) return 0;
+    if (!sa) return -1;
+    if (!sb) return 1;
+    return strcmp(sa, sb);
+}
+
+static int cmp_str_desc(const void* a, const void* b) {
+    return -cmp_str_asc(a, b);
+}
+
+// Comparison function for floats (stored as double bits in intptr_t)
+static int cmp_float_asc(const void* a, const void* b) {
+    double fa, fb;
+    intptr_t ia = (intptr_t)(*(void**)a);
+    intptr_t ib = (intptr_t)(*(void**)b);
+    memcpy(&fa, &ia, sizeof(double));
+    memcpy(&fb, &ib, sizeof(double));
+    return (fa > fb) - (fa < fb);
+}
+
+static int cmp_float_desc(const void* a, const void* b) {
+    return -cmp_float_asc(a, b);
+}
+
+// Sort list in-place
+// reverse: 0 = ascending, 1 = descending
+void list_sort(DesiList* list, int reverse) {
+    if (!list || list->length <= 1) return;
+    
+    int (*cmp_func)(const void*, const void*) = NULL;
+    
+    switch (list->type_tag) {
+        case 0: // int
+            cmp_func = reverse ? cmp_int_desc : cmp_int_asc;
+            break;
+        case 1: // str
+            cmp_func = reverse ? cmp_str_desc : cmp_str_asc;
+            break;
+        case 4: // float (type_tag 4 for float)
+            cmp_func = reverse ? cmp_float_desc : cmp_float_asc;
+            break;
+        default:
+            // For other types, sort by pointer value (stable but arbitrary)
+            cmp_func = reverse ? cmp_int_desc : cmp_int_asc;
+            break;
+    }
+    
+    qsort(list->data, list->length, sizeof(void*), cmp_func);
+}
 
 // Create a slice from start (inclusive) to end (exclusive)
 DesiList* list_slice(DesiList* list, int64_t start, int64_t end) {
