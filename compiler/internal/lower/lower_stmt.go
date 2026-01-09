@@ -227,6 +227,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					}
 				}
 			}
+			// Also skip drop for dict.get() - returns borrowed reference to value in dict
+			if call, isCallExpr := s.Value.(*ast.CallExpr); isCallExpr {
+				if field, ok := call.Callee.(*ast.FieldExpr); ok && field.Name.Name == "get" {
+					if ls.info != nil {
+						if baseType := ls.info.Types[field.X]; baseType != nil {
+							if _, isDict := baseType.(*types.Dict); isDict {
+								skipDrop = true
+								if ls.cur().borrowed == nil {
+									ls.cur().borrowed = map[string]bool{}
+								}
+								ls.cur().borrowed[s.Name.Name] = true
+							}
+						}
+					}
+				}
+			}
 		}
 
 		if varType != nil && !skipDrop {
