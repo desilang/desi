@@ -32,7 +32,7 @@ func TestAsyncLambda_DesugarsToHiddenAsyncFunc(t *testing.T) {
 	}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{fn}}
 
-	lower.DesugarAsyncLambdas(mod)
+	lower.DesugarAsyncLambdas(mod, nil)
 
 	// 1) The call's callee must now be an identifier __lam$N
 	es, ok := fn.Body.Stmts[0].(*ast.ExprStmt)

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/check"
 )
 
 // DesugarAsyncLambdas finds lambda expressions inside function bodies,
@@ -16,7 +17,7 @@ import (
 // copied (converted) from the lambda. Names are made unique within the module.
 //
 // Returns a map of variable names to hidden function names for lambdas assigned to variables.
-func DesugarAsyncLambdas(mod *ast.Module) map[string]string {
+func DesugarAsyncLambdas(mod *ast.Module, info *check.Info) map[string]string {
 	aliases := make(map[string]string)
 	if mod == nil {
 		return aliases
@@ -43,7 +44,7 @@ func DesugarAsyncLambdas(mod *ast.Module) map[string]string {
 			continue
 		}
 		for i, s := range fd.Body.Stmts {
-			fd.Body.Stmts[i] = rewriteStmtForAsyncLambda(s, mod, &synth, &next, aliases)
+			fd.Body.Stmts[i] = rewriteStmtForAsyncLambda(s, mod, &synth, &next, aliases, info)
 		}
 	}
 
@@ -56,12 +57,12 @@ func DesugarAsyncLambdas(mod *ast.Module) map[string]string {
 	return aliases
 }
 
-func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDecl, next *int, aliases map[string]string) ast.Stmt {
+func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDecl, next *int, aliases map[string]string, info *check.Info) ast.Stmt {
 	switch st := s.(type) {
 	case *ast.LetStmt:
 		// Handle let x = lambda<...>...
 		if st.Value != nil {
-			st.Value = rewriteExprForAsyncLambda(st.Value, mod, synth, next)
+			st.Value = rewriteExprForAsyncLambda(st.Value, mod, synth, next, info)
 			// If value is now a __lam$N identifier, record the alias
 			if id, ok := st.Value.(*ast.Ident); ok && strings.HasPrefix(id.Name, "__lam$") {
 				aliases[st.Name.Name] = id.Name
@@ -70,53 +71,53 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 		return st
 	case *ast.AssignStmt:
 		for i, e := range st.LHS {
-			st.LHS[i] = rewriteExprForAsyncLambda(e, mod, synth, next)
+			st.LHS[i] = rewriteExprForAsyncLambda(e, mod, synth, next, info)
 		}
 		for i, e := range st.RHS {
-			st.RHS[i] = rewriteExprForAsyncLambda(e, mod, synth, next)
+			st.RHS[i] = rewriteExprForAsyncLambda(e, mod, synth, next, info)
 		}
 		return st
 	case *ast.ExprStmt:
-		st.Expr = rewriteExprForAsyncLambda(st.Expr, mod, synth, next)
+		st.Expr = rewriteExprForAsyncLambda(st.Expr, mod, synth, next, info)
 		return st
 	case *ast.ReturnStmt:
-		st.Value = rewriteExprForAsyncLambda(st.Value, mod, synth, next)
+		st.Value = rewriteExprForAsyncLambda(st.Value, mod, synth, next, info)
 		return st
 	case *ast.IfStmt:
-		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next)
+		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next, info)
 		if st.Then != nil {
 			for i, ss := range st.Then.Stmts {
-				st.Then.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
+				st.Then.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
 			}
 		}
 		for _, e := range st.Elifs {
-			e.Cond = rewriteExprForAsyncLambda(e.Cond, mod, synth, next)
+			e.Cond = rewriteExprForAsyncLambda(e.Cond, mod, synth, next, info)
 			if e.Body != nil {
 				for i, ss := range e.Body.Stmts {
-					e.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
+					e.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
 				}
 			}
 		}
 		if st.Else != nil {
 			for i, ss := range st.Else.Stmts {
-				st.Else.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
+				st.Else.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
 			}
 		}
 		return st
 	case *ast.WhileStmt:
-		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next)
+		st.Cond = rewriteExprForAsyncLambda(st.Cond, mod, synth, next, info)
 		if st.Body != nil {
 			for i, ss := range st.Body.Stmts {
-				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
+				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
 			}
 		}
 		return st
 	case *ast.UsingStmt:
-		st.Bind = rewriteExprForAsyncLambda(st.Bind, mod, synth, next)
-		st.Init = rewriteExprForAsyncLambda(st.Init, mod, synth, next)
+		st.Bind = rewriteExprForAsyncLambda(st.Bind, mod, synth, next, info)
+		st.Init = rewriteExprForAsyncLambda(st.Init, mod, synth, next, info)
 		if st.Body != nil {
 			for i, ss := range st.Body.Stmts {
-				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases)
+				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
 			}
 		}
 		return st
@@ -125,11 +126,11 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 	}
 }
 
-func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDecl, next *int) ast.Expr {
+func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDecl, next *int, info *check.Info) ast.Expr {
 	switch x := e.(type) {
 	case *ast.LambdaExpr:
 		// Recurse into body first (in case of nested lambdas).
-		x.Body = rewriteExprForAsyncLambda(x.Body, mod, synth, next)
+		x.Body = rewriteExprForAsyncLambda(x.Body, mod, synth, next, info)
 
 		// Build scope from lambda parameters
 		scope := make(map[string]bool)
@@ -150,9 +151,22 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 			params = append(params, ast.Param{Name: lp.Name, Type: lp.Type})
 		}
 		for _, cap := range captures {
+			// Look up captured variable's type from info
+			var capType *ast.TypeName
+			if info != nil {
+				// Try to find the type in info.Types by looking up the identifier
+				for expr, t := range info.Types {
+					if id, ok := expr.(*ast.Ident); ok && id.Name == cap {
+						if t != nil {
+							capType = &ast.TypeName{Name: t.String()}
+						}
+						break
+					}
+				}
+			}
 			params = append(params, ast.Param{
 				Name: ast.Ident{Name: cap},
-				Type: nil, // Type inferred at callsite
+				Type: capType,
 			})
 		}
 
@@ -178,45 +192,36 @@ func rewriteExprForAsyncLambda(e ast.Expr, mod *ast.Module, synth *[]*ast.FuncDe
 		}
 		*synth = append(*synth, fn)
 
-		// If there are captures, return capture marker with lambda name
-		// The tg.run() lowering will generate wrapper and handle ctx passing
-		if len(captures) > 0 {
-			args := make([]ast.Expr, len(captures))
-			for i, cap := range captures {
-				args[i] = &ast.Ident{Name: cap}
+		// Store captures in info for call-site resolution
+		if len(captures) > 0 && info != nil {
+			if info.LambdaCaptures == nil {
+				info.LambdaCaptures = make(map[string][]string)
 			}
-			// Return: lamName.__captures__(a, b, c)
-			return &ast.CallExpr{
-				Callee: &ast.FieldExpr{
-					X:    &ast.Ident{Name: lamName},
-					Name: ast.Ident{Name: "__captures__"},
-				},
-				Args: args,
-			}
+			info.LambdaCaptures[lamName] = captures
 		}
 
-		// No captures - just return lambda identifier for regular lambda calls
+		// Return just the lambda identifier - captures will be added at call site
 		return &ast.Ident{Name: lamName}
 
 	case *ast.CallExpr:
-		x.Callee = rewriteExprForAsyncLambda(x.Callee, mod, synth, next)
+		x.Callee = rewriteExprForAsyncLambda(x.Callee, mod, synth, next, info)
 		for i, a := range x.Args {
-			x.Args[i] = rewriteExprForAsyncLambda(a, mod, synth, next)
+			x.Args[i] = rewriteExprForAsyncLambda(a, mod, synth, next, info)
 		}
 		return x
 	case *ast.UnaryExpr:
-		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next)
+		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next, info)
 		return x
 	case *ast.BinaryExpr:
-		x.Lhs = rewriteExprForAsyncLambda(x.Lhs, mod, synth, next)
-		x.Rhs = rewriteExprForAsyncLambda(x.Rhs, mod, synth, next)
+		x.Lhs = rewriteExprForAsyncLambda(x.Lhs, mod, synth, next, info)
+		x.Rhs = rewriteExprForAsyncLambda(x.Rhs, mod, synth, next, info)
 		return x
 	case *ast.IndexExpr:
-		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next)
-		x.Idx = rewriteExprForAsyncLambda(x.Idx, mod, synth, next)
+		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next, info)
+		x.Idx = rewriteExprForAsyncLambda(x.Idx, mod, synth, next, info)
 		return x
 	case *ast.FieldExpr:
-		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next)
+		x.X = rewriteExprForAsyncLambda(x.X, mod, synth, next, info)
 		return x
 	default:
 		return e
