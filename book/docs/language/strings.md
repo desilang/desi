@@ -145,9 +145,39 @@ print(f"Use {{braces}} like this")
 let s: str = "hello world"
 
 # Common operations
-let upper: str = s.upper()      # "HELLO WORLD"
-let lower: str = s.lower()      # "hello world"
 let length: int = len(s)        # 11
+```
+
+### split()
+
+Split a string by a delimiter, returning a list of strings:
+
+```desi
+let csv = "apple,banana,cherry"
+let parts = csv.split(",")      # ["apple", "banana", "cherry"]
+
+for item: str in parts:
+    print(item)
+```
+
+### join()
+
+Join a list of strings with a delimiter:
+
+```desi
+let words = ["apple", "banana", "cherry"]
+let joined = words.join(", ")   # "apple, banana, cherry"
+print(joined)
+```
+
+### replace()
+
+Replace all occurrences of a substring:
+
+```desi
+let original = "Hello World"
+let result = original.replace("World", "Desi")  # "Hello Desi"
+print(result)
 ```
 
 ---
