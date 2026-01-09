@@ -220,6 +220,65 @@ void* dict_get(dict_t* d, int64_t key_int, const char* key_str, double key_float
     return (void*)default_val;
 }
 
+// Get value for a key, or insert default if not found
+void* dict_setdefault(dict_t* d, int64_t key_int, const char* key_str, double key_float,
+                      void* key_ptr, const void* default_val, int value_type_tag) {
+    if (!d) return (void*)default_val; // Or maybe create a new dict? No, robust failure.
+
+    uint64_t hash = hash_key(d, key_int, key_str, key_float, key_ptr);
+    size_t index = hash % d->bucket_count;
+
+    // 1. Check if key exists
+    dict_entry_t* entry = d->buckets[index];
+    while (entry) {
+        if (keys_equal(d, entry, key_int, key_str, key_float, key_ptr)) {
+            return entry->value;
+        }
+        entry = entry->next;
+    }
+
+    // 2. Key not found - insert default (using existing insert logic would re-hash, let's just manual insert or call insert)
+    // Calling dict_insert is safer/cleaner code reuse, even if it re-hashes (optimization: pass hash?)
+    // dict_insert accepts explicit key params.
+    dict_insert(d, key_int, key_str, key_float, key_ptr, default_val, value_type_tag);
+    
+    // 3. Return the inserted value. Since we copied it, we need to find it again?
+    // Optimization: dict_insert doesn't return the pointer.
+    // Let's optimize: Inlined insert logic to return pointer.
+    // Actually for MVP, let's just call dict_insert then dict_get (or manual lookup).
+    // Manual lookup is fast since we have the index/hash (if we didn't recompute).
+    // But dict_insert might resize (not yet implemented fully? Wait, insert doesn't resize in this snippet)
+    
+    // Re-lookup to return the *stored* pointer (important for ownership/lifetime)
+    // Or return default_val (which is what we passed)?
+    // The convention is usually to return the value in the dict.
+    // If we return default_val (stack ptr), it might go out of scope if caller expects internal ptr?
+    // But primitives are by value. Pointers are pointers.
+    // If I insert a string, I insert a COPY. I should return the COPY in the dict basically.
+    // So I should return the value *in the dict*.
+    
+    // Re-lookup is safest MVP.
+    // We already computed hash/index, but dict_insert might have added it.
+    
+    // For now, re-use dict_insert and then re-search.
+    // Optimization later.
+    
+    // (Wait, dict_insert recomputes hash).
+    
+    index = hash % d->bucket_count; // Recompute index just in case? No, insert might have resized?
+    // This implementation of dict_insert DOES NOT RESIZE.
+    
+    entry = d->buckets[index];
+    // It's at the HEAD (L199: new_entry->next = d->buckets[index]; d->buckets[index] = new_entry;)
+    // So checking head is sufficient!
+    if (entry && keys_equal(d, entry, key_int, key_str, key_float, key_ptr)) {
+         return entry->value;
+    }
+    
+    // Fallback if something weird happened (should be unreachable)
+    return (void*)default_val;
+}
+
 // Check if key exists in dictionary
 bool dict_has_key(dict_t* d, int64_t key_int, const char* key_str, double key_float, void* key_ptr) {
     if (!d) return false;

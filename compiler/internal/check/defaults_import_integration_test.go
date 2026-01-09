@@ -120,5 +120,5 @@ def main() -> int:
 	if len(res.Diags) == 0 {
 		t.Fatalf("expected diagnostics, got none")
 	}
-	mustHaveSomeDiagContaining(t, res.Diags, "unknown named argument")
+	mustHaveSomeDiagContaining(t, res.Diags, "no matching overload")
 }

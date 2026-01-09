@@ -91,6 +91,7 @@ let empty: dict[str, int] = {}
 # Operations
 ages.insert("Charlie", 35)     # Insert/update
 let age = ages.get("Alice", 0) # Get with default
+let val = ages.setdefault("Dave", 40) # Get or insert default
 let has = "Alice" in ages      # Key exists
 
 # Iteration
