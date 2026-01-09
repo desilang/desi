@@ -1,0 +1,61 @@
+# Test list containing sets: list[set[int]]
+# NOTE: Sets are UNORDERED - iteration order is not guaranteed
+# Access and iterate through nested sets
+
+def main() -> int:
+    print("Testing list of sets:")
+    
+    # Create list of sets
+    let groups: list[set[int]] = []
+    
+    let set1: set[int] = #{1, 2, 3}
+    let set2: set[int] = #{10, 20, 30}
+    let set3: set[int] = #{100, 200, 300}
+    
+    groups.append(set1)
+    groups.append(set2) 
+    groups.append(set3)
+    print("Appended 3 sets")
+    
+    # Access set from list and iterate
+    print("groups[0] elements:")
+    let first_set = groups[0]
+    for val: int in first_set:
+        print(val)
+    
+    print("groups[1] elements:")
+    let second_set = groups[1]
+    for val: int in second_set:
+        print(val)
+    
+    # Nested iteration: all sets in list
+    print("All elements from all sets:")
+    for s: set[int] in groups:
+        for val: int in s:
+            print(val)
+    
+    print("List of sets test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing list of sets:
+# Appended 3 sets
+# groups[0] elements:
+# 3
+# 2
+# 1
+# groups[1] elements:
+# 30
+# 20
+# 10
+# All elements from all sets:
+# 3
+# 2
+# 1
+# 30
+# 20
+# 10
+# 100
+# 200
+# 300
+# List of sets test passed!
