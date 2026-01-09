@@ -154,29 +154,68 @@ if 1 in matrix:
 
 ## Custom Type Keys
 
-You can use custom types as keys by implementing `__hash__` and `__eq__` dunders:
+Any custom type (class, struct, enum) can be used as a dict key. By default, keys use **pointer identity**:
+
+```desi
+class SimpleClass:
+    pub x: int
+
+let cache: dict[SimpleClass, str] = {}
+let obj = SimpleClass(1)
+cache.insert(obj, "stored")
+
+if obj in cache:        # Found - same pointer
+    print("OK")
+
+let copy = SimpleClass(1)
+if copy in cache:       # NOT found - different pointer!
+    print("found")
+else:
+    print("not found")  # This prints
+```
+
+### Value-Based Keys (with `__hash__`/`__eq__`)
+
+For value-based equality, implement both `__hash__` and `__eq__`:
 
 ```desi
 class Point:
     pub x: int
     pub y: int
     
-    pub def __new__(self, x: int, y: int):
-        self.x = x
-        self.y = y
-    
     pub def __hash__(self) -> u64:
-        # Return a hash value
-        return 42  # Use a proper hash in production
+        return self.x * 31 + self.y
     
     pub def __eq__(self, other: Point) -> bool:
         return self.x == other.x and self.y == other.y
 
-# Use Point as dict key
-# TODO: Full custom key support coming in next release
+let cache: dict[Point, str] = {}
+cache.insert(Point(1, 2), "origin")
+
+# Different object, same values - FOUND!
+if Point(1, 2) in cache:
+    print("found via value equality")
 ```
 
-> [!NOTE]
-> Custom type keys require both `__hash__` and `__eq__` dunders.
-> - `__hash__(self) -> u64` - Return a hash value
-> - `__eq__(self, other: T) -> bool` - Compare for equality
+### Enum Keys
+
+> [!IMPORTANT]
+> Enums use pointer identity. Each access to `Color.Red` creates a **new allocation**.
+> Store enum values in variables for reliable lookups:
+
+```desi
+enum Color:
+    Red: none
+    Green: none
+
+let red = Color.Red          # Store in variable
+let cache: dict[Color, str] = {}
+cache.insert(red, "color")
+
+if red in cache:             # Same variable - found!
+    print("OK")
+
+if Color.Red in cache:       # NEW allocation - NOT found!
+    print("found")
+```
+

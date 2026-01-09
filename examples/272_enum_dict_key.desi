@@ -1,0 +1,49 @@
+# Test enum as dict key - store in variable
+
+enum Color:
+    Red: none
+    Green: none
+    Blue: none
+
+def main() -> int:
+    print("Testing enum as dict key:")
+    
+    # Store enum values in variables to ensure same pointer
+    let red = Color.Red
+    let green = Color.Green
+    let blue = Color.Blue
+    
+    # Create dict with enum keys
+    let colors: dict[Color, str] = {}
+    
+    colors.insert(red, "red color")
+    colors.insert(green, "green color")
+    colors.insert(blue, "blue color")
+    print("Inserted 3 colors")
+    
+    # Test lookup with same variable (same pointer)
+    if red in colors:
+        print("red found: OK")
+    else:
+        print("ERROR: red not found")
+    
+    if green in colors:
+        print("green found: OK")
+    else:
+        print("ERROR: green not found")
+    
+    if blue in colors:
+        print("blue found: OK")
+    else:
+        print("ERROR: blue not found")
+    
+    print("Enum dict key test passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Testing enum as dict key:
+# Inserted 3 colors
+# red found: OK
+# green found: OK
+# blue found: OK
+# Enum dict key test passed!
