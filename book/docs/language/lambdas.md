@@ -90,8 +90,31 @@ let add_x: int = lambda<int> y: int: x + y
 print(add_x(5))  # 15
 ```
 
+### Capturing Different Types
+
+All types can be captured - primitives, strings, and objects:
+
+```desi
+# Primitive capture
+let offset: int = 100
+let scale: float = 2.5
+let calc = lambda<float> n: int: (n + offset) as float * scale
+print(calc(10))  # 275.0
+
+# Multiple captures
+let prefix = "Hello, "
+let suffix = "!"
+let greet = lambda<str> name: str: prefix + name + suffix
+print(greet("World"))  # Hello, World!
+```
+
 !!! note "Read-only captures"
     Captured variables are read-only. Lambdas cannot reassign outer variables.
+
+!!! tip "Performance"
+    Captured primitives are passed by value (no heap allocation). 
+    Captured objects are passed by reference (pointer copy).
+
 
 ## Common Patterns
 
