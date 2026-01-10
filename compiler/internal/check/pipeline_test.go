@@ -61,7 +61,7 @@ func TestM4_Pipeline_ArityMismatch(t *testing.T) {
 	mod.Decls = append(mod.Decls, main)
 
 	diags, _ := Check(mod)
-	mustHaveSomeDiagContaining(t, diags, "pipeline")
+	mustHaveSomeDiagContaining(t, diags, "arity mismatch")
 }
 
 func TestM4_Pipeline_TypeMismatch(t *testing.T) {
@@ -83,5 +83,5 @@ func TestM4_Pipeline_TypeMismatch(t *testing.T) {
 	mod.Decls = append(mod.Decls, main)
 
 	diags, _ := Check(mod)
-	mustHaveSomeDiagContaining(t, diags, "pipeline")
+	mustHaveSomeDiagContaining(t, diags, "no matching overload")
 }

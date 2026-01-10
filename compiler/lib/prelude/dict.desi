@@ -21,6 +21,11 @@ pub def dict_insert(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f
 pub def dict_get(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64, 
                  key_ptr: cptr[void], default_val: cptr[void]) -> cptr[void]
 
+# dict_setdefault(dict, key_int, key_str, key_float, key_ptr, default_val, value_type_tag)
+@extern("C")
+pub def dict_setdefault(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64, 
+                        key_ptr: cptr[void], default_val: cptr[void], value_type_tag: i32) -> cptr[void]
+
 # dict_has_key(dict, key_int, key_str, key_float, key_ptr)
 @extern("C")
 pub def dict_has_key(d: cptr[void], key_int: i64, key_str: cptr[u8], key_float: f64, 

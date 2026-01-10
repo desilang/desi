@@ -736,6 +736,10 @@ func (c *checker) resolveDictMethod(x *ast.FieldExpr, d *types.Dict) types.T {
 		// get(key: K, default: V) -> V
 		// TODO: Make default optional?
 		methodType = types.FuncOf([]types.T{d.Key, d.Val}, d.Val, false)
+	case "setdefault":
+		// setdefault(key: K, default: V) -> V
+		c.checkMutableCollection(x, "setdefault")
+		methodType = types.FuncOf([]types.T{d.Key, d.Val}, d.Val, false)
 	case "insert":
 		// insert(key: K, value: V) -> none
 		methodType = types.FuncOf([]types.T{d.Key, d.Val}, types.None, false)

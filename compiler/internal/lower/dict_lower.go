@@ -80,6 +80,67 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		}
 		return valDst
 
+	case "setdefault":
+		// setdefault(key, default) -> Value
+		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
+		defVal := ls.lowerExpr(args[1])
+
+		// Get default value type
+		var valType types.T
+		if ls.info != nil {
+			valType = ls.info.Types[args[1]]
+		}
+
+		// Similar to insert, handle float bitcast and store to stack
+		isFloat := valType == types.Float || valType == types.F32 || valType == types.F64
+
+		defPtr := ls.b.FreshTemp("def_ptr")
+		if isFloat {
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.BitCast{Val: defVal, Dst: val64, Type: "i64"})
+			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: defPtr})
+			ls.b.Emit(&hir.Store{Dst: defPtr, Val: val64})
+		} else {
+			// For non-float, we can store directly if size matches, but for safety lets cast to i64 then store
+			// Primitives are stored as i64 in dict.
+			// Wait, for 'get' above we just stared.
+			// dict_get expects default_val as pointer.
+			// dict_insert expects value as pointer AND type tag.
+			// dict_setdefault needs both.
+			val64 := ls.b.FreshTemp("val64")
+			ls.b.Emit(&hir.Cast{Dst: val64, Src: defVal, Type: "i64"})
+			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: defPtr})
+			ls.b.Emit(&hir.Store{Dst: defPtr, Val: val64})
+		}
+
+		// Determine type tag
+		var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+		if ls.info != nil {
+			typeTag = getTypeTag(ls.info.Types[args[1]])
+		}
+
+		resPtr := ls.b.FreshTemp("res_ptr")
+		// dict_setdefault(dict, key_int, key_str, key_float, key_ptr, default_ptr, type_tag)
+		ls.b.Emit(&hir.Call{Dst: resPtr, Fn: "dict_setdefault", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr, defPtr, typeTag}, Type: "ptr"})
+
+		// Load result
+		valDst := ls.b.FreshTemp("val")
+		ls.b.Emit(&hir.Load{Type: "i64", Src: resPtr, Dst: valDst})
+
+		// Cast back if needed (copy-paste from get)
+		dictValType := dictType.Val
+		needsPtrCast := types.Equal(dictValType, types.Str)
+		switch dictValType.(type) {
+		case *types.Class, *types.List, *types.Set, *types.Dict, *types.Struct:
+			needsPtrCast = true
+		}
+		if needsPtrCast {
+			ptrDst := ls.b.FreshTemp("val_ptr")
+			ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
+			return ptrDst
+		}
+		return valDst
+
 	case "insert":
 		// insert(key, value)
 		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)

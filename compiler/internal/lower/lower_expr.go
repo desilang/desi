@@ -591,6 +591,42 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			return dstPtr
 		}
 
+		// Handle dict indexing: dict[key]
+		if dictType, ok := lhsType.(*types.Dict); ok {
+			dict := ls.lowerExpr(x.X)
+			// prepareKeyArgs expects keyExpr and keyType
+			keyExpr := x.Idx
+			keyType := dictType.Key
+
+			keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(keyExpr, keyType)
+
+			// Default value: NULL (panic on missing in runtime if we deref null, or we can handle it)
+			defPtr := hir.ConstNull{}
+
+			resPtr := ls.b.FreshTemp("res_ptr")
+			// dict_get(dict, key_int, key_str, key_float, key_ptr, default_ptr)
+			ls.b.Emit(&hir.Call{Dst: resPtr, Fn: "dict_get", Args: []hir.Value{dict, keyInt, keyStr, keyFloat, keyPtr, defPtr}, Type: "ptr"})
+
+			// Result is pointer to value
+			// Load result
+			valDst := ls.b.FreshTemp("val")
+			ls.b.Emit(&hir.Load{Type: "i64", Src: resPtr, Dst: valDst})
+
+			// Cast back if needed
+			dictValType := dictType.Val
+			needsPtrCast := types.Equal(dictValType, types.Str)
+			switch dictValType.(type) {
+			case *types.Class, *types.List, *types.Set, *types.Dict, *types.Struct:
+				needsPtrCast = true
+			}
+			if needsPtrCast {
+				ptrDst := ls.b.FreshTemp("val_ptr")
+				ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
+				return ptrDst
+			}
+			return valDst
+		}
+
 		// Handle list indexing: list[index]
 		if listType, ok := lhsType.(*types.List); ok {
 			list := ls.lowerExpr(x.X)

@@ -1,0 +1,66 @@
+# Test dict.setdefault()
+
+class Point:
+    pub x: int
+    pub y: int
+
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+    pub def __hash__(self) -> u64:
+        # Cast to u64 for hash
+        return (self.x * 31 + self.y) as u64
+
+    pub def __eq__(self, other: Point) -> bool:
+        return self.x == other.x and self.y == other.y
+
+def main() -> int:
+    # 1. Primitives (int values)
+    # Dicts are mutable reference types, but variable binding might need mut if we replace it.
+    # setdefault mutates the dict content.
+    let mut counts: dict[str, int] = {"a": 1}
+    
+    # Existing key
+    let a_val = counts.setdefault("a", 100)
+    print(a_val) # Expected: 1
+    
+    # New key
+    let b_val = counts.setdefault("b", 2)
+    print(b_val) # Expected: 2
+    print(counts["b"]) # Expected: 2
+    
+    # 2. Reference types (strings)
+    let mut mappings: dict[int, str] = {1: "one"}
+    
+    # Existing
+    print(mappings.setdefault(1, "new")) # Expected: "one"
+    
+    # New
+    print(mappings.setdefault(2, "two")) # Expected: "two"
+    print(mappings[2]) # Expected: "two"
+    
+    # 3. Custom keys
+    let p1 = Point(1, 2)
+    let mut points: dict[Point, str] = {}
+    
+    print(points.setdefault(p1, "origin")) # Expected: "origin"
+    print(points[p1]) # Expected: "origin"
+    
+    let p2 = Point(1, 2) # Equal to p1
+    print(points.setdefault(p2, "duplicate")) # Expected: "origin" (found existing)
+
+    print("All dict.setdefault() tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 1
+# 2
+# 2
+# one
+# two
+# two
+# origin
+# origin
+# origin
+# All dict.setdefault() tests passed!

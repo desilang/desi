@@ -66,6 +66,7 @@ for name: str, score: int in scores.items():
 |--------|-------------|
 | `has_key(key)` | Returns `true` if key exists |
 | `get(key, default)` | Get value or default if not found |
+| `setdefault(key, default)` | Get value if exists, else insert default and return it |
 | `insert(key, value)` | Insert or update key-value pair |
 | `clear()` | Remove all entries |
 | `to_str()` | Convert to string representation |

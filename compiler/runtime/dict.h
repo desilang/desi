@@ -55,6 +55,8 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
                  void* key_ptr, const void* value, int value_type_tag);
 void* dict_get(dict_t* d, int64_t key_int, const char* key_str, double key_float, 
                void* key_ptr, const void* default_val);
+void* dict_setdefault(dict_t* d, int64_t key_int, const char* key_str, double key_float, 
+                      void* key_ptr, const void* default_val, int value_type_tag);
 bool dict_has_key(dict_t* d, int64_t key_int, const char* key_str, double key_float, void* key_ptr);
 void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float, void* key_ptr);
 void dict_clear(dict_t* d);
