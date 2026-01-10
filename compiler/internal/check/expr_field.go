@@ -871,6 +871,9 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "reverse":
 		// reverse() -> void
 		methodType = types.FuncOf(nil, types.None, false)
+	case "sort":
+		// sort(reverse: bool = false) -> void
+		methodType = types.FuncOf([]types.T{types.Bool}, types.None, false)
 	case "clear":
 		// clear() -> void
 		methodType = types.FuncOf(nil, types.None, false)

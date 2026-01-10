@@ -35,6 +35,7 @@ void list_insert(DesiList* list, int64_t index, void* item);
 void* list_pop(DesiList* list, int64_t index);
 void list_remove(DesiList* list, void* item);  // Remove first occurrence
 void list_reverse(DesiList* list);
+void list_sort(DesiList* list, int reverse);  // reverse: 0=asc, 1=desc
 
 // === Slicing & Search ===
 DesiList* list_slice(DesiList* list, int64_t start, int64_t end);

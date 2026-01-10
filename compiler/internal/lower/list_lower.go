@@ -94,6 +94,16 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		ls.b.Emit(&hir.Call{Fn: "list_reverse", Args: []hir.Value{receiver}})
 		return nil
 
+	case "sort":
+		// sort(reverse=false) - in-place sort
+		var reverseArg hir.Value = hir.ConstInt{Text: "0", Type: "i32"} // default ascending
+		if len(args) > 0 {
+			// If arg provided, check if it's a bool literal or expression
+			reverseArg = ls.lowerExpr(args[0])
+		}
+		ls.b.Emit(&hir.Call{Fn: "list_sort", Args: []hir.Value{receiver, reverseArg}})
+		return nil
+
 	case "clear":
 		// clear()
 		ls.b.Emit(&hir.Call{Fn: "list_clear", Args: []hir.Value{receiver}})
