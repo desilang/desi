@@ -334,13 +334,20 @@ func addPreludeBuiltins(info *Info) {
 	)
 
 	// --- sorted builtin ---
-	// sorted(items: list[int]) -> list[int]
-	// Special handling in expr_call.go
+	// sorted(items: list[T]) -> list[T]
+	// sorted(items: list[T], reverse: bool) -> list[T]
+	// Special handling in expr_call.go, use Any for pipe compatibility
 	addN("sorted",
-		[]types.T{nil}, // list[int]
+		[]types.T{types.Any}, // accepts any list
 		[]ast.ParamMode{ast.ParamMove},
-		nil, // list[int] - determined in expr_call.go
+		types.Any, // return type determined in expr_call.go
 		[]string{"items"},
+	)
+	addN("sorted",
+		[]types.T{types.Any, types.Bool}, // accepts any list, bool
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		types.Any, // return type determined in expr_call.go
+		[]string{"items", "reverse"},
 	)
 
 	// --- zip builtin ---
