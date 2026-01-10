@@ -651,6 +651,46 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			return c.checkTypeCall(call, sym)
 		}
 
+		// Built-in sorted() function - accepts any list, optional reverse bool
+		// sorted(items) or sorted(items, reverse)
+		if id.Name == "sorted" {
+			var itemsType types.T
+			var reverseType types.T
+
+			for i, arg := range argsNodes {
+				t := c.typ(arg.Expr)
+				if arg.Name == nil {
+					// Positional
+					if i == 0 {
+						itemsType = t
+					} else if i == 1 {
+						reverseType = t
+					}
+				} else {
+					// Named
+					if arg.Name.Name == "items" {
+						itemsType = t
+					} else if arg.Name.Name == "reverse" {
+						reverseType = t
+					}
+				}
+			}
+
+			if itemsType != nil {
+				if listT, ok := itemsType.(*types.List); ok {
+					// Validate optional reverse arg is bool
+					if reverseType != nil && !types.Equal(reverseType, types.Bool) {
+						c.add(diagAt("DTE0001", call.Span, "sorted second argument must be bool (reverse)"))
+						return nil
+					}
+					c.info.Types[call] = listT
+					return listT
+				}
+				c.add(diagAt("DTE0001", call.Span, "sorted requires a list"))
+				return nil
+			}
+		}
+
 		if !hasNamed {
 			// Legacy positional path
 			args := make([]types.T, len(argsNodes))
@@ -836,23 +876,6 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					}
 				}
 				c.add(diagAt("DTE0001", call.Span, id.Name+" requires list[bool]"))
-				return nil
-			}
-
-			// Built-in sorted() function - accepts any list, optional reverse bool
-			// sorted(items) or sorted(items, reverse)
-			if id.Name == "sorted" && len(args) >= 1 && len(args) <= 2 && args[0] != nil {
-				if listT, ok := args[0].(*types.List); ok {
-					// Validate optional reverse arg is bool
-					if len(args) == 2 && args[1] != nil && !types.Equal(args[1], types.Bool) {
-						c.add(diagAt("DTE0001", call.Span, "sorted second argument must be bool (reverse)"))
-						return nil
-					}
-					c.info.Types[call] = listT
-					return listT
-				}
-				c.add(diagAt("DTE0001", call.Span, "sorted requires a list"))
-				return nil
 			}
 
 			// Built-in mutex_new(value) function - creates Mutex[T] from value type

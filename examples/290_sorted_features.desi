@@ -1,0 +1,39 @@
+def main() -> int:
+    let nums = [5, 2, 8, 1, 9, 3]
+    
+    # 1. Standard positional
+    print(sorted(nums))
+
+    # 2. Positional with reverse
+    print(sorted(nums, true))
+
+    # 3. Named arguments
+    print(sorted(items=nums))
+
+    # 4. Named reverse
+    print(sorted(nums, reverse=true))
+
+    # 5. Mixed order named arguments
+    print(sorted(reverse=false, items=nums))
+
+    # 6. Pipe operator (implicit items)
+    print(nums |> sorted())
+
+    # 7. Pipe with named reverse
+    print(nums |> sorted(reverse=true))
+
+    # 8. Explicit type annotation (verifies type checker return type)
+    let s: list[int] = sorted(nums, reverse=true)
+    print(s)
+
+    return 0
+
+# EXPECTED_OUTPUT:
+# [1, 2, 3, 5, 8, 9]
+# [9, 8, 5, 3, 2, 1]
+# [1, 2, 3, 5, 8, 9]
+# [9, 8, 5, 3, 2, 1]
+# [1, 2, 3, 5, 8, 9]
+# [1, 2, 3, 5, 8, 9]
+# [9, 8, 5, 3, 2, 1]
+# [9, 8, 5, 3, 2, 1]

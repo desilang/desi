@@ -1619,9 +1619,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				newArgs = append(newArgs, x.Lhs)
 				newArgs = append(newArgs, call.Args...)
 
+				// Also populate ArgNodes (critical for sorted() and other handlers relying on names)
+				newArgNodes := make([]ast.CallArg, 0, len(call.ArgNodes)+1)
+				// LHS is always passed as the first positional argument
+				newArgNodes = append(newArgNodes, ast.CallArg{Name: nil, Expr: x.Lhs})
+				newArgNodes = append(newArgNodes, call.ArgNodes...)
+
 				newCall := &ast.CallExpr{
-					Callee: call.Callee,
-					Args:   newArgs,
+					Callee:   call.Callee,
+					Args:     newArgs,
+					ArgNodes: newArgNodes,
+					Span:     x.Span,
 				}
 				return ls.lowerCall(newCall)
 			}
