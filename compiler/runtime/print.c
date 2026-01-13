@@ -54,7 +54,25 @@ void stream_print_int(DesiStream* s, int64_t n) {
 }
 
 void stream_print_float(DesiStream* s, double f) {
-    if (s && s->handle) fprintf(s->handle, "%g", f);
+    if (s && s->handle) {
+        // Python-like formatting: ensure floats always show decimal point
+        // e.g., 1.0 not 1, but 3.14 stays 3.14
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%g", f);
+        // Check if result has decimal point or 'e' (scientific notation)
+        int has_decimal = 0;
+        for (int i = 0; buf[i]; i++) {
+            if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+                has_decimal = 1;
+                break;
+            }
+        }
+        if (has_decimal) {
+            fputs(buf, s->handle);
+        } else {
+            fprintf(s->handle, "%s.0", buf);
+        }
+    }
 }
 
 void stream_print_bool(DesiStream* s, int b) {
@@ -139,6 +157,43 @@ const char* bool_to_cstring(bool b) {
     return b ? "true" : "false";
 }
 
+// Python-like float formatting: ensures .0 for whole numbers
+void print_float_py(double f) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", f);
+    // Check if result has decimal point or 'e' (scientific notation)
+    int has_decimal = 0;
+    for (int i = 0; buf[i]; i++) {
+        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+            has_decimal = 1;
+            break;
+        }
+    }
+    if (has_decimal) {
+        printf("%s\n", buf);
+    } else {
+        printf("%s.0\n", buf);
+    }
+}
+
+// Python-like float formatting without newline (for print_item)
+void print_float_item_py(double f) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", f);
+    int has_decimal = 0;
+    for (int i = 0; buf[i]; i++) {
+        if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+            has_decimal = 1;
+            break;
+        }
+    }
+    if (has_decimal) {
+        printf("%s", buf);
+    } else {
+        printf("%s.0", buf);
+    }
+}
+
 void print_str(const char* s) {
     puts(s);
 }
@@ -153,7 +208,22 @@ void print_int_to_stream(FILE* stream, int64_t n) {
 }
 
 void print_float_to_stream(FILE* stream, double f) {
-    if (stream) fprintf(stream, "%g", f);
+    if (stream) {
+        char buf[64];
+        snprintf(buf, sizeof(buf), "%g", f);
+        int has_decimal = 0;
+        for (int i = 0; buf[i]; i++) {
+            if (buf[i] == '.' || buf[i] == 'e' || buf[i] == 'E') {
+                has_decimal = 1;
+                break;
+            }
+        }
+        if (has_decimal) {
+            fputs(buf, stream);
+        } else {
+            fprintf(stream, "%s.0", buf);
+        }
+    }
 }
 
 void print_bool_to_stream(FILE* stream, int b) {

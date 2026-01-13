@@ -434,16 +434,10 @@ func (m *Module) emitCall(c *hir.Call) {
 			}
 			return
 		}
-		// Float arguments: call printf with %g (strips trailing zeros)
+		// Float arguments: call print_float_py (Python-like formatting with .0 for whole numbers)
 		if ty == "double" {
-			m.ensureDecl("declare i32 @printf(ptr, ...)")
-			// Create format string global
-			g, n := m.ensureCStringGlobal("%g\n", true)
-			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n", m.tempID, n, n, g)
-			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
-			m.tempID++
-			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, double %s)\n", m.tempID, fmtPtr, val)
-			m.tempID++
+			m.ensureDecl("declare void @print_float_py(double)")
+			wprintf(&m.funcs, "  call void @print_float_py(double %s)\n", val)
 			return
 		}
 		// Boolean arguments: print true/false
@@ -529,16 +523,10 @@ func (m *Module) emitCall(c *hir.Call) {
 			}
 			return
 		}
-		// Float arguments
+		// Float arguments: call print_float_item_py (Python-like, no newline)
 		if ty == "double" {
-			m.ensureDecl("declare i32 @printf(ptr, ...)")
-			fmtG, fmtN := m.ensureCStringGlobal("%g", false)
-			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
-				m.tempID, fmtN, fmtN, fmtG)
-			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
-			m.tempID++
-			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, double %s)\n", m.tempID, fmtPtr, val)
-			m.tempID++
+			m.ensureDecl("declare void @print_float_item_py(double)")
+			wprintf(&m.funcs, "  call void @print_float_item_py(double %s)\n", val)
 			return
 		}
 		// Boolean arguments

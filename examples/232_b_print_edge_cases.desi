@@ -29,6 +29,6 @@ def main() -> int:
 # -
 # 999999999
 # 0
-# 0
+# 0.0
 # true false
 # x

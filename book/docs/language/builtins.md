@@ -16,7 +16,10 @@ print("Hello, World!")
 print("Name:", name, "Age:", age)
 
 # Mixed types - automatic conversion
-print(1, true, 3.14, "text")  # → 1 true 3.140000 text
+print(1, true, 3.14, "text")  # → 1 true 3.14 text
+
+# Floats always show decimal point (Python-like)
+print(5.0)  # → 5.0 (not 5)
 
 # No arguments - prints empty line
 print()
