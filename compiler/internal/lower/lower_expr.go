@@ -157,9 +157,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 							ls.b.Emit(&hir.Call{Dst: res, Fn: formatFn, Args: []hir.Value{val, specVal}, Type: "ptr"})
 							fmtBuilder.WriteString("%s")
 							val = res
+						} else if _, hasRepr := cls.Dunders["__repr__"]; hasRepr {
+							// Fallback to __repr__(self) -> str
+							res := ls.b.FreshTemp("repr_res")
+							reprFn := cls.Name + "___repr__"
+							ls.b.Emit(&hir.Call{Dst: res, Fn: reprFn, Args: []hir.Value{val}, Type: "ptr"})
+							fmtBuilder.WriteString("%s")
+							val = res
 						} else {
 							fmtBuilder.WriteString("<?>")
 						}
+					} else if _, ok := typ.(*types.Class); ok {
+						// Class without __format__/__repr__
+						fmtBuilder.WriteString("<?>")
 					} else {
 						fmtBuilder.WriteString("<?>")
 					}
