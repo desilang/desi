@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ctype.h>
 #include <math.h>
+#include <stdint.h>
 
 // ============================================================
 // JSON Value Types
@@ -224,8 +225,11 @@ static JsonNode* parse_number(JsonParser* p) {
         }
     }
     
-    // Parse the number
-    char* numstr = strndup(p->input + start, p->pos - start);
+    // Parse the number - use manual string copy since strndup is POSIX, not MSVC
+    size_t numlen = p->pos - start;
+    char* numstr = (char*)malloc(numlen + 1);
+    memcpy(numstr, p->input + start, numlen);
+    numstr[numlen] = '\0';
     double val = strtod(numstr, NULL);
     free(numstr);
     

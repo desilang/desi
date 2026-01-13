@@ -36,7 +36,7 @@
     
     /* Thread */
     typedef HANDLE DesiPlatformThread;
-    typedef DWORD WINAPI (*DesiThreadFunc)(LPVOID);
+    typedef DWORD (WINAPI *DesiThreadFunc)(LPVOID);
     
     /* RwLock: SRWLOCK supports read/write */
     typedef SRWLOCK DesiPlatformRwLock;

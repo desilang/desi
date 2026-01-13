@@ -20,5 +20,13 @@ Thumbs.db
 /desic
 /build/
 
+# mpdecimal build artifacts (Windows)
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.obj
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/.objs/
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.lib
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.exp
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.manifest
+compiler/runtime/decimal/lib/*.lib
+
 output.txt
 test*.txt
