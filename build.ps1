@@ -233,15 +233,15 @@ if (-not $SkipRuntime) {
 
 # Build Go compiler tools
 Write-Step "Building desic..."
-& $GoExe build -o (Join-Path $BinDir "desic.exe") ./compiler/cmd/desic
+& $GoExe build -ldflags="-s -w" -o (Join-Path $BinDir "desic.exe") ./compiler/cmd/desic
 if ($LASTEXITCODE -ne 0) { throw "Failed to build desic" }
 
 Write-Step "Building desifmt..."
-& $GoExe build -o (Join-Path $BinDir "desifmt.exe") ./compiler/cmd/desifmt
+& $GoExe build -ldflags="-s -w" -o (Join-Path $BinDir "desifmt.exe") ./compiler/cmd/desifmt
 if ($LASTEXITCODE -ne 0) { throw "Failed to build desifmt" }
 
 Write-Step "Building desirepl..."
-& $GoExe build -o (Join-Path $BinDir "desirepl.exe") ./compiler/cmd/desirepl
+& $GoExe build -ldflags="-s -w" -o (Join-Path $BinDir "desirepl.exe") ./compiler/cmd/desirepl
 if ($LASTEXITCODE -ne 0) { throw "Failed to build desirepl" }
 
 Write-Success "All tools built successfully!"
