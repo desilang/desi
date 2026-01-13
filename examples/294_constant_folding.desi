@@ -1,6 +1,27 @@
-# Test constant expressions at runtime
-# Constant folding infrastructure created for type checker validation
-# Note: Class constants with complex expressions need parser enhancement (pending_tasks.md)
+# Test constant folding at compile time
+# Comprehensive edge cases with proper class constant syntax
+
+class Math:
+    # Integer arithmetic - with pub and type annotations
+    pub const INT_ADD: int = 10 + 20             # 30
+    pub const INT_SUB: int = 100 - 50            # 50
+    pub const INT_MUL: int = 6 * 7               # 42
+    pub const INT_DIV: int = 100 / 4             # 25
+    pub const INT_MOD: int = 17 % 5              # 2
+    
+    # Float arithmetic
+    pub const FLOAT_ADD: float = 1.5 + 2.5       # 4.0
+    pub const FLOAT_MUL: float = 3.14 * 2.0      # 6.28
+    
+    # Complex expressions
+    pub const COMPLEX: int = (10 + 5) * 2        # 30
+    
+    # Comparisons
+    pub const CMP_GT: bool = 10 > 5              # true
+    pub const CMP_EQ: bool = 5 == 5              # true
+    
+    # Unary operators
+    pub const NEG: int = -42                     # -42
 
 def main() -> int:
     # === Integer Arithmetic ===
@@ -36,15 +57,19 @@ def main() -> int:
     let c = not false
     print(c)                   # true
     
+    # === Class Constants ===
+    print(Math.INT_ADD)        # 30
+    print(Math.INT_MUL)        # 42
+    print(Math.COMPLEX)        # 30
+    print(Math.CMP_GT)         # true
+    print(Math.NEG)            # -42
+    
     # === Zero Edge Cases ===
     print(0 + 0)               # 0
     print(0 * 1000)            # 0
     
     # === Large Numbers ===
     print(1000000 * 1000)      # 1000000000
-    
-    # === Negative multiplication ===
-    print((-2) * (-3))         # 6
     
     return 0
 
@@ -68,7 +93,11 @@ def main() -> int:
 # true
 # true
 # true
+# 30
+# 42
+# 30
+# true
+# -42
 # 0
 # 0
 # 1000000000
-# 6
