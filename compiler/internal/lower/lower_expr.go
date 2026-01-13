@@ -85,23 +85,56 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			case *ast.FStringExpr:
 				// Expression with format spec
 				val := ls.lowerExpr(p.X)
-				fmtSpec := ls.specToPrintf(p.Spec, p.X)
-				fmtBuilder.WriteString(fmtSpec)
-				// Handle bool conversion if needed
 				if ls.info != nil {
-					typ := ls.info.Types[p.X]
+					// Get type from expression - try multiple lookup strategies
+					var typ types.T
+					typ = ls.info.Types[p.X]
+
+					// If nil, try looking up Ident in scope info
+					if typ == nil {
+						if ident, ok := p.X.(*ast.Ident); ok {
+							if sym := ls.info.Idents[ident]; sym != nil {
+								typ = sym.Type
+							}
+						}
+					}
+
+					// Check for __format__ dunder on custom types
+					if cls, ok := typ.(*types.Class); ok && cls.Dunders != nil {
+						if _, hasFormat := cls.Dunders["__format__"]; hasFormat {
+							// Call __format__(self, spec) -> str
+							specVal := hir.ConstStr{Text: p.Spec}
+							res := ls.b.FreshTemp("fmt_res")
+							formatFn := cls.Name + "___format__"
+							ls.b.Emit(&hir.Call{Dst: res, Fn: formatFn, Args: []hir.Value{val, specVal}, Type: "ptr"})
+							fmtBuilder.WriteString("%s")
+							args = append(args, res)
+							continue
+						}
+					}
+					// Handle bool conversion if needed (existing logic)
 					if types.Equal(typ, types.Bool) && !strings.Contains(p.Spec, "d") {
 						res := ls.b.FreshTemp("bool_str")
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
 						val = res
 					}
 				}
+				fmtSpec := ls.specToPrintf(p.Spec, p.X)
+				fmtBuilder.WriteString(fmtSpec)
 				args = append(args, val)
 			default:
 				// Expression without format spec - lower it and add default format specifier
 				val := ls.lowerExpr(p)
 				if ls.info != nil {
+					// Get type - try Types first, then Idents for identifiers
 					typ := ls.info.Types[p]
+					if typ == nil {
+						if ident, ok := p.(*ast.Ident); ok {
+							if sym := ls.info.Idents[ident]; sym != nil {
+								typ = sym.Type
+							}
+						}
+					}
 					if types.Equal(typ, types.Int) {
 						fmtBuilder.WriteString("%lld")
 					} else if types.Equal(typ, types.Str) {
@@ -115,6 +148,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						res := ls.b.FreshTemp("bool_str")
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
 						val = res
+					} else if cls, ok := typ.(*types.Class); ok && cls.Dunders != nil {
+						if _, hasFormat := cls.Dunders["__format__"]; hasFormat {
+							// Call __format__(self, "") -> str with empty spec
+							specVal := hir.ConstStr{Text: ""}
+							res := ls.b.FreshTemp("fmt_res")
+							formatFn := cls.Name + "___format__"
+							ls.b.Emit(&hir.Call{Dst: res, Fn: formatFn, Args: []hir.Value{val, specVal}, Type: "ptr"})
+							fmtBuilder.WriteString("%s")
+							val = res
+						} else {
+							fmtBuilder.WriteString("<?>")
+						}
 					} else {
 						fmtBuilder.WriteString("<?>")
 					}

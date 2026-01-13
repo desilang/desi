@@ -362,6 +362,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 		}
 		c.info.Types[e] = types.Str
 		return types.Str
+	case *ast.FStringExpr:
+		// FStringExpr wraps an expression with optional format spec
+		// Type-check the inner expression and store its type
+		innerType := c.typ(x.X)
+		c.info.Types[e] = innerType
+		return innerType
 	case *ast.NoneLit:
 		c.info.Types[e] = types.None
 		return types.None
