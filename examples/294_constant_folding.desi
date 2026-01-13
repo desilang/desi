@@ -1,0 +1,74 @@
+# Test constant expressions at runtime
+# Constant folding infrastructure created for type checker validation
+# Note: Class constants with complex expressions need parser enhancement (pending_tasks.md)
+
+def main() -> int:
+    # === Integer Arithmetic ===
+    print(1 + 2 + 3)           # 6
+    print(10 - 3 - 2)          # 5
+    print(2 * 3 * 4)           # 24
+    print(100 / 5 / 2)         # 10
+    print(17 % 5)              # 2
+    
+    # === Float Arithmetic ===
+    print(1.5 + 2.5)           # 4.0
+    print(3.14 * 2.0)          # 6.28
+    print(10.0 / 4.0)          # 2.5
+    
+    # === Unary Operators ===
+    print(-42)                 # -42
+    let neg: int = - -10
+    print(neg)                 # 10
+    
+    # === Comparison Operations ===
+    print(5 > 3)               # true
+    print(3 < 8)               # true
+    print(5 >= 5)              # true
+    print(5 <= 5)              # true
+    print(5 == 5)              # true
+    print(5 != 3)              # true
+    
+    # === Boolean Operations ===
+    let a = true and true
+    print(a)                   # true
+    let b = true or false
+    print(b)                   # true
+    let c = not false
+    print(c)                   # true
+    
+    # === Zero Edge Cases ===
+    print(0 + 0)               # 0
+    print(0 * 1000)            # 0
+    
+    # === Large Numbers ===
+    print(1000000 * 1000)      # 1000000000
+    
+    # === Negative multiplication ===
+    print((-2) * (-3))         # 6
+    
+    return 0
+
+# EXPECTED_OUTPUT:
+# 6
+# 5
+# 24
+# 10
+# 2
+# 4.0
+# 6.28
+# 2.5
+# -42
+# 10
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# 0
+# 0
+# 1000000000
+# 6
