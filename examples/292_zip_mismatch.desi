@@ -1,0 +1,35 @@
+# Test zip() with different length lists
+# Expected: Truncate to shortest (Python behavior)
+
+def main() -> int:
+    print("Test 1: L1 longer")
+    let l1 = [1, 2, 3]
+    let l2 = [10, 20]
+    
+    # Should perform 2 iterations (min length)
+    for a: int, b: int in zip(l1, l2):
+        print(a)
+        print(b)
+        
+    print("Test 2: L2 longer")
+    let l3 = [100]
+    let l4 = [200, 300]
+    
+    # Should perform 1 iteration (min length)
+    for x: int, y: int in zip(l3, l4):
+        print(x)
+        print(y)
+
+    print("Success")
+    return 0
+
+# EXPECTED_OUTPUT:
+# Test 1: L1 longer
+# 1
+# 10
+# 2
+# 20
+# Test 2: L2 longer
+# 100
+# 200
+# Success
