@@ -2,6 +2,7 @@
  * Desi Runtime Scheduler Implementation
  * 
  * M:N threading with work-stealing for lightweight concurrency.
+ * Cross-platform using platform.h abstractions.
  */
 
 #include "scheduler.h"
@@ -9,15 +10,26 @@
 #include <stdio.h>
 #include <string.h>
 
+/* Platform-specific thread-local storage */
+#ifdef _WIN32
+    #define DESI_THREAD_LOCAL __declspec(thread)
+#else
+    #define DESI_THREAD_LOCAL __thread
+#endif
+
 /* Global scheduler instance */
 static Scheduler g_scheduler = {0};
 
 /* Thread-local current task */
-static __thread Task* current_task = NULL;
-static __thread Worker* current_worker = NULL;
+static DESI_THREAD_LOCAL Task* current_task = NULL;
+static DESI_THREAD_LOCAL Worker* current_worker = NULL;
 
 /* Forward declarations */
+#ifdef _WIN32
+static DWORD WINAPI worker_thread_fn(LPVOID arg);
+#else
 static void* worker_thread_fn(void* arg);
+#endif
 static Task* steal_task(Worker* thief);
 static void workqueue_init(WorkQueue* q);
 static void workqueue_push(WorkQueue* q, Task* t);
@@ -31,15 +43,15 @@ static void workqueue_init(WorkQueue* q) {
     q->head = NULL;
     q->tail = NULL;
     q->count = 0;
-    pthread_mutex_init(&q->lock, NULL);
-    pthread_cond_init(&q->not_empty, NULL);
+    DESI_MUTEX_INIT(q->lock);
+    DESI_COND_INIT(q->not_empty);
 }
 
 /*
  * Push task to back of queue (producer side)
  */
 static void workqueue_push(WorkQueue* q, Task* t) {
-    pthread_mutex_lock(&q->lock);
+    DESI_MUTEX_LOCK(q->lock);
     t->next = NULL;
     if (q->tail) {
         q->tail->next = t;
@@ -48,15 +60,15 @@ static void workqueue_push(WorkQueue* q, Task* t) {
     }
     q->tail = t;
     q->count++;
-    pthread_cond_signal(&q->not_empty);
-    pthread_mutex_unlock(&q->lock);
+    DESI_COND_SIGNAL(q->not_empty);
+    DESI_MUTEX_UNLOCK(q->lock);
 }
 
 /*
  * Pop task from front of queue (owner side - LIFO for cache locality)
  */
 static Task* workqueue_pop(WorkQueue* q) {
-    pthread_mutex_lock(&q->lock);
+    DESI_MUTEX_LOCK(q->lock);
     Task* t = q->head;
     if (t) {
         q->head = t->next;
@@ -64,7 +76,7 @@ static Task* workqueue_pop(WorkQueue* q) {
         q->count--;
         t->next = NULL;
     }
-    pthread_mutex_unlock(&q->lock);
+    DESI_MUTEX_UNLOCK(q->lock);
     return t;
 }
 
@@ -74,6 +86,35 @@ static Task* workqueue_pop(WorkQueue* q) {
 static Task* workqueue_steal(WorkQueue* q) {
     /* Same as pop for now, but could be lock-free FIFO */
     return workqueue_pop(q);
+}
+
+/*
+ * Platform-specific thread yield
+ */
+static void platform_yield(void) {
+#ifdef _WIN32
+    SwitchToThread();
+#else
+    sched_yield();
+#endif
+}
+
+/*
+ * Platform-specific timed wait (returns after timeout or signal)
+ */
+static void platform_cond_timedwait_ms(DesiPlatformCond* cond, DesiPlatformMutex* mutex, int ms) {
+#ifdef _WIN32
+    SleepConditionVariableSRW(cond, mutex, (DWORD)ms, 0);
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    ts.tv_nsec += ms * 1000000;
+    while (ts.tv_nsec >= 1000000000) {
+        ts.tv_sec++;
+        ts.tv_nsec -= 1000000000;
+    }
+    pthread_cond_timedwait(cond, mutex, &ts);
+#endif
 }
 
 /*
@@ -89,7 +130,7 @@ void scheduler_init(int n_workers) {
     g_scheduler.workers = calloc(n_workers, sizeof(Worker));
     g_scheduler.running = true;
     workqueue_init(&g_scheduler.global_queue);
-    pthread_mutex_init(&g_scheduler.lock, NULL);
+    DESI_MUTEX_INIT(g_scheduler.lock);
     
     /* Start worker threads */
     for (int i = 0; i < n_workers; i++) {
@@ -97,7 +138,12 @@ void scheduler_init(int n_workers) {
         w->id = i;
         w->running = true;
         workqueue_init(&w->local_queue);
+        
+#ifdef _WIN32
+        w->thread = CreateThread(NULL, 0, worker_thread_fn, w, 0, NULL);
+#else
         pthread_create(&w->thread, NULL, worker_thread_fn, w);
+#endif
     }
 }
 
@@ -109,14 +155,19 @@ void scheduler_shutdown(void) {
     
     /* Wake up all workers */
     for (int i = 0; i < g_scheduler.n_workers; i++) {
-        pthread_cond_broadcast(&g_scheduler.workers[i].local_queue.not_empty);
+        DESI_COND_BROADCAST(g_scheduler.workers[i].local_queue.not_empty);
     }
-    pthread_cond_broadcast(&g_scheduler.global_queue.not_empty);
+    DESI_COND_BROADCAST(g_scheduler.global_queue.not_empty);
     
     /* Join all worker threads */
     for (int i = 0; i < g_scheduler.n_workers; i++) {
         g_scheduler.workers[i].running = false;
+#ifdef _WIN32
+        WaitForSingleObject(g_scheduler.workers[i].thread, INFINITE);
+        CloseHandle(g_scheduler.workers[i].thread);
+#else
         pthread_join(g_scheduler.workers[i].thread, NULL);
+#endif
     }
     
     free(g_scheduler.workers);
@@ -134,7 +185,11 @@ void scheduler_spawn(void (*fn)(void* ctx), void* ctx, const char* name) {
     t->state = TASK_READY;
     t->next = NULL;
     t->cancelled = false;
+#ifdef _WIN32
+    t->name = name ? _strdup(name) : NULL;
+#else
     t->name = name ? strdup(name) : NULL;
+#endif
     
     scheduler_spawn_task(t);
 }
@@ -175,7 +230,11 @@ static Task* steal_task(Worker* thief) {
 /*
  * Worker thread main loop
  */
+#ifdef _WIN32
+static DWORD WINAPI worker_thread_fn(LPVOID arg) {
+#else
 static void* worker_thread_fn(void* arg) {
+#endif
     Worker* w = (Worker*)arg;
     current_worker = w;
     
@@ -204,22 +263,19 @@ static void* worker_thread_fn(void* arg) {
             if (t->name) free(t->name);
             free(t);
         } else {
-            /* No work, wait briefly */
-            pthread_mutex_lock(&w->local_queue.lock);
-            struct timespec ts;
-            clock_gettime(CLOCK_REALTIME, &ts);
-            ts.tv_nsec += 1000000; /* 1ms timeout */
-            if (ts.tv_nsec >= 1000000000) {
-                ts.tv_sec++;
-                ts.tv_nsec -= 1000000000;
-            }
-            pthread_cond_timedwait(&w->local_queue.not_empty, 
-                                   &w->local_queue.lock, &ts);
-            pthread_mutex_unlock(&w->local_queue.lock);
+            /* No work, wait briefly (1ms timeout) */
+            DESI_MUTEX_LOCK(w->local_queue.lock);
+            platform_cond_timedwait_ms(&w->local_queue.not_empty, 
+                                       &w->local_queue.lock, 1);
+            DESI_MUTEX_UNLOCK(w->local_queue.lock);
         }
     }
     
+#ifdef _WIN32
+    return 0;
+#else
     return NULL;
+#endif
 }
 
 /*
@@ -247,8 +303,7 @@ bool scheduler_is_cancelled(void) {
  * Yield to other tasks
  */
 void scheduler_yield(void) {
-    /* For now, just a thread yield */
-    sched_yield();
+    platform_yield();
 }
 
 /*

@@ -10,7 +10,7 @@
 
 #include <stdint.h>
 #include <stdbool.h>
-#include <pthread.h>
+#include "platform.h"
 
 /* Task states */
 typedef enum {
@@ -34,14 +34,14 @@ typedef struct Task {
 typedef struct WorkQueue {
     Task* head;
     Task* tail;
-    pthread_mutex_t lock;
-    pthread_cond_t not_empty;
+    DesiPlatformMutex lock;
+    DesiPlatformCond not_empty;
     int count;
 } WorkQueue;
 
 /* A worker is an OS thread that executes tasks */
 typedef struct Worker {
-    pthread_t thread;
+    DesiPlatformThread thread;
     WorkQueue local_queue;
     int id;
     bool running;
@@ -53,7 +53,7 @@ typedef struct Scheduler {
     int n_workers;
     WorkQueue global_queue;
     bool running;
-    pthread_mutex_t lock;
+    DesiPlatformMutex lock;
 } Scheduler;
 
 /* Initialize the scheduler with n_workers OS threads */
