@@ -1656,7 +1656,86 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
-		// Fallback for methods (dict/set) or unknown types
+		// Check if this is a method reference on a class (bound method)
+		// When a method name is accessed without being called, create a bound method
+		if cls, ok := baseType.(*types.Class); ok {
+			// Check if this is a method (Methods is map[string]*Func)
+			if _, exists := cls.Methods[name]; exists {
+				// This is a bound method reference: obj.method
+				// Create DesiCallable struct: {fn_ptr: ptr, receiver: ptr}
+
+				// Allocate bound method struct (16 bytes: fn + receiver)
+				callable := ls.b.FreshTemp("bound_method")
+				ls.b.Emit(&hir.Call{
+					Dst:  callable,
+					Fn:   "malloc",
+					Args: []hir.Value{hir.ConstInt{Text: "16"}},
+					Type: "ptr",
+				})
+
+				// Store method function pointer at offset 0
+				mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
+				fnSlot := ls.b.FreshTemp("fn_slot")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    "i8",
+					Base:    callable,
+					Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+					Dst:     fnSlot,
+				})
+				ls.b.Emit(&hir.Store{Dst: fnSlot, Val: hir.FuncRef{Name: mangledName}})
+
+				// Store receiver pointer at offset 8
+				recvSlot := ls.b.FreshTemp("recv_slot")
+				ls.b.Emit(&hir.GetElementPtr{
+					Type:    "i8",
+					Base:    callable,
+					Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+					Dst:     recvSlot,
+				})
+				ls.b.Emit(&hir.Store{Dst: recvSlot, Val: base})
+
+				return callable
+			}
+		}
+
+		// Also check generic class types
+		if g, ok := baseType.(*types.Generic); ok {
+			if cls, ok := g.Base.(*types.Class); ok {
+				if _, exists := cls.Methods[name]; exists {
+					// Bound method on generic class instance
+					callable := ls.b.FreshTemp("bound_method")
+					ls.b.Emit(&hir.Call{
+						Dst:  callable,
+						Fn:   "malloc",
+						Args: []hir.Value{hir.ConstInt{Text: "16"}},
+						Type: "ptr",
+					})
+
+					mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
+					fnSlot := ls.b.FreshTemp("fn_slot")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    callable,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+						Dst:     fnSlot,
+					})
+					ls.b.Emit(&hir.Store{Dst: fnSlot, Val: hir.FuncRef{Name: mangledName}})
+
+					recvSlot := ls.b.FreshTemp("recv_slot")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    callable,
+						Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+						Dst:     recvSlot,
+					})
+					ls.b.Emit(&hir.Store{Dst: recvSlot, Val: base})
+
+					return callable
+				}
+			}
+		}
+
+		// Fallback for dict/set methods or unknown types
 		dst := ls.b.FreshTemp("field")
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "get.field." + name, Args: []hir.Value{base}})
 		return dst

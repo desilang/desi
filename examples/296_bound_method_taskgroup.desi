@@ -1,0 +1,30 @@
+# Test bound method in TaskGroup
+# Verifies that instance methods can be passed to tg.run()
+
+import sync
+
+class Worker:
+	pub mut id: int
+	
+	pub def work(self) -> none:
+		print("Worker", self.id, "working")
+
+def main() -> int:
+	let mut w1 = Worker()
+	let mut w2 = Worker()
+	w1.id := 1
+	w2.id := 2
+	
+	using tg = sync.TaskGroup():
+		# Pass bound methods directly to run()
+		tg.run(w1.work)
+		tg.run(w2.work)
+		tg.wait()
+	
+	print("All workers done")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Worker 1 working
+# Worker 2 working
+# All workers done
