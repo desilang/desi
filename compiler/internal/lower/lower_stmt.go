@@ -1036,9 +1036,17 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 		// Handle zip(a, b) with two targets - parallel iteration
 		if isZip && len(s.Targets) == 2 {
-			// Get length of first list (iteration stops at min length - checking bounds in list_get)
-			lenTemp := ls.b.FreshTemp("for_len")
-			ls.b.Emit(&hir.Call{Dst: lenTemp, Fn: "list_len", Args: []hir.Value{zipIterVal1}, Type: "i64"})
+			// Get min length of both lists for zip truncation (Python behavior)
+			len1Temp := ls.b.FreshTemp("zip_len1")
+			len2Temp := ls.b.FreshTemp("zip_len2")
+			ls.b.Emit(&hir.Call{Dst: len1Temp, Fn: "list_len", Args: []hir.Value{zipIterVal1}, Type: "i64"})
+			ls.b.Emit(&hir.Call{Dst: len2Temp, Fn: "list_len", Args: []hir.Value{zipIterVal2}, Type: "i64"})
+
+			// Compute min(len1, len2)
+			cmpTemp := ls.b.FreshTemp("zip_cmp")
+			ls.b.Emit(&hir.BinaryOp{Dst: cmpTemp, Op: "<", LHS: len1Temp, RHS: len2Temp, Type: "i1"})
+			lenTemp := ls.b.FreshTemp("zip_len")
+			ls.b.Emit(&hir.Select{Dst: lenTemp, Cond: cmpTemp, Then: len1Temp, Else: len2Temp, Type: "i64"})
 
 			// Allocate index variable
 			idxPtr := ls.b.FreshTemp("for_idx_ptr")
