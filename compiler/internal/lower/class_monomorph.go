@@ -2,6 +2,7 @@ package lower
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -219,16 +220,14 @@ func lowerMonomorphizedDunderNew(mangledName string, method *ast.FuncDecl, subst
 
 	entry := hir.NewBlock("entry")
 
-	// Calculate total size with concrete types
-	totalSize := 0
-	if baseCls != nil {
-		for _, field := range baseCls.Fields {
-			concreteType := substituteType(field.Type, subst)
-			totalSize += getSize(concreteType)
+	// Calculate total size with concrete types (with proper alignment)
+	totalSize := 1
+	if baseCls != nil && len(baseCls.Fields) > 0 {
+		concreteTypes := make([]types.T, len(baseCls.Fields))
+		for i, field := range baseCls.Fields {
+			concreteTypes[i] = substituteType(field.Type, subst)
 		}
-	}
-	if totalSize == 0 {
-		totalSize = 1
+		totalSize = getClassSizeFromTypes(concreteTypes)
 	}
 
 	// Allocate
@@ -387,6 +386,55 @@ func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *type
 						if concrete != dt {
 							s.Type = lowerType(concrete)
 							s.DesiType = concrete
+						}
+					}
+				}
+				block.Stmts[i] = s
+
+			case *hir.GetElementPtr:
+				// Recalculate field offset for generic class fields with concrete types
+				// This fixes Pair<int, int> where offset was calculated with T=ptr (8 bytes)
+				// but should be calculated with T=int (4 bytes)
+				if s.Type == "i8" && len(s.Indices) == 1 {
+					// This is likely a field access: getelementptr i8, ptr %self, i32 <offset>
+					// We need to recalculate the offset based on substituted field types
+					if constIdx, ok := s.Indices[0].(hir.ConstInt); ok {
+						// Try to determine which field this offset corresponds to
+						// by comparing it with the expected offsets for each field
+						offset := 0
+						oldOffset, _ := strconv.Atoi(constIdx.Text)
+
+						// Calculate expected offsets with substituted types
+						for fieldIdx, f := range baseCls.Fields {
+							fieldType := substituteType(f.Type, subst)
+							fieldSize := getSize(fieldType)
+							fieldAlign := getAlign(fieldType)
+
+							// Align offset
+							if fieldAlign > 0 && offset%fieldAlign != 0 {
+								offset += fieldAlign - (offset % fieldAlign)
+							}
+
+							// Check if this matches the old offset
+							if offset == oldOffset {
+								// This is the correct field, offset is already correct
+								break
+							}
+
+							// Also check if we've hit the field by index
+							// (in case old offset was wrong but we can identify by position)
+							actualOldOffset := 0
+							for j := 0; j < fieldIdx; j++ {
+								// Calculate with generic types (how it was originally)
+								actualOldOffset += getSize(baseCls.Fields[j].Type)
+							}
+							if actualOldOffset == oldOffset {
+								// Found the field - update to correct offset
+								s.Indices[0] = hir.ConstInt{Text: fmt.Sprintf("%d", offset)}
+								break
+							}
+
+							offset += fieldSize
 						}
 					}
 				}

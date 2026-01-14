@@ -1583,15 +1583,23 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		}
 
 		if fields != nil {
-			// Find field index and offset
+			// Find field index and calculate aligned offset
 			idx := -1
 			offset := 0
 			for i, f := range fields {
+				fieldSize := getSize(f.Type)
+				fieldAlign := getAlign(f.Type)
+
+				// Align offset to field's alignment requirement before this field
+				if fieldAlign > 0 && offset%fieldAlign != 0 {
+					offset += fieldAlign - (offset % fieldAlign)
+				}
+
 				if f.Name == name {
 					idx = i
 					break
 				}
-				offset += getSize(f.Type)
+				offset += fieldSize
 			}
 
 			if idx != -1 {

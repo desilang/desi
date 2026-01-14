@@ -69,15 +69,10 @@ func LowerDefaultConstructor(className string, cls *types.Class) []*hir.Func {
 
 	wrapperEntry := hir.NewBlock("entry")
 
-	// Calculate size
-	totalSize := 0
-	if cls != nil {
-		for _, field := range cls.Fields {
-			totalSize += getSize(field.Type)
-		}
-	}
-	if totalSize == 0 {
-		totalSize = 1
+	// Calculate size with proper alignment
+	totalSize := 1
+	if cls != nil && len(cls.Fields) > 0 {
+		totalSize = getClassSize(cls.Fields)
 	}
 
 	// Allocate
@@ -135,15 +130,10 @@ func LowerDunderNew(className string, method *ast.FuncDecl, info *check.Info, sr
 
 	entry := hir.NewBlock("entry")
 
-	// Calculate total size
-	totalSize := 0
-	if cls != nil {
-		for _, field := range cls.Fields {
-			totalSize += getSize(field.Type)
-		}
-	}
-	if totalSize == 0 {
-		totalSize = 1
+	// Calculate total size with proper alignment
+	totalSize := 1
+	if cls != nil && len(cls.Fields) > 0 {
+		totalSize = getClassSize(cls.Fields)
 	}
 
 	// Allocate
