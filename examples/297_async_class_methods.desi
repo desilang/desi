@@ -1,0 +1,53 @@
+# Async Class Methods Example
+# Demonstrates using class methods with TaskGroup for concurrent execution
+
+import sync
+
+class DataProcessor:
+	pub mut name: str
+	pub mut count: int
+	
+	pub def process(self) -> none:
+		print(self.name, "processing...")
+		self.count := self.count + 1
+		print(self.name, "done!")
+
+class Logger:
+	pub mut prefix: str
+	
+	pub def log(self) -> none:
+		print("[", self.prefix, "]", "logged")
+
+def main() -> int:
+	# Create worker instances
+	let mut p1 = DataProcessor()
+	let mut p2 = DataProcessor()
+	p1.name := "Worker-1"
+	p2.name := "Worker-2"
+	p1.count := 0
+	p2.count := 0
+	
+	let mut logger = Logger()
+	logger.prefix := "INFO"
+	
+	print("Starting concurrent processing...")
+	
+	# Use TaskGroup to run instance methods concurrently
+	using tg = sync.TaskGroup():
+		# Pass bound methods - captures both method pointer and instance
+		tg.run(p1.process)
+		tg.run(p2.process)
+		tg.run(logger.log)
+		tg.wait()
+	
+	print("All tasks complete!")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Starting concurrent processing...
+# Worker-1 processing...
+# Worker-1 done!
+# Worker-2 processing...
+# Worker-2 done!
+# [ INFO ] logged
+# All tasks complete!
