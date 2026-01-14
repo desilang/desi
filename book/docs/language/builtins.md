@@ -291,6 +291,9 @@ for name: str, score: int in zip(names, scores):
 # bob: 85
 ```
 
+> **Note**: If the lists have different lengths, `zip()` truncates to the shortest.
+> For example, `zip([1,2,3], [10,20])` iterates only 2 times.
+
 ---
 
 ## Quick Reference
