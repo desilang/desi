@@ -705,12 +705,12 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				// Get the LHS value (previously lowered in lowerExpr)
 				lhsVal := ls.lowerExpr(isExpr.X)
 
-				// Load payload pointer from enum (offset 4, after the i32 tag)
+				// Load payload pointer from enum (offset 8, aligned after i32 tag + padding)
 				payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
 				ls.b.Emit(&hir.GetElementPtr{
 					Type:    "i8",
 					Base:    lhsVal,
-					Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+					Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 					Dst:     payloadPtrSlot,
 				})
 
@@ -1487,7 +1487,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						ls.b.Emit(&hir.Call{Dst: optionTemp, Fn: nextMangledName, Args: []hir.Value{iterTemp}, Type: "ptr"})
 
 						// Check is_some (Option variant tag == 0 means Some)
-						// Option layout: tag (i32 at offset 0), payload ptr (ptr at offset 4)
+						// Option layout: tag (i32 at offset 0), padding (4), payload ptr (ptr at offset 8)
 						tagPtr := ls.b.FreshTemp("option_tag_ptr")
 						ls.b.Emit(&hir.GetElementPtr{Type: "i8", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "0"}}, Dst: tagPtr})
 						tag := ls.b.FreshTemp("option_tag")
@@ -1502,9 +1502,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						ls.push()
 
-						// Extract value from Option (payload ptr is at offset 4)
+						// Extract value from Option (payload ptr is at offset 8, aligned)
 						valPtrPtr := ls.b.FreshTemp("option_val_ptr_ptr")
-						ls.b.Emit(&hir.GetElementPtr{Type: "i8", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "4"}}, Dst: valPtrPtr})
+						ls.b.Emit(&hir.GetElementPtr{Type: "i8", Base: optionTemp, Indices: []hir.Value{hir.ConstInt{Text: "8"}}, Dst: valPtrPtr})
 						valPtr := ls.b.FreshTemp("option_val_ptr")
 						ls.b.Emit(&hir.Load{Type: "ptr", Src: valPtrPtr, Dst: valPtr})
 						elemVal := ls.b.FreshTemp("iter_elem")
