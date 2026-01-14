@@ -71,8 +71,53 @@ print("Warning:", style="bold,yellow")
 
 **Supported Types:**
 - Strings, integers, floats, booleans
-- Custom classes with `__str__` or `__repr__` methods
-- Collections with Display trait implementation
+- Custom classes with `__format__`, `__repr__`, or `__str__` methods
+
+### Custom Formatting in F-Strings
+
+Define `__format__` for custom class formatting:
+
+```desi
+class Point:
+    pub x: int
+    pub y: int
+    
+    pub def __format__(self, spec: str) -> str:
+        if spec == "short":
+            return f"({self.x},{self.y})"
+        return f"Point({self.x}, {self.y})"
+
+let p = Point(x=1, y=2)
+print(f"{p:short}")  # → (1,2)
+print(f"{p}")        # → Point(1, 2)
+```
+
+**Fallback Chain:** When displaying a custom class in f-strings or `print()`:
+1. `__format__(self, spec)` - Primary (receives format specifier)
+2. `__repr__(self)` - Fallback (no specifier support)
+3. `<?>` - Default for types without either method
+
+**Example with `__repr__` fallback:**
+```desi
+class Vector:
+    pub x: int
+    pub y: int
+    
+    pub def __repr__(self) -> str:
+        return f"Vector<{self.x}, {self.y}>"
+
+let v = Vector(x=3, y=4)
+print(f"{v}")  # → Vector<3, 4> (uses __repr__)
+```
+
+**Dos:**
+- ✅ Use `__format__` for types that need format specifiers
+- ✅ Use `__repr__` for simple string representation
+- ✅ Return a `str` from both methods
+
+**Don'ts:**
+- ❌ Don't define format specs that conflict with built-in types (`:d`, `:f`, etc.)
+- ❌ Don't forget the `spec` parameter in `__format__` signature
 
 ---
 

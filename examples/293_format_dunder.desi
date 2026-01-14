@@ -1,6 +1,7 @@
-# Test __format__ dunder for custom class formatting in f-strings
-# Using simpler struct pattern that works with existing tests
+# Test __format__ and __repr__ fallback for f-strings
+# Tests Python-like fallback chain: __format__ -> __repr__ -> <?>
 
+# Class with __format__ - should use __format__
 class Point:
     pub x: int
     pub y: int
@@ -14,17 +15,32 @@ class Point:
             return f"({self.x},{self.y})"
         return f"Point({self.x}, {self.y})"
 
+# Class with only __repr__ - should fallback to __repr__
+class Vector:
+    pub x: int
+    pub y: int
+    
+    pub def __new__(self, x: int, y: int):
+        self.x := x
+        self.y := y
+
+    pub def __repr__(self) -> str:
+        return f"Vector<{self.x}, {self.y}>"
+
 def main() -> int:
-    let p: Point = Point(x=1, y=2)
+    let p = Point(x=1, y=2)
+    let v = Vector(x=3, y=4)
     
-    # Test with format spec - use __format__
-    print(f"{p:short}")
+    # Point with __format__
+    print(f"{p:short}")    # Uses __format__ with spec
+    print(f"{p}")          # Uses __format__ with empty spec
     
-    # Test without format spec - default behavior
-    print(f"{p}")
+    # Vector with __repr__ fallback
+    print(f"{v}")          # Should fallback to __repr__
     
     return 0
 
 # EXPECTED_OUTPUT:
 # (1,2)
 # Point(1, 2)
+# Vector<3, 4>

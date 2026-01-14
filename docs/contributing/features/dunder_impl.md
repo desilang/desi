@@ -11,7 +11,8 @@ This document describes the implementation of Python-style dunder (double unders
 | `__setitem__` | `obj[idx] := val` | Index assignment |
 | `__len__` | `len(obj)` | Custom length |
 | `__contains__` | `x in obj` | Membership test |
-| `__repr__` | `print(obj)` | String representation |
+| `__format__` | `f"{obj:spec}"` | F-string formatting with spec |
+| `__repr__` | `f"{obj}"`, `print(obj)` | Fallback string representation |
 | `__eq__`, `__ne__`, etc. | `obj == other` | Comparison operators |
 | `__add__`, `__sub__`, etc. | `obj + other` | Arithmetic operators |
 
@@ -89,10 +90,47 @@ if _, ok := objType.(*types.List); ok {
 }
 ```
 
+### `__format__` and `__repr__` Fallback Chain
+
+**F-string formatting follows Python-like fallback:**
+1. If `__format__(self, spec: str) -> str` exists, call it
+2. Else if `__repr__(self) -> str` exists, call it  
+3. Else output `<?>`
+
+**Key Design Decision:** The format specifier is passed as a string parameter, allowing custom formatting:
+- `f"{obj:short}"` → calls `__format__(obj, "short")`
+- `f"{obj}"` → calls `__format__(obj, "")` with empty spec
+
+**Implementation:** `compiler/internal/lower/lower_expr.go`
+
+```go
+// FStringExpr case (with format spec)
+if _, hasFormat := cls.Dunders["__format__"]; hasFormat {
+    formatFn := cls.Name + "___format__"
+    ls.b.Emit(&hir.Call{Dst: res, Fn: formatFn, Args: []hir.Value{val, specVal}})
+}
+
+// Default case (no spec) - fallback chain
+if _, hasFormat := cls.Dunders["__format__"]; hasFormat {
+    // Call __format__ with empty spec
+} else if _, hasRepr := cls.Dunders["__repr__"]; hasRepr {
+    reprFn := cls.Name + "___repr__"
+    ls.b.Emit(&hir.Call{Dst: res, Fn: reprFn, Args: []hir.Value{val}})
+}
+```
+
+**Type Checker Fix:** Added `*ast.FStringExpr` case in `check/expr.go` to populate type info:
+```go
+case *ast.FStringExpr:
+    innerType := c.typ(x.X)
+    c.info.Types[e] = innerType
+```
+
 ## Tests
 
 - `examples/206_custom_dunders.desi` - `__getitem__`, `__setitem__`, `__len__`
 - `examples/210_custom_contains.desi` - `__contains__` dunder
+- `examples/293_format_dunder.desi` - `__format__` and `__repr__` fallback
 
 ## Commits
 
