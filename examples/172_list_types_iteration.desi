@@ -108,7 +108,7 @@ def test_zip_with_structs():
 # Float iteration:
 # 1.5
 # 2.5
-# 3
+# 3.0
 # float list: PASS
 # Bool iteration:
 # true
