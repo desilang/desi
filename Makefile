@@ -63,23 +63,23 @@ tools: $(DESIFMT) $(DESIREPL)
 
 $(DESIC):
 	@echo "==> Building desic..."
-	$(GO) build -o $@ ./compiler/cmd/desic
+	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desic
 
 $(DESIFMT):
 	@echo "==> Building desifmt..."
-	$(GO) build -o $@ ./compiler/cmd/desifmt
+	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desifmt
 
 $(DESIREPL):
 	@echo "==> Building desirepl..."
-	$(GO) build -o $@ ./compiler/cmd/desirepl
+	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desirepl
 
 # Windows Build
 windows:
 	@mkdir -p $(BIN_DIR)
 	@echo "==> Building Windows binaries..."
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BIN_DIR)/desic.exe ./compiler/cmd/desic
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BIN_DIR)/desifmt.exe ./compiler/cmd/desifmt
-	GOOS=windows GOARCH=amd64 $(GO) build -o $(BIN_DIR)/desirepl.exe ./compiler/cmd/desirepl
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desic.exe ./compiler/cmd/desic
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desifmt.exe ./compiler/cmd/desifmt
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desirepl.exe ./compiler/cmd/desirepl
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR) gen/

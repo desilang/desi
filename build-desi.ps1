@@ -110,7 +110,7 @@ try {
     # Temporarily disable ErrorActionPreference to prevent stderr warnings from causing exceptions
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $clangOutput = & $ClangExe $LlvmIr $LibDesi -o $Executable 2>&1
+    $clangOutput = & $ClangExe $LlvmIr $LibDesi -o $Executable -ffunction-sections -fdata-sections -Wl,--gc-sections 2>&1
     $clangExit = $LASTEXITCODE
     $ErrorActionPreference = $oldEAP
     if ($clangExit -ne 0) {

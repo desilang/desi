@@ -30,8 +30,8 @@ echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
-# Link against libdesi.a (static runtime)
-clang build/program.o -Lbuild -ldesi -o "build/output/$OUTPUT_NAME"
+# Link against libdesi.a (static runtime) with dead code elimination
+clang build/program.o -Lbuild -ldesi -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o
