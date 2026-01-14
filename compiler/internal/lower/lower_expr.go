@@ -972,12 +972,12 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Full semantics (match + early return on Err/Nothing) can be added later
 		inner := ls.lowerExpr(x.X)
 
-		// Get payload ptr at offset 4 (same as unwrap() method)
+		// Get payload ptr at offset 8 (aligned after i32 tag + padding)
 		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
 		ls.b.Emit(&hir.GetElementPtr{
 			Type:    "i8",
 			Base:    inner,
-			Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 			Dst:     payloadPtrSlot,
 		})
 		payloadPtr := ls.b.FreshTemp("payload_ptr")

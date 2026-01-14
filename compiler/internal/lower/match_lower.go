@@ -111,12 +111,12 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 	if ls.info != nil && ls.info.MatchBindings[m] != nil {
 		bindings := ls.info.MatchBindings[m][start]
 		if len(bindings) > 0 && enumType != nil {
-			// Load payload pointer from enum (offset 4, after the i32 tag)
+			// Load payload pointer from enum (offset 8, aligned after i32 tag + padding)
 			payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
 			ls.b.Emit(&hir.GetElementPtr{
 				Type:    "i8",
 				Base:    scrutinee,
-				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
 

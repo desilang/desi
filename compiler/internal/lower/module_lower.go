@@ -313,7 +313,7 @@ func LowerStructConstructor(sd *ast.StructDecl, info *check.Info) *hir.Func {
 		st, _ = t.(*types.Struct)
 	}
 
-	// Calculate layout and create parameters
+	// Calculate layout and create parameters with proper alignment
 	var params []hir.Param
 	var offsets []int
 	currentOffset := 0
@@ -324,8 +324,15 @@ func LowerStructConstructor(sd *ast.StructDecl, info *check.Info) *hir.Func {
 			fieldType = st.Fields[i].Type
 		}
 
-		// Calculate size and offset
+		// Calculate size and alignment
 		size := getSize(fieldType)
+		align := getAlign(fieldType)
+
+		// Align currentOffset to field's alignment requirement
+		if align > 0 && currentOffset%align != 0 {
+			currentOffset += align - (currentOffset % align)
+		}
+
 		offsets = append(offsets, currentOffset)
 		currentOffset += size
 
