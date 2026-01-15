@@ -1,0 +1,182 @@
+# Comprehensive match edge case tests
+# Tests various scenarios inspired by Rust, Swift, Kotlin match/when
+
+enum Status:
+    Pending: none
+    Running: int
+    Complete: str
+    Error: str
+
+enum Color:
+    Red: none
+    Green: none
+    Blue: none
+
+def main() -> int:
+    print("=== Edge Case Tests ===")
+    
+    # Test 1: Multiple literals with wildcard default
+    let x = 42
+    let r1 = match x:
+        0: "zero"
+        1: "one"
+        _: "other"
+    print("1. Wildcard default:", r1)
+    
+    # Test 2: Large int edge values
+    let big = 999999999
+    let r2 = match big:
+        0: "zero"
+        999999999: "found big"
+        _: "unknown"
+    print("2. Large int:", r2)
+    
+    # Test 3: Bool both cases
+    let b1 = true
+    let b2 = false
+    let r3a = match b1:
+        true: "T"
+        false: "F"
+    let r3b = match b2:
+        true: "T"
+        false: "F"
+    print("3. Bool true:", r3a, "false:", r3b)
+    
+    # Test 4: Enum all unit variants
+    let c1 = Color.Red
+    let c2 = Color.Green
+    let c3 = Color.Blue
+    let rc1 = match c1:
+        Red: "R"
+        Green: "G"
+        Blue: "B"
+    let rc2 = match c2:
+        Red: "R"
+        Green: "G"
+        Blue: "B"
+    let rc3 = match c3:
+        Red: "R"
+        Green: "G"
+        Blue: "B"
+    print("4. Colors:", rc1, rc2, rc3)
+    
+    # Test 5: Enum mixed payload/unit - Pending
+    let s1 = Status.Pending
+    let rs1 = match s1:
+        Pending: "pending"
+        Running(n1): f"run {n1}"
+        Complete(m1): f"ok {m1}"
+        Error(e1): f"err {e1}"
+    print("5a. Pending:", rs1)
+    
+    # Test 6: Enum mixed payload/unit - Running
+    let s2 = Status.Running(42)
+    let rs2 = match s2:
+        Pending: "pending"
+        Running(n2): f"run {n2}"
+        Complete(m2): f"ok {m2}"
+        Error(e2): f"err {e2}"
+    print("5b. Running:", rs2)
+    
+    # Test 7: Enum mixed payload/unit - Complete
+    let s3 = Status.Complete("done")
+    let rs3 = match s3:
+        Pending: "pending"
+        Running(n3): f"run {n3}"
+        Complete(m3): f"ok {m3}"
+        Error(e3): f"err {e3}"
+    print("5c. Complete:", rs3)
+    
+    # Test 8: Enum mixed payload/unit - Error
+    let s4 = Status.Error("fail")
+    let rs4 = match s4:
+        Pending: "pending"
+        Running(n4): f"run {n4}"
+        Complete(m4): f"ok {m4}"
+        Error(e4): f"err {e4}"
+    print("5d. Error:", rs4)
+    
+    # Test 9: Option<int>
+    let opt1: Option[int] = Option.Some(100)
+    let opt2: Option[int] = Option.Nothing
+    let ro1 = match opt1:
+        Some(v1): f"got {v1}"
+        Nothing: "none"
+    let ro2 = match opt2:
+        Some(v2): f"got {v2}"
+        Nothing: "none"
+    print("6a. Option Some:", ro1)
+    print("6b. Option Nothing:", ro2)
+    
+    # Test 10: Result<str, str>
+    let res1: Result[str, str] = Result.Ok("success")
+    let res2: Result[str, str] = Result.Err("failure")
+    let rr1 = match res1:
+        Ok(ok1): f"ok: {ok1}"
+        Err(er1): f"err: {er1}"
+    let rr2 = match res2:
+        Ok(ok2): f"ok: {ok2}"
+        Err(er2): f"err: {er2}"
+    print("7a. Result Ok:", rr1)
+    print("7b. Result Err:", rr2)
+    
+    # Test 11: Match in expression position
+    let expr_result = match 5:
+        0: "zero"
+        5: "five"
+        _: "other"
+    print("8. Expr position:", expr_result)
+    
+    # Test 12: Unused binding with wildcard
+    let status = Status.Running(999)
+    let r12 = match status:
+        Running(_): "running something"
+        _: "other"
+    print("9. Unused binding:", r12)
+    
+    # Test 13: Empty string in enum payload
+    let empty = Status.Complete("")
+    let r13 = match empty:
+        Complete(str_val): f"complete: '{str_val}'"
+        _: "other"
+    print("10. Empty str payload:", r13)
+    
+    # Test 14: Zero values
+    let zero = 0
+    let rz = match zero:
+        0: "zero!"
+        _: "not zero"
+    print("11. Zero match:", rz)
+    
+    # Test 15: Qualified and unqualified mix
+    let mixed = Status.Running(50)
+    let rm = match mixed:
+        Status.Pending: "qualified pending"
+        Running(runval): f"unqualified run {runval}"
+        Status.Complete(compval): f"qualified complete {compval}"
+        Error(errval): f"unqualified error {errval}"
+    print("12. Mixed qualified:", rm)
+    
+    print("=== All edge cases passed! ===")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Edge Case Tests ===
+# 1. Wildcard default: other
+# 2. Large int: found big
+# 3. Bool true: T false: F
+# 4. Colors: R G B
+# 5a. Pending: pending
+# 5b. Running: run 42
+# 5c. Complete: ok done
+# 5d. Error: err fail
+# 6a. Option Some: got 100
+# 6b. Option Nothing: none
+# 7a. Result Ok: ok: success
+# 7b. Result Err: err: failure
+# 8. Expr position: five
+# 9. Unused binding: running something
+# 10. Empty str payload: complete: ''
+# 11. Zero match: zero!
+# 12. Mixed qualified: unqualified run 50
+# === All edge cases passed! ===

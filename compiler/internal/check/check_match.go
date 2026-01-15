@@ -37,6 +37,17 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 				et = e
 				typeArgs = g.Args
 			}
+		} else if fn, ok := scrutineeType.(*types.Func); ok {
+			// Unit variant case: Status.Pending has type () -> Status
+			// Extract enum from function return type
+			if e, ok := fn.Ret.(*types.Enum); ok {
+				et = e
+			} else if g, ok := fn.Ret.(*types.Generic); ok {
+				if e, ok := g.Base.(*types.Enum); ok {
+					et = e
+					typeArgs = g.Args
+				}
+			}
 		}
 
 		if et != nil {
