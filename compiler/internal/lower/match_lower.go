@@ -114,7 +114,20 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 		}
 	}
 
-	if cond == nil && !isIdentifierWithGuard {
+	// Check for struct pattern (struct patterns have no tag to check)
+	isStructPattern := false
+	if cond == nil && enumType == nil {
+		scrType := ls.info.Types[m.Scrutinee]
+		if _, ok := scrType.(*types.Struct); ok {
+			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+				if _, ok := call.Callee.(*ast.Ident); ok {
+					isStructPattern = true
+				}
+			}
+		}
+	}
+
+	if cond == nil && !isIdentifierWithGuard && !isStructPattern {
 		// Pattern not supported, skip to next arm
 		ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 		return
@@ -208,11 +221,38 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 				ls.matchLocals[binding.Name] = val
 			}
 		} else if len(bindings) > 0 {
-			// Non-enum bindings: identifier pattern binds to scrutinee value
+			// Non-enum bindings: identifier pattern or struct pattern
 			for _, binding := range bindings {
 				if binding.FieldIndex == -1 {
 					// Scrutinee binding: the binding IS the scrutinee value
 					ls.matchLocals[binding.Name] = scrutinee
+				} else if binding.FieldIndex >= 0 {
+					// Struct field binding: load field from struct
+					val := ls.b.FreshTemp(binding.Name)
+					fieldPtr := ls.b.FreshTemp("struct_field_ptr")
+
+					// Get struct type from scrutinee type
+					scrType := ls.info.Types[m.Scrutinee]
+					if st, ok := scrType.(*types.Struct); ok {
+						// Get field offset
+						offset := 0
+						for i := 0; i < binding.FieldIndex; i++ {
+							offset += getSize(st.Fields[i].Type)
+						}
+
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    "i8",
+							Base:    scrutinee,
+							Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+							Dst:     fieldPtr,
+						})
+						ls.b.Emit(&hir.Load{
+							Type: lowerType(binding.Type),
+							Src:  fieldPtr,
+							Dst:  val,
+						})
+						ls.matchLocals[binding.Name] = val
+					}
 				}
 			}
 		}

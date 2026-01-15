@@ -220,6 +220,48 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 			}
 		}
 
+		// Handle struct pattern: Point(x, y) when scrutinee is struct type
+		if len(bindings) == 0 {
+			var st *types.Struct
+			if s, ok := scrutineeType.(*types.Struct); ok {
+				st = s
+			}
+
+			if st != nil {
+				if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+					// Check if callee matches struct name
+					if id, ok := call.Callee.(*ast.Ident); ok && id.Name == st.Name {
+						// Struct pattern with field bindings
+						// Arguments bind to struct fields in order
+						for j, arg := range call.Args {
+							if j >= len(st.Fields) {
+								continue
+							}
+							field := st.Fields[j]
+
+							if ident, ok := arg.(*ast.Ident); ok && ident.Name != "_" {
+								binding := MatchBinding{
+									Name:       ident.Name,
+									Type:       field.Type,
+									FieldIndex: j,
+									Node:       ident,
+								}
+								bindings = append(bindings, binding)
+
+								sym := &Symbol{
+									Name: ident.Name,
+									Kind: SymVar,
+									Type: field.Type,
+									Node: ident,
+								}
+								c.info.Idents[ident] = sym
+							}
+						}
+					}
+				}
+			}
+		}
+
 	skipBindings:
 		// Handle identifier pattern bindings for guards (e.g., n if n > 0)
 		// If pattern is a simple identifier (not _ or enum variant), bind it to scrutinee type
