@@ -1,0 +1,45 @@
+# Test match expression with generic enums (Option, Result)
+# Verifies that match works correctly with generic enum bindings
+
+def main() -> int:
+	# Test 1: Option<int>
+	let opt1: Option[int] = Option.Some(42)
+	let r1 = match opt1:
+		Option.Some(v): f"got {v}"
+		Option.Nothing: "nothing"
+	print("Option<int> Some:", r1)
+	
+	let opt2: Option[int] = Option.Nothing
+	let r2 = match opt2:
+		Option.Some(v): f"got {v}"
+		Option.Nothing: "nothing"
+	print("Option<int> Nothing:", r2)
+	
+	# Test 2: Option<str>
+	let opt3: Option[str] = Option.Some("hello")
+	let r3 = match opt3:
+		Option.Some(s): f"text: {s}"
+		Option.Nothing: "nothing"
+	print("Option<str>:", r3)
+	
+	# Test 3: Result<int, str>
+	let res1: Result[int, str] = Result.Ok(100)
+	let r4 = match res1:
+		Result.Ok(v): f"success: {v}"
+		Result.Err(e): f"error: {e}"
+	print("Result Ok:", r4)
+	
+	let res2: Result[int, str] = Result.Err("failed")
+	let r5 = match res2:
+		Result.Ok(v): f"success: {v}"
+		Result.Err(e): f"error: {e}"
+	print("Result Err:", r5)
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# Option<int> Some: got 42
+# Option<int> Nothing: nothing
+# Option<str>: text: hello
+# Result Ok: success: 100
+# Result Err: error: failed

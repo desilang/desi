@@ -93,7 +93,7 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 	}
 
 	// Pattern match: build condition
-	cond := ls.buildMatchCondition(arm.Pattern, tagVal, enumType)
+	cond := ls.buildMatchCondition(arm.Pattern, scrutinee, tagVal, enumType)
 
 	if cond == nil {
 		// Pattern not supported, skip to next arm
@@ -129,13 +129,31 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 
 			// For each binding, load the field value
 			for _, binding := range bindings {
-				// For MVP: single field payload, so just load directly
 				val := ls.b.FreshTemp(binding.Name)
-				ls.b.Emit(&hir.Load{
-					Type: lowerType(binding.Type),
-					Src:  payloadPtr,
-					Dst:  val,
-				})
+
+				// Check if binding type is a pointer type (class, struct, list, dict, set)
+				// For pointer types, the payload IS the pointer - don't double-dereference
+				isPtr := false
+				switch binding.Type.(type) {
+				case *types.Class, *types.Struct, *types.List, *types.Dict, *types.Set:
+					isPtr = true
+				}
+
+				if isPtr {
+					// For pointer types, just load the pointer value
+					ls.b.Emit(&hir.Load{
+						Type: "ptr",
+						Src:  payloadPtr,
+						Dst:  val,
+					})
+				} else {
+					// For primitive types, load the value
+					ls.b.Emit(&hir.Load{
+						Type: lowerType(binding.Type),
+						Src:  payloadPtr,
+						Dst:  val,
+					})
+				}
 
 				// Store in matchLocals for use in arm body
 				ls.matchLocals[binding.Name] = val
@@ -170,8 +188,39 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 }
 
 // buildMatchCondition creates the condition expression for a pattern match
-func (ls *lowerState) buildMatchCondition(pattern ast.Expr, tagVal hir.Value, enumType *types.Enum) hir.Value {
-	// For now, only support enum variant patterns
+func (ls *lowerState) buildMatchCondition(pattern ast.Expr, scrutinee hir.Value, tagVal hir.Value, enumType *types.Enum) hir.Value {
+	// Handle literal patterns (bool, int, str)
+	switch lit := pattern.(type) {
+	case *ast.BoolLit:
+		// Compare scrutinee == literal (bool is i1)
+		cmp := ls.b.FreshTemp("cmp")
+		litVal := "0"
+		if lit.Value {
+			litVal = "1"
+		}
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  scrutinee,
+			RHS:  hir.ConstInt{Text: litVal},
+			Dst:  cmp,
+			Type: "i1",
+		})
+		return cmp
+
+	case *ast.IntLit:
+		// Compare scrutinee == literal (int is i64)
+		cmp := ls.b.FreshTemp("cmp")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  scrutinee,
+			RHS:  hir.ConstInt{Text: lit.Text},
+			Dst:  cmp,
+			Type: "i1",
+		})
+		return cmp
+	}
+
+	// Handle enum variant patterns
 	var variantName string
 
 	if call, ok := pattern.(*ast.CallExpr); ok {

@@ -1,0 +1,40 @@
+# Test match expression with literal patterns (bool, int)
+# Verifies that match works correctly with primitive literal patterns
+
+def main() -> int:
+	# Test 1: Match on bool
+	let b = true
+	let r1 = match b:
+		true: "yes"
+		false: "no"
+	print("bool true:", r1)
+	
+	let b2 = false
+	let r2 = match b2:
+		true: "yes"
+		false: "no"
+	print("bool false:", r2)
+	
+	# Test 2: Match on int with literals
+	let x = 5
+	let r3 = match x:
+		0: "zero"
+		1: "one"
+		5: "five"
+		_: "other"
+	print("int 5:", r3)
+	
+	let y = 99
+	let r4 = match y:
+		0: "zero"
+		1: "one"
+		_: "other"
+	print("int 99:", r4)
+	
+	return 0
+
+# EXPECTED_OUTPUT:
+# bool true: yes
+# bool false: no
+# int 5: five
+# int 99: other
