@@ -26,6 +26,7 @@ type FromImportItem struct {
 // FromImportStmt models:   from dotted.name import a [as x], b, ...
 //
 //	or:   from dotted.name import *
+//	or:   pub from dotted.name import X  (public re-export)
 //
 // For relative imports (from .module import x), Relative is true
 type FromImportStmt struct {
@@ -33,6 +34,7 @@ type FromImportStmt struct {
 	Items    []FromImportItem // imported items (empty if Star is true)
 	Star     bool             // true for wildcard import (from X import *)
 	Relative bool             // true for relative imports (. prefix)
+	Pub      bool             // true for public re-export (pub from X import Y)
 	Span     diag.Span
 }
 
