@@ -12,14 +12,14 @@ def main() -> int:
     let r1 = match e1:
         Text(s): f"text: {s}"
         Numbers(n): f"nums: {len(n)}"
-        Data.Empty: "empty"
+        Empty: "empty"
     print(r1)
     
-    # Test 2: Unqualified unit pattern with same-variant scrutinee
-    let e2 = Data.Text("test")
+    # Test 2: Unqualified unit pattern with unit variant scrutinee
+    let e2 = Data.Empty
     let r2 = match e2:
-        Text(s): f"has text: {s}"
-        Data.Empty: "is empty"
+        Text(s): "has text"
+        Empty: "is empty"
         _: "other"
     print(r2)
     
@@ -36,6 +36,6 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # text: hello world
-# has text: test
+# is empty
 # unqualified nums: 3
 # All unqualified pattern tests passed!
