@@ -1,0 +1,50 @@
+# Test Option/Result with class types
+# Verifies that generic enums work correctly with user-defined class payloads
+
+class Point:
+	pub mut x: int
+	pub mut y: int
+
+class User:
+	pub mut name: str
+	pub mut age: int
+
+def main() -> int:
+	# Test 1: Option<Point>
+	let mut p = Point()
+	p.x := 10
+	p.y := 20
+	
+	let opt: Option[Point] = Option.Some(p)
+	
+	match opt:
+		Option.Some(pt): print("Got point:", pt.x, pt.y)
+		Option.Nothing: print("No point")
+	
+	# Test 2: Result<User, str>
+	let mut u = User()
+	u.name := "Alice"
+	u.age := 30
+	
+	let res: Result[User, str] = Result.Ok(u)
+	
+	match res:
+		Result.Ok(user): print("Got user:", user.name, user.age)
+		Result.Err(e): print("Error:", e)
+	
+	# Test 3: Option<list>
+	let items = [1, 2, 3]
+	let opt_list: Option[list[int]] = Option.Some(items)
+	
+	match opt_list:
+		Option.Some(lst): print("Got list with", len(lst), "items")
+		Option.Nothing: print("No list")
+	
+	print("All class-in-generic tests passed!")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Got point: 10 20
+# Got user: Alice 30
+# Got list with 3 items
+# All class-in-generic tests passed!
