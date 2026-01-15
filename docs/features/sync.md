@@ -333,7 +333,7 @@ def main() -> int:
 
 Functions passed to `tg.run()` must:
 - Return **`none`**
-- Can be named functions or lambdas
+- Can be named functions, lambdas, or **bound methods** (instance methods)
 
 ```desi
 # Valid worker function
@@ -345,6 +345,36 @@ using tg = sync.TaskGroup():
     tg.run(my_worker)
     tg.wait()
 ```
+
+### Bound Methods (Class Instance Methods)
+
+You can pass instance methods directly to `run()`:
+
+```desi
+class Worker:
+    pub mut id: int
+    
+    pub def process(self) -> none:
+        print("Worker", self.id, "processing...")
+
+def main() -> int:
+    let mut w1 = Worker()
+    let mut w2 = Worker()
+    w1.id := 1
+    w2.id := 2
+    
+    using tg = sync.TaskGroup():
+        tg.run(w1.process)  # Bound method - captures w1
+        tg.run(w2.process)  # Bound method - captures w2
+        tg.wait()
+    
+    return 0
+```
+
+**How bound methods work:**
+- `w1.process` creates a **bound method** - a callable that captures both the method and receiver
+- When executed, `self` is automatically set to `w1`
+- The receiver must outlive the task (TaskGroup's `wait()` ensures this)
 
 ### Closure Capture in `run()`
 

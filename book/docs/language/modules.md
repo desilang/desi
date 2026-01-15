@@ -44,6 +44,18 @@ class Point:
     y: int
 ```
 
+## Public Re-exports
+
+Use `pub from` to re-export items as part of your module's public API:
+
+```python
+# mylib.desi - re-export print for users of mylib
+pub from io import print
+pub from math import add, sub
+
+# Consumers can now do: from mylib import print, add
+```
+
 ## Module Structure
 
 ```

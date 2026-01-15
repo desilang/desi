@@ -186,7 +186,11 @@ pub def package_func() -> int:
 
 ## Re-exporting
 
-Packages commonly re-export items from submodules:
+Packages commonly re-export items from submodules. There are two approaches:
+
+### Standard Re-export (in `__mod.desi`)
+
+Items imported in `__mod.desi` become available to package consumers:
 
 ```desi
 # prelude/__mod.desi
@@ -202,10 +206,30 @@ from prelude.dict import *
 from prelude.set import *
 ```
 
+### Explicit Public Re-export (`pub from`)
+
+Use `pub from X import Y` for explicit public re-exports in any file:
+
+```desi
+# mylib.desi
+
+# Explicitly mark as public re-export
+pub from io import print
+pub from math import add, sub
+
+# Now consumers of mylib get print, add, sub directly
+```
+
+**When to use `pub from`:**
+- Make imported items part of your module's public API
+- Re-export items outside of `__mod.desi` files
+- Explicit about what's being re-exported
+
 Consumers can then import from the package:
 
 ```desi
 from prelude import zeroed, to_u8
+from mylib import print, add
 ```
 
 ---
