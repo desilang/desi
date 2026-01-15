@@ -821,11 +821,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		if ls.isMutable(x.Name) {
 			dst := ls.b.FreshTemp("load")
 
-			// Determine type
-			loadType := "i32" // default
+			// Determine type - check multiple sources
+			loadType := "ptr" // default to ptr for heap-allocated types
 			if ls.info != nil {
-				if sym := ls.info.Idents[x]; sym != nil {
+				if sym := ls.info.Idents[x]; sym != nil && sym.Type != nil {
 					loadType = lowerType(sym.Type)
+				} else if t := ls.info.Types[x]; t != nil {
+					loadType = lowerType(t)
 				}
 			}
 
