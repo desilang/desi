@@ -46,6 +46,13 @@ func (p *Parser) parseMatch() *ast.MatchExpr {
 			pat = p.parseExpr()
 		}
 
+		// Check for guard clause: pattern if condition
+		var guard ast.Expr
+		if p.cur.Tok == token.KW_if {
+			p.next() // consume 'if'
+			guard = p.parseExpr()
+		}
+
 		if !p.expect(token.COLON, ":") {
 			p.syncStmt()
 			continue
@@ -56,6 +63,7 @@ func (p *Parser) parseMatch() *ast.MatchExpr {
 
 		arms = append(arms, ast.MatchArm{
 			Pattern: pat,
+			Guard:   guard,
 			Result:  res,
 			Span:    ast.JoinSpan(armStart, end),
 		})

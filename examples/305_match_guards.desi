@@ -1,0 +1,58 @@
+# Test guard clauses in match statements
+# Syntax: pattern if condition: result
+
+def main() -> int:
+    print("=== Guard Clause Tests ===")
+    
+    # Test 1: Basic number range guards
+    let x = 50
+    let r1 = match x:
+        n if n > 100: "large"
+        n if n > 0: "positive"
+        n if n < 0: "negative"
+        _: "zero"
+    print("1. Number guard:", r1)
+    
+    # Test 2: Guard with specific values
+    let score = 85
+    let grade = match score:
+        s if s >= 90: "A"
+        s if s >= 80: "B"
+        s if s >= 70: "C"
+        _: "F"
+    print("2. Grade guard:", grade)
+    
+    # Test 3: Guard with enum payload
+    let opt: Option[int] = Option.Some(42)
+    let r3 = match opt:
+        Some(v) if v > 50: "big value"
+        Some(v): f"small value: {v}"
+        Nothing: "nothing"
+    print("3. Enum guard:", r3)
+    
+    # Test 4: Multiple guards on same pattern
+    let y = -5
+    let r4 = match y:
+        n if n > 0: "positive"
+        n if n < 0: "negative"
+        _: "zero"
+    print("4. Negative guard:", r4)
+    
+    # Test 5: Guard with wildcard fallback
+    let z = 0
+    let r5 = match z:
+        n if n != 0: "non-zero"
+        _: "zero"
+    print("5. Zero guard:", r5)
+    
+    print("=== All guard tests passed! ===")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Guard Clause Tests ===
+# 1. Number guard: positive
+# 2. Grade guard: B
+# 3. Enum guard: small value: 42
+# 4. Negative guard: negative
+# 5. Zero guard: zero
+# === All guard tests passed! ===
