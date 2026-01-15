@@ -51,12 +51,13 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 
 		entry := hir.NewBlock("entry")
 
-		// Allocate enum struct: 12 bytes (4 for i32 tag + 8 for ptr payload)
+		// Allocate enum struct: 16 bytes (4 for i32 tag + 4 padding + 8 for ptr payload)
+		// Pointer must be 8-byte aligned, so payload ptr goes at offset 8, not 4
 		enumPtr := hir.Temp{Name: "%enum_ptr"}
 		entry.Stmts = append(entry.Stmts, &hir.Call{
 			Dst:  enumPtr,
 			Fn:   "malloc",
-			Args: []hir.Value{hir.ConstInt{Text: "12"}},
+			Args: []hir.Value{hir.ConstInt{Text: "16"}},
 			Type: "ptr",
 		})
 
@@ -93,12 +94,12 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 				Val: hir.Var{Name: "value"},
 			})
 
-			// Store payload pointer at offset 4
+			// Store payload pointer at offset 8 (aligned for 8-byte ptr)
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
 				Base:    enumPtr,
-				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
 			entry.Stmts = append(entry.Stmts, &hir.Store{
@@ -106,12 +107,12 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 				Val: payloadPtr,
 			})
 		} else {
-			// Unit variant: set payload to null
+			// Unit variant: set payload to null at offset 8
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
 				Base:    enumPtr,
-				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
 			// Store null (0)
@@ -157,12 +158,13 @@ func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func 
 
 		entry := hir.NewBlock("entry")
 
-		// Allocate enum struct: 12 bytes (4 for i32 tag + 8 for ptr payload)
+		// Allocate enum struct: 16 bytes (4 for i32 tag + 4 padding + 8 for ptr payload)
+		// Pointer must be 8-byte aligned, so payload ptr goes at offset 8, not 4
 		enumPtr := hir.Temp{Name: "%enum_ptr"}
 		entry.Stmts = append(entry.Stmts, &hir.Call{
 			Dst:  enumPtr,
 			Fn:   "malloc",
-			Args: []hir.Value{hir.ConstInt{Text: "12"}},
+			Args: []hir.Value{hir.ConstInt{Text: "16"}},
 			Type: "ptr",
 		})
 
@@ -198,12 +200,12 @@ func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func 
 				Val: hir.Var{Name: "value"},
 			})
 
-			// Store payload pointer at offset 4
+			// Store payload pointer at offset 8 (aligned for 8-byte ptr)
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
 				Base:    enumPtr,
-				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
 			entry.Stmts = append(entry.Stmts, &hir.Store{
@@ -211,12 +213,12 @@ func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func 
 				Val: payloadPtr,
 			})
 		} else {
-			// Unit variant: set payload to null
+			// Unit variant: set payload to null at offset 8
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
 				Base:    enumPtr,
-				Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
 			entry.Stmts = append(entry.Stmts, &hir.Store{

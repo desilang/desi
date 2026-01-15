@@ -60,12 +60,12 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		// For now, just assume tag == 0 and load payload.
 		// TODO: Add runtime check and panic
 
-		// Get payload ptr at offset 4
+		// Get payload ptr at offset 8 (aligned after i32 tag + padding)
 		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
 		ls.b.Emit(&hir.GetElementPtr{
 			Type:    "i8",
 			Base:    receiver,
-			Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 			Dst:     payloadPtrSlot,
 		})
 		payloadPtr := ls.b.FreshTemp("payload_ptr")
@@ -173,7 +173,7 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		ls.b.Emit(&hir.GetElementPtr{
 			Type:    "i8",
 			Base:    receiver,
-			Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 			Dst:     payloadPtrSlot,
 		})
 		payloadPtr := ls.b.FreshTemp("payload_ptr")
@@ -216,7 +216,7 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		ls.b.Emit(&hir.GetElementPtr{
 			Type:    "i8",
 			Base:    receiver,
-			Indices: []hir.Value{hir.ConstInt{Text: "4"}},
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 			Dst:     payloadPtrSlot,
 		})
 		payloadPtr := ls.b.FreshTemp("payload_ptr")
