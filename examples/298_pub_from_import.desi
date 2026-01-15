@@ -1,0 +1,11 @@
+# Test pub from X import Y syntax for public re-exports
+
+# Public re-export - makes print available from this module
+pub from io import print
+
+def main() -> int:
+	print("Hello from pub re-export test!")
+	return 0
+
+# EXPECTED_OUTPUT:
+# Hello from pub re-export test!

@@ -131,6 +131,26 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 					m.Decls = append(m.Decls, f)
 				}
 				continue
+			case token.KW_from:
+				// pub from X import Y - public re-export
+				p.next() // consume 'pub'
+				s := p.parseFromImport()
+				if s != nil {
+					if fs, ok := s.(*ast.FromImportStmt); ok {
+						fs.Pub = true
+					}
+					// Wrap in __top__ for execution (or handle in check phase)
+					top := &ast.FuncDecl{
+						Name: ast.Ident{Name: "__top__", Span: s.SpanOf()},
+						Body: &ast.Block{
+							Stmts: []ast.Stmt{s},
+							Span:  s.SpanOf(),
+						},
+						Span: s.SpanOf(),
+					}
+					m.Decls = append(m.Decls, top)
+				}
+				continue
 			case token.KW_let:
 				// 'pub let x = ...' -> parse as statement, then hoist into a __top__ block
 				// marked as pub via the statement metadata? No, LetStmt now has Pub field.
