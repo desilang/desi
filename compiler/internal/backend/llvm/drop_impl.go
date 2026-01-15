@@ -128,10 +128,135 @@ func (m *Module) emitStructDrop(val string, st *types.Struct) {
 }
 
 // emitEnumDrop generates cleanup code for an enum value
+// Enum layout: tag (i32 at offset 0), payload (ptr at offset 8)
 func (m *Module) emitEnumDrop(val string, et *types.Enum) {
-	// TODO: Load tag, switch on variants, recursively drop payloads
-	// For now, just free the enum pointer itself to avoid the main leak
+	// Check if any variant has heap-allocated fields
+	hasHeapPayload := false
+	for _, v := range et.Variants {
+		for _, f := range v.Fields {
+			if isHeapType(f.Type) {
+				hasHeapPayload = true
+				break
+			}
+		}
+		if hasHeapPayload {
+			break
+		}
+	}
 
+	// If no variant has heap-allocated payloads, just free the enum
+	if !hasHeapPayload {
+		fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
+		m.ensureDecl("declare void @free(ptr)")
+		return
+	}
+
+	// Load the tag to determine which variant to drop
+	tagPtr := fmt.Sprintf("%%enum_tag_ptr_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = getelementptr i8, ptr %s, i32 0\n", tagPtr, val)
+
+	tagVal := fmt.Sprintf("%%enum_tag_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = load i32, ptr %s\n", tagVal, tagPtr)
+
+	// Generate switch on tag for variants with heap payloads
+	doneLabel := fmt.Sprintf("enum_drop_done_%d", m.mergeID)
+	defaultLabel := fmt.Sprintf("enum_drop_default_%d", m.mergeID)
+	m.mergeID++
+
+	// Build switch cases for variants with heap fields
+	var cases []string
+	variantLabels := make(map[int]string)
+
+	for _, v := range et.Variants {
+		hasHeap := false
+		for _, f := range v.Fields {
+			if isHeapType(f.Type) {
+				hasHeap = true
+				break
+			}
+		}
+		if hasHeap {
+			label := fmt.Sprintf("enum_drop_v%d_%d", v.Tag, m.mergeID)
+			variantLabels[v.Tag] = label
+			cases = append(cases, fmt.Sprintf("i32 %d, label %%%s", v.Tag, label))
+		}
+	}
+
+	// Emit switch instruction
+	fmt.Fprintf(&m.funcs, "  switch i32 %s, label %%%s [\n", tagVal, defaultLabel)
+	for _, c := range cases {
+		fmt.Fprintf(&m.funcs, "    %s\n", c)
+	}
+	fmt.Fprintf(&m.funcs, "  ]\n\n")
+
+	// Emit code for each variant with heap payloads
+	for _, v := range et.Variants {
+		label, ok := variantLabels[v.Tag]
+		if !ok {
+			continue
+		}
+
+		fmt.Fprintf(&m.funcs, "%s:\n", label)
+
+		// Load payload pointer from offset 8
+		payloadPtr := fmt.Sprintf("%%enum_payload_ptr_%d_%d", v.Tag, m.tempID)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = getelementptr i8, ptr %s, i32 8\n", payloadPtr, val)
+
+		payloadVal := fmt.Sprintf("%%enum_payload_%d_%d", v.Tag, m.tempID)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", payloadVal, payloadPtr)
+
+		// Null check for payload
+		payloadCond := fmt.Sprintf("%%enum_payload_null_%d", m.tempID)
+		m.tempID++
+		fmt.Fprintf(&m.funcs, "  %s = icmp eq ptr %s, null\n", payloadCond, payloadVal)
+
+		dropPayloadLabel := fmt.Sprintf("enum_drop_payload_%d_%d", v.Tag, m.mergeID)
+		skipPayloadLabel := fmt.Sprintf("enum_skip_payload_%d_%d", v.Tag, m.mergeID)
+		m.mergeID++
+
+		fmt.Fprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n\n", payloadCond, skipPayloadLabel, dropPayloadLabel)
+
+		// Drop payload fields
+		fmt.Fprintf(&m.funcs, "%s:\n", dropPayloadLabel)
+
+		// For each heap field in the variant, recursively drop
+		offset := 0
+		for i, f := range v.Fields {
+			if isHeapType(f.Type) {
+				fieldPtr := fmt.Sprintf("%%v%d_field_ptr_%d_%d", v.Tag, i, m.tempID)
+				m.tempID++
+				fmt.Fprintf(&m.funcs, "  %s = getelementptr i8, ptr %s, i32 %d\n", fieldPtr, payloadVal, offset)
+
+				fieldVal := fmt.Sprintf("%%v%d_field_val_%d_%d", v.Tag, i, m.tempID)
+				m.tempID++
+				fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", fieldVal, fieldPtr)
+
+				m.emitDropForType(fieldVal, f.Type)
+			}
+			// All fields are 8 bytes (pointer-sized or padded)
+			offset += 8
+		}
+
+		// Free the payload struct itself
+		fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", payloadVal)
+		m.ensureDecl("declare void @free(ptr)")
+
+		fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", skipPayloadLabel)
+
+		fmt.Fprintf(&m.funcs, "%s:\n", skipPayloadLabel)
+		fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", doneLabel)
+	}
+
+	// Default case: no heap payload to drop
+	fmt.Fprintf(&m.funcs, "%s:\n", defaultLabel)
+	fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", doneLabel)
+
+	// Done: free the enum wrapper
+	fmt.Fprintf(&m.funcs, "%s:\n", doneLabel)
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
 }
