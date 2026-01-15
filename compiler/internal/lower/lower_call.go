@@ -670,6 +670,63 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
 									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
 								}
+							} else if fieldExpr, ok := x.Args[0].(*ast.FieldExpr); ok {
+								// Check if this is a bound method: obj.method
+								argType := ls.info.Types[fieldExpr.X]
+								var cls *types.Class
+								if c, ok := argType.(*types.Class); ok {
+									cls = c
+								} else if g, ok := argType.(*types.Generic); ok {
+									if c, ok := g.Base.(*types.Class); ok {
+										cls = c
+									}
+								}
+
+								if cls != nil {
+									methodName := fieldExpr.Name.Name
+									if _, exists := cls.Methods[methodName]; exists {
+										// Bound method: tg.run(obj.method)
+										boundMethod := ls.lowerExpr(x.Args[0])
+
+										// Extract fn from offset 0
+										fnSlot := ls.b.FreshTemp("bound_fn_slot")
+										ls.b.Emit(&hir.GetElementPtr{
+											Type:    "i8",
+											Base:    boundMethod,
+											Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+											Dst:     fnSlot,
+										})
+										fnPtr := ls.b.FreshTemp("bound_fn_ptr")
+										ls.b.Emit(&hir.Load{Type: "ptr", Src: fnSlot, Dst: fnPtr})
+
+										// Extract receiver from offset 8
+										recvSlot := ls.b.FreshTemp("bound_recv_slot")
+										ls.b.Emit(&hir.GetElementPtr{
+											Type:    "i8",
+											Base:    boundMethod,
+											Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+											Dst:     recvSlot,
+										})
+										recvPtr := ls.b.FreshTemp("bound_recv_ptr")
+										ls.b.Emit(&hir.Load{Type: "ptr", Src: recvSlot, Dst: recvPtr})
+
+										ls.b.Emit(&hir.Call{
+											Fn:   "taskgroup_spawn",
+											Args: []hir.Value{tgVal, fnPtr, recvPtr},
+											Type: "void",
+										})
+										return hir.ConstInt{Text: "0"}
+									}
+								}
+
+								// Not a class method, fallback
+								fnVal := ls.lowerExpr(x.Args[0])
+								ls.b.Emit(&hir.Call{
+									Fn:   "taskgroup_spawn",
+									Args: []hir.Value{tgVal, fnVal, ctxVal},
+									Type: "void",
+								})
+								return hir.ConstInt{Text: "0"}
 							} else {
 								// Fallback: lower expression (shouldn't happen often)
 								fnVal := ls.lowerExpr(x.Args[0])
