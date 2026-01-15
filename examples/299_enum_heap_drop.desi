@@ -1,0 +1,33 @@
+# Test enum drop with heap-allocated payloads
+# Verifies that enum variants with heap payloads are properly cleaned up
+
+enum Data:
+	Empty: none
+	Text: str
+	Numbers: list[int]
+
+def main() -> int:
+	# Test each variant type
+	let e1 = Data.Empty
+	let e2 = Data.Text("hello world")
+	let e3 = Data.Numbers([1, 2, 3, 4, 5])
+	
+	# Access and print to verify values
+	if e2 is Data.Text(s):
+		print("Text:", s)
+	
+	if e3 is Data.Numbers(nums):
+		print("Numbers:", len(nums))
+	
+	print("Enum drop test passed!")
+	return 0
+	
+	# When e1-e3 go out of scope, their payloads should be freed:
+	# - e1: just free enum wrapper (no payload)
+	# - e2: free str, then enum wrapper
+	# - e3: free list, then enum wrapper
+
+# EXPECTED_OUTPUT:
+# Text: hello world
+# Numbers: 5
+# Enum drop test passed!
