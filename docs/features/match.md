@@ -147,6 +147,28 @@ let label = match enabled:
     false: "disabled"
 ```
 
+## Guard Clauses
+
+Add conditions to patterns with `if`:
+
+```desi
+let x = 50
+let r = match x:
+    n if n > 100: "large"
+    n if n > 0: "positive"
+    n if n < 0: "negative"
+    _: "zero"
+
+# With enum payloads
+let opt: Option[int] = Option.Some(42)
+let result = match opt:
+    Some(v) if v > 50: "big value"
+    Some(v): f"small: {v}"
+    Nothing: "nothing"
+```
+
+The identifier (`n`, `v`) binds to the scrutinee/payload value for use in the guard.
+
 ## Implementation Details
 
 ### Type Checker (check_match.go)
@@ -168,7 +190,6 @@ Enum: [tag: i32 (4 bytes)] [padding (4 bytes)] [payload_ptr: ptr (8 bytes)]
 
 ## Current Limitations
 
-- **No guard clauses**: `case x if x > 0` not yet supported
 - **No nested patterns**: `Some(Some(x))` not yet supported
 - **No struct patterns**: `Point{x, y}` not yet supported
 

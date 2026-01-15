@@ -120,6 +120,24 @@ let msg = match success:
 # All arms must return the same type
 ```
 
+## Guard Clauses
+
+Add conditions to patterns with `if`:
+
+```python
+let x = 50
+let result = match x:
+    n if n > 100: "large"
+    n if n > 0: "positive"
+    _: "zero or negative"
+
+# Works with enums too
+match opt:
+    Some(v) if v > 50: "big value"
+    Some(v): f"small: {v}"
+    Nothing: "none"
+```
+
 ## Tips
 
 - Always handle all cases or use `_` as a catch-all
@@ -127,3 +145,5 @@ let msg = match success:
 - You can use either `Option.Some(v)` or just `Some(v)` - both work!
 - Extract payload values with bindings: `Running(id)` 
 - Use `_` inside patterns to ignore values: `Running(_)`
+- Add conditions with guards: `n if n > 0: ...`
+
