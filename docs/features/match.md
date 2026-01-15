@@ -33,7 +33,7 @@ let r = match x:
 
 ## Enum Patterns
 
-Match on enum variants with payload extraction:
+Match on enum variants with payload extraction. Both qualified and unqualified patterns are supported:
 
 ```desi
 enum Status:
@@ -42,24 +42,55 @@ enum Status:
     Complete: str
 
 let s = Status.Running(42)
-let msg = match s:
+
+# Using qualified patterns (EnumName.Variant)
+let msg1 = match s:
     Status.Pending: "waiting"
     Status.Running(id): f"running job {id}"
     Status.Complete(m): f"done: {m}"
+
+# Using unqualified patterns (just Variant)
+let msg2 = match s:
+    Pending: "waiting"
+    Running(id): f"running job {id}"
+    Complete(m): f"done: {m}"
+
+# Mixing qualified and unqualified
+let msg3 = match s:
+    Status.Pending: "qualified pending"
+    Running(id): f"unqualified running {id}"
+    Complete(m): "unqualified complete"
 ```
 
 ## Generic Enums (Option, Result)
 
 ```desi
+# Option with unqualified patterns
 let opt: Option[int] = Option.Some(42)
 let r = match opt:
-    Option.Some(v): f"got {v}"
-    Option.Nothing: "nothing"
+    Some(v): f"got {v}"
+    Nothing: "nothing"
 
+# Result with unqualified patterns
 let res: Result[int, str] = Result.Ok(100)
 let r = match res:
-    Result.Ok(v): f"success: {v}"
-    Result.Err(e): f"error: {e}"
+    Ok(v): f"success: {v}"
+    Err(e): f"error: {e}"
+```
+
+## Class Types in Generics
+
+Option and Result work correctly with class types:
+
+```desi
+class Point:
+    pub mut x: int
+    pub mut y: int
+
+let opt: Option[Point] = Option.Some(myPoint)
+match opt:
+    Some(pt): print(pt.x, pt.y)
+    Nothing: print("no point")
 ```
 
 ## Wildcard Pattern
@@ -74,7 +105,15 @@ let r = match x:
     _: "other"  # Matches everything else
 ```
 
-## Exhaustiveness
+Wildcards can also ignore bindings:
+
+```desi
+match status:
+    Running(_): "running something"  # Ignores the payload
+    _: "other"
+```
+
+## Exhaustiveness Checking
 
 The type checker warns if not all enum variants are covered:
 
@@ -86,8 +125,8 @@ enum Color:
 
 let c = Color.Red
 match c:
-    Color.Red: "red"
-    Color.Green: "green"
+    Red: "red"
+    Green: "green"
     # Warning: missing Blue variant
 ```
 
@@ -102,16 +141,36 @@ let result: str = match x:
     0: "zero"
     _: "other"
 
-# Use in function calls
-print(match b: true: "yes", false: "no")
+# Use in assignments
+let label = match enabled:
+    true: "enabled"
+    false: "disabled"
+```
+
+## Implementation Details
+
+### Type Checker (check_match.go)
+- Extracts enum type from scrutinee (handles Enum, Generic, and Func return types)
+- Validates pattern-variant matching
+- Populates `MatchBindings` map for payload extraction
+- Performs exhaustiveness checking
+
+### Lowerer (match_lower.go)
+- Generates If-Else chain for pattern matching
+- Extracts tag from enum memory layout (offset 0)
+- Extracts payload for bindings (offset 8)
+- Handles both primitive and pointer types correctly
+
+### Memory Layout
+```
+Enum: [tag: i32 (4 bytes)] [padding (4 bytes)] [payload_ptr: ptr (8 bytes)]
 ```
 
 ## Current Limitations
 
-- **Qualified variant names required**: Must use `Option.Some(v)` not just `Some(v)`
-- **Class types in Option/Result**: Known issue with class types in generic enums
 - **No guard clauses**: `case x if x > 0` not yet supported
 - **No nested patterns**: `Some(Some(x))` not yet supported
+- **No struct patterns**: `Point{x, y}` not yet supported
 
 ## Related
 

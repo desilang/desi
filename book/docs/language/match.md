@@ -5,14 +5,14 @@ Match expressions let you test a value against multiple patterns and execute cod
 ## Quick Start
 
 ```python
-let color = "red"
-let result = match color:
-    "red": "Stop"
-    "green": "Go"
-    "yellow": "Slow down"
-    _: "Unknown"
+let day = 2
+let name = match day:
+    1: "Monday"
+    2: "Tuesday"
+    3: "Wednesday"
+    _: "Another day"
 
-print(result)  # Stop
+print(name)  # Tuesday
 ```
 
 ## Boolean Matching
@@ -40,11 +40,18 @@ let grade = match score:
 The most powerful use of match is with enums:
 
 ```python
-let result: Option[int] = Option.Some(42)
+enum Status:
+    Pending: none
+    Running: int
+    Complete: str
 
-match result:
-    Option.Some(value): print(f"Got: {value}")
-    Option.Nothing: print("No value")
+let s = Status.Running(42)
+let msg = match s:
+    Pending: "waiting..."
+    Running(id): f"running job {id}"
+    Complete(result): f"done: {result}"
+
+print(msg)  # running job 42
 ```
 
 ## Pattern Bindings
@@ -52,13 +59,17 @@ match result:
 Extract values from enum payloads:
 
 ```python
+let result: Option[int] = Option.Some(42)
+
+match result:
+    Some(value): print(f"Got: {value}")
+    Nothing: print("No value")
+
+# With Result
 let res: Result[str, str] = Result.Ok("Success!")
-
 let message = match res:
-    Result.Ok(msg): f"✓ {msg}"
-    Result.Err(err): f"✗ Error: {err}"
-
-print(message)  # ✓ Success!
+    Ok(msg): f"✓ {msg}"
+    Err(err): f"✗ Error: {err}"
 ```
 
 ## Wildcard `_`
@@ -66,12 +77,34 @@ print(message)  # ✓ Success!
 Matches anything - use as a default case:
 
 ```python
-let day = 4
-let name = match day:
-    1: "Monday"
-    2: "Tuesday"
-    7: "Sunday"
-    _: "Some other day"
+let x = 99
+let label = match x:
+    0: "zero"
+    1: "one"
+    _: "something else"
+```
+
+Ignore bindings you don't need:
+
+```python
+match status:
+    Running(_): "running (don't care about ID)"
+    _: "other"
+```
+
+## Works with Classes
+
+Match works with classes inside Option/Result:
+
+```python
+class Point:
+    pub mut x: int
+    pub mut y: int
+
+let opt: Option[Point] = Option.Some(myPoint)
+match opt:
+    Some(pt): print(pt.x, pt.y)
+    Nothing: print("no point")
 ```
 
 ## Match is an Expression
@@ -80,14 +113,17 @@ Match returns a value, so you can use it anywhere:
 
 ```python
 # In variable assignment
-let label = match x: 0: "zero", _: "non-zero"
+let msg = match success:
+    true: "It worked!"
+    false: "Try again"
 
-# In function arguments
-print(match enabled: true: "ON", false: "OFF")
+# All arms must return the same type
 ```
 
 ## Tips
 
 - Always handle all cases or use `_` as a catch-all
 - Match arms must all return the same type
-- Use qualified names for enum variants: `Option.Some`, not just `Some`
+- You can use either `Option.Some(v)` or just `Some(v)` - both work!
+- Extract payload values with bindings: `Running(id)` 
+- Use `_` inside patterns to ignore values: `Running(_)`
