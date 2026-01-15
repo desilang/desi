@@ -435,15 +435,23 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				found := false
 				var fieldType types.T
 
-				// Helper to find field in struct/class
+				// Helper to find field in struct/class (with alignment)
 				findField := func(fields []types.Field) {
 					for _, f := range fields {
+						fieldSize := getSize(f.Type)
+						fieldAlign := getAlign(f.Type)
+
+						// Align offset to field's alignment requirement
+						if fieldAlign > 0 && offset%fieldAlign != 0 {
+							offset += fieldAlign - (offset % fieldAlign)
+						}
+
 						if f.Name == fieldName {
 							found = true
 							fieldType = f.Type
 							break
 						}
-						offset += getSize(f.Type)
+						offset += fieldSize
 					}
 				}
 
@@ -451,9 +459,25 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					if cls, ok := recvType.(*types.Class); ok {
 						findField(cls.Fields)
 					} else if gen, ok := recvType.(*types.Generic); ok {
-						// Handle generic class instances like Box<int>
+						// Handle generic class instances like Pair<int, str>
+						// Must substitute type params with concrete args for correct field sizes
 						if cls, ok := gen.Base.(*types.Class); ok {
-							findField(cls.Fields)
+							// Build substitution map
+							subst := make(map[string]types.T)
+							for i, tp := range cls.TypeParams {
+								if i < len(gen.Args) {
+									subst[tp.Name] = gen.Args[i]
+								}
+							}
+							// Create substituted fields for offset calculation
+							substFields := make([]types.Field, len(cls.Fields))
+							for i, f := range cls.Fields {
+								substFields[i] = types.Field{
+									Name: f.Name,
+									Type: substituteType(f.Type, subst),
+								}
+							}
+							findField(substFields)
 						}
 					} else if st, ok := recvType.(*types.Struct); ok {
 						findField(st.Fields)

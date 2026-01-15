@@ -414,3 +414,73 @@ func getSize(t types.T) int {
 		return 8 // pointers, etc.
 	}
 }
+
+// getAlign returns the alignment requirement in bytes for a given type
+func getAlign(t types.T) int {
+	if t == nil {
+		return 8 // default to pointer alignment
+	}
+
+	// Handle struct/class types (pointers - 8-byte aligned)
+	if _, ok := t.(*types.Struct); ok {
+		return 8
+	}
+	if _, ok := t.(*types.Class); ok {
+		return 8
+	}
+
+	name := t.String()
+	switch name {
+	case "int", "i32", "u32", "f32":
+		return 4
+	case "i64", "u64", "isize", "usize", "float", "f64":
+		return 8
+	case "bool":
+		return 1
+	case "str":
+		return 8 // ptr
+	default:
+		return 8 // pointers, etc.
+	}
+}
+
+// getClassSize calculates the total size needed for a class/struct instance
+// accounting for field alignment requirements.
+// This ensures fields are properly aligned for their type (e.g., pointers need 8-byte alignment).
+func getClassSize(fields []types.Field) int {
+	offset := 0
+	for _, field := range fields {
+		fieldSize := getSize(field.Type)
+		fieldAlign := getAlign(field.Type)
+
+		// Align offset to field's alignment requirement
+		if fieldAlign > 0 && offset%fieldAlign != 0 {
+			offset += fieldAlign - (offset % fieldAlign)
+		}
+		offset += fieldSize
+	}
+	if offset == 0 {
+		return 1 // Minimum size
+	}
+	return offset
+}
+
+// getClassSizeFromTypes calculates the total size needed for a slice of types
+// accounting for alignment requirements.
+func getClassSizeFromTypes(fieldTypes []types.T) int {
+	offset := 0
+	for _, t := range fieldTypes {
+		fieldSize := getSize(t)
+		fieldAlign := getAlign(t)
+
+		// Align offset to field's alignment requirement
+		if fieldAlign > 0 && offset%fieldAlign != 0 {
+			offset += fieldAlign - (offset % fieldAlign)
+		}
+		offset += fieldSize
+	}
+	if offset == 0 {
+		return 1 // Minimum size
+	}
+	return offset
+}

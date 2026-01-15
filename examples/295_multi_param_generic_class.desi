@@ -1,0 +1,46 @@
+# Test multi-param generic class with different type combinations
+# Ensures field alignment is correct (int at offset 0, ptr at offset 8)
+
+class Pair<T, U>:
+    pub first: T
+    pub second: U
+    
+    pub def __new__(self, first: T, second: U):
+        self.first := first
+        self.second := second
+    
+    pub def swap(self) -> Pair<U, T>:
+        return Pair(first=self.second, second=self.first)
+
+def main() -> int:
+    # Test int + str (the alignment edge case: 4 bytes + 8 bytes)
+    let p1: Pair<int, str> = Pair(first=42, second="hello")
+    print(p1.first)
+    print(p1.second)
+    
+    # Test str + int (reverse order)
+    let p2: Pair<str, int> = Pair(first="world", second=99)
+    print(p2.first)
+    print(p2.second)
+    
+    # Test two ptr types (both 8-byte aligned)
+    let p3: Pair<str, str> = Pair(first="foo", second="bar")
+    print(p3.first)
+    print(p3.second)
+    
+    # Test two int types (both 4-byte)
+    let p4: Pair<int, int> = Pair(first=1, second=2)
+    print(p4.first)
+    print(p4.second)
+    
+    return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# hello
+# world
+# 99
+# foo
+# bar
+# 1
+# 2
