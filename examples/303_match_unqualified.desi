@@ -1,0 +1,41 @@
+# Test unqualified variant patterns in match
+# Allows using Text(s) instead of requiring Data.Text(s)
+
+enum Data:
+    Empty: none
+    Text: str
+    Numbers: list[int]
+
+def main() -> int:
+    # Test 1: Unqualified patterns with payload
+    let e1 = Data.Text("hello world")
+    let r1 = match e1:
+        Text(s): f"text: {s}"
+        Numbers(n): f"nums: {len(n)}"
+        Data.Empty: "empty"
+    print(r1)
+    
+    # Test 2: Unqualified unit pattern with same-variant scrutinee
+    let e2 = Data.Text("test")
+    let r2 = match e2:
+        Text(s): f"has text: {s}"
+        Data.Empty: "is empty"
+        _: "other"
+    print(r2)
+    
+    # Test 3: Mix of qualified and unqualified
+    let e3 = Data.Numbers([1, 2, 3])
+    let r3 = match e3:
+        Data.Text(s): "qualified text"
+        Numbers(n): f"unqualified nums: {len(n)}"
+        Data.Empty: "qualified empty"
+    print(r3)
+    
+    print("All unqualified pattern tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# text: hello world
+# has text: test
+# unqualified nums: 3
+# All unqualified pattern tests passed!

@@ -224,13 +224,25 @@ func (ls *lowerState) buildMatchCondition(pattern ast.Expr, scrutinee hir.Value,
 	var variantName string
 
 	if call, ok := pattern.(*ast.CallExpr); ok {
-		// Enum variant match: Enum.Variant(...)
+		// Enum variant match with payload
 		if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+			// Qualified: Data.Text(s)
 			variantName = sel.Name.Name
+		} else if id, ok := call.Callee.(*ast.Ident); ok {
+			// Unqualified: Text(s)
+			variantName = id.Name
 		}
 	} else if sel, ok := pattern.(*ast.FieldExpr); ok {
-		// Enum variant match: Enum.Variant
+		// Qualified unit variant: Data.Empty
 		variantName = sel.Name.Name
+	} else if id, ok := pattern.(*ast.Ident); ok && id.Name != "_" && enumType != nil {
+		// Unqualified unit variant: Empty (check if it's a variant name)
+		for _, v := range enumType.Variants {
+			if v.Name == id.Name {
+				variantName = id.Name
+				break
+			}
+		}
 	} else {
 		return nil // Unsupported pattern type
 	}
