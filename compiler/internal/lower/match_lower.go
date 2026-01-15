@@ -114,7 +114,20 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 		}
 	}
 
-	if cond == nil && !isIdentifierWithGuard {
+	// Check for struct pattern (struct patterns have no tag to check)
+	isStructPattern := false
+	if cond == nil && enumType == nil {
+		scrType := ls.info.Types[m.Scrutinee]
+		if _, ok := scrType.(*types.Struct); ok {
+			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+				if _, ok := call.Callee.(*ast.Ident); ok {
+					isStructPattern = true
+				}
+			}
+		}
+	}
+
+	if cond == nil && !isIdentifierWithGuard && !isStructPattern {
 		// Pattern not supported, skip to next arm
 		ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 		return
@@ -152,32 +165,67 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 
 				// Check if this is a nested pattern binding
 				if binding.NestedPattern != nil {
-					// Nested binding: need to extract inner payload
-					// payloadPtr is the box pointer, load inner enum ptr from it
-					innerEnumPtr := ls.b.FreshTemp("inner_enum_ptr")
-					ls.b.Emit(&hir.Load{
-						Type: "ptr",
-						Src:  payloadPtr,
-						Dst:  innerEnumPtr,
-					})
+					// Check if nested type is struct or enum
+					isNestedStruct := false
+					if _, ok := binding.NestedType.(*types.Struct); ok {
+						isNestedStruct = true
+					}
 
-					// Load inner payload box pointer (offset 8)
-					innerPayloadSlot := ls.b.FreshTemp("inner_payload_slot")
-					ls.b.Emit(&hir.GetElementPtr{
-						Type:    "i8",
-						Base:    innerEnumPtr,
-						Indices: []hir.Value{hir.ConstInt{Text: "8"}},
-						Dst:     innerPayloadSlot,
-					})
-					innerPayloadBoxPtr := ls.b.FreshTemp("inner_payload_box")
-					ls.b.Emit(&hir.Load{Type: "ptr", Src: innerPayloadSlot, Dst: innerPayloadBoxPtr})
+					if isNestedStruct {
+						// Nested struct: load struct ptr from payload, then load field
+						innerStructPtr := ls.b.FreshTemp("inner_struct_ptr")
+						ls.b.Emit(&hir.Load{
+							Type: "ptr",
+							Src:  payloadPtr,
+							Dst:  innerStructPtr,
+						})
 
-					// Load the inner value from the box
-					ls.b.Emit(&hir.Load{
-						Type: lowerType(binding.Type),
-						Src:  innerPayloadBoxPtr,
-						Dst:  val,
-					})
+						// Get field offset
+						st := binding.NestedType.(*types.Struct)
+						offset := 0
+						for i := 0; i < binding.FieldIndex; i++ {
+							offset += getSize(st.Fields[i].Type)
+						}
+
+						fieldPtr := ls.b.FreshTemp("struct_field_ptr")
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    "i8",
+							Base:    innerStructPtr,
+							Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+							Dst:     fieldPtr,
+						})
+						ls.b.Emit(&hir.Load{
+							Type: lowerType(binding.Type),
+							Src:  fieldPtr,
+							Dst:  val,
+						})
+					} else {
+						// Nested enum: load inner enum ptr, then load inner payload
+						innerEnumPtr := ls.b.FreshTemp("inner_enum_ptr")
+						ls.b.Emit(&hir.Load{
+							Type: "ptr",
+							Src:  payloadPtr,
+							Dst:  innerEnumPtr,
+						})
+
+						// Load inner payload box pointer (offset 8)
+						innerPayloadSlot := ls.b.FreshTemp("inner_payload_slot")
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    "i8",
+							Base:    innerEnumPtr,
+							Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+							Dst:     innerPayloadSlot,
+						})
+						innerPayloadBoxPtr := ls.b.FreshTemp("inner_payload_box")
+						ls.b.Emit(&hir.Load{Type: "ptr", Src: innerPayloadSlot, Dst: innerPayloadBoxPtr})
+
+						// Load the inner value from the box
+						ls.b.Emit(&hir.Load{
+							Type: lowerType(binding.Type),
+							Src:  innerPayloadBoxPtr,
+							Dst:  val,
+						})
+					}
 				} else {
 					// Regular binding: load from outer payload
 					// Check if binding type is a pointer type (class, struct, list, dict, set)
@@ -208,11 +256,38 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 				ls.matchLocals[binding.Name] = val
 			}
 		} else if len(bindings) > 0 {
-			// Non-enum bindings: identifier pattern binds to scrutinee value
+			// Non-enum bindings: identifier pattern or struct pattern
 			for _, binding := range bindings {
 				if binding.FieldIndex == -1 {
 					// Scrutinee binding: the binding IS the scrutinee value
 					ls.matchLocals[binding.Name] = scrutinee
+				} else if binding.FieldIndex >= 0 {
+					// Struct field binding: load field from struct
+					val := ls.b.FreshTemp(binding.Name)
+					fieldPtr := ls.b.FreshTemp("struct_field_ptr")
+
+					// Get struct type from scrutinee type
+					scrType := ls.info.Types[m.Scrutinee]
+					if st, ok := scrType.(*types.Struct); ok {
+						// Get field offset
+						offset := 0
+						for i := 0; i < binding.FieldIndex; i++ {
+							offset += getSize(st.Fields[i].Type)
+						}
+
+						ls.b.Emit(&hir.GetElementPtr{
+							Type:    "i8",
+							Base:    scrutinee,
+							Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+							Dst:     fieldPtr,
+						})
+						ls.b.Emit(&hir.Load{
+							Type: lowerType(binding.Type),
+							Src:  fieldPtr,
+							Dst:  val,
+						})
+						ls.matchLocals[binding.Name] = val
+					}
 				}
 			}
 		}
