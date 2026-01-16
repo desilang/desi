@@ -4,6 +4,7 @@ import "github.com/desilang/desi/compiler/internal/diag"
 
 type MatchArm struct {
 	Pattern Expr
+	Guard   Expr // Optional guard condition (nil if no guard)
 	Result  Expr
 	Span    diag.Span
 }

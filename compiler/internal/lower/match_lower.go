@@ -105,7 +105,16 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 	// Pattern match: build condition
 	cond := ls.buildMatchCondition(arm.Pattern, scrutinee, tagVal, enumType)
 
-	if cond == nil {
+	// Check for identifier pattern with guard (e.g., n if n > 0)
+	// This is a catchall pattern that only matches when guard is true
+	isIdentifierWithGuard := false
+	if cond == nil && arm.Guard != nil {
+		if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" {
+			isIdentifierWithGuard = true
+		}
+	}
+
+	if cond == nil && !isIdentifierWithGuard {
 		// Pattern not supported, skip to next arm
 		ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 		return
@@ -168,7 +177,32 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 				// Store in matchLocals for use in arm body
 				ls.matchLocals[binding.Name] = val
 			}
+		} else if len(bindings) > 0 {
+			// Non-enum bindings: identifier pattern binds to scrutinee value
+			for _, binding := range bindings {
+				if binding.FieldIndex == -1 {
+					// Scrutinee binding: the binding IS the scrutinee value
+					ls.matchLocals[binding.Name] = scrutinee
+				}
+			}
 		}
+	}
+
+	// Build else block for remaining arms (needed for guard fallthrough too)
+	elseBlock := ls.b.NewBlock(fmt.Sprintf("match.else%d", start))
+
+	// If there's a guard clause, check it and potentially fall through to else
+	if arm.Guard != nil {
+		guardVal := ls.lowerExpr(arm.Guard)
+		guardThen := ls.b.NewBlock(fmt.Sprintf("guard.then%d", start))
+
+		// Branch: if guard true -> guardThen, else -> elseBlock
+		ls.b.Emit(&hir.If{
+			Cond: guardVal,
+			Then: guardThen,
+			Else: elseBlock,
+		})
+		ls.b.SetBlock(guardThen)
 	}
 
 	res := ls.lowerExpr(arm.Result)
@@ -182,19 +216,28 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 	}
 
 	// Build else block for remaining arms
-	elseBlock := ls.b.NewBlock(fmt.Sprintf("match.else%d", start))
 	ls.b.SetBlock(elseBlock)
 
 	// Recursively handle remaining arms in else block
 	ls.lowerMatchArms(m, arms, start+1, scrutinee, tagVal, enumType, resPtr, llvmResType)
 
-	// Go back to original block and emit If
+	// Go back to original block and emit branch
 	ls.b.SetBlock(savedBlock)
-	ls.b.Emit(&hir.If{
-		Cond: cond,
-		Then: thenBlock,
-		Else: elseBlock,
-	})
+	if cond != nil {
+		ls.b.Emit(&hir.If{
+			Cond: cond,
+			Then: thenBlock,
+			Else: elseBlock,
+		})
+	} else {
+		// Identifier-with-guard: always enter then block
+		// (guard will handle the conditional logic, falling through to else if false)
+		ls.b.Emit(&hir.If{
+			Cond: hir.ConstBool{Value: true},
+			Then: thenBlock,
+			Else: elseBlock,
+		})
+	}
 }
 
 // buildMatchCondition creates the condition expression for a pattern match

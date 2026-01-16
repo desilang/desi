@@ -147,6 +147,21 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 		}
 
 	skipBindings:
+		// Handle identifier pattern bindings for guards (e.g., n if n > 0)
+		// If pattern is a simple identifier (not _ or enum variant), bind it to scrutinee type
+		if len(bindings) == 0 && arm.Guard != nil {
+			if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" {
+				// Create binding: identifier binds to scrutinee value
+				binding := MatchBinding{
+					Name:       id.Name,
+					Type:       scrutineeType,
+					FieldIndex: -1, // Not an enum field
+					Node:       id,
+				}
+				bindings = append(bindings, binding)
+			}
+		}
+
 		// Store bindings for this arm
 		if len(bindings) > 0 {
 			if c.info.MatchBindings[m] == nil {
@@ -193,6 +208,15 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 				Node: b.Node,
 			}
 			c.scope.Define(sym)
+		}
+
+		// Type check guard expression if present (must be bool)
+		if arm.Guard != nil {
+			guardType := c.typ(arm.Guard)
+			if guardType != nil && !types.Equal(guardType, types.Bool) {
+				c.add(diagAt("DTE0001", arm.Guard.SpanOf(),
+					"guard expression must be bool, got '"+guardType.String()+"'"))
+			}
 		}
 
 		resultType := c.typ(arm.Result)
