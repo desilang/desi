@@ -169,6 +169,24 @@ let result = match opt:
 
 The identifier (`n`, `v`) binds to the scrutinee/payload value for use in the guard.
 
+## Nested Patterns
+
+Match on nested enums like `Option[Option[int]]`:
+
+```desi
+let nested: Option[Option[int]] = Option.Some(Option.Some(42))
+let r = match nested:
+    Some(Some(v)): f"nested value: {v}"
+    Some(Nothing): "outer Some, inner Nothing"
+    Nothing: "outer Nothing"
+```
+
+Nested patterns work by:
+1. Checking outer tag matches
+2. Loading outer payload (inner enum)
+3. Checking inner tag matches
+4. Extracting inner payload for binding
+
 ## Implementation Details
 
 ### Type Checker (check_match.go)
@@ -190,7 +208,6 @@ Enum: [tag: i32 (4 bytes)] [padding (4 bytes)] [payload_ptr: ptr (8 bytes)]
 
 ## Current Limitations
 
-- **No nested patterns**: `Some(Some(x))` not yet supported
 - **No struct patterns**: `Point{x, y}` not yet supported
 
 ## Related

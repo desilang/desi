@@ -138,6 +138,18 @@ match opt:
     Nothing: "none"
 ```
 
+## Nested Patterns
+
+Match on nested enums:
+
+```python
+let nested: Option[Option[int]] = Option.Some(Option.Some(42))
+match nested:
+    Some(Some(v)): print(f"value: {v}")
+    Some(Nothing): print("inner nothing")
+    Nothing: print("outer nothing")
+```
+
 ## Tips
 
 - Always handle all cases or use `_` as a catch-all
@@ -146,4 +158,5 @@ match opt:
 - Extract payload values with bindings: `Running(id)` 
 - Use `_` inside patterns to ignore values: `Running(_)`
 - Add conditions with guards: `n if n > 0: ...`
+- Match nested enums: `Some(Some(v))`
 
