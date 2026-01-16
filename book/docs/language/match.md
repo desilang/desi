@@ -150,6 +150,26 @@ match nested:
     Nothing: print("outer nothing")
 ```
 
+## Struct Patterns
+
+Match on struct fields:
+
+```python
+struct Point:
+    pub x: int
+    pub y: int
+
+let p = Point(x=10, y=20)
+match p:
+    Point(x, y): print(f"({x}, {y})")
+
+# Also works inside Option/Result
+let opt: Option[Point] = Option.Some(Point(x=5, y=15))
+match opt:
+    Some(Point(x, y)): print(f"point: ({x}, {y})")
+    Nothing: print("no point")
+```
+
 ## Tips
 
 - Always handle all cases or use `_` as a catch-all
@@ -159,4 +179,6 @@ match nested:
 - Use `_` inside patterns to ignore values: `Running(_)`
 - Add conditions with guards: `n if n > 0: ...`
 - Match nested enums: `Some(Some(v))`
+- Match struct fields: `Point(x, y)`
+- Match struct in enum: `Some(Point(x, y))`
 

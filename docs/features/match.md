@@ -187,6 +187,29 @@ Nested patterns work by:
 3. Checking inner tag matches
 4. Extracting inner payload for binding
 
+## Struct Patterns
+
+Match on struct fields:
+
+```desi
+struct Point:
+    pub x: int
+    pub y: int
+
+let p = Point(x=10, y=20)
+let r = match p:
+    Point(x, y): f"x={x}, y={y}"
+```
+
+### Nested Struct in Enum
+
+```desi
+let opt: Option[Point] = Option.Some(Point(x=5, y=15))
+match opt:
+    Some(Point(x, y)): f"({x}, {y})"
+    Nothing: "no point"
+```
+
 ## Implementation Details
 
 ### Type Checker (check_match.go)
@@ -208,7 +231,7 @@ Enum: [tag: i32 (4 bytes)] [padding (4 bytes)] [payload_ptr: ptr (8 bytes)]
 
 ## Current Limitations
 
-- **No struct patterns**: `Point{x, y}` not yet supported
+- Match statement is now feature-complete for common patterns
 
 ## Related
 
