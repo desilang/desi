@@ -101,19 +101,6 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 
 						// Validate each binding
 						for j, arg := range call.Args {
-							// Argument must be an identifier
-							ident, ok := arg.(*ast.Ident)
-							if !ok {
-								c.add(diagAt("DTE0001", arg.SpanOf(),
-									"pattern binding must be an identifier"))
-								continue
-							}
-
-							// Don't bind wildcards
-							if ident.Name == "_" {
-								continue
-							}
-
 							// Determine type of the field
 							fieldType := variant.Fields[j].Type
 
@@ -122,24 +109,111 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 								fieldType = substitute(fieldType, subst)
 							}
 
-							// Create binding
-							binding := MatchBinding{
-								Name:       ident.Name,
-								Type:       fieldType,
-								FieldIndex: j,
-								Node:       ident,
-							}
-							bindings = append(bindings, binding)
+							// Argument can be an identifier (binding) or CallExpr (nested pattern)
+							switch argExpr := arg.(type) {
+							case *ast.Ident:
+								// Simple binding (e.g., v in Some(v))
+								// Don't bind wildcards
+								if argExpr.Name == "_" {
+									continue
+								}
 
-							// Add to temporary scope for arm body
-							// Create a symbol for this binding
-							sym := &Symbol{
-								Name: ident.Name,
-								Kind: SymVar,
-								Type: fieldType,
-								Node: ident,
+								// Create binding
+								binding := MatchBinding{
+									Name:       argExpr.Name,
+									Type:       fieldType,
+									FieldIndex: j,
+									Node:       argExpr,
+								}
+								bindings = append(bindings, binding)
+
+								// Add to temporary scope for arm body
+								sym := &Symbol{
+									Name: argExpr.Name,
+									Kind: SymVar,
+									Type: fieldType,
+									Node: argExpr,
+								}
+								c.info.Idents[argExpr] = sym
+
+							case *ast.CallExpr:
+								// Nested pattern (e.g., Some(v) in Some(Some(v)))
+								// Extract variant from nested pattern
+								var nestedVariantName string
+								if nestedIdent, ok := argExpr.Callee.(*ast.Ident); ok {
+									nestedVariantName = nestedIdent.Name
+								} else if nestedField, ok := argExpr.Callee.(*ast.FieldExpr); ok {
+									nestedVariantName = nestedField.Name.Name
+								}
+
+								// Get inner enum type from fieldType
+								var innerEt *types.Enum
+								var innerTypeArgs []types.T
+								if e, ok := fieldType.(*types.Enum); ok {
+									innerEt = e
+								} else if g, ok := fieldType.(*types.Generic); ok {
+									if e, ok := g.Base.(*types.Enum); ok {
+										innerEt = e
+										innerTypeArgs = g.Args
+									}
+								}
+
+								if innerEt != nil && nestedVariantName != "" {
+									// Find the nested variant
+									var nestedVariant *types.Variant
+									for k := range innerEt.Variants {
+										if innerEt.Variants[k].Name == nestedVariantName {
+											nestedVariant = &innerEt.Variants[k]
+											break
+										}
+									}
+
+									if nestedVariant != nil && len(argExpr.Args) > 0 {
+										// Recursively process nested pattern args
+										innerSubst := make(map[string]types.T)
+										if len(innerTypeArgs) > 0 && len(innerEt.TypeParams) > 0 {
+											for k, tp := range innerEt.TypeParams {
+												if k < len(innerTypeArgs) {
+													innerSubst[tp.Name] = innerTypeArgs[k]
+												}
+											}
+										}
+
+										for k, nestedArg := range argExpr.Args {
+											if nestedIdent, ok := nestedArg.(*ast.Ident); ok && nestedIdent.Name != "_" {
+												// Get the inner field type
+												innerFieldType := nestedVariant.Fields[k].Type
+												if len(innerSubst) > 0 {
+													innerFieldType = substitute(innerFieldType, innerSubst)
+												}
+
+												// Create binding with nested pattern info
+												binding := MatchBinding{
+													Name:          nestedIdent.Name,
+													Type:          innerFieldType,
+													FieldIndex:    j, // Outer field index
+													Node:          nestedIdent,
+													NestedPattern: argExpr,
+													NestedType:    fieldType,
+												}
+												bindings = append(bindings, binding)
+
+												// Add to scope
+												sym := &Symbol{
+													Name: nestedIdent.Name,
+													Kind: SymVar,
+													Type: innerFieldType,
+													Node: nestedIdent,
+												}
+												c.info.Idents[nestedIdent] = sym
+											}
+										}
+									}
+								}
+							default:
+								c.add(diagAt("DTE0001", arg.SpanOf(),
+									"pattern binding must be an identifier or nested pattern"))
 							}
-							c.info.Idents[ident] = sym
 						}
 					}
 				}

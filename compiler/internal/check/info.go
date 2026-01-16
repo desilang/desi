@@ -94,10 +94,12 @@ type DbgCallInfo struct {
 
 // MatchBinding represents a variable bound in a match pattern
 type MatchBinding struct {
-	Name       string     // Variable name (e.g., "x")
-	Type       types.T    // Payload field type
-	FieldIndex int        // Index in variant.Fields
-	Node       *ast.Ident // The identifier node in the pattern
+	Name          string        // Variable name (e.g., "x")
+	Type          types.T       // Payload field type
+	FieldIndex    int           // Index in variant.Fields (-1 for scrutinee binding)
+	Node          *ast.Ident    // The identifier node in the pattern
+	NestedPattern *ast.CallExpr // Nested pattern (e.g., Some(v) in Some(Some(v)))
+	NestedType    types.T       // Type of the nested pattern value
 }
 
 // FuncCand represents a single callable candidate.

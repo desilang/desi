@@ -1,0 +1,27 @@
+# Test nested pattern matching
+# Patterns like Some(Some(x)) for Option[Option[int]]
+
+def main() -> int:
+    # Test 1: Nested Option
+    let nested: Option[Option[int]] = Option.Some(Option.Some(42))
+    let r1 = match nested:
+        Some(Some(v)): f"nested value: {v}"
+        Some(Nothing): "outer Some, inner Nothing"
+        Nothing: "outer Nothing"
+    print("1. Nested Option:", r1)
+    
+    # Test 2: Different nesting levels
+    let inner_nothing: Option[Option[int]] = Option.Some(Option.Nothing)
+    let r2 = match inner_nothing:
+        Some(Some(v)): f"value: {v}"
+        Some(Nothing): "inner nothing"
+        Nothing: "outer nothing"
+    print("2. Inner Nothing:", r2)
+    
+    print("Nested pattern tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 1. Nested Option: nested value: 42
+# 2. Inner Nothing: inner nothing
+# Nested pattern tests passed!

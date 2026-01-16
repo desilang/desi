@@ -150,28 +150,58 @@ func (ls *lowerState) lowerMatchArms(m *ast.MatchExpr, arms []ast.MatchArm, star
 			for _, binding := range bindings {
 				val := ls.b.FreshTemp(binding.Name)
 
-				// Check if binding type is a pointer type (class, struct, list, dict, set)
-				// For pointer types, the payload IS the pointer - don't double-dereference
-				isPtr := false
-				switch binding.Type.(type) {
-				case *types.Class, *types.Struct, *types.List, *types.Dict, *types.Set:
-					isPtr = true
-				}
-
-				if isPtr {
-					// For pointer types, just load the pointer value
+				// Check if this is a nested pattern binding
+				if binding.NestedPattern != nil {
+					// Nested binding: need to extract inner payload
+					// payloadPtr is the box pointer, load inner enum ptr from it
+					innerEnumPtr := ls.b.FreshTemp("inner_enum_ptr")
 					ls.b.Emit(&hir.Load{
 						Type: "ptr",
 						Src:  payloadPtr,
+						Dst:  innerEnumPtr,
+					})
+
+					// Load inner payload box pointer (offset 8)
+					innerPayloadSlot := ls.b.FreshTemp("inner_payload_slot")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    innerEnumPtr,
+						Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+						Dst:     innerPayloadSlot,
+					})
+					innerPayloadBoxPtr := ls.b.FreshTemp("inner_payload_box")
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: innerPayloadSlot, Dst: innerPayloadBoxPtr})
+
+					// Load the inner value from the box
+					ls.b.Emit(&hir.Load{
+						Type: lowerType(binding.Type),
+						Src:  innerPayloadBoxPtr,
 						Dst:  val,
 					})
 				} else {
-					// For primitive types, load the value
-					ls.b.Emit(&hir.Load{
-						Type: lowerType(binding.Type),
-						Src:  payloadPtr,
-						Dst:  val,
-					})
+					// Regular binding: load from outer payload
+					// Check if binding type is a pointer type (class, struct, list, dict, set)
+					isPtr := false
+					switch binding.Type.(type) {
+					case *types.Class, *types.Struct, *types.List, *types.Dict, *types.Set:
+						isPtr = true
+					}
+
+					if isPtr {
+						// For pointer types, just load the pointer value
+						ls.b.Emit(&hir.Load{
+							Type: "ptr",
+							Src:  payloadPtr,
+							Dst:  val,
+						})
+					} else {
+						// For primitive types, load the value
+						ls.b.Emit(&hir.Load{
+							Type: lowerType(binding.Type),
+							Src:  payloadPtr,
+							Dst:  val,
+						})
+					}
 				}
 
 				// Store in matchLocals for use in arm body
@@ -324,6 +354,104 @@ func (ls *lowerState) buildMatchCondition(pattern ast.Expr, scrutinee hir.Value,
 		Dst:  cmp,
 		Type: "i1",
 	})
+
+	// Check for nested patterns in CallExpr args
+	if call, ok := pattern.(*ast.CallExpr); ok && enumType != nil {
+		for _, arg := range call.Args {
+			if nestedCall, ok := arg.(*ast.CallExpr); ok {
+				// This is a nested pattern - need to add inner tag check
+				// For now, we'll add the nested condition in buildMatchCondition recursively
+
+				// Get the variant to determine inner type
+				var innerType types.T
+				for _, v := range enumType.Variants {
+					if v.Name == variantName && len(v.Fields) > 0 {
+						innerType = v.Fields[0].Type
+						break
+					}
+				}
+
+				// Extract inner enum type
+				var innerEt *types.Enum
+				if innerType != nil {
+					if e, ok := innerType.(*types.Enum); ok {
+						innerEt = e
+					} else if g, ok := innerType.(*types.Generic); ok {
+						if e, ok := g.Base.(*types.Enum); ok {
+							innerEt = e
+						}
+					}
+				}
+
+				if innerEt != nil {
+					// Load outer payload box pointer
+					payloadPtrSlot := ls.b.FreshTemp("nested_payload_slot")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    scrutinee,
+						Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+						Dst:     payloadPtrSlot,
+					})
+					payloadBoxPtr := ls.b.FreshTemp("nested_payload_box")
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadBoxPtr})
+
+					// Load inner enum ptr from box
+					innerEnumPtr := ls.b.FreshTemp("nested_enum_ptr")
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadBoxPtr, Dst: innerEnumPtr})
+
+					// Load inner tag
+					innerTagPtr := ls.b.FreshTemp("nested_tag_ptr")
+					ls.b.Emit(&hir.GetElementPtr{
+						Type:    "i8",
+						Base:    innerEnumPtr,
+						Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+						Dst:     innerTagPtr,
+					})
+					innerTag := ls.b.FreshTemp("nested_tag")
+					ls.b.Emit(&hir.Load{Type: "i32", Src: innerTagPtr, Dst: innerTag})
+
+					// Get inner variant name and tag
+					var innerVariantName string
+					if id, ok := nestedCall.Callee.(*ast.Ident); ok {
+						innerVariantName = id.Name
+					} else if sel, ok := nestedCall.Callee.(*ast.FieldExpr); ok {
+						innerVariantName = sel.Name.Name
+					}
+
+					innerTargetTag := -1
+					for _, v := range innerEt.Variants {
+						if v.Name == innerVariantName {
+							innerTargetTag = v.Tag
+							break
+						}
+					}
+
+					if innerTargetTag >= 0 {
+						// Compare inner tag
+						innerCmp := ls.b.FreshTemp("nested_cmp")
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "==",
+							LHS:  innerTag,
+							RHS:  hir.ConstInt{Text: fmt.Sprintf("%d", innerTargetTag)},
+							Dst:  innerCmp,
+							Type: "i1",
+						})
+
+						// AND outer and inner conditions
+						combined := ls.b.FreshTemp("combined_cmp")
+						ls.b.Emit(&hir.BinaryOp{
+							Op:   "and",
+							LHS:  cmp,
+							RHS:  innerCmp,
+							Dst:  combined,
+							Type: "i1",
+						})
+						return combined
+					}
+				}
+			}
+		}
+	}
 
 	return cmp
 }
