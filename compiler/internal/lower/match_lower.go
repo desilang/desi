@@ -39,6 +39,16 @@ func (ls *lowerState) lowerMatchExpr(m *ast.MatchExpr) hir.Value {
 		if et, ok := g.Base.(*types.Enum); ok {
 			enumType = et
 		}
+	} else if fn, ok := scrType.(*types.Func); ok {
+		// Unit variant case: Data.Empty has type () -> Data
+		// Extract enum from function return type
+		if et, ok := fn.Ret.(*types.Enum); ok {
+			enumType = et
+		} else if g, ok := fn.Ret.(*types.Generic); ok {
+			if et, ok := g.Base.(*types.Enum); ok {
+				enumType = et
+			}
+		}
 	}
 
 	if enumType != nil {
