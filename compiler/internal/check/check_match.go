@@ -41,12 +41,13 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 
 		if et != nil {
 			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
-				// Pattern is EnumName.Variant(args...)
+				// Pattern is EnumName.Variant(args...) OR just Variant(args...)
 				// Extract variant name
 				var variantName string
 				var variant *types.Variant
 
 				if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+					// Qualified: Data.Text(s)
 					variantName = sel.Name.Name
 					// Find variant in enum
 					for k := range et.Variants {
@@ -55,8 +56,16 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 							break
 						}
 					}
+				} else if id, ok := call.Callee.(*ast.Ident); ok {
+					// Unqualified: Text(s) - resolve using scrutinee's enum type
+					variantName = id.Name
+					for k := range et.Variants {
+						if et.Variants[k].Name == variantName {
+							variant = &et.Variants[k]
+							break
+						}
+					}
 				}
-
 				if variant != nil {
 					// Validate binding arguments
 					if len(call.Args) > 0 {
@@ -138,7 +147,27 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 		// Type check the pattern (for validation)
 		// NOTE: Skip this for patterns with bindings, since we've already validated them
 		// and c.typ would try to evaluate binding arguments as expressions
-		if len(bindings) == 0 {
+		// Also skip for any patterns that look like variant patterns (Ident or Ident(...))
+		// These are pattern syntax, not expressions, so they shouldn't be type-checked
+		skipPatternCheck := len(bindings) > 0
+		if !skipPatternCheck {
+			// Check if pattern looks like an unqualified variant reference
+			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+				if _, ok := call.Callee.(*ast.Ident); ok {
+					// Ident(args) pattern - assume it's a variant, don't type-check
+					skipPatternCheck = true
+				}
+			} else if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" && et != nil {
+				// Bare Ident pattern - only skip if it matches a variant
+				for _, v := range et.Variants {
+					if v.Name == id.Name {
+						skipPatternCheck = true
+						break
+					}
+				}
+			}
+		}
+		if !skipPatternCheck {
 			_ = c.typ(arm.Pattern)
 		}
 
@@ -193,10 +222,23 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 			var variantName string
 			if call, ok := arm.Pattern.(*ast.CallExpr); ok {
 				if sel, ok := call.Callee.(*ast.FieldExpr); ok {
+					// Qualified: Data.Text(s)
 					variantName = sel.Name.Name
+				} else if id, ok := call.Callee.(*ast.Ident); ok {
+					// Unqualified: Text(s)
+					variantName = id.Name
 				}
 			} else if sel, ok := arm.Pattern.(*ast.FieldExpr); ok {
+				// Qualified unit: Data.Empty
 				variantName = sel.Name.Name
+			} else if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" {
+				// Unqualified unit: Empty (check if it's a variant name)
+				for _, v := range et.Variants {
+					if v.Name == id.Name {
+						variantName = id.Name
+						break
+					}
+				}
 			}
 
 			if variantName != "" {
