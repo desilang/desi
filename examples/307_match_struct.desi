@@ -1,0 +1,32 @@
+# Test struct pattern matching
+# Patterns like Point(x, y) for matching struct fields
+
+struct Point:
+    pub x: int
+    pub y: int
+
+struct Color:
+    pub r: int
+    pub g: int
+    pub b: int
+
+def main() -> int:
+    # Test 1: Basic struct pattern
+    let p = Point(x=10, y=20)
+    let r1 = match p:
+        Point(x, y): f"x={x}, y={y}"
+    print("1. Struct pattern:", r1)
+    
+    # Test 2: Color struct
+    let c = Color(r=255, g=128, b=0)
+    let r2 = match c:
+        Color(r, g, b): f"rgb({r}, {g}, {b})"
+    print("2. Color pattern:", r2)
+    
+    print("Struct pattern tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 1. Struct pattern: x=10, y=20
+# 2. Color pattern: rgb(255, 128, 0)
+# Struct pattern tests passed!
