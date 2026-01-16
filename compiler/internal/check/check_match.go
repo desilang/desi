@@ -209,10 +209,90 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 											}
 										}
 									}
+								} else {
+									// Check if nested pattern is a struct (e.g., Some(Point(x, y)))
+									var innerSt *types.Struct
+									if s, ok := fieldType.(*types.Struct); ok {
+										innerSt = s
+									}
+
+									if innerSt != nil && nestedVariantName == innerSt.Name {
+										// Struct pattern inside enum payload
+										for k, nestedArg := range argExpr.Args {
+											if k >= len(innerSt.Fields) {
+												continue
+											}
+											if nestedIdent, ok := nestedArg.(*ast.Ident); ok && nestedIdent.Name != "_" {
+												innerFieldType := innerSt.Fields[k].Type
+
+												// Create binding with nested struct info
+												binding := MatchBinding{
+													Name:          nestedIdent.Name,
+													Type:          innerFieldType,
+													FieldIndex:    k, // Struct field index
+													Node:          nestedIdent,
+													NestedPattern: argExpr,
+													NestedType:    fieldType,
+												}
+												bindings = append(bindings, binding)
+
+												// Add to scope
+												sym := &Symbol{
+													Name: nestedIdent.Name,
+													Kind: SymVar,
+													Type: innerFieldType,
+													Node: nestedIdent,
+												}
+												c.info.Idents[nestedIdent] = sym
+											}
+										}
+									}
 								}
 							default:
 								c.add(diagAt("DTE0001", arg.SpanOf(),
 									"pattern binding must be an identifier or nested pattern"))
+							}
+						}
+					}
+				}
+			}
+		}
+
+		// Handle struct pattern: Point(x, y) when scrutinee is struct type
+		if len(bindings) == 0 {
+			var st *types.Struct
+			if s, ok := scrutineeType.(*types.Struct); ok {
+				st = s
+			}
+
+			if st != nil {
+				if call, ok := arm.Pattern.(*ast.CallExpr); ok {
+					// Check if callee matches struct name
+					if id, ok := call.Callee.(*ast.Ident); ok && id.Name == st.Name {
+						// Struct pattern with field bindings
+						// Arguments bind to struct fields in order
+						for j, arg := range call.Args {
+							if j >= len(st.Fields) {
+								continue
+							}
+							field := st.Fields[j]
+
+							if ident, ok := arg.(*ast.Ident); ok && ident.Name != "_" {
+								binding := MatchBinding{
+									Name:       ident.Name,
+									Type:       field.Type,
+									FieldIndex: j,
+									Node:       ident,
+								}
+								bindings = append(bindings, binding)
+
+								sym := &Symbol{
+									Name: ident.Name,
+									Kind: SymVar,
+									Type: field.Type,
+									Node: ident,
+								}
+								c.info.Idents[ident] = sym
 							}
 						}
 					}
