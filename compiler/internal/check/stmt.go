@@ -449,6 +449,13 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			return
 		}
 		rt := c.typ(st.Value)
+
+		// DSY0002: Detect guard escape - guards must not be returned
+		if c.isNonEscapingType(rt) {
+			c.add(diagAt("DSY0002", st.Span,
+				"cannot return guard type '"+rt.String()+"' - guards must not escape their scope"))
+		}
+
 		if c.curFuncRet != nil && !types.Equal(rt, c.curFuncRet) {
 			c.add(diagAt("DTE0004", st.Span, "wrong return type: expected "+c.curFuncRet.String()))
 		}
@@ -1082,4 +1089,18 @@ func (c *checker) collectCapturedVariables(block *ast.Block) map[string]*Symbol 
 	}
 
 	return captured
+}
+
+// isNonEscapingType returns true if t is a type that must not escape its scope.
+// This includes lock guards which must be dropped to release locks.
+// This is a compile-time check with zero runtime overhead.
+func (c *checker) isNonEscapingType(t types.T) bool {
+	if t == nil {
+		return false
+	}
+	switch t.(type) {
+	case *types.MutexGuard, *types.ReadGuard, *types.WriteGuard:
+		return true
+	}
+	return false
 }

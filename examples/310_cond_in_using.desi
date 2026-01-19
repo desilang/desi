@@ -1,0 +1,18 @@
+# Test conditionals inside using blocks
+import sync
+
+def test_conditional() -> int:
+    let mutex = sync.Mutex(50)
+    using guard = mutex.lock():
+        if guard.value > 40:
+            return guard.value + 10
+        else:
+            return guard.value - 10
+    return 0
+
+def main() -> int:
+    print(test_conditional())
+    return 0
+
+# EXPECTED_OUTPUT:
+# 60
