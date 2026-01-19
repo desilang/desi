@@ -57,8 +57,8 @@ func IsSend(t T) bool {
 	case *Mutex:
 		return true
 
-	// MutexGuard is NOT Send (can't transfer lock ownership across threads)
-	case *MutexGuard:
+	// MutexGuard, ReadGuard, WriteGuard are NOT Send (can't transfer lock ownership across threads)
+	case *MutexGuard, *ReadGuard, *WriteGuard:
 		return false
 
 	// Functions are Send
@@ -133,8 +133,8 @@ func IsSync(t T) bool {
 	case *Mutex:
 		return true
 
-	// MutexGuard provides &mut access, so it's NOT Sync
-	case *MutexGuard:
+	// MutexGuard, ReadGuard, WriteGuard provide &mut access, so they're NOT Sync
+	case *MutexGuard, *ReadGuard, *WriteGuard:
 		return false
 
 	// Functions are Sync
