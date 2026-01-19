@@ -11,7 +11,8 @@ func (c *checker) collectEnum(d *ast.EnumDecl) {
 	// Create enum type (variants populated in Pass 2)
 	et := &types.Enum{Name: d.Name.Name}
 	for _, tp := range d.TypeParams {
-		et.TypeParams = append(et.TypeParams, types.TypeParam{Name: tp.Name.Name})
+		bounds := extractBoundsFromTypeParams(tp)
+		et.TypeParams = append(et.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 	}
 
 	// Register the enum type name
@@ -45,10 +46,11 @@ func (c *checker) checkEnum(d *ast.EnumDecl) {
 	// e.g., for "enum Option<T>", add T as a TypeParam
 	c.scope = NewScope(c.scope)
 	for _, typeParam := range d.TypeParams {
+		bounds := extractBoundsFromTypeParams(typeParam)
 		c.scope.Define(&Symbol{
 			Name: typeParam.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: typeParam.Name.Name},
+			Type: &types.TypeParam{Name: typeParam.Name.Name, Bounds: bounds},
 		})
 	}
 

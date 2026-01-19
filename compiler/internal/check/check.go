@@ -223,10 +223,11 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 
 	// Add generic type parameters to scope
 	for _, typeParam := range fd.TypeParams {
+		bounds := extractBoundsFromTypeParams(typeParam)
 		c.scope.Define(&Symbol{
 			Name: typeParam.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: typeParam.Name.Name},
+			Type: &types.TypeParam{Name: typeParam.Name.Name, Bounds: bounds},
 		})
 	}
 
@@ -258,7 +259,8 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	sig.Name = name
 	sig.IsPub = fd.Pub
 	for _, tp := range fd.TypeParams {
-		sig.TypeParams = append(sig.TypeParams, types.TypeParam{Name: tp.Name.Name})
+		bounds := extractBoundsFromTypeParams(tp)
+		sig.TypeParams = append(sig.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 	}
 
 	set := c.info.Funcs[name]
@@ -311,10 +313,11 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 
 	// Add generic type parameters to scope (like we do for enums)
 	for _, typeParam := range fd.TypeParams {
+		bounds := extractBoundsFromTypeParams(typeParam)
 		c.scope.Define(&Symbol{
 			Name: typeParam.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: typeParam.Name.Name},
+			Type: &types.TypeParam{Name: typeParam.Name.Name, Bounds: bounds},
 		})
 	}
 

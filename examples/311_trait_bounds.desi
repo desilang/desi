@@ -1,0 +1,30 @@
+# Test: Trait Bounds Syntax Parsing
+# This test verifies that the parser correctly handles trait bounds syntax.
+# Bound enforcement is not yet implemented - this only tests parsing.
+
+# EXPECTED_OUTPUT:
+# Testing trait bounds parsing
+# Container has: hello
+# Pair has: 10 and world
+# Trait bounds syntax parsing works!
+
+# Generic struct with single bound (new syntax - parsed but not enforced)
+struct Container<T: Display>:
+    item: T
+
+# Generic struct with multiple bounds (new syntax - parsed but not enforced)
+struct Pair<A: Numeric, B: Display>:
+    first: A
+    second: B
+
+def main():
+    print("Testing trait bounds parsing")
+    
+    # Use type inference - avoids explicit generic instantiation syntax issues
+    let c: Container<str> = Container(item="hello")
+    print(f"Container has: {c.item}")
+    
+    let p: Pair<int, str> = Pair(first=10, second="world")
+    print(f"Pair has: {p.first} and {p.second}")
+    
+    print("Trait bounds syntax parsing works!")
