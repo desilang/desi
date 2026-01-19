@@ -150,8 +150,15 @@ type Generic struct {
 
 // TypeParam represents a type parameter like T, U, E
 // Used during type checking of generic definitions
+// Can optionally have trait bounds like T: Numeric or T: Display + Eq
 type TypeParam struct {
-	Name string // "T", "U", "E", etc.
+	Name   string   // "T", "U", "E", etc.
+	Bounds []string // Optional trait bounds ["Numeric", "Display"]
+}
+
+// TypeParamOf creates a TypeParam with optional bounds
+func TypeParamOf(name string, bounds ...string) TypeParam {
+	return TypeParam{Name: name, Bounds: bounds}
 }
 
 // M9A: C-ABI pointer type cptr[T]
@@ -304,7 +311,10 @@ func (t *Generic) String() string {
 }
 
 func (t *TypeParam) String() string {
-	return t.Name
+	if len(t.Bounds) == 0 {
+		return t.Name
+	}
+	return t.Name + ": " + strings.Join(t.Bounds, " + ")
 }
 func (t *CPtr) String() string       { return "cptr[" + t.Elem.String() + "]" }
 func (t *TypeAlias) String() string  { return t.Name } // Nominal: display alias name, not underlying type

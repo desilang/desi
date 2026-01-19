@@ -254,10 +254,10 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 			// Infer type arguments from the inferred map
 			var args []types.T
 			for _, tp := range d.TypeParams {
-				if t, ok := inferred[tp.Name]; ok {
+				if t, ok := inferred[tp.Name.Name]; ok {
 					args = append(args, t)
 				} else {
-					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name+"'"))
+					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name.Name+"'"))
 					args = append(args, types.Any)
 				}
 			}

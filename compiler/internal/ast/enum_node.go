@@ -11,7 +11,7 @@ type EnumVariantDecl struct {
 type EnumDecl struct {
 	Pub        bool
 	Name       Ident
-	TypeParams []Ident // e.g., [T, E] for Result<T, E>
+	TypeParams []*TypeParamNode // e.g., [T, E] or [T: Display]
 	Variants   []*EnumVariantDecl
 	Decorators []*Decorator
 	Doc        *StrLit // optional docstring (first stmt)
