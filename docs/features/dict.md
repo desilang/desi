@@ -60,6 +60,24 @@ for name: str, score: int in scores.items():
     print(score)
 ```
 
+## Mutable Iteration
+
+To modify dict values during iteration, use `mut` on the value target:
+
+```desi
+let mut counts = {"a": 1, "b": 2, "c": 3}
+
+for key, mut value in counts.items():
+    value := value * 10  # Write-back to dict
+
+print(counts["a"])  # 10
+print(counts["b"])  # 20
+```
+
+> [!IMPORTANT]
+> The source dict must be declared with `let mut` for mutable iteration.
+> Keys are always immutable during iteration.
+
 ## Dict Methods
 
 | Method | Description |
