@@ -90,6 +90,8 @@ nav:
     - Error Handling: language/error-handling.md
     - Reference Counting: language/rc.md
     - Pipeline Operator: language/pipeline.md
+  - Generics:
+    - Trait Bounds: generics/trait-bounds.md
   - Reference:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md
