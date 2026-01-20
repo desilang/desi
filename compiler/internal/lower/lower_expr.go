@@ -1007,6 +1007,31 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
 
+	case *ast.IfExpr:
+		// Ternary expression: value if condition else other
+		// Evaluate condition, then select between branches
+		cond := ls.lowerExpr(x.Cond)
+		thenVal := ls.lowerExpr(x.Then)
+		elseVal := ls.lowerExpr(x.Else)
+
+		// Get the result type
+		var resultType string = "i64" // default
+		if ls.info != nil {
+			if t := ls.info.Types[x]; t != nil {
+				resultType = lowerType(t)
+			}
+		}
+
+		result := ls.b.FreshTemp("ternary_result")
+		ls.b.Emit(&hir.Select{
+			Cond: cond,
+			Then: thenVal,
+			Else: elseVal,
+			Dst:  result,
+			Type: resultType,
+		})
+		return result
+
 	case *ast.IsExpr:
 		// 'is' operator: identity comparison or pattern matching
 		lhs := ls.lowerExpr(x.X)

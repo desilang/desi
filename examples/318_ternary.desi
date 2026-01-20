@@ -1,0 +1,135 @@
+# Test ternary/conditional expression: value if condition else other
+# Python-style inline if-else for expressions
+
+def abs_val(n: int) -> int:
+    return n if n >= 0 else (0 - n)
+
+def clamp(val: int, min_v: int, max_v: int) -> int:
+    return min_v if val < min_v else max_v if val > max_v else val
+
+def main() -> int:
+    # === Basic ternary ===
+    print("=== Basic Ternary ===")
+    let x = 42 if true else 0
+    print(f"42 if true else 0 = {x}")
+    
+    let y = 42 if false else 0
+    print(f"42 if false else 0 = {y}")
+    
+    # === String types ===
+    print("=== String Types ===")
+    let msg = "yes" if true else "no"
+    print(f"\"yes\" if true else \"no\" = {msg}")
+    
+    let empty = "" if true else "fallback"
+    print(f"empty if true = '{empty}'")
+    
+    # === Comparisons ===
+    print("=== Comparisons ===")
+    let a = 5
+    let b = 10
+    let max_val = a if a > b else b
+    print(f"max(5, 10) = {max_val}")
+    
+    let min_val = a if a < b else b
+    print(f"min(5, 10) = {min_val}")
+    
+    # === Edge case: equal values ===
+    let eq = a if a == a else b
+    print(f"5 if 5==5 else 10 = {eq}")
+    
+    # === Zero values ===
+    print("=== Zero Values ===")
+    let zero = 0 if true else 99
+    print(f"0 if true else 99 = {zero}")
+    
+    let non_zero = 0 if false else 99
+    print(f"0 if false else 99 = {non_zero}")
+    
+    # === Nested ternary (chained) ===
+    print("=== Nested Ternary ===")
+    let score = 95
+    let grade = "A" if score >= 90 else "B" if score >= 80 else "C" if score >= 70 else "F"
+    print(f"grade(95) = {grade}")
+    
+    let score2 = 75
+    let grade2 = "A" if score2 >= 90 else "B" if score2 >= 80 else "C" if score2 >= 70 else "F"
+    print(f"grade(75) = {grade2}")
+    
+    let score3 = 50
+    let grade3 = "A" if score3 >= 90 else "B" if score3 >= 80 else "C" if score3 >= 70 else "F"
+    print(f"grade(50) = {grade3}")
+    
+    # === In expressions ===
+    print("=== In Expressions ===")
+    let doubled = (10 if true else 5) * 2
+    print(f"(10 if true else 5) * 2 = {doubled}")
+    
+    # === In function call context ===
+    print(f"inline: {100 if true else 0}")
+    
+    # === Using functions ===
+    print("=== Function Usage ===")
+    print(f"abs(-7) = {abs_val(-7)}")
+    print(f"abs(7) = {abs_val(7)}")
+    print(f"clamp(5, 0, 10) = {clamp(5, 0, 10)}")
+    print(f"clamp(-5, 0, 10) = {clamp(-5, 0, 10)}")
+    print(f"clamp(15, 0, 10) = {clamp(15, 0, 10)}")
+    
+    # === Boolean conditions ===
+    print("=== Boolean Conditions ===")
+    let flag = true
+    let result = "on" if flag else "off"
+    print(f"flag=true, result = {result}")
+    
+    let flag2 = false
+    let result2 = "on" if flag2 else "off"
+    print(f"flag=false, result = {result2}")
+    
+    # === Complex conditions ===
+    print("=== Complex Conditions ===")
+    let n = 7
+    let parity = "even" if n % 2 == 0 else "odd"
+    print(f"7 is {parity}")
+    
+    let n2 = 8
+    let parity2 = "even" if n2 % 2 == 0 else "odd"
+    print(f"8 is {parity2}")
+    
+    print("=== All tests passed! ===")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Basic Ternary ===
+# 42 if true else 0 = 42
+# 42 if false else 0 = 0
+# === String Types ===
+# "yes" if true else "no" = yes
+# empty if true = ''
+# === Comparisons ===
+# max(5, 10) = 10
+# min(5, 10) = 5
+# 5 if 5==5 else 10 = 5
+# === Zero Values ===
+# 0 if true else 99 = 0
+# 0 if false else 99 = 99
+# === Nested Ternary ===
+# grade(95) = A
+# grade(75) = C
+# grade(50) = F
+# === In Expressions ===
+# (10 if true else 5) * 2 = 20
+# inline: 100
+# === Function Usage ===
+# abs(-7) = 7
+# abs(7) = 7
+# clamp(5, 0, 10) = 5
+# clamp(-5, 0, 10) = 0
+# clamp(15, 0, 10) = 10
+# === Boolean Conditions ===
+# flag=true, result = on
+# flag=false, result = off
+# === Complex Conditions ===
+# 7 is odd
+# 8 is even
+# === All tests passed! ===

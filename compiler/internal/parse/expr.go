@@ -11,6 +11,35 @@ import (
 // ...
 
 func (p *Parser) parseExpr() ast.Expr {
+	e := p.parseOr()
+
+	// Check for ternary/conditional expression: value if condition else other
+	if p.cur.Tok == token.KW_if {
+		startSpan := e.SpanOf()
+		p.next() // consume 'if'
+
+		cond := p.parseOr()
+
+		if !p.expect(token.KW_else, "else") {
+			return e
+		}
+
+		elseExpr := p.parseExpr() // recursively parse to allow chaining
+
+		return &ast.IfExpr{
+			Then: e,
+			Cond: cond,
+			Else: elseExpr,
+			Span: ast.JoinSpan(startSpan, elseExpr.SpanOf()),
+		}
+	}
+
+	return e
+}
+
+// parseExprNoTernary parses an expression without ternary support.
+// Used in contexts where 'if' keyword has a different meaning (comprehension filters, match guards).
+func (p *Parser) parseExprNoTernary() ast.Expr {
 	return p.parseOr()
 }
 
