@@ -1240,14 +1240,61 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if s.Targets[0].Name != nil {
 				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: keyVal})
 			}
+
+			// Check if value is mutable (requires write-back)
+			isMutableValue := s.Targets[1].IsMut
+			var valueName string
+
 			// Bind value variable (second target)
 			if s.Targets[1].Name != nil {
-				ls.b.Emit(&hir.Let{Name: s.Targets[1].Name.Name, Init: valueVal})
+				valueName = s.Targets[1].Name.Name
+				if isMutableValue {
+					// For mutable iteration, create alloca (Let with nil) then store
+					// This allows reassignment to work with Store
+					ls.cur().mutable[valueName] = true
+					ls.cur().locals = append(ls.cur().locals, valueName)
+					ls.b.Emit(&hir.Let{Name: valueName, Init: nil, Type: types.Int})
+					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: valueName}, Val: valueVal})
+				} else {
+					// Immutable: emit regular Let
+					ls.b.Emit(&hir.Let{Name: valueName, Init: valueVal})
+				}
 			}
 
 			// Lower body
 			if s.Body != nil {
 				ls.lowerBlock(s.Body)
+			}
+
+			// Write back mutable value to dict after body
+			if isMutableValue && valueName != "" {
+				// Load the current (possibly mutated) value from the alloca
+				mutatedVal := ls.b.FreshTemp("mutated_val")
+				ls.b.Emit(&hir.Load{Type: "i32", Src: hir.Var{Name: valueName}, Dst: mutatedVal})
+
+				// Cast to i64 for dict_insert
+				mutatedValI64 := ls.b.FreshTemp("mutated_val_i64")
+				ls.b.Emit(&hir.Cast{Dst: mutatedValI64, Src: mutatedVal, Type: "i64"})
+
+				// Allocate temporary buffer for the value (dict_insert expects void*)
+				valueBoxPtr := ls.b.FreshTemp("value_box_ptr")
+				ls.b.Emit(&hir.Alloca{Dst: valueBoxPtr, Type: "i64", Count: 1})
+				ls.b.Emit(&hir.Store{Dst: valueBoxPtr, Val: mutatedValI64})
+
+				// Call dict_insert(dict, key_int, key_str, key_float, key_ptr, value, value_type_tag)
+				// For string keys: key_int=0, key_str=keyVal, key_float=0.0, key_ptr=null
+				ls.b.Emit(&hir.Call{
+					Fn: "dict_insert",
+					Args: []hir.Value{
+						dictVal,
+						hir.ConstInt{Text: "0", Type: "i64"}, // key_int
+						keyVal,                               // key_str
+						hir.ConstFloat{Text: "0.0"},          // key_float
+						hir.ConstNull{},                      // key_ptr
+						valueBoxPtr,                          // value
+						hir.ConstInt{Text: "2", Type: "i32"}, // TYPE_TAG_INT
+					},
+				})
 			}
 
 			// Scope cleanup

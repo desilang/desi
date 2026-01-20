@@ -1,0 +1,39 @@
+# Test dict mutable iteration
+# for key, mut value in dict.items():
+
+def main() -> int:
+    let mut counts = {"a": 1, "b": 2, "c": 3}
+    
+    # Test 1: Mutate values while iterating
+    for key, mut value in counts.items():
+        value := value * 10
+    
+    print("1. After mutation:")
+    print("a:", counts["a"])
+    print("b:", counts["b"])
+    print("c:", counts["c"])
+    
+    # Test 2: Conditional mutation
+    let mut scores = {"alice": 80, "bob": 90, "charlie": 65}
+    for name, mut score in scores.items():
+        if score < 70:
+            score := 70  # Minimum passing score
+    
+    print("2. After conditional mutation:")
+    print("alice:", scores["alice"])
+    print("bob:", scores["bob"])
+    print("charlie:", scores["charlie"])
+    
+    print("Dict mutable iteration tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# 1. After mutation:
+# a: 10
+# b: 20
+# c: 30
+# 2. After conditional mutation:
+# alice: 80
+# bob: 90
+# charlie: 70
+# Dict mutable iteration tests passed!
