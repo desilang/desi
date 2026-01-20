@@ -174,6 +174,50 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 					return types.TupleOf(newElems...)
 				}
 
+				// Handle list type aliases (e.g., type MyList<T> = list<T>)
+				if listType, ok := sym.Type.(*types.List); ok {
+					if _, ok := listType.Elem.(*types.TypeParam); ok && len(args) > 0 {
+						// TypeParam in elem position - substitute with first type arg
+						return &types.List{Elem: args[0]}
+					}
+					// If elem is already concrete or no args, return as-is
+					return sym.Type
+				}
+
+				// Handle set type aliases (e.g., type MySet<T> = set<T>)
+				if setType, ok := sym.Type.(*types.Set); ok {
+					if _, ok := setType.Elem.(*types.TypeParam); ok {
+						if len(args) > 0 {
+							return &types.Set{Elem: args[0]}
+						}
+					}
+					return sym.Type
+				}
+
+				// Handle dict type aliases (e.g., type MyDict<K, V> = dict<K, V>)
+				if dictType, ok := sym.Type.(*types.Dict); ok {
+					newKey := dictType.Key
+					newVal := dictType.Val
+					argIdx := 0
+					if tp, ok := dictType.Key.(*types.TypeParam); ok {
+						if argIdx < len(args) {
+							newKey = args[argIdx]
+							argIdx++
+						}
+						_ = tp // use tp to avoid unused warning
+					}
+					if tp, ok := dictType.Val.(*types.TypeParam); ok {
+						if argIdx < len(args) {
+							newVal = args[argIdx]
+						}
+						_ = tp
+					}
+					if newKey != dictType.Key || newVal != dictType.Val {
+						return &types.Dict{Key: newKey, Val: newVal}
+					}
+					return sym.Type
+				}
+
 				// Create Generic instantiation for other generic types
 				// First, validate that type arguments satisfy bounds
 				c.validateGenericBounds(sym.Type, args, tn.Span)
