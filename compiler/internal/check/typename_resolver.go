@@ -175,6 +175,9 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 				}
 
 				// Create Generic instantiation for other generic types
+				// First, validate that type arguments satisfy bounds
+				c.validateGenericBounds(sym.Type, args, tn.Span)
+
 				return &types.Generic{
 					Base: sym.Type,
 					Args: args,

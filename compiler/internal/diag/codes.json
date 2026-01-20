@@ -766,6 +766,11 @@
       "id": "DSY0005",
       "title": "WriteGuard should be used with 'using' guard",
       "help": "Consider using 'using guard = rw.write():' to ensure the write lock is properly released."
+    },
+    "unsatisfied_trait_bound": {
+      "id": "DSY0010",
+      "title": "type does not satisfy trait bound",
+      "help": "The type argument does not implement the required trait. Ensure the type implements the trait or use a compatible type."
     }
   }
 }

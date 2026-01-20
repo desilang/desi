@@ -141,6 +141,8 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 					args = append(args, types.Any) // Fallback
 				}
 			}
+			// Validate bounds on inferred type arguments
+			c.validateGenericBounds(st, args, call.Span)
 			return &types.Generic{Base: st, Args: args}
 		}
 		return st
@@ -261,6 +263,8 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 					args = append(args, types.Any)
 				}
 			}
+			// Validate bounds on inferred type arguments
+			c.validateGenericBounds(cls, args, call.Span)
 			gen := &types.Generic{Base: cls, Args: args}
 			// Record this instantiation for monomorphization
 			c.info.ClassInstantiations[cls.Name] = append(c.info.ClassInstantiations[cls.Name], gen)
