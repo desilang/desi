@@ -15,6 +15,16 @@ type TypeName struct {
 	Span       diag.Span
 }
 
+// TypeParamNode represents a type parameter with optional trait bounds.
+// Used in generic declarations like def foo<T: Numeric, U: Display + Eq>()
+type TypeParamNode struct {
+	Name   Ident    // The type parameter name (T, U, etc.)
+	Bounds []*Ident // Optional trait bounds (Numeric, Display, etc.)
+	Span   diag.Span
+}
+
+func (n *TypeParamNode) SpanOf() diag.Span { return n.Span }
+
 type Module struct {
 	File  string
 	Decls []Decl
@@ -32,7 +42,7 @@ type FuncDecl struct {
 	Async      bool
 	Pub        bool
 	Name       Ident
-	TypeParams []Ident // e.g., [T, U] for def swap<T, U>
+	TypeParams []*TypeParamNode // e.g., [T, U] or [T: Numeric, U: Display]
 	Params     []Param
 	RetType    *TypeName // optional
 	Body       *Block    // nil if just a signature + NL

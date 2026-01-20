@@ -5,7 +5,7 @@ import "github.com/desilang/desi/compiler/internal/diag"
 type StructDecl struct {
 	Pub        bool
 	Name       Ident
-	TypeParams []Ident // e.g., [T] for Container<T>
+	TypeParams []*TypeParamNode // e.g., [T] or [T: Numeric]
 	Fields     []*FieldDecl
 	Decorators []*Decorator
 	Doc        *StrLit // optional docstring (first stmt)

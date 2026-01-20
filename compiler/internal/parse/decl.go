@@ -38,8 +38,8 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 	name := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 	p.next()
 
-	// Parse optional type parameters: <T> or <T, U>
-	var typeParams []ast.Ident
+	// Parse optional type parameters: <T> or <T, U> or <T: Trait>
+	var typeParams []*ast.TypeParamNode
 	if p.cur.Tok == token.LT { // <
 		p.next()
 		for {
@@ -47,8 +47,31 @@ func (p *Parser) parseFuncWithDecs(decs []*ast.Decorator) *ast.FuncDecl {
 				p.errExpected(spanPos(p.file, p.cur), "type parameter name")
 				break
 			}
-			typeParams = append(typeParams, ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+			tpStart := spanPos(p.file, p.cur)
+			tpName := ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
 			p.next()
+
+			// Parse optional trait bounds: T: Trait or T: Trait1 + Trait2
+			var bounds []*ast.Ident
+			if p.accept(token.COLON) {
+				for {
+					if p.cur.Tok != token.IDENT {
+						p.errExpected(spanPos(p.file, p.cur), "trait name")
+						break
+					}
+					bounds = append(bounds, &ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)})
+					p.next()
+					if !p.accept(token.PLUS) {
+						break
+					}
+				}
+			}
+
+			typeParams = append(typeParams, &ast.TypeParamNode{
+				Name:   tpName,
+				Bounds: bounds,
+				Span:   ast.JoinSpan(tpStart, spanPos(p.file, p.cur)),
+			})
 
 			if p.cur.Tok == token.GT { // >
 				p.next()

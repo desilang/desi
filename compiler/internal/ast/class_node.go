@@ -16,8 +16,8 @@ func (f *FieldDecl) SpanOf() diag.Span { return f.Span }
 type ClassDecl struct {
 	Pub          bool
 	Name         Ident
-	TypeParams   []Ident     // e.g., [T] for class Container<T>
-	Bases        []*TypeName // optional base classes
+	TypeParams   []*TypeParamNode // e.g., [T] or [T: Display]
+	Bases        []*TypeName      // optional base classes
 	Methods      []*FuncDecl
 	Fields       []*FieldDecl
 	Constants    []*ClassConstDecl
