@@ -1,0 +1,37 @@
+# Test: Explicit Generic Instantiation (Turbofish Syntax)
+# Tests the ::<Type> syntax for explicit type arguments
+
+# EXPECTED_OUTPUT:
+# identity::<int>(42) = 42
+# identity::<str>(hello) = hello
+# Box::<int> value: 99
+# Pair::<int, str>: 10 and world
+# Turbofish tests passed!
+
+def identity<T>(x: T) -> T:
+    return x
+
+struct Box<T>:
+    value: T
+
+struct Pair<A, B>:
+    first: A
+    second: B
+
+def main():
+    # Turbofish syntax for explicit type args
+    let a = identity::<int>(42)
+    print(f"identity::<int>(42) = {a}")
+    
+    let b = identity::<str>("hello")
+    print(f"identity::<str>(hello) = {b}")
+    
+    # Turbofish with struct instantiation
+    let box = Box::<int>(value=99)
+    print(f"Box::<int> value: {box.value}")
+    
+    # Multi-type turbofish
+    let pair = Pair::<int, str>(first=10, second="world")
+    print(f"Pair::<int, str>: {pair.first} and {pair.second}")
+    
+    print("Turbofish tests passed!")

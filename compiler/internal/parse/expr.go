@@ -398,6 +398,98 @@ func (p *Parser) parsePostfix() ast.Expr {
 			// Not a tuple index, done with postfix
 			return e
 
+		case token.COLON:
+			// Check for turbofish syntax: foo::<T, U>(args)
+			// Only valid if we see COLON COLON LT (::< pattern)
+			if p.peek.Tok != token.COLON {
+				// Single colon - not turbofish, done with postfix
+				return e
+			}
+			// Check if the token after the second colon is LT
+			// We need to peek 2 ahead: cur=: peek=: ahead[0]=?
+			// If ahead is empty, fill it by scanning ahead
+			if len(p.ahead) == 0 {
+				// Fill the ahead buffer with next token from scanner
+				p.ahead = append(p.ahead, p.sc.Next())
+			}
+			if p.ahead[0].Tok != token.LT {
+				// Pattern is ::X where X is not <, not turbofish (e.g., slice [::2])
+				return e
+			}
+			// Valid turbofish pattern ::< - consume the tokens
+			p.next() // consume first ':'
+			p.next() // consume second ':'
+			p.next() // consume '<'
+
+			// Parse type arguments
+			var typeArgs []*ast.TypeName
+			for {
+				tn := p.parseTypeName()
+				if tn == nil {
+					break
+				}
+				typeArgs = append(typeArgs, tn)
+
+				if p.cur.Tok == token.COMMA {
+					p.next()
+					continue
+				}
+				if p.cur.Tok == token.GT {
+					p.next()
+					break
+				}
+				if p.cur.Tok == token.RSHIFT {
+					// >> for nested generics - use expectTypeGT
+					p.expectTypeGT()
+					break
+				}
+				break
+			}
+
+			// Now expect '(' for the call
+			if p.cur.Tok != token.LPAREN {
+				p.errExpected(spanPos(p.file, p.cur), "(")
+				return e
+			}
+			callStart := spanPos(p.file, p.cur)
+			p.next() // consume '('
+
+			var args []ast.Expr
+			var argNodes []ast.CallArg
+
+			if p.cur.Tok != token.RPAREN {
+				for {
+					// Check for keyword argument: name=value
+					if p.cur.Tok == token.IDENT && p.peek.Tok == token.ASSIGN {
+						nameTok := p.cur
+						nameIdent := &ast.Ident{Name: nameTok.Lexeme, Span: spanPos(p.file, nameTok)}
+						p.next()
+						_ = p.expect(token.ASSIGN, "=")
+						val := p.parseExpr()
+						argNodes = append(argNodes, ast.CallArg{Name: nameIdent, Expr: val})
+						args = append(args, val)
+					} else {
+						val := p.parseExpr()
+						argNodes = append(argNodes, ast.CallArg{Name: nil, Expr: val})
+						args = append(args, val)
+					}
+					if !p.accept(token.COMMA) {
+						break
+					}
+					if p.cur.Tok == token.RPAREN {
+						break
+					}
+				}
+			}
+			p.expectClose(token.RPAREN, ")", callStart)
+			e = &ast.CallExpr{
+				Callee:   e,
+				TypeArgs: typeArgs,
+				Args:     args,
+				ArgNodes: argNodes,
+				Span:     ast.JoinSpan(e.SpanOf(), spanPos(p.file, p.cur)),
+			}
+
 		default:
 			return e
 		}

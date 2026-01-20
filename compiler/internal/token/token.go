@@ -79,17 +79,18 @@ const (
 	KW_spawn  // spawn: block for concurrent tasks
 
 	// Delimiters / punctuators
-	LPAREN // (
-	RPAREN // )
-	LBRACK // [
-	RBRACK // ]
-	LBRACE // {
-	RBRACE // }
-	COMMA  // ,
-	COLON  // :
-	DOT    // .
-	AT     // @ (decorators)
-	HASH   // # (participates in '#{' set opener)
+	LPAREN     // (
+	RPAREN     // )
+	LBRACK     // [
+	RBRACK     // ]
+	LBRACE     // {
+	RBRACE     // }
+	COMMA      // ,
+	COLON      // :
+	DOT        // .
+	AT         // @ (decorators)
+	HASH       // # (participates in '#{' set opener)
+	COLONCOLON // :: (turbofish for explicit generic instantiation)
 
 	// Operators
 	ASSIGN  // =
@@ -171,7 +172,7 @@ func TokenCategory(t Token) Category {
 		POW, POW_EQ, XOR, XOR_EQ, EQEQ, NEQ, LT, LTE, GT, GTE, IN, BANG, PIPE, PIPE_GT, ARROW, FAT_ARROW,
 		TILDE, AMP, AMP_EQ, PIPE_EQ, LSHIFT, LSHIFT_EQ, RSHIFT, RSHIFT_EQ, QUESTION:
 		return CatOperator
-	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH:
+	case LPAREN, RPAREN, LBRACK, RBRACK, LBRACE, RBRACE, COMMA, COLON, DOT, AT, HASH, COLONCOLON:
 		return CatPunct
 	default:
 		return CatSpecial
