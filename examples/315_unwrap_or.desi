@@ -1,0 +1,61 @@
+# Test unwrap_or for Option and Result types
+# EXPECTED_OUTPUT:
+# === Option.unwrap_or Tests ===
+# Some(42).unwrap_or(0) = 42
+# None.unwrap_or(99) = 99
+# Some("hello").unwrap_or("default") = hello
+# None.unwrap_or("fallback") = fallback
+# === Result.unwrap_or Tests ===
+# Ok(100).unwrap_or(0) = 100
+# Err("oops").unwrap_or(-1) = -1
+# === Edge Cases ===
+# Default same as value: Some(42).unwrap_or(42) = 42
+# Zero default: None.unwrap_or(0) = 0
+# Empty string default: None.unwrap_or("") = 
+# === All tests passed! ===
+
+def main() -> int:
+    print("=== Option.unwrap_or Tests ===")
+    
+    # Basic Some case
+    let some_int: Option<int> = Option.Some(42)
+    print(f"Some(42).unwrap_or(0) = {some_int.unwrap_or(0)}")
+    
+    # Basic None case  
+    let none_int: Option<int> = Option.Nothing
+    print(f"None.unwrap_or(99) = {none_int.unwrap_or(99)}")
+    
+    # String type - Some
+    let some_str: Option<str> = Option.Some("hello")
+    print(f"Some(\"hello\").unwrap_or(\"default\") = {some_str.unwrap_or("default")}")
+    
+    # String type - None
+    let none_str: Option<str> = Option.Nothing
+    print(f"None.unwrap_or(\"fallback\") = {none_str.unwrap_or("fallback")}")
+    
+    print("=== Result.unwrap_or Tests ===")
+    
+    # Result Ok case
+    let ok_result: Result<int, str> = Result.Ok(100)
+    print(f"Ok(100).unwrap_or(0) = {ok_result.unwrap_or(0)}")
+    
+    # Result Err case
+    let err_result: Result<int, str> = Result.Err("oops")
+    print(f"Err(\"oops\").unwrap_or(-1) = {err_result.unwrap_or(-1)}")
+    
+    print("=== Edge Cases ===")
+    
+    # Default same as contained value
+    let v1: Option<int> = Option.Some(42)
+    print(f"Default same as value: Some(42).unwrap_or(42) = {v1.unwrap_or(42)}")
+    
+    # Zero as default
+    let v2: Option<int> = Option.Nothing
+    print(f"Zero default: None.unwrap_or(0) = {v2.unwrap_or(0)}")
+    
+    # Empty string as default
+    let v3: Option<str> = Option.Nothing
+    print(f"Empty string default: None.unwrap_or(\"\") = {v3.unwrap_or("")}")
+    
+    print("=== All tests passed! ===")
+    return 0
