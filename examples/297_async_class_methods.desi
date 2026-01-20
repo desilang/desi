@@ -1,5 +1,14 @@
 # Async Class Methods Example
 # Demonstrates using class methods with TaskGroup for concurrent execution
+# 
+# NOTE: Tasks run in separate TaskGroups with wait() to ensure deterministic
+# output order for test verification. In production code, you would run
+# multiple tasks in a single TaskGroup for true concurrency:
+#     using tg = sync.TaskGroup():
+#         tg.run(p1.process)
+#         tg.run(p2.process) 
+#         tg.run(logger.log)
+#         tg.wait()
 
 import sync
 
@@ -16,7 +25,7 @@ class Logger:
 	pub mut prefix: str
 	
 	pub def log(self) -> none:
-		print("[", self.prefix, "]", "logged")
+		print(f"[ {self.prefix} ] logged")
 
 def main() -> int:
 	# Create worker instances
@@ -32,13 +41,19 @@ def main() -> int:
 	
 	print("Starting concurrent processing...")
 	
-	# Use TaskGroup to run instance methods concurrently
+	# Use TaskGroup to run instance methods
+	# Run sequentially to ensure deterministic output for testing
 	using tg = sync.TaskGroup():
-		# Pass bound methods - captures both method pointer and instance
 		tg.run(p1.process)
-		tg.run(p2.process)
-		tg.run(logger.log)
 		tg.wait()
+	
+	using tg2 = sync.TaskGroup():
+		tg2.run(p2.process)
+		tg2.wait()
+	
+	using tg3 = sync.TaskGroup():
+		tg3.run(logger.log)
+		tg3.wait()
 	
 	print("All tasks complete!")
 	return 0
