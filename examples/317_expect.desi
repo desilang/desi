@@ -1,0 +1,47 @@
+# Test expect() and expect_err() methods for Option and Result types
+# Like unwrap()/unwrap_err() but with custom panic message for clearer debugging
+# EXPECTED_OUTPUT:
+# === Option.expect Tests ===
+# Some(42).expect() = 42
+# Some(0).expect() = 0
+# Some("hello").expect() = hello
+# === Result.expect Tests ===
+# Ok(100).expect() = 100
+# === Result.expect_err Tests ===
+# Err("error").expect_err() = error
+# === All tests passed! ===
+
+def main() -> int:
+    print("=== Option.expect Tests ===")
+    
+    # expect on Some - should succeed
+    let some_val: Option<int> = Option.Some(42)
+    print(f"Some(42).expect() = {some_val.expect("value should exist")}")
+    
+    # Edge case: zero value
+    let some_zero: Option<int> = Option.Some(0)
+    print(f"Some(0).expect() = {some_zero.expect("zero value")}")
+    
+    # String type
+    let some_str: Option<str> = Option.Some("hello")
+    print(f"Some(\"hello\").expect() = {some_str.expect("string value")}")
+    
+    print("=== Result.expect Tests ===")
+    
+    # expect on Result Ok - should succeed
+    let ok_val: Result<int, str> = Result.Ok(100)
+    print(f"Ok(100).expect() = {ok_val.expect("result should be ok")}")
+    
+    print("=== Result.expect_err Tests ===")
+    
+    # expect_err on Result Err - should succeed
+    let err_val: Result<int, str> = Result.Err("error")
+    print(f"Err(\"error\").expect_err() = {err_val.expect_err("should be error")}")
+    
+    # Note: Panic cases would show custom messages:
+    # - Option.Nothing.expect("custom msg") -> panic: custom msg
+    # - Result.Err("e").expect("msg") -> panic: msg
+    # - Result.Ok(v).expect_err("msg") -> panic: msg
+    
+    print("=== All tests passed! ===")
+    return 0

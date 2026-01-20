@@ -34,6 +34,12 @@ void __panic_unwrap_ok(void) {
     exit(1);
 }
 
+// Panic function for expect() with custom message
+void __panic_expect(const char* msg) {
+    fprintf(stderr, "panic: %s\n", msg);
+    exit(1);
+}
+
 // Math helper functions for float special values
 #include <math.h>
 
