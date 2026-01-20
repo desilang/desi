@@ -718,7 +718,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					x.Dst.Name, condVal, thenTy, thenVal, thenTy, elseVal)
 				m.tempTypes[x.Dst.Name] = x.Type
 
-			// ------- control flow (elided) -------
+				// ------- control flow (elided) -------
 			case *hir.If:
 				// Emit proper LLVM control flow for If statement
 				cty, cval := m.operand(x.Cond)
@@ -747,6 +747,10 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// Emit merge label immediately to split the current block
 				// Subsequent statements in this loop will be emitted into the merge block
 				wprintf(&m.funcs, "%s:\n", mergeLabel)
+
+				// Mark lifetimes as closed for THIS block to prevent unreachable
+				// lifetime.end calls. The merge block is a new block with its own lifetime tracking.
+				lifetimesClosed = true
 
 			case *hir.While:
 				// Emit proper LLVM loop structure:
@@ -840,6 +844,20 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			}
 		}
 
+		// Check if the last statement was hir.If and the merge block needs a terminator
+		// This handles the case where both branches return, leaving the merge block empty
+		// Only do this if the block is NOT in cfBlocks (so it won't get a branch added later)
+		if len(b.Stmts) > 0 {
+			if _, isIf := b.Stmts[len(b.Stmts)-1].(*hir.If); isIf {
+				// The last statement was an If, meaning the merge block was just emitted
+				// but has no content. We need to add a terminator.
+				// Only do this if this block won't get a branch added by cfBlocks handling
+				if lifetimesClosed && m.cfBlocks[label] == "" {
+					wprintf(&m.funcs, "  unreachable\n")
+				}
+			}
+		}
+
 		// Add terminator for control flow blocks (branches to merge)
 		if mergeLabel, ok := m.cfBlocks[label]; ok {
 			// Check if block already has a terminator (e.g., ret)
@@ -867,15 +885,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					delete(m.cfLoopConds, label)
 					lifetimesClosed = true // Don't emit lifetime.end after branch
 				} else {
-					// Regular control flow block: unconditional branch
+					// Regular control flow block: unconditional branch to merge
 					wprintf(&m.funcs, "  br label %%%s\n", mergeLabel)
 					lifetimesClosed = true // Don't emit lifetime.end after branch
 				}
 			}
-			// Remove from map
+			// Remove from cfBlocks map
 			delete(m.cfBlocks, label)
-
-			// Do NOT emit merge label here - it was already emitted in the If/While case
 		}
 
 		// Close lifetimes for locals at end of block if we didn't just emit an early 'ret'.

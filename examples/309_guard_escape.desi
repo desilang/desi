@@ -1,0 +1,74 @@
+# Guard escape comprehensive edge case tests  
+# Testing patterns inspired by C++, Rust memory safety bugs
+import sync
+
+# ============================================
+# POSITIVE TESTS: Valid guard usage patterns
+# ============================================
+
+# Test 1: Basic mutex guard with using (RAII)
+def test_basic_raii() -> int:
+    let mutex = sync.Mutex(100)
+    using guard = mutex.lock():
+        return guard.value * 2
+    return 0
+
+# Test 2: Value extraction (safe - extracting primitive)
+def test_value_extraction() -> int:
+    let mutex = sync.Mutex(42)
+    let result: int = 0
+    using guard = mutex.lock():
+        result := guard.value
+    return result
+
+# Test 3: Multiple operations on same guard (10+20+15=45)
+def test_multiple_ops() -> int:
+    let mutex = sync.Mutex(10)
+    using guard = mutex.lock():
+        let a = guard.value
+        let b = guard.value * 2
+        let c = guard.value + 5
+        return a + b + c
+    return 0
+
+# Test 4: Sequential guard scopes (not nested - avoiding deadlock)
+def test_sequential_guards() -> int:
+    let m1 = sync.Mutex(10)
+    let m2 = sync.Mutex(20)
+    let val1: int = 0
+    let val2: int = 0
+    using g1 = m1.lock():
+        val1 := g1.value
+    using g2 = m2.lock():
+        val2 := g2.value
+    return val1 + val2
+
+# Test 5: Guard with multiple accesses
+def test_multiple_accesses() -> int:
+    let mutex = sync.Mutex(5)
+    let total: int = 0
+    using guard = mutex.lock():
+        total := guard.value + guard.value + guard.value
+    return total
+
+# Main test runner
+def main() -> int:
+    print("=== Guard Escape Edge Case Tests ===")
+    
+    print("1. Basic RAII:", test_basic_raii())
+    print("2. Value extraction:", test_value_extraction())
+    print("3. Multiple ops:", test_multiple_ops())
+    print("4. Sequential guards:", test_sequential_guards())
+    print("5. Multiple accesses:", test_multiple_accesses())
+    
+    print("All guard escape edge case tests passed!")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Guard Escape Edge Case Tests ===
+# 1. Basic RAII: 200
+# 2. Value extraction: 42
+# 3. Multiple ops: 45
+# 4. Sequential guards: 30
+# 5. Multiple accesses: 15
+# All guard escape edge case tests passed!
