@@ -1,18 +1,4 @@
 # Test unwrap_or for Option and Result types
-# EXPECTED_OUTPUT:
-# === Option.unwrap_or Tests ===
-# Some(42).unwrap_or(0) = 42
-# None.unwrap_or(99) = 99
-# Some("hello").unwrap_or("default") = hello
-# None.unwrap_or("fallback") = fallback
-# === Result.unwrap_or Tests ===
-# Ok(100).unwrap_or(0) = 100
-# Err("oops").unwrap_or(-1) = -1
-# === Edge Cases ===
-# Default same as value: Some(42).unwrap_or(42) = 42
-# Zero default: None.unwrap_or(0) = 0
-# Empty string default: None.unwrap_or("") = 
-# === All tests passed! ===
 
 def main() -> int:
     print("=== Option.unwrap_or Tests ===")
@@ -59,3 +45,18 @@ def main() -> int:
     
     print("=== All tests passed! ===")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Option.unwrap_or Tests ===
+# Some(42).unwrap_or(0) = 42
+# None.unwrap_or(99) = 99
+# Some("hello").unwrap_or("default") = hello
+# None.unwrap_or("fallback") = fallback
+# === Result.unwrap_or Tests ===
+# Ok(100).unwrap_or(0) = 100
+# Err("oops").unwrap_or(-1) = -1
+# === Edge Cases ===
+# Default same as value: Some(42).unwrap_or(42) = 42
+# Zero default: None.unwrap_or(0) = 0
+# Empty string default: None.unwrap_or("") = 
+# === All tests passed! ===

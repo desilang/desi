@@ -1,15 +1,5 @@
 # Test expect() and expect_err() methods for Option and Result types
 # Like unwrap()/unwrap_err() but with custom panic message for clearer debugging
-# EXPECTED_OUTPUT:
-# === Option.expect Tests ===
-# Some(42).expect() = 42
-# Some(0).expect() = 0
-# Some("hello").expect() = hello
-# === Result.expect Tests ===
-# Ok(100).expect() = 100
-# === Result.expect_err Tests ===
-# Err("error").expect_err() = error
-# === All tests passed! ===
 
 def main() -> int:
     print("=== Option.expect Tests ===")
@@ -45,3 +35,14 @@ def main() -> int:
     
     print("=== All tests passed! ===")
     return 0
+
+# EXPECTED_OUTPUT:
+# === Option.expect Tests ===
+# Some(42).expect() = 42
+# Some(0).expect() = 0
+# Some("hello").expect() = hello
+# === Result.expect Tests ===
+# Ok(100).expect() = 100
+# === Result.expect_err Tests ===
+# Err("error").expect_err() = error
+# === All tests passed! ===
