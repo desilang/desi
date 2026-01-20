@@ -137,6 +137,7 @@ match result:
 | `is_nothing()` | `bool` | True if contains nothing |
 | `unwrap()` | `T` | Returns the value (panics if Nothing) |
 | `unwrap_or(default)` | `T` | Returns value if Some, otherwise `default` |
+| `expect(msg)` | `T` | Like unwrap but panics with custom message |
 
 ### Result<T, E> Methods
 
@@ -147,6 +148,10 @@ match result:
 | `unwrap()` | `T` | Returns success value (panics if Err) |
 | `unwrap_err()` | `E` | Returns error value (panics if Ok) |
 | `unwrap_or(default)` | `T` | Returns value if Ok, otherwise `default` |
+| `expect(msg)` | `T` | Like unwrap but panics with custom message |
+| `expect_err(msg)` | `E` | Like unwrap_err but panics with custom message |
+| `ok()` | `Option<T>` | Converts Ok to Some, Err to Nothing |
+| `err()` | `Option<E>` | Converts Err to Some, Ok to Nothing |
 
 ---
 
@@ -200,6 +205,41 @@ if option.is_some():
 match option:
     Option.Some(v): handle(v)
     Option.Nothing: handle_missing()
+```
+
+### expect() - Custom Panic Messages
+
+Use `expect(msg)` for clearer debugging when unwrapping should never fail:
+
+```desi
+def get_config(name: str) -> str:
+    let config: Option<str> = load_config(name)
+    return config.expect(f"Config '{name}' must exist")
+
+# If None: panic: Config 'database_url' must exist
+```
+
+### ok() and err() - Result to Option Conversion
+
+Convert between Result and Option when you only care about one variant:
+
+```desi
+let result: Result<int, str> = Result.Ok(42)
+
+# Extract Ok value as Option
+let value = result.ok()           # Some(42)
+let v = value.unwrap_or(0)        # 42
+
+# Extract Err value as Option  
+let error = result.err()          # Nothing
+```
+
+Useful for chaining with Option methods:
+
+```desi
+let res: Result<int, str> = do_something()
+let val = res.ok().unwrap_or(default_value)
+```
 
 ---
 
