@@ -463,8 +463,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 				"cannot return guard type '"+rt.String()+"' - guards must not escape their scope"))
 		}
 
-		if c.curFuncRet != nil && !types.Equal(rt, c.curFuncRet) {
-			c.add(diagAt("DTE0004", st.Span, "wrong return type: expected "+c.curFuncRet.String()))
+		if c.curFuncRet != nil && rt != nil && !types.Assignable(c.curFuncRet, rt) {
+			c.add(diagAt("DTE0004", st.Span, "wrong return type: expected "+c.curFuncRet.String()+", got "+rt.String()))
 		}
 
 	case *ast.ExprStmt:
