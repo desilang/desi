@@ -25,7 +25,7 @@
 # 
 # === Turbofish in Expressions ===
 # identity::<int>(1) + identity::<int>(2) = 3
-# Nested turbofish: skipped (known codegen issue)
+# Nested turbofish calls: 42
 # Turbofish in struct field: 77
 # 
 # === Generics of Generics ===
@@ -124,10 +124,9 @@ def test_turbofish_in_expressions():
     let sum = a + b
     print(f"identity::<int>(1) + identity::<int>(2) = {sum}")
     
-    # TODO: Nested generic calls have a codegen bug - fix in future PR
-    # let c = identity::<int>(identity::<int>(42))  # Returns garbage
-    # print(f"Nested turbofish calls: {c}")
-    print("Nested turbofish: skipped (known codegen issue)")
+    # Nested turbofish calls (fixed!)
+    let c = identity::<int>(identity::<int>(42))
+    print(f"Nested turbofish calls: {c}")
     
     # In struct field
     let val = identity::<int>(77)

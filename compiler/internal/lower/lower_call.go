@@ -2337,6 +2337,19 @@ skipMethodCall:
 					if t := ls.info.Types[x.Args[i]]; t != nil {
 						argType = lowerType(t)
 					}
+
+					// Check if the argument is itself a call to a generic function
+					// In that case, it already returns ptr at LLVM level and shouldn't be re-boxed
+					if call, ok := x.Args[i].(*ast.CallExpr); ok {
+						if callId, ok := call.Callee.(*ast.Ident); ok {
+							if set, ok := ls.info.Funcs[callId.Name]; ok && len(set.Cands) > 0 {
+								if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
+									// Arg is a call to a generic function, it returns ptr
+									argType = "ptr"
+								}
+							}
+						}
+					}
 				}
 
 				if argType != "ptr" && argType != "void" {
