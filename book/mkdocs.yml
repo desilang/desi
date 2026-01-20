@@ -94,6 +94,16 @@ nav:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md
     - Keywords: reference/keywords.md
+  - Concurrency:
+    - Overview: concurrency/thread-safety.md
+    - Mutex: concurrency/mutex.md
+    - RwLock: concurrency/rwlock.md
+    - Channels: concurrency/channels.md
+    - TaskGroup: concurrency/taskgroup.md
+    - Select: concurrency/select.md
+    - Atomic: concurrency/atomic.md
+    - Semaphore: concurrency/semaphore.md
+    - RAII Safety: concurrency/raii-safety.md
   - Examples: examples/index.md
   - Changelog: changelog.md
 
