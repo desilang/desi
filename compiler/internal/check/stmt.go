@@ -209,6 +209,13 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+valT.String()+"' to '"+sym.Type.String()+"'"))
 				}
 
+				// DSY0004: Detect storing guard types in variables
+				// Guards should only be created via `using` statements
+				if c.isNonEscapingType(valT) {
+					c.add(diagAt("DSY0004", st.Span,
+						"cannot store guard type '"+valT.String()+"' in variable - use 'using' statement instead"))
+				}
+
 			case *ast.FieldExpr:
 				// Field assignment: obj.field = value OR ClassName.static_field = value
 				valT := c.typ(rt)
