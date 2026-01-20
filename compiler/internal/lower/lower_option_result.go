@@ -711,6 +711,146 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		val := ls.b.FreshTemp("expect_err_val")
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
+
+	case "ok":
+		// Result.ok() -> Option<T>
+		// If Ok(v), return Some(v). If Err(_), return Nothing.
+
+		// Get tag from Result
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Allocate Option struct
+		optionSlot := ls.b.FreshTemp("option_slot")
+		ls.b.Emit(&hir.Alloca{Type: "{i32, ptr}", Count: 1, Dst: optionSlot})
+
+		// Pre-store Nothing (tag = 1)
+		tagPtrOption := ls.b.FreshTemp("tag_ptr_option")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    optionSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtrOption,
+		})
+		ls.b.Emit(&hir.Store{Dst: tagPtrOption, Val: hir.ConstInt{Text: "1", Type: "i32"}})
+
+		// Check if Ok (tag == 0)
+		isOk := ls.b.FreshTemp("is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		// Create conditional block for Ok case
+		curBlock := ls.b.Block()
+		okBlock := ls.b.NewBlock("ok_some")
+		ls.b.SetBlock(okBlock)
+
+		// In Ok block: overwrite with Some (tag=0) + copy payload
+		ls.b.Emit(&hir.Store{Dst: tagPtrOption, Val: hir.ConstInt{Text: "0", Type: "i32"}})
+		srcPayloadPtrSlot := ls.b.FreshTemp("src_payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     srcPayloadPtrSlot,
+		})
+		srcPayloadPtr := ls.b.FreshTemp("src_payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPayloadPtrSlot, Dst: srcPayloadPtr})
+		dstPayloadPtrSlot := ls.b.FreshTemp("dst_payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    optionSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     dstPayloadPtrSlot,
+		})
+		ls.b.Emit(&hir.Store{Dst: dstPayloadPtrSlot, Val: srcPayloadPtr})
+
+		// Switch back and emit conditional (Else: nil = fallthrough)
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: okBlock, Else: nil})
+
+		return optionSlot
+
+	case "err":
+		// Result.err() -> Option<E>
+		// If Err(e), return Some(e). If Ok(_), return Nothing.
+
+		// Get tag from Result
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Allocate Option struct
+		optionSlot := ls.b.FreshTemp("option_slot")
+		ls.b.Emit(&hir.Alloca{Type: "{i32, ptr}", Count: 1, Dst: optionSlot})
+
+		// Pre-store Nothing (tag = 1)
+		tagPtrOption := ls.b.FreshTemp("tag_ptr_option")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    optionSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtrOption,
+		})
+		ls.b.Emit(&hir.Store{Dst: tagPtrOption, Val: hir.ConstInt{Text: "1", Type: "i32"}})
+
+		// Check if Err (tag != 0)
+		isErr := ls.b.FreshTemp("is_err")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "!=",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isErr,
+			Type: "i1",
+		})
+
+		// Create conditional block for Err case
+		curBlock := ls.b.Block()
+		errBlock := ls.b.NewBlock("err_some")
+		ls.b.SetBlock(errBlock)
+
+		// In Err block: overwrite with Some (tag=0) + copy payload
+		ls.b.Emit(&hir.Store{Dst: tagPtrOption, Val: hir.ConstInt{Text: "0", Type: "i32"}})
+		srcPayloadPtrSlot := ls.b.FreshTemp("src_payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     srcPayloadPtrSlot,
+		})
+		srcPayloadPtr := ls.b.FreshTemp("src_payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPayloadPtrSlot, Dst: srcPayloadPtr})
+		dstPayloadPtrSlot := ls.b.FreshTemp("dst_payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    optionSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     dstPayloadPtrSlot,
+		})
+		ls.b.Emit(&hir.Store{Dst: dstPayloadPtrSlot, Val: srcPayloadPtr})
+
+		// Switch back and emit conditional (Else: nil = fallthrough)
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isErr, Then: errBlock, Else: nil})
+
+		return optionSlot
 	}
 
 	return hir.ConstInt{Text: "0"}

@@ -989,6 +989,14 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "expect_err":
 		// (msg: str) -> E - like unwrap_err but with custom panic message
 		methodType = types.FuncOf([]types.T{types.Str}, errType, false)
+	case "ok":
+		// () -> Option<T> - converts Result to Option, Ok(v) -> Some(v), Err(_) -> Nothing
+		optionType := types.OptionOf(okType)
+		methodType = types.FuncOf(nil, optionType, false)
+	case "err":
+		// () -> Option<E> - converts Result to Option, Err(e) -> Some(e), Ok(_) -> Nothing
+		optionType := types.OptionOf(errType)
+		methodType = types.FuncOf(nil, optionType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
 		return nil
