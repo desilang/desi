@@ -13,7 +13,8 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 	// Create struct type (fields populated in Pass 2)
 	st := &types.Struct{Name: d.Name.Name}
 	for _, tp := range d.TypeParams {
-		st.TypeParams = append(st.TypeParams, types.TypeParam{Name: tp.Name.Name})
+		bounds := extractBoundsFromTypeParams(tp)
+		st.TypeParams = append(st.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 	}
 
 	// Register the struct type name.
@@ -42,10 +43,11 @@ func (c *checker) collectTypeAlias(d *ast.TypeAliasDecl) {
 
 	// Add type parameters to scope (e.g., for Box<T>)
 	for _, tp := range d.TypeParams {
+		bounds := extractBoundsFromTypeParams(tp)
 		c.scope.Define(&Symbol{
 			Name: tp.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: tp.Name.Name},
+			Type: &types.TypeParam{Name: tp.Name.Name, Bounds: bounds},
 		})
 	}
 
@@ -103,7 +105,8 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 
 	// Add type parameters
 	for _, tp := range d.TypeParams {
-		cls.TypeParams = append(cls.TypeParams, types.TypeParam{Name: tp.Name.Name})
+		bounds := extractBoundsFromTypeParams(tp)
+		cls.TypeParams = append(cls.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 	}
 
 	// Register the class type
@@ -158,7 +161,8 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		}
 		// Add type parameters
 		for _, tp := range nested.TypeParams {
-			nestedCls.TypeParams = append(nestedCls.TypeParams, types.TypeParam{Name: tp.Name.Name})
+			bounds := extractBoundsFromTypeParams(tp)
+			nestedCls.TypeParams = append(nestedCls.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 		}
 
 		// Create nested scope for type parameters if any (so T is visible for fields/methods)
@@ -255,10 +259,11 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 	defer func() { c.scope = c.scope.parent }()
 
 	for _, typeParam := range d.TypeParams {
+		bounds := extractBoundsFromTypeParams(typeParam)
 		c.scope.Define(&Symbol{
 			Name: typeParam.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: typeParam.Name.Name},
+			Type: &types.TypeParam{Name: typeParam.Name.Name, Bounds: bounds},
 		})
 	}
 
@@ -300,10 +305,11 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	defer func() { c.scope = c.scope.parent }()
 
 	for _, tp := range d.TypeParams {
+		bounds := extractBoundsFromTypeParams(tp)
 		c.scope.Define(&Symbol{
 			Name: tp.Name.Name,
 			Kind: SymType,
-			Type: &types.TypeParam{Name: tp.Name.Name},
+			Type: &types.TypeParam{Name: tp.Name.Name, Bounds: bounds},
 		})
 	}
 
