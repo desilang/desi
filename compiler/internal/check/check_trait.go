@@ -136,6 +136,43 @@ func (c *checker) checkBounds(typeArg types.T, bounds []string, span diag.Span) 
 	return nil
 }
 
+// validateGenericBounds validates all type arguments against their corresponding bounds
+// from the base type's TypeParams. Emits DSY0010 diagnostics for unsatisfied bounds.
+func (c *checker) validateGenericBounds(baseType types.T, args []types.T, span diag.Span) {
+	if baseType == nil || len(args) == 0 {
+		return
+	}
+
+	// Extract TypeParams from the base type
+	var typeParams []types.TypeParam
+	switch base := baseType.(type) {
+	case *types.Struct:
+		typeParams = base.TypeParams
+	case *types.Class:
+		typeParams = base.TypeParams
+	case *types.Enum:
+		typeParams = base.TypeParams
+	default:
+		return // No type params to check
+	}
+
+	// Check each arg against its corresponding TypeParam's bounds
+	for i, param := range typeParams {
+		if i >= len(args) {
+			break
+		}
+		if len(param.Bounds) == 0 {
+			continue // No bounds on this param
+		}
+
+		arg := args[i]
+		d := c.checkBounds(arg, param.Bounds, span)
+		if d != nil {
+			c.add(*d)
+		}
+	}
+}
+
 // extractBoundsFromTypeParams extracts bound names from AST TypeParamNode.
 // Returns a slice of trait name strings for the bounds.
 func extractBoundsFromTypeParams(tp *ast.TypeParamNode) []string {
