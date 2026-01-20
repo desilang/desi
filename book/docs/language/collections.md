@@ -98,6 +98,12 @@ let has = "Alice" in ages      # Key exists
 for key, val: str, int in ages.items():
     print(key)
     print(val)
+
+# Mutable iteration: modify values during iteration
+let mut scores = {"alice": 80, "bob": 65}
+for name, mut score in scores.items():
+    if score < 70:
+        score := 70  # Write-back to dict
 ```
 
 ### Dict with Custom Keys
