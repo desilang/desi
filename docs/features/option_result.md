@@ -136,6 +136,7 @@ match result:
 | `is_some()` | `bool` | True if contains a value |
 | `is_nothing()` | `bool` | True if contains nothing |
 | `unwrap()` | `T` | Returns the value (panics if Nothing) |
+| `unwrap_or(default)` | `T` | Returns value if Some, otherwise `default` |
 
 ### Result<T, E> Methods
 
@@ -145,6 +146,7 @@ match result:
 | `is_err()` | `bool` | True if operation failed |
 | `unwrap()` | `T` | Returns success value (panics if Err) |
 | `unwrap_err()` | `E` | Returns error value (panics if Ok) |
+| `unwrap_or(default)` | `T` | Returns value if Ok, otherwise `default` |
 
 ---
 
@@ -282,10 +284,10 @@ if result.is_ok():
        let x = try_something()?  # Would propagate error
    ```
 
-2. **No `unwrap_or()`**: Default value methods are not yet implemented:
+2. ~~**No `unwrap_or()`**~~: ✅ **Implemented Jan 2025**:
    ```desi
-   # Not yet supported:
-   let value = option.unwrap_or(0)
+   let value = option.unwrap_or(0)  # Works!
+   let result = ok_or_err.unwrap_or(-1)  # Works!
    ```
 
 3. **No `map()` / `and_then()`**: Functional combinators are not yet available:
