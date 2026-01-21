@@ -148,6 +148,59 @@ match result:
 
 ---
 
+## Panic Behavior
+
+⚠️ **Calling `unwrap()` on an invalid variant causes a runtime panic with a clear error message.**
+
+### Option Panic
+
+```desi
+let x: Option<int> = Option.Nothing
+let v = x.unwrap()  # PANICS!
+```
+
+**Error Message:**
+```
+panic: called unwrap() on a None value
+```
+
+### Result Panics
+
+```desi
+let x: Result<int, str> = Result.Err("oops")
+let v = x.unwrap()  # PANICS!
+```
+
+**Error Message:**
+```
+panic: called unwrap() on an Err value
+```
+
+```desi
+let x: Result<int, str> = Result.Ok(42)
+let e = x.unwrap_err()  # PANICS!
+```
+
+**Error Message:**
+```
+panic: called unwrap_err() on an Ok value
+```
+
+### Safe Pattern
+
+Always check before unwrapping:
+
+```desi
+if option.is_some():
+    let value = option.unwrap()  # Safe!
+
+# Or use pattern matching (recommended)
+match option:
+    Option.Some(v): handle(v)
+    Option.Nothing: handle_missing()
+
+---
+
 ## Best Practices
 
 ### ✅ Do

@@ -6,8 +6,11 @@ This document covers Desi's generics system, including generic classes, function
 1. [Generic Classes](#generic-classes)
 2. [Generic Functions](#generic-functions)
 3. [Constructor Type Inference](#constructor-type-inference)
-4. [Implementation Details](#implementation-details)
-5. [Limitations](#limitations)
+4. [Turbofish Syntax](#turbofish-syntax-t)
+5. [Generic Type Aliases](#generic-type-aliases)
+6. [Trait Bounds](#trait-bounds)
+7. [Implementation Details](#implementation-details)
+8. [Limitations](#limitations)
 
 ---
 
@@ -159,6 +162,112 @@ When you call a generic class constructor with arguments:
 
 ---
 
+## Turbofish Syntax `::<T>`
+
+When the compiler cannot infer a generic type, you can use **turbofish syntax** to explicitly specify type arguments.
+
+### Basic Usage
+
+```desi
+def identity<T>(x: T) -> T:
+    return x
+
+# Explicit type specification with turbofish
+let x = identity::<int>(42)
+let s = identity::<str>("hello")
+```
+
+### Nested Generic Calls
+
+Turbofish works correctly with nested generic calls:
+
+```desi
+let result = identity::<int>(identity::<int>(42))
+```
+
+### When to Use
+
+- When type inference fails due to ambiguity
+- When you want to be explicit about types for documentation
+- In complex generic contexts where inference might choose the wrong type
+
+---
+
+## Generic Type Aliases
+
+Type aliases let you create shorter names for complex types, including generic types.
+
+### Simple Type Alias
+
+```desi
+type IntList = list<int>
+type StrToInt = dict<str, int>
+
+let nums: IntList = [1, 2, 3]
+let ages: StrToInt = {"alice": 30, "bob": 25}
+```
+
+### Generic Type Alias
+
+You can create generic type aliases with type parameters:
+
+```desi
+type MyList<T> = list<T>
+type MyDict<K, V> = dict<K, V>
+type Pair<A, B> = (A, B)
+
+let nums: MyList<int> = [1, 2, 3]
+let p: Pair<str, int> = ("alice", 30)
+```
+
+### Type Alias with Trait Bounds
+
+Constrained type aliases allow you to restrict which types can be used:
+
+```desi
+type NumericList<T: Numeric> = list<T>
+
+let nums: NumericList<int> = [1, 2, 3]   # Works: int is Numeric
+let floats: NumericList<float> = [1.0]  # Works: float is Numeric
+# let strs: NumericList<str> = ["hi"]   # ERROR: str is not Numeric
+```
+
+---
+
+## Trait Bounds
+
+Trait bounds restrict which types can be used with a generic.
+
+### Syntax
+
+```desi
+def sum<T: Numeric>(a: T, b: T) -> T:
+    return a + b
+
+class Container<T: Display>:
+    pub mut val: T
+```
+
+### Built-in Traits
+
+| Trait | Types | Description |
+|-------|-------|-------------|
+| `Numeric` | `int`, `float`, `i32`, etc. | Supports arithmetic |
+| `Display` | Most types | Can be printed |
+| `Eq` | Most types | Supports `==` |
+| `Ord` | `int`, `float`, `str` | Supports `<`, `>` |
+| `Send` | Thread-safe types | Safe to send across threads |
+| `Sync` | Thread-safe types | Safe to share across threads |
+
+### Multiple Bounds
+
+```desi
+def compare<T: Eq + Ord>(a: T, b: T) -> bool:
+    return a < b
+```
+
+---
+
 ## Implementation Details
 
 ### Monomorphization (Generic Classes)
@@ -222,7 +331,7 @@ store i32 42, ptr %box
 
 - Full monomorphization for generic functions (if needed for performance)
 - Better error messages for type inference failures
-- Support for trait/interface bounds on type parameters
+- ✅ ~~Support for trait/interface bounds on type parameters~~ (Implemented Jan 2025)
 
 ---
 
