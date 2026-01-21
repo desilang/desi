@@ -1,11 +1,5 @@
 # Test functions returning Option and Result types
 # This tests the fix for return type inference with Option/Result constructors
-# EXPECTED_OUTPUT:
-# find_value(1) = 42
-# find_value(99) = -1
-# divide(10, 2) = 5
-# divide(10, 0) = error
-# Test passed!
 
 def find_value(id: int) -> Option<int>:
     if id == 1:
@@ -35,3 +29,10 @@ def main() -> int:
     
     print("Test passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# find_value(1) = 42
+# find_value(99) = -1
+# divide(10, 2) = 5
+# divide(10, 0) = error
+# Test passed!
