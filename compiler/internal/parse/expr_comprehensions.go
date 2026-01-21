@@ -181,8 +181,9 @@ func (p *Parser) parseCompClausesAfterFor() []ast.CompClause {
 			return clauses
 		}
 
-		// Parse <iter> with normal membership behavior.
-		iter := p.parseExpr()
+		// Parse <iter> with normal membership behavior, but without ternary support
+		// so 'if' is recognized as filter clause, not ternary operator
+		iter := p.parseExprNoTernary()
 
 		// Optional chain of `if <cond>`; combine multiple guards with `and`
 		// so we keep a single If expression in the AST clause shape.

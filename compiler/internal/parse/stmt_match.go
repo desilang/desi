@@ -43,7 +43,8 @@ func (p *Parser) parseMatch() *ast.MatchExpr {
 			pat = &ast.Ident{Name: "_", Span: spanPos(p.file, p.cur)} // <-- pointer
 			p.next()
 		} else {
-			pat = p.parseExpr()
+			// Use parseExprNoTernary so 'if' is recognized as guard, not ternary
+			pat = p.parseExprNoTernary()
 		}
 
 		// Check for guard clause: pattern if condition

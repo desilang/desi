@@ -667,6 +667,32 @@ func (c *checker) typ(e ast.Expr) types.T {
 		c.add(diagAt("DTE0004", x.Span, "? operator can only be applied to Result or Option types, got "+t.String()))
 		return nil
 
+	case *ast.IfExpr:
+		// Ternary expression: value if condition else other
+		thenType := c.typ(x.Then)
+		condType := c.typ(x.Cond)
+		elseType := c.typ(x.Else)
+
+		// Check condition is bool
+		if condType != nil && !types.Equal(condType, types.Bool) {
+			c.add(diagAt("DTE0004", x.Cond.SpanOf(), "ternary condition must be bool, got "+condType.String()))
+		}
+
+		// Check both branches have compatible types
+		if thenType != nil && elseType != nil {
+			if !types.Assignable(thenType, elseType) && !types.Assignable(elseType, thenType) {
+				c.add(diagAt("DTE0004", x.Span, "ternary branches have incompatible types: "+thenType.String()+" and "+elseType.String()))
+			}
+		}
+
+		// Result type is the then branch type (or common type)
+		resultType := thenType
+		if resultType == nil {
+			resultType = elseType
+		}
+		c.info.Types[x] = resultType
+		return resultType
+
 	case *ast.LambdaExpr:
 		// Require explicit return type via lambda<RetType>
 		var retType types.T
