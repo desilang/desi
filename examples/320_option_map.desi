@@ -9,6 +9,7 @@
 # Nothing.map(double) = Nothing
 # Chained: Some(5).map(double).map(double) = Some(20)
 # Some(10).map(add_ten) = Some(20)
+# Type transformation: Some(42) -> "42"
 # Done!
 
 def double(x: int) -> int:
@@ -16,6 +17,9 @@ def double(x: int) -> int:
 
 def add_ten(x: int) -> int:
     return x + 10
+
+def to_str(x: int) -> str:
+    return f"{x}"
 
 def main():
     # Basic case: map over Some value
@@ -41,5 +45,11 @@ def main():
     let result = maybe.map(add_ten)
     if result.is_some():
         print(f"Some(10).map(add_ten) = Some({result.unwrap()})")
+    
+    # Type transformation: int -> str
+    let res: Option<int> = Option.Some(42)
+    let str_result = res.map(to_str)
+    if str_result.is_some():
+        print(f"Type transformation: Some(42) -> \"{str_result.unwrap()}\"")
     
     print("Done!")
