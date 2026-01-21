@@ -16,6 +16,24 @@ void __panic_divzero(void) {
     exit(1);
 }
 
+// Panic function for unwrapping None (Option.Nothing)
+void __panic_unwrap_none(void) {
+    fprintf(stderr, "panic: called unwrap() on a None value\n");
+    exit(1);
+}
+
+// Panic function for unwrapping Err (Result.Err)
+void __panic_unwrap_err(void) {
+    fprintf(stderr, "panic: called unwrap() on an Err value\n");
+    exit(1);
+}
+
+// Panic function for unwrap_err on Ok (Result.Ok)
+void __panic_unwrap_ok(void) {
+    fprintf(stderr, "panic: called unwrap_err() on an Ok value\n");
+    exit(1);
+}
+
 // Math helper functions for float special values
 #include <math.h>
 
