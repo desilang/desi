@@ -977,6 +977,9 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "unwrap_err":
 		// () -> E
 		methodType = types.FuncOf(nil, errType, false)
+	case "unwrap_or":
+		// (default: T) -> T
+		methodType = types.FuncOf([]types.T{okType}, okType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
 		return nil

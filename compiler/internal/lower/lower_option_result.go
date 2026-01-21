@@ -126,6 +126,94 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		val := ls.b.FreshTemp("val")
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
+
+	case "unwrap_or":
+		// If tag == 0 (Some), return payload. If tag == 1 (None), return default.
+		// args[0] is the default value
+
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Lower the default argument first
+		defaultVal := ls.lowerExpr(args[0])
+
+		// Get tag
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Check: tag == 0 means Some
+		isSome := ls.b.FreshTemp("is_some")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isSome,
+			Type: "i1",
+		})
+
+		// Get element type
+		recvType := ls.info.Types[x.X]
+		var elemType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 0 {
+				elemType = g.Args[0]
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				elemType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		if elemType == nil {
+			return defaultVal
+		}
+
+		valType := lowerType(elemType)
+
+		// Allocate result slot on stack
+		resultSlot := ls.b.FreshTemp("unwrap_or_slot")
+		ls.b.Emit(&hir.Alloca{Type: valType, Dst: resultSlot})
+
+		// Store default first (will be overwritten if Some)
+		ls.b.Emit(&hir.Store{Val: defaultVal, Dst: resultSlot})
+
+		// Create conditional block for Some case
+		curBlock := ls.b.Block()
+		someBlock := ls.b.NewBlock("unwrap_or_some")
+		ls.b.SetBlock(someBlock)
+
+		// In Some block: load payload and store to result
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		val := ls.b.FreshTemp("unwrap_or_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+
+		ls.b.Emit(&hir.Store{Val: val, Dst: resultSlot})
+
+		// Switch back and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isSome, Then: someBlock, Else: nil})
+
+		// Load result from slot
+		result := ls.b.FreshTemp("unwrap_or_result")
+		ls.b.Emit(&hir.Load{Type: valType, Src: resultSlot, Dst: result})
+		return result
 	}
 
 	return hir.ConstInt{Text: "0"}
@@ -254,6 +342,94 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		val := ls.b.FreshTemp("val")
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
+
+	case "unwrap_or":
+		// If tag == 0 (Ok), return payload. If tag == 1 (Err), return default.
+		// args[0] is the default value
+
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Lower the default argument first
+		defaultVal := ls.lowerExpr(args[0])
+
+		// Get tag
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Check: tag == 0 means Ok
+		isOk := ls.b.FreshTemp("is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		// Get element type (T from Result<T, E>)
+		recvType := ls.info.Types[x.X]
+		var elemType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 0 {
+				elemType = g.Args[0] // T
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				elemType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		if elemType == nil {
+			return defaultVal
+		}
+
+		valType := lowerType(elemType)
+
+		// Allocate result slot on stack
+		resultSlot := ls.b.FreshTemp("unwrap_or_slot")
+		ls.b.Emit(&hir.Alloca{Type: valType, Dst: resultSlot})
+
+		// Store default first (will be overwritten if Ok)
+		ls.b.Emit(&hir.Store{Val: defaultVal, Dst: resultSlot})
+
+		// Create conditional block for Ok case
+		curBlock := ls.b.Block()
+		okBlock := ls.b.NewBlock("result_unwrap_or_ok")
+		ls.b.SetBlock(okBlock)
+
+		// In Ok block: load payload and store to result
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		val := ls.b.FreshTemp("unwrap_or_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+
+		ls.b.Emit(&hir.Store{Val: val, Dst: resultSlot})
+
+		// Switch back and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: okBlock, Else: nil})
+
+		// Load result from slot
+		result := ls.b.FreshTemp("unwrap_or_result")
+		ls.b.Emit(&hir.Load{Type: valType, Src: resultSlot, Dst: result})
+		return result
 
 	case "unwrap_err":
 		// If tag == 1 (Err), return payload. If tag == 0 (Ok), panic.
