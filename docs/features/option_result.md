@@ -138,6 +138,7 @@ match result:
 | `unwrap()` | `T` | Returns the value (panics if Nothing) |
 | `unwrap_or(default)` | `T` | Returns value if Some, otherwise `default` |
 | `expect(msg)` | `T` | Like unwrap but panics with custom message |
+| `map(fn)` | `Option<U>` | Transforms value: `Some(x).map(f) -> Some(f(x))` |
 
 ### Result<T, E> Methods
 
@@ -239,6 +240,43 @@ Useful for chaining with Option methods:
 ```desi
 let res: Result<int, str> = do_something()
 let val = res.ok().unwrap_or(default_value)
+```
+
+### map() - Transform Contained Values
+
+Use `map(fn)` to transform the value inside an Option or Result without unwrapping:
+
+```desi
+def double(x: int) -> int:
+    return x * 2
+
+let opt: Option<int> = Option.Some(21)
+let mapped = opt.map(double)  # Some(42)
+
+let nothing: Option<int> = Option.Nothing
+let mapped2 = nothing.map(double)  # Nothing
+```
+
+**Key behaviors:**
+- `Some(x).map(f)` → `Some(f(x))` - Applies function to contained value
+- `Nothing.map(f)` → `Nothing` - Preserves Nothing, function is never called
+
+**Chaining:**
+
+```desi
+let opt: Option<int> = Option.Some(5)
+let result = opt.map(double).map(double)  # Some(20)
+```
+
+**Return type inference:**
+The return type of `map` is automatically inferred from the function's return type:
+
+```desi
+def add_ten(x: int) -> int:
+    return x + 10
+
+let opt: Option<int> = Option.Some(10)
+let result = opt.map(add_ten)  # Type is Option<int>
 ```
 
 ---
