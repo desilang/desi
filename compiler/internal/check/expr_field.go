@@ -943,6 +943,9 @@ func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "unwrap_or":
 		// (default: T) -> T
 		methodType = types.FuncOf([]types.T{elemType}, elemType, false)
+	case "expect":
+		// (msg: str) -> T - like unwrap but with custom panic message
+		methodType = types.FuncOf([]types.T{types.Str}, elemType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
 		return nil
@@ -980,6 +983,12 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "unwrap_or":
 		// (default: T) -> T
 		methodType = types.FuncOf([]types.T{okType}, okType, false)
+	case "expect":
+		// (msg: str) -> T - like unwrap but with custom panic message
+		methodType = types.FuncOf([]types.T{types.Str}, okType, false)
+	case "expect_err":
+		// (msg: str) -> E - like unwrap_err but with custom panic message
+		methodType = types.FuncOf([]types.T{types.Str}, errType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
 		return nil

@@ -214,6 +214,80 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		result := ls.b.FreshTemp("unwrap_or_result")
 		ls.b.Emit(&hir.Load{Type: valType, Src: resultSlot, Dst: result})
 		return result
+
+	case "expect":
+		// If tag == 0 (Some), return payload. If tag == 1 (None), panic with custom msg.
+		// args[0] is the message
+
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Lower the message argument
+		msgVal := ls.lowerExpr(args[0])
+
+		// Get tag
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Check: tag != 0 means None - should panic
+		isNone := ls.b.FreshTemp("is_none")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "!=",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isNone,
+			Type: "i1",
+		})
+
+		// Create panic block
+		curBlock := ls.b.Block()
+		panicBlock := ls.b.NewBlock("expect_panic")
+		ls.b.SetBlock(panicBlock)
+		ls.b.Emit(&hir.Call{Fn: "__panic_expect", Args: []hir.Value{msgVal}})
+
+		// Switch back and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isNone, Then: panicBlock, Else: nil})
+
+		// Get payload
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		recvType := ls.info.Types[x.X]
+		var elemType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 0 {
+				elemType = g.Args[0]
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				elemType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		if elemType == nil {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		valType := lowerType(elemType)
+		val := ls.b.FreshTemp("expect_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+		return val
 	}
 
 	return hir.ConstInt{Text: "0"}
@@ -503,6 +577,138 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 
 		valType := lowerType(errType)
 		val := ls.b.FreshTemp("err_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+		return val
+
+	case "expect":
+		// If tag == 0 (Ok), return payload. If tag == 1 (Err), panic with custom msg.
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		msgVal := ls.lowerExpr(args[0])
+
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		isErr := ls.b.FreshTemp("is_err")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "!=",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isErr,
+			Type: "i1",
+		})
+
+		curBlock := ls.b.Block()
+		panicBlock := ls.b.NewBlock("expect_panic")
+		ls.b.SetBlock(panicBlock)
+		ls.b.Emit(&hir.Call{Fn: "__panic_expect", Args: []hir.Value{msgVal}})
+
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isErr, Then: panicBlock, Else: nil})
+
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		recvType := ls.info.Types[x.X]
+		var elemType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 0 {
+				elemType = g.Args[0]
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				elemType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		if elemType == nil {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		valType := lowerType(elemType)
+		val := ls.b.FreshTemp("expect_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+		return val
+
+	case "expect_err":
+		// If tag == 1 (Err), return payload. If tag == 0 (Ok), panic with custom msg.
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		msgVal := ls.lowerExpr(args[0])
+
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		isOk := ls.b.FreshTemp("is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		curBlock := ls.b.Block()
+		panicBlock := ls.b.NewBlock("expect_err_panic")
+		ls.b.SetBlock(panicBlock)
+		ls.b.Emit(&hir.Call{Fn: "__panic_expect", Args: []hir.Value{msgVal}})
+
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: panicBlock, Else: nil})
+
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+
+		recvType := ls.info.Types[x.X]
+		var errType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 1 {
+				errType = g.Args[1]
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 1 && len(e.Variants[1].Fields) > 0 {
+				errType = e.Variants[1].Fields[0].Type
+			}
+		}
+
+		if errType == nil {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		valType := lowerType(errType)
+		val := ls.b.FreshTemp("expect_err_val")
 		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
 		return val
 	}
