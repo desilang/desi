@@ -1,0 +1,56 @@
+# Test Result.ok() and Result.err() methods
+# ok() converts Result<T, E> to Option<T> - extracts the Ok value
+# err() converts Result<T, E> to Option<E> - extracts the Err value
+
+def main() -> int:
+    print("=== Result.ok() Tests ===")
+    
+    # ok() on Ok result - returns Some
+    let ok_result: Result<int, str> = Result.Ok(42)
+    let opt1 = ok_result.ok()
+    if opt1.is_some():
+        print(f"Result.Ok(42).ok() = Some({opt1.unwrap()})")
+    
+    # ok() on Err result - returns Nothing
+    let err_result: Result<int, str> = Result.Err("error")
+    let opt2 = err_result.ok()
+    if opt2.is_nothing():
+        print("Result.Err(\"error\").ok() = Nothing")
+    
+    print("=== Result.err() Tests ===")
+    
+    # err() on Err result - returns Some
+    let opt3 = err_result.err()
+    if opt3.is_some():
+        print(f"Result.Err(\"error\").err() = Some(\"{opt3.unwrap()}\")")
+    
+    # err() on Ok result - returns Nothing
+    let opt4 = ok_result.err()
+    if opt4.is_nothing():
+        print("Result.Ok(42).err() = Nothing")
+    
+    print("=== Practical Usage ===")
+    
+    # Use ok() to convert Result to Option for optional chaining
+    let res: Result<int, str> = Result.Ok(100)
+    let val = res.ok().unwrap_or(0)
+    print(f"Result.Ok(100).ok().unwrap_or(0) = {val}")
+    
+    let res2: Result<int, str> = Result.Err("failed")
+    let val2 = res2.ok().unwrap_or(0)
+    print(f"Result.Err(\"failed\").ok().unwrap_or(0) = {val2}")
+    
+    print("=== All tests passed! ===")
+    return 0
+
+# EXPECTED_OUTPUT:
+# === Result.ok() Tests ===
+# Result.Ok(42).ok() = Some(42)
+# Result.Err("error").ok() = Nothing
+# === Result.err() Tests ===
+# Result.Err("error").err() = Some("error")
+# Result.Ok(42).err() = Nothing
+# === Practical Usage ===
+# Result.Ok(100).ok().unwrap_or(0) = 100
+# Result.Err("failed").ok().unwrap_or(0) = 0
+# === All tests passed! ===
