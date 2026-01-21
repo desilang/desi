@@ -946,6 +946,12 @@ func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "expect":
 		// (msg: str) -> T - like unwrap but with custom panic message
 		methodType = types.FuncOf([]types.T{types.Str}, elemType, false)
+	case "map":
+		// map(fn: Any) -> Option<Any>
+		// The actual return type is inferred at call site from lambda's return type
+		// We use Any here as a placeholder that will be refined in expr_call.go
+		resultType := types.OptionOf(types.Any)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
 		return nil
