@@ -1,0 +1,37 @@
+# Test functions returning Option and Result types
+# This tests the fix for return type inference with Option/Result constructors
+# EXPECTED_OUTPUT:
+# find_value(1) = 42
+# find_value(99) = -1
+# divide(10, 2) = 5
+# divide(10, 0) = error
+# Test passed!
+
+def find_value(id: int) -> Option<int>:
+    if id == 1:
+        return Option.Some(42)
+    return Option.Nothing
+
+def divide(a: int, b: int) -> Result<int, str>:
+    if b == 0:
+        return Result.Err("division by zero")
+    return Result.Ok(a / b)
+
+def main() -> int:
+    # Test Option returning function
+    let v1 = find_value(1)
+    print(f"find_value(1) = {v1.unwrap_or(-1)}")
+    
+    let v2 = find_value(99)
+    print(f"find_value(99) = {v2.unwrap_or(-1)}")
+    
+    # Test Result returning function
+    let r1 = divide(10, 2)
+    print(f"divide(10, 2) = {r1.unwrap_or(-1)}")
+    
+    let r2 = divide(10, 0)
+    if r2.is_err():
+        print("divide(10, 0) = error")
+    
+    print("Test passed!")
+    return 0
