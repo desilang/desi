@@ -2915,6 +2915,7 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 
 	// Get element value and bind loop variable
 	var elemVal hir.Value
+	var loopVarType types.T = types.Int // default
 	if isRange {
 		// For range, the index IS the element value (cast to i32)
 		elemI32 := ls.b.FreshTemp("range_elem")
@@ -2929,14 +2930,40 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 		elemPtr := ls.b.FreshTemp("comp_elem_ptr")
 		ls.b.Emit(&hir.Call{Dst: elemPtr, Fn: "list_get", Args: []hir.Value{iterVal, idxI32}, Type: "ptr"})
 
-		// Cast to element type (default i32 for int lists)
-		elemTemp := ls.b.FreshTemp("comp_elem")
-		ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtr, Type: "i32"})
-		elemVal = elemTemp
+		// Determine actual element type from type checker
+		elemLLVMType := "i32" // default
+		if ls.info != nil {
+			if iterType := ls.info.Types[clause.Iter]; iterType != nil {
+				switch it := iterType.(type) {
+				case *types.List:
+					elemLLVMType = lowerType(it.Elem)
+					loopVarType = it.Elem
+				case *types.Set:
+					elemLLVMType = lowerType(it.Elem)
+					loopVarType = it.Elem
+				case *types.Generic:
+					// Handle generic list like list[Box<int>]
+					if list, ok := it.Base.(*types.List); ok {
+						elemLLVMType = lowerType(list.Elem)
+						loopVarType = list.Elem
+					}
+				}
+			}
+		}
+
+		// If element is a class/struct (ptr), don't cast - use directly
+		if elemLLVMType == "ptr" {
+			elemVal = elemPtr
+		} else {
+			// Cast to element type for primitives
+			elemTemp := ls.b.FreshTemp("comp_elem")
+			ls.b.Emit(&hir.Cast{Dst: elemTemp, Src: elemPtr, Type: elemLLVMType})
+			elemVal = elemTemp
+		}
 	}
 
 	// Bind loop variable for use in element expression
-	ls.b.Emit(&hir.Let{Name: loopVarName, Init: elemVal, Type: types.Int})
+	ls.b.Emit(&hir.Let{Name: loopVarName, Init: elemVal, Type: loopVarType})
 
 	// 7. Evaluate element expression (the transformed value)
 	transformedElem := ls.lowerExpr(c.Elem)

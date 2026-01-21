@@ -1,0 +1,43 @@
+# Test: Comprehension type inference with generic methods
+# This file tests type inference when calling generic class methods in comprehensions
+
+class Box<T>:
+    pub mut value: T
+    
+    pub def __new__(self, value: T):
+        self.value := value
+    
+    pub def get(self) -> T:
+        return self.value
+
+# EXPECTED_OUTPUT:
+# Individual box values:
+#   box.get() = 1
+#   box.get() = 2
+#   box.get() = 3
+# Comprehension test:
+# len(values) = 3
+#   value = 1
+#   value = 2
+#   value = 3
+# Comprehension generic method test done!
+
+def main():
+    # Simple case: create boxes
+    let boxes: list[Box<int>] = [Box(value=1), Box(value=2), Box(value=3)]
+    
+    # Print individual box values first (non-comprehension)
+    print("Individual box values:")
+    for box in boxes:
+        print(f"  box.get() = {box.get()}")
+    
+    # Now test comprehension
+    print("Comprehension test:")
+    let values: list[int] = [box.get() for box in boxes]
+    print(f"len(values) = {len(values)}")
+    
+    # Print individual values
+    for v in values:
+        print(f"  value = {v}")
+    
+    print("Comprehension generic method test done!")
