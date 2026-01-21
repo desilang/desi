@@ -92,6 +92,7 @@ nav:
     - Pipeline Operator: language/pipeline.md
   - Generics:
     - Trait Bounds: generics/trait-bounds.md
+    - Turbofish Syntax: generics/turbofish.md
   - Reference:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md

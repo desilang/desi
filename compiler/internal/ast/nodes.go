@@ -295,8 +295,9 @@ type CallArg struct {
 
 type CallExpr struct {
 	Callee   Expr
-	Args     []Expr    // legacy positional-only list (kept for back-compat)
-	ArgNodes []CallArg // canonical argument list with names
+	TypeArgs []*TypeName // explicit type args from turbofish syntax: foo::<T>(...)
+	Args     []Expr      // legacy positional-only list (kept for back-compat)
+	ArgNodes []CallArg   // canonical argument list with names
 	Span     diag.Span
 }
 
