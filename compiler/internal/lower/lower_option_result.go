@@ -392,17 +392,13 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 			Dst:     resultPayloadSlot,
 		})
 
-		// For primitive types, we need to store the value directly
-		// For pointer types, we store the pointer
-		if fnRetType == "i32" || fnRetType == "i64" || fnRetType == "i8" || fnRetType == "double" || fnRetType == "i1" {
-			// Allocate space for the primitive value and store it there
-			primStorage := ls.b.FreshTemp("prim_storage")
-			ls.b.Emit(&hir.Alloca{Type: fnRetType, Count: 1, Dst: primStorage})
-			ls.b.Emit(&hir.Store{Dst: primStorage, Val: callResult})
-			ls.b.Emit(&hir.Store{Dst: resultPayloadSlot, Val: primStorage})
-		} else {
-			ls.b.Emit(&hir.Store{Dst: resultPayloadSlot, Val: callResult})
-		}
+		// For ALL types, we need to allocate storage for the value
+		// because unwrap expects the payload slot to contain a pointer TO the value.
+		// The Option layout is: { i32 tag, ptr payload_ptr } where payload_ptr points to the actual value.
+		valStorage := ls.b.FreshTemp("val_storage")
+		ls.b.Emit(&hir.Alloca{Type: fnRetType, Count: 1, Dst: valStorage})
+		ls.b.Emit(&hir.Store{Dst: valStorage, Val: callResult})
+		ls.b.Emit(&hir.Store{Dst: resultPayloadSlot, Val: valStorage})
 
 		// Switch back to main block and emit conditional
 		ls.b.SetBlock(curBlock)
