@@ -913,6 +913,13 @@ func (c *checker) resolveListMethod(x *ast.FieldExpr, l *types.List) types.T {
 	case "iter":
 		// iter() -> ListIter[T] - creates lazy iterator
 		methodType = types.FuncOf(nil, &types.ListIter{Elem: l.Elem}, false)
+	case "map":
+		// map(fn: (T) -> U) -> list[U]
+		// The actual return type is inferred at call site from lambda's return type
+		methodType = types.FuncOf([]types.T{types.Any}, types.ListOf(types.Any), false)
+	case "filter":
+		// filter(fn: (T) -> bool) -> list[T]
+		methodType = types.FuncOf([]types.T{types.Any}, l, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on list"))
 		return nil

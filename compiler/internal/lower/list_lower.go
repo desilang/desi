@@ -183,6 +183,174 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		ls.b.Emit(&hir.Alloca{Dst: iterPtr, Type: "{ptr, i64}", Count: 1})
 		ls.b.Emit(&hir.Call{Fn: "list_iter_init", Args: []hir.Value{iterPtr, receiver}})
 		return iterPtr
+
+	case "map":
+		// map(fn) -> list[U]
+		// Create new list, iterate source, apply fn to each element, append result
+		if len(args) < 1 {
+			return nil
+		}
+
+		// Get the function name from the argument using AST pattern matching
+		funcExpr := args[0]
+		fnName := ""
+		if id, ok := funcExpr.(*ast.Ident); ok {
+			fnName = id.Name
+		} else if fe, ok := funcExpr.(*ast.FieldExpr); ok {
+			// Qualified name like mod.func
+			fnName = ls.calleeName(funcExpr)
+			_ = fe
+		} else {
+			// Fallback
+			fnName = ls.calleeName(funcExpr)
+		}
+
+		// Get return type from type info for proper casting
+		fnRetType := "ptr"
+		if ls.info != nil {
+			if fnType, ok := ls.info.Types[args[0]].(*types.Func); ok {
+				fnRetType = lowerType(fnType.Ret)
+			}
+		}
+
+		// Create result list
+		resultList := ls.b.FreshTemp("map_result_list")
+		ls.b.Emit(&hir.Call{Dst: resultList, Fn: "list_new", Args: nil})
+
+		// Get length of source list
+		srcLen := ls.b.FreshTemp("src_len")
+		ls.b.Emit(&hir.Call{Dst: srcLen, Fn: "list_len", Args: []hir.Value{receiver}})
+
+		// Create index pointer (on stack so it persists across blocks)
+		idxPtr := ls.b.FreshTemp("idx_ptr")
+		ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+		// Create condition block
+		condBlk := ls.b.NewBlock("map_cond")
+		oldCur := ls.b.Block()
+
+		ls.b.SetBlock(condBlk)
+		idxVal := ls.b.FreshTemp("map_idx")
+		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+		condTemp := ls.b.FreshTemp("map_cond_val")
+		ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: srcLen, Type: "i1"})
+		ls.b.SetBlock(oldCur)
+
+		// Create body block
+		bodyBlk := ls.b.NewBlock("map_body")
+		ls.b.SetBlock(bodyBlk)
+
+		// Load current index
+		idxBody := ls.b.FreshTemp("map_idx_body")
+		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+		// Get element from source list
+		elem := ls.b.FreshTemp("map_elem")
+		ls.b.Emit(&hir.Call{Dst: elem, Fn: "list_get", Args: []hir.Value{receiver, idxBody}, Type: "ptr"})
+
+		// Call the function with the element
+		fnResult := ls.b.FreshTemp("fn_result")
+		ls.b.Emit(&hir.Call{Dst: fnResult, Fn: fnName, Args: []hir.Value{elem}, Type: fnRetType})
+
+		// Cast result and append to result list
+		fnResultPtr := ls.b.FreshTemp("fn_result_ptr")
+		ls.b.Emit(&hir.Cast{Dst: fnResultPtr, Src: fnResult, Type: "ptr"})
+		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{resultList, fnResultPtr, hir.ConstInt{Text: "0", Type: "i32"}}})
+
+		// Increment index
+		nextIdx := ls.b.FreshTemp("next_idx")
+		ls.b.Emit(&hir.BinaryOp{Dst: nextIdx, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: nextIdx})
+
+		// Emit while loop from original block
+		ls.b.SetBlock(oldCur)
+		ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+		return resultList
+
+	case "filter":
+		// filter(fn) -> list[T]
+		// Create new list, iterate source, if fn(elem) is true, append elem
+		if len(args) < 1 {
+			return nil
+		}
+
+		// Get the function name from the argument using AST pattern matching
+		funcExpr := args[0]
+		fnName := ""
+		if id, ok := funcExpr.(*ast.Ident); ok {
+			fnName = id.Name
+		} else if fe, ok := funcExpr.(*ast.FieldExpr); ok {
+			// Qualified name like mod.func
+			fnName = ls.calleeName(funcExpr)
+			_ = fe
+		} else {
+			// Fallback
+			fnName = ls.calleeName(funcExpr)
+		}
+
+		// Create result list
+		resultList := ls.b.FreshTemp("filter_result_list")
+		ls.b.Emit(&hir.Call{Dst: resultList, Fn: "list_new", Args: nil})
+
+		// Get length of source list
+		srcLen := ls.b.FreshTemp("src_len")
+		ls.b.Emit(&hir.Call{Dst: srcLen, Fn: "list_len", Args: []hir.Value{receiver}})
+
+		// Create index pointer
+		idxPtr := ls.b.FreshTemp("idx_ptr")
+		ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+		// Create condition block
+		condBlk := ls.b.NewBlock("filter_cond")
+		oldCur := ls.b.Block()
+
+		ls.b.SetBlock(condBlk)
+		idxVal := ls.b.FreshTemp("filter_idx")
+		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+		condTemp := ls.b.FreshTemp("filter_cond_val")
+		ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: srcLen, Type: "i1"})
+		ls.b.SetBlock(oldCur)
+
+		// Create body block
+		bodyBlk := ls.b.NewBlock("filter_body")
+		ls.b.SetBlock(bodyBlk)
+
+		// Load current index
+		idxBody := ls.b.FreshTemp("filter_idx_body")
+		ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+		// Get element from source list
+		elem := ls.b.FreshTemp("filter_elem")
+		ls.b.Emit(&hir.Call{Dst: elem, Fn: "list_get", Args: []hir.Value{receiver, idxBody}, Type: "ptr"})
+
+		// Call the predicate function
+		predResult := ls.b.FreshTemp("pred_result")
+		ls.b.Emit(&hir.Call{Dst: predResult, Fn: fnName, Args: []hir.Value{elem}, Type: "i1"})
+
+		// Create conditional append block
+		appendBlk := ls.b.NewBlock("filter_append")
+		ls.b.SetBlock(appendBlk)
+		elemPtr := ls.b.FreshTemp("elem_ptr")
+		ls.b.Emit(&hir.Cast{Dst: elemPtr, Src: elem, Type: "ptr"})
+		ls.b.Emit(&hir.Call{Fn: "list_append", Args: []hir.Value{resultList, elemPtr, hir.ConstInt{Text: "0", Type: "i32"}}})
+
+		// Emit conditional in body block
+		ls.b.SetBlock(bodyBlk)
+		ls.b.Emit(&hir.If{Cond: predResult, Then: appendBlk, Else: nil})
+
+		// Increment index (after conditional)
+		nextIdx := ls.b.FreshTemp("next_idx")
+		ls.b.Emit(&hir.BinaryOp{Dst: nextIdx, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: nextIdx})
+
+		// Emit while loop from original block
+		ls.b.SetBlock(oldCur)
+		ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+		return resultList
 	}
 
 	return nil
