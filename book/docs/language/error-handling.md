@@ -44,6 +44,9 @@ match value:
 | `is_some()` | `bool` | Returns true if Some |
 | `is_nothing()` | `bool` | Returns true if Nothing |
 | `unwrap()` | `T` | Returns value or panics if Nothing |
+| `unwrap_or(default)` | `T` | Returns value or default if Nothing |
+| `expect(msg)` | `T` | Like unwrap but panics with custom message |
+| `map(fn)` | `Option<U>` | Transforms value: `Some(x).map(f) -> Some(f(x))` |
 
 ```desi
 let x: Option<int> = Option.Some(42)
@@ -288,7 +291,31 @@ def get_or_default(opt: Option<int>, default: int) -> int:
         Option.Nothing: default
 ```
 
-### Map Pattern
+### Built-in map() Method
+
+Desi provides a built-in `map()` method for Option types:
+
+```desi
+def double(x: int) -> int:
+    return x * 2
+
+let opt: Option<int> = Option.Some(21)
+let mapped = opt.map(double)  # Some(42)
+
+let nothing: Option<int> = Option.Nothing
+let mapped2 = nothing.map(double)  # Nothing
+```
+
+**Behavior:**
+- `Some(x).map(f)` → `Some(f(x))` - transforms the contained value
+- `Nothing.map(f)` → `Nothing` - preserves Nothing, function is never called
+
+**Chaining:**
+```desi
+let result = opt.map(double).map(double)  # Some(84)
+```
+
+For reference, this is equivalent to:
 
 ```desi
 def map_option<T, U>(opt: Option<T>, f: (T) -> U) -> Option<U>:
