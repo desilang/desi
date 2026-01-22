@@ -126,6 +126,9 @@ match result:
 | `is_err()` | `bool` | Returns true if Err |
 | `unwrap()` | `T` | Returns value or panics |
 | `unwrap_err()` | `E` | Returns error or panics |
+| `unwrap_or(default)` | `T` | Returns value or default if Err |
+| `expect(msg)` | `T` | Like unwrap but panics with custom message |
+| `map(fn)` | `Result<U, E>` | Transforms Ok value: `Ok(x).map(f) -> Ok(f(x))` |
 
 ```desi
 let x: Result<int, str> = Result.Ok(100)
