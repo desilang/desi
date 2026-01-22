@@ -1,6 +1,7 @@
 package check
 
 import (
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )

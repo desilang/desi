@@ -1,0 +1,45 @@
+# Option.map - Transforms contained value
+#
+# Option.map(fn) applies the function to the contained value if Some,
+# returning a new Option with the transformed value. Returns Nothing if
+# the Option is Nothing.
+#
+# EXPECTED_OUTPUT:
+# Some(21).map(double) = Some(42)
+# Nothing.map(double) = Nothing
+# Chained: Some(5).map(double).map(double) = Some(20)
+# Some(10).map(add_ten) = Some(20)
+# Done!
+
+def double(x: int) -> int:
+    return x * 2
+
+def add_ten(x: int) -> int:
+    return x + 10
+
+def main():
+    # Basic case: map over Some value
+    let opt: Option<int> = Option.Some(21)
+    let mapped = opt.map(double)
+    if mapped.is_some():
+        print(f"Some(21).map(double) = Some({mapped.unwrap()})")
+    
+    # Nothing case: map preserves Nothing
+    let nothing: Option<int> = Option.Nothing
+    let mapped2 = nothing.map(double)
+    if mapped2.is_nothing():
+        print("Nothing.map(double) = Nothing")
+    
+    # Chained map operations
+    let option: Option<int> = Option.Some(5)
+    let chained = option.map(double).map(double)
+    if chained.is_some():
+        print(f"Chained: Some(5).map(double).map(double) = Some({chained.unwrap()})")
+    
+    # Multiple different functions
+    let maybe: Option<int> = Option.Some(10)
+    let result = maybe.map(add_ten)
+    if result.is_some():
+        print(f"Some(10).map(add_ten) = Some({result.unwrap()})")
+    
+    print("Done!")

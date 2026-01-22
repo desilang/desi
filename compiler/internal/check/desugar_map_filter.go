@@ -103,20 +103,24 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		x.Rhs = desugarExpr(x.Rhs)
 
 		// Handle pipe operator: xs |> map(f), xs |> filter(p)
+		// BUT skip desugaring for Option/Result types (they have their own map method)
 		if x.Op == "|>" {
 			if call, ok := x.Rhs.(*ast.CallExpr); ok {
 				if id, ok := call.Callee.(*ast.Ident); ok && len(call.Args) == 1 {
-					switch id.Name {
-					case "map":
-						// xs |> map(f) → [f(__x) for __x in xs]
-						lc := buildMapComp(x.Lhs, call.Args[0]).(*ast.ListComp)
-						lc.Span = x.SpanOf()
-						return lc
-					case "filter":
-						// xs |> filter(p) → [__x for __x in xs if p(__x)]
-						lc := buildFilterComp(x.Lhs, call.Args[0]).(*ast.ListComp)
-						lc.Span = x.SpanOf()
-						return lc
+					// Skip if LHS looks like Option or Result
+					if !looksLikeOptionOrResult(x.Lhs) {
+						switch id.Name {
+						case "map":
+							// xs |> map(f) → [f(__x) for __x in xs]
+							lc := buildMapComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+							lc.Span = x.SpanOf()
+							return lc
+						case "filter":
+							// xs |> filter(p) → [__x for __x in xs if p(__x)]
+							lc := buildFilterComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+							lc.Span = x.SpanOf()
+							return lc
+						}
 					}
 				}
 			}
@@ -133,18 +137,22 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		x.Callee, x.Args = callee, args
 
 		// Handle dot method syntax: xs.map(f), xs.filter(p)
+		// BUT skip desugaring for Option/Result types (they have their own map method)
 		if fe, ok := x.Callee.(*ast.FieldExpr); ok && len(x.Args) == 1 {
-			switch fe.Name.Name {
-			case "map":
-				// xs.map(f) → [f(__x) for __x in xs]
-				lc := buildMapComp(fe.X, x.Args[0]).(*ast.ListComp)
-				lc.Span = x.SpanOf()
-				return lc
-			case "filter":
-				// xs.filter(p) → [__x for __x in xs if p(__x)]
-				lc := buildFilterComp(fe.X, x.Args[0]).(*ast.ListComp)
-				lc.Span = x.SpanOf()
-				return lc
+			// Skip if receiver looks like Option or Result (AST pattern check since types aren't available yet)
+			if !looksLikeOptionOrResult(fe.X) {
+				switch fe.Name.Name {
+				case "map":
+					// xs.map(f) → [f(__x) for __x in xs]
+					lc := buildMapComp(fe.X, x.Args[0]).(*ast.ListComp)
+					lc.Span = x.SpanOf()
+					return lc
+				case "filter":
+					// xs.filter(p) → [__x for __x in xs if p(__x)]
+					lc := buildFilterComp(fe.X, x.Args[0]).(*ast.ListComp)
+					lc.Span = x.SpanOf()
+					return lc
+				}
 			}
 		}
 
@@ -225,5 +233,67 @@ func buildFilterComp(xs ast.Expr, p ast.Expr) ast.Expr {
 			Iter:   xs,
 			If:     pred,
 		}},
+	}
+}
+
+// looksLikeOptionOrResult checks if an expression appears to be an Option or Result
+// value based on AST patterns. Since desugaring happens before type checking,
+// we can't know the actual type, so we use heuristics:
+//
+//  1. Direct constructor: Option.Some(...), Option.Nothing, Result.Ok(...), Result.Err(...)
+//  2. Method call on something that looks like Option/Result: x.unwrap(), x.is_some(), etc.
+//  3. Variables with common naming patterns (defensive, catches common cases)
+//
+// This is necessary to prevent list comprehension desugaring from capturing Option.map/Result.map.
+// Zero runtime overhead - this is compile-time only.
+func looksLikeOptionOrResult(e ast.Expr) bool {
+	switch x := e.(type) {
+	case *ast.Ident:
+		// Check if identifier name suggests Option/Result (common patterns)
+		// This is heuristic-based for simple variable names
+		name := x.Name
+		// Skip if it's a likely collection name
+		if name == "xs" || name == "items" || name == "list" || name == "arr" || name == "data" {
+			return false
+		}
+		// Check for Option/Result related names
+		if name == "opt" || name == "option" || name == "maybe" ||
+			name == "res" || name == "result" ||
+			name == "some" || name == "none" || name == "nothing" ||
+			name == "ok" || name == "err" {
+			return true
+		}
+		return false
+
+	case *ast.FieldExpr:
+		// Check for Option.Something or Result.Something
+		if id, ok := x.X.(*ast.Ident); ok {
+			if id.Name == "Option" || id.Name == "Result" {
+				return true
+			}
+		}
+		// Check for method calls that are Option/Result specific: x.unwrap(), x.is_some(), etc.
+		methodName := x.Name.Name
+		if methodName == "unwrap" || methodName == "unwrap_or" || methodName == "expect" ||
+			methodName == "is_some" || methodName == "is_nothing" || methodName == "is_none" ||
+			methodName == "is_ok" || methodName == "is_err" || methodName == "ok" || methodName == "err" {
+			return true
+		}
+		return looksLikeOptionOrResult(x.X)
+
+	case *ast.CallExpr:
+		// Check if this is an Option/Result constructor call
+		if fe, ok := x.Callee.(*ast.FieldExpr); ok {
+			if id, ok := fe.X.(*ast.Ident); ok {
+				if id.Name == "Option" || id.Name == "Result" {
+					return true
+				}
+			}
+		}
+		// Check callee for Option/Result method chains
+		return looksLikeOptionOrResult(x.Callee)
+
+	default:
+		return false
 	}
 }

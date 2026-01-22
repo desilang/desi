@@ -342,6 +342,10 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			if types.Equal(receiverType, types.File) {
 				isBuiltinCollection = true
 			}
+			// Also check for Option and Result types (for map, unwrap_or methods)
+			if types.IsOption(receiverType) || types.IsResult(receiverType) {
+				isBuiltinCollection = true
+			}
 
 			if isBuiltinCollection {
 				// Get the method type from the field expression
@@ -351,6 +355,45 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					args := make([]types.T, len(argsNodes))
 					for i, a := range argsNodes {
 						args[i] = c.typ(a.Expr)
+					}
+
+					// Special handling for Option/Result .map() - infer return type from lambda
+					if fe.Name.Name == "map" && (types.IsOption(receiverType) || types.IsResult(receiverType)) {
+						if len(args) == 1 {
+							// Look up the actual Func type of the argument
+							var funcRetType types.T
+
+							// First try: lambda expr stores full Func type in c.info.Types
+							if storedType := c.info.Types[argsNodes[0].Expr]; storedType != nil {
+								if fnType, ok := storedType.(*types.Func); ok {
+									funcRetType = fnType.Ret
+								}
+							}
+
+							// Second try: function reference or variable with Func type
+							if funcRetType == nil {
+								if fnType, ok := args[0].(*types.Func); ok {
+									funcRetType = fnType.Ret
+								}
+							}
+
+							if funcRetType != nil {
+								// Construct proper return type
+								var resultType types.T
+								if types.IsOption(receiverType) {
+									resultType = types.OptionOf(funcRetType)
+								} else if types.IsResult(receiverType) {
+									// Preserve error type from Result<T, E>
+									errType := types.ResultErrType(receiverType)
+									if errType == nil {
+										errType = types.Any
+									}
+									resultType = types.ResultOf(funcRetType, errType)
+								}
+								c.info.Types[call] = resultType
+								return resultType
+							}
+						}
 					}
 
 					// If methodType is a function type, validate arguments and extract return type
