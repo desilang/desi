@@ -38,6 +38,33 @@ let points: list[Point] = [
 print(points[0].x)  # 1
 ```
 
+### List Transformation Methods
+
+Lists have built-in methods for transforming and filtering elements:
+
+```desi
+let numbers: list[int] = [1, 2, 3, 4, 5]
+
+# Transform each element
+let doubled = numbers.map(lambda<int> x: int: x * 2)
+# doubled = [2, 4, 6, 8, 10]
+
+# Filter elements
+let evens = numbers.filter(lambda<bool> x: int: x % 2 == 0)
+# evens = [2, 4]
+
+# Chain transformations
+let result = numbers.map(lambda<int> x: int: x * 2)
+                    .filter(lambda<bool> x: int: x > 5)
+# result = [6, 8, 10]
+
+# Pipe syntax also works
+let piped = numbers |> map(lambda<int> x: int: x * 2)
+                   |> filter(lambda<bool> x: int: x > 5)
+```
+
+> **See also**: [Built-in Functions](builtins.md) for functional-style `map()` and `filter()`
+
 ## Set
 
 Unordered collection of unique elements.

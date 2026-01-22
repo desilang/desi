@@ -14,17 +14,28 @@ Desugaring is a compile-time transformation that rewrites high-level syntax into
 
 ## Current Desugars
 
-### map/filter → List Comprehension
+### map/filter → List Comprehension (Functional Style Only)
+
+**As of Jan 22, 2025**: Only functional-style `map(f, xs)` and `filter(p, xs)` are desugared. Method-style `.map()` and `.filter()` are now proper typed methods.
 
 ```desi
-# Before desugaring
-map(double, nums)
-filter(is_even, nums)
+# Functional style → DESUGARED to comprehension
+map(double, nums)       # → [double(__x) for __x in nums]
+filter(is_even, nums)   # → [__x for __x in nums if is_even(__x)]
 
-# After desugaring
-[double(__x) for __x in nums]
-[__x for __x in nums if is_even(__x)]
+# Method style → PROPER METHODS (not desugared)
+nums.map(double)         # → Lowered via lowerListMethod()
+nums.filter(is_even)     # → Lowered via lowerListMethod()
+
+# Pipe style → TRANSFORMED to method call, then lowered
+nums |> map(double)      # → nums.map(double) → lowerListMethod()
 ```
+
+**Architecture**:
+- **Desugaring** (pre-type-check): Converts `map(f, xs)` to comprehension AST
+- **Pipe Transform** (pre-type-check): Converts `xs |> map(f)` to `xs.map(f)` AST
+- **Type Checking**: `List.map` and `List.filter` have proper method signatures
+- **Lowering**: `lowerListMethod()` emits `hir.While` loops for method calls
 
 **Location**: `compiler/internal/check/desugar_map_filter.go`
 
