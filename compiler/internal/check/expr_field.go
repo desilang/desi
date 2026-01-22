@@ -1003,6 +1003,12 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 		// () -> Option<E> - converts Result to Option, Err(e) -> Some(e), Ok(_) -> Nothing
 		optionType := types.OptionOf(errType)
 		methodType = types.FuncOf(nil, optionType, false)
+	case "map":
+		// map(fn: Any) -> Result<Any, E>
+		// The actual return type is inferred at call site from lambda's return type
+		// Preserves the error type E from the original Result
+		resultType := types.ResultOf(types.Any, errType)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
 		return nil

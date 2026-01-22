@@ -968,6 +968,141 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		ls.b.Emit(&hir.If{Cond: isErr, Then: errBlock, Else: nil})
 
 		return optionSlot
+
+	case "map":
+		// Result.map(fn) -> Result<U, E>
+		// If Ok(v), return Ok(fn(v)). If Err(e), return Err(e).
+
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Get tag from Result
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Allocate result slot (struct with tag + payload ptr)
+		resultSlot := ls.b.FreshTemp("map_result")
+		ls.b.Emit(&hir.Alloca{Type: "{i32, ptr}", Count: 1, Dst: resultSlot})
+
+		// Pre-store the current tag (will be overwritten if Ok)
+		tagPtrResult := ls.b.FreshTemp("tag_ptr_result")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtrResult,
+		})
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: tag})
+
+		// Copy the error payload in case this is Err
+		srcPayloadSlot := ls.b.FreshTemp("src_payload_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     srcPayloadSlot,
+		})
+		srcPayload := ls.b.FreshTemp("src_payload")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPayloadSlot, Dst: srcPayload})
+
+		dstPayloadSlot := ls.b.FreshTemp("dst_payload_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     dstPayloadSlot,
+		})
+		ls.b.Emit(&hir.Store{Dst: dstPayloadSlot, Val: srcPayload})
+
+		// Check if Ok (tag == 0)
+		isOk := ls.b.FreshTemp("is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		// Get Ok payload type
+		recvType := ls.info.Types[x.X]
+		var okType types.T
+		if g, ok := recvType.(*types.Generic); ok {
+			if len(g.Args) > 0 {
+				okType = g.Args[0]
+			}
+		} else if e, ok := recvType.(*types.Enum); ok {
+			if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+				okType = e.Variants[0].Fields[0].Type
+			}
+		}
+
+		valType := "ptr" // default
+		if okType != nil {
+			valType = lowerType(okType)
+		}
+
+		// Create conditional block for Ok case
+		curBlock := ls.b.Block()
+		okBlock := ls.b.NewBlock("map_ok")
+		ls.b.SetBlock(okBlock)
+
+		// Load payload from Result
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+		payloadVal := ls.b.FreshTemp("payload_val")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: payloadVal})
+
+		// Lower the lambda and call it with payload
+		lambdaVal := ls.lowerExpr(args[0])
+
+		// Get the function's return type for correct LLVM type
+		fnRetType := "ptr" // default
+		if fnType, ok := ls.info.Types[args[0]].(*types.Func); ok {
+			fnRetType = lowerType(fnType.Ret)
+		}
+
+		callResult := ls.b.FreshTemp("map_call_result")
+		ls.b.Emit(&hir.Call{Dst: callResult, Fn: lambdaVal.String(), Args: []hir.Value{payloadVal}, Type: fnRetType})
+
+		// Store Ok tag (0)
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: hir.ConstInt{Text: "0", Type: "i32"}})
+
+		// Store result payload - allocate storage for the value
+		resultPayloadSlot := ls.b.FreshTemp("result_payload_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     resultPayloadSlot,
+		})
+
+		// Allocate storage for ALL value types
+		valStorage := ls.b.FreshTemp("val_storage")
+		ls.b.Emit(&hir.Alloca{Type: fnRetType, Count: 1, Dst: valStorage})
+		ls.b.Emit(&hir.Store{Dst: valStorage, Val: callResult})
+		ls.b.Emit(&hir.Store{Dst: resultPayloadSlot, Val: valStorage})
+
+		// Switch back to main block and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: okBlock, Else: nil})
+
+		return resultSlot
 	}
 
 	return hir.ConstInt{Text: "0"}

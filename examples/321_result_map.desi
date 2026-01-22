@@ -1,0 +1,35 @@
+# Result.map - Transforms Ok value, preserves Err
+#
+# Result.map(fn) applies the function to the contained value if Ok,
+# returning a new Result with the transformed value. Returns Err unchanged
+# if the Result is Err.
+#
+# EXPECTED_OUTPUT:
+# Ok(21).map(double) = Ok(42)
+# Err.map(double) = Err("error message")
+# Chained: Ok(5).map(double).map(double) = Ok(20)
+# Done!
+
+def double(x: int) -> int:
+    return x * 2
+
+def main():
+    # Test Result.map on Ok
+    let res: Result<int, str> = Result.Ok(21)
+    let mapped = res.map(double)
+    if mapped.is_ok():
+        print(f"Ok(21).map(double) = Ok({mapped.unwrap()})")
+    
+    # Test Result.map on Err - should preserve error
+    let err: Result<int, str> = Result.Err("error message")
+    let mapped2 = err.map(double)
+    if mapped2.is_err():
+        print(f"Err.map(double) = Err(\"{mapped2.unwrap_err()}\")")
+    
+    # Chained maps
+    let result: Result<int, str> = Result.Ok(5)
+    let chained = result.map(double).map(double)
+    if chained.is_ok():
+        print(f"Chained: Ok(5).map(double).map(double) = Ok({chained.unwrap()})")
+    
+    print("Done!")
