@@ -153,6 +153,7 @@ match result:
 | `expect_err(msg)` | `E` | Like unwrap_err but panics with custom message |
 | `ok()` | `Option<T>` | Converts Ok to Some, Err to Nothing |
 | `err()` | `Option<E>` | Converts Err to Some, Ok to Nothing |
+| `map(fn)` | `Result<U, E>` | Transforms Ok value: `Ok(x).map(f) -> Ok(f(x))` |
 
 ---
 
