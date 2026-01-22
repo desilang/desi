@@ -116,6 +116,11 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Merge checker diagnostics.
 	res.Diags = append(res.Diags, c.diags...)
 
+	// Phase 2 desugaring: type-aware map/filter desugaring for method-style and pipe-style calls.
+	// This runs AFTER type checking so we can use actual type info to decide whether to desugar
+	// (only collections, not Option/Result which have their own map methods).
+	desugarMapFilterWithTypes(mod, res.Info)
+
 	// ---- Task B hook: len() nicer error when type has no length (DCO0001) ----
 	res.Diags = append(res.Diags, collectLenNoLengthDiags(mod, res.Info)...)
 

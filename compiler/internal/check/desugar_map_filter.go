@@ -1,6 +1,9 @@
 package check
 
-import "github.com/desilang/desi/compiler/internal/ast"
+import (
+	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/types"
+)
 
 // =============================================================================
 // DESUGARING ARCHITECTURE - DO NOT REMOVE THIS COMMENT
@@ -139,7 +142,7 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		// Handle dot method syntax: xs.map(f), xs.filter(p)
 		// BUT skip desugaring for Option/Result types (they have their own map method)
 		if fe, ok := x.Callee.(*ast.FieldExpr); ok && len(x.Args) == 1 {
-			// Skip if receiver looks like Option or Result (AST pattern check since types aren't available yet)
+			// Skip if receiver looks like Option or Result
 			if !looksLikeOptionOrResult(fe.X) {
 				switch fe.Name.Name {
 				case "map":
@@ -250,13 +253,8 @@ func looksLikeOptionOrResult(e ast.Expr) bool {
 	switch x := e.(type) {
 	case *ast.Ident:
 		// Check if identifier name suggests Option/Result (common patterns)
-		// This is heuristic-based for simple variable names
 		name := x.Name
-		// Skip if it's a likely collection name
-		if name == "xs" || name == "items" || name == "list" || name == "arr" || name == "data" {
-			return false
-		}
-		// Check for Option/Result related names
+		// Common Option/Result variable names - only exact matches
 		if name == "opt" || name == "option" || name == "maybe" ||
 			name == "res" || name == "result" ||
 			name == "some" || name == "none" || name == "nothing" ||
@@ -266,20 +264,21 @@ func looksLikeOptionOrResult(e ast.Expr) bool {
 		return false
 
 	case *ast.FieldExpr:
-		// Check for Option.Something or Result.Something
+		// Check for Option.Something or Result.Something (constructor patterns)
 		if id, ok := x.X.(*ast.Ident); ok {
 			if id.Name == "Option" || id.Name == "Result" {
 				return true
 			}
 		}
-		// Check for method calls that are Option/Result specific: x.unwrap(), x.is_some(), etc.
+		// Check for method calls that are Option/Result specific
 		methodName := x.Name.Name
 		if methodName == "unwrap" || methodName == "unwrap_or" || methodName == "expect" ||
 			methodName == "is_some" || methodName == "is_nothing" || methodName == "is_none" ||
-			methodName == "is_ok" || methodName == "is_err" || methodName == "ok" || methodName == "err" {
-			return true
+			methodName == "is_ok" || methodName == "is_err" || methodName == "ok" || methodName == "err" ||
+			methodName == "map" { // Also check for chained .map() calls
+			return looksLikeOptionOrResult(x.X)
 		}
-		return looksLikeOptionOrResult(x.X)
+		return false
 
 	case *ast.CallExpr:
 		// Check if this is an Option/Result constructor call
@@ -295,5 +294,167 @@ func looksLikeOptionOrResult(e ast.Expr) bool {
 
 	default:
 		return false
+	}
+}
+
+// =============================================================================
+// TYPE-AWARE DESUGARING (runs AFTER type checking)
+// =============================================================================
+//
+// desugarMapFilterWithTypes handles method-style and pipe-style desugaring
+// for map/filter after type checking is complete. This allows us to check
+// the actual receiver type and only desugar for collection types (list, set),
+// not for Option/Result which have their own map methods.
+//
+// Called from check.go after type checking completes.
+func desugarMapFilterWithTypes(mod *ast.Module, info *Info) {
+	if mod == nil || info == nil {
+		return
+	}
+	for _, d := range mod.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Body == nil {
+			continue
+		}
+		desugarBlockWithTypes(fd.Body, info)
+	}
+}
+
+func desugarBlockWithTypes(b *ast.Block, info *Info) {
+	if b == nil {
+		return
+	}
+	for i := range b.Stmts {
+		switch s := b.Stmts[i].(type) {
+		case *ast.ExprStmt:
+			s.Expr = desugarExprWithTypes(s.Expr, info)
+		case *ast.LetStmt:
+			if s.Value != nil {
+				s.Value = desugarExprWithTypes(s.Value, info)
+			}
+		case *ast.IfStmt:
+			s.Cond = desugarExprWithTypes(s.Cond, info)
+			desugarBlockWithTypes(s.Then, info)
+			for j := range s.Elifs {
+				s.Elifs[j].Cond = desugarExprWithTypes(s.Elifs[j].Cond, info)
+				desugarBlockWithTypes(s.Elifs[j].Body, info)
+			}
+			desugarBlockWithTypes(s.Else, info)
+		case *ast.WhileStmt:
+			s.Cond = desugarExprWithTypes(s.Cond, info)
+			desugarBlockWithTypes(s.Body, info)
+		case *ast.ForStmt:
+			s.Iter = desugarExprWithTypes(s.Iter, info)
+			desugarBlockWithTypes(s.Body, info)
+		case *ast.ReturnStmt:
+			if s.Value != nil {
+				s.Value = desugarExprWithTypes(s.Value, info)
+			}
+		case *ast.AssignStmt:
+			for j := range s.RHS {
+				s.RHS[j] = desugarExprWithTypes(s.RHS[j], info)
+			}
+		case *ast.UsingStmt:
+			if s.Init != nil {
+				s.Init = desugarExprWithTypes(s.Init, info)
+			}
+			desugarBlockWithTypes(s.Body, info)
+		}
+	}
+}
+
+// isCollectionType returns true if the type is a list, set, or dict (but not Option/Result)
+func isCollectionType(t types.T) bool {
+	if t == nil {
+		return false
+	}
+	switch tt := t.(type) {
+	case *types.List:
+		return true
+	case *types.Set:
+		return true
+	case *types.Dict:
+		return true
+	case *types.Enum:
+		// Option and Result are enums but should NOT be desugared
+		if tt.Name == "Option" || tt.Name == "Result" {
+			return false
+		}
+		return false
+	default:
+		return false
+	}
+}
+
+func desugarExprWithTypes(e ast.Expr, info *Info) ast.Expr {
+	if e == nil {
+		return nil
+	}
+
+	switch x := e.(type) {
+	case *ast.BinaryExpr:
+		x.Lhs = desugarExprWithTypes(x.Lhs, info)
+		x.Rhs = desugarExprWithTypes(x.Rhs, info)
+
+		// Handle pipe operator: xs |> map(f), xs |> filter(p) - only for collections
+		if x.Op == "|>" {
+			if call, ok := x.Rhs.(*ast.CallExpr); ok {
+				if id, ok := call.Callee.(*ast.Ident); ok && len(call.Args) == 1 {
+					// Check actual type of LHS
+					lhsType := info.Types[x.Lhs]
+					if isCollectionType(lhsType) {
+						switch id.Name {
+						case "map":
+							lc := buildMapComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+							lc.Span = x.SpanOf()
+							return lc
+						case "filter":
+							lc := buildFilterComp(x.Lhs, call.Args[0]).(*ast.ListComp)
+							lc.Span = x.SpanOf()
+							return lc
+						}
+					}
+				}
+			}
+		}
+		return x
+
+	case *ast.CallExpr:
+		// Recurse into callee/args
+		x.Callee = desugarExprWithTypes(x.Callee, info)
+		for i := range x.Args {
+			x.Args[i] = desugarExprWithTypes(x.Args[i], info)
+		}
+
+		// Handle method syntax: xs.map(f), xs.filter(p) - only for collections
+		if fe, ok := x.Callee.(*ast.FieldExpr); ok && len(x.Args) == 1 {
+			receiverType := info.Types[fe.X]
+			if isCollectionType(receiverType) {
+				switch fe.Name.Name {
+				case "map":
+					lc := buildMapComp(fe.X, x.Args[0]).(*ast.ListComp)
+					lc.Span = x.SpanOf()
+					return lc
+				case "filter":
+					lc := buildFilterComp(fe.X, x.Args[0]).(*ast.ListComp)
+					lc.Span = x.SpanOf()
+					return lc
+				}
+			}
+		}
+		return x
+
+	case *ast.ListLit:
+		for i := range x.Elems {
+			x.Elems[i] = desugarExprWithTypes(x.Elems[i], info)
+		}
+		return x
+
+	case *ast.FieldExpr:
+		x.X = desugarExprWithTypes(x.X, info)
+		return x
+
+	default:
+		return e
 	}
 }
