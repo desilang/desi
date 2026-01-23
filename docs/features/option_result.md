@@ -142,6 +142,7 @@ match result:
 | `and_then(fn)` | `Option<U>` | Chains operations: `Some(x).and_then(f) -> f(x)` |
 | `or_else(fn)` | `Option<T>` | Fallback: `Nothing.or_else(f) -> f()` |
 | `unwrap_or_else(fn)` | `T` | Lazy default: `Nothing.unwrap_or_else(f) -> f()` |
+| `?` (operator) | `T` | Early return: unwraps or returns Nothing |
 
 ### Result<T, E> Methods
 
@@ -160,6 +161,7 @@ match result:
 | `and_then(fn)` | `Result<U, E>` | Chains operations: `Ok(x).and_then(f) -> f(x)` |
 | `or_else(fn)` | `Result<T, E>` | Fallback: `Err(e).or_else(f) -> f(e)` |
 | `unwrap_or_else(fn)` | `T` | Lazy default: `Err(e).unwrap_or_else(f) -> f(e)` |
+| `?` (operator) | `T` | Early return: unwraps or returns Err |
 
 ---
 

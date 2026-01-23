@@ -412,6 +412,25 @@ let val = opt.unwrap_or(expensive_computation())
 let val = opt.unwrap_or_else(expensive_computation)
 ```
 
+### The `?` Operator (Error Propagation)
+
+The `?` operator provides concise error propagation. When applied to a Result or Option:
+- **On Ok/Some**: extracts and returns the value
+- **On Err/Nothing**: early returns from the function with the error
+
+```desi
+def double_or_propagate(res: Result[int, str]) -> Result[int, str]:
+    let n = res?  # If Err, return early with that Err
+    return Result.Ok(n * 2)
+
+def get_doubled(opt: Option[int]) -> Option[int]:
+    let n = opt?  # If Nothing, return early with Nothing
+    return Option.Some(n * 2)
+```
+
+> [!IMPORTANT]
+> The enclosing function must return a compatible Result/Option type. Using `?` in a function that returns `int` will cause a compile error.
+
 ### Chain Multiple Operations
 
 ```desi

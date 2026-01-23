@@ -1,20 +1,23 @@
-# Test file for ? operator (Phase 4)
+# Test file for ? operator
 # The ? operator should:
 # - For Result[T, E]: return T on Ok, early return Err on Err
 # - For Option[T]: return T on Some, early return Nothing on Nothing
 
-def main() -> int:
-    # Test ? operator on Result
-    let x: Result<int, str> = Result.Ok(42)
-    
-    # Using ? to unwrap - if Err, would early return
-    # For now just test parsing and type checking
+def try_unwrap(x: Result[int, str]) -> Result[int, str]:
+    # Using ? to unwrap - if Err, would early return the Err
     let val = x?
+    return Result.Ok(val * 2)
+
+def main():
+    # Test ? operator on Result with Ok
+    let res: Result[int, str] = Result.Ok(42)
+    let result = try_unwrap(res)
     
-    print(f"Unwrapped: {val}")
+    if result.is_ok():
+        print(f"Unwrapped and doubled: {result.unwrap_or(0)}")
+    
     print("Test passed!")
-    return 0
 
 # EXPECTED_OUTPUT:
-# Unwrapped: <?>
+# Unwrapped and doubled: 84
 # Test passed!
