@@ -965,6 +965,12 @@ func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
 		// Actual return type is inferred at call site from lambda's Option<U> return type
 		resultType := types.OptionOf(types.Any)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "or_else":
+		// or_else(fn: () -> Option<T>) -> Option<T>
+		// Returns original if Some, calls fn if Nothing
+		// Actual return type is inferred at call site from lambda's Option<T> return type
+		resultType := types.OptionOf(elemType)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
 		return nil
@@ -1027,6 +1033,12 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 		// Unlike map, and_then does NOT wrap - the fn must return Result itself
 		// Preserves the error type E from the original Result
 		resultType := types.ResultOf(types.Any, errType)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "or_else":
+		// or_else(fn: E -> Result<T, E>) -> Result<T, E>
+		// Returns original if Ok, calls fn(err) if Err
+		// Actual return type is inferred at call site from lambda's Result<T, E> return type
+		resultType := types.ResultOf(okType, errType)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
