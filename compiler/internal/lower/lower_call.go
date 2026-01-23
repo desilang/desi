@@ -102,7 +102,18 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// 0. Method calls (FieldExpr callee)
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
 		if ls.info != nil {
+			// Get the receiver type
+			// For chained calls like nums.map(...).filter(...), fe.X is a CallExpr
+			// We need to get the return type of that CallExpr
 			feXType := ls.info.Types[fe.X]
+
+			// If the type lookup failed and fe.X is a CallExpr, try to get the return type
+			if feXType == nil {
+				if callExpr, ok := fe.X.(*ast.CallExpr); ok {
+					// Try to get the type of the whole call expression
+					feXType = ls.info.Types[callExpr]
+				}
+			}
 
 			// Handle sync module constructors: sync.Mutex(value), sync.Channel(cap), sync.TaskGroup()
 			if id, ok := fe.X.(*ast.Ident); ok && id.Name == "sync" {
@@ -203,6 +214,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 				}
 				return ls.lowerListMethod(fe, x.Args, t)
+			}
+
+			// Special case: if feXType is nil but method name is map or filter,
+			// assume it's a list method (common for chained calls where CallExpr type lookup fails)
+			if feXType == nil && (fe.Name.Name == "map" || fe.Name.Name == "filter") {
+				// Try to infer the list type by lowering the receiver and assuming it's a list
+				// Create a dummy list type - the actual element type will be inferred during lowering
+				dummyListType := &types.List{Elem: types.Any}
+				return ls.lowerListMethod(fe, x.Args, dummyListType)
 			}
 
 			// ListIter methods: collect, map, filter, first

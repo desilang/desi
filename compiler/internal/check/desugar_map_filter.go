@@ -105,24 +105,22 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		x.Lhs = desugarExpr(x.Lhs)
 		x.Rhs = desugarExpr(x.Rhs)
 
-		// Handle pipe operator: xs |> map(f), xs |> filter(p)
-		// BUT skip desugaring for Option/Result types (they have their own map method)
+		// Transform pipe operator: xs |> map(f) -> xs.map(f)
+		// This converts pipe syntax to method call syntax which works for List, Option, Result
 		if x.Op == "|>" {
 			if call, ok := x.Rhs.(*ast.CallExpr); ok {
 				if id, ok := call.Callee.(*ast.Ident); ok && len(call.Args) == 1 {
-					// Skip if LHS looks like Option or Result
-					if !looksLikeOptionOrResult(x.Lhs) {
-						switch id.Name {
-						case "map":
-							// xs |> map(f) → [f(__x) for __x in xs]
-							lc := buildMapComp(x.Lhs, call.Args[0]).(*ast.ListComp)
-							lc.Span = x.SpanOf()
-							return lc
-						case "filter":
-							// xs |> filter(p) → [__x for __x in xs if p(__x)]
-							lc := buildFilterComp(x.Lhs, call.Args[0]).(*ast.ListComp)
-							lc.Span = x.SpanOf()
-							return lc
+					if id.Name == "map" || id.Name == "filter" {
+						// Transform: xs |> map(f) => xs.map(f)
+						// Create a new CallExpr with FieldExpr as callee
+						fieldExpr := &ast.FieldExpr{
+							X:    x.Lhs,
+							Name: ast.Ident{Name: id.Name},
+						}
+						return &ast.CallExpr{
+							Callee: fieldExpr,
+							Args:   call.Args,
+							Span:   x.SpanOf(),
 						}
 					}
 				}
@@ -139,25 +137,9 @@ func desugarExpr(e ast.Expr) ast.Expr {
 		}
 		x.Callee, x.Args = callee, args
 
-		// Handle dot method syntax: xs.map(f), xs.filter(p)
-		// BUT skip desugaring for Option/Result types (they have their own map method)
-		if fe, ok := x.Callee.(*ast.FieldExpr); ok && len(x.Args) == 1 {
-			// Skip if receiver looks like Option or Result
-			if !looksLikeOptionOrResult(fe.X) {
-				switch fe.Name.Name {
-				case "map":
-					// xs.map(f) → [f(__x) for __x in xs]
-					lc := buildMapComp(fe.X, x.Args[0]).(*ast.ListComp)
-					lc.Span = x.SpanOf()
-					return lc
-				case "filter":
-					// xs.filter(p) → [__x for __x in xs if p(__x)]
-					lc := buildFilterComp(fe.X, x.Args[0]).(*ast.ListComp)
-					lc.Span = x.SpanOf()
-					return lc
-				}
-			}
-		}
+		// NOTE: Method-style xs.map(f) and xs.filter(p) are NOT desugared here.
+		// List, Option, and Result all have proper .map()/.filter() methods now
+		// that are type-checked and lowered directly.
 
 		// Then, check for map/filter shapes (2-arg only).
 		// Python 3 order: map(func, iterable), filter(func, iterable)

@@ -7,6 +7,12 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// isListType checks if a type is a List type
+func isListType(t types.T) bool {
+	_, ok := t.(*types.List)
+	return ok
+}
+
 func (c *checker) typCall(call *ast.CallExpr) types.T {
 	// --- Case 0: direct call of a lambda: (lambda ...)(args)
 	if l, ok := call.Callee.(*ast.LambdaExpr); ok {
@@ -357,8 +363,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						args[i] = c.typ(a.Expr)
 					}
 
-					// Special handling for Option/Result .map() - infer return type from lambda
-					if fe.Name.Name == "map" && (types.IsOption(receiverType) || types.IsResult(receiverType)) {
+					// Special handling for Option/Result/List .map() - infer return type from lambda
+					if fe.Name.Name == "map" && (types.IsOption(receiverType) || types.IsResult(receiverType) || isListType(receiverType)) {
 						if len(args) == 1 {
 							// Look up the actual Func type of the argument
 							var funcRetType types.T
@@ -389,6 +395,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 										errType = types.Any
 									}
 									resultType = types.ResultOf(funcRetType, errType)
+								} else if isListType(receiverType) {
+									// List.map(f) -> list[U] where U is f's return type
+									resultType = types.ListOf(funcRetType)
 								}
 								c.info.Types[call] = resultType
 								return resultType
