@@ -139,6 +139,7 @@ match result:
 | `unwrap_or(default)` | `T` | Returns value if Some, otherwise `default` |
 | `expect(msg)` | `T` | Like unwrap but panics with custom message |
 | `map(fn)` | `Option<U>` | Transforms value: `Some(x).map(f) -> Some(f(x))` |
+| `and_then(fn)` | `Option<U>` | Chains operations: `Some(x).and_then(f) -> f(x)` |
 
 ### Result<T, E> Methods
 
@@ -154,6 +155,7 @@ match result:
 | `ok()` | `Option<T>` | Converts Ok to Some, Err to Nothing |
 | `err()` | `Option<E>` | Converts Err to Some, Ok to Nothing |
 | `map(fn)` | `Result<U, E>` | Transforms Ok value: `Ok(x).map(f) -> Ok(f(x))` |
+| `and_then(fn)` | `Result<U, E>` | Chains operations: `Ok(x).and_then(f) -> f(x)` |
 
 ---
 
