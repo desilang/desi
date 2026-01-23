@@ -1,0 +1,37 @@
+# Test Option/Result unwrap_or_else combinator
+# EXPECTED_OUTPUT:
+# Testing Option.unwrap_or_else:
+# Some(5).unwrap_or_else: 5
+# Nothing.unwrap_or_else: 99
+# Testing Result.unwrap_or_else:
+# Ok(5).unwrap_or_else: 5
+# Err.unwrap_or_else: 42
+
+def compute_default() -> int:
+    return 99
+
+def handle_error(e: str) -> int:
+    return 42
+
+def main():
+    # Option.unwrap_or_else tests
+    print("Testing Option.unwrap_or_else:")
+    
+    let opt1: Option[int] = Option.Some(5)
+    let val1 = opt1.unwrap_or_else(compute_default)
+    print(f"Some(5).unwrap_or_else: {val1}")
+    
+    let opt2: Option[int] = Option.Nothing
+    let val2 = opt2.unwrap_or_else(compute_default)
+    print(f"Nothing.unwrap_or_else: {val2}")
+    
+    # Result.unwrap_or_else tests
+    print("Testing Result.unwrap_or_else:")
+    
+    let res1: Result[int, str] = Result.Ok(5)
+    let val3 = res1.unwrap_or_else(handle_error)
+    print(f"Ok(5).unwrap_or_else: {val3}")
+    
+    let res2: Result[int, str] = Result.Err("error")
+    let val4 = res2.unwrap_or_else(handle_error)
+    print(f"Err.unwrap_or_else: {val4}")
