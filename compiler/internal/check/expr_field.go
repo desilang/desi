@@ -971,6 +971,11 @@ func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
 		// Actual return type is inferred at call site from lambda's Option<T> return type
 		resultType := types.OptionOf(elemType)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "unwrap_or_else":
+		// unwrap_or_else(fn: () -> T) -> T
+		// Returns value if Some, calls fn() if Nothing
+		// Lazy evaluation - fn only called when needed
+		methodType = types.FuncOf([]types.T{types.Any}, elemType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
 		return nil
@@ -1040,6 +1045,11 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 		// Actual return type is inferred at call site from lambda's Result<T, E> return type
 		resultType := types.ResultOf(okType, errType)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "unwrap_or_else":
+		// unwrap_or_else(fn: E -> T) -> T
+		// Returns value if Ok, calls fn(err) if Err
+		// Lazy evaluation - fn only called when needed
+		methodType = types.FuncOf([]types.T{types.Any}, okType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Result"))
 		return nil

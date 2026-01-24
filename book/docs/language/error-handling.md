@@ -384,6 +384,34 @@ let res: Result[int, str] = Result.Err("failed")
 let result = res.or_else(handle_error)  # Ok(0)
 ```
 
+### Built-in unwrap_or_else() Method
+
+The `unwrap_or_else()` method returns the value or computes a default lazily:
+
+```desi
+def compute_default() -> int:
+    return 99
+
+let opt: Option[int] = Option.Nothing
+let val = opt.unwrap_or_else(compute_default)  # 99 (fn called)
+
+let some_opt: Option[int] = Option.Some(5)
+let val2 = some_opt.unwrap_or_else(compute_default)  # 5 (fn NOT called)
+```
+
+**Comparison with `unwrap_or`:**
+- `unwrap_or(default)` - default is always evaluated
+- `unwrap_or_else(fn)` - fn only called when needed (lazy)
+
+**Use lazy evaluation for expensive defaults:**
+```desi
+# Expensive - always computed even if unused
+let val = opt.unwrap_or(expensive_computation())
+
+# Lazy - only computed if needed
+let val = opt.unwrap_or_else(expensive_computation)
+```
+
 ### Chain Multiple Operations
 
 ```desi
