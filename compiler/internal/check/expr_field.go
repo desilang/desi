@@ -959,6 +959,12 @@ func (c *checker) checkOptionMethod(x *ast.FieldExpr, t types.T) types.T {
 		// We use Any here as a placeholder that will be refined in expr_call.go
 		resultType := types.OptionOf(types.Any)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "and_then":
+		// and_then(fn: T -> Option<U>) -> Option<U>
+		// Unlike map, and_then does NOT wrap - the fn must return Option itself
+		// Actual return type is inferred at call site from lambda's Option<U> return type
+		resultType := types.OptionOf(types.Any)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Option"))
 		return nil
@@ -1013,6 +1019,12 @@ func (c *checker) checkResultMethod(x *ast.FieldExpr, t types.T) types.T {
 	case "map":
 		// map(fn: Any) -> Result<Any, E>
 		// The actual return type is inferred at call site from lambda's return type
+		// Preserves the error type E from the original Result
+		resultType := types.ResultOf(types.Any, errType)
+		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)
+	case "and_then":
+		// and_then(fn: T -> Result<U, E>) -> Result<U, E>
+		// Unlike map, and_then does NOT wrap - the fn must return Result itself
 		// Preserves the error type E from the original Result
 		resultType := types.ResultOf(types.Any, errType)
 		methodType = types.FuncOf([]types.T{types.Any}, resultType, false)

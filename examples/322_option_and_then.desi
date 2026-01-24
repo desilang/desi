@@ -1,0 +1,53 @@
+# Test Option/Result and_then combinator
+# EXPECTED_OUTPUT:
+# Testing Option.and_then:
+# Some(5).and_then(double_opt): is_some=true, val=10
+# Nothing.and_then(double_opt): is_some=false
+# Some(5).and_then(fail_opt): is_some=false
+# Testing Result.and_then:
+# Ok(5).and_then(double_res): is_ok=true, val=10
+# Err.and_then(double_res): is_ok=false
+# Ok(5).and_then(fail_res): is_ok=false
+
+def double_opt(x: int) -> Option[int]:
+    return Option.Some(x * 2)
+
+def fail_opt(x: int) -> Option[int]:
+    return Option.Nothing
+
+def double_res(x: int) -> Result[int, str]:
+    return Result.Ok(x * 2)
+
+def fail_res(x: int) -> Result[int, str]:
+    return Result.Err("failed")
+
+def main():
+    # Option.and_then tests
+    print("Testing Option.and_then:")
+    
+    let opt1: Option[int] = Option.Some(5)
+    let result1 = opt1.and_then(double_opt)
+    print(f"Some(5).and_then(double_opt): is_some={result1.is_some()}, val={result1.unwrap_or(0)}")
+    
+    let opt2: Option[int] = Option.Nothing
+    let result2 = opt2.and_then(double_opt)
+    print(f"Nothing.and_then(double_opt): is_some={result2.is_some()}")
+    
+    let opt3: Option[int] = Option.Some(5)
+    let result3 = opt3.and_then(fail_opt)
+    print(f"Some(5).and_then(fail_opt): is_some={result3.is_some()}")
+    
+    # Result.and_then tests
+    print("Testing Result.and_then:")
+    
+    let res1: Result[int, str] = Result.Ok(5)
+    let result4 = res1.and_then(double_res)
+    print(f"Ok(5).and_then(double_res): is_ok={result4.is_ok()}, val={result4.unwrap_or(0)}")
+    
+    let res2: Result[int, str] = Result.Err("error")
+    let result5 = res2.and_then(double_res)
+    print(f"Err.and_then(double_res): is_ok={result5.is_ok()}")
+    
+    let res3: Result[int, str] = Result.Ok(5)
+    let result6 = res3.and_then(fail_res)
+    print(f"Ok(5).and_then(fail_res): is_ok={result6.is_ok()}")

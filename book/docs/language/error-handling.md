@@ -327,6 +327,35 @@ def map_option<T, U>(opt: Option<T>, f: (T) -> U) -> Option<U>:
         Option.Nothing: Option.Nothing
 ```
 
+### Built-in and_then() Method
+
+The `and_then()` method chains operations that themselves return an Option or Result (also called flatMap or bind):
+
+```desi
+def get_even(x: int) -> Option[int]:
+    if x % 2 == 0:
+        return Option.Some(x)
+    return Option.Nothing
+
+let opt: Option[int] = Option.Some(4)
+let result = opt.and_then(get_even)  # Some(4)
+
+let opt2: Option[int] = Option.Some(5)
+let result2 = opt2.and_then(get_even)  # Nothing (5 is odd)
+```
+
+**Key difference from `map()`:**
+- `map(f)` wraps the result: `Some(x).map(f) -> Some(f(x))`
+- `and_then(f)` uses `f`'s return directly: `Some(x).and_then(f) -> f(x)`
+
+**Use when** your function already returns an Option/Result:
+```desi
+# Chaining operations that can fail
+let result = get_user(id)
+    .and_then(get_profile)    # get_profile returns Option
+    .and_then(get_settings)   # get_settings returns Option
+```
+
 ### Chain Multiple Operations
 
 ```desi

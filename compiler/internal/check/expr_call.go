@@ -405,6 +405,35 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						}
 					}
 
+					// Special handling for Option/Result .and_then() - return type IS lambda's return type (not wrapped)
+					if fe.Name.Name == "and_then" && (types.IsOption(receiverType) || types.IsResult(receiverType)) {
+						if len(args) == 1 {
+							// Look up the actual Func type of the argument
+							var funcRetType types.T
+
+							// First try: lambda expr stores full Func type in c.info.Types
+							if storedType := c.info.Types[argsNodes[0].Expr]; storedType != nil {
+								if fnType, ok := storedType.(*types.Func); ok {
+									funcRetType = fnType.Ret
+								}
+							}
+
+							// Second try: function reference or variable with Func type
+							if funcRetType == nil {
+								if fnType, ok := args[0].(*types.Func); ok {
+									funcRetType = fnType.Ret
+								}
+							}
+
+							// For and_then, the lambda's return type IS the result type (no wrapping)
+							// Lambda must return Option<U> or Result<U, E>
+							if funcRetType != nil {
+								c.info.Types[call] = funcRetType
+								return funcRetType
+							}
+						}
+					}
+
 					// If methodType is a function type, validate arguments and extract return type
 					if funcType, ok := methodType.(*types.Func); ok {
 						// Check arity

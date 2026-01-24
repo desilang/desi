@@ -405,6 +405,117 @@ func (ls *lowerState) lowerOptionMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		ls.b.Emit(&hir.If{Cond: isSome, Then: someBlock, Else: nil})
 
 		return resultSlot
+
+	case "and_then":
+		// and_then(fn: T -> Option<U>) -> Option<U>
+		// Unlike map, and_then does NOT wrap - the fn must return Option itself
+		// If Some: call fn(payload) and return its result directly
+		// If Nothing: return Nothing
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Get tag to check if Some or Nothing
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		isSome := ls.b.FreshTemp("is_some")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isSome,
+			Type: "i1",
+		})
+
+		// Get the return type of the lambda (it's an Option<U>)
+		retType := "ptr" // Options are always ptr
+		if fnType, ok := ls.info.Types[args[0]].(*types.Func); ok {
+			retType = lowerType(fnType.Ret)
+		}
+
+		// Allocate storage for result Option
+		resultSlot := ls.b.FreshTemp("and_then_result")
+		ls.b.Emit(&hir.Alloca{Type: "{i32, ptr}", Count: 1, Dst: resultSlot})
+
+		// Pre-initialize to Nothing (tag=1, payload=null)
+		tagPtrResult := ls.b.FreshTemp("result_tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtrResult,
+		})
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: hir.ConstInt{Text: "1", Type: "i32"}})
+
+		// Create block for Some case
+		curBlock := ls.b.Block()
+		someBlock := ls.b.NewBlock("and_then_some")
+
+		// In Some case: get payload and call lambda
+		ls.b.SetBlock(someBlock)
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtr,
+		})
+
+		// Load payload pointer and dereference
+		payloadValPtr := ls.b.FreshTemp("payload_val_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtr, Dst: payloadValPtr})
+		payloadVal := ls.b.FreshTemp("payload_val")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadValPtr, Dst: payloadVal})
+
+		// Call lambda with payload - result IS the Option we return (no wrapping)
+		lambdaVal := ls.lowerExpr(args[0])
+		callResult := ls.b.FreshTemp("and_then_call_result")
+		ls.b.Emit(&hir.Call{Dst: callResult, Fn: lambdaVal.String(), Args: []hir.Value{payloadVal}, Type: retType})
+
+		// Copy the result Option's tag to our result slot
+		lambdaResultTagPtr := ls.b.FreshTemp("lambda_result_tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    callResult,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     lambdaResultTagPtr,
+		})
+		lambdaResultTag := ls.b.FreshTemp("lambda_result_tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: lambdaResultTagPtr, Dst: lambdaResultTag})
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: lambdaResultTag})
+
+		// Copy the result Option's payload to our result slot
+		lambdaResultPayloadPtr := ls.b.FreshTemp("lambda_result_payload_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    callResult,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     lambdaResultPayloadPtr,
+		})
+		lambdaResultPayload := ls.b.FreshTemp("lambda_result_payload")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: lambdaResultPayloadPtr, Dst: lambdaResultPayload})
+		resultPayloadPtr := ls.b.FreshTemp("result_payload_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     resultPayloadPtr,
+		})
+		ls.b.Emit(&hir.Store{Dst: resultPayloadPtr, Val: lambdaResultPayload})
+
+		// Switch back to main block and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isSome, Then: someBlock, Else: nil})
+
+		return resultSlot
 	}
 
 	return hir.ConstInt{Text: "0"}
@@ -1097,6 +1208,130 @@ func (ls *lowerState) lowerResultMethod(x *ast.FieldExpr, args []ast.Expr, t *ty
 		ls.b.Emit(&hir.Alloca{Type: fnRetType, Count: 1, Dst: valStorage})
 		ls.b.Emit(&hir.Store{Dst: valStorage, Val: callResult})
 		ls.b.Emit(&hir.Store{Dst: resultPayloadSlot, Val: valStorage})
+
+		// Switch back to main block and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: okBlock, Else: nil})
+
+		return resultSlot
+
+	case "and_then":
+		// and_then(fn: T -> Result<U, E>) -> Result<U, E>
+		// Unlike map, and_then does NOT wrap - the fn must return Result itself
+		// If Ok: call fn(payload) and return its result directly
+		// If Err: return the original Err
+		if len(args) < 1 {
+			return hir.ConstInt{Text: "0"}
+		}
+
+		// Get tag to check if Ok or Err
+		tagPtr := ls.b.FreshTemp("tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
+		})
+		tag := ls.b.FreshTemp("tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
+
+		// Get the return type of the lambda (it's a Result<U, E>)
+		retType := "ptr" // Results are always ptr
+		if fnType, ok := ls.info.Types[args[0]].(*types.Func); ok {
+			retType = lowerType(fnType.Ret)
+		}
+
+		// Allocate storage for result
+		resultSlot := ls.b.FreshTemp("and_then_result")
+		ls.b.Emit(&hir.Alloca{Type: "{i32, ptr}", Count: 1, Dst: resultSlot})
+
+		// Copy tag and payload from source (in case this is Err)
+		tagPtrResult := ls.b.FreshTemp("result_tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtrResult,
+		})
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: tag})
+
+		// Copy the error payload in case this is Err
+		srcPayloadSlot := ls.b.FreshTemp("src_payload_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     srcPayloadSlot,
+		})
+		srcPayload := ls.b.FreshTemp("src_payload")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: srcPayloadSlot, Dst: srcPayload})
+
+		dstPayloadSlot := ls.b.FreshTemp("dst_payload_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    resultSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     dstPayloadSlot,
+		})
+		ls.b.Emit(&hir.Store{Dst: dstPayloadSlot, Val: srcPayload})
+
+		// Check if Ok (tag == 0)
+		isOk := ls.b.FreshTemp("is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		// Create block for Ok case
+		curBlock := ls.b.Block()
+		okBlock := ls.b.NewBlock("and_then_ok")
+
+		// In Ok case: get payload and call lambda
+		ls.b.SetBlock(okBlock)
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    receiver,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtr,
+		})
+
+		// Load payload pointer and dereference
+		payloadValPtr := ls.b.FreshTemp("payload_val_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtr, Dst: payloadValPtr})
+		payloadVal := ls.b.FreshTemp("payload_val")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadValPtr, Dst: payloadVal})
+
+		// Call lambda with payload
+		lambdaVal := ls.lowerExpr(args[0])
+		callResult := ls.b.FreshTemp("and_then_call_result")
+		ls.b.Emit(&hir.Call{Dst: callResult, Fn: lambdaVal.String(), Args: []hir.Value{payloadVal}, Type: retType})
+
+		// Copy the result's tag and payload to our result slot
+		lambdaResultTagPtr := ls.b.FreshTemp("lambda_result_tag_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    callResult,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     lambdaResultTagPtr,
+		})
+		lambdaResultTag := ls.b.FreshTemp("lambda_result_tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: lambdaResultTagPtr, Dst: lambdaResultTag})
+		ls.b.Emit(&hir.Store{Dst: tagPtrResult, Val: lambdaResultTag})
+
+		lambdaResultPayloadPtr := ls.b.FreshTemp("lambda_result_payload_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    callResult,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     lambdaResultPayloadPtr,
+		})
+		lambdaResultPayload := ls.b.FreshTemp("lambda_result_payload")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: lambdaResultPayloadPtr, Dst: lambdaResultPayload})
+		ls.b.Emit(&hir.Store{Dst: dstPayloadSlot, Val: lambdaResultPayload})
 
 		// Switch back to main block and emit conditional
 		ls.b.SetBlock(curBlock)
