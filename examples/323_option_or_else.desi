@@ -1,0 +1,37 @@
+# Test Option/Result or_else combinator
+# EXPECTED_OUTPUT:
+# Testing Option.or_else:
+# Some(5).or_else: is_some=true, val=5
+# Nothing.or_else: is_some=true, val=99
+# Testing Result.or_else:
+# Ok(5).or_else: is_ok=true, val=5
+# Err.or_else: is_ok=true, val=42
+
+def fallback_opt() -> Option[int]:
+    return Option.Some(99)
+
+def fallback_res(e: str) -> Result[int, str]:
+    return Result.Ok(42)
+
+def main():
+    # Option.or_else tests
+    print("Testing Option.or_else:")
+    
+    let opt1: Option[int] = Option.Some(5)
+    let result1 = opt1.or_else(fallback_opt)
+    print(f"Some(5).or_else: is_some={result1.is_some()}, val={result1.unwrap_or(0)}")
+    
+    let opt2: Option[int] = Option.Nothing
+    let result2 = opt2.or_else(fallback_opt)
+    print(f"Nothing.or_else: is_some={result2.is_some()}, val={result2.unwrap_or(0)}")
+    
+    # Result.or_else tests
+    print("Testing Result.or_else:")
+    
+    let res1: Result[int, str] = Result.Ok(5)
+    let result3 = res1.or_else(fallback_res)
+    print(f"Ok(5).or_else: is_ok={result3.is_ok()}, val={result3.unwrap_or(0)}")
+    
+    let res2: Result[int, str] = Result.Err("error")
+    let result4 = res2.or_else(fallback_res)
+    print(f"Err.or_else: is_ok={result4.is_ok()}, val={result4.unwrap_or(0)}")

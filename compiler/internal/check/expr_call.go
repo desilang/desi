@@ -405,8 +405,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						}
 					}
 
-					// Special handling for Option/Result .and_then() - return type IS lambda's return type (not wrapped)
-					if fe.Name.Name == "and_then" && (types.IsOption(receiverType) || types.IsResult(receiverType)) {
+					// Special handling for Option/Result .and_then() and .or_else() - return type IS lambda's return type (not wrapped)
+					if (fe.Name.Name == "and_then" || fe.Name.Name == "or_else") && (types.IsOption(receiverType) || types.IsResult(receiverType)) {
 						if len(args) == 1 {
 							// Look up the actual Func type of the argument
 							var funcRetType types.T
@@ -425,7 +425,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 								}
 							}
 
-							// For and_then, the lambda's return type IS the result type (no wrapping)
+							// For and_then/or_else, the lambda's return type IS the result type (no wrapping)
 							// Lambda must return Option<U> or Result<U, E>
 							if funcRetType != nil {
 								c.info.Types[call] = funcRetType

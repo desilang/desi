@@ -356,6 +356,34 @@ let result = get_user(id)
     .and_then(get_settings)   # get_settings returns Option
 ```
 
+### Built-in or_else() Method
+
+The `or_else()` method provides a fallback when the value is Nothing/Err:
+
+```desi
+def fallback_value() -> Option[int]:
+    return Option.Some(99)
+
+let opt: Option[int] = Option.Nothing
+let result = opt.or_else(fallback_value)  # Some(99)
+
+let some_opt: Option[int] = Option.Some(5)
+let result2 = some_opt.or_else(fallback_value)  # Some(5) - original kept
+```
+
+**Key difference from `and_then()`:**
+- `and_then(f)` calls `f` when Some/Ok
+- `or_else(f)` calls `f` when Nothing/Err
+
+**For Result**, the function receives the error:
+```desi
+def handle_error(e: str) -> Result[int, str]:
+    return Result.Ok(0)  # Convert error to default value
+
+let res: Result[int, str] = Result.Err("failed")
+let result = res.or_else(handle_error)  # Ok(0)
+```
+
 ### Chain Multiple Operations
 
 ```desi
