@@ -1,0 +1,37 @@
+# Test ? operator for Option/Result
+# EXPECTED_OUTPUT:
+# Testing Result ?:
+# double_if_ok(Ok(5)): is_ok=true, val=10
+# double_if_ok(Err): is_ok=false
+# Testing Option ?:
+# double_if_some(Some(5)): is_some=true, val=10
+# double_if_some(Nothing): is_some=false
+
+def double_if_ok(res: Result[int, str]) -> Result[int, str]:
+    let n = res?  # Early return Err if Err
+    return Result.Ok(n * 2)
+
+def double_if_some(opt: Option[int]) -> Option[int]:
+    let n = opt?  # Early return Nothing if Nothing
+    return Option.Some(n * 2)
+
+def main():
+    print("Testing Result ?:")
+    
+    let r1_input: Result[int, str] = Result.Ok(5)
+    let r1 = double_if_ok(r1_input)
+    print(f"double_if_ok(Ok(5)): is_ok={r1.is_ok()}, val={r1.unwrap_or(0)}")
+    
+    let r2_input: Result[int, str] = Result.Err("error")
+    let r2 = double_if_ok(r2_input)
+    print(f"double_if_ok(Err): is_ok={r2.is_ok()}")
+    
+    print("Testing Option ?:")
+    
+    let o1_input: Option[int] = Option.Some(5)
+    let o1 = double_if_some(o1_input)
+    print(f"double_if_some(Some(5)): is_some={o1.is_some()}, val={o1.unwrap_or(0)}")
+    
+    let o2: Option[int] = Option.Nothing
+    let o2_result = double_if_some(o2)
+    print(f"double_if_some(Nothing): is_some={o2_result.is_some()}")

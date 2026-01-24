@@ -970,29 +970,44 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return hir.Var{Name: fmt.Sprintf("unary(%s …)", x.Op)}
 
 	case *ast.TryExpr:
-		// ? operator: unwrap Result/Option by loading payload directly
-		// Full semantics (match + early return on Err/Nothing) can be added later
+		// ? operator: unwrap Result/Option with early return on Err/Nothing
+		// 1. Check tag - if Err/Nothing (tag != 0), early return with receiver
+		// 2. If Ok/Some (tag == 0), extract and return payload
 		inner := ls.lowerExpr(x.X)
 
-		// Get payload ptr at offset 8 (aligned after i32 tag + padding)
-		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		// Get tag at offset 0
+		tagPtr := ls.b.FreshTemp("try_tag_ptr")
 		ls.b.Emit(&hir.GetElementPtr{
 			Type:    "i8",
 			Base:    inner,
-			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
-			Dst:     payloadPtrSlot,
+			Indices: []hir.Value{hir.ConstInt{Text: "0"}},
+			Dst:     tagPtr,
 		})
-		payloadPtr := ls.b.FreshTemp("payload_ptr")
-		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+		tag := ls.b.FreshTemp("try_tag")
+		ls.b.Emit(&hir.Load{Type: "i32", Src: tagPtr, Dst: tag})
 
-		// Load value from payload ptr
-		// Get the element type from the Result/Option generic type
+		// Check if Ok/Some (tag == 0)
+		isOk := ls.b.FreshTemp("try_is_ok")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  tag,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isOk,
+			Type: "i1",
+		})
+
+		// Get element type for payload loading
 		var elemType types.T
 		if ls.info != nil {
 			if recvType := ls.info.Types[x.X]; recvType != nil {
 				if g, ok := recvType.(*types.Generic); ok {
 					if len(g.Args) > 0 {
 						elemType = g.Args[0] // T from Result[T,E] or Option[T]
+					}
+				} else if e, ok := recvType.(*types.Enum); ok {
+					// Extract from enum variant fields (for non-generic Option/Result)
+					if len(e.Variants) > 0 && len(e.Variants[0].Fields) > 0 {
+						elemType = e.Variants[0].Fields[0].Type
 					}
 				}
 			}
@@ -1003,8 +1018,43 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			valType = lowerType(elemType)
 		}
 
+		// Allocate storage for result value
+		resultSlot := ls.b.FreshTemp("try_result")
+		ls.b.Emit(&hir.Alloca{Type: valType, Count: 1, Dst: resultSlot})
+
+		// Create blocks for Ok and Err cases
+		curBlock := ls.b.Block()
+		okBlock := ls.b.NewBlock("try_ok")
+		errBlock := ls.b.NewBlock("try_err")
+
+		// Ok block: extract payload
+		ls.b.SetBlock(okBlock)
+		payloadPtrSlot := ls.b.FreshTemp("payload_ptr_slot")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    inner,
+			Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+			Dst:     payloadPtrSlot,
+		})
+		payloadPtr := ls.b.FreshTemp("payload_ptr")
+		ls.b.Emit(&hir.Load{Type: "ptr", Src: payloadPtrSlot, Dst: payloadPtr})
+		payloadVal := ls.b.FreshTemp("try_payload")
+		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: payloadVal})
+		ls.b.Emit(&hir.Store{Dst: resultSlot, Val: payloadVal})
+
+		// Err block: early return with the receiver (Err/Nothing)
+		ls.b.SetBlock(errBlock)
+		// Run defers and drops before early return
+		ls.emitAllDefersAndDrops()
+		ls.b.Emit(&hir.Ret{Val: inner})
+
+		// Switch back to main block and emit conditional
+		ls.b.SetBlock(curBlock)
+		ls.b.Emit(&hir.If{Cond: isOk, Then: okBlock, Else: errBlock})
+
+		// Load and return result (only reached if Ok/Some)
 		val := ls.b.FreshTemp("try_val")
-		ls.b.Emit(&hir.Load{Type: valType, Src: payloadPtr, Dst: val})
+		ls.b.Emit(&hir.Load{Type: valType, Src: resultSlot, Dst: val})
 		return val
 
 	case *ast.IfExpr:
