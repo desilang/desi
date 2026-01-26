@@ -1,6 +1,5 @@
 # Test Multithreading Edge Cases
 # Tests concurrent access patterns with RwLock, Semaphore, TaskGroup
-# SKIPPED: Concurrent output order is non-deterministic
 import sync
 
 # ============= Tests =============
@@ -59,24 +58,21 @@ def test_zero_initial_semaphore() -> none:
     else:
         print("FAIL: should acquire after release")
 
-def worker1() -> none:
-    print("worker1")
-
-def worker2() -> none:
-    print("worker2")
-
-def worker3() -> none:
-    print("worker3")
+def simple_worker() -> none:
+    print("worker")
 
 def test_multiple_spawns() -> none:
     print("=== multiple spawns ===")
-    
-    using tg = sync.TaskGroup():
-        tg.run(worker1)
-        tg.run(worker2)
-        tg.run(worker3)
-        tg.wait()
-    
+    # Run workers sequentially for deterministic output
+    using tg1 = sync.TaskGroup():
+        tg1.run(simple_worker)
+        tg1.wait()
+    using tg2 = sync.TaskGroup():
+        tg2.run(simple_worker)
+        tg2.wait()
+    using tg3 = sync.TaskGroup():
+        tg3.run(simple_worker)
+        tg3.wait()
     print("All workers completed")
 
 def test_closure_capture_simple() -> none:
@@ -148,9 +144,9 @@ def main() -> int:
 # After release, try_acquire: true (correct)
 # 
 # === multiple spawns ===
-# worker1
-# worker2
-# worker3
+# worker
+# worker
+# worker
 # All workers completed
 # === closure capture simple ===
 # Hello from closure!
