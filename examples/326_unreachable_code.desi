@@ -1,0 +1,19 @@
+# Test unreachable code warning (DW0004)
+# WARNINGS: DW0004
+
+def test_simple() -> int:
+    return 42
+    print("never runs")  # Should trigger DW0004
+
+def test_multiple() -> int:
+    return 1
+    let x = 2  # DW0004
+    let y = 3  # DW0004
+
+def main() -> int:
+    test_simple()
+    test_multiple()
+    return 0
+
+# EXPECTED_OUTPUT:
+# 
