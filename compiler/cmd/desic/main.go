@@ -88,6 +88,12 @@ func main() {
 		os.Exit(exitCode)
 	}
 
+	// Subcommand path: desic doc ...
+	if len(os.Args) >= 2 && os.Args[1] == "doc" {
+		exitCode := runDoc(os.Args[2:])
+		os.Exit(exitCode)
+	}
+
 	// Subcommand path: desic check ...
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
 		jsonMode := ef == "json"
@@ -689,4 +695,259 @@ func bytesEqual(a, b []byte) bool {
 		}
 	}
 	return true
+}
+
+// ---- doc subcommand ----
+
+// runDoc handles the `desic doc` subcommand.
+// Generates markdown documentation from Desi source files.
+func runDoc(args []string) int {
+	if len(args) == 0 {
+		term.Println("usage: desic doc <file.desi>")
+		term.Flush()
+		return 2
+	}
+
+	path := args[0]
+	src, err := os.ReadFile(path)
+	if err != nil {
+		term.Eprintln("desic doc:", err)
+		term.Flush()
+		return 1
+	}
+
+	mod, diags := parse.ParseFile(path, src)
+	if len(diags) > 0 {
+		for _, d := range diags {
+			d.RenderTTY(os.Stderr, diag.Theme{})
+		}
+		term.Flush()
+		return 1
+	}
+
+	// Generate markdown documentation
+	doc := generateDoc(mod, src)
+	term.Println(doc)
+	term.Flush()
+	return 0
+}
+
+// generateDoc generates markdown documentation from a parsed module.
+func generateDoc(mod *ast.Module, src []byte) string {
+	var sb strings.Builder
+
+	// Module header
+	baseName := filepath.Base(mod.File)
+	sb.WriteString(fmt.Sprintf("# Module: %s\n\n", baseName))
+
+	// Collect declarations by type
+	var funcs []*ast.FuncDecl
+	var classes []*ast.ClassDecl
+	var structs []*ast.StructDecl
+	var enums []*ast.EnumDecl
+
+	for _, d := range mod.Decls {
+		switch decl := d.(type) {
+		case *ast.FuncDecl:
+			if decl.Name.Name != "__top__" && decl.Pub {
+				funcs = append(funcs, decl)
+			}
+		case *ast.ClassDecl:
+			if decl.Pub {
+				classes = append(classes, decl)
+			}
+		case *ast.StructDecl:
+			if decl.Pub {
+				structs = append(structs, decl)
+			}
+		case *ast.EnumDecl:
+			if decl.Pub {
+				enums = append(enums, decl)
+			}
+		}
+	}
+
+	// Document functions
+	if len(funcs) > 0 {
+		sb.WriteString("## Functions\n\n")
+		for _, fn := range funcs {
+			renderFunc(&sb, fn, src)
+		}
+	}
+
+	// Document classes
+	if len(classes) > 0 {
+		sb.WriteString("## Classes\n\n")
+		for _, cls := range classes {
+			renderClass(&sb, cls, src)
+		}
+	}
+
+	// Document structs
+	if len(structs) > 0 {
+		sb.WriteString("## Structs\n\n")
+		for _, st := range structs {
+			renderStruct(&sb, st, src)
+		}
+	}
+
+	// Document enums
+	if len(enums) > 0 {
+		sb.WriteString("## Enums\n\n")
+		for _, en := range enums {
+			renderEnum(&sb, en, src)
+		}
+	}
+
+	return sb.String()
+}
+
+// renderFunc renders documentation for a function.
+func renderFunc(sb *strings.Builder, fn *ast.FuncDecl, src []byte) {
+	// Signature
+	sig := formatFuncSig(fn)
+	sb.WriteString(fmt.Sprintf("### `%s`\n\n", sig))
+
+	// Docstring
+	if fn.Doc != nil {
+		docText := extractDocString(fn.Doc, src)
+		if docText != "" {
+			sb.WriteString(docText + "\n\n")
+		}
+	}
+}
+
+// renderClass renders documentation for a class.
+func renderClass(sb *strings.Builder, cls *ast.ClassDecl, src []byte) {
+	sb.WriteString(fmt.Sprintf("### `%s`\n\n", cls.Name.Name))
+
+	// Docstring
+	if cls.Doc != nil {
+		docText := extractDocString(cls.Doc, src)
+		if docText != "" {
+			sb.WriteString(docText + "\n\n")
+		}
+	}
+
+	// Fields
+	if len(cls.Fields) > 0 {
+		sb.WriteString("**Fields:**\n")
+		for _, f := range cls.Fields {
+			if f.Pub {
+				typeName := "any"
+				if f.Type != nil {
+					typeName = f.Type.Name
+				}
+				sb.WriteString(fmt.Sprintf("- `%s: %s`\n", f.Name.Name, typeName))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Methods
+	var pubMethods []*ast.FuncDecl
+	for _, m := range cls.Methods {
+		if m.Pub {
+			pubMethods = append(pubMethods, m)
+		}
+	}
+	if len(pubMethods) > 0 {
+		sb.WriteString("**Methods:**\n")
+		for _, m := range pubMethods {
+			sig := formatFuncSig(m)
+			sb.WriteString(fmt.Sprintf("- `%s`", sig))
+			if m.Doc != nil {
+				docText := extractDocString(m.Doc, src)
+				if docText != "" {
+					// Show first line as summary
+					lines := strings.SplitN(docText, "\n", 2)
+					sb.WriteString(fmt.Sprintf(" - %s", strings.TrimSpace(lines[0])))
+				}
+			}
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+}
+
+// renderStruct renders documentation for a struct.
+func renderStruct(sb *strings.Builder, st *ast.StructDecl, src []byte) {
+	sb.WriteString(fmt.Sprintf("### `%s`\n\n", st.Name.Name))
+
+	if st.Doc != nil {
+		docText := extractDocString(st.Doc, src)
+		if docText != "" {
+			sb.WriteString(docText + "\n\n")
+		}
+	}
+
+	if len(st.Fields) > 0 {
+		sb.WriteString("**Fields:**\n")
+		for _, f := range st.Fields {
+			typeName := "any"
+			if f.Type != nil {
+				typeName = f.Type.Name
+			}
+			sb.WriteString(fmt.Sprintf("- `%s: %s`\n", f.Name.Name, typeName))
+		}
+		sb.WriteString("\n")
+	}
+}
+
+// renderEnum renders documentation for an enum.
+func renderEnum(sb *strings.Builder, en *ast.EnumDecl, src []byte) {
+	sb.WriteString(fmt.Sprintf("### `%s`\n\n", en.Name.Name))
+
+	if en.Doc != nil {
+		docText := extractDocString(en.Doc, src)
+		if docText != "" {
+			sb.WriteString(docText + "\n\n")
+		}
+	}
+
+	if len(en.Variants) > 0 {
+		sb.WriteString("**Variants:**\n")
+		for _, v := range en.Variants {
+			if v.Type != nil {
+				sb.WriteString(fmt.Sprintf("- `%s(%s)`\n", v.Name.Name, v.Type.Name))
+			} else {
+				sb.WriteString(fmt.Sprintf("- `%s`\n", v.Name.Name))
+			}
+		}
+		sb.WriteString("\n")
+	}
+}
+
+// formatFuncSig formats a function signature.
+func formatFuncSig(fn *ast.FuncDecl) string {
+	var params []string
+	for _, p := range fn.Params {
+		typeName := "any"
+		if p.Type != nil {
+			typeName = p.Type.Name
+		}
+		params = append(params, fmt.Sprintf("%s: %s", p.Name.Name, typeName))
+	}
+
+	sig := fmt.Sprintf("%s(%s)", fn.Name.Name, strings.Join(params, ", "))
+	if fn.RetType != nil {
+		sig += " -> " + fn.RetType.Name
+	}
+	return sig
+}
+
+// extractDocString extracts docstring text from a StrLit.
+func extractDocString(doc *ast.StrLit, src []byte) string {
+	if doc.Value != "" {
+		return strings.TrimSpace(doc.Value)
+	}
+	// Extract from source using span
+	if doc.Span.Start.Byte > 0 && doc.Span.End.Byte > doc.Span.Start.Byte {
+		text := string(src[doc.Span.Start.Byte:doc.Span.End.Byte])
+		// Remove triple quotes
+		text = strings.TrimPrefix(text, "\"\"\"")
+		text = strings.TrimSuffix(text, "\"\"\"")
+		return strings.TrimSpace(text)
+	}
+	return ""
 }
