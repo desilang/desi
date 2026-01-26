@@ -701,14 +701,28 @@ func bytesEqual(a, b []byte) bool {
 
 // runDoc handles the `desic doc` subcommand.
 // Generates markdown documentation from Desi source files.
+// Flags: --all (include non-pub declarations)
 func runDoc(args []string) int {
-	if len(args) == 0 {
-		term.Println("usage: desic doc <file.desi>")
+	showAll := false
+	var files []string
+
+	for _, a := range args {
+		switch a {
+		case "--all", "-a":
+			showAll = true
+		default:
+			files = append(files, a)
+		}
+	}
+
+	if len(files) == 0 {
+		term.Println("usage: desic doc [--all] <file.desi>")
+		term.Println("flags: --all, -a (include non-pub declarations)")
 		term.Flush()
 		return 2
 	}
 
-	path := args[0]
+	path := files[0]
 	src, err := os.ReadFile(path)
 	if err != nil {
 		term.Eprintln("desic doc:", err)
@@ -726,14 +740,15 @@ func runDoc(args []string) int {
 	}
 
 	// Generate markdown documentation
-	doc := generateDoc(mod, src)
+	doc := generateDoc(mod, src, showAll)
 	term.Println(doc)
 	term.Flush()
 	return 0
 }
 
 // generateDoc generates markdown documentation from a parsed module.
-func generateDoc(mod *ast.Module, src []byte) string {
+// If showAll is true, includes non-pub declarations.
+func generateDoc(mod *ast.Module, src []byte, showAll bool) string {
 	var sb strings.Builder
 
 	// Module header
@@ -749,19 +764,19 @@ func generateDoc(mod *ast.Module, src []byte) string {
 	for _, d := range mod.Decls {
 		switch decl := d.(type) {
 		case *ast.FuncDecl:
-			if decl.Name.Name != "__top__" && decl.Pub {
+			if decl.Name.Name != "__top__" && (showAll || decl.Pub) {
 				funcs = append(funcs, decl)
 			}
 		case *ast.ClassDecl:
-			if decl.Pub {
+			if showAll || decl.Pub {
 				classes = append(classes, decl)
 			}
 		case *ast.StructDecl:
-			if decl.Pub {
+			if showAll || decl.Pub {
 				structs = append(structs, decl)
 			}
 		case *ast.EnumDecl:
-			if decl.Pub {
+			if showAll || decl.Pub {
 				enums = append(enums, decl)
 			}
 		}
