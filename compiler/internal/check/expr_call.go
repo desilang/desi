@@ -682,6 +682,24 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.info.Types[call] = argType
 			return argType
 		}
+
+		// Special case: type_of(expr) returns Type[T] where T is the expression's type
+		if id.Name == "type_of" {
+			if len(call.Args) != 1 {
+				c.add(diagAt("DTE0046", call.Span, "type_of() takes exactly 1 argument"))
+				return nil
+			}
+			// Type-check the argument and get its type
+			argType := c.typ(call.Args[0])
+			if argType == nil {
+				return nil
+			}
+
+			// Return Type[T] where T is the argument's type
+			resultType := &types.TypeWrapper{Wrapped: argType}
+			c.info.Types[call] = resultType
+			return resultType
+		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc

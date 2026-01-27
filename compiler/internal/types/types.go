@@ -187,6 +187,17 @@ type TypeAlias struct {
 	Target T      // The underlying type
 }
 
+// TypeWrapper represents Type[T] - a first-class type object for reflection
+// Example: Type[int] wraps the int type, allowing runtime type introspection
+type TypeWrapper struct {
+	Wrapped T // The type being wrapped (e.g., int, MyClass)
+}
+
+func (t *TypeWrapper) isType() {}
+func (t *TypeWrapper) String() string {
+	return fmt.Sprintf("Type[%s]", t.Wrapped.String())
+}
+
 type Field struct {
 	Name  string
 	Type  T

@@ -224,6 +224,20 @@ func addPreludeBuiltins(info *Info) {
 		Modes:      []ast.ParamMode{ast.ParamMove},
 	})
 
+	// type_of(value: Any) -> Type[T] - runtime type introspection
+	// Returns a Type[T] wrapper containing the value's type information
+	// Special handling in expr_call.go to return Type[T] where T is the arg's type
+	info.Funcs["type_of"] = &OverloadSet{Name: "type_of"}
+	info.Funcs["type_of"].Add(&FuncCand{
+		Type: &types.Func{
+			Params:   []types.T{types.Any},
+			Ret:      types.Any, // replaced with Type[T] in expr_call.go
+			Variadic: false,
+		},
+		ParamNames: []string{"value"},
+		Modes:      []ast.ParamMode{ast.ParamMove},
+	})
+
 	// --- Task D stubs (compile-only, with explicit names) ---
 	// list_push(list: _, value: int) -> none
 	addN("list_push",

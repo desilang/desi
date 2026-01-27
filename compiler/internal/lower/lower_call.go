@@ -941,6 +941,40 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				return argVal
 			}
 		}
+		// type_of(expr) - returns a Type[T] wrapper with runtime type info
+		if calleeName == "type_of" {
+			if len(x.Args) > 0 {
+				// Get the type of the argument from type info
+				argType := ls.info.Types[x.Args[0]]
+				if argType == nil {
+					argType = types.Any
+				}
+				typeName := argType.String()
+
+				// Generate a unique type ID from the type name
+				var typeID uint64
+				for _, c := range typeName {
+					typeID = typeID*31 + uint64(c)
+				}
+
+				// Get size (use 8 for pointers/refs, actual size calculation is complex)
+				var typeSize int64 = 8 // Default pointer size
+
+				// Call __desi_type_new(id, name, size)
+				res := ls.b.FreshTemp("type_info")
+				ls.b.Emit(&hir.Call{
+					Dst: res,
+					Fn:  "__desi_type_new",
+					Args: []hir.Value{
+						hir.ConstInt{Text: fmt.Sprintf("%d", typeID), Type: "i64"},
+						hir.ConstStr{Text: typeName},
+						hir.ConstInt{Text: fmt.Sprintf("%d", typeSize), Type: "i64"},
+					},
+					Type: "ptr",
+				})
+				return res
+			}
+		}
 		if set, ok := ls.info.Funcs[calleeName]; ok && len(set.Cands) > 0 {
 			// Check if any candidate is variadic
 			// In practice, after type checking, we know which one was chosen
