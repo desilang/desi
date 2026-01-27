@@ -3,6 +3,8 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/format"
 	"github.com/desilang/desi/compiler/internal/lex"
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/resolve"
@@ -78,6 +81,12 @@ func main() {
 	diag.SetGlobalRender(ef, cm)
 
 	exitCode := 0
+
+	// Subcommand path: desic fmt ...
+	if len(os.Args) >= 2 && os.Args[1] == "fmt" {
+		exitCode := runFmt(os.Args[2:])
+		os.Exit(exitCode)
+	}
 
 	// Subcommand path: desic check ...
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
@@ -548,4 +557,136 @@ func stripRenderFlags(args []string) []string {
 		}
 	}
 	return out
+}
+
+// ---- fmt subcommand ----
+
+// runFmt handles the `desic fmt` subcommand.
+// Flags: -w (write in place), -l (list files that differ), -q (quiet)
+func runFmt(args []string) int {
+	writeInPlace := false
+	listOnly := false
+	quiet := false
+	var files []string
+
+	for _, a := range args {
+		switch a {
+		case "-w":
+			writeInPlace = true
+		case "-l":
+			listOnly = true
+		case "-q":
+			quiet = true
+		default:
+			files = append(files, a)
+		}
+	}
+
+	if len(files) == 0 {
+		term.Println("usage: desic fmt [flags] <file-or-dir> ...")
+		term.Println("flags: -w (write in place), -l (list files that differ), -q (quiet)")
+		return 2
+	}
+
+	hadError := false
+	for _, path := range files {
+		stat, err := os.Stat(path)
+		if err != nil {
+			term.Eprintln("desic fmt:", err)
+			hadError = true
+			continue
+		}
+
+		if stat.IsDir() {
+			err := filepath.WalkDir(path, func(p string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if d.IsDir() || filepath.Ext(p) != ".desi" {
+					return nil
+				}
+				if !formatOneFile(p, writeInPlace, listOnly, quiet) {
+					hadError = true
+				}
+				return nil
+			})
+			if err != nil {
+				term.Eprintln("desic fmt:", err)
+				hadError = true
+			}
+		} else {
+			if !formatOneFile(path, writeInPlace, listOnly, quiet) {
+				hadError = true
+			}
+		}
+	}
+
+	if hadError {
+		return 1
+	}
+	return 0
+}
+
+// formatOneFile formats a single .desi file.
+func formatOneFile(path string, writeInPlace, listOnly, quiet bool) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		term.Eprintln("desic fmt:", err)
+		return false
+	}
+	defer func() { _ = f.Close() }()
+
+	src, err := io.ReadAll(f)
+	if err != nil {
+		term.Eprintln("desic fmt:", err)
+		return false
+	}
+
+	out, diags := format.FormatBytes(src)
+	if len(diags) > 0 {
+		for _, d := range diags {
+			d.RenderTTY(os.Stderr, diag.Theme{})
+		}
+		return false
+	}
+
+	if listOnly {
+		if !bytesEqual(src, out) {
+			term.Println(path)
+		}
+		return true
+	}
+
+	if writeInPlace {
+		if bytesEqual(src, out) {
+			if !quiet {
+				term.Println("formatted:", path, "(no changes)")
+			}
+			return true
+		}
+		if err := os.WriteFile(path, out, 0644); err != nil {
+			term.Eprintln("desic fmt:", err)
+			return false
+		}
+		if !quiet {
+			term.Println("wrote:", path)
+		}
+		return true
+	}
+
+	// Default: print to stdout
+	term.Write(os.Stdout, out)
+	return true
+}
+
+func bytesEqual(a, b []byte) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
