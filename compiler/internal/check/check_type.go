@@ -413,9 +413,13 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	for _, cd := range d.Constants {
 		constType := c.resolveType(cd.Type)
 
-		// Check the value expression
-		// Note: We should verify it's a constant expression, but for now we just check the type.
-		// TODO: Add constant folding/verification.
+		// Verify the value is a compile-time constant expression
+		constVal := c.evalConst(cd.Value)
+		if constVal == nil {
+			c.add(diagAt("DTE0004", cd.Value.SpanOf(), "class constant must be a compile-time constant expression"))
+		}
+
+		// Check the value expression type
 		valType := c.typ(cd.Value)
 
 		if !types.Assignable(constType, valType) {
