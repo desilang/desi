@@ -20,6 +20,18 @@ The command generates markdown with:
 ### Module Header
 ```markdown
 # Module: filename.desi
+
+Module-level docstring appears here if present.
+```
+
+A module docstring is the first triple-quoted string at the top of the file:
+```desi
+"""
+This module provides utility functions.
+"""
+
+pub def helper() -> int:
+    pass
 ```
 
 ### Functions

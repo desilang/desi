@@ -27,6 +27,7 @@ func (n *TypeParamNode) SpanOf() diag.Span { return n.Span }
 
 type Module struct {
 	File  string
+	Doc   *StrLit // optional module docstring (first stmt if triple-quoted)
 	Decls []Decl
 	Span  diag.Span
 }

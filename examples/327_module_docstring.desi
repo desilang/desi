@@ -1,0 +1,15 @@
+"""
+This module demonstrates module-level docstrings.
+It provides example functions for testing the module doc feature.
+"""
+
+pub def greet(name: str) -> str:
+    """Return a greeting message."""
+    return f"Hello, {name}!"
+
+def main() -> int:
+    print(greet("World"))
+    return 0
+
+# EXPECTED_OUTPUT:
+# Hello, World!

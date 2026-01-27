@@ -213,6 +213,28 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		m.Decls = append(m.Decls, top)
 	}
 	m.Span = ast.JoinSpan(m.Span, spanPos(filename, p.cur))
+
+	// Convert first long string in first __top__ block to DocStringStmt (like parseBlock does)
+	// Then extract it as module docstring
+	if len(m.Decls) > 0 {
+		if top, ok := m.Decls[0].(*ast.FuncDecl); ok && top.Name.Name == "__top__" {
+			if top.Body != nil && len(top.Body.Stmts) > 0 {
+				// Convert ExprStmt with long string to DocStringStmt
+				if es, ok := top.Body.Stmts[0].(*ast.ExprStmt); ok {
+					if lit, ok2 := es.Expr.(*ast.StrLit); ok2 && lit.Long {
+						top.Body.Stmts[0] = &ast.DocStringStmt{Value: lit, Span: es.SpanOf()}
+					}
+				}
+				// Now extract as module docstring
+				if ds, ok := top.Body.Stmts[0].(*ast.DocStringStmt); ok && ds.Value != nil && ds.Value.Long {
+					m.Doc = ds.Value
+					// Remove from the __top__ block
+					top.Body.Stmts = top.Body.Stmts[1:]
+				}
+			}
+		}
+	}
+
 	return m, p.diags
 }
 

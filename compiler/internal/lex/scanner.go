@@ -786,20 +786,23 @@ func (s *Scanner) scanFStringPart() Item {
 
 func (s *Scanner) scanLongString() Item {
 	startCol := s.col
+	startLine := s.line
 	s.i += 3 // """
 	s.col += 3
+	contentStart := s.i // Start of content after opening """
 	for s.i < len(s.src) {
 		// close only on exact """
 		if s.peek2Is(`"""`) {
+			content := string(s.src[contentStart:s.i])
 			s.i += 3
 			s.col += 3
-			return Item{Tok: token.LONGSTR, Lexeme: "", Line: s.line, Col: startCol}
+			return Item{Tok: token.LONGSTR, Lexeme: content, Line: startLine, Col: startCol}
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {
 			if !s.consumeEscape() {
 				s.addErr("lexer.invalid_escape_sequence", "invalid escape sequence", s.line, s.col)
-				return Item{Tok: token.ILLEGAL, Lexeme: "invalid escape sequence", Line: s.line, Col: startCol}
+				return Item{Tok: token.ILLEGAL, Lexeme: "invalid escape sequence", Line: startLine, Col: startCol}
 			}
 			continue
 		}
@@ -812,8 +815,8 @@ func (s *Scanner) scanLongString() Item {
 		s.i += w
 		s.col++
 	}
-	s.addErr("lexer.unterminated_string", "long string literal not closed", s.line, startCol)
-	return Item{Tok: token.ILLEGAL, Lexeme: "unterminated long string", Line: s.line, Col: startCol}
+	s.addErr("lexer.unterminated_string", "long string literal not closed", startLine, startCol)
+	return Item{Tok: token.ILLEGAL, Lexeme: "unterminated long string", Line: startLine, Col: startCol}
 }
 
 // validate and consume one escape sequence after the backslash.

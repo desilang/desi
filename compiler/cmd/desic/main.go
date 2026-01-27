@@ -755,6 +755,14 @@ func generateDoc(mod *ast.Module, src []byte, showAll bool) string {
 	baseName := filepath.Base(mod.File)
 	sb.WriteString(fmt.Sprintf("# Module: %s\n\n", baseName))
 
+	// Module docstring (if present)
+	if mod.Doc != nil {
+		docText := extractDocString(mod.Doc, src)
+		if docText != "" {
+			sb.WriteString(docText + "\n\n")
+		}
+	}
+
 	// Collect declarations by type
 	var funcs []*ast.FuncDecl
 	var classes []*ast.ClassDecl

@@ -553,8 +553,9 @@ func (p *Parser) parsePrimary() ast.Expr {
 
 	case token.STR, token.LONGSTR:
 		st := &ast.StrLit{
-			Long: p.cur.Tok == token.LONGSTR,
-			Span: spanPos(p.file, p.cur),
+			Long:  p.cur.Tok == token.LONGSTR,
+			Value: p.cur.Lexeme,
+			Span:  spanPos(p.file, p.cur),
 		}
 		p.next()
 		return st
