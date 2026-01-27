@@ -52,6 +52,10 @@ type Module struct {
 	staticFieldGlobals map[string]GlobalDef // name -> definition
 	nameVersions       map[string]int       // track name usage for unique SSA names
 
+	// Lazy module initialization tracking
+	lazyModules     map[string]bool // module path -> needs lazy init
+	lazyInitEmitted map[string]bool // module path -> init thunk already emitted
+
 	// TaskGroup wrapper functions: wrapperName -> WrapperInfo
 	tgWrappers map[string]WrapperInfo
 }
@@ -82,6 +86,8 @@ func NewModule(name string) *Module {
 		currentMoves:       make(map[string]bool),
 		staticFieldGlobals: make(map[string]GlobalDef),
 		nameVersions:       make(map[string]int),
+		lazyModules:        make(map[string]bool),
+		lazyInitEmitted:    make(map[string]bool),
 		tgWrappers:         make(map[string]WrapperInfo),
 	}
 }
@@ -89,6 +95,62 @@ func NewModule(name string) *Module {
 // MarkAsyncWrapper records that calls to 'name' return a ptr (future handle).
 func (m *Module) MarkAsyncWrapper(name string) {
 	m.asyncWrappers[name] = true
+}
+
+// SetLazyModules registers modules for lazy initialization.
+// Each module will get an init flag and thunk generated.
+func (m *Module) SetLazyModules(modules []string) {
+	for _, mod := range modules {
+		m.lazyModules[mod] = true
+	}
+}
+
+// sanitizeModName converts a module path to a valid LLVM identifier.
+// Replaces dots and slashes with underscores.
+func sanitizeModName(path string) string {
+	s := strings.ReplaceAll(path, ".", "_")
+	s = strings.ReplaceAll(s, "/", "_")
+	s = strings.ReplaceAll(s, "-", "_")
+	return s
+}
+
+// emitLazyInitThunks generates lazy init flags and thunks for registered modules.
+// Called before IR() to emit the necessary globals and functions.
+func (m *Module) emitLazyInitThunks() {
+	for modPath := range m.lazyModules {
+		if m.lazyInitEmitted[modPath] {
+			continue
+		}
+		m.lazyInitEmitted[modPath] = true
+
+		safeName := sanitizeModName(modPath)
+		flagName := fmt.Sprintf("@__mod_%s_init_done", safeName)
+		thunkName := fmt.Sprintf("__ensure_%s_init", safeName)
+		topName := fmt.Sprintf("%s___top__", safeName) // Module's __top__ function
+
+		// Emit global init flag
+		wprintf(&m.globals, "%s = internal global i1 false\n", flagName)
+
+		// Emit init thunk function
+		var b bytes.Buffer
+		wprintf(&b, "define void @%s() {\n", thunkName)
+		wprintf(&b, "entry:\n")
+		wprintf(&b, "  %%done = load i1, ptr %s\n", flagName)
+		wprintf(&b, "  br i1 %%done, label %%skip, label %%init\n")
+		wprintf(&b, "\n")
+		wprintf(&b, "init:\n")
+		// Call the module's __top__ function if it exists
+		if m.definedFunctions[topName] {
+			wprintf(&b, "  call i32 @%s()\n", topName)
+		}
+		wprintf(&b, "  store i1 true, ptr %s\n", flagName)
+		wprintf(&b, "  br label %%skip\n")
+		wprintf(&b, "\n")
+		wprintf(&b, "skip:\n")
+		wprintf(&b, "  ret void\n")
+		wprintf(&b, "}\n\n")
+		m.funcs.Write(b.Bytes())
+	}
 }
 
 // uniqueName generates a unique SSA name by appending a version suffix if needed.
@@ -175,7 +237,8 @@ func (m *Module) writeGlobals() {
 
 func (m *Module) IR() string {
 	m.writeGlobals()
-	m.emitTGWrappers() // Emit TaskGroup wrapper functions
+	m.emitTGWrappers()     // Emit TaskGroup wrapper functions
+	m.emitLazyInitThunks() // Emit lazy module init thunks
 	var out bytes.Buffer
 	// Use ABI layer for target information
 	abiInfo := abi.Current()

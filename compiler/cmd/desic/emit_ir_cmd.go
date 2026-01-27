@@ -132,6 +132,15 @@ func init() {
 	lm := llvm.NewModule(filepath.Base(file))
 	markAsyncWrappers(lm, hm)
 
+	// Set lazy modules for deferred initialization
+	if res.Info.R != nil && len(res.Info.R.LazyModules) > 0 {
+		lazyPaths := make([]string, 0, len(res.Info.R.LazyModules))
+		for path := range res.Info.R.LazyModules {
+			lazyPaths = append(lazyPaths, path)
+		}
+		lm.SetLazyModules(lazyPaths)
+	}
+
 	// Inject param/ret textual types from surface annotations in all modules
 	for _, astMod := range allASTs {
 		injectUserFuncSigs(astMod)
