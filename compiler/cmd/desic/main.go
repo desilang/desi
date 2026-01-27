@@ -819,9 +819,35 @@ func generateDoc(mod *ast.Module, src []byte, showAll bool) string {
 
 // renderFunc renders documentation for a function.
 func renderFunc(sb *strings.Builder, fn *ast.FuncDecl, src []byte) {
-	// Signature
-	sig := formatFuncSig(fn)
-	sb.WriteString(fmt.Sprintf("### `%s`\n\n", sig))
+	// Line number
+	line := fn.Span.Start.Line
+
+	// Build signature with type params
+	sig := formatFuncSigFull(fn)
+
+	// Visibility and async markers
+	var markers []string
+	if !fn.Pub {
+		markers = append(markers, "private")
+	}
+	if fn.Async {
+		markers = append(markers, "async")
+	}
+	markerStr := ""
+	if len(markers) > 0 {
+		markerStr = fmt.Sprintf(" *(%s)*", strings.Join(markers, ", "))
+	}
+
+	sb.WriteString(fmt.Sprintf("### `%s`%s\n", sig, markerStr))
+	sb.WriteString(fmt.Sprintf("*Line %d*\n\n", line))
+
+	// Decorators
+	if len(fn.Decorators) > 0 {
+		for _, dec := range fn.Decorators {
+			sb.WriteString(fmt.Sprintf("- `@%s`\n", dec.Name.Name))
+		}
+		sb.WriteString("\n")
+	}
 
 	// Docstring
 	if fn.Doc != nil {
@@ -834,7 +860,52 @@ func renderFunc(sb *strings.Builder, fn *ast.FuncDecl, src []byte) {
 
 // renderClass renders documentation for a class.
 func renderClass(sb *strings.Builder, cls *ast.ClassDecl, src []byte) {
-	sb.WriteString(fmt.Sprintf("### `%s`\n\n", cls.Name.Name))
+	// Line number
+	line := cls.Span.Start.Line
+
+	// Class name with type params
+	className := cls.Name.Name
+	if len(cls.TypeParams) > 0 {
+		var tps []string
+		for _, tp := range cls.TypeParams {
+			tpStr := tp.Name.Name
+			if len(tp.Bounds) > 0 {
+				var bounds []string
+				for _, b := range tp.Bounds {
+					bounds = append(bounds, b.Name)
+				}
+				tpStr += ": " + strings.Join(bounds, " + ")
+			}
+			tps = append(tps, tpStr)
+		}
+		className += "<" + strings.Join(tps, ", ") + ">"
+	}
+
+	// Visibility marker
+	visMarker := ""
+	if !cls.Pub {
+		visMarker = " *(private)*"
+	}
+
+	sb.WriteString(fmt.Sprintf("### `%s`%s\n", className, visMarker))
+	sb.WriteString(fmt.Sprintf("*Line %d*\n\n", line))
+
+	// Decorators
+	if len(cls.Decorators) > 0 {
+		for _, dec := range cls.Decorators {
+			sb.WriteString(fmt.Sprintf("- `@%s`\n", dec.Name.Name))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Inheritance
+	if len(cls.Bases) > 0 {
+		var bases []string
+		for _, b := range cls.Bases {
+			bases = append(bases, formatTypeName(b))
+		}
+		sb.WriteString(fmt.Sprintf("**Extends:** %s\n\n", strings.Join(bases, ", ")))
+	}
 
 	// Docstring
 	if cls.Doc != nil {
@@ -844,37 +915,76 @@ func renderClass(sb *strings.Builder, cls *ast.ClassDecl, src []byte) {
 		}
 	}
 
-	// Fields
+	// Constants
+	if len(cls.Constants) > 0 {
+		sb.WriteString("**Constants:**\n")
+		for _, c := range cls.Constants {
+			vis := ""
+			if !c.IsPub {
+				vis = " *(private)*"
+			}
+			typeName := formatTypeName(c.Type)
+			sb.WriteString(fmt.Sprintf("- `%s: %s`%s\n", c.Name.Name, typeName, vis))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Static fields
+	if len(cls.StaticFields) > 0 {
+		sb.WriteString("**Static Fields:**\n")
+		for _, sf := range cls.StaticFields {
+			vis := ""
+			if !sf.IsPub {
+				vis = " *(private)*"
+			}
+			mut := ""
+			if sf.IsMut {
+				mut = " *(mut)*"
+			}
+			typeName := formatTypeName(sf.Type)
+			sb.WriteString(fmt.Sprintf("- `%s: %s`%s%s\n", sf.Name.Name, typeName, mut, vis))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Instance fields
 	if len(cls.Fields) > 0 {
 		sb.WriteString("**Fields:**\n")
 		for _, f := range cls.Fields {
-			if f.Pub {
-				typeName := "any"
-				if f.Type != nil {
-					typeName = f.Type.Name
-				}
-				sb.WriteString(fmt.Sprintf("- `%s: %s`\n", f.Name.Name, typeName))
+			vis := ""
+			if !f.Pub {
+				vis = " *(private)*"
 			}
+			mut := ""
+			if f.Mut {
+				mut = " *(mut)*"
+			}
+			typeName := "any"
+			if f.Type != nil {
+				typeName = formatTypeName(f.Type)
+			}
+			sb.WriteString(fmt.Sprintf("- `%s: %s`%s%s\n", f.Name.Name, typeName, mut, vis))
 		}
 		sb.WriteString("\n")
 	}
 
 	// Methods
-	var pubMethods []*ast.FuncDecl
-	for _, m := range cls.Methods {
-		if m.Pub {
-			pubMethods = append(pubMethods, m)
-		}
-	}
-	if len(pubMethods) > 0 {
+	if len(cls.Methods) > 0 {
 		sb.WriteString("**Methods:**\n")
-		for _, m := range pubMethods {
+		for _, m := range cls.Methods {
 			sig := formatFuncSig(m)
-			sb.WriteString(fmt.Sprintf("- `%s`", sig))
+			vis := ""
+			if !m.Pub {
+				vis = " *(private)*"
+			}
+			async := ""
+			if m.Async {
+				async = " *(async)*"
+			}
+			sb.WriteString(fmt.Sprintf("- `%s`%s%s", sig, async, vis))
 			if m.Doc != nil {
 				docText := extractDocString(m.Doc, src)
 				if docText != "" {
-					// Show first line as summary
 					lines := strings.SplitN(docText, "\n", 2)
 					sb.WriteString(fmt.Sprintf(" - %s", strings.TrimSpace(lines[0])))
 				}
@@ -887,7 +997,17 @@ func renderClass(sb *strings.Builder, cls *ast.ClassDecl, src []byte) {
 
 // renderStruct renders documentation for a struct.
 func renderStruct(sb *strings.Builder, st *ast.StructDecl, src []byte) {
-	sb.WriteString(fmt.Sprintf("### `%s`\n\n", st.Name.Name))
+	// Line number
+	line := st.Span.Start.Line
+
+	// Visibility marker
+	visMarker := ""
+	if !st.Pub {
+		visMarker = " *(private)*"
+	}
+
+	sb.WriteString(fmt.Sprintf("### `%s`%s\n", st.Name.Name, visMarker))
+	sb.WriteString(fmt.Sprintf("*Line %d*\n\n", line))
 
 	if st.Doc != nil {
 		docText := extractDocString(st.Doc, src)
@@ -901,7 +1021,7 @@ func renderStruct(sb *strings.Builder, st *ast.StructDecl, src []byte) {
 		for _, f := range st.Fields {
 			typeName := "any"
 			if f.Type != nil {
-				typeName = f.Type.Name
+				typeName = formatTypeName(f.Type)
 			}
 			sb.WriteString(fmt.Sprintf("- `%s: %s`\n", f.Name.Name, typeName))
 		}
@@ -911,7 +1031,35 @@ func renderStruct(sb *strings.Builder, st *ast.StructDecl, src []byte) {
 
 // renderEnum renders documentation for an enum.
 func renderEnum(sb *strings.Builder, en *ast.EnumDecl, src []byte) {
-	sb.WriteString(fmt.Sprintf("### `%s`\n\n", en.Name.Name))
+	// Line number
+	line := en.Span.Start.Line
+
+	// Enum name with type params
+	enumName := en.Name.Name
+	if len(en.TypeParams) > 0 {
+		var tps []string
+		for _, tp := range en.TypeParams {
+			tpStr := tp.Name.Name
+			if len(tp.Bounds) > 0 {
+				var bounds []string
+				for _, b := range tp.Bounds {
+					bounds = append(bounds, b.Name)
+				}
+				tpStr += ": " + strings.Join(bounds, " + ")
+			}
+			tps = append(tps, tpStr)
+		}
+		enumName += "<" + strings.Join(tps, ", ") + ">"
+	}
+
+	// Visibility marker
+	visMarker := ""
+	if !en.Pub {
+		visMarker = " *(private)*"
+	}
+
+	sb.WriteString(fmt.Sprintf("### `%s`%s\n", enumName, visMarker))
+	sb.WriteString(fmt.Sprintf("*Line %d*\n\n", line))
 
 	if en.Doc != nil {
 		docText := extractDocString(en.Doc, src)
@@ -924,7 +1072,7 @@ func renderEnum(sb *strings.Builder, en *ast.EnumDecl, src []byte) {
 		sb.WriteString("**Variants:**\n")
 		for _, v := range en.Variants {
 			if v.Type != nil {
-				sb.WriteString(fmt.Sprintf("- `%s(%s)`\n", v.Name.Name, v.Type.Name))
+				sb.WriteString(fmt.Sprintf("- `%s(%s)`\n", v.Name.Name, formatTypeName(v.Type)))
 			} else {
 				sb.WriteString(fmt.Sprintf("- `%s`\n", v.Name.Name))
 			}
@@ -933,22 +1081,85 @@ func renderEnum(sb *strings.Builder, en *ast.EnumDecl, src []byte) {
 	}
 }
 
-// formatFuncSig formats a function signature.
+// formatFuncSig formats a function signature (simple version for method lists).
 func formatFuncSig(fn *ast.FuncDecl) string {
 	var params []string
 	for _, p := range fn.Params {
 		typeName := "any"
 		if p.Type != nil {
-			typeName = p.Type.Name
+			typeName = formatTypeName(p.Type)
 		}
 		params = append(params, fmt.Sprintf("%s: %s", p.Name.Name, typeName))
 	}
 
 	sig := fmt.Sprintf("%s(%s)", fn.Name.Name, strings.Join(params, ", "))
 	if fn.RetType != nil {
-		sig += " -> " + fn.RetType.Name
+		sig += " -> " + formatTypeName(fn.RetType)
 	}
 	return sig
+}
+
+// formatFuncSigFull formats a function signature with type params and param modes.
+func formatFuncSigFull(fn *ast.FuncDecl) string {
+	// Type parameters
+	typeParams := ""
+	if len(fn.TypeParams) > 0 {
+		var tps []string
+		for _, tp := range fn.TypeParams {
+			tpStr := tp.Name.Name
+			if len(tp.Bounds) > 0 {
+				var bounds []string
+				for _, b := range tp.Bounds {
+					bounds = append(bounds, b.Name)
+				}
+				tpStr += ": " + strings.Join(bounds, " + ")
+			}
+			tps = append(tps, tpStr)
+		}
+		typeParams = "<" + strings.Join(tps, ", ") + ">"
+	}
+
+	// Parameters with modes
+	var params []string
+	for _, p := range fn.Params {
+		typeName := "any"
+		if p.Type != nil {
+			typeName = formatTypeName(p.Type)
+		}
+		paramStr := ""
+		switch p.Mode {
+		case ast.ParamRef:
+			paramStr = "ref "
+		case ast.ParamInout:
+			paramStr = "inout "
+		}
+		paramStr += p.Name.Name + ": " + typeName
+		if p.Default != nil {
+			paramStr += " = ..."
+		}
+		params = append(params, paramStr)
+	}
+
+	sig := fmt.Sprintf("%s%s(%s)", fn.Name.Name, typeParams, strings.Join(params, ", "))
+	if fn.RetType != nil {
+		sig += " -> " + formatTypeName(fn.RetType)
+	}
+	return sig
+}
+
+// formatTypeName formats a TypeName including generics.
+func formatTypeName(t *ast.TypeName) string {
+	if t == nil {
+		return "any"
+	}
+	if len(t.Params) > 0 {
+		var params []string
+		for _, p := range t.Params {
+			params = append(params, formatTypeName(p))
+		}
+		return t.Name + "<" + strings.Join(params, ", ") + ">"
+	}
+	return t.Name
 }
 
 // extractDocString extracts docstring text from a StrLit.
