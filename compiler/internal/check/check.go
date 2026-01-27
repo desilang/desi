@@ -409,8 +409,18 @@ func (c *checker) checkBlock(b *ast.Block) {
 	if b == nil {
 		return
 	}
+	terminated := false
 	for _, s := range b.Stmts {
+		// Check for unreachable code after return/break/continue
+		if terminated {
+			c.add(diagAt("DW0004", s.SpanOf(), "unreachable code"))
+			continue // Skip checking unreachable statements
+		}
 		c.checkStmt(s)
+		// Mark block as terminated after return
+		if _, isReturn := s.(*ast.ReturnStmt); isReturn {
+			terminated = true
+		}
 	}
 }
 
