@@ -16,6 +16,10 @@ type Info struct {
 	FromItemPaths map[string]string      // local name -> qualified path (e.g., "Inner" -> "Container.Inner")
 	Graph         *Graph                 // edges: thisModule -> importedModule (dotted)
 
+	// Lazy module initialization tracking
+	// Maps module path -> module for lazy init thunk generation
+	LazyModules map[string]*ast.Module
+
 	// Phase-2: typed export surface per module (functions only for now),
 	// keyed by dotted module path (e.g., "math", "util.math").
 	ModuleExports map[string]*Exports
@@ -91,6 +95,7 @@ func Resolve(mod *ast.Module, ldr Loader) ([]diag.Diagnostic, *Info) {
 		FromItems:     map[string]*ast.Module{},
 		FromItemPaths: map[string]string{},
 		Graph:         NewGraph(),
+		LazyModules:   map[string]*ast.Module{},
 		ModuleExports: map[string]*Exports{},
 	}
 	var diags []diag.Diagnostic
@@ -163,6 +168,8 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 			}
 			if local != "" && tmod != nil {
 				info.Imports[local] = tmod
+				// Track for lazy initialization
+				info.LazyModules[actualPath] = tmod
 			}
 			info.Graph.AddEdge(srcModule, actualPath)
 
@@ -201,6 +208,10 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 					}
 				}
 				info.Graph.AddEdge(srcModule, actualPath)
+				// Track for lazy initialization
+				if tmod != nil {
+					info.LazyModules[actualPath] = tmod
+				}
 				continue // Skip normal item processing
 			}
 
@@ -236,6 +247,10 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 				}
 			}
 			info.Graph.AddEdge(srcModule, actualPath)
+			// Track for lazy initialization
+			if tmod != nil {
+				info.LazyModules[actualPath] = tmod
+			}
 		}
 	}
 }
