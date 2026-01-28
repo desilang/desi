@@ -6,7 +6,47 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "list.h"
+
+// ==================== Type[T] Runtime Support ====================
+// DesiTypeInfo represents runtime type information for Type[T]
+
+typedef struct DesiTypeInfo {
+    uint64_t id;           // Unique type ID (hash of type name)
+    const char* name;      // Type name string (e.g., "int", "list[str]")
+    size_t size;           // Size in bytes (0 for unsized types)
+} DesiTypeInfo;
+
+// Create a type info object (called from lowering for type_of)
+DesiTypeInfo* __desi_type_new(uint64_t id, const char* name, size_t size) {
+    DesiTypeInfo* t = malloc(sizeof(DesiTypeInfo));
+    if (!t) {
+        fprintf(stderr, "panic: failed to allocate type info\n");
+        exit(1);
+    }
+    t->id = id;
+    t->name = name;  // Static string, no copy needed
+    t->size = size;
+    return t;
+}
+
+// Get the type name as a string
+const char* __desi_type_name(DesiTypeInfo* t) {
+    return t ? t->name : "unknown";
+}
+
+// Get the type size
+size_t __desi_type_size(DesiTypeInfo* t) {
+    return t ? t->size : 0;
+}
+
+// Compare two types for equality
+bool __desi_type_equal(DesiTypeInfo* a, DesiTypeInfo* b) {
+    if (!a || !b) return false;
+    return a->id == b->id;
+}
+
 
 // Panic function for integer division by zero
 // Future: When hot-reload is implemented, this becomes process-local

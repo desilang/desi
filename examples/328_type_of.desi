@@ -1,0 +1,33 @@
+# Test Type[T] wrapper and type_of builtin
+
+def main() -> int:
+    # Test with basic types
+    let x = 42
+    let int_type = type_of(x)
+    print(f"int type: {int_type.name}")
+    
+    let s = "hello"
+    let str_type = type_of(s)
+    print(f"str type: {str_type.name}")
+    
+    let f = 3.14
+    let float_type = type_of(f)
+    print(f"float type: {float_type.name}")
+    
+    let b = true
+    let bool_type = type_of(b)
+    print(f"bool type: {bool_type.name}")
+    
+    # Test with collections
+    let nums: list[int] = [1, 2, 3]
+    let list_type = type_of(nums)
+    print(f"list type: {list_type.name}")
+    
+    return 0
+
+# EXPECTED_OUTPUT:
+# int type: int
+# str type: str
+# float type: float
+# bool type: bool
+# list type: list[int]

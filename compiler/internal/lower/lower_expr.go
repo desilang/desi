@@ -1584,6 +1584,21 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Handle Type[T].name and Type[T].size field access
+		if _, ok := baseType.(*types.TypeWrapper); ok {
+			if name == "name" {
+				// Call __desi_type_name(type_info) -> str
+				result := ls.b.FreshTemp("type_name")
+				ls.b.Emit(&hir.Call{Dst: result, Fn: "__desi_type_name", Args: []hir.Value{base}, Type: "ptr"})
+				return result
+			} else if name == "size" {
+				// Call __desi_type_size(type_info) -> i64
+				result := ls.b.FreshTemp("type_size")
+				ls.b.Emit(&hir.Call{Dst: result, Fn: "__desi_type_size", Args: []hir.Value{base}, Type: "i64"})
+				return result
+			}
+		}
+
 		if s, ok := baseType.(*types.Struct); ok {
 			fields = s.Fields
 		} else if c, ok := baseType.(*types.Class); ok {

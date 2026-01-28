@@ -376,6 +376,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveArcMethod(x, arc)
 	}
 
+	// Handle Type[T] field access: name, size
+	if tw, ok := t.(*types.TypeWrapper); ok {
+		return c.resolveTypeWrapperField(x, tw)
+	}
+
 	// Handle Channel methods: sender, receiver, close
 	if ch, ok := t.(*types.Channel); ok {
 		return c.resolveChannelMethod(x, ch)
@@ -1235,6 +1240,25 @@ func (c *checker) resolveMutexGuardField(x *ast.FieldExpr, g *types.MutexGuard) 
 		return g.Inner
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on MutexGuard"))
+		return nil
+	}
+}
+
+// resolveTypeWrapperField resolves field access on Type[T]: name, size
+func (c *checker) resolveTypeWrapperField(x *ast.FieldExpr, tw *types.TypeWrapper) types.T {
+	name := x.Name.Name
+
+	switch name {
+	case "name":
+		// name field returns the type name as a string
+		c.info.Types[x] = types.Str
+		return types.Str
+	case "size":
+		// size field returns the type size as an integer
+		c.info.Types[x] = types.Int
+		return types.Int
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined field '"+name+"' on Type[T]"))
 		return nil
 	}
 }
