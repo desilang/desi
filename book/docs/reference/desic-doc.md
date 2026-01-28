@@ -24,6 +24,7 @@ desic doc lib/sync/mutex.desi > docs/mutex.md
 
 | Declaration | Info Shown |
 |-------------|------------|
+| Module | Module-level docstring |
 | Functions | Signature, params, return type |
 | Classes | Fields, methods, constants, inheritance |
 | Structs | Fields |
@@ -34,6 +35,20 @@ Each item includes:
 - Docstring (if triple-quoted `"""..."""`)
 - Visibility (`*(private)*` with `--all`)
 - Generics (`<T: Bound>`)
+
+### Module Docstrings
+
+Place a triple-quoted string at the very beginning of your file:
+
+```desi
+"""
+This module provides math utilities.
+Multi-line descriptions are supported.
+"""
+
+pub def add(a: int, b: int) -> int:
+    return a + b
+```
 
 ## Example
 
