@@ -98,3 +98,33 @@ from std.math import add  # ✓ Use this instead
 from foo import bar   # ❌ Ambiguous, remove one
 ```
 
+## Lazy Initialization
+
+Imports are **lazy by default** — modules initialize only when first used:
+
+```python
+import log
+import math
+
+def main() -> int:
+    print("Starting...")
+    log.info("Using log now")  # log module initializes here
+    # math is never used, so it never initializes
+    0
+```
+
+### Benefits
+
+- **Performance** — unused imports have zero runtime cost
+- **Circular imports** — modules can import each other safely
+- **No boilerplate** — lazy behavior is automatic
+
+### How It Works
+
+Each module has an init guard:
+
+1. First call to `log.info()` triggers `__ensure_log_init()`
+2. The init thunk checks a flag and calls the module's `__top__()` if needed
+3. Subsequent calls skip initialization
+
+This happens transparently — you don't need to think about it!

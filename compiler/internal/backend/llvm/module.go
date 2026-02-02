@@ -153,6 +153,32 @@ func (m *Module) emitLazyInitThunks() {
 	}
 }
 
+// ensureLazyModuleInit checks if a function belongs to a lazy module and emits
+// the init thunk call if it hasn't been called yet for this module.
+// Returns true if the function belongs to a lazy module (init was ensured),
+// false otherwise.
+func (m *Module) ensureLazyModuleInit(fnName string) bool {
+	// Check each lazy module to see if the function starts with its prefix
+	for modPath := range m.lazyModules {
+		safeName := sanitizeModName(modPath)
+		prefix := safeName + "_"
+
+		// Check if function starts with module prefix (e.g., "math_sin" for "math" module)
+		if strings.HasPrefix(fnName, prefix) {
+			// Only emit the init call once per module
+			thunkName := fmt.Sprintf("__ensure_%s_init", safeName)
+			if !m.lazyInitEmitted[modPath+"_called"] {
+				m.lazyInitEmitted[modPath+"_called"] = true
+				// Don't emit declare - the thunk is defined in emitLazyInitThunks()
+				// LLVM doesn't allow declare+define for the same function
+				wprintf(&m.funcs, "  call void @%s()\n", thunkName)
+			}
+			return true
+		}
+	}
+	return false
+}
+
 // uniqueName generates a unique SSA name by appending a version suffix if needed.
 // This handles variables with the same name appearing in multiple scopes (e.g., loop variables).
 // Call once per variable definition, then use the returned name consistently.

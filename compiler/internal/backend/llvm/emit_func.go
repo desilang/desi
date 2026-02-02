@@ -120,6 +120,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		if isMainFunc && firstBlock {
 			m.ensureDecl("declare void @__desi_runtime_init()")
 			wprintf(&m.funcs, "  call void @__desi_runtime_init()\n")
+
 			// Call __top__ to initialize global variables (only if defined)
 			if m.definedFunctions["__top__"] {
 				wprintf(&m.funcs, "  call i32 @__top__()\n")
