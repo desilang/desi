@@ -26,6 +26,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	m.varTypes = make(map[string]types.T)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
 	m.currentMoves = nil
+	m.curFuncName = fn.Name // Track for call depth instrumentation
 
 	// Look up moves and param types if we have origin info
 	if m.info != nil && fn.Origin != nil {
@@ -125,6 +126,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			if m.definedFunctions["__top__"] {
 				wprintf(&m.funcs, "  call i32 @__top__()\n")
 			}
+			firstBlock = false
+		} else if firstBlock && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
+			// Emit call depth tracking for user functions (skip main and __top__)
+			m.ensureDecl("declare void @__desi_call_enter()")
+			wprintf(&m.funcs, "  call void @__desi_call_enter()\n")
 			firstBlock = false
 		}
 

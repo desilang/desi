@@ -465,6 +465,29 @@ def validate_age(age: int) -> Result<int, str>:
 
 Desi's approach combines Rust's type safety with Python's readable syntax.
 
+## Runtime Limits
+
+Desi enforces runtime safety limits to prevent runaway programs:
+
+### Recursion Depth
+
+Maximum recursion depth is **1000** by default. Exceeding this triggers a panic:
+
+```desi
+def infinite_recurse(n: int) -> int:
+    infinite_recurse(n + 1)  # Panics after 1000 calls
+
+def main() -> int:
+    infinite_recurse(0)  # Desi panic: maximum recursion depth exceeded (1000)
+    0
+```
+
+This protects against stack overflow from:
+
+- Unbounded recursion
+- Deeply nested function calls
+- Accidental infinite loops via recursion
+
 ## See Also
 
 - [Types](types.md) - Option and Result type definitions

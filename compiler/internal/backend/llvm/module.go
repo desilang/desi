@@ -34,6 +34,7 @@ type Module struct {
 
 	// Current function being emitted
 	curFunc            *hir.Func
+	curFuncName        string          // name of current function for depth tracking
 	tempID             int             // counter for %t0, %t1, ...
 	mergeID            int             // counter for merge blocks
 	asyncWrappers      map[string]bool // functions returning ptr (future handle)
@@ -449,6 +450,13 @@ func (m *Module) emitRet(r *hir.Ret) {
 	if r == nil {
 		return
 	}
+
+	// Emit call depth decrement for user functions (skip main/__top__)
+	if m.curFuncName != "" && m.curFuncName != "main" && !strings.HasSuffix(m.curFuncName, "__top__") {
+		m.ensureDecl("declare void @__desi_call_exit()")
+		wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
+	}
+
 	// If there's no explicit value, return a typed zero consistent with the current function header.
 	if r.Val == nil {
 		switch m.curFuncRetTy {
