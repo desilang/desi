@@ -4,14 +4,64 @@ Configure your editor for the best Desi development experience.
 
 ---
 
-## Syntax Highlighting
+## Language Server (desilsp)
 
-Since Desi syntax is very similar to Python, you can use Python syntax highlighting in most editors for now.
+Desi includes a Language Server for IDE features like error highlighting, hover, and go-to-definition.
 
-!!! note "Official Editor Support Coming"
-    Official Desi language support (VSCode extension, Tree-sitter grammar) is planned for a future release.
+### Build the LSP
+
+```bash
+make tools  # Creates bin/desilsp
+export PATH="$PATH:/path/to/desi/bin"
+```
+
+### Features
+
+| Feature | Description |
+|---------|-------------|
+| **Diagnostics** | Red squiggles for type errors |
+| **Hover** | View type info on mouse hover |
+| **Go to Definition** | Ctrl+Click to jump to declaration |
+| **Find References** | Find all usages of a symbol |
+| **Document Symbols** | List functions/classes in outline |
 
 ---
+
+## Visual Studio Code (with LSP)
+
+1. Install the Desi extension:
+   ```bash
+   cd editors/vscode
+   npm install
+   code --install-extension .
+   ```
+
+2. Open a `.desi` file and the LSP starts automatically.
+
+---
+
+## Neovim (with LSP)
+
+Add to your Neovim config (`init.lua`):
+
+```lua
+local lspconfig = require('lspconfig')
+local configs = require('lspconfig.configs')
+
+configs.desilsp = {
+  default_config = {
+    cmd = { 'desilsp' },
+    filetypes = { 'desi' },
+    root_dir = lspconfig.util.root_pattern('desi.toml', '.git'),
+  },
+}
+
+lspconfig.desilsp.setup{}
+```
+
+---
+
+## Syntax Highlighting (Fallback)
 
 ## Visual Studio Code
 
