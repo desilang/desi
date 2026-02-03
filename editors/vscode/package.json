@@ -1,0 +1,31 @@
+{
+  "name": "desi-language",
+  "displayName": "Desi Language",
+  "description": "Language support for Desi programming language",
+  "version": "0.1.0",
+  "publisher": "desilang",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": ["Programming Languages"],
+  "activationEvents": [
+    "onLanguage:desi"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "languages": [{
+      "id": "desi",
+      "aliases": ["Desi", "desi"],
+      "extensions": [".desi"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "desi",
+      "scopeName": "source.desi",
+      "path": "./syntaxes/desi.tmLanguage.json"
+    }]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  }
+}
