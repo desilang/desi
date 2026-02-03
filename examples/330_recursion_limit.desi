@@ -1,0 +1,10 @@
+# EXPECTED: RUNTIME_ERROR
+# Test recursion limit detection
+# This test should panic when recursion depth exceeds 1000
+
+def recurse(n: int) -> int:
+    recurse(n + 1)
+
+def main() -> int:
+    recurse(0)
+    0
