@@ -176,6 +176,7 @@ func isBuiltin(name string) bool {
 		"dbg": true, "spawn": true, "rc": true, "arc": true,
 		"Option": true, "Result": true, "Some": true, "Nothing": true,
 		"Ok": true, "Err": true, "true": true, "false": true,
+		"set_recursion_limit": true,
 	}
 	return builtins[name]
 }

@@ -1453,6 +1453,26 @@ handlePrint:
 		}
 	}
 
+	// 1.8. set_recursion_limit(n) - configure maximum recursion depth
+	// Like Python's sys.setrecursionlimit(n)
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+		if calleeName == "set_recursion_limit" && len(x.Args) == 1 {
+			// Lower the limit value
+			limitVal := ls.lowerExpr(x.Args[0])
+
+			// Cast to i64 for the C function
+			limit64 := ls.b.FreshTemp("limit_i64")
+			ls.b.Emit(&hir.Cast{Dst: limit64, Src: limitVal, Type: "i64"})
+
+			// Call runtime helper: __desi_set_max_recursion(limit)
+			ls.b.Emit(&hir.Call{Fn: "__desi_set_max_recursion", Args: []hir.Value{limit64}})
+
+			// Return none/void
+			return nil
+		}
+	}
+
 	// Handle log.info(), log.warn(), log.error(), log.debug()
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {

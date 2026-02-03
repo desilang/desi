@@ -488,6 +488,40 @@ This protects against stack overflow from:
 - Deeply nested function calls
 - Accidental infinite loops via recursion
 
+### Configuring the Limit
+
+Use `set_recursion_limit(n)` to adjust the limit at runtime:
+
+```desi
+def deep_recurse(n: int) -> int:
+    if n <= 0:
+        return 0
+    return deep_recurse(n - 1)
+
+def main() -> int:
+    set_recursion_limit(10000)  # Increase limit
+    print(deep_recurse(5000))   # Works now
+    0
+```
+
+### Tail Call Optimization
+
+Desi automatically optimizes **self-recursive tail calls**:
+
+```desi
+# Tail recursive - optimized, no stack growth
+def factorial(n: int, acc: int) -> int:
+    if n <= 1:
+        return acc
+    return factorial(n - 1, n * acc)  # Tail call
+
+def main() -> int:
+    print(factorial(100000, 1))  # Works without stack overflow
+    0
+```
+
+**Tail position**: A call is in tail position when its result is immediately returned without further processing.
+
 ## See Also
 
 - [Types](types.md) - Option and Result type definitions

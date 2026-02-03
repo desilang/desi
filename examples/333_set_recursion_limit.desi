@@ -1,0 +1,18 @@
+# Test set_recursion_limit builtin (like Python's sys.setrecursionlimit)
+
+def count_down(n: int) -> int:
+    if n <= 0:
+        return 0
+    return count_down(n - 1)
+
+def main() -> int:
+    # Default limit is 1000, increase it for this test
+    set_recursion_limit(50000)
+    
+    # This would fail at default limit but works with higher limit
+    print(count_down(2000))  # 0 (reached the end)
+    print("Recursion limit increased successfully!")
+    0
+# EXPECTED_OUTPUT:
+# 0
+# Recursion limit increased successfully!
