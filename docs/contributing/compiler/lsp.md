@@ -71,3 +71,26 @@ code .  # F5 to launch dev host
 - `definitionProvider` - Go to definition
 - `referencesProvider` - Find all references
 - `documentSymbolProvider` - Outline view
+
+---
+
+## Roadmap
+
+### Phase 2: Enhanced Features
+- [ ] **Completion** - Auto-complete identifiers, keywords
+- [ ] **Signature Help** - Parameter hints in function calls
+- [ ] **Rename** - Rename symbol across files
+- [ ] **Code Actions** - Quick fixes for common errors
+- [ ] **Formatting** - Integrate `desifmt`
+
+### Phase 3: Advanced
+- [ ] **Incremental sync** - Only send changed regions
+- [ ] **Workspace symbols** - Cross-file symbol search
+- [ ] **Semantic tokens** - Rich syntax highlighting
+- [ ] **Inlay hints** - Show inferred types inline
+- [ ] **Call hierarchy** - View call graph
+
+### Phase 4: Multi-file
+- [ ] **Cross-file definition** - Jump to imported modules
+- [ ] **Multi-root workspaces** - Support monorepos
+- [ ] **Project-wide diagnostics** - Check all files on save
