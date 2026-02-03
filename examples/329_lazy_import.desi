@@ -1,0 +1,16 @@
+# Test lazy module initialization
+# Modules are initialized only when their symbols are first accessed
+
+import log
+
+def main() -> int:
+    # The log module should be lazily initialized when we call log.info
+    print("Before log call")
+    log.info("Hello from lazy-loaded log module")
+    print("After log call")
+    0
+
+# NOTE: This test uses ANSI escape codes for colored log prefixes.
+# Visual verification required - run manually to see colors.
+# The key test is that lazy init allows the module to be loaded on first use,
+# not at program start. The __ensure_log_init() thunk is called before log.info.

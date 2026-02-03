@@ -11,6 +11,9 @@ import (
 )
 
 func (m *Module) emitCall(c *hir.Call) {
+	// Check if this function belongs to a lazy module - emit init thunk if needed
+	m.ensureLazyModuleInit(c.Fn)
+
 	// Stream accessor functions: __get_stdout(), __get_stderr()
 	if c.Fn == "__get_stdout" && len(c.Args) == 0 {
 		m.ensureDecl("declare ptr @__get_stdout()")
