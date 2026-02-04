@@ -72,11 +72,18 @@ type PublishDiagnosticsParams struct {
 
 // --- Initialize ---
 
+// WorkspaceFolder represents a root folder in a multi-root workspace.
+type WorkspaceFolder struct {
+	URI  string `json:"uri"`
+	Name string `json:"name"`
+}
+
 // InitializeParams is sent by client on startup.
 type InitializeParams struct {
-	ProcessID    *int        `json:"processId"`
-	RootURI      string      `json:"rootUri"`
-	Capabilities interface{} `json:"capabilities"`
+	ProcessID        *int              `json:"processId"`
+	RootURI          string            `json:"rootUri"`
+	WorkspaceFolders []WorkspaceFolder `json:"workspaceFolders,omitempty"`
+	Capabilities     interface{}       `json:"capabilities"`
 }
 
 // ServerCapabilities advertises what the server can do.

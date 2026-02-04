@@ -20,11 +20,12 @@ import (
 
 // Server is the LSP server.
 type Server struct {
-	mu        sync.Mutex
-	documents map[string]*Document // URI -> document
-	rootURI   string
-	log       *log.Logger
-	writer    io.Writer
+	mu               sync.Mutex
+	documents        map[string]*Document // URI -> document
+	rootURI          string
+	workspaceFolders []WorkspaceFolder
+	log              *log.Logger
+	writer           io.Writer
 }
 
 // Document represents an open document.
@@ -125,6 +126,8 @@ func (s *Server) handleRequest(req *Request) {
 		s.handleDidChange(req)
 	case "textDocument/didClose":
 		s.handleDidClose(req)
+	case "textDocument/didSave":
+		s.handleDidSave(req)
 	case "textDocument/hover":
 		s.handleHover(req)
 	case "textDocument/definition":
@@ -169,7 +172,8 @@ func (s *Server) handleInitialize(req *Request) {
 	json.Unmarshal(paramsJSON, &params)
 
 	s.rootURI = params.RootURI
-	s.log.Printf("Root URI: %s", s.rootURI)
+	s.workspaceFolders = params.WorkspaceFolders
+	s.log.Printf("Root URI: %s, Workspace Folders: %d", s.rootURI, len(s.workspaceFolders))
 
 	result := InitializeResult{
 		Capabilities: ServerCapabilities{
@@ -263,6 +267,40 @@ func (s *Server) handleDidClose(req *Request) {
 
 	// Clear diagnostics
 	s.publishDiagnostics(params.TextDocument.URI, nil, []Diagnostic{})
+}
+
+// handleDidSave triggers project-wide diagnostics on save.
+// Efficient: only re-analyzes open documents, not entire workspace.
+func (s *Server) handleDidSave(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params struct {
+		TextDocument TextDocumentIdentifier `json:"textDocument"`
+	}
+	json.Unmarshal(paramsJSON, &params)
+
+	// Re-analyze saved document
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if ok {
+		s.analyzeAndPublish(doc)
+	}
+
+	// Optional: analyze other open documents that may import this file
+	// This is bounded by # of open documents, not workspace size
+	s.mu.Lock()
+	docs := make([]*Document, 0, len(s.documents))
+	for uri, d := range s.documents {
+		if uri != params.TextDocument.URI {
+			docs = append(docs, d)
+		}
+	}
+	s.mu.Unlock()
+
+	for _, d := range docs {
+		s.analyzeAndPublish(d)
+	}
 }
 
 func (s *Server) handleHover(req *Request) {
