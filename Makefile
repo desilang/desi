@@ -21,6 +21,7 @@ LIB_DESI = $(BUILD_DIR)/libdesi.a
 DESIC = $(BIN_DIR)/desic
 DESIFMT = $(BIN_DIR)/desifmt
 DESIREPL = $(BIN_DIR)/desirepl
+DESILSP = $(BIN_DIR)/desilsp
 
 .PHONY: all clean runtime compiler tools directories decimal-lib
 
@@ -59,7 +60,7 @@ $(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB)
 # Compiler and Tools
 compiler: $(DESIC)
 
-tools: $(DESIFMT) $(DESIREPL)
+tools: $(DESIFMT) $(DESIREPL) $(DESILSP)
 
 $(DESIC):
 	@echo "==> Building desic..."
@@ -73,6 +74,10 @@ $(DESIREPL):
 	@echo "==> Building desirepl..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desirepl
 
+$(DESILSP):
+	@echo "==> Building desilsp..."
+	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desilsp
+
 # Windows Build
 windows:
 	@mkdir -p $(BIN_DIR)
@@ -80,6 +85,7 @@ windows:
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desic.exe ./compiler/cmd/desic
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desifmt.exe ./compiler/cmd/desifmt
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desirepl.exe ./compiler/cmd/desirepl
+	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desilsp.exe ./compiler/cmd/desilsp
 
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR) gen/
