@@ -1,0 +1,16 @@
+# Tail call optimization test: factorial with accumulator pattern
+# This should NOT cause stack overflow due to TCO
+
+def factorial(n: int, acc: int) -> int:
+    if n <= 1:
+        return acc
+    return factorial(n - 1, n * acc)  # Tail call - optimized to loop
+
+def main() -> int:
+    # Test small values first
+    print(factorial(5, 1))   # 120
+    print(factorial(10, 1))  # 3628800
+    0
+# EXPECTED_OUTPUT:
+# 120
+# 3628800

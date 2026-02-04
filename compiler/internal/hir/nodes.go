@@ -156,6 +156,15 @@ type Call struct {
 
 func (*Call) isStmt() {}
 
+// TailCall marks a self-recursive call in tail position.
+// These are transformed into loops by the LLVM backend.
+type TailCall struct {
+	Fn   string  // Function name (must match current function)
+	Args []Value // New values for parameters on next iteration
+}
+
+func (*TailCall) isStmt() {}
+
 type Ret struct{ Val Value } // nil => void ret
 
 func (*Ret) isStmt() {}

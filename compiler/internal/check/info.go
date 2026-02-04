@@ -466,4 +466,9 @@ func addPreludeBuiltins(info *Info) {
 		nil, // Arc[T] - determined in expr_call.go
 		[]string{"value"},
 	)
+
+	// --- Runtime configuration builtins ---
+	// set_recursion_limit(limit: int) -> none
+	// Like Python's sys.setrecursionlimit(n), sets the max call depth
+	add1("set_recursion_limit", types.Int, types.None, "limit", ast.ParamMove)
 }

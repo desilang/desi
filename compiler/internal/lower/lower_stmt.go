@@ -627,6 +627,29 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 	case *ast.ReturnStmt:
+		// Check for tail call: return fn(...) where fn is current function
+		curFuncName := ls.b.Func().Name
+		if call, ok := s.Value.(*ast.CallExpr); ok {
+			calleeName := ""
+			if id, ok := call.Callee.(*ast.Ident); ok {
+				calleeName = id.Name
+			}
+			// Detect self-recursive tail call
+			if calleeName == curFuncName {
+				// Lower arguments for the tail call
+				var args []hir.Value
+				for _, arg := range call.Args {
+					args = append(args, ls.lowerExpr(arg))
+				}
+				// Emit drops before the tail call (just like before return)
+				ls.emitAllDefersAndDrops()
+				// Emit TailCall instead of Ret
+				ls.b.Emit(&hir.TailCall{Fn: curFuncName, Args: args})
+				ls.terminated = true
+				return
+			}
+		}
+
 		// IMPORTANT: Evaluate return expression FIRST, before any drops!
 		// If return expression references a local that gets freed, we need
 		// to capture its value before freeing.

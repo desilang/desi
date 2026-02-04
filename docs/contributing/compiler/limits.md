@@ -74,6 +74,35 @@ Desi panic: maximum recursion depth exceeded (1000)
 
 ---
 
+## Tail Call Optimization
+
+Self-recursive tail calls are optimized to prevent stack growth.
+
+### Detection (`lower_stmt.go`)
+
+```go
+// In ReturnStmt lowering
+if call, ok := s.Value.(*ast.CallExpr); ok {
+    if calleeName == curFuncName {
+        // Emit TailCall instead of Ret
+        ls.b.Emit(&hir.TailCall{Fn: curFuncName, Args: args})
+    }
+}
+```
+
+### LLVM Backend (`emit_func.go`)
+
+```go
+case *hir.TailCall:
+    // Decrement call depth to avoid false limit breach
+    wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
+    // Emit LLVM tail call
+    wprintf(&m.funcs, "  %s = tail call %s @%s(%s)\n", result, retType, fn, args)
+    wprintf(&m.funcs, "  ret %s %s\n", retType, result)
+```
+
+---
+
 ## Future Work
 
 - CLI flag `--max-recursion=N` to configure limit

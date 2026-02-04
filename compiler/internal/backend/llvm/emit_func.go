@@ -513,6 +513,44 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				}
 				m.emitRet(x)
 
+			case *hir.TailCall:
+				// TCO: Emit tail call that LLVM can optimize
+				// For self-recursive calls, we emit a tail call instruction
+				// which LLVM will optimize if possible
+				var argParts []string
+				for i, arg := range x.Args {
+					_, val := m.operand(arg)
+					// Get param type from function signature
+					paramType := "ptr" // default
+					if i < len(fn.Params) {
+						paramType = fn.Params[i].Type
+					}
+					argParts = append(argParts, fmt.Sprintf("%s %s", paramType, val))
+				}
+				args := strings.Join(argParts, ", ")
+
+				// Build return type and function signature
+				retType := "i32" // default
+				if fn.RetType != "" && fn.RetType != "void" {
+					retType = fn.RetType
+				}
+
+				// Decrement call depth BEFORE tail call to avoid false recursion limit
+				// (since tail call is effectively a return-then-call, not a nested call)
+				m.ensureDecl("declare void @__desi_call_exit()")
+				wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
+
+				// Emit tail call
+				if fn.RetType == "" || fn.RetType == "void" {
+					wprintf(&m.funcs, "  tail call void @%s(%s)\n", x.Fn, args)
+					wprintf(&m.funcs, "  ret void\n")
+				} else {
+					tailResult := fmt.Sprintf("%%tailcall_%d", m.tempID)
+					m.tempID++
+					wprintf(&m.funcs, "  %s = tail call %s @%s(%s)\n", tailResult, retType, x.Fn, args)
+					wprintf(&m.funcs, "  ret %s %s\n", retType, tailResult)
+				}
+
 			case *hir.IncRef:
 				// Tier-0 no-op
 			case *hir.DecRef:

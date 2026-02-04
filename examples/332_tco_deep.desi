@@ -1,0 +1,17 @@
+# Test TCO with very deep recursion (would overflow without optimization)
+# Uses a countdown function that only recurses (no computation overflow)
+
+def countdown(n: int) -> int:
+    if n <= 0:
+        return 0
+    return countdown(n - 1)  # Tail call - should be optimized
+
+def main() -> int:
+    # This would absolutely overflow without TCO (10000+ stack frames)
+    # With TCO via LLVM tail call, this should work fine
+    print(countdown(100000))  # Should print 0
+    print("Done!")
+    0
+# EXPECTED_OUTPUT:
+# 0
+# Done!
