@@ -81,16 +81,18 @@ type InitializeParams struct {
 
 // ServerCapabilities advertises what the server can do.
 type ServerCapabilities struct {
-	TextDocumentSync           int                   `json:"textDocumentSync"` // 1=Full, 2=Incremental
-	HoverProvider              bool                  `json:"hoverProvider"`
-	DefinitionProvider         bool                  `json:"definitionProvider"`
-	ReferencesProvider         bool                  `json:"referencesProvider"`
-	DocumentSymbolProvider     bool                  `json:"documentSymbolProvider"`
-	CompletionProvider         *CompletionOptions    `json:"completionProvider,omitempty"`
-	SignatureHelpProvider      *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
-	RenameProvider             bool                  `json:"renameProvider,omitempty"`
-	CodeActionProvider         bool                  `json:"codeActionProvider,omitempty"`
-	DocumentFormattingProvider bool                  `json:"documentFormattingProvider,omitempty"`
+	TextDocumentSync           int                    `json:"textDocumentSync"` // 1=Full, 2=Incremental
+	HoverProvider              bool                   `json:"hoverProvider"`
+	DefinitionProvider         bool                   `json:"definitionProvider"`
+	ReferencesProvider         bool                   `json:"referencesProvider"`
+	DocumentSymbolProvider     bool                   `json:"documentSymbolProvider"`
+	CompletionProvider         *CompletionOptions     `json:"completionProvider,omitempty"`
+	SignatureHelpProvider      *SignatureHelpOptions  `json:"signatureHelpProvider,omitempty"`
+	RenameProvider             bool                   `json:"renameProvider,omitempty"`
+	CodeActionProvider         bool                   `json:"codeActionProvider,omitempty"`
+	DocumentFormattingProvider bool                   `json:"documentFormattingProvider,omitempty"`
+	SemanticTokensProvider     *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
+	InlayHintProvider          bool                   `json:"inlayHintProvider,omitempty"`
 }
 
 // InitializeResult is the response to initialize.
@@ -286,6 +288,74 @@ type FormattingOptions struct {
 	TabSize      int  `json:"tabSize"`
 	InsertSpaces bool `json:"insertSpaces"`
 }
+
+// --- Semantic Tokens ---
+
+// SemanticTokensLegend describes token types and modifiers.
+type SemanticTokensLegend struct {
+	TokenTypes     []string `json:"tokenTypes"`
+	TokenModifiers []string `json:"tokenModifiers"`
+}
+
+// SemanticTokensOptions for server capabilities.
+type SemanticTokensOptions struct {
+	Legend SemanticTokensLegend `json:"legend"`
+	Full   bool                 `json:"full"`
+}
+
+// SemanticTokensParams sent by the client.
+type SemanticTokensParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+}
+
+// SemanticTokens response with encoded token data.
+type SemanticTokens struct {
+	Data []int `json:"data"`
+}
+
+// Semantic token types (indices into legend.tokenTypes)
+const (
+	SemanticTokenTypeNamespace = iota
+	SemanticTokenTypeType
+	SemanticTokenTypeClass
+	SemanticTokenTypeEnum
+	SemanticTokenTypeInterface
+	SemanticTokenTypeStruct
+	SemanticTokenTypeTypeParameter
+	SemanticTokenTypeParameter
+	SemanticTokenTypeVariable
+	SemanticTokenTypeProperty
+	SemanticTokenTypeEnumMember
+	SemanticTokenTypeFunction
+	SemanticTokenTypeMethod
+	SemanticTokenTypeMacro
+	SemanticTokenTypeKeyword
+	SemanticTokenTypeComment
+	SemanticTokenTypeString
+	SemanticTokenTypeNumber
+	SemanticTokenTypeOperator
+)
+
+// --- Inlay Hints ---
+
+// InlayHintParams sent by the client.
+type InlayHintParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+}
+
+// InlayHint represents an inline type hint.
+type InlayHint struct {
+	Position Position `json:"position"`
+	Label    string   `json:"label"`
+	Kind     int      `json:"kind,omitempty"`
+}
+
+// InlayHintKind values.
+const (
+	InlayHintKindType      = 1
+	InlayHintKindParameter = 2
+)
 
 // --- JSON-RPC ---
 

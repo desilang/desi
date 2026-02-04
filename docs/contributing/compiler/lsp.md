@@ -76,6 +76,8 @@ code .  # F5 to launch dev host
 - `renameProvider` - Rename symbol
 - `codeActionProvider` - Quick fixes from diagnostics
 - `documentFormattingProvider` - Format document
+- `semanticTokensProvider` - Rich syntax highlighting
+- `inlayHintProvider` - Inline type hints
 
 ---
 
@@ -91,8 +93,8 @@ code .  # F5 to launch dev host
 ### Phase 3: Advanced
 - [ ] **Incremental sync** - Only send changed regions
 - [ ] **Workspace symbols** - Cross-file symbol search
-- [ ] **Semantic tokens** - Rich syntax highlighting
-- [ ] **Inlay hints** - Show inferred types inline
+- [x] **Semantic tokens** - Rich syntax highlighting
+- [x] **Inlay hints** - Show inferred types inline
 - [ ] **Call hierarchy** - View call graph
 
 ### Phase 4: Multi-file
