@@ -51,4 +51,4 @@ The sys module will be expanded to include:
 
 ## See Also
 
-- [Examples: Print to stderr](../../examples/233_print_stderr.desi)
+- [Error Handling](../language/error-handling.md) - For handling errors

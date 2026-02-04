@@ -183,5 +183,4 @@ while i < len:
 
 ## See Also
 
-- [Examples: JSON Edge Cases](../../examples/244_json_edge_cases.desi)
-- [Examples: Basic JSON](../../examples/238_json_parse.desi)
+- [Error Handling](../language/error-handling.md) - For safe value access patterns

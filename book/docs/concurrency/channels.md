@@ -182,4 +182,4 @@ Consider alternatives:
 ## See Also
 
 - [Mutex](./mutex.md) - Thread-safe shared state
-- [Concurrency Overview](./concurrency.md) - Async/await and tasks
+- [Concurrency Overview](./thread-safety.md) - Thread safety and tasks

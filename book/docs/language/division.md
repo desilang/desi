@@ -46,4 +46,4 @@ match result:
 
 ## See Also
 
-- [Hot-Reload Future Plans](../../docs/todo/hot_reload_panic.md)
+- [Error Handling](./error-handling.md) - For Result types

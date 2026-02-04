@@ -80,16 +80,34 @@ nav:
     - Generics: tutorials/generics.md
   - Language Guide:
     - Types: language/types.md
+    - Mutability: language/mutability.md
     - Control Flow: language/control-flow.md
+    - Match: language/match.md
     - Functions: language/functions.md
     - Lambda Functions: language/lambdas.md
     - Classes: language/classes.md
+    - Enums: language/enums.md
     - Generics: language/generics.md
     - Modules & Imports: language/modules.md
+    - Collections: language/collections.md
+    - Strings: language/strings.md
+    - Tuples: language/tuples.md
+    - Slicing: language/slicing.md
     - Iterators: language/iterators.md
+    - Iteration: language/iteration.md
     - Error Handling: language/error-handling.md
     - Reference Counting: language/rc.md
     - Pipeline Operator: language/pipeline.md
+    - Membership (in): language/membership.md
+    - Is Operator: language/is-operator.md
+    - Division: language/division.md
+    - Dunder Methods: language/dunder-methods.md
+    - Builtins: language/builtins.md
+    - Raw Strings: language/raw_strings.md
+    - Global Constants: language/global-constants.md
+    - Arena Memory: language/arena.md
+    - Pointers (cptr): language/ptr.md
+    - JSON: language/json.md
   - Generics:
     - Trait Bounds: generics/trait-bounds.md
     - Turbofish Syntax: generics/turbofish.md
@@ -97,11 +115,19 @@ nav:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md
     - Keywords: reference/keywords.md
+    - desic doc: reference/desic-doc.md
+  - Standard Library:
+    - JSON: stdlib/json.md
+    - Math: stdlib/math.md
+    - Logging: stdlib/log.md
+    - Sync: stdlib/sync.md
+    - System: stdlib/sys.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md
     - Mutex: concurrency/mutex.md
     - RwLock: concurrency/rwlock.md
     - Channels: concurrency/channels.md
+    - Channel (detail): concurrency/channel.md
     - TaskGroup: concurrency/taskgroup.md
     - Select: concurrency/select.md
     - Atomic: concurrency/atomic.md
