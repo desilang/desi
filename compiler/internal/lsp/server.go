@@ -149,6 +149,12 @@ func (s *Server) handleRequest(req *Request) {
 		s.handleInlayHint(req)
 	case "workspace/symbol":
 		s.handleWorkspaceSymbol(req)
+	case "textDocument/prepareCallHierarchy":
+		s.handlePrepareCallHierarchy(req)
+	case "callHierarchy/incomingCalls":
+		s.handleIncomingCalls(req)
+	case "callHierarchy/outgoingCalls":
+		s.handleOutgoingCalls(req)
 	default:
 		if req.ID != nil {
 			s.sendError(req.ID, MethodNotFound, "Method not found: "+req.Method)
@@ -195,6 +201,7 @@ func (s *Server) handleInitialize(req *Request) {
 			},
 			InlayHintProvider:       true,
 			WorkspaceSymbolProvider: true,
+			CallHierarchyProvider:   true,
 		},
 	}
 	s.sendResult(req.ID, result)
@@ -758,6 +765,71 @@ func (s *Server) handleWorkspaceSymbol(req *Request) {
 	}
 
 	s.sendResult(req.ID, symbols)
+}
+
+// handlePrepareCallHierarchy prepares call hierarchy for a position.
+func (s *Server) handlePrepareCallHierarchy(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params CallHierarchyPrepareParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok || doc.Module == nil {
+		s.sendResult(req.ID, []CallHierarchyItem{})
+		return
+	}
+
+	// Find function at position
+	for _, decl := range doc.Module.Decls {
+		fd, ok := decl.(*ast.FuncDecl)
+		if !ok || fd.Name.Name == "__top__" {
+			continue
+		}
+
+		span := fd.Name.Span
+		lspRange := diagSpanToRange(span)
+
+		// Check if position is within the function name
+		if params.Position.Line >= lspRange.Start.Line && params.Position.Line <= lspRange.End.Line {
+			item := CallHierarchyItem{
+				Name:           fd.Name.Name,
+				Kind:           SymbolKindFunction,
+				URI:            params.TextDocument.URI,
+				Range:          diagSpanToRange(fd.Span),
+				SelectionRange: lspRange,
+				Data:           fd.Name.Name,
+			}
+			s.sendResult(req.ID, []CallHierarchyItem{item})
+			return
+		}
+	}
+
+	s.sendResult(req.ID, []CallHierarchyItem{})
+}
+
+// handleIncomingCalls finds callers of a function.
+// TODO: Implement full AST walking to find call sites.
+func (s *Server) handleIncomingCalls(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params CallHierarchyIncomingCallsParams
+	json.Unmarshal(paramsJSON, &params)
+
+	// For now, return empty - full implementation requires AST walking
+	s.sendResult(req.ID, []CallHierarchyIncomingCall{})
+}
+
+// handleOutgoingCalls finds functions called by this function.
+// TODO: Implement full AST walking to find call sites.
+func (s *Server) handleOutgoingCalls(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params CallHierarchyOutgoingCallsParams
+	json.Unmarshal(paramsJSON, &params)
+
+	// For now, return empty - full implementation requires AST walking
+	s.sendResult(req.ID, []CallHierarchyOutgoingCall{})
 }
 
 // analyzeAndPublish parses and type-checks a document.
