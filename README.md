@@ -46,6 +46,7 @@ Desi uses a `Makefile` to build the compiler, tools, and runtime library.
     - `bin/desic`: The compiler
     - `bin/desifmt`: The formatter
     - `bin/desirepl`: The REPL
+    - `bin/desilsp`: The language server (LSP)
     - `build/libdesi.a`: The static runtime library
 
 2.  **Compile Desi Code**:
@@ -54,6 +55,18 @@ Desi uses a `Makefile` to build the compiler, tools, and runtime library.
     ./build-desi.sh examples/38_while_loop.desi my_program
     ./build/output/my_program
     ```
+
+## IDE Integration
+
+Desi has full LSP (Language Server Protocol) support via `desilsp`:
+
+| Editor | Setup |
+|--------|-------|
+| **VS Code** | `cd editors/vscode && npm install` then F5 to launch |
+| **IntelliJ/IDEA** | `cd editors/intellij && ./gradlew buildPlugin` |
+| **Any LSP Editor** | Configure to run `bin/desilsp` via stdio |
+
+**Features**: Hover, completion, go-to-definition, find references, rename, code actions, formatting, semantic highlighting, inlay hints, and more.
 
 ### Supported Platforms
 

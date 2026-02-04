@@ -70,7 +70,7 @@ nav:
   - Getting Started:
     - Installation: getting-started/install.md
     - First Program: getting-started/first-program.md
-    - Editor Setup: getting-started/editor-setup.md
+    - IDE Setup: getting-started/ide-setup.md
   - Tutorials:
     - Introduction: tutorials/intro.md
     - Variables & Types: tutorials/variables.md
