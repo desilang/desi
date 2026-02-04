@@ -93,7 +93,7 @@ code .  # F5 to launch dev host
 - [x] **Formatting** - Format document
 
 ### Phase 3: Advanced ✅
-- [ ] **Incremental sync** - Only send changed regions (deferred)
+- [x] **Incremental sync** - Only send changed regions
 - [x] **Workspace symbols** - Cross-file symbol search
 - [x] **Semantic tokens** - Rich syntax highlighting
 - [x] **Inlay hints** - Show inferred types inline

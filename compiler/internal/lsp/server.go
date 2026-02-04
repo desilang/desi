@@ -177,7 +177,7 @@ func (s *Server) handleInitialize(req *Request) {
 
 	result := InitializeResult{
 		Capabilities: ServerCapabilities{
-			TextDocumentSync:       1, // Full sync
+			TextDocumentSync:       2, // Incremental sync
 			HoverProvider:          true,
 			DefinitionProvider:     true,
 			ReferencesProvider:     true,
@@ -236,7 +236,8 @@ func (s *Server) handleDidChange(req *Request) {
 	var params struct {
 		TextDocument   VersionedTextDocumentIdentifier `json:"textDocument"`
 		ContentChanges []struct {
-			Text string `json:"text"`
+			Range *Range `json:"range,omitempty"` // nil for full sync
+			Text  string `json:"text"`
 		} `json:"contentChanges"`
 	}
 	json.Unmarshal(paramsJSON, &params)
@@ -245,7 +246,16 @@ func (s *Server) handleDidChange(req *Request) {
 	doc, ok := s.documents[params.TextDocument.URI]
 	if ok && len(params.ContentChanges) > 0 {
 		doc.Version = params.TextDocument.Version
-		doc.Text = params.ContentChanges[0].Text // Full sync
+
+		for _, change := range params.ContentChanges {
+			if change.Range == nil {
+				// Full sync: replace entire content
+				doc.Text = change.Text
+			} else {
+				// Incremental sync: apply range-based edit
+				doc.Text = applyTextEdit(doc.Text, *change.Range, change.Text)
+			}
+		}
 	}
 	s.mu.Unlock()
 
@@ -1208,6 +1218,41 @@ func posInRange(pos Position, r Range) bool {
 		return false
 	}
 	return true
+}
+
+// applyTextEdit applies an incremental text edit to a document.
+// Converts LSP line/character positions to byte offsets and splices in new text.
+func applyTextEdit(text string, r Range, newText string) string {
+	lines := strings.Split(text, "\n")
+
+	// Convert start position to offset
+	startOffset := 0
+	for i := 0; i < r.Start.Line && i < len(lines); i++ {
+		startOffset += len(lines[i]) + 1 // +1 for newline
+	}
+	if r.Start.Line < len(lines) {
+		startOffset += min(r.Start.Character, len(lines[r.Start.Line]))
+	}
+
+	// Convert end position to offset
+	endOffset := 0
+	for i := 0; i < r.End.Line && i < len(lines); i++ {
+		endOffset += len(lines[i]) + 1
+	}
+	if r.End.Line < len(lines) {
+		endOffset += min(r.End.Character, len(lines[r.End.Line]))
+	}
+
+	// Ensure offsets are within bounds
+	if startOffset > len(text) {
+		startOffset = len(text)
+	}
+	if endOffset > len(text) {
+		endOffset = len(text)
+	}
+
+	// Apply the edit
+	return text[:startOffset] + newText + text[endOffset:]
 }
 
 // codeIDToSeverity maps Desi code ID prefixes to LSP severities.
