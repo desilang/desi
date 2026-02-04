@@ -1,0 +1,21 @@
+# Safe Extern Test
+# Tests @extern("C", safe=true, c_name="...") syntax
+
+# For simplicity, use a C function that doesn't require pointer out params
+# The safe=true wrapper just calls the raw extern inside unsafe block
+
+@extern("C", safe=true, c_name="abs")
+pub def absolute(x: i32) -> i32
+
+def main() -> int:
+    let val = absolute(-42)
+    print(val)
+    
+    let val2 = absolute(10)
+    print(val2)
+    
+    0
+
+# EXPECTED_OUTPUT:
+# 42
+# 10
