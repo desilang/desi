@@ -596,12 +596,14 @@ func (s *Scanner) scanString() Item {
 	startCol := s.col
 	s.i++ // consume opening "
 	s.col++
+	contentStart := s.i // start of content
 	for s.i < len(s.src) {
 		// close?
 		if s.peekIs('"') {
+			content := string(s.src[contentStart:s.i])
 			s.i++
 			s.col++
-			return Item{Tok: token.STR, Lexeme: "", Line: s.line, Col: startCol}
+			return Item{Tok: token.STR, Lexeme: content, Line: s.line, Col: startCol}
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {

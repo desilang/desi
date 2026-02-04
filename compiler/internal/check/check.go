@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/desugar"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
@@ -59,7 +60,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// Top-level let statements become module-scope globals.
 	res.Diags = append(res.Diags, injectGlobals(top, mod)...)
 
+	// Desugar passes (before type checking)
 	desugarMapFilter(mod)
+	desugar.ExpandSafeExterns(mod) // Transform @extern(safe=true) into raw extern + wrapper
 
 	// Phase-2: build exact signatures for 'from … import …' into Info.Funcs.
 	PopulateImportedFuncSigs(mod, res.Info, rinfo)

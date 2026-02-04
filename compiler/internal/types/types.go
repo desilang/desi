@@ -209,6 +209,8 @@ type Struct struct {
 	Name       string
 	TypeParams []TypeParam
 	Fields     []Field
+	FFI        bool // C-compatible layout (@ffi_struct)
+	Packed     bool // Packed layout (#[packed])
 }
 
 type Variant struct {

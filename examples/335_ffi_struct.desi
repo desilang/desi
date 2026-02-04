@@ -1,0 +1,27 @@
+# @ffi_struct Test
+# Tests C-compatible struct layout decorator
+
+@ffi_struct
+struct Point:
+    x: i32
+    y: i32
+
+@ffi_struct
+struct Rectangle:
+    origin: Point
+    width: i32
+    height: i32
+
+def main() -> int:
+    let p = Point(x=10, y=20)
+    print(p.x)
+    print(p.y)
+    
+    let r = Rectangle(origin=Point(x=0, y=0), width=100, height=50)
+    print(r.width)
+    0
+
+# EXPECTED_OUTPUT:
+# 10
+# 20
+# 100

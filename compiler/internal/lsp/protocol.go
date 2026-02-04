@@ -81,11 +81,16 @@ type InitializeParams struct {
 
 // ServerCapabilities advertises what the server can do.
 type ServerCapabilities struct {
-	TextDocumentSync       int  `json:"textDocumentSync"` // 1=Full, 2=Incremental
-	HoverProvider          bool `json:"hoverProvider"`
-	DefinitionProvider     bool `json:"definitionProvider"`
-	ReferencesProvider     bool `json:"referencesProvider"`
-	DocumentSymbolProvider bool `json:"documentSymbolProvider"`
+	TextDocumentSync           int                   `json:"textDocumentSync"` // 1=Full, 2=Incremental
+	HoverProvider              bool                  `json:"hoverProvider"`
+	DefinitionProvider         bool                  `json:"definitionProvider"`
+	ReferencesProvider         bool                  `json:"referencesProvider"`
+	DocumentSymbolProvider     bool                  `json:"documentSymbolProvider"`
+	CompletionProvider         *CompletionOptions    `json:"completionProvider,omitempty"`
+	SignatureHelpProvider      *SignatureHelpOptions `json:"signatureHelpProvider,omitempty"`
+	RenameProvider             bool                  `json:"renameProvider,omitempty"`
+	CodeActionProvider         bool                  `json:"codeActionProvider,omitempty"`
+	DocumentFormattingProvider bool                  `json:"documentFormattingProvider,omitempty"`
 }
 
 // InitializeResult is the response to initialize.
@@ -139,6 +144,147 @@ type DocumentSymbol struct {
 	Range          Range            `json:"range"`
 	SelectionRange Range            `json:"selectionRange"`
 	Children       []DocumentSymbol `json:"children,omitempty"`
+}
+
+// --- Completion ---
+
+// CompletionItemKind values.
+const (
+	CompletionKindText          = 1
+	CompletionKindMethod        = 2
+	CompletionKindFunction      = 3
+	CompletionKindConstructor   = 4
+	CompletionKindField         = 5
+	CompletionKindVariable      = 6
+	CompletionKindClass         = 7
+	CompletionKindInterface     = 8
+	CompletionKindModule        = 9
+	CompletionKindProperty      = 10
+	CompletionKindUnit          = 11
+	CompletionKindValue         = 12
+	CompletionKindEnum          = 13
+	CompletionKindKeyword       = 14
+	CompletionKindSnippet       = 15
+	CompletionKindColor         = 16
+	CompletionKindFile          = 17
+	CompletionKindReference     = 18
+	CompletionKindFolder        = 19
+	CompletionKindEnumMember    = 20
+	CompletionKindConstant      = 21
+	CompletionKindStruct        = 22
+	CompletionKindEvent         = 23
+	CompletionKindOperator      = 24
+	CompletionKindTypeParameter = 25
+)
+
+// CompletionItem represents a completion suggestion.
+type CompletionItem struct {
+	Label         string `json:"label"`
+	Kind          int    `json:"kind,omitempty"`
+	Detail        string `json:"detail,omitempty"`
+	Documentation string `json:"documentation,omitempty"`
+	InsertText    string `json:"insertText,omitempty"`
+}
+
+// CompletionList is a collection of completion items.
+type CompletionList struct {
+	IsIncomplete bool             `json:"isIncomplete"`
+	Items        []CompletionItem `json:"items"`
+}
+
+// CompletionOptions for server capabilities.
+type CompletionOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+}
+
+// --- Signature Help ---
+
+// SignatureHelp contains active signature and parameter.
+type SignatureHelp struct {
+	Signatures      []SignatureInfo `json:"signatures"`
+	ActiveSignature int             `json:"activeSignature"`
+	ActiveParameter int             `json:"activeParameter"`
+}
+
+// SignatureInfo describes a function signature.
+type SignatureInfo struct {
+	Label         string          `json:"label"`
+	Documentation string          `json:"documentation,omitempty"`
+	Parameters    []ParameterInfo `json:"parameters,omitempty"`
+}
+
+// ParameterInfo describes a parameter.
+type ParameterInfo struct {
+	Label string `json:"label"`
+}
+
+// SignatureHelpOptions for server capabilities.
+type SignatureHelpOptions struct {
+	TriggerCharacters []string `json:"triggerCharacters,omitempty"`
+}
+
+// --- Rename ---
+
+// RenameParams sent by the client.
+type RenameParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+	NewName      string                 `json:"newName"`
+}
+
+// WorkspaceEdit contains changes to multiple documents.
+type WorkspaceEdit struct {
+	Changes map[string][]TextEdit `json:"changes,omitempty"`
+}
+
+// TextEdit represents a change to a document.
+type TextEdit struct {
+	Range   Range  `json:"range"`
+	NewText string `json:"newText"`
+}
+
+// --- Code Actions ---
+
+// CodeActionParams sent by the client.
+type CodeActionParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Range        Range                  `json:"range"`
+	Context      CodeActionContext      `json:"context"`
+}
+
+// CodeActionContext provides context for code actions.
+type CodeActionContext struct {
+	Diagnostics []Diagnostic `json:"diagnostics"`
+	Only        []string     `json:"only,omitempty"`
+}
+
+// CodeAction represents a quick fix or refactoring.
+type CodeAction struct {
+	Title       string         `json:"title"`
+	Kind        string         `json:"kind,omitempty"`
+	Diagnostics []Diagnostic   `json:"diagnostics,omitempty"`
+	Edit        *WorkspaceEdit `json:"edit,omitempty"`
+}
+
+// CodeActionKind values.
+const (
+	CodeActionKindQuickFix       = "quickfix"
+	CodeActionKindRefactor       = "refactor"
+	CodeActionKindSourceOrganize = "source.organizeImports"
+)
+
+// --- Formatting ---
+
+// DocumentFormattingParams sent by the client.
+type DocumentFormattingParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Options      FormattingOptions      `json:"options"`
+}
+
+// FormattingOptions control formatting behavior.
+type FormattingOptions struct {
+	TabSize      int  `json:"tabSize"`
+	InsertSpaces bool `json:"insertSpaces"`
 }
 
 // --- JSON-RPC ---

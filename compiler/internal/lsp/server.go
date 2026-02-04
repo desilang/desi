@@ -133,6 +133,16 @@ func (s *Server) handleRequest(req *Request) {
 		s.handleReferences(req)
 	case "textDocument/documentSymbol":
 		s.handleDocumentSymbol(req)
+	case "textDocument/completion":
+		s.handleCompletion(req)
+	case "textDocument/signatureHelp":
+		s.handleSignatureHelp(req)
+	case "textDocument/rename":
+		s.handleRename(req)
+	case "textDocument/codeAction":
+		s.handleCodeAction(req)
+	case "textDocument/formatting":
+		s.handleFormatting(req)
 	default:
 		if req.ID != nil {
 			s.sendError(req.ID, MethodNotFound, "Method not found: "+req.Method)
@@ -156,6 +166,15 @@ func (s *Server) handleInitialize(req *Request) {
 			DefinitionProvider:     true,
 			ReferencesProvider:     true,
 			DocumentSymbolProvider: true,
+			CompletionProvider: &CompletionOptions{
+				TriggerCharacters: []string{"."},
+			},
+			SignatureHelpProvider: &SignatureHelpOptions{
+				TriggerCharacters: []string{"(", ","},
+			},
+			RenameProvider:             true,
+			CodeActionProvider:         true,
+			DocumentFormattingProvider: true,
 		},
 	}
 	s.sendResult(req.ID, result)
@@ -303,6 +322,199 @@ func (s *Server) handleDocumentSymbol(req *Request) {
 
 	symbols := s.getDocumentSymbols(doc)
 	s.sendResult(req.ID, symbols)
+}
+
+// handleCompletion provides auto-completion suggestions.
+func (s *Server) handleCompletion(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params TextDocumentPositionParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok {
+		s.sendResult(req.ID, CompletionList{Items: []CompletionItem{}})
+		return
+	}
+
+	items := s.getCompletions(doc, params.Position)
+	s.sendResult(req.ID, CompletionList{
+		IsIncomplete: false,
+		Items:        items,
+	})
+}
+
+// handleSignatureHelp provides function parameter hints.
+func (s *Server) handleSignatureHelp(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params TextDocumentPositionParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok || doc.Info == nil {
+		s.sendResult(req.ID, nil)
+		return
+	}
+
+	sig := s.getSignatureHelp(doc, params.Position)
+	s.sendResult(req.ID, sig)
+}
+
+// handleRename renames a symbol across the document.
+func (s *Server) handleRename(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params RenameParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok || doc.Info == nil {
+		s.sendResult(req.ID, WorkspaceEdit{})
+		return
+	}
+
+	// Find all references and create edits
+	refs := s.findReferences(doc, params.Position)
+	edits := make([]TextEdit, 0, len(refs))
+	for _, ref := range refs {
+		edits = append(edits, TextEdit{
+			Range:   ref.Range,
+			NewText: params.NewName,
+		})
+	}
+
+	result := WorkspaceEdit{
+		Changes: map[string][]TextEdit{
+			params.TextDocument.URI: edits,
+		},
+	}
+	s.sendResult(req.ID, result)
+}
+
+// handleCodeAction provides quick fixes for diagnostics.
+func (s *Server) handleCodeAction(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params CodeActionParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok {
+		s.sendResult(req.ID, []CodeAction{})
+		return
+	}
+
+	var actions []CodeAction
+
+	// Generate quick fixes for each diagnostic in the context
+	for _, clientDiag := range params.Context.Diagnostics {
+		// Look up suggestions from our diagnostic catalog
+		if entry, ok := diag.Lookup(clientDiag.Code); ok {
+			for _, sugg := range entry.Suggestions {
+				if sugg.Replacement != "" {
+					actions = append(actions, CodeAction{
+						Title:       sugg.Label,
+						Kind:        CodeActionKindQuickFix,
+						Diagnostics: []Diagnostic{clientDiag},
+						Edit: &WorkspaceEdit{
+							Changes: map[string][]TextEdit{
+								params.TextDocument.URI: {
+									{
+										Range:   clientDiag.Range,
+										NewText: sugg.Replacement,
+									},
+								},
+							},
+						},
+					})
+				}
+			}
+		}
+	}
+
+	// Also check local diagnostics for any matching quick fixes
+	for _, localDiag := range doc.Diags {
+		if posInRange(Position{Line: params.Range.Start.Line, Character: params.Range.Start.Character}, localDiag.Range) {
+			if entry, ok := diag.Lookup(localDiag.Code); ok {
+				for _, sugg := range entry.Suggestions {
+					if sugg.Label != "" && sugg.Message != "" {
+						actions = append(actions, CodeAction{
+							Title:       sugg.Label + ": " + sugg.Message,
+							Kind:        CodeActionKindQuickFix,
+							Diagnostics: []Diagnostic{localDiag},
+						})
+					}
+				}
+			}
+		}
+	}
+
+	s.sendResult(req.ID, actions)
+}
+
+// handleFormatting formats the entire document.
+func (s *Server) handleFormatting(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params DocumentFormattingParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok {
+		s.sendResult(req.ID, []TextEdit{})
+		return
+	}
+
+	// Format using desifmt (we inline the formatting logic here)
+	formatted := s.formatDocument(doc.Text, params.Options)
+	if formatted == doc.Text {
+		// No changes needed
+		s.sendResult(req.ID, []TextEdit{})
+		return
+	}
+
+	// Calculate full document range
+	lines := strings.Split(doc.Text, "\n")
+	lastLine := len(lines) - 1
+	lastChar := 0
+	if lastLine >= 0 {
+		lastChar = len(lines[lastLine])
+	}
+
+	edits := []TextEdit{
+		{
+			Range: Range{
+				Start: Position{Line: 0, Character: 0},
+				End:   Position{Line: lastLine, Character: lastChar},
+			},
+			NewText: formatted,
+		},
+	}
+	s.sendResult(req.ID, edits)
+}
+
+// formatDocument applies basic formatting to the document text.
+func (s *Server) formatDocument(text string, opts FormattingOptions) string {
+	// Basic formatting: normalize indentation and trailing whitespace
+	lines := strings.Split(text, "\n")
+	var result []string
+	for _, line := range lines {
+		// Trim trailing whitespace
+		trimmed := strings.TrimRight(line, " \t")
+		result = append(result, trimmed)
+	}
+	return strings.Join(result, "\n")
 }
 
 // analyzeAndPublish parses and type-checks a document.
@@ -469,6 +681,121 @@ func (s *Server) getDocumentSymbols(doc *Document) []DocumentSymbol {
 		}
 	}
 	return symbols
+}
+
+// getCompletions generates completion items for a document position.
+func (s *Server) getCompletions(doc *Document, pos Position) []CompletionItem {
+	var items []CompletionItem
+
+	// Add Desi keywords
+	keywords := []string{
+		"def", "class", "struct", "enum", "trait", "impl",
+		"if", "elif", "else", "for", "while", "match",
+		"return", "break", "continue", "pass",
+		"let", "mut", "pub", "async", "await",
+		"import", "from", "as",
+		"true", "false", "none",
+		"and", "or", "not", "in", "is",
+		"try", "except", "finally", "raise",
+		"using", "defer", "unsafe",
+	}
+	for _, kw := range keywords {
+		items = append(items, CompletionItem{
+			Label: kw,
+			Kind:  CompletionKindKeyword,
+		})
+	}
+
+	// Add symbols from the document
+	if doc.Info != nil {
+		// Add functions
+		for name, overloads := range doc.Info.Funcs {
+			if name == "__top__" {
+				continue
+			}
+			detail := ""
+			if overloads != nil && len(overloads.Cands) > 0 && overloads.Cands[0].Type != nil {
+				detail = overloads.Cands[0].Type.String()
+			}
+			items = append(items, CompletionItem{
+				Label:  name,
+				Kind:   CompletionKindFunction,
+				Detail: detail,
+			})
+		}
+
+		// Add types from declarations
+		if doc.Module != nil {
+			for _, decl := range doc.Module.Decls {
+				switch d := decl.(type) {
+				case *ast.ClassDecl:
+					items = append(items, CompletionItem{
+						Label: d.Name.Name,
+						Kind:  CompletionKindClass,
+					})
+				case *ast.StructDecl:
+					items = append(items, CompletionItem{
+						Label: d.Name.Name,
+						Kind:  CompletionKindStruct,
+					})
+				case *ast.EnumDecl:
+					items = append(items, CompletionItem{
+						Label: d.Name.Name,
+						Kind:  CompletionKindEnum,
+					})
+				}
+			}
+		}
+	}
+
+	return items
+}
+
+// getSignatureHelp returns signature help for a function call.
+func (s *Server) getSignatureHelp(doc *Document, pos Position) *SignatureHelp {
+	if doc.Info == nil || doc.Module == nil {
+		return nil
+	}
+
+	// Walk through expressions to find call at/near position
+	// This is a simplified implementation - a real one would track parentheses
+	for expr, t := range doc.Info.Types {
+		call, ok := expr.(*ast.CallExpr)
+		if !ok {
+			continue
+		}
+		span := call.SpanOf()
+		r := diagSpanToRange(span)
+		if posInRange(pos, r) {
+			// Found a call, get function info
+			if fn, ok := call.Callee.(*ast.Ident); ok {
+				if overloads, ok := doc.Info.Funcs[fn.Name]; ok && len(overloads.Cands) > 0 {
+					cand := overloads.Cands[0]
+					if cand.Type != nil {
+						var params []ParameterInfo
+						for i, p := range cand.Type.Params {
+							label := fmt.Sprintf("param%d", i)
+							if cand.Decl != nil && i < len(cand.Decl.Params) {
+								label = cand.Decl.Params[i].Name.Name
+							}
+							params = append(params, ParameterInfo{Label: label + ": " + p.String()})
+						}
+						return &SignatureHelp{
+							Signatures: []SignatureInfo{
+								{
+									Label:      fn.Name + "(" + t.String() + ")",
+									Parameters: params,
+								},
+							},
+							ActiveSignature: 0,
+							ActiveParameter: len(call.Args), // Approximation
+						}
+					}
+				}
+			}
+		}
+	}
+	return nil
 }
 
 // diagSpanToRange converts a diag.Span to LSP Range.

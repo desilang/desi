@@ -17,6 +17,16 @@ func (c *checker) collectStruct(d *ast.StructDecl) {
 		st.TypeParams = append(st.TypeParams, types.TypeParam{Name: tp.Name.Name, Bounds: bounds})
 	}
 
+	// Check for @ffi_struct decorator for C-compatible layout
+	for _, dec := range d.Decorators {
+		if dec.Name.Name == "ffi_struct" {
+			st.FFI = true
+		}
+		if dec.Name.Name == "packed" {
+			st.Packed = true
+		}
+	}
+
 	// Register the struct type name.
 	c.scope.Define(&Symbol{
 		Name: d.Name.Name,
@@ -277,6 +287,17 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 			Name: f.Name.Name,
 			Type: fieldType,
 		})
+
+		// Validate FFI-compatible types for @ffi_struct
+		if st.FFI && !isFFICompatible(fieldType) {
+			c.add(diagAt("DFI0004", f.Span,
+				fmt.Sprintf("@ffi_struct field '%s' has non-FFI-compatible type '%s'", f.Name.Name, fieldType)))
+		}
+	}
+
+	// FFI structs cannot be generic
+	if st.FFI && len(st.TypeParams) > 0 {
+		c.add(diagAt("DFI0005", d.Span, "@ffi_struct cannot be generic"))
 	}
 }
 
@@ -783,4 +804,34 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		}
 	}
 
+}
+
+// isFFICompatible checks if a type is valid for @ffi_struct fields.
+// FFI-compatible types: primitives (int, float, bool), cptr, and other @ffi_struct types.
+func isFFICompatible(t types.T) bool {
+	// Check for primitive numeric and boolean types
+	if types.Equal(t, types.Int) || types.Equal(t, types.Float) || types.Equal(t, types.Bool) {
+		return true
+	}
+	// Check for sized integers
+	if types.Equal(t, types.I8) || types.Equal(t, types.I16) || types.Equal(t, types.I32) || types.Equal(t, types.I64) {
+		return true
+	}
+	if types.Equal(t, types.U8) || types.Equal(t, types.U16) || types.Equal(t, types.U32) || types.Equal(t, types.U64) {
+		return true
+	}
+	// Check for sized floats
+	if types.Equal(t, types.F32) || types.Equal(t, types.F64) {
+		return true
+	}
+	// Check for cptr (raw C pointer)
+	if _, ok := t.(*types.CPtr); ok {
+		return true
+	}
+	// Check for other @ffi_struct types
+	if st, ok := t.(*types.Struct); ok {
+		return st.FFI
+	}
+	// str, list, dict, set, etc. are NOT FFI-safe
+	return false
 }

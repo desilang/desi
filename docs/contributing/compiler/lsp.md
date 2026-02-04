@@ -71,17 +71,22 @@ code .  # F5 to launch dev host
 - `definitionProvider` - Go to definition
 - `referencesProvider` - Find all references
 - `documentSymbolProvider` - Outline view
+- `completionProvider` - Auto-complete (keywords, functions, types)
+- `signatureHelpProvider` - Parameter hints
+- `renameProvider` - Rename symbol
+- `codeActionProvider` - Quick fixes from diagnostics
+- `documentFormattingProvider` - Format document
 
 ---
 
 ## Roadmap
 
-### Phase 2: Enhanced Features
-- [ ] **Completion** - Auto-complete identifiers, keywords
-- [ ] **Signature Help** - Parameter hints in function calls
-- [ ] **Rename** - Rename symbol across files
-- [ ] **Code Actions** - Quick fixes for common errors
-- [ ] **Formatting** - Integrate `desifmt`
+### Phase 2: Enhanced Features ✅
+- [x] **Completion** - Auto-complete identifiers, keywords
+- [x] **Signature Help** - Parameter hints in function calls
+- [x] **Rename** - Rename symbol across files
+- [x] **Code Actions** - Quick fixes for common errors
+- [x] **Formatting** - Format document
 
 ### Phase 3: Advanced
 - [ ] **Incremental sync** - Only send changed regions

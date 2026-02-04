@@ -30,11 +30,24 @@ func (p *Parser) parseDecorators() []*ast.Decorator {
 
 		// optional arg list
 		var args []ast.Expr
+		var kwArgs map[string]ast.Expr
 		if p.accept(token.LPAREN) {
 			paren := spanPos(p.file, p.cur)
 			if p.cur.Tok != token.RPAREN {
 				for {
-					args = append(args, p.parseExpr())
+					// Check for keyword arg: IDENT '=' expr
+					if p.cur.Tok == token.IDENT && p.peek.Tok == token.ASSIGN {
+						key := p.cur.Lexeme
+						p.next() // consume IDENT
+						p.next() // consume '='
+						val := p.parseExpr()
+						if kwArgs == nil {
+							kwArgs = make(map[string]ast.Expr)
+						}
+						kwArgs[key] = val
+					} else {
+						args = append(args, p.parseExpr())
+					}
 					if !p.accept(token.COMMA) {
 						break
 					}
@@ -53,9 +66,10 @@ func (p *Parser) parseDecorators() []*ast.Decorator {
 		}
 
 		decs = append(decs, &ast.Decorator{
-			Name: ast.Ident{Name: dotName, Span: nameSpan},
-			Args: args,
-			Span: ast.JoinSpan(start, spanPos(p.file, p.cur)),
+			Name:   ast.Ident{Name: dotName, Span: nameSpan},
+			Args:   args,
+			KwArgs: kwArgs,
+			Span:   ast.JoinSpan(start, spanPos(p.file, p.cur)),
 		})
 	}
 	return decs
