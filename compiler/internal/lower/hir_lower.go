@@ -166,6 +166,14 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		}
 	}
 
+	// Check for @inline decorator
+	for _, dec := range fd.Decorators {
+		if dec.Name.Name == "inline" {
+			f.Inline = true
+			break
+		}
+	}
+
 	return f
 }
 

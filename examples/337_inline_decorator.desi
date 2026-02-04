@@ -1,0 +1,23 @@
+# @inline Decorator Test
+# Tests that @inline functions compile correctly
+
+@inline
+def square(x: int) -> int:
+    return x * x
+
+@inline
+def add(a: int, b: int) -> int:
+    return a + b
+
+def main() -> int:
+    let r1 = square(5)
+    print(r1)
+    
+    let r2 = add(10, 7)
+    print(r2)
+    
+    0
+
+# EXPECTED_OUTPUT:
+# 25
+# 17
