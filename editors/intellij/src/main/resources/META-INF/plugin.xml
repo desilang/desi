@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<idea-plugin>
+    <id>com.desilang.desi-language</id>
+    <name>Desi Language</name>
+    <vendor email="support@desilang.io" url="https://desilang.io">Desi Language</vendor>
+
+    <description><![CDATA[
+        Language support for the Desi programming language.
+        <ul>
+            <li>Syntax highlighting</li>
+            <li>LSP integration (hover, completion, go-to-definition)</li>
+            <li>Error diagnostics</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.redhat.devtools.lsp4ij</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File Type Registration -->
+        <fileType
+            name="Desi"
+            implementationClass="com.desilang.plugin.DesiFileType"
+            fieldName="INSTANCE"
+            language="Desi"
+            extensions="desi"/>
+    </extensions>
+
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <!-- LSP Server Definition -->
+        <server id="desilsp"
+                name="Desi Language Server"
+                factoryClass="com.desilang.plugin.DesiLspServerFactory"/>
+
+        <languageMapping language="Desi" serverId="desilsp"/>
+    </extensions>
+</idea-plugin>
