@@ -30,3 +30,10 @@ compiler/runtime/decimal/lib/*.lib
 
 output.txt
 test*.txt
+
+# Node
+**/node_modules/
+**/package-lock.json
+
+# VS Code extension builds
+**/*.vsix
