@@ -93,6 +93,7 @@ type ServerCapabilities struct {
 	DocumentFormattingProvider bool                   `json:"documentFormattingProvider,omitempty"`
 	SemanticTokensProvider     *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
 	InlayHintProvider          bool                   `json:"inlayHintProvider,omitempty"`
+	WorkspaceSymbolProvider    bool                   `json:"workspaceSymbolProvider,omitempty"`
 }
 
 // InitializeResult is the response to initialize.
@@ -356,6 +357,21 @@ const (
 	InlayHintKindType      = 1
 	InlayHintKindParameter = 2
 )
+
+// --- Workspace Symbols ---
+
+// WorkspaceSymbolParams sent by the client.
+type WorkspaceSymbolParams struct {
+	Query string `json:"query"`
+}
+
+// SymbolInformation represents a symbol in the workspace.
+type SymbolInformation struct {
+	Name          string   `json:"name"`
+	Kind          int      `json:"kind"`
+	Location      Location `json:"location"`
+	ContainerName string   `json:"containerName,omitempty"`
+}
 
 // --- JSON-RPC ---
 

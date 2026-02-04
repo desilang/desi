@@ -78,6 +78,7 @@ code .  # F5 to launch dev host
 - `documentFormattingProvider` - Format document
 - `semanticTokensProvider` - Rich syntax highlighting
 - `inlayHintProvider` - Inline type hints
+- `workspaceSymbolProvider` - Cross-file symbol search
 
 ---
 
@@ -92,7 +93,7 @@ code .  # F5 to launch dev host
 
 ### Phase 3: Advanced
 - [ ] **Incremental sync** - Only send changed regions
-- [ ] **Workspace symbols** - Cross-file symbol search
+- [x] **Workspace symbols** - Cross-file symbol search
 - [x] **Semantic tokens** - Rich syntax highlighting
 - [x] **Inlay hints** - Show inferred types inline
 - [ ] **Call hierarchy** - View call graph
