@@ -147,6 +147,8 @@ func (s *Server) handleRequest(req *Request) {
 		s.handleSemanticTokens(req)
 	case "textDocument/inlayHint":
 		s.handleInlayHint(req)
+	case "workspace/symbol":
+		s.handleWorkspaceSymbol(req)
 	default:
 		if req.ID != nil {
 			s.sendError(req.ID, MethodNotFound, "Method not found: "+req.Method)
@@ -191,7 +193,8 @@ func (s *Server) handleInitialize(req *Request) {
 				},
 				Full: true,
 			},
-			InlayHintProvider: true,
+			InlayHintProvider:       true,
+			WorkspaceSymbolProvider: true,
 		},
 	}
 	s.sendResult(req.ID, result)
@@ -689,6 +692,72 @@ func (s *Server) getInlayHints(doc *Document, r Range) []InlayHint {
 	}
 
 	return hints
+}
+
+// handleWorkspaceSymbol searches for symbols across all open documents.
+func (s *Server) handleWorkspaceSymbol(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params WorkspaceSymbolParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	var symbols []SymbolInformation
+	query := strings.ToLower(params.Query)
+
+	// Search all open documents
+	for uri, doc := range s.documents {
+		if doc.Module == nil {
+			continue
+		}
+
+		for _, decl := range doc.Module.Decls {
+			var name string
+			var kind int
+			var span diag.Span
+
+			switch d := decl.(type) {
+			case *ast.FuncDecl:
+				if d.Name.Name == "__top__" {
+					continue
+				}
+				name = d.Name.Name
+				kind = SymbolKindFunction
+				span = d.Name.Span
+			case *ast.ClassDecl:
+				name = d.Name.Name
+				kind = SymbolKindClass
+				span = d.Name.Span
+			case *ast.StructDecl:
+				name = d.Name.Name
+				kind = SymbolKindStruct
+				span = d.Name.Span
+			case *ast.EnumDecl:
+				name = d.Name.Name
+				kind = SymbolKindEnum
+				span = d.Name.Span
+			default:
+				continue
+			}
+
+			// Filter by query (case-insensitive substring match)
+			if query != "" && !strings.Contains(strings.ToLower(name), query) {
+				continue
+			}
+
+			symbols = append(symbols, SymbolInformation{
+				Name: name,
+				Kind: kind,
+				Location: Location{
+					URI:   uri,
+					Range: diagSpanToRange(span),
+				},
+			})
+		}
+	}
+
+	s.sendResult(req.ID, symbols)
 }
 
 // analyzeAndPublish parses and type-checks a document.
