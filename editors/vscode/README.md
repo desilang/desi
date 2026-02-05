@@ -1,31 +1,51 @@
 # Desi Language Extension for VS Code
 
-Provides language support for the Desi programming language.
+Full language support for Desi powered by `desilsp`.
 
 ## Features
 
-- **Syntax highlighting** - Keywords, strings, numbers, operators
-- **Diagnostics** - Type errors and warnings as you type
-- **Hover** - View type information on hover
-- **Go to Definition** - Ctrl+Click to jump to definitions
-- **Find References** - Find all usages of a symbol
-- **Document Symbols** - List functions, classes, structs
+| Feature | Shortcut |
+|---------|----------|
+| **Hover** | Mouse hover - type info |
+| **Go to Definition** | `Cmd+Click` / `F12` |
+| **Find References** | `Shift+F12` |
+| **Rename Symbol** | `F2` |
+| **Auto-Complete** | `.` trigger |
+| **Signature Help** | `(` trigger |
+| **Code Actions** | `Cmd+.` |
+| **Format Document** | `Shift+Alt+F` |
+| **Outline View** | Sidebar |
+| **Workspace Symbols** | `Cmd+T` |
+| **Semantic Highlighting** | Automatic |
+| **Inlay Hints** | Automatic |
+| **Call Hierarchy** | Right-click |
 
 ## Installation
 
-### Prerequisites
-1. Build the language server:
-   ```bash
-   cd /path/to/desi
-   make tools  # Builds desilsp to bin/desilsp
-   ```
+### 1. Build the Language Server
 
-2. Ensure `desilsp` is in your PATH, or configure the path in settings.
+```bash
+cd /path/to/desi
+make tools  # Builds desilsp to bin/desilsp
+```
 
-### Install Extension
-1. Open VS Code
-2. Run: `Extensions: Install from VSIX...`
-3. Or for development: `Run Extension` (F5) from this directory
+### 2. Install Extension
+
+**Development:**
+```bash
+cd editors/vscode
+npm install
+code .
+# Press F5 to launch extension development host
+```
+
+**Package for distribution:**
+```bash
+npx vsce package --allow-missing-repository
+# Produces desi-language-0.1.0.vsix
+```
+
+Then: `Extensions: Install from VSIX...`
 
 ## Configuration
 
@@ -35,11 +55,4 @@ Provides language support for the Desi programming language.
 }
 ```
 
-## Development
-
-```bash
-cd editors/vscode
-npm install
-code .
-# Press F5 to launch extension development host
-```
+If `desi.lspPath` is not set, the extension looks for `desilsp` in PATH.
