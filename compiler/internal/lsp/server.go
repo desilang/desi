@@ -907,15 +907,46 @@ func (s *Server) findDefinition(doc *Document, pos Position) *Location {
 	for ident, sym := range doc.Info.Idents {
 		span := ident.SpanOf()
 		r := diagSpanToRange(span)
-		if posInRange(pos, r) && sym.Node != nil {
-			declSpan := sym.Node.SpanOf()
-			return &Location{
-				URI:   doc.URI,
-				Range: diagSpanToRange(declSpan),
+		if posInRange(pos, r) && sym != nil {
+			// Check if this is an imported symbol
+			if sym.Node != nil {
+				declSpan := sym.Node.SpanOf()
+				return &Location{
+					URI:   doc.URI,
+					Range: diagSpanToRange(declSpan),
+				}
+			}
+
+			// Check for cross-file import
+			if doc.Info.ImportPaths != nil {
+				if modPath, ok := doc.Info.ImportPaths[ident.Name]; ok {
+					// Resolve module path to file URI
+					fileURI := s.resolveModuleURI(modPath)
+					if fileURI != "" {
+						return &Location{
+							URI:   fileURI,
+							Range: Range{Start: Position{0, 0}, End: Position{0, 0}},
+						}
+					}
+				}
 			}
 		}
 	}
 	return nil
+}
+
+// resolveModuleURI converts a module path to a file URI.
+func (s *Server) resolveModuleURI(modPath string) string {
+	// Convert dotted path to file path
+	filePath := strings.ReplaceAll(modPath, ".", "/") + ".desi"
+
+	// Try relative to root
+	if s.rootURI != "" {
+		rootPath := uriToPath(s.rootURI)
+		fullPath := rootPath + "/" + filePath
+		return pathToURI(fullPath)
+	}
+	return ""
 }
 
 // findReferences finds all references to a symbol.
@@ -1159,6 +1190,14 @@ func uriToPath(uri string) string {
 		return strings.TrimPrefix(uri, "file://")
 	}
 	return uri
+}
+
+// pathToURI converts a filesystem path to a file:// URI.
+func pathToURI(path string) string {
+	if !strings.HasPrefix(path, "file://") {
+		return "file://" + path
+	}
+	return path
 }
 
 // --- JSON-RPC Helpers ---

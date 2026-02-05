@@ -100,6 +100,6 @@ code .  # F5 to launch dev host
 - [x] **Call hierarchy** - View call graph
 
 ### Phase 4: Multi-file
-- [ ] **Cross-file definition** - Jump to imported modules
+- [x] **Cross-file definition** - Jump to imported modules
 - [ ] **Multi-root workspaces** - Support monorepos
 - [ ] **Project-wide diagnostics** - Check all files on save
