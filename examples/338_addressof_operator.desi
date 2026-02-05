@@ -1,0 +1,13 @@
+# Address-of Operator Test
+# Tests & syntax for taking address of values (FFI pointer semantics)
+
+def main() -> int:
+    unsafe:
+        let x: int = 42
+        # Take address of variable
+        let ptr_x = &x
+        print(x)
+    0
+
+# EXPECTED_OUTPUT:
+# 42

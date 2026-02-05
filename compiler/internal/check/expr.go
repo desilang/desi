@@ -460,6 +460,12 @@ func (c *checker) typ(e ast.Expr) types.T {
 				c.info.Types[e] = t
 				return t
 			}
+		case "&":
+			// Address-of operator - returns a pointer type (represented as CPtr)
+			// Only valid in unsafe blocks (checked at statement level)
+			ptrType := types.CPtrOf(t)
+			c.info.Types[e] = ptrType
+			return ptrType
 		}
 
 		c.add(diagAt("DTE0004", x.Span, "invalid unary '"+x.Op+"' on type '"+t.String()+"'"))

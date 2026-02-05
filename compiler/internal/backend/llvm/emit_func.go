@@ -665,6 +665,26 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					}
 				}
 
+			case *hir.AddressOf:
+				// Address-of operator: allocate on stack and return pointer
+				// If Src is a Var, we already have a stack allocation, just use its address
+				if varSrc, ok := x.Src.(hir.Var); ok {
+					// Variable already has an alloca, just copy the pointer
+					wprintf(&m.funcs, "  %s = bitcast ptr %%%s to ptr\n", x.Dst.Name, varSrc.Name)
+				} else {
+					// For non-variable sources, alloca and store
+					allocTy := x.Type
+					if allocTy == "" {
+						allocTy = "ptr"
+					}
+					allocTemp := x.Dst.Name + ".addr"
+					wprintf(&m.funcs, "  %s = alloca %s\n", allocTemp, allocTy)
+					srcOp, _ := m.operand(x.Src)
+					wprintf(&m.funcs, "  store %s %s, ptr %s\n", allocTy, srcOp, allocTemp)
+					wprintf(&m.funcs, "  %s = bitcast ptr %s to ptr\n", x.Dst.Name, allocTemp)
+				}
+				m.tempTypes[x.Dst.Name] = "ptr"
+
 			case *hir.GetElementPtr:
 				baseOp := m.ptrOperand(x.Base)
 				var idxStr strings.Builder
