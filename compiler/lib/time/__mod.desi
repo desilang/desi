@@ -200,8 +200,8 @@ pub def to_local(utc_ts: float) -> float:
 # ============================================================
 
 # Format current time using strftime pattern
-# Example: time.format_time("%Y-%m-%d")  -> "2026-02-05"
-pub def format_time(format: str) -> str:
+# Example: time.strftime("%Y-%m-%d")  -> "2026-02-05"
+pub def strftime(format: str) -> str:
     unsafe:
         return __desi_time_strftime(format)
 
@@ -224,8 +224,8 @@ pub def from_parts(year: int, month: int, day: int, hour: int, minute: int, seco
         return __time_from_parts(year, month, day, hour, minute, second)
 
 # Human-readable time string (like "Wed Feb  5 13:30:00 2026")
-# Example: time.readable_time(ts)
-pub def readable_time(ts: float) -> str:
+# Example: time.ctime(ts)
+pub def ctime(ts: float) -> str:
     unsafe:
         return __desi_time_ctime(ts)
 

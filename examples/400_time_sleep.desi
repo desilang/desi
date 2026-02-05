@@ -35,10 +35,10 @@ def test_timezone_functions():
 
 def test_formatting():
     print("=== Formatting & Parsing ===")
-    let date_str = format_time("%Y-%m-%d")
-    print("format_time('%Y-%m-%d'):", date_str)
-    let time_str = format_time("%H:%M:%S")
-    print("format_time('%H:%M:%S'):", time_str)
+    let date_str = strftime("%Y-%m-%d")
+    print("strftime('%Y-%m-%d'):", date_str)
+    let time_str = strftime("%H:%M:%S")
+    print("strftime('%H:%M:%S'):", time_str)
     let ts = from_parts(2026, 1, 15, 10, 30, 45)
     let formatted = format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
     print("format_timestamp(2026-01-15 10:30:45):", formatted)
@@ -46,7 +46,7 @@ def test_formatting():
     print("parse_time('2026-02-05'):", parsed)
     let built = from_parts(2026, 12, 25, 0, 0, 0)
     print("from_parts(2026, 12, 25):", built)
-    let readable = readable_time(now())
+    let readable = ctime(now())
     print("ctime():", readable)
     let original = from_parts(2026, 6, 15, 14, 30, 0)
     let fmt = format_timestamp(original, "%Y-%m-%d %H:%M:%S")

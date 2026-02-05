@@ -46,12 +46,14 @@ libc (time.h, sys/time.h)     ← System libraries
 
 ## Naming Collision Issue
 
-Some C stdlib functions (`strftime`, `ctime`) conflict with Desi function names at link time. To avoid infinite recursion:
+Some C stdlib functions (`strftime`, `ctime`) have the same names as Desi functions. With the new symbol mangling:
 
-- C functions are prefixed: `__desi_time_strftime`, `__desi_time_ctime`
-- Desi API uses different names: `format_time()`, `readable_time()`
+- All non-extern Desi functions are prefixed with `__desi$` at compile time
+- For example, `strftime` → `__desi$strftime` in the generated LLVM IR
+- This prevents collision with C's `strftime` at link time
+- Users can use natural function names without workarounds
 
-**Future fix**: Update compiler to mangle all Desi symbols with unique prefixes.
+**Note**: Builtins (`print`, `len`, etc.) and `@extern` functions are NOT mangled.
 
 ## Platform Differences
 
