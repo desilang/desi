@@ -94,6 +94,7 @@ type ServerCapabilities struct {
 	SemanticTokensProvider     *SemanticTokensOptions `json:"semanticTokensProvider,omitempty"`
 	InlayHintProvider          bool                   `json:"inlayHintProvider,omitempty"`
 	WorkspaceSymbolProvider    bool                   `json:"workspaceSymbolProvider,omitempty"`
+	CallHierarchyProvider      bool                   `json:"callHierarchyProvider,omitempty"`
 }
 
 // InitializeResult is the response to initialize.
@@ -371,6 +372,46 @@ type SymbolInformation struct {
 	Kind          int      `json:"kind"`
 	Location      Location `json:"location"`
 	ContainerName string   `json:"containerName,omitempty"`
+}
+
+// --- Call Hierarchy ---
+
+// CallHierarchyPrepareParams sent by the client.
+type CallHierarchyPrepareParams struct {
+	TextDocument TextDocumentIdentifier `json:"textDocument"`
+	Position     Position               `json:"position"`
+}
+
+// CallHierarchyItem represents a function/method in the call hierarchy.
+type CallHierarchyItem struct {
+	Name           string `json:"name"`
+	Kind           int    `json:"kind"`
+	URI            string `json:"uri"`
+	Range          Range  `json:"range"`
+	SelectionRange Range  `json:"selectionRange"`
+	Data           any    `json:"data,omitempty"`
+}
+
+// CallHierarchyIncomingCallsParams sent by the client.
+type CallHierarchyIncomingCallsParams struct {
+	Item CallHierarchyItem `json:"item"`
+}
+
+// CallHierarchyIncomingCall represents a caller.
+type CallHierarchyIncomingCall struct {
+	From       CallHierarchyItem `json:"from"`
+	FromRanges []Range           `json:"fromRanges"`
+}
+
+// CallHierarchyOutgoingCallsParams sent by the client.
+type CallHierarchyOutgoingCallsParams struct {
+	Item CallHierarchyItem `json:"item"`
+}
+
+// CallHierarchyOutgoingCall represents a callee.
+type CallHierarchyOutgoingCall struct {
+	To         CallHierarchyItem `json:"to"`
+	FromRanges []Range           `json:"fromRanges"`
 }
 
 // --- JSON-RPC ---

@@ -79,6 +79,7 @@ code .  # F5 to launch dev host
 - `semanticTokensProvider` - Rich syntax highlighting
 - `inlayHintProvider` - Inline type hints
 - `workspaceSymbolProvider` - Cross-file symbol search
+- `callHierarchyProvider` - View call graph
 
 ---
 
@@ -91,12 +92,12 @@ code .  # F5 to launch dev host
 - [x] **Code Actions** - Quick fixes for common errors
 - [x] **Formatting** - Format document
 
-### Phase 3: Advanced
-- [ ] **Incremental sync** - Only send changed regions
+### Phase 3: Advanced ✅
+- [ ] **Incremental sync** - Only send changed regions (deferred)
 - [x] **Workspace symbols** - Cross-file symbol search
 - [x] **Semantic tokens** - Rich syntax highlighting
 - [x] **Inlay hints** - Show inferred types inline
-- [ ] **Call hierarchy** - View call graph
+- [x] **Call hierarchy** - View call graph
 
 ### Phase 4: Multi-file
 - [ ] **Cross-file definition** - Jump to imported modules
