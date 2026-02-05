@@ -600,12 +600,12 @@ func (s *Scanner) scanString() Item {
 	for s.i < len(s.src) {
 		// close?
 		if s.peekIs('"') {
-			// Don't put content in Lexeme - let formatter reconstruct from source
-			// to preserve exact original formatting with quotes.
-			_ = string(s.src[contentStart:s.i]) // consumed but not used
+			// Store content WITHOUT quotes in Lexeme for runtime printing
+			// AST passes like desugar can use the raw content directly
+			content := string(s.src[contentStart:s.i])
 			s.i++
 			s.col++
-			return Item{Tok: token.STR, Lexeme: "", Line: s.line, Col: startCol}
+			return Item{Tok: token.STR, Lexeme: content, Line: s.line, Col: startCol}
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {

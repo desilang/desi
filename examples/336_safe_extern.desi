@@ -1,16 +1,17 @@
 # Safe Extern Test
-# Tests basic @extern decorator for C function binding
+# Tests @extern("C", safe=true, c_name="...") for seamless C FFI
 
-@extern("C")
-def abs(x: i32) -> i32
+# safe=true generates a wrapper with internal unsafe block
+@extern("C", safe=true, c_name="abs")
+pub def safe_abs(x: i32) -> i32
 
 def main() -> int:
-    unsafe:
-        let val = abs(-42)
-        print(val)
-        
-        let val2 = abs(10)
-        print(val2)
+    # No unsafe block needed - safe=true handles it internally!
+    let val = safe_abs(-42)
+    print(val)
+    
+    let val2 = safe_abs(10)
+    print(val2)
     
     0
 

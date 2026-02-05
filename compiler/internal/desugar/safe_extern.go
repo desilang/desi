@@ -115,7 +115,7 @@ func getSafeExternInfo(fd *ast.FuncDecl) *SafeExternInfo {
 			continue
 		}
 
-		// Get c_name
+		// Get c_name (Value is content without quotes since scanner change)
 		cNameExpr, hasCName := dec.KwArgs["c_name"]
 		if !hasCName {
 			continue
@@ -125,8 +125,7 @@ func getSafeExternInfo(fd *ast.FuncDecl) *SafeExternInfo {
 			continue
 		}
 
-		// Value contains the lexeme which includes quotes - strip them
-		cName := stripQuotes(cNameStr.Value)
+		cName := cNameStr.Value
 		if cName == "" {
 			continue
 		}
