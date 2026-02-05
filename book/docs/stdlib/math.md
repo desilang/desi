@@ -55,5 +55,4 @@ Since division by zero now panics, creating NaN requires special operations. A `
 
 ## See Also
 
-- [Examples: Math Module](../../examples/245_math_module.desi)
-- [Division by Zero](../language/division.md)
+- [Division by Zero](../language/division.md) - Related safety behavior

@@ -159,4 +159,4 @@ let ch = Channel(10)
 ## See Also
 
 - [Mutex](./mutex.md) - For protecting shared data
-- [Spawn](./spawn.md) - For creating concurrent tasks
+- [TaskGroup](./taskgroup.md) - For creating concurrent tasks
