@@ -94,6 +94,12 @@ func main() {
 		os.Exit(exitCode)
 	}
 
+	// Subcommand path: desic watch ...
+	if len(os.Args) >= 2 && os.Args[1] == "watch" {
+		exitCode := runWatch(os.Args[2:])
+		os.Exit(exitCode)
+	}
+
 	// Subcommand path: desic check ...
 	if len(os.Args) >= 2 && os.Args[1] == "check" {
 		jsonMode := ef == "json"
