@@ -99,7 +99,7 @@ code .  # F5 to launch dev host
 - [x] **Inlay hints** - Show inferred types inline
 - [x] **Call hierarchy** - View call graph
 
-### Phase 4: Multi-file
+### Phase 4: Multi-file ✅
 - [x] **Cross-file definition** - Jump to imported modules
-- [ ] **Multi-root workspaces** - Support monorepos
-- [ ] **Project-wide diagnostics** - Check all files on save
+- [x] **Multi-root workspaces** - Support monorepos
+- [x] **Project-wide diagnostics** - Check all files on save
