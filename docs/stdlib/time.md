@@ -44,6 +44,44 @@ libc (time.h, sys/time.h)     ← System libraries
 | `__time_humanize` | "1 hour, 5 minutes" format |
 | `__time_relative` | "3 hours ago" format |
 
+## Classes
+
+### Duration
+
+A value class representing time spans.
+
+```desi
+pub class Duration:
+    pub seconds: float
+    
+    @staticmethod
+    pub def from_seconds(s: float) -> Duration
+    pub def total_seconds(self) -> float
+    pub def __str__(self) -> str  # Uses humanize
+```
+
+**Design Notes:**
+- Uses public `seconds` field instead of private `_seconds` to avoid constructor lowering issues
+- Factory methods use `@staticmethod` decorator for proper static dispatch
+- `__str__` calls `__time_humanize` for pretty printing
+
+### Stopwatch
+
+Simple timing utility for measuring code execution.
+
+```desi
+pub class Stopwatch:
+    pub start_time: float
+    
+    pub def start(self)
+    pub def elapsed(self) -> float
+    pub def elapsed_str(self) -> str
+```
+
+**Design Notes:**
+- Originally designed as context manager with `__close__` but simplified to avoid constructor complexity
+- Uses `start()` method instead of constructor initialization for reliability
+
 ## Symbol Mangling (Compiler Feature)
 
 Desi uses **targeted symbol mangling** to prevent collisions with C stdlib:
