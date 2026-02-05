@@ -143,6 +143,10 @@ func (s *Server) handleRequest(req *Request) {
 		s.handleCodeAction(req)
 	case "textDocument/formatting":
 		s.handleFormatting(req)
+	case "textDocument/semanticTokens/full":
+		s.handleSemanticTokens(req)
+	case "textDocument/inlayHint":
+		s.handleInlayHint(req)
 	default:
 		if req.ID != nil {
 			s.sendError(req.ID, MethodNotFound, "Method not found: "+req.Method)
@@ -175,6 +179,19 @@ func (s *Server) handleInitialize(req *Request) {
 			RenameProvider:             true,
 			CodeActionProvider:         true,
 			DocumentFormattingProvider: true,
+			SemanticTokensProvider: &SemanticTokensOptions{
+				Legend: SemanticTokensLegend{
+					TokenTypes: []string{
+						"namespace", "type", "class", "enum", "interface",
+						"struct", "typeParameter", "parameter", "variable",
+						"property", "enumMember", "function", "method",
+						"macro", "keyword", "comment", "string", "number", "operator",
+					},
+					TokenModifiers: []string{"declaration", "definition", "readonly"},
+				},
+				Full: true,
+			},
+			InlayHintProvider: true,
 		},
 	}
 	s.sendResult(req.ID, result)
@@ -515,6 +532,163 @@ func (s *Server) formatDocument(text string, opts FormattingOptions) string {
 		result = append(result, trimmed)
 	}
 	return strings.Join(result, "\n")
+}
+
+// handleSemanticTokens provides semantic highlighting data.
+func (s *Server) handleSemanticTokens(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params SemanticTokensParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok || doc.Module == nil {
+		s.sendResult(req.ID, SemanticTokens{Data: []int{}})
+		return
+	}
+
+	tokens := s.getSemanticTokens(doc)
+	s.sendResult(req.ID, SemanticTokens{Data: tokens})
+}
+
+// handleInlayHint provides inline type hints.
+func (s *Server) handleInlayHint(req *Request) {
+	paramsJSON, _ := json.Marshal(req.Params)
+	var params InlayHintParams
+	json.Unmarshal(paramsJSON, &params)
+
+	s.mu.Lock()
+	doc, ok := s.documents[params.TextDocument.URI]
+	s.mu.Unlock()
+
+	if !ok || doc.Info == nil {
+		s.sendResult(req.ID, []InlayHint{})
+		return
+	}
+
+	hints := s.getInlayHints(doc, params.Range)
+	s.sendResult(req.ID, hints)
+}
+
+// getSemanticTokens generates encoded semantic token data.
+func (s *Server) getSemanticTokens(doc *Document) []int {
+	var data []int
+	prevLine := 0
+	prevChar := 0
+
+	// Walk declarations and add tokens
+	for _, decl := range doc.Module.Decls {
+		switch d := decl.(type) {
+		case *ast.FuncDecl:
+			if d.Name.Name == "__top__" {
+				continue
+			}
+			// Function name
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			// Encode: deltaLine, deltaChar, length, tokenType, modifiers
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeFunction, 1) // 1 = declaration modifier
+			prevLine = line
+			prevChar = char
+
+		case *ast.ClassDecl:
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeClass, 1)
+			prevLine = line
+			prevChar = char
+
+		case *ast.StructDecl:
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeStruct, 1)
+			prevLine = line
+			prevChar = char
+
+		case *ast.EnumDecl:
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeEnum, 1)
+			prevLine = line
+			prevChar = char
+		}
+	}
+
+	return data
+}
+
+// getInlayHints generates inline type hints for variable declarations.
+func (s *Server) getInlayHints(doc *Document, r Range) []InlayHint {
+	var hints []InlayHint
+
+	if doc.Info == nil {
+		return hints
+	}
+
+	// Walk identifiers and add type hints for variables without explicit types
+	for ident, sym := range doc.Info.Idents {
+		if sym == nil || sym.Type == nil {
+			continue
+		}
+
+		span := ident.SpanOf()
+		lspRange := diagSpanToRange(span)
+
+		// Check if in requested range
+		if lspRange.Start.Line < r.Start.Line || lspRange.End.Line > r.End.Line {
+			continue
+		}
+
+		// Add type hint after the identifier
+		hints = append(hints, InlayHint{
+			Position: Position{
+				Line:      lspRange.End.Line,
+				Character: lspRange.End.Character,
+			},
+			Label: ": " + sym.Type.String(),
+			Kind:  InlayHintKindType,
+		})
+	}
+
+	return hints
 }
 
 // analyzeAndPublish parses and type-checks a document.
