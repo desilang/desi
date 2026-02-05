@@ -87,6 +87,15 @@ windows:
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desirepl.exe ./compiler/cmd/desirepl
 	GOOS=windows GOARCH=amd64 $(GO) build -ldflags="-s -w" -o $(BIN_DIR)/desilsp.exe ./compiler/cmd/desilsp
 
+# Editor Plugins
+.PHONY: vscode editors
+
+vscode: $(DESILSP)
+	@echo "==> Building VS Code extension..."
+	cd editors/vscode && npm install && npm run package 2>/dev/null || npx vsce package --allow-missing-repository
+
+editors: vscode
+	@echo "==> All editor plugins built"
+
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR) gen/
-
