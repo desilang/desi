@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: pygments-desi
+Version: 0.1.0
+Summary: Pygments lexer for the Desi programming language
+Requires-Dist: pygments
+Dynamic: requires-dist
+Dynamic: summary

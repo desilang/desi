@@ -40,6 +40,14 @@ func ExpandSafeExterns(mod *ast.Module) *ast.Module {
 			continue
 		}
 
+		// Validate out params exist in function signature
+		if err := validateOutParams(fd, safeInfo); err != nil {
+			// For now, keep original decl and let type checker catch it later
+			// A proper implementation would collect errors and return them
+			newDecls = append(newDecls, decl)
+			continue
+		}
+
 		// Generate the hidden raw extern and wrapper
 		rawExtern, wrapper := generateSafeWrapper(fd, safeInfo)
 		newDecls = append(newDecls, rawExtern, wrapper)
@@ -47,6 +55,38 @@ func ExpandSafeExterns(mod *ast.Module) *ast.Module {
 
 	mod.Decls = newDecls
 	return mod
+}
+
+// validateOutParams checks that all names in out=[] exist in the function parameters.
+func validateOutParams(fd *ast.FuncDecl, info *SafeExternInfo) error {
+	if len(info.OutParams) == 0 {
+		return nil // No out params to validate
+	}
+
+	// Build set of param names
+	paramNames := make(map[string]bool)
+	for _, p := range fd.Params {
+		paramNames[p.Name.Name] = true
+	}
+
+	// Check each out param exists
+	for _, outName := range info.OutParams {
+		if !paramNames[outName] {
+			// Return error - param doesn't exist
+			return &OutParamError{ParamName: outName, FuncName: fd.Name.Name}
+		}
+	}
+	return nil
+}
+
+// OutParamError represents an invalid out parameter name.
+type OutParamError struct {
+	ParamName string
+	FuncName  string
+}
+
+func (e *OutParamError) Error() string {
+	return "out parameter '" + e.ParamName + "' not found in function '" + e.FuncName + "'"
 }
 
 // SafeExternInfo holds parsed info from @extern("C", safe=true, c_name="...")

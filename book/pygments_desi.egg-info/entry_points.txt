@@ -1,0 +1,2 @@
+[pygments.lexers]
+desi = pygments_desi:DesiLexer

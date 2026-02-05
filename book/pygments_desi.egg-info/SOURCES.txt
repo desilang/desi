@@ -1,0 +1,9 @@
+setup.py
+pygments_desi/__init__.py
+pygments_desi/desi_lexer.py
+pygments_desi.egg-info/PKG-INFO
+pygments_desi.egg-info/SOURCES.txt
+pygments_desi.egg-info/dependency_links.txt
+pygments_desi.egg-info/entry_points.txt
+pygments_desi.egg-info/requires.txt
+pygments_desi.egg-info/top_level.txt

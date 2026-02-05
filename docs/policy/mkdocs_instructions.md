@@ -39,7 +39,12 @@ conda activate desi-docs
 
 ```bash
 pip install mkdocs-material mike
+
+# Install Desi syntax highlighting
+pip install -e book/
 ```
+
+The `book/` directory contains a Pygments lexer for Desi that enables syntax highlighting in code blocks using \`\`\`desi
 
 ---
 
