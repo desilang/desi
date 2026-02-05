@@ -280,6 +280,7 @@ type Func struct {
 	RetType string // optional (e.g. "ptr", "i32")
 	Blocks  []*Block
 	Origin  interface{} // *ast.FuncDecl (using interface{} to avoid import cycle if needed, but ast is likely fine)
+	Inline  bool        // true if @inline decorator present (emit LLVM alwaysinline)
 }
 
 type Block struct {

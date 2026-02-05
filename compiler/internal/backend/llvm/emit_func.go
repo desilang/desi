@@ -82,7 +82,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 		// Track parameter type for operand() lookups
 		m.tempTypes[p.Name] = pty
 	}
-	wprintf(&m.funcs, ") {\n")
+	// Add inline attribute if requested
+	attrs := ""
+	if fn.Inline {
+		attrs = " alwaysinline"
+	}
+	wprintf(&m.funcs, ")%s {\n", attrs)
 
 	type localInfo struct {
 		name string
