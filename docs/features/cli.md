@@ -51,6 +51,32 @@ Server started on port 8080 (v2 - hot reloaded!)
 - Auto-detects `main.desi` in target directory
 - **`--run`**: Full compile + link + execute with auto-restart
 
+**State Serialization Builtins (for `--run` mode):**
+
+| Function | Description |
+|----------|-------------|
+| `is_reload() -> bool` | Returns `true` if this is a hot reload |
+| `reload_count() -> int` | Number of reloads (0 = first run) |
+| `state_file() -> Option[str]` | Path to temporary state file |
+| `write_state(json: str) -> bool` | Write JSON to state file |
+| `read_state() -> Option[str]` | Read JSON from state file |
+| `delete_state() -> bool` | Clean up after restore |
+
+**Example with State Preservation:**
+
+```desi
+if is_reload():
+    match read_state():
+        case Some(json):
+            restore_from_json(json)
+            delete_state()
+            print(f"Restored from reload #{reload_count()}")
+        case Nothing:
+            pass
+else:
+    print("First run")
+```
+
 ---
 
 ### `desic check` - Type Check

@@ -1473,6 +1473,60 @@ handlePrint:
 		}
 	}
 
+	// 1.9. Hot reload state serialization builtins
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee)
+
+		// is_reload() -> bool
+		if calleeName == "is_reload" && len(x.Args) == 0 {
+			dst := ls.b.FreshTemp("is_reload")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_is_reload", Args: nil, Type: "i1"})
+			return dst
+		}
+
+		// reload_count() -> int
+		if calleeName == "reload_count" && len(x.Args) == 0 {
+			dst := ls.b.FreshTemp("reload_count")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_reload_count", Args: nil, Type: "i64"})
+			return dst
+		}
+
+		// state_file() -> Option[str]
+		if calleeName == "state_file" && len(x.Args) == 0 {
+			// Call C function that returns ptr (NULL if not set)
+			rawPtr := ls.b.FreshTemp("state_file_raw")
+			ls.b.Emit(&hir.Call{Dst: rawPtr, Fn: "__desi_state_file", Args: nil, Type: "ptr"})
+			// Wrap in Option - use Option.Some if non-null, Option.Nothing otherwise
+			dst := ls.b.FreshTemp("state_file_opt")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_ptr_to_option_str", Args: []hir.Value{rawPtr}, Type: "ptr"})
+			return dst
+		}
+
+		// write_state(json: str) -> bool
+		if calleeName == "write_state" && len(x.Args) == 1 {
+			jsonVal := ls.lowerExpr(x.Args[0])
+			dst := ls.b.FreshTemp("write_state")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_write_state", Args: []hir.Value{jsonVal}, Type: "i1"})
+			return dst
+		}
+
+		// read_state() -> Option[str]
+		if calleeName == "read_state" && len(x.Args) == 0 {
+			rawPtr := ls.b.FreshTemp("read_state_raw")
+			ls.b.Emit(&hir.Call{Dst: rawPtr, Fn: "__desi_read_state", Args: nil, Type: "ptr"})
+			dst := ls.b.FreshTemp("read_state_opt")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_ptr_to_option_str", Args: []hir.Value{rawPtr}, Type: "ptr"})
+			return dst
+		}
+
+		// delete_state() -> bool
+		if calleeName == "delete_state" && len(x.Args) == 0 {
+			dst := ls.b.FreshTemp("delete_state")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_delete_state", Args: nil, Type: "i1"})
+			return dst
+		}
+	}
+
 	// Handle log.info(), log.warn(), log.error(), log.debug()
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {

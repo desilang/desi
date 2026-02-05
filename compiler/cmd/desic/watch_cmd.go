@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -123,12 +124,17 @@ func runWatch(args []string) int {
 	var currentProcess *exec.Cmd
 	var processMu sync.Mutex
 
+	// Reload tracking for state serialization
+	reloadCount := 0
+	stateFilePath := filepath.Join(os.TempDir(), "desi-reload-state.json")
+
 	// Initial build
 	mainFile := findMainFile(absDir)
 	if mainFile != "" {
 		term.Println("📦 Building:", mainFile)
 		term.Flush()
-		buildAndRun(mainFile, runAfterBuild, &currentProcess, &processMu, verbose)
+		buildAndRun(mainFile, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
+		reloadCount++
 	}
 
 	// Watch loop
@@ -174,7 +180,8 @@ func runWatch(args []string) int {
 					buildTarget = event.Name
 				}
 
-				buildAndRun(buildTarget, runAfterBuild, &currentProcess, &processMu, verbose)
+				buildAndRun(buildTarget, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
+				reloadCount++
 			})
 			debounceMu.Unlock()
 
@@ -217,7 +224,9 @@ func findMainFile(dir string) string {
 }
 
 // buildAndRun compiles the file and optionally runs it
-func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, processMu *sync.Mutex, verbose bool) {
+// reloadCount tracks how many times we've reloaded (0 = first run)
+// stateFilePath is the path for state serialization between reloads
+func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, processMu *sync.Mutex, verbose bool, reloadCount int, stateFilePath string) {
 	startTime := time.Now()
 
 	// Kill existing process if running
@@ -243,7 +252,8 @@ func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, pro
 
 	// If not running, just type-check
 	if !runAfterBuild {
-		cmd := exec.Command("desic", "check", file)
+		exePath, _ := os.Executable()
+		cmd := exec.Command(exePath, "check", file)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 
@@ -277,7 +287,8 @@ func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, pro
 	if verbose {
 		term.Println("  📝 Emitting IR...")
 	}
-	emitCmd := exec.Command("desic", "emit-ir", file)
+	exePath, _ := os.Executable()
+	emitCmd := exec.Command(exePath, "emit-ir", file)
 	irOutput, err := emitCmd.Output()
 	if err != nil {
 		elapsed := time.Since(startTime)
@@ -349,8 +360,13 @@ int main(void) { return __top__(); }
 	term.Printf("✅ Build succeeded (%.2fs)\n", elapsed.Seconds())
 	term.Flush()
 
-	// Step 3: Run the binary
-	term.Println("🚀 Running...")
+	// Step 6: Run the binary
+	isReload := reloadCount > 0
+	if isReload {
+		term.Println("🔄 Restarting with state...")
+	} else {
+		term.Println("🚀 Running...")
+	}
 	term.Println("─────────────────────────────────────")
 	term.Flush()
 
@@ -358,6 +374,13 @@ int main(void) { return __top__(); }
 	runCmd.Stdout = os.Stdout
 	runCmd.Stderr = os.Stderr
 	runCmd.Stdin = os.Stdin
+
+	// Set environment variables for state serialization
+	runCmd.Env = append(os.Environ(),
+		fmt.Sprintf("DESI_RELOAD=%v", isReload),
+		fmt.Sprintf("DESI_RELOAD_COUNT=%d", reloadCount),
+		fmt.Sprintf("DESI_STATE_FILE=%s", stateFilePath),
+	)
 
 	processMu.Lock()
 	*currentProcess = runCmd
