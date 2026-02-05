@@ -186,6 +186,56 @@ If we add intrusive data structures:
 - [x] Flag FFI outside unsafe (error by default)
 - [x] Add `@ffi_struct` for C-compatible struct layouts
 - [x] Add safe wrapper generation with `@extern(safe=true, c_name="...")`
+- [x] Add `&` address-of operator for FFI pointer passing
+
+---
+
+## The `&` Address-Of Operator
+
+The `&` operator takes the address of a value, returning a pointer type (`CPtr[T]`). This is essential for C FFI functions that require pointer arguments.
+
+### Syntax
+
+```desi
+unsafe:
+    let x: int = 42
+    let ptr_x = &x   # ptr_x has type CPtr[int]
+```
+
+### Semantics
+
+| Operation | Result Type | Description |
+|-----------|-------------|-------------|
+| `&x` (variable) | `CPtr[T]` | Takes address of stack variable |
+| `&expr` (expression) | `CPtr[T]` | Allocates temp on stack, stores expr, returns pointer |
+
+### Restrictions
+
+1. **Unsafe blocks only**: The `&` operator is only valid inside `unsafe:` blocks
+2. **No pointer arithmetic**: Desi does not support pointer arithmetic (`ptr + 1`)
+3. **Pointer lifetimes**: Pointers are valid only while the referenced value is in scope
+
+### LLVM Implementation
+
+For variable references:
+```llvm
+%addrof = bitcast ptr %x to ptr   ; Just take address of stack slot
+```
+
+For expression results:
+```llvm
+%addrof.addr = alloca i64         ; Allocate temp
+store i64 %expr_result, ptr %addrof.addr  ; Store value
+%addrof = bitcast ptr %addrof.addr to ptr ; Return pointer
+```
+
+### Use Cases
+
+1. **C functions with out-params**: Pass address for C to write results
+2. **C functions reading values by reference**: Avoid copying large structs
+3. **Safe FFI wrappers**: Internal use in generated wrapper functions
+
+---
 
 ### Phase 4: Lock Guards (Long-term)
 - [ ] Implement after concurrency primitives
