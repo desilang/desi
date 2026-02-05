@@ -1,0 +1,364 @@
+# Time module - Comprehensive time/datetime functions
+# Python-inspired + Desi innovations
+# Uses C runtime for cross-platform support
+
+# ============================================================
+# C Runtime Bindings
+# ============================================================
+
+# Core time functions
+@extern("C")
+def __time_sleep_secs(seconds: float) -> none
+
+@extern("C")
+def __time_now() -> float
+
+@extern("C")
+def __time_utc_now() -> float
+
+@extern("C")
+def __time_monotonic() -> float
+
+@extern("C")
+def __time_perf_counter() -> float
+
+# Timezone functions
+@extern("C")
+def __time_timezone_offset() -> int
+
+@extern("C")
+def __time_timezone_name() -> str
+
+@extern("C")
+def __time_is_dst() -> bool
+
+@extern("C")
+def __time_to_utc(local_ts: float) -> float
+
+@extern("C")
+def __time_to_local(utc_ts: float) -> float
+
+# Formatting & parsing
+@extern("C")
+def __desi_time_strftime(format: str) -> str
+
+@extern("C")
+def __time_format_timestamp(ts: float, format: str) -> str
+
+@extern("C")
+def __time_parse(time_str: str, format: str) -> float
+
+@extern("C")
+def __time_from_parts(year: int, month: int, day: int, hour: int, minute: int, second: int) -> float
+
+@extern("C")
+def __desi_time_ctime(ts: float) -> str
+
+# Current time component getters
+@extern("C")
+def __time_year() -> int
+
+@extern("C")
+def __time_month() -> int
+
+@extern("C")
+def __time_day() -> int
+
+@extern("C")
+def __time_hour() -> int
+
+@extern("C")
+def __time_minute() -> int
+
+@extern("C")
+def __time_second() -> int
+
+@extern("C")
+def __time_weekday() -> int
+
+# Timestamp component getters
+@extern("C")
+def __time_year_of(ts: float) -> int
+
+@extern("C")
+def __time_month_of(ts: float) -> int
+
+@extern("C")
+def __time_day_of(ts: float) -> int
+
+@extern("C")
+def __time_hour_of(ts: float) -> int
+
+@extern("C")
+def __time_minute_of(ts: float) -> int
+
+@extern("C")
+def __time_second_of(ts: float) -> int
+
+@extern("C")
+def __time_weekday_of(ts: float) -> int
+
+@extern("C")
+def __time_day_of_year(ts: float) -> int
+
+@extern("C")
+def __time_is_leap_year(year: int) -> bool
+
+# Arithmetic
+@extern("C")
+def __time_add_seconds(ts: float, seconds: float) -> float
+
+@extern("C")
+def __time_add_days(ts: float, days: int) -> float
+
+@extern("C")
+def __time_add_hours(ts: float, hours: int) -> float
+
+@extern("C")
+def __time_add_minutes(ts: float, minutes: int) -> float
+
+@extern("C")
+def __time_diff(ts1: float, ts2: float) -> float
+
+# Innovative functions
+@extern("C")
+def __time_humanize(seconds: float) -> str
+
+@extern("C")
+def __time_relative(ts: float) -> str
+
+# ============================================================
+# Public API - Core Time Functions
+# ============================================================
+
+# Sleep for the specified duration in seconds
+# Example: time.sleep(0.5)  # Sleep for 500ms
+pub def sleep(seconds: float) -> none:
+    unsafe:
+        __time_sleep_secs(seconds)
+
+# Get current local Unix timestamp (seconds since epoch)
+# Example: let ts = time.now()
+pub def now() -> float:
+    unsafe:
+        return __time_now()
+
+# Get current UTC Unix timestamp
+# Example: let utc = time.utc_now()
+pub def utc_now() -> float:
+    unsafe:
+        return __time_utc_now()
+
+# Get monotonic time (for measuring elapsed time, immune to clock changes)
+# Example: let start = time.monotonic()
+pub def monotonic() -> float:
+    unsafe:
+        return __time_monotonic()
+
+# High-precision performance counter (for benchmarking)
+# Example: let t = time.perf_counter()
+pub def perf_counter() -> float:
+    unsafe:
+        return __time_perf_counter()
+
+# ============================================================
+# Public API - Timezone Functions
+# ============================================================
+
+# Get timezone offset from UTC in seconds (positive = east)
+# Example: time.timezone_offset()  -> -21600 (CST is UTC-6)
+pub def timezone_offset() -> int:
+    unsafe:
+        return __time_timezone_offset()
+
+# Get timezone name
+# Example: time.timezone_name()  -> "CST"
+pub def timezone_name() -> str:
+    unsafe:
+        return __time_timezone_name()
+
+# Check if currently observing daylight saving time
+# Example: if time.is_dst(): print("DST active")
+pub def is_dst() -> bool:
+    unsafe:
+        return __time_is_dst()
+
+# Convert local timestamp to UTC
+# Example: let utc = time.to_utc(local_ts)
+pub def to_utc(local_ts: float) -> float:
+    unsafe:
+        return __time_to_utc(local_ts)
+
+# Convert UTC timestamp to local
+# Example: let local = time.to_local(utc_ts)
+pub def to_local(utc_ts: float) -> float:
+    unsafe:
+        return __time_to_local(utc_ts)
+
+# ============================================================
+# Public API - Formatting & Parsing
+# ============================================================
+
+# Format current time using strftime pattern
+# Example: time.format_time("%Y-%m-%d")  -> "2026-02-05"
+pub def format_time(format: str) -> str:
+    unsafe:
+        return __desi_time_strftime(format)
+
+# Format a specific timestamp
+# Example: time.format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
+pub def format_timestamp(ts: float, format: str) -> str:
+    unsafe:
+        return __time_format_timestamp(ts, format)
+
+# Parse time string to timestamp (inverse of format_time)
+# Example: time.parse_time("2026-02-05", "%Y-%m-%d")
+pub def parse_time(time_str: str, format: str) -> float:
+    unsafe:
+        return __time_parse(time_str, format)
+
+# Create timestamp from components
+# Example: time.from_parts(2026, 2, 5, 13, 30, 0)
+pub def from_parts(year: int, month: int, day: int, hour: int, minute: int, second: int) -> float:
+    unsafe:
+        return __time_from_parts(year, month, day, hour, minute, second)
+
+# Human-readable time string (like "Wed Feb  5 13:30:00 2026")
+# Example: time.readable_time(ts)
+pub def readable_time(ts: float) -> str:
+    unsafe:
+        return __desi_time_ctime(ts)
+
+# ============================================================
+# Public API - Current Time Components
+# ============================================================
+
+# Get current year
+pub def year() -> int:
+    unsafe:
+        return __time_year()
+
+# Get current month (1-12)
+pub def month() -> int:
+    unsafe:
+        return __time_month()
+
+# Get current day of month (1-31)
+pub def day() -> int:
+    unsafe:
+        return __time_day()
+
+# Get current hour (0-23)
+pub def hour() -> int:
+    unsafe:
+        return __time_hour()
+
+# Get current minute (0-59)
+pub def minute() -> int:
+    unsafe:
+        return __time_minute()
+
+# Get current second (0-59)
+pub def second() -> int:
+    unsafe:
+        return __time_second()
+
+# Get current day of week (0=Sunday, 6=Saturday)
+pub def weekday() -> int:
+    unsafe:
+        return __time_weekday()
+
+# ============================================================
+# Public API - Timestamp Component Extraction
+# ============================================================
+
+# Get year from a timestamp
+pub def year_of(ts: float) -> int:
+    unsafe:
+        return __time_year_of(ts)
+
+# Get month from a timestamp (1-12)
+pub def month_of(ts: float) -> int:
+    unsafe:
+        return __time_month_of(ts)
+
+# Get day from a timestamp (1-31)
+pub def day_of(ts: float) -> int:
+    unsafe:
+        return __time_day_of(ts)
+
+# Get hour from a timestamp (0-23)
+pub def hour_of(ts: float) -> int:
+    unsafe:
+        return __time_hour_of(ts)
+
+# Get minute from a timestamp (0-59)
+pub def minute_of(ts: float) -> int:
+    unsafe:
+        return __time_minute_of(ts)
+
+# Get second from a timestamp (0-59)
+pub def second_of(ts: float) -> int:
+    unsafe:
+        return __time_second_of(ts)
+
+# Get day of week from a timestamp (0=Sunday, 6=Saturday)
+pub def weekday_of(ts: float) -> int:
+    unsafe:
+        return __time_weekday_of(ts)
+
+# Get day of year (1-366)
+pub def day_of_year(ts: float) -> int:
+    unsafe:
+        return __time_day_of_year(ts)
+
+# Check if a year is a leap year
+pub def is_leap_year(year: int) -> bool:
+    unsafe:
+        return __time_is_leap_year(year)
+
+# ============================================================
+# Public API - Arithmetic
+# ============================================================
+
+# Add seconds to a timestamp
+pub def add_seconds(ts: float, seconds: float) -> float:
+    unsafe:
+        return __time_add_seconds(ts, seconds)
+
+# Add days to a timestamp
+pub def add_days(ts: float, days: int) -> float:
+    unsafe:
+        return __time_add_days(ts, days)
+
+# Add hours to a timestamp
+pub def add_hours(ts: float, hours: int) -> float:
+    unsafe:
+        return __time_add_hours(ts, hours)
+
+# Add minutes to a timestamp
+pub def add_minutes(ts: float, minutes: int) -> float:
+    unsafe:
+        return __time_add_minutes(ts, minutes)
+
+# Get difference between two timestamps in seconds
+pub def diff(ts1: float, ts2: float) -> float:
+    unsafe:
+        return __time_diff(ts1, ts2)
+
+# ============================================================
+# Public API - Innovative Desi Functions
+# ============================================================
+
+# Convert seconds to human-readable duration
+# Example: time.humanize(3665) -> "1 hour, 1 minute, 5 seconds"
+pub def humanize(seconds: float) -> str:
+    unsafe:
+        return __time_humanize(seconds)
+
+# Get relative time description
+# Example: time.relative(past_ts) -> "3 hours ago"
+# Example: time.relative(future_ts) -> "in 2 days"
+pub def relative(ts: float) -> str:
+    unsafe:
+        return __time_relative(ts)

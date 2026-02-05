@@ -1,0 +1,167 @@
+# Comprehensive time module test
+# Tests all functions with edge cases inspired by Python, Rust, Elixir
+
+from time import *
+
+def test_core_functions():
+    print("=== Core Time Functions ===")
+    let ts = now()
+    print("now():", ts)
+    let utc = utc_now()
+    print("utc_now():", utc)
+    let m1 = monotonic()
+    sleep(0.01)
+    let m2 = monotonic()
+    print("monotonic() increasing:", m2 > m1)
+    let p1 = perf_counter()
+    let p2 = perf_counter()
+    print("perf_counter() precision:", p2 >= p1)
+    print("")
+
+def test_timezone_functions():
+    print("=== Timezone Functions ===")
+    let offset = timezone_offset()
+    print("timezone_offset():", offset, "seconds")
+    let tz_name = timezone_name()
+    print("timezone_name():", tz_name)
+    let dst = is_dst()
+    print("is_dst():", dst)
+    let local = now()
+    let utc = to_utc(local)
+    let back = to_local(utc)
+    let round_trip_ok = diff(local, back) < 1.0
+    print("to_utc/to_local round-trip:", round_trip_ok)
+    print("")
+
+def test_formatting():
+    print("=== Formatting & Parsing ===")
+    let date_str = format_time("%Y-%m-%d")
+    print("format_time('%Y-%m-%d'):", date_str)
+    let time_str = format_time("%H:%M:%S")
+    print("format_time('%H:%M:%S'):", time_str)
+    let ts = from_parts(2026, 1, 15, 10, 30, 45)
+    let formatted = format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
+    print("format_timestamp(2026-01-15 10:30:45):", formatted)
+    let parsed = parse_time("2026-02-05", "%Y-%m-%d")
+    print("parse_time('2026-02-05'):", parsed)
+    let built = from_parts(2026, 12, 25, 0, 0, 0)
+    print("from_parts(2026, 12, 25):", built)
+    let readable = readable_time(now())
+    print("ctime():", readable)
+    let original = from_parts(2026, 6, 15, 14, 30, 0)
+    let fmt = format_timestamp(original, "%Y-%m-%d %H:%M:%S")
+    let reparsed = parse_time(fmt, "%Y-%m-%d %H:%M:%S")
+    let rt_ok = diff(original, reparsed) < 1.0
+    print("format->parse round-trip:", rt_ok)
+    print("")
+
+def test_current_components():
+    print("=== Current Time Components ===")
+    print("year():", year())
+    print("month():", month())
+    print("day():", day())
+    print("hour():", hour())
+    print("minute():", minute())
+    print("second():", second())
+    print("weekday():", weekday(), "(0=Sun)")
+    print("")
+
+def test_timestamp_components():
+    print("=== Timestamp Component Extraction ===")
+    let ts = from_parts(2026, 7, 4, 12, 30, 45)
+    print("year_of():", year_of(ts))
+    print("month_of():", month_of(ts))
+    print("day_of():", day_of(ts))
+    print("hour_of():", hour_of(ts))
+    print("minute_of():", minute_of(ts))
+    print("second_of():", second_of(ts))
+    print("weekday_of():", weekday_of(ts))
+    print("day_of_year():", day_of_year(ts))
+    print("")
+
+def test_leap_year():
+    print("=== Leap Year Tests ===")
+    print("2024 leap:", is_leap_year(2024))
+    print("2025 leap:", is_leap_year(2025))
+    print("2000 leap:", is_leap_year(2000))
+    print("1900 leap:", is_leap_year(1900))
+    print("2100 leap:", is_leap_year(2100))
+    print("")
+
+def test_arithmetic():
+    print("=== Arithmetic Functions ===")
+    let base = from_parts(2026, 2, 5, 12, 0, 0)
+    let plus_30s = add_seconds(base, 30.0)
+    print("add_seconds(30):", second_of(plus_30s))
+    let plus_15m = add_minutes(base, 15)
+    print("add_minutes(15):", minute_of(plus_15m))
+    let plus_3h = add_hours(base, 3)
+    print("add_hours(3):", hour_of(plus_3h))
+    let plus_7d = add_days(base, 7)
+    print("add_days(7):", day_of(plus_7d))
+    let minus_1d = add_days(base, -1)
+    print("add_days(-1):", day_of(minus_1d))
+    let ts1 = from_parts(2026, 2, 5, 12, 0, 0)
+    let ts2 = from_parts(2026, 2, 5, 13, 0, 0)
+    let d = diff(ts2, ts1)
+    print("diff(1 hour):", d, "seconds")
+    print("")
+
+def test_humanize():
+    print("=== Humanize Function ===")
+    print("humanize(0):", humanize(0.0))
+    print("humanize(1):", humanize(1.0))
+    print("humanize(60):", humanize(60.0))
+    print("humanize(3600):", humanize(3600.0))
+    print("humanize(3665):", humanize(3665.0))
+    print("humanize(86400):", humanize(86400.0))
+    print("humanize(90061):", humanize(90061.0))
+    print("")
+
+def test_relative():
+    print("=== Relative Time Function ===")
+    let ts = now()
+    let hour_ago = add_hours(ts, -1)
+    print("1 hour ago:", relative(hour_ago))
+    let day_ago = add_days(ts, -1)
+    print("1 day ago:", relative(day_ago))
+    let hour_later = add_hours(ts, 1)
+    print("in 1 hour:", relative(hour_later))
+    let week_later = add_days(ts, 7)
+    print("in 7 days:", relative(week_later))
+    print("")
+
+def test_sleep_precision():
+    print("=== Sleep Precision ===")
+    let start = monotonic()
+    sleep(0.1)
+    let elapsed = monotonic() - start
+    print("sleep(0.1):", elapsed, "s")
+    let start2 = monotonic()
+    sleep(0.25)
+    let elapsed2 = monotonic() - start2
+    print("sleep(0.25):", elapsed2, "s")
+    print("")
+
+def main():
+    print("========================================")
+    print("   Desi Time Module - Complete Test")
+    print("========================================")
+    print("")
+    test_core_functions()
+    test_timezone_functions()
+    test_formatting()
+    test_current_components()
+    test_timestamp_components()
+    test_leap_year()
+    test_arithmetic()
+    test_humanize()
+    test_relative()
+    test_sleep_precision()
+    print("========================================")
+    print("All time module tests complete!")
+    print("========================================")
+
+main()
+
+# SKIPPED: Non-deterministic output
