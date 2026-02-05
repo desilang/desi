@@ -578,6 +578,16 @@
           "message": "Surround the call with an 'unsafe:' block to acknowledge the FFI boundary."
         }
       ]
+    },
+    "ffi_struct_invalid_type": {
+      "id": "DFI0004",
+      "title": "non-FFI-compatible field type in @ffi_struct",
+      "help": "@ffi_struct fields must use FFI-compatible types: int, i8-i64, u8-u64, float, f32, f64, bool, cptr, or other @ffi_struct types."
+    },
+    "ffi_struct_no_generics": {
+      "id": "DFI0005",
+      "title": "@ffi_struct cannot be generic",
+      "help": "C-compatible structs cannot have type parameters. Remove the generic parameters."
     }
   },
   "numeric": {

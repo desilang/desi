@@ -1,7 +1,7 @@
 # FFI Safety Design Document
 
-**Status**: DRAFT - Research & Design Phase
-**Priority**: Medium (implement after concurrency primitives)
+**Status**: PARTIALLY IMPLEMENTED - Phase 3 Complete (unsafe blocks, @ffi_struct, safe wrappers)
+**Priority**: Medium
 
 ---
 
@@ -171,20 +171,21 @@ If we add intrusive data structures:
 
 ## Implementation Roadmap
 
-### Phase 1: Awareness (Immediate)
-- [ ] Document FFI safety in contributor guide
-- [ ] Add warnings in docs about C library assumptions
-- [ ] Create example showing proper FFI usage
+### Phase 1: Awareness (Immediate) ✅
+- [x] Document FFI safety in contributor guide
+- [x] Add warnings in docs about C library assumptions
+- [x] Create example showing proper FFI usage
 
 ### Phase 2: Annotations (Short-term)
 - [ ] Add `@ffi` annotation support
 - [ ] Implement `safe`, `thread_safe` flags
 - [ ] Generate safety documentation
 
-### Phase 3: `unsafe` Blocks (Medium-term)
-- [ ] Add `unsafe` keyword
-- [ ] Parse unsafe blocks
-- [ ] Flag FFI outside unsafe (configurable)
+### Phase 3: `unsafe` Blocks (Medium-term) ✅
+- [x] Add `unsafe` keyword and parse unsafe blocks
+- [x] Flag FFI outside unsafe (error by default)
+- [x] Add `@ffi_struct` for C-compatible struct layouts
+- [x] Add safe wrapper generation with `@extern(safe=true, c_name="...")`
 
 ### Phase 4: Lock Guards (Long-term)
 - [ ] Implement after concurrency primitives
