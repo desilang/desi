@@ -2,7 +2,6 @@ package lower
 
 import (
 	"bytes"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -37,33 +36,48 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
 // mangleDesiName adds __desi$ prefix to avoid C stdlib collisions.
-// Preserves special names: main, __top__, builtins, and any name starting with __ (runtime hooks).
+// Only mangles specific function names known to conflict with C stdlib.
 func mangleDesiName(name string) string {
-	// Don't mangle special entry points and runtime hooks
-	if name == "main" || name == "__top__" || strings.HasPrefix(name, "__") {
-		return name
+	// Only mangle names that are known to conflict with C stdlib functions
+	// These are C standard library functions that Desi might want to use as names
+	cStdlibConflicts := map[string]bool{
+		// time.h
+		"strftime": true, "ctime": true, "time": true, "clock": true,
+		"difftime": true, "mktime": true, "asctime": true, "gmtime": true,
+		"localtime": true,
+		// stdio.h
+		"getchar": true, "putchar": true, "puts": true, "gets": true,
+		"scanf": true, "sprintf": true, "sscanf": true, "fopen": true,
+		"fclose": true, "fread": true, "fwrite": true, "fgets": true,
+		"fputs": true, "fgetc": true, "fputc": true, "feof": true,
+		"ferror": true, "fflush": true, "fseek": true, "ftell": true,
+		"rewind": true, "remove": true, "rename": true, "tmpfile": true,
+		"tmpnam": true, "perror": true,
+		// stdlib.h
+		"atoi": true, "atof": true, "atol": true, "strtol": true,
+		"strtod": true, "rand": true, "srand": true, "abort": true,
+		"atexit": true, "getenv": true, "system": true, "bsearch": true,
+		"qsort": true, "div": true, "ldiv": true, "labs": true,
+		// string.h
+		"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
+		"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,
+		"strstr": true, "strlen": true, "strerror": true, "strtok": true,
+		"memcpy": true, "memmove": true, "memcmp": true, "memset": true,
+		"memchr": true,
+		// math.h
+		"sin": true, "cos": true, "tan": true, "asin": true, "acos": true,
+		"atan": true, "atan2": true, "sinh": true, "cosh": true, "tanh": true,
+		"exp": true, "log": true, "log10": true, "pow": true, "sqrt": true,
+		"ceil": true, "floor": true, "fabs": true, "fmod": true,
+		// ctype.h
+		"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
+		"isupper": true, "islower": true, "toupper": true, "tolower": true,
 	}
-	// Don't mangle builtins - they're implemented in C runtime
-	builtins := map[string]bool{
-		"print": true, "len": true, "str": true, "int": true,
-		"float": true, "bool": true, "list": true, "dict": true,
-		"set": true, "range": true, "enumerate": true, "zip": true,
-		"map": true, "filter": true, "reduce": true, "sum": true,
-		"min": true, "max": true, "abs": true, "sorted": true,
-		"reversed": true, "any": true, "all": true, "type": true,
-		"input": true, "open": true, "assert": true, "panic": true,
-		"dbg": true, "spawn": true, "rc": true, "arc": true,
-		"Option": true, "Result": true, "Some": true, "Nothing": true,
-		"Ok": true, "Err": true, "true": true, "false": true,
-		"set_recursion_limit": true, "type_of": true,
-		// Also common C runtime hooks that don't start with __
-		"malloc": true, "free": true, "printf": true, "exit": true,
+
+	if cStdlibConflicts[name] {
+		return "__desi$" + name
 	}
-	if builtins[name] {
-		return name
-	}
-	// Add prefix to avoid C stdlib collisions
-	return "__desi$" + name
+	return name
 }
 
 // isExternFunction checks if a function has @extern decorator

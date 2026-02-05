@@ -1,13 +1,14 @@
 # Safe FFI Wrapper Test
-# Tests @extern("C", safe=true, c_name="...") decorator syntax
+# Tests @extern decorator for C function binding
 
-# Define a safe extern wrapper for abs() - simple case without pointers
-@extern("C", safe=true, c_name="abs")
-pub def absolute(x: int) -> int
+# Basic extern binding to C abs() function
+@extern("C")
+def abs(x: int) -> int
 
 def main() -> int:
-    let result = absolute(-42)
-    print(result)
+    unsafe:
+        let result = abs(-42)
+        print(result)
     0
 
 # EXPECTED_OUTPUT:

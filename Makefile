@@ -11,8 +11,8 @@ RUNTIME_SRC = compiler/runtime
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
 
-# Auto-discover all .c files in runtime (excluding decimal subdirectory)
-RUNTIME_SRCS = $(wildcard $(RUNTIME_SRC)/*.c)
+# Auto-discover all .c files in runtime (excluding decimal subdirectory and desi_host)
+RUNTIME_SRCS = $(filter-out $(RUNTIME_SRC)/desi_host.c,$(wildcard $(RUNTIME_SRC)/*.c))
 RUNTIME_OBJS = $(patsubst $(RUNTIME_SRC)/%.c,$(BUILD_DIR)/%.o,$(RUNTIME_SRCS))
 
 LIB_DESI = $(BUILD_DIR)/libdesi.a
