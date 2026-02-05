@@ -224,33 +224,215 @@ func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, pro
 	processMu.Lock()
 	if *currentProcess != nil && (*currentProcess).Process != nil {
 		if verbose {
-			term.Println("  Stopping previous process...")
+			term.Println("  🔄 Stopping previous process...")
 		}
 		_ = (*currentProcess).Process.Signal(syscall.SIGTERM)
-		_ = (*currentProcess).Wait()
+		// Give it a moment to exit gracefully
+		done := make(chan error, 1)
+		go func() {
+			done <- (*currentProcess).Wait()
+		}()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			_ = (*currentProcess).Process.Kill()
+		}
 		*currentProcess = nil
 	}
 	processMu.Unlock()
 
-	// Run desic build (or check for now)
-	// For Phase 1, we'll just run 'desic check' to verify the code compiles
-	cmd := exec.Command("desic", "check", file)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// If not running, just type-check
+	if !runAfterBuild {
+		cmd := exec.Command("desic", "check", file)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
 
-	err := cmd.Run()
-	elapsed := time.Since(startTime)
+		err := cmd.Run()
+		elapsed := time.Since(startTime)
 
+		if err != nil {
+			term.Printf("❌ Check failed (%.2fs)\n", elapsed.Seconds())
+		} else {
+			term.Printf("✅ Check passed (%.2fs)\n", elapsed.Seconds())
+		}
+		term.Flush()
+		return
+	}
+
+	// Full build pipeline: emit-ir → clang → run
+	tempDir, err := os.MkdirTemp("", "desi-watch-*")
 	if err != nil {
-		term.Printf("❌ Build failed (%.2fs)\n", elapsed.Seconds())
-	} else {
-		term.Printf("✅ Build succeeded (%.2fs)\n", elapsed.Seconds())
+		term.Eprintln("❌ Failed to create temp dir:", err)
+		term.Flush()
+		return
+	}
+	// Note: We don't remove tempDir immediately so the binary can run
+	// It will be cleaned up on next build or OS cleanup
 
-		// If --run flag and we have a build command that produces a binary,
-		// we would run it here. For now, just show success.
-		if runAfterBuild {
-			term.Println("   (--run: binary execution not yet implemented)")
+	baseName := strings.TrimSuffix(filepath.Base(file), ".desi")
+	irPath := filepath.Join(tempDir, baseName+".ll")
+	binPath := filepath.Join(tempDir, baseName)
+
+	// Step 1: Emit LLVM IR
+	if verbose {
+		term.Println("  📝 Emitting IR...")
+	}
+	emitCmd := exec.Command("desic", "emit-ir", file)
+	irOutput, err := emitCmd.Output()
+	if err != nil {
+		elapsed := time.Since(startTime)
+		// Show stderr if available
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Stderr.Write(exitErr.Stderr)
+		}
+		term.Printf("❌ Compile failed (%.2fs)\n", elapsed.Seconds())
+		term.Flush()
+		return
+	}
+
+	// Write IR to file
+	if err := os.WriteFile(irPath, irOutput, 0644); err != nil {
+		term.Eprintln("❌ Failed to write IR:", err)
+		term.Flush()
+		return
+	}
+
+	// Step 2: Compile with llc to object file
+	if verbose {
+		term.Println("  🔨 Compiling to object code...")
+	}
+	objPath := filepath.Join(tempDir, baseName+".o")
+	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-o", objPath)
+	llcCmd.Stderr = os.Stderr
+	if err := llcCmd.Run(); err != nil {
+		elapsed := time.Since(startTime)
+		term.Printf("❌ Compile failed (%.2fs) - is llc installed?\n", elapsed.Seconds())
+		term.Flush()
+		return
+	}
+
+	// Step 4: Create main stub (Desi uses __top__ as entry, but linker needs main)
+	mainStub := filepath.Join(tempDir, "main_stub.c")
+	stubContent := `extern int __top__(void);
+int main(void) { return __top__(); }
+`
+	if err := os.WriteFile(mainStub, []byte(stubContent), 0644); err != nil {
+		term.Eprintln("❌ Failed to write main stub:", err)
+		term.Flush()
+		return
+	}
+
+	// Step 5: Link with clang
+	if verbose {
+		term.Println("  🔗 Linking...")
+	}
+
+	// Find the build directory for libdesi.a
+	buildDir := findBuildDir()
+	clangArgs := []string{objPath, mainStub, "-o", binPath}
+	if buildDir != "" {
+		clangArgs = append(clangArgs, "-L"+buildDir, "-ldesi")
+	}
+	// Add common flags
+	clangArgs = append(clangArgs, "-lm", "-Wl,-dead_strip")
+
+	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd.Stderr = os.Stderr
+	if err := clangCmd.Run(); err != nil {
+		elapsed := time.Since(startTime)
+		term.Printf("❌ Link failed (%.2fs) - is clang installed?\n", elapsed.Seconds())
+		term.Flush()
+		return
+	}
+
+	elapsed := time.Since(startTime)
+	term.Printf("✅ Build succeeded (%.2fs)\n", elapsed.Seconds())
+	term.Flush()
+
+	// Step 3: Run the binary
+	term.Println("🚀 Running...")
+	term.Println("─────────────────────────────────────")
+	term.Flush()
+
+	runCmd := exec.Command(binPath)
+	runCmd.Stdout = os.Stdout
+	runCmd.Stderr = os.Stderr
+	runCmd.Stdin = os.Stdin
+
+	processMu.Lock()
+	*currentProcess = runCmd
+	processMu.Unlock()
+
+	// Start the process
+	if err := runCmd.Start(); err != nil {
+		term.Eprintln("❌ Failed to start:", err)
+		term.Flush()
+		return
+	}
+
+	if verbose {
+		term.Printf("  (PID: %d)\n", runCmd.Process.Pid)
+		term.Flush()
+	}
+
+	// Wait for process in background (don't block the watcher)
+	go func() {
+		err := runCmd.Wait()
+		processMu.Lock()
+		if *currentProcess == runCmd {
+			*currentProcess = nil
+		}
+		processMu.Unlock()
+
+		term.Println("─────────────────────────────────────")
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				term.Printf("⚠️  Process exited with code %d\n", exitErr.ExitCode())
+			} else {
+				term.Printf("⚠️  Process terminated: %v\n", err)
+			}
+		} else {
+			term.Println("✅ Process exited normally")
+		}
+		term.Flush()
+	}()
+}
+
+// findBuildDir looks for the Desi build directory containing libdesi.a
+func findBuildDir() string {
+	// Try common locations
+	candidates := []string{
+		"build",
+		".",
+	}
+
+	// Also check relative to executable
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			exeDir,
+			filepath.Join(exeDir, "build"),
+			filepath.Join(exeDir, "..", "build"),
+		)
+	}
+
+	// Check relative to working directory
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(wd, "build"),
+			wd,
+		)
+	}
+
+	for _, c := range candidates {
+		libPath := filepath.Join(c, "libdesi.a")
+		if _, err := os.Stat(libPath); err == nil {
+			if abs, err := filepath.Abs(c); err == nil {
+				return abs
+			}
+			return c
 		}
 	}
-	term.Flush()
+
+	return "" // Build dir not found
 }
