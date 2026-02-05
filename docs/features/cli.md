@@ -50,6 +50,11 @@ Server started on port 8080 (v2 - hot reloaded!)
 - Graceful Ctrl+C handling
 - Auto-detects `main.desi` in target directory
 - **`--run`**: Full compile + link + execute with auto-restart
+- **`--hot`**: True hot reload (code swaps without process restart)
+
+> [!NOTE]
+> `--hot` mode compiles to `.dylib`/`.so` and runs via `desi-host` for live code swapping.
+> Best for long-running programs (servers, loops). Simple programs will exit immediately.
 
 **State Serialization Builtins (for `--run` mode):**
 
