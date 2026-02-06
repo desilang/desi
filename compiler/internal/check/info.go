@@ -471,4 +471,18 @@ func addPreludeBuiltins(info *Info) {
 	// set_recursion_limit(limit: int) -> none
 	// Like Python's sys.setrecursionlimit(n), sets the max call depth
 	add1("set_recursion_limit", types.Int, types.None, "limit", ast.ParamMove)
+
+	// --- Hot reload state serialization builtins ---
+	// is_reload() -> bool: Returns true if this is a hot reload (not first run)
+	addN("is_reload", nil, nil, types.Bool, nil)
+	// reload_count() -> int: Returns how many times we've reloaded (0 = first run)
+	addN("reload_count", nil, nil, types.Int, nil)
+	// state_file() -> Option[str]: Returns the state file path if available
+	addN("state_file", nil, nil, types.OptionOf(types.Str), nil)
+	// write_state(json: str) -> bool: Write JSON string to state file
+	add1("write_state", types.Str, types.Bool, "json", ast.ParamMove)
+	// read_state() -> Option[str]: Read JSON string from state file
+	addN("read_state", nil, nil, types.OptionOf(types.Str), nil)
+	// delete_state() -> bool: Delete state file after successful restore
+	addN("delete_state", nil, nil, types.Bool, nil)
 }
