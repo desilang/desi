@@ -600,10 +600,12 @@ func (s *Scanner) scanString() Item {
 	for s.i < len(s.src) {
 		// close?
 		if s.peekIs('"') {
-			content := string(s.src[contentStart:s.i])
+			// Don't put content in Lexeme - let formatter reconstruct from source
+			// to preserve exact original formatting with quotes.
+			_ = string(s.src[contentStart:s.i]) // consumed but not used
 			s.i++
 			s.col++
-			return Item{Tok: token.STR, Lexeme: content, Line: s.line, Col: startCol}
+			return Item{Tok: token.STR, Lexeme: "", Line: s.line, Col: startCol}
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {
@@ -795,10 +797,12 @@ func (s *Scanner) scanLongString() Item {
 	for s.i < len(s.src) {
 		// close only on exact """
 		if s.peek2Is(`"""`) {
-			content := string(s.src[contentStart:s.i])
+			// Don't put content in Lexeme - let formatter reconstruct from source
+			// to preserve exact original formatting. This is consistent with STR.
+			_ = string(s.src[contentStart:s.i]) // consumed but not used
 			s.i += 3
 			s.col += 3
-			return Item{Tok: token.LONGSTR, Lexeme: content, Line: startLine, Col: startCol}
+			return Item{Tok: token.LONGSTR, Lexeme: "", Line: startLine, Col: startCol}
 		}
 		r, w := utf8.DecodeRune(s.src[s.i:])
 		if r == '\\' {
