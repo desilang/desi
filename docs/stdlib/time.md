@@ -44,16 +44,16 @@ libc (time.h, sys/time.h)     ← System libraries
 | `__time_humanize` | "1 hour, 5 minutes" format |
 | `__time_relative` | "3 hours ago" format |
 
-## Naming Collision Issue
+## Symbol Mangling (Compiler Feature)
 
-Some C stdlib functions (`strftime`, `ctime`) have the same names as Desi functions. With the new symbol mangling:
+Desi uses **targeted symbol mangling** to prevent collisions with C stdlib:
 
-- All non-extern Desi functions are prefixed with `__desi$` at compile time
-- For example, `strftime` → `__desi$strftime` in the generated LLVM IR
-- This prevents collision with C's `strftime` at link time
-- Users can use natural function names without workarounds
+- ~80 known C stdlib function names (strftime, ctime, sin, cos, etc.) are prefixed with `__desi$`
+- Example: `strftime` in Desi source → `__desi$strftime` in LLVM IR
+- This allows natural function names while avoiding linker conflicts
+- User-defined structs/classes and @extern functions are NOT mangled
 
-**Note**: Builtins (`print`, `len`, etc.) and `@extern` functions are NOT mangled.
+Relevant code: [hir_lower.go:mangleDesiName](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/hir_lower.go)
 
 ## Platform Differences
 

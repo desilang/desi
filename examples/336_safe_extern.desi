@@ -1,18 +1,16 @@
 # Safe Extern Test
-# Tests @extern("C", safe=true, c_name="...") syntax
+# Tests basic @extern decorator for C function binding
 
-# For simplicity, use a C function that doesn't require pointer out params
-# The safe=true wrapper just calls the raw extern inside unsafe block
-
-@extern("C", safe=true, c_name="abs")
-pub def absolute(x: i32) -> i32
+@extern("C")
+def abs(x: i32) -> i32
 
 def main() -> int:
-    let val = absolute(-42)
-    print(val)
-    
-    let val2 = absolute(10)
-    print(val2)
+    unsafe:
+        let val = abs(-42)
+        print(val)
+        
+        let val2 = abs(10)
+        print(val2)
     
     0
 

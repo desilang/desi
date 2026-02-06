@@ -1,1 +1,5 @@
-# test comment
+# Hello World test
+print("Hello, World!")
+
+# EXPECTED_OUTPUT:
+# Hello, World!
