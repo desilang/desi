@@ -256,6 +256,12 @@ func (p *Parser) parseUnary() ast.Expr {
 		p.next()
 		x := p.parseUnary()
 		return &ast.UnaryExpr{Op: "await", X: x, Span: joinTok(p.file, op, p.cur)}
+	case token.AMP:
+		// Address-of operator (for FFI pointer semantics, only valid in unsafe blocks)
+		op := p.cur
+		p.next()
+		x := p.parseUnary()
+		return &ast.UnaryExpr{Op: "&", X: x, Span: joinTok(p.file, op, p.cur)}
 	default:
 		return p.parsePostfix()
 	}

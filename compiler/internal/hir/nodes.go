@@ -316,6 +316,15 @@ type Load struct {
 
 func (*Load) isStmt() {}
 
+// AddressOf takes the address of a value (for FFI pointer semantics)
+type AddressOf struct {
+	Src  Value  // value to take address of
+	Dst  Temp   // destination temp (will be ptr)
+	Type string // type of the value being addressed
+}
+
+func (*AddressOf) isStmt() {}
+
 type GetElementPtr struct {
 	Type    string  // type of the element being indexed (e.g. "i32" or "{ptr, i64}")
 	Base    Value   // base pointer

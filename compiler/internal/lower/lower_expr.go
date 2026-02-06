@@ -964,6 +964,53 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				Type: "i1",
 			})
 			return dst
+		} else if x.Op == "&" {
+			// Address-of operator (for FFI pointer semantics)
+			// Allocate the value on stack and return pointer
+			// Only valid in unsafe blocks (type checker should enforce this)
+			inner := x.X
+
+			// If inner is a variable, get its address
+			if ident, ok := inner.(*ast.Ident); ok {
+				// Return address of variable (as a fresh temp pointing to it)
+				dst := ls.b.FreshTemp("addrof")
+
+				// Determine type for alloca
+				typ := "ptr"
+				if ls.info != nil {
+					if t := ls.info.Types[inner]; t != nil {
+						typ = lowerType(t)
+					}
+				}
+
+				// Emit AddressOf HIR instruction
+				ls.b.Emit(&hir.AddressOf{
+					Src:  hir.Var{Name: ident.Name},
+					Dst:  dst,
+					Type: typ,
+				})
+				return dst
+			}
+
+			// For non-variable expressions, evaluate and store in temp
+			val := ls.lowerExpr(inner)
+			dst := ls.b.FreshTemp("addrof")
+
+			// Determine type
+			typ := "ptr"
+			if ls.info != nil {
+				if t := ls.info.Types[inner]; t != nil {
+					typ = lowerType(t)
+				}
+			}
+
+			// Emit AddressOf which will alloca + store
+			ls.b.Emit(&hir.AddressOf{
+				Src:  val,
+				Dst:  dst,
+				Type: typ,
+			})
+			return dst
 		}
 
 		// Unknown unary: just print-through for now.
