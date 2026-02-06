@@ -10,26 +10,37 @@ Watch for file changes and automatically rebuild/run.
 
 ```bash
 desic watch           # Watch and type-check only
-desic watch --run .   # Watch, build, and run with hot reload!
+desic watch --run .   # Watch, build, and run with auto-restart
+desic watch --hot .   # True hot reload (no process restart)
 desic watch -v .      # Verbose mode
 ```
 
-**Hot Reload Example:**
+**Modes:**
 
-```
-🔥 Watching for changes in: /my-project
-📦 Building: main.desi
-✅ Build succeeded (0.31s)
-🚀 Running...
-─────────────────────────────────────
-Hello from my Desi program!
+| Flag | Description |
+|------|-------------|
+| (none) | Type-check only on file change |
+| `--run` | Rebuild and restart process on change |
+| `--hot` | Recompile `.so`, reload via `desi-host` (no restart) |
 
-📝 Changed: main.desi
-✅ Build succeeded (0.09s)
-🚀 Running...
-─────────────────────────────────────
-Hello from v2 - hot reloaded!
+**State Serialization Builtins (for `--run` mode):**
+
+```desi
+if is_reload():
+    match read_state():
+        case Some(json):
+            restore_from_json(json)
+            delete_state()
+else:
+    print("First run")
 ```
+
+| Function | Description |
+|----------|-------------|
+| `is_reload()` | `true` if this is a reload |
+| `reload_count()` | Number of reloads (0 = first) |
+| `write_state(json)` | Save state to temp file |
+| `read_state()` | Load state from temp file |
 
 Press `Ctrl+C` to stop watching.
 
