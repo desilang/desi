@@ -245,6 +245,69 @@ print(relative(future)) # "in 3 days"
 
 ---
 
+## Duration Class
+
+A class for representing and working with time durations.
+
+### Creating Durations
+
+```python
+from time import Duration
+
+# Factory methods
+let d1 = Duration.from_seconds(90.0)
+let d2 = Duration.from_minutes(1.5)   # 90 seconds
+let d3 = Duration.from_hours(2.0)     # 7200 seconds
+let d4 = Duration.from_days(1.0)      # 86400 seconds
+let d5 = Duration.from_millis(500.0)  # 0.5 seconds
+
+# Or use the helper function
+let d6 = create_duration(3600.0)
+```
+
+### Duration Methods
+
+```python
+let d = Duration.from_hours(2.5)
+
+d.total_seconds()  # 9000.0
+d.total_minutes()  # 150.0
+d.total_hours()    # 2.5
+d.total_days()     # 0.104...
+
+# String representation (calls humanize)
+print(d)  # "2 hours, 30 minutes"
+```
+
+---
+
+## Stopwatch Class
+
+Simple timing utility for measuring code execution.
+
+```python
+from time import Stopwatch
+
+let sw = Stopwatch()
+sw.start()
+
+# ... do some work ...
+sleep(1.0)
+
+print(sw.elapsed())      # 1.0 (seconds)
+print(sw.elapsed_str())  # "1 second"
+```
+
+### Stopwatch Methods
+
+| Method | Return | Description |
+|--------|--------|-------------|
+| `start()` | none | Start or restart timing |
+| `elapsed()` | float | Get elapsed seconds |
+| `elapsed_str()` | str | Get human-readable elapsed time |
+
+---
+
 ## Complete Example
 
 ```python

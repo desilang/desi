@@ -362,3 +362,94 @@ pub def humanize(seconds: float) -> str:
 pub def relative(ts: float) -> str:
     unsafe:
         return __time_relative(ts)
+
+# ============================================================
+# Duration Class - Represents time spans
+# ============================================================
+
+pub class Duration:
+    """Represents a duration/time span for arithmetic and formatting."""
+    pub seconds: float
+    
+    # Factory methods - create Duration from various units
+    @staticmethod
+    pub def from_seconds(s: float) -> Duration:
+        let d = Duration()
+        d.seconds = s
+        return d
+    
+    @staticmethod
+    pub def from_minutes(m: float) -> Duration:
+        let d = Duration()
+        d.seconds = m * 60.0
+        return d
+    
+    @staticmethod
+    pub def from_hours(h: float) -> Duration:
+        let d = Duration()
+        d.seconds = h * 3600.0
+        return d
+    
+    @staticmethod
+    pub def from_days(d_val: float) -> Duration:
+        let d = Duration()
+        d.seconds = d_val * 86400.0
+        return d
+    
+    @staticmethod
+    pub def from_millis(ms: float) -> Duration:
+        let d = Duration()
+        d.seconds = ms / 1000.0
+        return d
+    
+    # Accessors
+    pub def total_seconds(self) -> float:
+        return self.seconds
+    
+    pub def total_minutes(self) -> float:
+        return self.seconds / 60.0
+    
+    pub def total_hours(self) -> float:
+        return self.seconds / 3600.0
+    
+    pub def total_days(self) -> float:
+        return self.seconds / 86400.0
+    
+    # String representation
+    pub def __str__(self) -> str:
+        unsafe:
+            return __time_humanize(self.seconds)
+
+# ============================================================
+# Stopwatch - Simple timing utility
+# ============================================================
+
+pub class Stopwatch:
+    """Times code execution. Create, do work, then call elapsed()."""
+    pub start_time: float
+    
+    pub def start(self):
+        """Start or restart the stopwatch."""
+        unsafe:
+            self.start_time = __time_monotonic()
+    
+    pub def elapsed(self) -> float:
+        """Get elapsed time in seconds since start."""
+        unsafe:
+            return __time_monotonic() - self.start_time
+    
+    pub def elapsed_str(self) -> str:
+        """Get elapsed time as human-readable string."""
+        unsafe:
+            return __time_humanize(self.elapsed())
+
+# ============================================================
+# Convenience Functions
+# ============================================================
+
+pub def create_duration(seconds: float) -> Duration:
+    """Create a Duration from seconds."""
+    let d = Duration()
+    d.seconds = seconds
+    return d
+
