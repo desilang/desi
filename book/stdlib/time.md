@@ -12,7 +12,7 @@ let ts = now()
 print("Current timestamp:", ts)
 
 # Format as string
-print(format_time("%Y-%m-%d %H:%M:%S"))
+print(strftime("%Y-%m-%d %H:%M:%S"))
 
 # Sleep for 1 second
 sleep(1.0)
@@ -87,13 +87,13 @@ Convert UTC timestamp to local.
 
 ## Formatting & Parsing
 
-### `format_time(format: str) -> str`
+### `strftime(format: str) -> str`
 Format current time using strftime patterns.
 
 ```python
-format_time("%Y-%m-%d")      # "2026-02-05"
-format_time("%H:%M:%S")      # "13:30:45"
-format_time("%A, %B %d")     # "Thursday, February 05"
+strftime("%Y-%m-%d")      # "2026-02-05"
+strftime("%H:%M:%S")      # "13:30:45"
+strftime("%A, %B %d")     # "Thursday, February 05"
 ```
 
 **Common format codes:**
@@ -130,11 +130,11 @@ Create a timestamp from components.
 let christmas = from_parts(2026, 12, 25, 0, 0, 0)
 ```
 
-### `readable_time(ts: float) -> str`
+### `ctime(ts: float) -> str`
 Human-readable time string.
 
 ```python
-print(readable_time(now()))  # "Thu Feb  5 13:30:45 2026"
+print(ctime(now()))  # "Thu Feb  5 13:30:45 2026"
 ```
 
 ---
@@ -252,8 +252,8 @@ from time import *
 
 def main():
     # Display current time info
-    print("Today is", format_time("%A, %B %d, %Y"))
-    print("Time:", format_time("%H:%M:%S"))
+    print("Today is", strftime("%A, %B %d, %Y"))
+    print("Time:", strftime("%H:%M:%S"))
     print("Timezone:", timezone_name())
     
     # Calculate future date

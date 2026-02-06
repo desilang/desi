@@ -2,6 +2,7 @@ package lower
 
 import (
 	"bytes"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -35,6 +36,46 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
+// mangleDesiName adds __desi$ prefix to avoid C stdlib collisions.
+// Preserves special names: main, __top__, builtins, and any name starting with __ (runtime hooks).
+func mangleDesiName(name string) string {
+	// Don't mangle special entry points and runtime hooks
+	if name == "main" || name == "__top__" || strings.HasPrefix(name, "__") {
+		return name
+	}
+	// Don't mangle builtins - they're implemented in C runtime
+	builtins := map[string]bool{
+		"print": true, "len": true, "str": true, "int": true,
+		"float": true, "bool": true, "list": true, "dict": true,
+		"set": true, "range": true, "enumerate": true, "zip": true,
+		"map": true, "filter": true, "reduce": true, "sum": true,
+		"min": true, "max": true, "abs": true, "sorted": true,
+		"reversed": true, "any": true, "all": true, "type": true,
+		"input": true, "open": true, "assert": true, "panic": true,
+		"dbg": true, "spawn": true, "rc": true, "arc": true,
+		"Option": true, "Result": true, "Some": true, "Nothing": true,
+		"Ok": true, "Err": true, "true": true, "false": true,
+		"set_recursion_limit": true, "type_of": true,
+		// Also common C runtime hooks that don't start with __
+		"malloc": true, "free": true, "printf": true, "exit": true,
+	}
+	if builtins[name] {
+		return name
+	}
+	// Add prefix to avoid C stdlib collisions
+	return "__desi$" + name
+}
+
+// isExternFunction checks if a function has @extern decorator
+func isExternFunction(fd *ast.FuncDecl) bool {
+	for _, dec := range fd.Decorators {
+		if dec.Name.Name == "extern" {
+			return true
+		}
+	}
+	return false
+}
+
 func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool) *hir.Func {
 	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals)
 }
@@ -45,7 +86,12 @@ func LowerFuncForDunderNew(fd *ast.FuncDecl, info *check.Info, src []byte, class
 }
 
 func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value, globals map[string]bool) *hir.Func {
-	b := hir.NewFunc(fd.Name.Name)
+	// Mangle function name to avoid C stdlib collisions (unless @extern)
+	funcName := fd.Name.Name
+	if !isExternFunction(fd) {
+		funcName = mangleDesiName(funcName)
+	}
+	b := hir.NewFunc(funcName)
 	ls := &lowerState{
 		b:                   b,
 		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
@@ -498,16 +544,25 @@ func (ls *lowerState) calleeName(e ast.Expr) string {
 				}
 			}
 		}
-		return x.Name
+		// Mangle non-extern function calls to match mangled definitions
+		return mangleDesiName(x.Name)
 	case *ast.FieldExpr:
 		// Check if this is a module-qualified call (e.g., "math.add")
 		if ls.info != nil && ls.info.R != nil {
 			// Check if the receiver (X) is a module name
 			if id, ok := x.X.(*ast.Ident); ok {
 				if _, isModule := ls.info.R.Imports[id.Name]; isModule {
-					// It's a qualified call like math.add
-					// Return just the function name since we're emitting it with that name
-					return x.Name.Name
+					// It's a qualified call like time.strftime
+					// Check if this function is @extern in the imported module
+					funcName := x.Name.Name
+					if set, ok := ls.info.Funcs[funcName]; ok && len(set.Cands) > 0 {
+						cand := set.Cands[0]
+						if cand.Extern {
+							return funcName // @extern: use unmangeld name
+						}
+					}
+					// Non-extern: mangle to match definition
+					return mangleDesiName(funcName)
 				}
 			}
 		}
