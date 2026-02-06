@@ -20,10 +20,11 @@ import (
 
 // runWatch handles the `desic watch` subcommand.
 // Watches for .desi file changes and automatically rebuilds/restarts.
-// Flags: -v (verbose), --run (run after build)
+// Flags: -v (verbose), --run (run after build), --hot (true hot reload)
 func runWatch(args []string) int {
 	verbose := false
 	runAfterBuild := false
+	hotReload := false
 	var targetDir string
 
 	for _, a := range args {
@@ -32,6 +33,9 @@ func runWatch(args []string) int {
 			verbose = true
 		case "--run":
 			runAfterBuild = true
+		case "--hot":
+			hotReload = true
+			runAfterBuild = true // --hot implies --run
 		default:
 			if !strings.HasPrefix(a, "-") && targetDir == "" {
 				targetDir = a
@@ -128,13 +132,24 @@ func runWatch(args []string) int {
 	reloadCount := 0
 	stateFilePath := filepath.Join(os.TempDir(), "desi-reload-state.json")
 
+	// Hot reload: persistent .so path and host PID
+	var soPath string
+	var hostPID int
+	if hotReload {
+		soPath = filepath.Join(os.TempDir(), "desi-hot-module.dylib")
+	}
+
 	// Initial build
 	mainFile := findMainFile(absDir)
 	if mainFile != "" {
 		term.Println("📦 Building:", mainFile)
 		term.Flush()
-		buildAndRun(mainFile, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
-		reloadCount++
+		if hotReload {
+			hostPID = buildAndRunHot(mainFile, soPath, &currentProcess, &processMu, verbose)
+		} else {
+			buildAndRun(mainFile, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
+			reloadCount++
+		}
 	}
 
 	// Watch loop
@@ -180,8 +195,17 @@ func runWatch(args []string) int {
 					buildTarget = event.Name
 				}
 
-				buildAndRun(buildTarget, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
-				reloadCount++
+				if hotReload && hostPID != 0 {
+					// True hot reload: rebuild .so and signal host
+					doHotReload(buildTarget, soPath, hostPID, verbose)
+				} else if hotReload && hostPID == 0 {
+					// Host died, restart it
+					hostPID = buildAndRunHot(buildTarget, soPath, &currentProcess, &processMu, verbose)
+				} else {
+					// Normal rebuild with process restart
+					buildAndRun(buildTarget, runAfterBuild, &currentProcess, &processMu, verbose, reloadCount, stateFilePath)
+					reloadCount++
+				}
 			})
 			debounceMu.Unlock()
 
@@ -458,4 +482,240 @@ func findBuildDir() string {
 	}
 
 	return "" // Build dir not found
+}
+
+// buildAndRunHot compiles to shared library and runs via desi-host
+// Returns the host process PID for sending reload signals
+func buildAndRunHot(file string, soPath string, currentProcess **exec.Cmd, processMu *sync.Mutex, verbose bool) int {
+	startTime := time.Now()
+
+	// Stop existing host if running
+	processMu.Lock()
+	if *currentProcess != nil && (*currentProcess).Process != nil {
+		_ = (*currentProcess).Process.Signal(syscall.SIGTERM)
+		done := make(chan error, 1)
+		go func() { done <- (*currentProcess).Wait() }()
+		select {
+		case <-done:
+		case <-time.After(2 * time.Second):
+			_ = (*currentProcess).Process.Kill()
+		}
+		*currentProcess = nil
+	}
+	processMu.Unlock()
+
+	// Create temp dir for build artifacts
+	tempDir, err := os.MkdirTemp("", "desi-hot-*")
+	if err != nil {
+		term.Eprintln("❌ Failed to create temp dir:", err)
+		term.Flush()
+		return 0
+	}
+
+	baseName := strings.TrimSuffix(filepath.Base(file), ".desi")
+	irPath := filepath.Join(tempDir, baseName+".ll")
+	objPath := filepath.Join(tempDir, baseName+".o")
+
+	// Step 1: Emit LLVM IR
+	if verbose {
+		term.Println("  📝 Emitting IR...")
+	}
+	exePath, _ := os.Executable()
+	emitCmd := exec.Command(exePath, "emit-ir", file)
+	irOutput, err := emitCmd.Output()
+	if err != nil {
+		elapsed := time.Since(startTime)
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Stderr.Write(exitErr.Stderr)
+		}
+		term.Printf("❌ Compile failed (%.2fs)\n", elapsed.Seconds())
+		term.Flush()
+		return 0
+	}
+
+	if err := os.WriteFile(irPath, irOutput, 0644); err != nil {
+		term.Eprintln("❌ Failed to write IR:", err)
+		term.Flush()
+		return 0
+	}
+
+	// Step 2: Compile to PIC object
+	if verbose {
+		term.Println("  🔨 Compiling to PIC object...")
+	}
+	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
+	llcCmd.Stderr = os.Stderr
+	if err := llcCmd.Run(); err != nil {
+		elapsed := time.Since(startTime)
+		term.Printf("❌ LLC failed (%.2fs)\n", elapsed.Seconds())
+		term.Flush()
+		return 0
+	}
+
+	// Step 3: Link as shared library
+	if verbose {
+		term.Println("  🔗 Linking shared library...")
+	}
+	buildDir := findBuildDir()
+	clangArgs := []string{"-shared", "-fPIC", "-o", soPath, objPath}
+	if buildDir != "" {
+		clangArgs = append(clangArgs, "-L"+buildDir, "-ldesi")
+	}
+	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd.Stderr = os.Stderr
+	if err := clangCmd.Run(); err != nil {
+		elapsed := time.Since(startTime)
+		term.Printf("❌ Link failed (%.2fs)\n", elapsed.Seconds())
+		term.Flush()
+		return 0
+	}
+
+	elapsed := time.Since(startTime)
+	term.Printf("✅ Build succeeded (%.2fs)\n", elapsed.Seconds())
+
+	// Step 4: Start desi-host
+	if verbose {
+		term.Println("  🚀 Starting desi-host...")
+	}
+	term.Println("🔥 Running with hot reload...")
+	term.Println("─────────────────────────────────────")
+	term.Flush()
+
+	hostPath := findHostBinary()
+	if hostPath == "" {
+		term.Eprintln("❌ desi-host binary not found")
+		term.Flush()
+		return 0
+	}
+
+	runCmd := exec.Command(hostPath, soPath)
+	runCmd.Stdout = os.Stdout
+	runCmd.Stderr = os.Stderr
+	runCmd.Stdin = os.Stdin
+
+	processMu.Lock()
+	*currentProcess = runCmd
+	processMu.Unlock()
+
+	if err := runCmd.Start(); err != nil {
+		term.Eprintln("❌ Failed to start host:", err)
+		term.Flush()
+		return 0
+	}
+
+	pid := runCmd.Process.Pid
+	term.Printf("   [desi-host PID: %d - send SIGUSR1 to reload]\n", pid)
+	term.Flush()
+
+	// Wait for process in background
+	go func() {
+		err := runCmd.Wait()
+		term.Println("─────────────────────────────────────")
+		if err != nil {
+			if _, ok := err.(*exec.ExitError); ok {
+				term.Printf("⚠️  Host terminated: %v\n", err)
+			}
+		} else {
+			term.Println("✅ Host exited normally")
+		}
+		term.Flush()
+	}()
+
+	return pid
+}
+
+// doHotReload rebuilds .so and sends SIGUSR1 to reload
+func doHotReload(file string, soPath string, hostPID int, verbose bool) bool {
+	startTime := time.Now()
+	term.Println("🔄 Hot reloading...")
+
+	// Build new .so but save to temp location first
+	tempDir, err := os.MkdirTemp("", "desi-hot-*")
+	if err != nil {
+		term.Eprintln("❌ Failed to create temp dir:", err)
+		return false
+	}
+	defer os.RemoveAll(tempDir)
+
+	baseName := strings.TrimSuffix(filepath.Base(file), ".desi")
+	irPath := filepath.Join(tempDir, baseName+".ll")
+	objPath := filepath.Join(tempDir, baseName+".o")
+
+	// Step 1: Emit LLVM IR
+	exePath, _ := os.Executable()
+	emitCmd := exec.Command(exePath, "emit-ir", file)
+	irOutput, err := emitCmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			os.Stderr.Write(exitErr.Stderr)
+		}
+		term.Printf("❌ Compile failed (%.2fs)\n", time.Since(startTime).Seconds())
+		return false
+	}
+
+	if err := os.WriteFile(irPath, irOutput, 0644); err != nil {
+		term.Eprintln("❌ Failed to write IR:", err)
+		return false
+	}
+
+	// Step 2: Compile to PIC object
+	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
+	if err := llcCmd.Run(); err != nil {
+		term.Printf("❌ LLC failed (%.2fs)\n", time.Since(startTime).Seconds())
+		return false
+	}
+
+	// Step 3: Link as shared library (overwrite existing)
+	buildDir := findBuildDir()
+	clangArgs := []string{"-shared", "-fPIC", "-o", soPath, objPath}
+	if buildDir != "" {
+		clangArgs = append(clangArgs, "-L"+buildDir, "-ldesi")
+	}
+	clangCmd := exec.Command("clang", clangArgs...)
+	if err := clangCmd.Run(); err != nil {
+		term.Printf("❌ Link failed (%.2fs)\n", time.Since(startTime).Seconds())
+		return false
+	}
+
+	// Step 4: Send SIGUSR1 to host
+	proc, err := os.FindProcess(hostPID)
+	if err != nil {
+		term.Eprintln("❌ Failed to find host process:", err)
+		return false
+	}
+	if err := proc.Signal(syscall.SIGUSR1); err != nil {
+		term.Eprintln("❌ Failed to send reload signal:", err)
+		return false
+	}
+
+	elapsed := time.Since(startTime)
+	term.Printf("✅ Hot reload sent (%.2fs)\n", elapsed.Seconds())
+	term.Flush()
+	return true
+}
+
+// findHostBinary looks for desi-host binary
+func findHostBinary() string {
+	candidates := []string{
+		"bin/desi-host",
+		"desi-host",
+	}
+
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "desi-host"),
+			filepath.Join(exeDir, "..", "bin", "desi-host"),
+		)
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			if abs, err := filepath.Abs(c); err == nil {
+				return abs
+			}
+			return c
+		}
+	}
+	return ""
 }

@@ -78,6 +78,16 @@ $(DESILSP):
 	@echo "==> Building desilsp..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desilsp
 
+# Hot Reload Host
+DESIHOST = $(BIN_DIR)/desi-host
+
+host: $(DESIHOST)
+
+$(DESIHOST): $(RUNTIME_SRC)/desi_host.c
+	@echo "==> Building desi-host..."
+	$(CC) -o $@ $< -ldl
+
+
 # Windows Build
 windows:
 	@mkdir -p $(BIN_DIR)
