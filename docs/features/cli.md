@@ -6,35 +6,40 @@ This document describes the `desic` command-line interface.
 
 ### `desic watch` - Hot Reload Development Mode
 
-Watches for `.desi` file changes and automatically rebuilds.
+Watches for `.desi` file changes and automatically rebuilds/runs.
 
 ```bash
-# Watch current directory
+# Watch and type-check only
 desic watch
 
-# Watch specific directory
-desic watch ./src
-
-# Verbose mode (show directory count)
-desic watch -v ./src
-
-# Run program after successful build (future feature)
+# Watch and run the program (hot reload!)
 desic watch --run ./src
+
+# Verbose mode (shows compile steps)
+desic watch --run -v ./src
 ```
 
-**Output Example:**
+**With `--run` flag (full hot reload):**
 
 ```
 🔥 Watching for changes in: /path/to/project
    Press Ctrl+C to stop
 
 📦 Building: main.desi
-✅ Build succeeded (0.12s)
+  📝 Emitting IR...
+  🔨 Compiling to object code...
+  🔗 Linking...
+✅ Build succeeded (0.31s)
+🚀 Running...
+─────────────────────────────────────
+Server started on port 8080
 
-📝 Changed: server.desi
-✅ Build succeeded (0.08s)
-
-👋 Stopping watch...
+📝 Changed: handler.desi
+  🔄 Stopping previous process...
+✅ Build succeeded (0.09s)
+🚀 Running...
+─────────────────────────────────────
+Server started on port 8080 (v2 - hot reloaded!)
 ```
 
 **Features:**
@@ -44,6 +49,7 @@ desic watch --run ./src
 - Skips `node_modules` and `__pycache__`
 - Graceful Ctrl+C handling
 - Auto-detects `main.desi` in target directory
+- **`--run`**: Full compile + link + execute with auto-restart
 
 ---
 

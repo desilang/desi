@@ -6,19 +6,29 @@ The `desic` command-line tool is your primary interface for working with Desi co
 
 ### `desic watch` - Development Mode 🔥
 
-Watch for file changes and automatically rebuild.
+Watch for file changes and automatically rebuild/run.
 
 ```bash
-desic watch           # Watch current directory
-desic watch ./src     # Watch specific directory
-desic watch -v ./src  # Verbose mode
+desic watch           # Watch and type-check only
+desic watch --run .   # Watch, build, and run with hot reload!
+desic watch -v .      # Verbose mode
 ```
 
-When you save a `.desi` file, you'll see:
+**Hot Reload Example:**
 
 ```
-📝 Changed: server.desi
-✅ Build succeeded (0.08s)
+🔥 Watching for changes in: /my-project
+📦 Building: main.desi
+✅ Build succeeded (0.31s)
+🚀 Running...
+─────────────────────────────────────
+Hello from my Desi program!
+
+📝 Changed: main.desi
+✅ Build succeeded (0.09s)
+🚀 Running...
+─────────────────────────────────────
+Hello from v2 - hot reloaded!
 ```
 
 Press `Ctrl+C` to stop watching.
