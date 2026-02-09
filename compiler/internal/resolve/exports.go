@@ -67,6 +67,37 @@ func CollectExports(mod *ast.Module) *Exports {
 	if mod == nil {
 		return out
 	}
+
+	// First pass: collect class names so we can recognize them as valid types for function signatures
+	localClasses := make(map[string]*types.Class)
+	for _, d := range mod.Decls {
+		cls, ok := d.(*ast.ClassDecl)
+		if !ok {
+			continue
+		}
+		// Create a placeholder class type for reference
+		classType := &types.Class{
+			Name:         cls.Name.Name,
+			Constructors: []*types.Func{},
+			Fields:       []types.Field{},
+			Methods:      map[string]*types.Func{},
+		}
+		localClasses[cls.Name.Name] = classType
+	}
+
+	// Helper to resolve type from name, including local classes
+	resolveType := func(name string) (types.T, bool) {
+		// First try built-in types
+		if t, ok := types.FromName(name); ok {
+			return t, true
+		}
+		// Then try local module classes
+		if cls, ok := localClasses[name]; ok {
+			return cls, true
+		}
+		return nil, false
+	}
+
 	for _, d := range mod.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -84,7 +115,7 @@ func CollectExports(mod *ast.Module) *Exports {
 				okTypes = false
 				break
 			}
-			if t, ok := types.FromName(p.Type.Name); ok {
+			if t, ok := resolveType(p.Type.Name); ok {
 				// If this is a variadic parameter, wrap in list[T]
 				if p.Variadic {
 					params[i] = types.ListOf(t)
@@ -103,7 +134,7 @@ func CollectExports(mod *ast.Module) *Exports {
 		if fn.RetType == nil {
 			continue
 		}
-		rt, ok := types.FromName(fn.RetType.Name)
+		rt, ok := resolveType(fn.RetType.Name)
 		if !ok {
 			continue
 		}

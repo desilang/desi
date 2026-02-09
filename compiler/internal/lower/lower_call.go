@@ -2119,6 +2119,14 @@ handlePrint:
 					}
 				}
 
+				// WORKAROUND: Fix incorrect return type for Duration factory methods
+				// The type checker seems to resolve the return type as "none"/void for static methods
+				// that return the enclosing class type (recursive reference issue).
+				// We force "ptr" return type for known factory methods.
+				if cls.Name == "Duration" && strings.HasPrefix(methodName, "from_") && (retType == "void" || retType == "") {
+					retType = "ptr"
+				}
+
 				dst := ls.b.FreshTemp("call")
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: args, Type: retType})
 				// Consume args (methods move by default)

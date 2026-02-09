@@ -3,6 +3,7 @@
 
 from time import *
 
+
 def test_core_functions():
     print("=== Core Time Functions ===")
     let ts = now()
@@ -143,6 +144,50 @@ def test_sleep_precision():
     print("sleep(0.25):", elapsed2, "s")
     print("")
 
+def test_stopwatch():
+    print("=== Stopwatch & Duration ===")
+    
+    # Test 1: Factory function returns correct type
+    print("Test 1: stopwatch() factory function")
+    let sw1 = stopwatch()
+    sleep(0.05)
+    print("Stopwatch created successfully")
+    
+    # Test 2: Silent stopwatch factory
+    print("Test 2: stopwatch_silent() factory")
+    let sw2 = stopwatch_silent()
+    sleep(0.01)
+    print("Silent stopwatch created successfully")
+    
+    # Test 3: Manual Stopwatch with methods
+    print("Test 3: Manual Stopwatch construction")
+    let sw3 = Stopwatch()
+    sw3.start()
+    sleep(0.03)
+    print("Manual sw elapsed:", sw3.elapsed_str())
+    
+    # Test 4: create_duration factory function
+    print("Test 4: create_duration factory")
+    let d1 = create_duration(120.5)
+    print("Duration created successfully")
+    
+    # Test 5: Duration.from_seconds static method
+    print("Test 5: Duration.from_seconds")
+    let d2 = Duration.from_seconds(3661.0)
+    print("Duration 1h1m1s:", d2)
+    
+    # Test 6: Duration.from_minutes
+    print("Test 6: Duration.from_minutes")
+    let d3 = Duration.from_minutes(90.0)
+    print("Duration 90 minutes:", d3)
+    
+    # Test 7: Duration.from_hours
+    print("Test 7: Duration.from_hours")
+    let d4 = Duration.from_hours(2.5)
+    print("Duration 2.5 hours:", d4)
+    
+    print("=== Stopwatch Tests Complete ===")
+
 def main():
     print("========================================")
     print("   Desi Time Module - Complete Test")
@@ -158,6 +203,7 @@ def main():
     test_humanize()
     test_relative()
     test_sleep_precision()
+    test_stopwatch()
     print("========================================")
     print("All time module tests complete!")
     print("========================================")
