@@ -47,46 +47,53 @@ pub def stopwatch_silent() -> Stopwatch  # No print on close
 pub def create_duration(seconds: float) -> Duration
 ```
 
-## Export Resolution Fix (Feb 2026)
+## Cross-Module Method Resolution Fix (Feb 2026)
 
 ### Problem
 
-Functions returning class types weren't being exported. `CollectExports()` in `exports.go` used `types.FromName()` which only recognizes built-in types.
+Two related issues in `CollectExports()`:
+1. Functions returning class types weren't exported (`types.FromName()` only handles builtins)
+2. Methods on factory-returned classes didn't resolve (placeholder class had empty `Methods` map)
 
 ### Solution
 
-Modified `CollectExports()` to:
+Restructured `CollectExports()` in `exports.go`:
 
-1. Pre-collect local class names in first pass
-2. Use `resolveType()` helper that checks both builtins AND local classes
+1. **Collect classes FIRST** via `collectClasses()` function
+2. **Use `out.Classes`** in `resolveType()` so function return types reference the same class instance
 
 ```go
-// First pass: collect class names
-localClasses := make(map[string]*types.Class)
-for _, d := range mod.Decls {
-    if cls, ok := d.(*ast.ClassDecl); ok {
-        localClasses[cls.Name.Name] = ...
+func collectClasses(mod *ast.Module, out *Exports) {
+    // Creates class with Methods, Dunders, Properties populated
+    classType := &types.Class{
+        Methods:    map[string]*types.Func{},
+        Dunders:    map[string]*types.Func{},
+        Properties: map[string]*types.Func{},
     }
+    // ... populates all methods ...
+    out.Classes[name] = classType
 }
 
-// Helper to resolve type from name
-resolveType := func(name string) (types.T, bool) {
-    if t, ok := types.FromName(name); ok { return t, true }
-    if cls, ok := localClasses[name]; ok { return cls, true }
-    return nil, false
+func CollectExports(mod *ast.Module) *Exports {
+    collectClasses(mod, out)  // FIRST: collect classes with full method info
+    
+    resolveType := func(name string) (types.T, bool) {
+        if cls, ok := out.Classes[name]; ok {
+            return cls, true  // Same instance as used for method lookup!
+        }
+        // ...
+    }
+    // SECOND: collect functions using resolveType
 }
 ```
 
-### Known Limitation
+### Result
 
-Methods on factory-returned class types don't resolve:
-
+Both patterns now work:
 ```desi
-stopwatch().elapsed()  # ❌ Error
-Stopwatch().elapsed()  # ✅ Works
+stopwatch().elapsed()     # ✅ Factory + method
+Stopwatch().elapsed()     # ✅ Constructor + method
 ```
-
-The returned class type placeholder from exports doesn't include method information. Fix requires propagating full class type info through imports.
 
 ## Indentation Requirements
 
