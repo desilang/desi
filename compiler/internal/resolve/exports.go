@@ -44,6 +44,114 @@ type Exports struct {
 	Globals map[string]types.T
 }
 
+// collectClasses extracts public class declarations from a module and populates out.Classes
+// with fully-typed class information including fields, constructors, and methods.
+// This must be called BEFORE function collection so that function return types can reference
+// the same class instances that have method information populated.
+func collectClasses(mod *ast.Module, out *Exports) {
+	for _, d := range mod.Decls {
+		cls, ok := d.(*ast.ClassDecl)
+		if !ok || !cls.Pub {
+			continue
+		}
+		name := cls.Name.Name
+
+		// Create a Class type for export
+		classType := &types.Class{
+			Name:         name,
+			Constructors: []*types.Func{},
+			Fields:       []types.Field{},
+			Methods:      map[string]*types.Func{},
+			Dunders:      map[string]*types.Func{},
+			Properties:   map[string]*types.Func{},
+		}
+
+		// Extract fields from class
+		for _, field := range cls.Fields {
+			if field.Type == nil {
+				continue
+			}
+			fieldType, ok := types.FromName(field.Type.Name)
+			if !ok {
+				continue
+			}
+			classType.Fields = append(classType.Fields, types.Field{
+				Name:  field.Name.Name,
+				Type:  fieldType,
+				IsPub: field.Pub,
+				IsMut: field.Mut,
+			})
+		}
+
+		// Extract methods from class (including __new__ and dunders)
+		for _, method := range cls.Methods {
+			methodName := method.Name.Name
+
+			// Handle __new__ as constructor
+			if methodName == "__new__" {
+				params := make([]types.T, 0, len(method.Params))
+				for _, p := range method.Params {
+					if p.Name.Name == "self" || p.Name.Name == "cls" {
+						continue
+					}
+					if p.Type == nil {
+						continue
+					}
+					if t, ok := types.FromName(p.Type.Name); ok {
+						params = append(params, t)
+					} else {
+						// Unknown type (e.g., generic param T) - treat as Any
+						params = append(params, types.Any)
+					}
+				}
+				returnType := classType
+				constructorFunc := types.FuncOf(params, returnType, false)
+				classType.Constructors = append(classType.Constructors, constructorFunc)
+				continue
+			}
+
+			// Build the method function type (including private methods for dunders)
+			params := make([]types.T, 0, len(method.Params))
+			for _, p := range method.Params {
+				if p.Name.Name == "self" {
+					continue
+				}
+				if p.Type == nil {
+					continue
+				}
+				t, ok := types.FromName(p.Type.Name)
+				if !ok {
+					// Unknown type (e.g., generic type param T) - treat as Any
+					t = types.Any
+				}
+				params = append(params, t)
+			}
+			var retType types.T = types.None
+			if method.RetType != nil {
+				if t, ok := types.FromName(method.RetType.Name); ok {
+					retType = t
+				}
+			}
+			methodFunc := types.FuncOf(params, retType, false)
+			methodFunc.IsPub = method.Pub
+
+			// Store dunders in Dunders map, others in Methods map
+			if len(methodName) > 4 && methodName[:2] == "__" && methodName[len(methodName)-2:] == "__" {
+				classType.Dunders[methodName] = methodFunc
+			} else if method.Pub {
+				classType.Methods[methodName] = methodFunc
+			}
+		}
+
+		// If no __new__ found, add a default zero-arg constructor
+		if len(classType.Constructors) == 0 {
+			classType.Constructors = append(classType.Constructors, types.FuncOf(nil, classType, false))
+		}
+
+		out.Classes[name] = classType
+	}
+}
+
 // CollectExports walks a parsed module and returns its exported function signatures.
 //
 // Rules implemented here:
@@ -68,36 +176,27 @@ func CollectExports(mod *ast.Module) *Exports {
 		return out
 	}
 
-	// First pass: collect class names so we can recognize them as valid types for function signatures
-	localClasses := make(map[string]*types.Class)
-	for _, d := range mod.Decls {
-		cls, ok := d.(*ast.ClassDecl)
-		if !ok {
-			continue
-		}
-		// Create a placeholder class type for reference
-		classType := &types.Class{
-			Name:         cls.Name.Name,
-			Constructors: []*types.Func{},
-			Fields:       []types.Field{},
-			Methods:      map[string]*types.Func{},
-		}
-		localClasses[cls.Name.Name] = classType
-	}
+	// ========================================================================
+	// FIRST: Collect public class declarations (so function return types can reference them)
+	// ========================================================================
+	collectClasses(mod, out)
 
-	// Helper to resolve type from name, including local classes
+	// Helper to resolve type from name, including exported classes from this module
 	resolveType := func(name string) (types.T, bool) {
 		// First try built-in types
 		if t, ok := types.FromName(name); ok {
 			return t, true
 		}
-		// Then try local module classes
-		if cls, ok := localClasses[name]; ok {
+		// Then try classes exported from this module (with full method info)
+		if cls, ok := out.Classes[name]; ok {
 			return cls, true
 		}
 		return nil, false
 	}
 
+	// ========================================================================
+	// SECOND: Collect public function declarations
+	// ========================================================================
 	for _, d := range mod.Decls {
 		fn, ok := d.(*ast.FuncDecl)
 		if !ok {
@@ -197,104 +296,17 @@ func CollectExports(mod *ast.Module) *Exports {
 		out.FuncExtern[name] = append(out.FuncExtern[name], meta)
 	}
 
-	// Collect public class declarations
+	// Handle nested classes (collectClasses already populated out.Classes with top-level classes)
 	for _, d := range mod.Decls {
 		cls, ok := d.(*ast.ClassDecl)
 		if !ok || !cls.Pub {
 			continue
 		}
 		name := cls.Name.Name
-
-		// Create a Class type for export
-		classType := &types.Class{
-			Name:         name,
-			Constructors: []*types.Func{},
-			Fields:       []types.Field{},
-			Methods:      map[string]*types.Func{},
+		classType := out.Classes[name]
+		if classType == nil {
+			continue // Should not happen, but safety check
 		}
-
-		// Extract fields from class
-		for _, field := range cls.Fields {
-			if field.Type == nil {
-				continue
-			}
-			fieldType, ok := types.FromName(field.Type.Name)
-			if !ok {
-				continue
-			}
-			classType.Fields = append(classType.Fields, types.Field{
-				Name:  field.Name.Name,
-				Type:  fieldType,
-				IsPub: field.Pub,
-				IsMut: field.Mut,
-			})
-		}
-
-		// Extract methods from class (including __new__)
-		for _, method := range cls.Methods {
-			methodName := method.Name.Name
-
-			// Handle __new__ as constructor
-			if methodName == "__new__" {
-				params := make([]types.T, 0, len(method.Params))
-				for _, p := range method.Params {
-					if p.Name.Name == "self" || p.Name.Name == "cls" {
-						continue
-					}
-					if p.Type == nil {
-						continue
-					}
-					if t, ok := types.FromName(p.Type.Name); ok {
-						params = append(params, t)
-					} else {
-						// Unknown type (e.g., generic param T) - treat as Any
-						params = append(params, types.Any)
-					}
-				}
-				returnType := classType
-				constructorFunc := types.FuncOf(params, returnType, false)
-				classType.Constructors = append(classType.Constructors, constructorFunc)
-				continue
-			}
-
-			// Skip non-public methods
-			if !method.Pub {
-				continue
-			}
-
-			// Build the method function type
-			params := make([]types.T, 0, len(method.Params))
-			for _, p := range method.Params {
-				if p.Name.Name == "self" {
-					continue
-				}
-				if p.Type == nil {
-					continue
-				}
-				t, ok := types.FromName(p.Type.Name)
-				if !ok {
-					// Unknown type (e.g., generic type param T) - treat as Any
-					t = types.Any
-				}
-				params = append(params, t)
-			}
-			var retType types.T = types.None
-			if method.RetType != nil {
-				if t, ok := types.FromName(method.RetType.Name); ok {
-					retType = t
-				}
-			}
-			methodFunc := types.FuncOf(params, retType, false)
-			methodFunc.IsPub = true // Mark as public for cross-module access
-			classType.Methods[methodName] = methodFunc
-		}
-
-		// If no __new__ found, add a default zero-arg constructor
-		if len(classType.Constructors) == 0 {
-			classType.Constructors = append(classType.Constructors, types.FuncOf(nil, classType, false))
-		}
-
-		out.Classes[name] = classType
 
 		// Export public nested classes with qualified name (Container.Inner)
 		for _, nested := range cls.Nested {
