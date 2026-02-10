@@ -49,6 +49,10 @@ type writer struct {
 
 	// Track the physical source line of the last token that counts as "code".
 	lastCodeLine int
+
+	// Track the last source line number we've processed, for detecting
+	// comment-only lines in gaps between tokens.
+	lastSourceLine int
 }
 
 const (
@@ -188,18 +192,59 @@ func rewrite(src []byte) []byte {
 		}
 		return sc.Next()
 	}
+	// Helper to emit any comment-only lines between lastSourceLine and currentLine.
+	// Returns true if any comment lines were emitted.
+	// We preserve the ORIGINAL indentation (counted as tab units) to ensure
+	// idempotent round-tripping.
+	emitSkippedCommentLines := func(currentLine int) bool {
+		emitted := false
+		// Process lines from lastSourceLine+1 up to (but not including) currentLine
+		for ln := w.lastSourceLine + 1; ln < currentLine; ln++ {
+			raw := getLineBytes(ln)
+			if cmt := isCommentOnlyLine(raw); cmt != nil {
+				// Count the original indentation level (tabs or spaces→tabs)
+				tabCount := 0
+				j := 0
+				for j < len(cmt) && (cmt[j] == '\t' || cmt[j] == ' ') {
+					if cmt[j] == '\t' {
+						tabCount++
+					}
+					j++
+				}
+				if w.atBOL {
+					for k := 0; k < tabCount; k++ {
+						w.buf.WriteByte('\t')
+					}
+				}
+				_, _ = w.buf.Write(cmt[j:])
+				w.nl()
+				emitted = true
+			}
+		}
+		if currentLine-1 > w.lastSourceLine {
+			w.lastSourceLine = currentLine - 1
+		}
+		return emitted
+	}
 
 	for {
 		it = advance()
 		cur = it.Tok
 		switch cur {
 		case token.EOF:
+			// Emit any trailing comment-only lines before EOF
+			emitSkippedCommentLines(it.Line)
+			w.lastSourceLine = it.Line
 			if !w.atBOL {
 				w.nl()
 			}
 			return w.buf.Bytes()
 
 		case token.NL:
+			// Emit any comment-only lines skipped between the last processed
+			// source line and this NL token's source line.
+			hadCommentEmission := emitSkippedCommentLines(it.Line)
+
 			// Attach trailing EOL comment (if any) ONLY for lines with code.
 			hadEOLComment := false
 			if w.lineHasContent && w.lineKind == _lineCode && w.lastCodeLine > 0 {
@@ -228,7 +273,15 @@ func rewrite(src []byte) []byte {
 				}
 			}
 			// Emit the single logical newline; layout controls indent depth.
-			w.nl()
+			// Skip if we just emitted comment lines (they already have newlines)
+			// and there was no code content on this logical line — the NL from
+			// the scanner is just marking the end of the comment-only line.
+			if hadCommentEmission && !w.lineHasContent {
+				// The comment emission already produced the newline.
+				// Just reset lineHasContent for the next line.
+			} else {
+				w.nl()
+			}
 
 		case token.Indent:
 			w.indentTabs++
@@ -239,6 +292,13 @@ func rewrite(src []byte) []byte {
 			}
 
 		default:
+			// Emit any comment-only lines that were skipped between the last token
+			// and this token (scanner skips comment-only lines).
+			emitSkippedCommentLines(it.Line)
+			if it.Line > w.lastSourceLine {
+				w.lastSourceLine = it.Line
+			}
+
 			// spacing before current token
 			if shouldSpaceBefore(w, it, peekItem().Tok) {
 				w.space()
@@ -253,13 +313,17 @@ func rewrite(src []byte) []byte {
 				w.lastCodeLine = it.Line
 
 			case token.CatLiteral:
-				// Numbers usually carry lexeme; STR/FSTR/LONGSTR are empty by design.
-				if it.Lexeme != "" {
+				isStringTok := cur == token.STR || cur == token.LONGSTR || cur == token.RAWSTR ||
+					cur == token.FSTR_START || cur == token.FSTR_PART || cur == token.FSTR_END
+
+				if !isStringTok && it.Lexeme != "" {
+					// Numeric literal — lexeme carries the exact source form.
 					w.tok(it.Lexeme)
 					w.lineKind = _lineCode
 					w.lastCodeLine = it.Line
 				} else {
-					// Reconstruct original STRING literal exactly.
+					// String literal — reconstruct from original source to
+					// preserve quotes, escape sequences, and f-string delimiters.
 					start := byteIndex(it.Line, it.Col)
 					nxt := peekItem()
 					nextStart := len(src)
@@ -275,7 +339,6 @@ func rewrite(src []byte) []byte {
 					lit := reconstructStringLiteral(src, start, nextStart)
 					w.tok(string(lit))
 
-					// Empty-lexeme literal here is a string by design.
 					if w.lineKind == _lineUnknown {
 						w.lineKind = _lineStringOnly
 					}
@@ -476,7 +539,29 @@ var isPrefixKeyword = map[token.Token]bool{
 	token.KW_from:   true,
 }
 
-// ---- EOL comment detection (local to formatter) ----
+// ---- Comment detection (local to formatter) ----
+
+// isCommentOnlyLine returns true if the line contains only whitespace and a comment
+// (starting with '#' but not '#{' for set literals). Returns the trimmed comment line
+// if it's a comment-only line, or nil otherwise.
+func isCommentOnlyLine(line []byte) []byte {
+	if len(line) == 0 {
+		return nil
+	}
+	// Skip leading whitespace
+	i := 0
+	for i < len(line) && (line[i] == ' ' || line[i] == '\t') {
+		i++
+	}
+	if i >= len(line) {
+		return nil // blank line
+	}
+	// Check if first non-whitespace is '#' (but not '#{')
+	if line[i] == '#' && (i+1 >= len(line) || line[i+1] != '{') {
+		return line // entire line is a comment
+	}
+	return nil
+}
 
 // findEOLCommentSuffix returns the trailing whitespace (if any) + "#…"
 // slice from a single physical line, or nil if none should be preserved.

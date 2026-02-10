@@ -58,12 +58,21 @@ desic check main.desi
 
 ### `desic fmt` - Format Code
 
-Auto-format your Desi code:
+Auto-format your Desi code with consistent style:
 
 ```bash
 desic fmt -w main.desi     # Write in place
 desic fmt -l ./src         # List files to change
+desifmt main.desi          # Standalone formatter (stdout)
+desifmt -w main.desi       # Standalone formatter (in-place)
 ```
+
+**What the formatter does:**
+
+- Uses **tabs** for indentation
+- Preserves **standalone comments** and **trailing comments**
+- Preserves **string literals** exactly (quotes, escapes, f-strings)
+- Normalizes spacing around operators and keywords
 
 ---
 
