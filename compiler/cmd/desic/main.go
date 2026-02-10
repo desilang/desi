@@ -45,7 +45,7 @@ var parserCodeMap = map[string]string{
 	"DPE1002": "parser.async_before_let",
 }
 
-const Version = "0.0.1-revised-bootstrap"
+const Version = "0.1.0-dev"
 
 func main() {
 	// --- Pre-scan render flags so 'check' subcommand also honors them ---
