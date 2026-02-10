@@ -132,34 +132,34 @@ def __time_relative(ts: float) -> str
 # ============================================================
 
 # Sleep for the specified duration in seconds
-# Example: time.sleep(0.5)  # Sleep for 500ms
+# Example: time.sleep(0.5)	# Sleep for 500ms
 pub def sleep(seconds: float) -> none:
-    unsafe:
-        __time_sleep_secs(seconds)
+	unsafe:
+		__time_sleep_secs(seconds)
 
 # Get current local Unix timestamp (seconds since epoch)
 # Example: let ts = time.now()
 pub def now() -> float:
-    unsafe:
-        return __time_now()
+	unsafe:
+		return __time_now()
 
 # Get current UTC Unix timestamp
 # Example: let utc = time.utc_now()
 pub def utc_now() -> float:
-    unsafe:
-        return __time_utc_now()
+	unsafe:
+		return __time_utc_now()
 
 # Get monotonic time (for measuring elapsed time, immune to clock changes)
 # Example: let start = time.monotonic()
 pub def monotonic() -> float:
-    unsafe:
-        return __time_monotonic()
+	unsafe:
+		return __time_monotonic()
 
 # High-precision performance counter (for benchmarking)
 # Example: let t = time.perf_counter()
 pub def perf_counter() -> float:
-    unsafe:
-        return __time_perf_counter()
+	unsafe:
+		return __time_perf_counter()
 
 # ============================================================
 # Public API - Timezone Functions
@@ -168,32 +168,32 @@ pub def perf_counter() -> float:
 # Get timezone offset from UTC in seconds (positive = east)
 # Example: time.timezone_offset()  -> -21600 (CST is UTC-6)
 pub def timezone_offset() -> int:
-    unsafe:
-        return __time_timezone_offset()
+	unsafe:
+		return __time_timezone_offset()
 
 # Get timezone name
-# Example: time.timezone_name()  -> "CST"
+# Example: time.timezone_name()	 -> "CST"
 pub def timezone_name() -> str:
-    unsafe:
-        return __time_timezone_name()
+	unsafe:
+		return __time_timezone_name()
 
 # Check if currently observing daylight saving time
 # Example: if time.is_dst(): print("DST active")
 pub def is_dst() -> bool:
-    unsafe:
-        return __time_is_dst()
+	unsafe:
+		return __time_is_dst()
 
 # Convert local timestamp to UTC
 # Example: let utc = time.to_utc(local_ts)
 pub def to_utc(local_ts: float) -> float:
-    unsafe:
-        return __time_to_utc(local_ts)
+	unsafe:
+		return __time_to_utc(local_ts)
 
 # Convert UTC timestamp to local
 # Example: let local = time.to_local(utc_ts)
 pub def to_local(utc_ts: float) -> float:
-    unsafe:
-        return __time_to_local(utc_ts)
+	unsafe:
+		return __time_to_local(utc_ts)
 
 # ============================================================
 # Public API - Formatting & Parsing
@@ -202,32 +202,32 @@ pub def to_local(utc_ts: float) -> float:
 # Format current time using strftime pattern
 # Example: time.strftime("%Y-%m-%d")  -> "2026-02-05"
 pub def strftime(format: str) -> str:
-    unsafe:
-        return __desi_time_strftime(format)
+	unsafe:
+		return __desi_time_strftime(format)
 
 # Format a specific timestamp
 # Example: time.format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
 pub def format_timestamp(ts: float, format: str) -> str:
-    unsafe:
-        return __time_format_timestamp(ts, format)
+	unsafe:
+		return __time_format_timestamp(ts, format)
 
 # Parse time string to timestamp (inverse of format_time)
 # Example: time.parse_time("2026-02-05", "%Y-%m-%d")
 pub def parse_time(time_str: str, format: str) -> float:
-    unsafe:
-        return __time_parse(time_str, format)
+	unsafe:
+		return __time_parse(time_str, format)
 
 # Create timestamp from components
 # Example: time.from_parts(2026, 2, 5, 13, 30, 0)
 pub def from_parts(year: int, month: int, day: int, hour: int, minute: int, second: int) -> float:
-    unsafe:
-        return __time_from_parts(year, month, day, hour, minute, second)
+	unsafe:
+		return __time_from_parts(year, month, day, hour, minute, second)
 
-# Human-readable time string (like "Wed Feb  5 13:30:00 2026")
+# Human-readable time string (like "Wed Feb	 5 13:30:00 2026")
 # Example: time.ctime(ts)
 pub def ctime(ts: float) -> str:
-    unsafe:
-        return __desi_time_ctime(ts)
+	unsafe:
+		return __desi_time_ctime(ts)
 
 # ============================================================
 # Public API - Current Time Components
@@ -235,38 +235,38 @@ pub def ctime(ts: float) -> str:
 
 # Get current year
 pub def year() -> int:
-    unsafe:
-        return __time_year()
+	unsafe:
+		return __time_year()
 
 # Get current month (1-12)
 pub def month() -> int:
-    unsafe:
-        return __time_month()
+	unsafe:
+		return __time_month()
 
 # Get current day of month (1-31)
 pub def day() -> int:
-    unsafe:
-        return __time_day()
+	unsafe:
+		return __time_day()
 
 # Get current hour (0-23)
 pub def hour() -> int:
-    unsafe:
-        return __time_hour()
+	unsafe:
+		return __time_hour()
 
 # Get current minute (0-59)
 pub def minute() -> int:
-    unsafe:
-        return __time_minute()
+	unsafe:
+		return __time_minute()
 
 # Get current second (0-59)
 pub def second() -> int:
-    unsafe:
-        return __time_second()
+	unsafe:
+		return __time_second()
 
 # Get current day of week (0=Sunday, 6=Saturday)
 pub def weekday() -> int:
-    unsafe:
-        return __time_weekday()
+	unsafe:
+		return __time_weekday()
 
 # ============================================================
 # Public API - Timestamp Component Extraction
@@ -274,48 +274,48 @@ pub def weekday() -> int:
 
 # Get year from a timestamp
 pub def year_of(ts: float) -> int:
-    unsafe:
-        return __time_year_of(ts)
+	unsafe:
+		return __time_year_of(ts)
 
 # Get month from a timestamp (1-12)
 pub def month_of(ts: float) -> int:
-    unsafe:
-        return __time_month_of(ts)
+	unsafe:
+		return __time_month_of(ts)
 
 # Get day from a timestamp (1-31)
 pub def day_of(ts: float) -> int:
-    unsafe:
-        return __time_day_of(ts)
+	unsafe:
+		return __time_day_of(ts)
 
 # Get hour from a timestamp (0-23)
 pub def hour_of(ts: float) -> int:
-    unsafe:
-        return __time_hour_of(ts)
+	unsafe:
+		return __time_hour_of(ts)
 
 # Get minute from a timestamp (0-59)
 pub def minute_of(ts: float) -> int:
-    unsafe:
-        return __time_minute_of(ts)
+	unsafe:
+		return __time_minute_of(ts)
 
 # Get second from a timestamp (0-59)
 pub def second_of(ts: float) -> int:
-    unsafe:
-        return __time_second_of(ts)
+	unsafe:
+		return __time_second_of(ts)
 
 # Get day of week from a timestamp (0=Sunday, 6=Saturday)
 pub def weekday_of(ts: float) -> int:
-    unsafe:
-        return __time_weekday_of(ts)
+	unsafe:
+		return __time_weekday_of(ts)
 
 # Get day of year (1-366)
 pub def day_of_year(ts: float) -> int:
-    unsafe:
-        return __time_day_of_year(ts)
+	unsafe:
+		return __time_day_of_year(ts)
 
 # Check if a year is a leap year
 pub def is_leap_year(year: int) -> bool:
-    unsafe:
-        return __time_is_leap_year(year)
+	unsafe:
+		return __time_is_leap_year(year)
 
 # ============================================================
 # Public API - Arithmetic
@@ -323,28 +323,28 @@ pub def is_leap_year(year: int) -> bool:
 
 # Add seconds to a timestamp
 pub def add_seconds(ts: float, seconds: float) -> float:
-    unsafe:
-        return __time_add_seconds(ts, seconds)
+	unsafe:
+		return __time_add_seconds(ts, seconds)
 
 # Add days to a timestamp
 pub def add_days(ts: float, days: int) -> float:
-    unsafe:
-        return __time_add_days(ts, days)
+	unsafe:
+		return __time_add_days(ts, days)
 
 # Add hours to a timestamp
 pub def add_hours(ts: float, hours: int) -> float:
-    unsafe:
-        return __time_add_hours(ts, hours)
+	unsafe:
+		return __time_add_hours(ts, hours)
 
 # Add minutes to a timestamp
 pub def add_minutes(ts: float, minutes: int) -> float:
-    unsafe:
-        return __time_add_minutes(ts, minutes)
+	unsafe:
+		return __time_add_minutes(ts, minutes)
 
 # Get difference between two timestamps in seconds
 pub def diff(ts1: float, ts2: float) -> float:
-    unsafe:
-        return __time_diff(ts1, ts2)
+	unsafe:
+		return __time_diff(ts1, ts2)
 
 # ============================================================
 # Public API - Innovative Desi Functions
@@ -353,103 +353,126 @@ pub def diff(ts1: float, ts2: float) -> float:
 # Convert seconds to human-readable duration
 # Example: time.humanize(3665) -> "1 hour, 1 minute, 5 seconds"
 pub def humanize(seconds: float) -> str:
-    unsafe:
-        return __time_humanize(seconds)
+	unsafe:
+		return __time_humanize(seconds)
 
 # Get relative time description
 # Example: time.relative(past_ts) -> "3 hours ago"
 # Example: time.relative(future_ts) -> "in 2 days"
 pub def relative(ts: float) -> str:
-    unsafe:
-        return __time_relative(ts)
+	unsafe:
+		return __time_relative(ts)
 
 # ============================================================
 # Duration Class - Represents time spans
 # ============================================================
 
 pub class Duration:
-    """Represents a duration/time span for arithmetic and formatting."""
-    pub seconds: float
-    
-    # Factory methods - create Duration from various units
-    @staticmethod
-    pub def from_seconds(s: float) -> Duration:
-        let d = Duration()
-        d.seconds = s
-        return d
-    
-    @staticmethod
-    pub def from_minutes(m: float) -> Duration:
-        let d = Duration()
-        d.seconds = m * 60.0
-        return d
-    
-    @staticmethod
-    pub def from_hours(h: float) -> Duration:
-        let d = Duration()
-        d.seconds = h * 3600.0
-        return d
-    
-    @staticmethod
-    pub def from_days(d_val: float) -> Duration:
-        let d = Duration()
-        d.seconds = d_val * 86400.0
-        return d
-    
-    @staticmethod
-    pub def from_millis(ms: float) -> Duration:
-        let d = Duration()
-        d.seconds = ms / 1000.0
-        return d
-    
-    # Accessors
-    pub def total_seconds(self) -> float:
-        return self.seconds
-    
-    pub def total_minutes(self) -> float:
-        return self.seconds / 60.0
-    
-    pub def total_hours(self) -> float:
-        return self.seconds / 3600.0
-    
-    pub def total_days(self) -> float:
-        return self.seconds / 86400.0
-    
-    # String representation
-    pub def __str__(self) -> str:
-        unsafe:
-            return __time_humanize(self.seconds)
+	"""Represents a duration/time span for arithmetic and formatting."""
+	pub mut seconds: float
+	
+	# Factory methods - create Duration from various units
+	@staticmethod
+	pub def from_seconds(s: float) -> Duration:
+		let d = Duration()
+		d.seconds := s
+		return d
+	
+	@staticmethod
+	pub def from_minutes(m: float) -> Duration:
+		let d = Duration()
+		d.seconds := m * 60.0
+		return d
+	
+	@staticmethod
+	pub def from_hours(h: float) -> Duration:
+		let d = Duration()
+		d.seconds := h * 3600.0
+		return d
+	
+	@staticmethod
+	pub def from_days(d_val: float) -> Duration:
+		let d = Duration()
+		d.seconds := d_val * 86400.0
+		return d
+	
+	@staticmethod
+	pub def from_millis(ms: float) -> Duration:
+		let d = Duration()
+		d.seconds := ms / 1000.0
+		return d
+	
+	# Accessors
+	pub def total_seconds(self) -> float:
+		return self.seconds
+	
+	pub def total_minutes(self) -> float:
+		return self.seconds / 60.0
+	
+	pub def total_hours(self) -> float:
+		return self.seconds / 3600.0
+	
+	pub def total_days(self) -> float:
+		return self.seconds / 86400.0
+	
+	# String representation
+	pub def __str__(self) -> str:
+		unsafe:
+			return __time_humanize(self.seconds)
 
 # ============================================================
 # Stopwatch - Simple timing utility
 # ============================================================
 
 pub class Stopwatch:
-    """Times code execution. Create, do work, then call elapsed()."""
-    pub start_time: float
-    
-    pub def start(self):
-        """Start or restart the stopwatch."""
-        unsafe:
-            self.start_time = __time_monotonic()
-    
-    pub def elapsed(self) -> float:
-        """Get elapsed time in seconds since start."""
-        unsafe:
-            return __time_monotonic() - self.start_time
-    
-    pub def elapsed_str(self) -> str:
-        """Get elapsed time as human-readable string."""
-        unsafe:
-            return __time_humanize(self.elapsed())
+	"""Times code execution. Create, do work, then call elapsed(). Use with 'using' for RAII."""
+	pub mut start_time: float
+	pub mut silent_mode: bool
+	
+	pub def start(self):
+		"""Start or restart the stopwatch."""
+		unsafe:
+			self.start_time := __time_monotonic()
+	
+	pub def elapsed(self) -> float:
+		"""Get elapsed time in seconds since start."""
+		unsafe:
+			return __time_monotonic() - self.start_time
+	
+	pub def elapsed_str(self) -> str:
+		"""Get elapsed time as human-readable string."""
+		unsafe:
+			return __time_humanize(self.elapsed())
+
+	pub def __close__(self) -> none:
+		"""RAII cleanup: print elapsed time at scope exit (unless silent)."""
+		if not self.silent_mode:
+			unsafe:
+				let msg = __time_humanize(self.elapsed())
+				print(f"Elapsed: {msg}")
 
 # ============================================================
 # Convenience Functions
 # ============================================================
 
 pub def create_duration(seconds: float) -> Duration:
-    """Create a Duration from seconds."""
-    let d = Duration()
-    d.seconds = seconds
-    return d
+	"""Create a Duration from seconds."""
+	let d = Duration()
+	d.seconds := seconds
+	return d
 
+pub def stopwatch() -> Stopwatch:
+	"""Create a new stopwatch (starts timing immediately)."""
+	let sw = Stopwatch()
+	unsafe:
+		sw.start_time := __time_monotonic()
+	sw.silent_mode := false
+	return sw
+
+pub def stopwatch_silent() -> Stopwatch:
+	"""Create a silent stopwatch that won't print on close."""
+	let sw = Stopwatch()
+	unsafe:
+		sw.start_time := __time_monotonic()
+	sw.silent_mode := true
+	return sw
