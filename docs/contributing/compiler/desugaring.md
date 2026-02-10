@@ -45,6 +45,44 @@ Desugaring has **zero runtime overhead** - the generated code is identical to ha
 
 Compile-time cost is O(n) where n = number of AST nodes, achieved by doing all transformations in a single AST walk.
 
+### Safe Extern → Raw Extern + Wrapper
+
+**Location**: `compiler/internal/desugar/safe_extern.go`
+
+`@extern("C", safe=true, ...)` declarations are desugared into a hidden raw extern and a public safe wrapper, keeping `unsafe` confined to the generated code.
+
+```desi
+# Input (no out params):
+@extern("C", safe=true, c_name="abs")
+pub def safe_abs(x: int) -> int
+
+# Output:
+@extern("C")
+def abs(x: int) -> int
+
+pub def safe_abs(x: int) -> int:
+    unsafe:
+        return abs(x)
+```
+
+With `out` params, the wrapper wraps designated params with `&` and the raw extern receives `cptr[T]`:
+
+```desi
+# Input (with out params):
+@extern("C", safe=true, c_name="modf", out=["iptr"])
+pub def safe_modf(x: float, iptr: float) -> float
+
+# Output:
+@extern("C")
+def modf(x: float, iptr: cptr[float]) -> float
+
+pub def safe_modf(x: float, iptr: float) -> float:
+    unsafe:
+        return modf(x, &iptr)
+```
+
+**Diagnostics**: `DFI0006` is emitted when an `out` param name doesn't match any function parameter.
+
 ## Adding New Desugars
 
 To maintain O(n) complexity:
@@ -130,3 +168,4 @@ Potential candidates for desugaring:
 - `flatmap(f, xs)` → nested comprehension
 - `zip(xs, ys)` → already handled specially in type-checker, could desugar
 - Pattern matching in assignments → explicit match expressions
+

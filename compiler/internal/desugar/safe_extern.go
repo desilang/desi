@@ -6,24 +6,36 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 )
 
-// ExpandSafeExterns transforms @extern("C", safe=true, c_name="...") declarations
+// ExpandSafeExterns transforms @extern("C", safe=true, c_name="...", out=["..."]) declarations
 // into a hidden raw extern and a public safe wrapper.
 //
-// Input:
+// Input (no out params):
 //
-//	@extern("C", safe=true, c_name="localtime_r")
-//	pub def localtime(timestamp: i64) -> TmStruct
+//	@extern("C", safe=true, c_name="abs")
+//	pub def safe_abs(x: int) -> int
 //
 // Output:
 //
 //	@extern("C")
-//	def __extern_localtime_r(__arg0: cptr[i64], __out: cptr[TmStruct]) -> cptr[TmStruct]
+//	def abs(x: int) -> int
 //
-//	pub def localtime(timestamp: i64) -> TmStruct:
+//	pub def safe_abs(x: int) -> int:
 //	    unsafe:
-//	        let __result: TmStruct = zeroed()
-//	        __extern_localtime_r(&timestamp, &__result)
-//	        return __result
+//	        return abs(x)
+//
+// Input (with out params):
+//
+//	@extern("C", safe=true, c_name="modf", out=["iptr"])
+//	pub def safe_modf(x: float, iptr: float) -> float
+//
+// Output:
+//
+//	@extern("C")
+//	def modf(x: float, iptr: cptr[float]) -> float
+//
+//	pub def safe_modf(x: float, iptr: float) -> float:
+//	    unsafe:
+//	        return modf(x, &iptr)
 func ExpandSafeExterns(mod *ast.Module) (*ast.Module, []diag.Diagnostic) {
 	var newDecls []ast.Decl
 	var diags []diag.Diagnostic
@@ -172,6 +184,12 @@ func generateSafeWrapper(fd *ast.FuncDecl, info *SafeExternInfo) (*ast.FuncDecl,
 	// Raw extern uses the actual C function name so linker resolves it
 	rawName := info.CName
 
+	// Build set of out param names for quick lookup
+	outSet := make(map[string]bool)
+	for _, name := range info.OutParams {
+		outSet[name] = true
+	}
+
 	// Create raw extern declaration
 	rawExtern := &ast.FuncDecl{
 		Name: ast.Ident{Name: rawName, Span: fd.Name.Span},
@@ -188,26 +206,47 @@ func generateSafeWrapper(fd *ast.FuncDecl, info *SafeExternInfo) (*ast.FuncDecl,
 		Span:    fd.Span,
 	}
 
-	// Copy params
+	// Copy params — wrap out params with cptr[T]
 	for _, p := range fd.Params {
-		rawExtern.Params = append(rawExtern.Params, p)
+		param := p
+		if outSet[p.Name.Name] && p.Type != nil {
+			param.Type = &ast.TypeName{
+				Name:   "cptr",
+				Params: []*ast.TypeName{p.Type},
+				Span:   p.Type.Span,
+			}
+		}
+		rawExtern.Params = append(rawExtern.Params, param)
 	}
 
 	// Create safe wrapper
-	wrapper := &ast.FuncDecl{
+	var wrapper *ast.FuncDecl
+
+	if len(info.OutParams) > 0 {
+		// Full wrapper: allocate zeroed result, pass &args, return result
+		wrapper = generateFullWrapper(fd, rawName, outSet)
+	} else {
+		// Simplified: just call the raw extern directly (no pointer wrapping needed)
+		wrapper = generateSimpleWrapper(fd, rawName)
+	}
+
+	return rawExtern, wrapper
+}
+
+// generateSimpleWrapper creates a wrapper that just calls the raw extern directly.
+// Used when there are no out params.
+func generateSimpleWrapper(fd *ast.FuncDecl, rawName string) *ast.FuncDecl {
+	return &ast.FuncDecl{
 		Name:    fd.Name,
 		Params:  fd.Params,
 		RetType: fd.RetType,
 		Pub:     fd.Pub,
 		Span:    fd.Span,
-		// Body will contain unsafe block with call to rawExtern
 		Body: &ast.Block{
 			Stmts: []ast.Stmt{
 				&ast.UnsafeBlock{
 					Body: &ast.Block{
 						Stmts: []ast.Stmt{
-							// Call raw extern and return
-							// Simplified: just call the raw extern directly
 							&ast.ReturnStmt{
 								Value: &ast.CallExpr{
 									Callee: &ast.Ident{Name: rawName, Span: fd.Name.Span},
@@ -225,8 +264,46 @@ func generateSafeWrapper(fd *ast.FuncDecl, info *SafeExternInfo) (*ast.FuncDecl,
 			Span: fd.Span,
 		},
 	}
+}
 
-	return rawExtern, wrapper
+// generateFullWrapper creates a wrapper that wraps out params with & in the call.
+// Generated code pattern:
+//
+//	pub def safe_modf(x: float, iptr: float) -> float:
+//	    unsafe:
+//	        return modf(x, &iptr)
+func generateFullWrapper(fd *ast.FuncDecl, rawName string, outSet map[string]bool) *ast.FuncDecl {
+	span := fd.Name.Span
+	callArgs := buildArgRefsWithAddressOf(fd.Params, outSet, span)
+
+	return &ast.FuncDecl{
+		Name:    fd.Name,
+		Params:  fd.Params,
+		RetType: fd.RetType,
+		Pub:     fd.Pub,
+		Span:    fd.Span,
+		Body: &ast.Block{
+			Stmts: []ast.Stmt{
+				&ast.UnsafeBlock{
+					Body: &ast.Block{
+						Stmts: []ast.Stmt{
+							&ast.ReturnStmt{
+								Value: &ast.CallExpr{
+									Callee: &ast.Ident{Name: rawName, Span: span},
+									Args:   callArgs,
+									Span:   fd.Span,
+								},
+								Span: fd.Span,
+							},
+						},
+						Span: fd.Span,
+					},
+					Span: fd.Span,
+				},
+			},
+			Span: fd.Span,
+		},
+	}
 }
 
 // buildArgRefs creates identifier references for each parameter.
@@ -234,6 +311,23 @@ func buildArgRefs(params []ast.Param) []ast.Expr {
 	var args []ast.Expr
 	for _, p := range params {
 		args = append(args, &ast.Ident{Name: p.Name.Name, Span: p.Name.Span})
+	}
+	return args
+}
+
+// buildArgRefsWithAddressOf creates argument expressions, wrapping out params with &.
+func buildArgRefsWithAddressOf(params []ast.Param, outSet map[string]bool, span diag.Span) []ast.Expr {
+	var args []ast.Expr
+	for _, p := range params {
+		ref := ast.Expr(&ast.Ident{Name: p.Name.Name, Span: p.Name.Span})
+		if outSet[p.Name.Name] {
+			ref = &ast.UnaryExpr{
+				Op:   "&",
+				X:    ref,
+				Span: span,
+			}
+		}
+		args = append(args, ref)
 	}
 	return args
 }

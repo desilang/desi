@@ -1,0 +1,20 @@
+# Safe Extern Out Parameter Test
+# Tests @extern(safe=true) with out=["param"] generating &param wrapper
+# Uses a simple C function that writes to an out-parameter pointer
+
+# modf splits a float into integer and fractional parts
+# C signature: double modf(double x, double *iptr)
+# The integer part is written to *iptr (out param), fractional part is returned
+@extern("C", safe=true, c_name="modf", out=["iptr"])
+pub def safe_modf(x: float, iptr: float) -> float
+
+def main() -> int:
+	# modf(3.75) should return 0.75 (fractional) and set iptr to 3.0 (integer)
+	let frac = safe_modf(3.75, 0.0)
+	print("modf(3.75) fractional:", frac)
+	print("Safe extern out param test passed!")
+	return 0
+
+# EXPECTED_OUTPUT:
+# modf(3.75) fractional: 0.75
+# Safe extern out param test passed!
