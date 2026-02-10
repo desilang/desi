@@ -122,6 +122,7 @@ nav:
     - Logging: stdlib/log.md
     - Sync: stdlib/sync.md
     - System: stdlib/sys.md
+    - Time: stdlib/time.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md
     - Mutex: concurrency/mutex.md
