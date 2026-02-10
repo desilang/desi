@@ -1,0 +1,48 @@
+# EXPECTED: COMPILE_ERROR
+# Hot Reload State Preservation Test
+#
+# Tests that write_state()/read_state() preserve state across reloads.
+#
+# HOW TO TEST:
+# 1. Run: desic watch --run .
+# 2. First run: "First run - saving state"
+# 3. Edit this file (add a comment) -> "Reloaded! State: hello"
+# 4. Press Ctrl+C to stop
+
+from time import sleep
+
+def restore_state(json: str):
+	print("Reloaded! State restored:", json)
+	# Write updated state for next reload
+	write_state("reloaded")
+
+def no_state():
+	print("Reloaded but no state found")
+	write_state("hello")
+
+def handle_reload():
+	let state = read_state()
+	match state:
+		Some(json): restore_state(json)
+		Nothing: no_state()
+
+def handle_first_run():
+	print("First run - saving initial state")
+	write_state("hello")
+
+def main() -> int:
+	if is_reload():
+		handle_reload()
+	else:
+		handle_first_run()
+
+	print("Reload count:", reload_count())
+
+	let mut i = 0
+	while i < 3:
+		print("Running... tick", i)
+		sleep(1.0)
+		i := i + 1
+
+	print("Done!")
+	0
