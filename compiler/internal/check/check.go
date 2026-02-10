@@ -62,7 +62,8 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 
 	// Desugar passes (before type checking)
 	desugarMapFilter(mod)
-	desugar.ExpandSafeExterns(mod) // Transform @extern(safe=true) into raw extern + wrapper
+	mod, safeExternDiags := desugar.ExpandSafeExterns(mod) // Transform @extern(safe=true) into raw extern + wrapper
+	res.Diags = append(res.Diags, safeExternDiags...)
 
 	// Phase-2: build exact signatures for 'from … import …' into Info.Funcs.
 	PopulateImportedFuncSigs(mod, res.Info, rinfo)

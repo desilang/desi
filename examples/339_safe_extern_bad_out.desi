@@ -1,0 +1,8 @@
+# EXPECTED: COMPILE_ERROR
+# Tests that invalid out= params in @extern(safe=true) are caught with DFI0006
+
+@extern("C", safe=true, c_name="abs", out=["nonexistent"])
+pub def bad_safe_abs(x: i32) -> i32
+
+def main() -> int:
+    0
