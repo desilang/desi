@@ -168,78 +168,251 @@ func initCmd(argv []string) int {
 // --------------------- run/build/test ---------------------
 
 func runCmd(argv []string) int {
-	m, mp, ok := loadManifestOrFail("run")
-	if !ok {
+	// desic run <file.desi> [-- args...]
+	// OR: desic run (uses desi.mod entry)
+	//
+	// Builds to a temp dir, runs the executable, then cleans up.
+
+	var file string
+	var progArgs []string
+	optLevel := ""
+
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		if a == "--" {
+			progArgs = argv[i+1:]
+			break
+		}
+		switch {
+		case strings.HasPrefix(a, "-O"):
+			optLevel = a
+		case strings.HasPrefix(a, "-"):
+			// skip render flags etc.
+		default:
+			if file == "" {
+				file = a
+			}
+		}
+	}
+
+	// If no file given, try desi.mod
+	if file == "" {
+		m, _, ok := loadManifestOrFail("run")
+		if !ok {
+			return 2
+		}
+		file = m.EntryPath()
+	}
+
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		term.Eprintln("run: file not found:", file)
 		return 2
 	}
-	entry := m.EntryPath()
-	iroots := pickIRoots(argv, m)
 
-	exe, _ := os.Executable()
-	args := []string{"check"}
-	args = append(args, forwardRenderFlags(argv)...)
-	if iroots != "" {
-		args = append(args, "-I", iroots)
+	// Build to temp dir
+	tmpDir, err := os.MkdirTemp("", "desi-run-*")
+	if err != nil {
+		term.Eprintln("run: failed to create temp dir:", err)
+		return 2
 	}
-	args = append(args, entry)
+	defer os.RemoveAll(tmpDir)
 
-	cmd := exec.Command(exe, args...)
+	basename := strings.TrimSuffix(filepath.Base(file), ".desi")
+	exePath := filepath.Join(tmpDir, basename)
+
+	code := buildFile(file, exePath, optLevel, argv, false)
+	if code != 0 {
+		return code
+	}
+
+	// Run the executable
+	cmd := exec.Command(exePath, progArgs...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Dir = filepath.Dir(mp)
+	cmd.Stdin = os.Stdin
 	if err := cmd.Run(); err != nil {
 		return exitCode(err)
 	}
-	// Success: child printed any messages; we stay quiet.
 	return 0
 }
 
 func buildCmd(argv []string) int {
-	m, mp, ok := loadManifestOrFail("build")
-	if !ok {
+	// desic build <file.desi> [-o name] [-O2]
+	// OR: desic build (uses desi.mod entry)
+	//
+	// Produces a native executable via: emit-ir → llc → clang.
+
+	var file string
+	var outputName string
+	optLevel := ""
+
+	for i := 0; i < len(argv); i++ {
+		a := argv[i]
+		switch {
+		case a == "-o" || a == "--output":
+			if i+1 >= len(argv) {
+				term.Eprintln("build: missing value for", a)
+				return 2
+			}
+			outputName = argv[i+1]
+			i++
+		case strings.HasPrefix(a, "-O"):
+			optLevel = a
+		case strings.HasPrefix(a, "-"):
+			// skip render flags etc.
+		default:
+			if file == "" {
+				file = a
+			}
+		}
+	}
+
+	// If no file given, try desi.mod
+	if file == "" {
+		m, mp, ok := loadManifestOrFail("build")
+		if !ok {
+			return 2
+		}
+		file = m.EntryPath()
+		if outputName == "" {
+			outputName = safePkgName(m.Package.Name)
+		}
+		_ = mp
+	}
+
+	if _, err := os.Stat(file); os.IsNotExist(err) {
+		term.Eprintln("build: file not found:", file)
 		return 2
 	}
-	entry := m.EntryPath()
-	outDir := m.OutDir()
-	if outDir == "" {
-		outDir = filepath.Join(filepath.Dir(mp), "build")
+
+	// Default output name from file basename
+	if outputName == "" {
+		outputName = strings.TrimSuffix(filepath.Base(file), ".desi")
 	}
+
+	// Ensure build/output directory exists
+	outDir := filepath.Join("build", "output")
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		term.Eprintln("build:", err)
 		return 2
 	}
 
-	// Call self: desic emit-ir ENTRY  (do NOT pass -I; emit-ir doesn’t accept it)
-	exe, _ := os.Executable()
-	args := []string{"emit-ir"}
-	args = append(args, forwardRenderFlags(argv)...)
-	args = append(args, entry)
+	exePath := filepath.Join(outDir, outputName)
+	code := buildFile(file, exePath, optLevel, argv, true)
+	if code != 0 {
+		return code
+	}
 
-	var buf bytes.Buffer
-	cmd := exec.Command(exe, args...)
-	cmd.Stdout = &buf
-	cmd.Stderr = os.Stderr
-	cmd.Dir = filepath.Dir(mp)
-	if err := cmd.Run(); err != nil {
+	term.Println("✓ Built executable:", exePath)
+	return 0
+}
+
+// buildFile does the full compile pipeline: emit-ir → llc → clang → executable.
+// Returns exit code (0 = success).
+func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int {
+	exe, _ := os.Executable()
+
+	// Step 1: Emit LLVM IR
+	if verbose {
+		term.Println("==> Compiling Desi to LLVM IR...")
+	}
+	emitArgs := []string{"emit-ir"}
+	emitArgs = append(emitArgs, forwardRenderFlags(argv)...)
+	emitArgs = append(emitArgs, file)
+
+	var irBuf bytes.Buffer
+	emitCmd := exec.Command(exe, emitArgs...)
+	emitCmd.Stdout = &irBuf
+	emitCmd.Stderr = os.Stderr
+	if err := emitCmd.Run(); err != nil {
 		return exitCode(err)
 	}
 
-	out := filepath.Join(outDir, safePkgName(m.Package.Name)+".ll")
-	if err := os.WriteFile(out, buf.Bytes(), 0o644); err != nil {
-		term.Eprintln("build:", err)
+	// Create temp dir for intermediate files
+	tmpDir, err := os.MkdirTemp("", "desi-build-*")
+	if err != nil {
+		term.Eprintln("build: failed to create temp dir:", err)
 		return 2
 	}
-	term.Println("wrote", out)
+	defer os.RemoveAll(tmpDir)
 
-	// Optional: verify with llvm-as if requested and available
-	if hasFlag(argv, "--verify-llvm") {
-		if err := verifyWithLLVMAs(buf.Bytes(), filepath.Dir(mp)); err != nil {
-			term.Eprintln("verify-llvm:", err.Error())
-			return 2
-		}
+	// Write IR to temp file
+	irPath := filepath.Join(tmpDir, "program.ll")
+	if err := os.WriteFile(irPath, irBuf.Bytes(), 0o644); err != nil {
+		term.Eprintln("build: failed to write IR:", err)
+		return 2
+	}
+
+	// Step 2: Compile IR to object file using llc
+	if verbose {
+		term.Println("==> Compiling LLVM IR to object file...")
+	}
+	objPath := filepath.Join(tmpDir, "program.o")
+	llcArgs := []string{"-filetype=obj", "-o", objPath}
+	if optLevel != "" {
+		llcArgs = append(llcArgs, optLevel)
+	}
+	llcArgs = append(llcArgs, irPath)
+	llcCmd := exec.Command("llc", llcArgs...)
+	llcCmd.Stderr = os.Stderr
+	if err := llcCmd.Run(); err != nil {
+		term.Eprintln("build: llc compilation failed:", err)
+		term.Eprintln("  Make sure LLVM is installed (brew install llvm)")
+		return exitCode(err)
+	}
+
+	// Step 3: Link to executable
+	if verbose {
+		term.Println("==> Linking executable...")
+	}
+	runtimeLib := findRuntimeLib()
+	clangArgs := []string{objPath, "-o", exePath}
+	if runtimeLib != "" {
+		clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
+	}
+	// Dead code elimination
+	if runtime.GOOS == "darwin" {
+		clangArgs = append(clangArgs, "-Wl,-dead_strip")
+	} else {
+		clangArgs = append(clangArgs, "-Wl,--gc-sections")
+	}
+	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd.Stderr = os.Stderr
+	if err := clangCmd.Run(); err != nil {
+		term.Eprintln("build: linking failed:", err)
+		return exitCode(err)
 	}
 
 	return 0
+}
+
+// findRuntimeLib locates libdesi.a by searching common paths.
+func findRuntimeLib() string {
+	candidates := []string{}
+
+	// Relative to executable
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		candidates = append(candidates,
+			filepath.Join(exeDir, "..", "build", "libdesi.a"),
+			filepath.Join(exeDir, "..", "lib", "libdesi.a"),
+		)
+	}
+
+	// Relative to working directory
+	if cwd, err := os.Getwd(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(cwd, "build", "libdesi.a"),
+			filepath.Join(cwd, "lib", "libdesi.a"),
+		)
+	}
+
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
 }
 
 func testCmd(argv []string) int {
