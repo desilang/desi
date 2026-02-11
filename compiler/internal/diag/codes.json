@@ -588,6 +588,11 @@
       "id": "DFI0005",
       "title": "@ffi_struct cannot be generic",
       "help": "C-compatible structs cannot have type parameters. Remove the generic parameters."
+    },
+    "safe_extern_bad_out_param": {
+      "id": "DFI0006",
+      "title": "out parameter not found in function signature",
+      "help": "Each name in out=[...] must match a parameter of the safe extern function. Check spelling or remove the invalid entry."
     }
   },
   "numeric": {

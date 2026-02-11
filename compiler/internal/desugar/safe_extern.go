@@ -3,6 +3,7 @@ package desugar
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/diag"
 )
 
 // ExpandSafeExterns transforms @extern("C", safe=true, c_name="...") declarations
@@ -23,8 +24,9 @@ import (
 //	        let __result: TmStruct = zeroed()
 //	        __extern_localtime_r(&timestamp, &__result)
 //	        return __result
-func ExpandSafeExterns(mod *ast.Module) *ast.Module {
+func ExpandSafeExterns(mod *ast.Module) (*ast.Module, []diag.Diagnostic) {
 	var newDecls []ast.Decl
+	var diags []diag.Diagnostic
 
 	for _, decl := range mod.Decls {
 		fd, ok := decl.(*ast.FuncDecl)
@@ -42,8 +44,13 @@ func ExpandSafeExterns(mod *ast.Module) *ast.Module {
 
 		// Validate out params exist in function signature
 		if err := validateOutParams(fd, safeInfo); err != nil {
-			// For now, keep original decl and let type checker catch it later
-			// A proper implementation would collect errors and return them
+			outErr := err.(*OutParamError)
+			diags = append(diags, diag.Diagnostic{
+				CodeID:  "DFI0006",
+				Domain:  "type",
+				Message: "out parameter '" + outErr.ParamName + "' not found in function '" + outErr.FuncName + "'",
+				Primary: diag.Label{Span: fd.Span, Primary: true},
+			})
 			newDecls = append(newDecls, decl)
 			continue
 		}
@@ -54,7 +61,7 @@ func ExpandSafeExterns(mod *ast.Module) *ast.Module {
 	}
 
 	mod.Decls = newDecls
-	return mod
+	return mod, diags
 }
 
 // validateOutParams checks that all names in out=[] exist in the function parameters.
