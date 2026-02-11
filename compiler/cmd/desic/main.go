@@ -18,6 +18,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/token"
+	"github.com/desilang/desi/compiler/internal/version"
 	"github.com/desilang/desi/compiler/lib"
 )
 
@@ -44,8 +45,6 @@ var parserCodeMap = map[string]string{
 	"DPE1001": "parser.async_before_def",
 	"DPE1002": "parser.async_before_let",
 }
-
-const Version = "0.1.0-dev"
 
 func main() {
 	// --- Pre-scan render flags so 'check' subcommand also honors them ---
@@ -179,7 +178,7 @@ func main() {
 
 	// Commands
 	if *flagVersion {
-		term.Println("desic", Version)
+		term.Println("desic", version.Version)
 		exitCode = 0
 		goto END
 	}
