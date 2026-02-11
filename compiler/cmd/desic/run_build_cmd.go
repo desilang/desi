@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -416,8 +417,8 @@ func findRuntimeLib() string {
 }
 
 func testCmd(argv []string) int {
-	// Parse arguments: desic test [file.desi] [-v|--verbose]
-	var testFile string
+	// Parse arguments: desic test [file.desi | pattern] [-v|--verbose]
+	var testFiles []string
 	verbose := false
 
 	for _, a := range argv {
@@ -425,55 +426,114 @@ func testCmd(argv []string) int {
 		case a == "-v" || a == "--verbose":
 			verbose = true
 		case !strings.HasPrefix(a, "-"):
-			if testFile == "" {
-				testFile = a
-			}
+			testFiles = append(testFiles, a)
 		}
 	}
 
-	if testFile == "" {
-		term.Eprintln("test: no test file specified")
-		term.Eprintln("usage: desic test <file.desi> [-v|--verbose]")
-		return 2
+	// If no files specified, auto-discover *_test.desi files
+	if len(testFiles) == 0 {
+		cwd, _ := os.Getwd()
+		discovered := discoverTestFiles(cwd)
+		if len(discovered) == 0 {
+			term.Eprintln("test: no test files found")
+			term.Eprintln("  Place *_test.desi files in the current directory or tests/ subdirectory,")
+			term.Eprintln("  or pass a file directly: desic test <file.desi>")
+			return 2
+		}
+		testFiles = discovered
 	}
 
-	// Check file exists
-	if _, err := os.Stat(testFile); os.IsNotExist(err) {
-		term.Eprintln("test: file not found:", testFile)
-		return 2
+	// Run each test file
+	passed := 0
+	failed := 0
+	var failures []string
+
+	for _, testFile := range testFiles {
+		if _, err := os.Stat(testFile); os.IsNotExist(err) {
+			term.Eprintln("test: file not found:", testFile)
+			failed++
+			failures = append(failures, testFile)
+			continue
+		}
+
+		baseName := filepath.Base(testFile)
+		if verbose {
+			term.Println("==>", baseName)
+		}
+
+		rc := runSingleTest(testFile, verbose)
+		if rc == 0 {
+			passed++
+			if !verbose {
+				term.Println("  ✓", baseName)
+			}
+		} else {
+			failed++
+			failures = append(failures, testFile)
+			term.Eprintln("  ✗", baseName)
+		}
 	}
 
-	if verbose {
-		term.Println("==> Type-checking", testFile, "...")
+	// Summary
+	term.Println("")
+	if failed == 0 {
+		term.Println(fmt.Sprintf("✓ %d test(s) passed!", passed))
+		return 0
 	}
+	term.Eprintln(fmt.Sprintf("✗ %d passed, %d failed", passed, failed))
+	for _, f := range failures {
+		term.Eprintln("  FAIL:", f)
+	}
+	return 1
+}
 
-	// Type-check the file
+// discoverTestFiles finds *_test.desi files in dir and dir/tests/.
+func discoverTestFiles(dir string) []string {
+	var files []string
+	searchDirs := []string{dir, filepath.Join(dir, "tests")}
+	for _, d := range searchDirs {
+		entries, err := os.ReadDir(d)
+		if err != nil {
+			continue
+		}
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), "_test.desi") {
+				files = append(files, filepath.Join(d, e.Name()))
+			}
+		}
+	}
+	return files
+}
+
+// runSingleTest compiles and runs a single test file. Returns 0 on success.
+func runSingleTest(testFile string, verbose bool) int {
 	exe, _ := os.Executable()
-	checkArgs := []string{"check", testFile}
-	checkCmd := exec.Command(exe, checkArgs...)
-	checkCmd.Stdout = nil
+
+	// Type-check
+	if verbose {
+		term.Println("    type-checking...")
+	}
+	checkCmd := exec.Command(exe, "check", testFile)
 	checkCmd.Stderr = os.Stderr
 	if err := checkCmd.Run(); err != nil {
-		term.Eprintln("test: type check failed")
+		term.Eprintln("test: type check failed for", testFile)
 		return exitCode(err)
 	}
 
+	// Emit IR
 	if verbose {
-		term.Println("==> Generating LLVM IR...")
+		term.Println("    emitting IR...")
 	}
-
-	// Emit IR for the test file
-	emitArgs := []string{"emit-ir", testFile}
 	var irBuf bytes.Buffer
-	emitCmd := exec.Command(exe, emitArgs...)
+	emitCmd := exec.Command(exe, "emit-ir", testFile)
 	emitCmd.Stdout = &irBuf
 	emitCmd.Stderr = os.Stderr
 	if err := emitCmd.Run(); err != nil {
-		term.Eprintln("test: emit-ir failed")
+		term.Eprintln("test: emit-ir failed for", testFile)
 		return exitCode(err)
 	}
 
-	// Create temp directory for build artifacts
+	// Temp dir for artifacts
 	tmpDir, err := os.MkdirTemp("", "desi-test-*")
 	if err != nil {
 		term.Eprintln("test: failed to create temp dir:", err)
@@ -481,75 +541,62 @@ func testCmd(argv []string) int {
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Write IR to temp file
 	irPath := filepath.Join(tmpDir, "test.ll")
 	if err := os.WriteFile(irPath, irBuf.Bytes(), 0o644); err != nil {
 		term.Eprintln("test: failed to write IR:", err)
 		return 2
 	}
 
+	// llc → object file
 	if verbose {
-		term.Println("==> Compiling to object file...")
+		term.Println("    compiling...")
 	}
-
-	// Compile IR to object file using llc
 	objPath := filepath.Join(tmpDir, "test.o")
 	llcCmd := exec.Command("llc", "-filetype=obj", "-o", objPath, irPath)
 	llcCmd.Stderr = os.Stderr
 	if err := llcCmd.Run(); err != nil {
-		term.Eprintln("test: llc compilation failed:", err)
-		term.Eprintln("  Make sure LLVM is installed (brew install llvm)")
+		term.Eprintln("test: llc compilation failed for", testFile)
 		return exitCode(err)
 	}
 
+	// Link with clang
 	if verbose {
-		term.Println("==> Linking executable...")
+		term.Println("    linking...")
 	}
-
-	// Find runtime library
-	compilerDir := filepath.Dir(exe)
-	runtimeLib := filepath.Join(compilerDir, "..", "runtime", "libdesi_runtime.a")
-	// Also check in compiler/runtime from working directory
-	if _, err := os.Stat(runtimeLib); os.IsNotExist(err) {
-		// Try relative to test file
-		testDir := filepath.Dir(testFile)
-		runtimeLib = filepath.Join(testDir, "..", "runtime", "libdesi_runtime.a")
-		if _, err := os.Stat(runtimeLib); os.IsNotExist(err) {
-			// Try from current directory
-			cwd, _ := os.Getwd()
-			runtimeLib = filepath.Join(cwd, "runtime", "libdesi_runtime.a")
-		}
-	}
-
-	// Link to executable
 	exePath := filepath.Join(tmpDir, "test_runner")
 	clangArgs := []string{"-o", exePath, objPath}
-	if _, err := os.Stat(runtimeLib); err == nil {
-		clangArgs = append(clangArgs, runtimeLib)
+
+	// Dead-code elimination
+	if runtime.GOOS == "darwin" {
+		clangArgs = append(clangArgs, "-Wl,-dead_strip")
+	} else if runtime.GOOS == "linux" {
+		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 	}
+
+	// Runtime library
+	if rtLib := findRuntimeLib(); rtLib != "" {
+		clangArgs = append(clangArgs, rtLib)
+		// If libdesi.a includes mpdec, we may need -lm
+		clangArgs = append(clangArgs, "-lm")
+	}
+
 	clangCmd := exec.Command("clang", clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
-		term.Eprintln("test: linking failed:", err)
+		term.Eprintln("test: linking failed for", testFile)
 		return exitCode(err)
 	}
 
+	// Run test
 	if verbose {
-		term.Println("==> Running tests...")
+		term.Println("    running...")
 	}
-
-	// Run the test executable
 	testRunner := exec.Command(exePath)
 	testRunner.Stdout = os.Stdout
 	testRunner.Stderr = os.Stderr
 	if err := testRunner.Run(); err != nil {
-		// Test failed (assertion failed)
-		term.Eprintln("")
-		term.Eprintln("✗ TEST FAILED")
 		return exitCode(err)
 	}
-
-	term.Println("✓ All tests passed!")
 	return 0
 }
 
