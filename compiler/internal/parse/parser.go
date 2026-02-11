@@ -7,6 +7,8 @@ import (
 	"github.com/desilang/desi/compiler/internal/token"
 )
 
+const maxErrors = 10 // stop collecting after this many errors
+
 type Parser struct {
 	sc    *lex.Scanner
 	file  string
@@ -14,6 +16,17 @@ type Parser struct {
 	peek  lex.Item
 	diags []diag.Diagnostic
 	ahead []lex.Item
+}
+
+// tooManyErrors returns true when we've hit the error limit.
+func (p *Parser) tooManyErrors() bool {
+	n := 0
+	for _, d := range p.diags {
+		if d.Domain != "warn" {
+			n++
+		}
+	}
+	return n >= maxErrors
 }
 
 func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
@@ -24,6 +37,9 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 
 	m := &ast.Module{File: filename, Span: spanPos(filename, p.cur)}
 	for p.cur.Tok != token.EOF {
+		if p.tooManyErrors() {
+			break
+		}
 		p.skipNLs()
 		if p.cur.Tok == token.EOF {
 			break
@@ -34,67 +50,89 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			// Decorators may precede class/struct/enum/function declarations.
 			decs := p.parseDecorators()
 			p.skipNLs()
+			var ok bool
 			switch {
 			case p.cur.Tok == token.KW_class || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_class):
 				if c := p.parseClassWithDecs(decs, false /*nested*/); c != nil {
 					m.Decls = append(m.Decls, c)
+					ok = true
 				}
 			case p.cur.Tok == token.KW_struct || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_struct):
 				if s := p.parseStructWithDecs(decs); s != nil {
 					m.Decls = append(m.Decls, s)
+					ok = true
 				}
 			case p.cur.Tok == token.KW_enum || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_enum):
 				if e := p.parseEnumWithDecs(decs); e != nil {
 					m.Decls = append(m.Decls, e)
+					ok = true
 				}
 			case p.cur.Tok == token.KW_trait || (p.cur.Tok == token.KW_pub && p.peek.Tok == token.KW_trait):
 				if t := p.parseTrait(decs); t != nil {
 					m.Decls = append(m.Decls, t)
+					ok = true
 				}
 			case p.cur.Tok == token.KW_impl:
 				if i := p.parseImpl(decs); i != nil {
 					m.Decls = append(m.Decls, i)
+					ok = true
 				}
 			default:
 				if f := p.parseFuncWithDecs(decs); f != nil {
 					m.Decls = append(m.Decls, f)
+					ok = true
 				}
+			}
+			if !ok {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_class:
 			if c := p.parseClassWithDecs(nil, false /*nested*/); c != nil {
 				m.Decls = append(m.Decls, c)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_struct:
 			if s := p.parseStructWithDecs(nil); s != nil {
 				m.Decls = append(m.Decls, s)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_enum:
 			if e := p.parseEnumWithDecs(nil); e != nil {
 				m.Decls = append(m.Decls, e)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_type:
 			if t := p.parseTypeAlias(false); t != nil {
 				m.Decls = append(m.Decls, t)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_trait:
 			if t := p.parseTrait(nil); t != nil {
 				m.Decls = append(m.Decls, t)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
 		case token.KW_impl:
 			if i := p.parseImpl(nil); i != nil {
 				m.Decls = append(m.Decls, i)
+			} else {
+				p.syncStmt()
 			}
 			continue
 
@@ -129,6 +167,8 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 			case token.KW_def, token.KW_async:
 				if f := p.parseFuncWithDecs(nil); f != nil {
 					m.Decls = append(m.Decls, f)
+				} else {
+					p.syncStmt()
 				}
 				continue
 			case token.KW_from:
@@ -188,6 +228,8 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		case token.KW_def, token.KW_async:
 			if f := p.parseFunc(); f != nil {
 				m.Decls = append(m.Decls, f)
+			} else {
+				p.syncStmt()
 			}
 			continue
 		}
