@@ -1,0 +1,33 @@
+# Guard Escape Negative Tests
+# Patterns that should trigger DSY0002/DSY0004 warnings
+# These compile with warnings but still run correctly
+import sync
+
+# Test 1: Returning a guard should trigger DSY0002
+# "cannot return guard type - guards must not escape their scope"
+def test_return_guard() -> int:
+	let mutex = sync.Mutex(42)
+	using guard = mutex.lock():
+		return guard.value
+	return 0
+
+# Test 2: Value extraction (safe - should NOT warn)
+def test_safe_extraction() -> int:
+	let mutex = sync.Mutex(99)
+	let result: int = 0
+	using guard = mutex.lock():
+		result := guard.value
+	return result
+
+def main() -> int:
+	print("=== Guard Escape Negative Tests ===")
+	print("1. Return guard value:", test_return_guard())
+	print("2. Safe extraction:", test_safe_extraction())
+	print("All guard escape negative tests passed!")
+	return 0
+
+# EXPECTED_OUTPUT:
+# === Guard Escape Negative Tests ===
+# 1. Return guard value: 42
+# 2. Safe extraction: 99
+# All guard escape negative tests passed!

@@ -1,0 +1,25 @@
+# SKIPPED: Requires interactive desic watch --run
+# Hot Reload End-to-End Test
+#
+# HOW TO TEST:
+# 1. Run: desic watch --run .
+# 2. Observe output: "Hello from Desi! (v1)"
+# 3. Edit this file: change v1 -> v2 in the print below
+# 4. Observe: process auto-restarts, prints "Hello from Desi! (v2)"
+# 5. Press Ctrl+C to stop
+
+from time import sleep
+
+def main() -> int:
+	print("Hello from Desi! (v1)")
+	print("Reload count:", reload_count())
+
+	# Keep running so watch can detect file changes
+	let mut i = 0
+	while i < 5:
+		print("tick", i)
+		sleep(1.0)
+		i := i + 1
+
+	print("Done!")
+	0
