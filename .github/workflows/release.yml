@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Build release binaries
+        run: |
+          set -e
+          VERSION="${GITHUB_REF_NAME}"
+          LDFLAGS="-s -w -X github.com/desilang/desi/compiler/internal/version.Version=${VERSION}"
+
+          # darwin arm64
+          mkdir -p dist/desi-${VERSION}-darwin-arm64
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desic   ./compiler/cmd/desic
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desifmt ./compiler/cmd/desifmt
+          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desilsp ./compiler/cmd/desilsp
+          tar czf dist/desi-${VERSION}-darwin-arm64.tar.gz -C dist desi-${VERSION}-darwin-arm64
+
+          # darwin amd64
+          mkdir -p dist/desi-${VERSION}-darwin-amd64
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desic   ./compiler/cmd/desic
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desifmt ./compiler/cmd/desifmt
+          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desilsp ./compiler/cmd/desilsp
+          tar czf dist/desi-${VERSION}-darwin-amd64.tar.gz -C dist desi-${VERSION}-darwin-amd64
+
+          # linux amd64
+          mkdir -p dist/desi-${VERSION}-linux-amd64
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desic   ./compiler/cmd/desic
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desifmt ./compiler/cmd/desifmt
+          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desilsp ./compiler/cmd/desilsp
+          tar czf dist/desi-${VERSION}-linux-amd64.tar.gz -C dist desi-${VERSION}-linux-amd64
+
+          # linux arm64
+          mkdir -p dist/desi-${VERSION}-linux-arm64
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desic   ./compiler/cmd/desic
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desifmt ./compiler/cmd/desifmt
+          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desilsp ./compiler/cmd/desilsp
+          tar czf dist/desi-${VERSION}-linux-arm64.tar.gz -C dist desi-${VERSION}-linux-arm64
+
+          # windows amd64
+          mkdir -p dist/desi-${VERSION}-windows-amd64
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desic.exe   ./compiler/cmd/desic
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desifmt.exe ./compiler/cmd/desifmt
+          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desilsp.exe ./compiler/cmd/desilsp
+          zip -rj dist/desi-${VERSION}-windows-amd64.zip dist/desi-${VERSION}-windows-amd64/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/*.zip

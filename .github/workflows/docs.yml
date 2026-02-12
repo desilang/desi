@@ -1,0 +1,67 @@
+name: Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'book/**'
+      - '.github/workflows/docs.yml'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to deploy (e.g., 0.1.0)'
+        required: true
+      alias:
+        description: 'Alias (stable, dev, etc.)'
+        required: false
+        default: 'stable'
+
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install mkdocs-material mike
+          pip install -e book/
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Manual deployment (workflow_dispatch)
+      - name: Deploy manual version
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          cd book
+          mike deploy --push --update-aliases ${{ inputs.version }} ${{ inputs.alias }}
+
+      # Dev deployment on push to main
+      - name: Deploy dev docs
+        if: github.event_name == 'push'
+        run: |
+          cd book
+          mike deploy --push dev
+
+      # Release deployment
+      - name: Deploy release docs
+        if: github.event_name == 'release'
+        run: |
+          cd book
+          VERSION=${GITHUB_REF#refs/tags/v}
+          mike deploy --push --update-aliases $VERSION stable
+          mike set-default --push stable
