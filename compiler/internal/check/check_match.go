@@ -396,7 +396,26 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 	}
 
 	// Exhaustiveness check
-	if et, ok := scrutineeType.(*types.Enum); ok {
+	// Extract enum type from scrutinee (handles direct, generic, and func-return cases)
+	var exhaustEnum *types.Enum
+	switch st := scrutineeType.(type) {
+	case *types.Enum:
+		exhaustEnum = st
+	case *types.Generic:
+		if e, ok := st.Base.(*types.Enum); ok {
+			exhaustEnum = e
+		}
+	case *types.Func:
+		if e, ok := st.Ret.(*types.Enum); ok {
+			exhaustEnum = e
+		} else if g, ok := st.Ret.(*types.Generic); ok {
+			if e, ok := g.Base.(*types.Enum); ok {
+				exhaustEnum = e
+			}
+		}
+	}
+
+	if exhaustEnum != nil {
 		covered := make(map[string]bool)
 		hasWildcard := false
 
@@ -422,7 +441,7 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 				variantName = sel.Name.Name
 			} else if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" {
 				// Unqualified unit: Empty (check if it's a variant name)
-				for _, v := range et.Variants {
+				for _, v := range exhaustEnum.Variants {
 					if v.Name == id.Name {
 						variantName = id.Name
 						break
@@ -437,7 +456,7 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 
 		if !hasWildcard {
 			var missing []string
-			for _, v := range et.Variants {
+			for _, v := range exhaustEnum.Variants {
 				if !covered[v.Name] {
 					missing = append(missing, v.Name)
 				}
