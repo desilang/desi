@@ -1,0 +1,46 @@
+# os module — operating system functions
+#
+# Provides getenv, getcwd, platform detection, and exit.
+#
+# Usage:
+#   import os
+#   let home = os.getenv("HOME")
+#   let cwd = os.getcwd()
+#   let p = os.platform()
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __os_getenv(key: str) -> str
+
+@extern("C")
+pub def __os_getcwd() -> str
+
+@extern("C")
+pub def __os_platform() -> str
+
+@extern("C")
+pub def __os_exit(code: int) -> none
+
+# --- Public API (thin wrappers) ---
+
+## Get an environment variable value. Returns empty string if not set.
+pub def getenv(key: str) -> str:
+	unsafe:
+		return __os_getenv(key)
+
+## Get the current working directory.
+pub def getcwd() -> str:
+	unsafe:
+		return __os_getcwd()
+
+## Get the platform name: "darwin", "linux", or "windows".
+pub def platform() -> str:
+	unsafe:
+		return __os_platform()
+
+## Exit the program with a status code.
+pub def exit(code: int) -> none:
+	unsafe:
+		__os_exit(code)
+
