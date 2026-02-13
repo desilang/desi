@@ -1,13 +1,22 @@
-# Test log functions
+# Test log module - all 5 severity levels
 import log
 
 def main() -> int:
-    log.info("Application started")
+    # All levels in order
     log.debug("Loading config...")
+    log.info("Application started")
     log.warn("Disk space low")
     log.error("Connection failed")
+    log.fatal("Unrecoverable error")
     log.info("Shutdown complete")
     0
 
-# NOTE: This test uses ANSI escape codes for colored log prefixes.
-# Visual verification required - run manually to see colors.
+# NOTE: Log output ordering may vary in automated test pipelines.
+# Run manually to verify: desic run examples/236_log_levels.desi
+# Expected (visual verification):
+#   [DEBUG] Loading config...
+#   [INFO] Application started
+#   [WARN] Disk space low
+#   [ERROR] Connection failed
+#   [FATAL] Unrecoverable error
+#   [INFO] Shutdown complete

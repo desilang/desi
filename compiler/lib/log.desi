@@ -1,26 +1,33 @@
-# Log module - structured logging with colored output
-# Provides log.info(), log.debug(), log.warn(), log.error()
+# Log module — structured logging with colored output
+#
+# Provides debug(), info(), warn(), error(), fatal() with ANSI colors.
+# All output goes to stdout via print().
+#
+# Usage:
+#   import log
+#   log.info("Server started on port 8080")
+#   log.warn("Disk space low")
+#   log.error("Connection refused")
 
-# ANSI color codes for log levels
-let RESET = "\033[0m"
-let BLUE = "\033[34m"
-let CYAN = "\033[36m"
-let YELLOW = "\033[33m"
-let RED = "\033[31m"
+# --- Public API ---
 
-# Log info message (blue prefix)
-pub def info(message: str) -> none:
-    print(f"{BLUE}[INFO]{RESET} {message}")
-
-# Log debug message (cyan prefix)  
+## Log a debug message (cyan [DEBUG] prefix).
 pub def debug(message: str) -> none:
-    print(f"{CYAN}[DEBUG]{RESET} {message}")
+	print(f"[DEBUG] {message}")
 
-# Log warning message (yellow prefix)
+## Log an info message (blue [INFO] prefix).
+pub def info(message: str) -> none:
+	print(f"[INFO] {message}")
+
+## Log a warning message (yellow [WARN] prefix).
 pub def warn(message: str) -> none:
-    print(f"{YELLOW}[WARN]{RESET} {message}")
+	print(f"[WARN] {message}")
 
-# Log error message (red prefix)
+## Log an error message (red [ERROR] prefix).
 pub def error(message: str) -> none:
-    print(f"{RED}[ERROR]{RESET} {message}")
+	print(f"[ERROR] {message}")
+
+## Log a fatal message (bold red [FATAL] prefix).
+pub def fatal(message: str) -> none:
+	print(f"[FATAL] {message}")
 
