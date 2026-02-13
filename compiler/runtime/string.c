@@ -38,15 +38,38 @@ char* int_to_str(int value) {
     return result;
 }
 
-// Convert float to string (newly allocated)
+// Convert float to string (Python-style: trims trailing zeros, preserves .0)
+// 3.14    -> "3.14"
+// 3.10    -> "3.1"
+// 42.0    -> "42.0"  (not "42")
+// 100.0   -> "100.0" (not "100")
+// 1e15    -> "1e+15" (large numbers use scientific notation)
 char* float_to_str(double value) {
-    // Reasonable buffer for float
-    char* result = (char*)malloc(32);
+    char* result = (char*)malloc(64);
     if (!result) {
         fprintf(stderr, "float_to_str: allocation failed\n");
         exit(1);
     }
-    snprintf(result, 32, "%g", value);
+    // Use %.15g — matches Python's effective precision, avoids IEEE 754 noise
+    snprintf(result, 64, "%.15g", value);
+
+    // If the result has no decimal point and no 'e'/'E',
+    // it's a whole number — append ".0" to distinguish from int
+    if (!strchr(result, '.') && !strchr(result, 'e') && !strchr(result, 'E')
+        && !strchr(result, 'n') && !strchr(result, 'i')) {  // skip nan/inf
+        strcat(result, ".0");
+    }
+
+    // Trim unnecessary trailing zeros after decimal point, but keep at least one
+    char* dot = strchr(result, '.');
+    if (dot && !strchr(result, 'e') && !strchr(result, 'E')) {
+        char* end = result + strlen(result) - 1;
+        while (end > dot + 1 && *end == '0') {
+            *end = '\0';
+            end--;
+        }
+    }
+
     return result;
 }
 

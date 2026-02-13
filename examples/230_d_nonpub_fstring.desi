@@ -17,6 +17,6 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # Private int: 42
-# Private float: 3.140000
+# Private float: 3.14
 # Private str: private
 # Private bool: true

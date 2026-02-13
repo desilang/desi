@@ -20,6 +20,6 @@ def main() -> int:
 # Private int: 1
 # Pub int: 2
 # Hidden int: 3
-# Private float: 3.140000
+# Private float: 3.14
 # Pub str: hello
 # Hidden bool: true

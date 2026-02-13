@@ -16,6 +16,6 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # Int: 42
-# Float: 3.141590
+# Float: 3.14159
 # Bool: true
 # String: Hello Globals

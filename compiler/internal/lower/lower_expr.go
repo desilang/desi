@@ -118,6 +118,12 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
 						val = res
 					}
+					// Handle float conversion for default display (no explicit spec)
+					if types.Equal(typ, types.Float) && p.Spec == "" {
+						res := ls.b.FreshTemp("float_str")
+						ls.b.Emit(&hir.Call{Dst: res, Fn: "float_to_str", Args: []hir.Value{val}, Type: "ptr"})
+						val = res
+					}
 				}
 				fmtSpec := ls.specToPrintf(p.Spec, p.X)
 				fmtBuilder.WriteString(fmtSpec)
@@ -140,7 +146,11 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					} else if types.Equal(typ, types.Str) {
 						fmtBuilder.WriteString("%s")
 					} else if types.Equal(typ, types.Float) {
-						fmtBuilder.WriteString("%f")
+						fmtBuilder.WriteString("%s")
+						// Convert float to string using runtime helper (trims trailing zeros)
+						res := ls.b.FreshTemp("float_str")
+						ls.b.Emit(&hir.Call{Dst: res, Fn: "float_to_str", Args: []hir.Value{val}, Type: "ptr"})
+						val = res
 					} else if types.Equal(typ, types.Bool) {
 						fmtBuilder.WriteString("%s")
 						// Convert bool to string pointer using runtime helper
@@ -2401,7 +2411,7 @@ func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
 			} else if types.Equal(typ, types.Str) {
 				return "%s"
 			} else if types.Equal(typ, types.Float) {
-				return "%f"
+				return "%s"
 			} else if types.Equal(typ, types.Bool) {
 				return "%s"
 			}

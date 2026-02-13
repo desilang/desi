@@ -28,8 +28,8 @@ pub def main():
     # print(Math.SECRET)
 
 # EXPECTED_OUTPUT:
-# PI: 3.141590
-# E: 2.718280
-# Area of radius 2: 12.566360
-# Circle.PI: 3.141590
+# PI: 3.14159
+# E: 2.71828
+# Area of radius 2: 12.56636
+# Circle.PI: 3.14159
 # Secret: 42
