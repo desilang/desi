@@ -58,6 +58,13 @@ func mangleDesiName(name string) string {
 		"strtod": true, "rand": true, "srand": true, "abort": true,
 		"atexit": true, "getenv": true, "system": true, "bsearch": true,
 		"qsort": true, "div": true, "ldiv": true, "labs": true,
+		"exit": true, "malloc": true, "free": true, "calloc": true,
+		"realloc": true,
+		// unistd.h (POSIX)
+		"getcwd": true, "chdir": true, "access": true, "read": true,
+		"write": true, "close": true, "sleep": true, "usleep": true,
+		"fork": true, "execve": true, "pipe": true, "dup": true,
+		"dup2": true, "isatty": true,
 		// string.h
 		"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
 		"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,

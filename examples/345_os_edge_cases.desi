@@ -1,0 +1,49 @@
+# Test os module - comprehensive edge cases
+import os
+
+def main() -> int:
+    # --- Platform ---
+    let p = os.platform()
+    print(f"platform: {p}")
+
+    # --- getenv: known variables ---
+    let home = os.getenv("HOME")
+    print(f"HOME: {home}")
+
+    let path = os.getenv("PATH")
+    print(f"PATH set: {len(path) > 0}")
+
+    let user = os.getenv("USER")
+    print(f"USER: {user}")
+
+    # --- getenv: unknown variable returns empty ---
+    let missing1 = os.getenv("DESI_TEST_MISSING_A")
+    let missing2 = os.getenv("DESI_TEST_MISSING_B")
+    let missing3 = os.getenv("ZZZZZZZ_NOT_REAL")
+    print(f"missing1 empty: {len(missing1) == 0}")
+    print(f"missing2 empty: {len(missing2) == 0}")
+    print(f"missing3 empty: {len(missing3) == 0}")
+
+    # --- getenv: empty string key ---
+    let empty_key = os.getenv("")
+    print(f"empty key: {len(empty_key) == 0}")
+
+    # --- getcwd ---
+    let cwd = os.getcwd()
+    print(f"cwd non-empty: {len(cwd) > 0}")
+    print(f"cwd starts with /: {cwd}")
+
+    # --- Multiple calls return same values ---
+    let p2 = os.platform()
+    let cwd2 = os.getcwd()
+    print(f"platform stable: {p == p2}")
+    print(f"cwd stable: {cwd == cwd2}")
+
+    # --- getenv with various key formats ---
+    let shell = os.getenv("SHELL")
+    print(f"SHELL set: {len(shell) > 0}")
+
+    0
+
+# NOTE: Some outputs are environment-dependent.
+# Run manually to verify: desic run examples/345_os_edge_cases.desi

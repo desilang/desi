@@ -1,0 +1,32 @@
+# Test os module - platform, getenv, getcwd
+import os
+
+def main() -> int:
+    # Platform detection
+    let p = os.platform()
+    print(p)
+
+    # Get current working directory
+    let cwd = os.getcwd()
+    print(len(cwd) > 0)
+
+    # Get environment variable (known)
+    let home = os.getenv("HOME")
+    print(len(home) > 0)
+
+    # Get environment variable (unknown - returns empty string)
+    let bogus = os.getenv("DESI_NONEXISTENT_VAR_XYZ")
+    print(len(bogus) == 0)
+
+    # Platform is a known value
+    let valid = p == "darwin" or p == "linux" or p == "windows"
+    print(valid)
+
+    0
+
+# EXPECTED_OUTPUT:
+# darwin
+# true
+# true
+# true
+# true
