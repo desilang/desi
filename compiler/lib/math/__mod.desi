@@ -1,8 +1,14 @@
-# Math module - mathematical functions
-# Uses hybrid C+Desi architecture
+# Math module - comprehensive mathematical functions
+# Uses safe extern wrappers over libc math.h
+#
+# Usage:
+#   import math
+#   let r = math.sqrt(2.0)
+#   let angle = math.atan2(1.0, 1.0)
+#   let n = math.randint(1, 100)
 
 # ============================================================
-# Pure Desi Functions
+# Pure Desi Functions (legacy, kept for compatibility)
 # ============================================================
 
 pub def add(x: int, y: int) -> int:
@@ -12,20 +18,364 @@ pub def sub(x: int, y: int) -> int:
     return x - y
 
 # ============================================================
-# C Runtime Bindings for Float Special Values
+# C Runtime Bindings (private)
 # ============================================================
 
+# Constants
 @extern("C")
-pub def __math_is_nan(x: float) -> bool
-
-@extern("C") 
-pub def __math_is_inf(x: float) -> bool
+def __math_pi() -> float
 
 @extern("C")
-pub def __math_is_finite(x: float) -> bool
+def __math_e() -> float
+
+@extern("C")
+def __math_tau() -> float
+
+@extern("C")
+def __math_inf() -> float
+
+@extern("C")
+def __math_nan() -> float
+
+# Trigonometric
+@extern("C")
+def __math_sin(x: float) -> float
+
+@extern("C")
+def __math_cos(x: float) -> float
+
+@extern("C")
+def __math_tan(x: float) -> float
+
+@extern("C")
+def __math_asin(x: float) -> float
+
+@extern("C")
+def __math_acos(x: float) -> float
+
+@extern("C")
+def __math_atan(x: float) -> float
+
+@extern("C")
+def __math_atan2(y: float, x: float) -> float
+
+@extern("C")
+def __math_sinh(x: float) -> float
+
+@extern("C")
+def __math_cosh(x: float) -> float
+
+@extern("C")
+def __math_tanh(x: float) -> float
+
+# Power & Logarithmic
+@extern("C")
+def __math_sqrt(x: float) -> float
+
+@extern("C")
+def __math_cbrt(x: float) -> float
+
+@extern("C")
+def __math_pow(x: float, y: float) -> float
+
+@extern("C")
+def __math_exp(x: float) -> float
+
+@extern("C")
+def __math_log(x: float) -> float
+
+@extern("C")
+def __math_log2(x: float) -> float
+
+@extern("C")
+def __math_log10(x: float) -> float
+
+@extern("C")
+def __math_hypot(x: float, y: float) -> float
+
+# Rounding
+@extern("C")
+def __math_floor(x: float) -> float
+
+@extern("C")
+def __math_ceil(x: float) -> float
+
+@extern("C")
+def __math_round(x: float) -> float
+
+@extern("C")
+def __math_round_away(x: float) -> float
+
+@extern("C")
+def __math_round_to(x: float, places: int) -> float
+
+@extern("C")
+def __math_trunc(x: float) -> float
+
+@extern("C")
+def __math_fmod(x: float, y: float) -> float
+
+# Utility
+@extern("C")
+def __math_abs(x: float) -> float
+
+@extern("C")
+def __math_abs_int(x: int) -> int
+
+@extern("C")
+def __math_fmin(x: float, y: float) -> float
+
+@extern("C")
+def __math_fmax(x: float, y: float) -> float
+
+@extern("C")
+def __math_clamp(x: float, lo: float, hi: float) -> float
+
+@extern("C")
+def __math_clamp_int(x: int, lo: int, hi: int) -> int
+
+@extern("C")
+def __math_sign(x: float) -> float
+
+# Float checks (in builtins.c)
+@extern("C")
+def __math_is_nan(x: float) -> bool
+
+@extern("C")
+def __math_is_inf(x: float) -> bool
+
+@extern("C")
+def __math_is_finite(x: float) -> bool
+
+# Random
+@extern("C")
+def __math_random() -> float
+
+@extern("C")
+def __math_randint(lo: int, hi: int) -> int
+
+@extern("C")
+def __math_seed(n: int) -> none
+
+# Conversion
+@extern("C")
+def __math_radians(degrees: float) -> float
+
+@extern("C")
+def __math_degrees(radians: float) -> float
 
 # ============================================================
-# Public API - Float Special Value Checks
+# Public API - Constants
+# ============================================================
+
+# Pi (π ≈ 3.14159265358979)
+pub def PI() -> float:
+    unsafe:
+        return __math_pi()
+
+# Euler's number (e ≈ 2.71828182845905)
+pub def E() -> float:
+    unsafe:
+        return __math_e()
+
+# Tau (τ = 2π ≈ 6.28318530717959)
+pub def TAU() -> float:
+    unsafe:
+        return __math_tau()
+
+# Positive infinity
+pub def INF() -> float:
+    unsafe:
+        return __math_inf()
+
+# Not a Number
+pub def NAN() -> float:
+    unsafe:
+        return __math_nan()
+
+# ============================================================
+# Public API - Trigonometric Functions
+# ============================================================
+
+# Sine of x (radians)
+pub def sin(x: float) -> float:
+    unsafe:
+        return __math_sin(x)
+
+# Cosine of x (radians)
+pub def cos(x: float) -> float:
+    unsafe:
+        return __math_cos(x)
+
+# Tangent of x (radians)
+pub def tan(x: float) -> float:
+    unsafe:
+        return __math_tan(x)
+
+# Arcsine (inverse sine), returns radians
+pub def asin(x: float) -> float:
+    unsafe:
+        return __math_asin(x)
+
+# Arccosine (inverse cosine), returns radians
+pub def acos(x: float) -> float:
+    unsafe:
+        return __math_acos(x)
+
+# Arctangent (inverse tangent), returns radians
+pub def atan(x: float) -> float:
+    unsafe:
+        return __math_atan(x)
+
+# Two-argument arctangent, returns angle in radians
+pub def atan2(y: float, x: float) -> float:
+    unsafe:
+        return __math_atan2(y, x)
+
+# Hyperbolic sine
+pub def sinh(x: float) -> float:
+    unsafe:
+        return __math_sinh(x)
+
+# Hyperbolic cosine
+pub def cosh(x: float) -> float:
+    unsafe:
+        return __math_cosh(x)
+
+# Hyperbolic tangent
+pub def tanh(x: float) -> float:
+    unsafe:
+        return __math_tanh(x)
+
+# ============================================================
+# Public API - Power & Logarithmic Functions
+# ============================================================
+
+# Square root of x
+pub def sqrt(x: float) -> float:
+    unsafe:
+        return __math_sqrt(x)
+
+# Cube root of x
+pub def cbrt(x: float) -> float:
+    unsafe:
+        return __math_cbrt(x)
+
+# x raised to the power y
+pub def pow(x: float, y: float) -> float:
+    unsafe:
+        return __math_pow(x, y)
+
+# e raised to the power x
+pub def exp(x: float) -> float:
+    unsafe:
+        return __math_exp(x)
+
+# Natural logarithm (base e)
+pub def log(x: float) -> float:
+    unsafe:
+        return __math_log(x)
+
+# Base-2 logarithm
+pub def log2(x: float) -> float:
+    unsafe:
+        return __math_log2(x)
+
+# Base-10 logarithm
+pub def log10(x: float) -> float:
+    unsafe:
+        return __math_log10(x)
+
+# Euclidean distance: sqrt(x² + y²)
+pub def hypot(x: float, y: float) -> float:
+    unsafe:
+        return __math_hypot(x, y)
+
+# ============================================================
+# Public API - Rounding Functions
+# ============================================================
+
+# Floor: largest integer ≤ x
+pub def floor(x: float) -> float:
+    unsafe:
+        return __math_floor(x)
+
+# Ceiling: smallest integer ≥ x
+pub def ceil(x: float) -> float:
+    unsafe:
+        return __math_ceil(x)
+
+# Round to nearest integer (Python/IEEE 754 banker's rounding: half to even)
+# round(2.5) -> 2.0, round(3.5) -> 4.0
+pub def round(x: float) -> float:
+    unsafe:
+        return __math_round(x)
+
+# Round half away from zero (C-style)
+# round_away(2.5) -> 3.0, round_away(-2.5) -> -3.0
+pub def round_away(x: float) -> float:
+    unsafe:
+        return __math_round_away(x)
+
+# Round to N decimal places (Python-style banker's rounding)
+# round_to(3.14159, 2) -> 3.14
+# round_to(2.675, 2) -> 2.67 (matches Python)
+# round_to(1234.5, -2) -> 1200.0 (negative places)
+pub def round_to(x: float, places: int) -> float:
+    unsafe:
+        return __math_round_to(x, places)
+
+# Truncate toward zero
+pub def trunc(x: float) -> float:
+    unsafe:
+        return __math_trunc(x)
+
+# Floating-point remainder of x / y
+pub def fmod(x: float, y: float) -> float:
+    unsafe:
+        return __math_fmod(x, y)
+
+# ============================================================
+# Public API - Utility Functions
+# ============================================================
+
+# Absolute value (float)
+pub def abs(x: float) -> float:
+    unsafe:
+        return __math_abs(x)
+
+# Absolute value (int)
+pub def abs_int(x: int) -> int:
+    unsafe:
+        return __math_abs_int(x)
+
+# Minimum of two floats
+pub def fmin(x: float, y: float) -> float:
+    unsafe:
+        return __math_fmin(x, y)
+
+# Maximum of two floats
+pub def fmax(x: float, y: float) -> float:
+    unsafe:
+        return __math_fmax(x, y)
+
+# Clamp x to [lo, hi] range (float)
+pub def clamp(x: float, lo: float, hi: float) -> float:
+    unsafe:
+        return __math_clamp(x, lo, hi)
+
+# Clamp x to [lo, hi] range (int)
+pub def clamp_int(x: int, lo: int, hi: int) -> int:
+    unsafe:
+        return __math_clamp_int(x, lo, hi)
+
+# Sign function: -1.0, 0.0, or 1.0
+pub def sign(x: float) -> float:
+    unsafe:
+        return __math_sign(x)
+
+# ============================================================
+# Public API - Float Checks
 # ============================================================
 
 # Check if a float is NaN (Not a Number)
@@ -42,3 +392,161 @@ pub def is_inf(x: float) -> bool:
 pub def is_finite(x: float) -> bool:
     unsafe:
         return __math_is_finite(x)
+
+# ============================================================
+# Public API - Random Numbers
+# ============================================================
+
+# Random float in [0.0, 1.0)
+pub def random() -> float:
+    unsafe:
+        return __math_random()
+
+# Random integer in [lo, hi] (inclusive)
+pub def randint(lo: int, hi: int) -> int:
+    unsafe:
+        return __math_randint(lo, hi)
+
+# Seed the random number generator
+pub def seed(n: int) -> none:
+    unsafe:
+        __math_seed(n)
+
+# ============================================================
+# Public API - Conversion
+# ============================================================
+
+# Convert degrees to radians
+pub def radians(degrees: float) -> float:
+    unsafe:
+        return __math_radians(degrees)
+
+# Convert radians to degrees
+pub def degrees(radians: float) -> float:
+    unsafe:
+        return __math_degrees(radians)
+
+# ============================================================
+# C Bindings - Unique Functions
+# ============================================================
+
+@extern("C")
+def __math_lerp(a: float, b: float, t: float) -> float
+
+@extern("C")
+def __math_inverse_lerp(a: float, b: float, x: float) -> float
+
+@extern("C")
+def __math_map_range(x: float, in_lo: float, in_hi: float, out_lo: float, out_hi: float) -> float
+
+@extern("C")
+def __math_approx_eq(a: float, b: float, epsilon: float) -> bool
+
+@extern("C")
+def __math_is_close(a: float, b: float, rel_tol: float, abs_tol: float) -> float
+
+@extern("C")
+def __math_smoothstep(edge0: float, edge1: float, x: float) -> float
+
+@extern("C")
+def __math_wrap(x: float, lo: float, hi: float) -> float
+
+@extern("C")
+def __math_wrap_int(x: int, lo: int, hi: int) -> int
+
+@extern("C")
+def __math_gcd(a: int, b: int) -> int
+
+@extern("C")
+def __math_lcm(a: int, b: int) -> int
+
+@extern("C")
+def __math_factorial(n: int) -> int
+
+@extern("C")
+def __math_fib(n: int) -> int
+
+@extern("C")
+def __math_step(edge: float, x: float) -> float
+
+# ============================================================
+# Public API - Unique Functions (not in most language stdlibs)
+# ============================================================
+
+# Linear interpolation: lerp(0, 10, 0.5) -> 5.0
+# Blends between a and b by factor t ∈ [0, 1]
+pub def lerp(a: float, b: float, t: float) -> float:
+    unsafe:
+        return __math_lerp(a, b, t)
+
+# Inverse lerp: given a value in [a, b], returns t ∈ [0, 1]
+# inverse_lerp(0, 100, 25) -> 0.25
+pub def inverse_lerp(a: float, b: float, x: float) -> float:
+    unsafe:
+        return __math_inverse_lerp(a, b, x)
+
+# Remap value from one range to another
+# map_range(50, 0, 100, 0, 1) -> 0.5
+# Like Arduino's map() but for floats
+pub def map_range(x: float, in_lo: float, in_hi: float, out_lo: float, out_hi: float) -> float:
+    unsafe:
+        return __math_map_range(x, in_lo, in_hi, out_lo, out_hi)
+
+# Approximate float equality with absolute tolerance
+# approx_eq(0.1 + 0.2, 0.3, 1e-9) -> true
+pub def approx_eq(a: float, b: float, epsilon: float) -> bool:
+    unsafe:
+        return __math_approx_eq(a, b, epsilon)
+
+# Python-style is_close with relative AND absolute tolerance
+# is_close(1000, 1000.001, 1e-6, 1e-9) -> true
+pub def is_close(a: float, b: float, rel_tol: float, abs_tol: float) -> float:
+    unsafe:
+        return __math_is_close(a, b, rel_tol, abs_tol)
+
+# Smooth Hermite interpolation (GLSL built-in)
+# Returns 0 for x<edge0, 1 for x>edge1, smooth curve between
+pub def smoothstep(edge0: float, edge1: float, x: float) -> float:
+    unsafe:
+        return __math_smoothstep(edge0, edge1, x)
+
+# Wrap value to [lo, hi) range (modular arithmetic)
+# wrap(370.0, 0.0, 360.0) -> 10.0
+# wrap(-30.0, 0.0, 360.0) -> 330.0
+pub def wrap(x: float, lo: float, hi: float) -> float:
+    unsafe:
+        return __math_wrap(x, lo, hi)
+
+# Wrap integer to [lo, hi) range
+pub def wrap_int(x: int, lo: int, hi: int) -> int:
+    unsafe:
+        return __math_wrap_int(x, lo, hi)
+
+# Greatest common divisor
+# gcd(12, 8) -> 4
+pub def gcd(a: int, b: int) -> int:
+    unsafe:
+        return __math_gcd(a, b)
+
+# Least common multiple
+# lcm(4, 6) -> 12
+pub def lcm(a: int, b: int) -> int:
+    unsafe:
+        return __math_lcm(a, b)
+
+# Factorial: n! (up to 20!)
+# factorial(5) -> 120
+pub def factorial(n: int) -> int:
+    unsafe:
+        return __math_factorial(n)
+
+# Fibonacci number (iterative, O(n))
+# fib(10) -> 55
+pub def fib(n: int) -> int:
+    unsafe:
+        return __math_fib(n)
+
+# Step function: 0.0 if x < edge, 1.0 otherwise (GLSL built-in)
+pub def step(edge: float, x: float) -> float:
+    unsafe:
+        return __math_step(edge, x)

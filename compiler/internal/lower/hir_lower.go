@@ -67,8 +67,11 @@ func mangleDesiName(name string) string {
 		// math.h
 		"sin": true, "cos": true, "tan": true, "asin": true, "acos": true,
 		"atan": true, "atan2": true, "sinh": true, "cosh": true, "tanh": true,
-		"exp": true, "log": true, "log10": true, "pow": true, "sqrt": true,
-		"ceil": true, "floor": true, "fabs": true, "fmod": true,
+		"exp": true, "exp2": true, "log": true, "log2": true, "log10": true,
+		"pow": true, "sqrt": true, "cbrt": true, "hypot": true,
+		"ceil": true, "floor": true, "round": true, "trunc": true,
+		"fabs": true, "fmod": true, "remainder": true, "fmax": true, "fmin": true,
+		"copysign": true, "fdim": true, "nan": true, "abs": true,
 		// ctype.h
 		"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
 		"isupper": true, "islower": true, "toupper": true, "tolower": true,
