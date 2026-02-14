@@ -1,9 +1,12 @@
-# sys module - standard streams
-# These are external globals initialized by __desi_runtime_init()
+# sys module — system streams
+# Provides stdout and stderr for print() file= parameter.
+#
+# Usage:
+#   import sys
+#   print("error", file=sys.stderr)
 
-# FileStream is an opaque pointer to DesiStream in the C runtime
-# sys.stdout and sys.stderr are the standard output/error streams
+## Standard output stream (for print file= parameter)
+pub extern stdout: ptr
 
-# Compiler magic: these map to @__desi_stdout and @__desi_stderr globals
-pub extern stdout: ptr  # DesiStream* for stdout
-pub extern stderr: ptr  # DesiStream* for stderr
+## Standard error stream (for print file= parameter)
+pub extern stderr: ptr
