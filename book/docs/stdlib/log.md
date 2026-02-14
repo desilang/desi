@@ -1,6 +1,6 @@
 # Log Module
 
-The `log` module provides structured logging with colored output for different severity levels.
+The `log` module provides structured logging with level prefixes for different severity levels.
 
 ## Import
 
@@ -8,19 +8,15 @@ The `log` module provides structured logging with colored output for different s
 import log
 ```
 
-Or import specific functions:
-```desi
-from log import info, warn, error, debug
-```
-
 ## Functions
 
-| Function | Description |
-|----------|-------------|
-| `log.info(message: str)` | Log info message with blue `[INFO]` prefix |
-| `log.debug(message: str)` | Log debug message with cyan `[DEBUG]` prefix |
-| `log.warn(message: str)` | Log warning message with yellow `[WARN]` prefix |
-| `log.error(message: str)` | Log error message with red `[ERROR]` prefix |
+| Function | Prefix | Use For |
+|----------|--------|---------|
+| `log.debug(msg)` | `[DEBUG]` | Verbose development details |
+| `log.info(msg)` | `[INFO]` | Normal application events |
+| `log.warn(msg)` | `[WARN]` | Potential problems |
+| `log.error(msg)` | `[ERROR]` | Recoverable errors |
+| `log.fatal(msg)` | `[FATAL]` | Unrecoverable errors |
 
 ## Usage
 
@@ -32,6 +28,7 @@ def main() -> int:
     log.debug("Loading configuration...")
     log.warn("Disk space is low")
     log.error("Connection failed")
+    log.fatal("Out of memory")
     0
 ```
 
@@ -42,12 +39,30 @@ def main() -> int:
 [DEBUG] Loading configuration...
 [WARN] Disk space is low
 [ERROR] Connection failed
+[FATAL] Out of memory
 ```
 
-!!! note "ANSI Colors"
-    Log output uses ANSI escape codes for colored terminal output. Colors may not display correctly in all terminals.
+## Typical Application Pattern
+
+```desi
+import log
+
+def process(data: str):
+    log.debug(f"Processing: {data}")
+    if len(data) == 0:
+        log.warn("Empty input received")
+        return
+    log.info(f"Processed {len(data)} characters")
+
+def main() -> int:
+    log.info("=== App Start ===")
+    process("hello")
+    process("")
+    log.info("=== App End ===")
+    0
+```
 
 ## See Also
 
-- [JSON Module](json.md) - JSON parsing and serialization
-- [Math Module](math.md) - Mathematical functions
+- [sys Module](sys.md) — Standard streams (`stdout`, `stderr`)
+- [Math Module](math.md) — Mathematical functions
