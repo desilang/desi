@@ -1,6 +1,6 @@
 # Log Module
 
-The `log` module provides structured logging with level prefixes for different severity levels.
+The `log` module provides structured logging with ANSI colored output and level filtering.
 
 ## Import
 
@@ -8,61 +8,71 @@ The `log` module provides structured logging with level prefixes for different s
 import log
 ```
 
-## Functions
+## Log Levels
 
-| Function | Prefix | Use For |
-|----------|--------|---------|
-| `log.debug(msg)` | `[DEBUG]` | Verbose development details |
-| `log.info(msg)` | `[INFO]` | Normal application events |
-| `log.warn(msg)` | `[WARN]` | Potential problems |
-| `log.error(msg)` | `[ERROR]` | Recoverable errors |
-| `log.fatal(msg)` | `[FATAL]` | Unrecoverable errors |
+Levels from lowest to highest priority:
 
-## Usage
+| Level | Function | Color | Output |
+|-------|----------|-------|--------|
+| DEBUG | `log.debug(msg)` | Cyan | stdout |
+| INFO | `log.info(msg)` | Blue | stdout |
+| WARN | `log.warn(msg)` | Yellow | stderr |
+| ERROR | `log.error(msg)` | Red | stderr |
+| FATAL | `log.fatal(msg)` | Bold Red | stderr |
+
+## Level Filtering
+
+Use `log.set_level(level)` to filter messages. Only messages at or above the set level are printed.
 
 ```desi
 import log
 
 def main() -> int:
-    log.info("Application started")
-    log.debug("Loading configuration...")
-    log.warn("Disk space is low")
-    log.error("Connection failed")
-    log.fatal("Out of memory")
+    # Default: all levels visible
+    log.debug("verbose detail")
+    log.info("starting up")
+
+    # Set to WARN — only WARN, ERROR, FATAL will show
+    log.set_level("WARN")
+    log.info("hidden")      # Filtered out
+    log.warn("visible")     # Shows
+
+    # Reset to show everything
+    log.set_level("DEBUG")
+    log.debug("visible again")
     0
 ```
 
-### Output
+Valid level names: `"DEBUG"`, `"INFO"`, `"WARN"`, `"ERROR"`, `"FATAL"`
 
-```
-[INFO] Application started
-[DEBUG] Loading configuration...
-[WARN] Disk space is low
-[ERROR] Connection failed
-[FATAL] Out of memory
-```
+## Usage Examples
 
-## Typical Application Pattern
+### Basic Logging
 
 ```desi
 import log
 
-def process(data: str):
-    log.debug(f"Processing: {data}")
-    if len(data) == 0:
-        log.warn("Empty input received")
-        return
-    log.info(f"Processed {len(data)} characters")
+def main() -> int:
+    log.info("Server started on port 8080")
+    log.warn("Disk space below 10%")
+    log.error("Connection to database refused")
+    0
+```
+
+### Production Configuration
+
+```desi
+import log
 
 def main() -> int:
-    log.info("=== App Start ===")
-    process("hello")
-    process("")
-    log.info("=== App End ===")
+    log.set_level("INFO")    # Hide debug in production
+    log.debug("hidden")
+    log.info("App ready")
+    log.error("Something broke")
     0
 ```
 
 ## See Also
 
+- [OS Module](os.md) — System functions
 - [sys Module](sys.md) — Standard streams (`stdout`, `stderr`)
-- [Math Module](math.md) — Mathematical functions

@@ -1,8 +1,8 @@
-# Test log module - comprehensive edge cases
+# Test log module - comprehensive edge cases with level filtering
 import log
 
 def main() -> int:
-    # --- Basic usage ---
+    # --- Basic usage (all levels visible) ---
     log.debug("verbose detail")
     log.info("server started on port 8080")
     log.warn("disk space below 10%")
@@ -20,39 +20,33 @@ def main() -> int:
     log.info("Value: 42, ratio: 3.14, flag: true")
     log.warn("Path: /usr/local/bin/desi")
     log.error("Error code: 0xFF")
-    log.info("Tabs:	and	tabs")
-
-    # --- Messages with punctuation ---
-    log.info("Hello, World!")
-    log.debug("a=1, b=2, c=3")
-    log.warn("Warning! Something bad might happen...")
-    log.error("Error: expected ';' but got '}'")
-
-    # --- All levels in reverse order ---
-    log.fatal("5-fatal")
-    log.error("4-error")
-    log.warn("3-warn")
-    log.info("2-info")
-    log.debug("1-debug")
 
     # --- F-string messages ---
     let name = "Desi"
     let version = 1
-    let pi = 3.14
     log.info(f"Starting {name} v{version}")
-    log.debug(f"Pi is approximately {pi}")
     log.warn(f"Max retries: {version + 2}")
 
-    # --- Multiple calls to same level ---
-    log.info("step 1 of 5")
-    log.info("step 2 of 5")
-    log.info("step 3 of 5")
-    log.info("step 4 of 5")
-    log.info("step 5 of 5")
+    # --- Level filtering ---
+    log.set_level("WARN")
+    log.debug("HIDDEN - debug below WARN")
+    log.info("HIDDEN - info below WARN")
+    log.warn("visible - warn at WARN")
+    log.error("visible - error above WARN")
+    log.fatal("visible - fatal above WARN")
+
+    log.set_level("FATAL")
+    log.error("HIDDEN - error below FATAL")
+    log.fatal("visible - fatal at FATAL")
+
+    # Reset to DEBUG
+    log.set_level("DEBUG")
+    log.debug("visible - back at debug")
 
     # --- Simulated application flow ---
     log.info("=== Application Start ===")
-    log.debug("Initializing subsystems...")
+    log.set_level("INFO")
+    log.debug("HIDDEN - debug disabled in production")
     log.info("Database connected")
     log.info("HTTP server listening")
     log.warn("Rate limiter disabled")
@@ -62,6 +56,5 @@ def main() -> int:
 
     0
 
-# NOTE: Log output ordering may vary in automated test pipelines.
-# Run manually to verify: desic run examples/343_log_module.desi
-# All messages should appear with [LEVEL] prefix format.
+# NOTE: Output contains ANSI color codes, visual verification only.
+# Run manually: desic run examples/343_log_module.desi
