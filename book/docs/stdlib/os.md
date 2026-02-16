@@ -1,6 +1,6 @@
 # OS Module
 
-The `os` module provides access to operating system functions: environment variables, current directory, platform detection, and program exit.
+The `os` module provides operating system functions for environment variables, process control, platform detection, and system commands.
 
 ## Import
 
@@ -8,73 +8,68 @@ The `os` module provides access to operating system functions: environment varia
 import os
 ```
 
-## Functions
-
-| Function | Returns | Description |
-|----------|---------|-------------|
-| `os.platform()` | `str` | OS name: `"darwin"`, `"linux"`, or `"windows"` |
-| `os.getenv(key)` | `str` | Environment variable value, or `""` if not set |
-| `os.getcwd()` | `str` | Current working directory |
-| `os.exit(code)` | — | Terminate program with exit code |
-
-## Usage
-
-```desi
-import os
-
-def main() -> int:
-    let platform = os.platform()
-    print(f"Running on {platform}")
-
-    let home = os.getenv("HOME")
-    print(f"Home: {home}")
-
-    let cwd = os.getcwd()
-    print(f"Working dir: {cwd}")
-    0
-```
-
-### Platform Detection
-
-```desi
-import os
-
-def main() -> int:
-    let p = os.platform()
-    if p == "darwin":
-        print("macOS detected")
-    elif p == "linux":
-        print("Linux detected")
-    0
-```
+## API Reference
 
 ### Environment Variables
 
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `getenv(key)` | `str` | Get env var (empty if not set) |
+| `setenv(key, val)` | `none` | Set env var |
+
+### Platform & System Info
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `platform()` | `str` | Platform ID: `"darwin"`, `"linux"`, `"windows"` |
+| `name()` | `str` | OS name: `"macOS"`, `"Linux"`, `"Windows"` |
+| `arch()` | `str` | CPU architecture: `"arm64"`, `"x86_64"` |
+| `hostname()` | `str` | System hostname |
+| `cpu_count()` | `int` | Number of CPU cores |
+
+### Process
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `getpid()` | `int` | Current process ID |
+| `exit(code)` | `none` | Exit with status code |
+
+### Directory
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `getcwd()` | `str` | Current working directory |
+| `chdir(path)` | `int` | Change directory (0 = success) |
+
+### Command Execution
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `system(cmd)` | `int` | Run shell command, returns exit code |
+
+## Usage Examples
+
 ```desi
 import os
 
 def main() -> int:
-    let path = os.getenv("PATH")
-    let missing = os.getenv("NONEXISTENT")
-    print(f"PATH length: {len(path)}")
-    print(f"Missing is empty: {len(missing) == 0}")
-    0
-```
+    # Platform detection
+    print(f"Running on {os.name()} ({os.arch()})")
+    print(f"Hostname: {os.hostname()}")
+    print(f"CPUs: {os.cpu_count()}")
 
-### Early Exit
+    # Environment
+    os.setenv("MY_APP_PORT", "8080")
+    let port = os.getenv("MY_APP_PORT")
+    print(f"Port: {port}")
 
-```desi
-import os
-
-def main() -> int:
-    let key = os.getenv("API_KEY")
-    if len(key) == 0:
-        print("Error: API_KEY not set")
-        os.exit(1)
+    # Working directory
+    let cwd = os.getcwd()
+    print(f"CWD: {cwd}")
     0
 ```
 
 ## See Also
 
-- [sys Module](sys.md) — Standard streams (`stdout`, `stderr`)
+- [Strings Module](strings.md) — String manipulation
 - [Log Module](log.md) — Structured logging
