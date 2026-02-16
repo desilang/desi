@@ -266,3 +266,274 @@ int __strings_is_lower(const char* s) {
     }
     return 1;
 }
+
+// ============================================================
+// Case conversion (additional)
+// ============================================================
+
+// Swap case: uppercase ↔ lowercase
+char* __strings_swapcase(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return strdup("");
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (isupper(c))
+            result[i] = (char)tolower(c);
+        else if (islower(c))
+            result[i] = (char)toupper(c);
+        else
+            result[i] = s[i];
+    }
+    result[len] = '\0';
+    return result;
+}
+
+// ============================================================
+// Search (additional)
+// ============================================================
+
+// Find last occurrence of sub in s, or -1 (Python rfind)
+int __strings_last_index_of(const char* s, const char* sub) {
+    if (!s || !sub) return -1;
+    size_t slen = strlen(s);
+    size_t sublen = strlen(sub);
+    if (sublen > slen) return -1;
+    if (sublen == 0) return (int)slen;
+    for (int i = (int)(slen - sublen); i >= 0; i--) {
+        if (strncmp(s + i, sub, sublen) == 0)
+            return i;
+    }
+    return -1;
+}
+
+// ============================================================
+// Transform (additional)
+// ============================================================
+
+// Remove prefix if present (Python 3.9+ removeprefix)
+char* __strings_removeprefix(const char* s, const char* prefix) {
+    if (!s || !prefix) return strdup(s ? s : "");
+    size_t plen = strlen(prefix);
+    if (plen > 0 && strncmp(s, prefix, plen) == 0)
+        return strdup(s + plen);
+    return strdup(s);
+}
+
+// Remove suffix if present (Python 3.9+ removesuffix)
+char* __strings_removesuffix(const char* s, const char* suffix) {
+    if (!s || !suffix) return strdup(s ? s : "");
+    size_t slen = strlen(s);
+    size_t xlen = strlen(suffix);
+    if (xlen > 0 && xlen <= slen && strcmp(s + slen - xlen, suffix) == 0) {
+        char* result = (char*)malloc(slen - xlen + 1);
+        if (!result) return strdup(s);
+        memcpy(result, s, slen - xlen);
+        result[slen - xlen] = '\0';
+        return result;
+    }
+    return strdup(s);
+}
+
+// Left-pad string to width with fill character (Python rjust)
+char* __strings_pad_left(const char* s, int width, const char* fill) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen >= width) return strdup(s);
+    char fc = (fill && *fill) ? fill[0] : ' ';
+    size_t pad = (size_t)(width) - slen;
+    char* result = (char*)malloc(width + 1);
+    if (!result) return strdup(s);
+    memset(result, fc, pad);
+    memcpy(result + pad, s, slen);
+    result[width] = '\0';
+    return result;
+}
+
+// Right-pad string to width with fill character (Python ljust)
+char* __strings_pad_right(const char* s, int width, const char* fill) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen >= width) return strdup(s);
+    char fc = (fill && *fill) ? fill[0] : ' ';
+    size_t pad = (size_t)(width) - slen;
+    char* result = (char*)malloc(width + 1);
+    if (!result) return strdup(s);
+    memcpy(result, s, slen);
+    memset(result + slen, fc, pad);
+    result[width] = '\0';
+    return result;
+}
+
+// Center string in field of given width (Python center)
+char* __strings_center(const char* s, int width, const char* fill) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen >= width) return strdup(s);
+    char fc = (fill && *fill) ? fill[0] : ' ';
+    size_t total_pad = (size_t)(width) - slen;
+    size_t left_pad = total_pad / 2;
+    size_t right_pad = total_pad - left_pad;
+    char* result = (char*)malloc(width + 1);
+    if (!result) return strdup(s);
+    memset(result, fc, left_pad);
+    memcpy(result + left_pad, s, slen);
+    memset(result + left_pad + slen, fc, right_pad);
+    result[width] = '\0';
+    return result;
+}
+
+// Zero-fill: pad with zeros on the left, preserving sign (Python zfill)
+char* __strings_zfill(const char* s, int width) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen >= width) return strdup(s);
+    size_t pad = (size_t)(width) - slen;
+    char* result = (char*)malloc(width + 1);
+    if (!result) return strdup(s);
+    int sign_offset = 0;
+    if (slen > 0 && (s[0] == '+' || s[0] == '-')) {
+        result[0] = s[0];
+        sign_offset = 1;
+    }
+    memset(result + sign_offset, '0', pad);
+    memcpy(result + sign_offset + pad, s + sign_offset, slen - sign_offset);
+    result[width] = '\0';
+    return result;
+}
+
+// Get character at index as single-char string (supports negative indices)
+char* __strings_char_at(const char* s, int idx) {
+    if (!s) return strdup("");
+    int len = (int)strlen(s);
+    if (idx < 0) idx += len;
+    if (idx < 0 || idx >= len) return strdup("");
+    char* result = (char*)malloc(2);
+    if (!result) return strdup("");
+    result[0] = s[idx];
+    result[1] = '\0';
+    return result;
+}
+
+// ============================================================
+// Character checks (additional)
+// ============================================================
+
+int __strings_is_ascii(const char* s) {
+    if (!s || *s == '\0') return 1; // empty is ascii (Python behavior)
+    while (*s) {
+        if ((unsigned char)*s > 127) return 0;
+        s++;
+    }
+    return 1;
+}
+
+int __strings_is_printable(const char* s) {
+    if (!s || *s == '\0') return 1; // empty is printable (Python behavior)
+    while (*s) {
+        if (!isprint((unsigned char)*s)) return 0;
+        s++;
+    }
+    return 1;
+}
+
+// ============================================================
+// Beyond Python — Desi extras
+// ============================================================
+
+// Truncate with suffix: "Hello World" → "Hello..." (max n chars total)
+char* __strings_truncate(const char* s, int max_len, const char* suffix) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen <= max_len) return strdup(s);
+    if (!suffix) suffix = "...";
+    size_t sfx_len = strlen(suffix);
+    int content_len = max_len - (int)sfx_len;
+    if (content_len < 0) content_len = 0;
+    char* result = (char*)malloc(max_len + 1);
+    if (!result) return strdup(s);
+    memcpy(result, s, content_len);
+    memcpy(result + content_len, suffix, sfx_len);
+    result[content_len + sfx_len] = '\0';
+    return result;
+}
+
+// URL-friendly slug: "Hello World!" → "hello-world"
+char* __strings_slugify(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return strdup("");
+    int j = 0;
+    int prev_dash = 1; // start true to avoid leading dash
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (isalnum(c)) {
+            result[j++] = (char)tolower(c);
+            prev_dash = 0;
+        } else if (!prev_dash) {
+            result[j++] = '-';
+            prev_dash = 1;
+        }
+    }
+    // Remove trailing dash
+    if (j > 0 && result[j - 1] == '-') j--;
+    result[j] = '\0';
+    return result;
+}
+
+// ============================================================
+// Split / Join (wrapping existing string.c functions)
+// ============================================================
+
+// Forward-declare existing string.c functions
+typedef struct {
+    void** data;
+    size_t length;
+    size_t capacity;
+    int type_tag;
+    char* (*to_str_fn)(void*);
+} DesiList;
+
+extern DesiList* list_new(int type_tag, char* (*to_str_fn)(void*));
+extern void list_append(DesiList* list, void* item, int type_tag);
+extern DesiList* string_split(const char* s, const char* delim);
+extern char* string_join(DesiList* list, const char* delim);
+
+// Split string by delimiter, returns list of strings
+DesiList* __strings_split(const char* s, const char* delim) {
+    return string_split(s, delim);
+}
+
+// Join list of strings with separator
+char* __strings_join(const char* sep, DesiList* parts) {
+    return string_join(parts, sep);
+}
+
+// Split by newlines (handles \n, \r\n, \r)
+DesiList* __strings_splitlines(const char* s) {
+    DesiList* result = list_new(1, NULL);
+    if (!s) return result;
+
+    const char* start = s;
+    while (*start) {
+        const char* end = start;
+        while (*end && *end != '\n' && *end != '\r') end++;
+
+        size_t len = (size_t)(end - start);
+        char* line = (char*)malloc(len + 1);
+        if (line) {
+            memcpy(line, start, len);
+            line[len] = '\0';
+        }
+        list_append(result, (void*)line, 1);
+
+        if (*end == '\r' && *(end + 1) == '\n')
+            end += 2; // \r\n
+        else if (*end)
+            end += 1; // \n or \r
+        start = end;
+    }
+    return result;
+}
