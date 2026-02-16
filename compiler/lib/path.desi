@@ -1,0 +1,113 @@
+# path module — filesystem path manipulation
+#
+# Provides path queries, manipulation, and joining.
+# All functions take str arguments. Path functions do NOT modify the filesystem.
+#
+# Usage:
+#   import path
+#   let dir = path.dirname("/home/user/file.txt")  # "/home/user"
+#   let name = path.basename("/home/user/file.txt") # "file.txt"
+#   let full = path.join("/home", "user", "file")   # not yet 3-arg
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __path_exists(p: str) -> bool
+
+@extern("C")
+def __path_is_file(p: str) -> bool
+
+@extern("C")
+def __path_is_dir(p: str) -> bool
+
+@extern("C")
+def __path_is_abs(p: str) -> bool
+
+@extern("C")
+def __path_size(p: str) -> int
+
+@extern("C")
+def __path_basename(p: str) -> str
+
+@extern("C")
+def __path_dirname(p: str) -> str
+
+@extern("C")
+def __path_ext(p: str) -> str
+
+@extern("C")
+def __path_stem(p: str) -> str
+
+@extern("C")
+def __path_join(a: str, b: str) -> str
+
+@extern("C")
+def __path_abs(p: str) -> str
+
+@extern("C")
+def __path_clean(p: str) -> str
+
+# --- Public API: Queries ---
+
+## Check if path exists (file or directory).
+pub def exists(p: str) -> bool:
+	unsafe:
+		return __path_exists(p)
+
+## Check if path is a regular file.
+pub def is_file(p: str) -> bool:
+	unsafe:
+		return __path_is_file(p)
+
+## Check if path is a directory.
+pub def is_dir(p: str) -> bool:
+	unsafe:
+		return __path_is_dir(p)
+
+## Check if path is absolute.
+pub def is_abs(p: str) -> bool:
+	unsafe:
+		return __path_is_abs(p)
+
+## Get file size in bytes, -1 on error.
+pub def size(p: str) -> int:
+	unsafe:
+		return __path_size(p)
+
+# --- Public API: Manipulation ---
+
+## Get the base name (last component) of a path.
+pub def basename(p: str) -> str:
+	unsafe:
+		return __path_basename(p)
+
+## Get the directory name (all but last component).
+pub def dirname(p: str) -> str:
+	unsafe:
+		return __path_dirname(p)
+
+## Get file extension (including the dot), or empty string.
+pub def ext(p: str) -> str:
+	unsafe:
+		return __path_ext(p)
+
+## Get filename without extension (stem).
+pub def stem(p: str) -> str:
+	unsafe:
+		return __path_stem(p)
+
+## Join two path components.
+pub def join(a: str, b: str) -> str:
+	unsafe:
+		return __path_join(a, b)
+
+## Get absolute path (resolve relative to cwd).
+pub def abs(p: str) -> str:
+	unsafe:
+		return __path_abs(p)
+
+## Normalize path: resolve . and .. components.
+pub def clean(p: str) -> str:
+	unsafe:
+		return __path_clean(p)
+
