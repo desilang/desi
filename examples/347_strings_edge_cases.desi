@@ -1,0 +1,93 @@
+# Test strings module - edge cases
+import strings
+
+def main() -> int:
+    # --- Empty string handling ---
+    print(strings.upper(""))
+    print(strings.lower(""))
+    print(strings.trim(""))
+    print(strings.reverse(""))
+    print(strings.capitalize(""))
+    print(strings.title(""))
+
+    # --- Single character ---
+    print(strings.upper("a"))
+    print(strings.lower("Z"))
+    print(strings.capitalize("x"))
+    print(strings.reverse("q"))
+
+    # --- Already in target case ---
+    print(strings.upper("ABC"))
+    print(strings.lower("xyz"))
+
+    # --- Search edge cases ---
+    print(strings.starts_with("", "x"))
+    print(strings.starts_with("x", ""))
+    print(strings.ends_with("", "x"))
+    print(strings.ends_with("x", ""))
+    print(strings.index_of("", "x"))
+    print(strings.contains("", ""))
+    print(strings.count("aaa", "a"))
+
+    # --- Repeat edge cases ---
+    print(strings.repeat("x", 0))
+    print(strings.repeat("x", 1))
+    print(strings.repeat("abc", 2))
+
+    # --- Replace no match ---
+    print(strings.replace("hello", "xyz", "abc"))
+
+    # --- Check edge cases on empty ---
+    print(strings.is_empty(""))
+    print(strings.is_digit(""))
+    print(strings.is_alpha(""))
+    print(strings.is_space(""))
+
+    # --- Mixed case checks ---
+    print(strings.is_upper("ABCd"))
+    print(strings.is_lower("abcD"))
+    print(strings.is_upper("123"))
+    print(strings.is_lower("123"))
+
+    # --- Numbers in string ---
+    print(strings.is_digit("0"))
+    print(strings.is_alnum("test123"))
+    print(strings.is_alpha("test123"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# 
+# 
+# 
+# 
+# 
+# 
+# A
+# z
+# X
+# q
+# ABC
+# xyz
+# false
+# true
+# false
+# true
+# -1
+# true
+# 3
+# 
+# x
+# abcabc
+# hello
+# true
+# false
+# false
+# false
+# false
+# false
+# true
+# true
+# true
+# true
+# false
