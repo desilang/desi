@@ -1,0 +1,41 @@
+# Test path module - path manipulation
+import path
+
+def main() -> int:
+    # Queries
+    print(path.exists("/tmp"))
+    print(path.is_dir("/tmp"))
+    print(path.is_file("/tmp"))
+    print(path.is_abs("/tmp"))
+    print(path.is_abs("relative"))
+
+    # Manipulation
+    print(path.basename("/home/user/file.txt"))
+    print(path.dirname("/home/user/file.txt"))
+    print(path.ext("/home/user/file.txt"))
+    print(path.ext("/home/user/.hidden"))
+    print(path.stem("/home/user/file.txt"))
+
+    # Join
+    print(path.join("/home", "user"))
+    print(path.join("/home/", "user"))
+
+    # Absolute check
+    print(path.is_abs(path.join("/a", "b")))
+
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# true
+# false
+# true
+# false
+# file.txt
+# /home/user
+# .txt
+# 
+# file
+# /home/user
+# /home/user
+# true

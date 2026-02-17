@@ -83,6 +83,8 @@ func mangleDesiName(name string) string {
 		// ctype.h
 		"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
 		"isupper": true, "islower": true, "toupper": true, "tolower": true,
+		// libgen.h / unistd.h (path operations)
+		"basename": true, "dirname": true, "realpath": true, "stat": true,
 	}
 
 	if cStdlibConflicts[name] {
