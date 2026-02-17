@@ -77,7 +77,51 @@ def __strings_is_upper(s: str) -> bool
 @extern("C")
 def __strings_is_lower(s: str) -> bool
 
-# --- Public API: Case Conversion ---
+@extern("C")
+def __strings_swapcase(s: str) -> str
+
+@extern("C")
+def __strings_last_index_of(s: str, sub: str) -> int
+
+@extern("C")
+def __strings_removeprefix(s: str, prefix: str) -> str
+
+@extern("C")
+def __strings_removesuffix(s: str, suffix: str) -> str
+
+@extern("C")
+def __strings_pad_left(s: str, width: int, fill: str) -> str
+
+@extern("C")
+def __strings_pad_right(s: str, width: int, fill: str) -> str
+
+@extern("C")
+def __strings_center(s: str, width: int, fill: str) -> str
+
+@extern("C")
+def __strings_zfill(s: str, width: int) -> str
+
+@extern("C")
+def __strings_char_at(s: str, idx: int) -> str
+
+@extern("C")
+def __strings_is_ascii(s: str) -> bool
+
+@extern("C")
+def __strings_is_printable(s: str) -> bool
+
+@extern("C")
+def __strings_truncate(s: str, max_len: int, suffix: str) -> str
+
+@extern("C")
+def __strings_slugify(s: str) -> str
+
+# NOTE: split()/join()/splitlines() are available as string methods:
+#   "a,b,c".split(",")   -> ["a", "b", "c"]
+#   ",".join(["a","b"])   -> "a,b"
+# list[str] return types are not yet supported through @extern("C") module path.
+
+
 
 ## Convert all characters to uppercase.
 pub def upper(s: str) -> str:
@@ -195,3 +239,75 @@ pub def is_lower(s: str) -> bool:
 	unsafe:
 		return __strings_is_lower(s)
 
+## Swap case: uppercase ↔ lowercase.
+pub def swapcase(s: str) -> str:
+	unsafe:
+		return __strings_swapcase(s)
+
+# --- Public API: Search (additional) ---
+
+## Return the index of the last occurrence of sub in s, or -1.
+pub def last_index_of(s: str, sub: str) -> int:
+	unsafe:
+		return __strings_last_index_of(s, sub)
+
+# --- Public API: Transform (additional) ---
+
+## Remove prefix if present.
+pub def removeprefix(s: str, prefix: str) -> str:
+	unsafe:
+		return __strings_removeprefix(s, prefix)
+
+## Remove suffix if present.
+pub def removesuffix(s: str, suffix: str) -> str:
+	unsafe:
+		return __strings_removesuffix(s, suffix)
+
+## Left-pad to width with fill character (default space).
+pub def pad_left(s: str, width: int, fill: str) -> str:
+	unsafe:
+		return __strings_pad_left(s, width, fill)
+
+## Right-pad to width with fill character (default space).
+pub def pad_right(s: str, width: int, fill: str) -> str:
+	unsafe:
+		return __strings_pad_right(s, width, fill)
+
+## Center in field of given width with fill character (default space).
+pub def center(s: str, width: int, fill: str) -> str:
+	unsafe:
+		return __strings_center(s, width, fill)
+
+## Zero-fill: pad with zeros on the left, preserving sign.
+pub def zfill(s: str, width: int) -> str:
+	unsafe:
+		return __strings_zfill(s, width)
+
+## Get character at index as string (supports negative indices).
+pub def char_at(s: str, idx: int) -> str:
+	unsafe:
+		return __strings_char_at(s, idx)
+
+# --- Public API: Character Checks (additional) ---
+
+## Check if all characters are ASCII (0-127).
+pub def is_ascii(s: str) -> bool:
+	unsafe:
+		return __strings_is_ascii(s)
+
+## Check if all characters are printable.
+pub def is_printable(s: str) -> bool:
+	unsafe:
+		return __strings_is_printable(s)
+
+# --- Public API: Desi Extras ---
+
+## Truncate to max_len with suffix (e.g. "Hello...").
+pub def truncate(s: str, max_len: int, suffix: str) -> str:
+	unsafe:
+		return __strings_truncate(s, max_len, suffix)
+
+## URL-friendly slug: "Hello World!" → "hello-world".
+pub def slugify(s: str) -> str:
+	unsafe:
+		return __strings_slugify(s)
