@@ -1527,23 +1527,9 @@ handlePrint:
 		}
 	}
 
-	// Handle log.info(), log.warn(), log.error(), log.debug()
+	// Handle module.method() calls: json.*, math.*
+	// Note: log.* calls are handled through normal module import system (log.desi → __log_* C runtime)
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
-		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "log" {
-			method := fe.Name.Name
-			if method == "info" || method == "warn" || method == "error" || method == "debug" {
-				// Get the message argument (if any)
-				var msgVal hir.Value = hir.ConstStr{Text: ""}
-				if len(x.Args) > 0 {
-					msgVal = ls.lowerExpr(x.Args[0])
-				}
-				// Emit call to log_info/warn/error/debug
-				dst := ls.b.FreshTemp("log")
-				funcName := "log_" + method
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: funcName, Args: []hir.Value{msgVal}, Type: "void"})
-				return nil
-			}
-		}
 		// Handle json.* functions
 		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
 			method := fe.Name.Name

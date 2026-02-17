@@ -1,33 +1,66 @@
-# Log module — structured logging with colored output
+# Log module — structured logging with level filtering and ANSI colors
 #
 # Provides debug(), info(), warn(), error(), fatal() with ANSI colors.
-# All output goes to stdout via print().
+# Supports log level filtering via set_level().
+# DEBUG/INFO go to stdout, WARN/ERROR/FATAL go to stderr.
 #
 # Usage:
 #   import log
 #   log.info("Server started on port 8080")
-#   log.warn("Disk space low")
-#   log.error("Connection refused")
+#   log.set_level("WARN")   # Only WARN, ERROR, FATAL will show
+#   log.info("hidden")      # Filtered out
+#   log.warn("visible")     # Shows
+
+# --- C runtime bindings (private) ---
+
+@extern("C")
+def __log_set_level(level: str) -> none
+
+@extern("C")
+def __log_debug(message: str) -> none
+
+@extern("C")
+def __log_info(message: str) -> none
+
+@extern("C")
+def __log_warn(message: str) -> none
+
+@extern("C")
+def __log_error(message: str) -> none
+
+@extern("C")
+def __log_fatal(message: str) -> none
 
 # --- Public API ---
 
+## Set the minimum log level. Messages below this level are filtered.
+## Valid levels: "DEBUG", "INFO", "WARN", "ERROR", "FATAL"
+pub def set_level(level: str) -> none:
+	unsafe:
+		__log_set_level(level)
+
 ## Log a debug message (cyan [DEBUG] prefix).
 pub def debug(message: str) -> none:
-	print(f"[DEBUG] {message}")
+	unsafe:
+		__log_debug(message)
 
 ## Log an info message (blue [INFO] prefix).
 pub def info(message: str) -> none:
-	print(f"[INFO] {message}")
+	unsafe:
+		__log_info(message)
 
 ## Log a warning message (yellow [WARN] prefix).
 pub def warn(message: str) -> none:
-	print(f"[WARN] {message}")
+	unsafe:
+		__log_warn(message)
 
 ## Log an error message (red [ERROR] prefix).
 pub def error(message: str) -> none:
-	print(f"[ERROR] {message}")
+	unsafe:
+		__log_error(message)
 
 ## Log a fatal message (bold red [FATAL] prefix).
 pub def fatal(message: str) -> none:
-	print(f"[FATAL] {message}")
+	unsafe:
+		__log_fatal(message)
 
