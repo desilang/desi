@@ -64,7 +64,8 @@ func mangleDesiName(name string) string {
 		"getcwd": true, "chdir": true, "access": true, "read": true,
 		"write": true, "close": true, "sleep": true, "usleep": true,
 		"fork": true, "execve": true, "pipe": true, "dup": true,
-		"dup2": true, "isatty": true,
+		"dup2": true, "isatty": true, "getpid": true, "setenv": true,
+		"unsetenv": true, "gethostname": true, "sysconf": true, "uname": true,
 		// string.h
 		"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
 		"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,

@@ -1,0 +1,36 @@
+# Test os module - comprehensive
+import os
+
+def main() -> int:
+    # Platform info
+    print(os.platform())
+    print(os.name())
+    print(os.arch())
+
+    # Environment variables
+    os.setenv("DESI_TEST", "hello_desi")
+    print(os.getenv("DESI_TEST"))
+
+    # Process info (check they return sensible values)
+    let pid = os.getpid()
+    let cores = os.cpu_count()
+    print(pid > 0)
+    print(cores > 0)
+
+    # hostname and getcwd are system-specific, just check they're non-empty
+    let host = os.hostname()
+    let cwd = os.getcwd()
+    print(host != "")
+    print(cwd != "")
+
+    0
+
+# EXPECTED_OUTPUT:
+# darwin
+# macOS
+# arm64
+# hello_desi
+# true
+# true
+# true
+# true

@@ -1,12 +1,14 @@
 # os module — operating system functions
 #
-# Provides getenv, getcwd, platform detection, and exit.
+# Provides environment variables, process info, directory operations,
+# platform detection, and command execution.
 #
 # Usage:
 #   import os
 #   let home = os.getenv("HOME")
 #   let cwd = os.getcwd()
-#   let p = os.platform()
+#   os.setenv("MY_VAR", "hello")
+#   print(os.platform())
 
 # --- C runtime bindings ---
 
@@ -14,30 +16,94 @@
 pub def __os_getenv(key: str) -> str
 
 @extern("C")
+pub def __os_setenv(key: str, val: str) -> none
+
+@extern("C")
 pub def __os_getcwd() -> str
+
+@extern("C")
+pub def __os_chdir(path: str) -> int
 
 @extern("C")
 pub def __os_platform() -> str
 
 @extern("C")
+pub def __os_name() -> str
+
+@extern("C")
+pub def __os_arch() -> str
+
+@extern("C")
+pub def __os_hostname() -> str
+
+@extern("C")
+pub def __os_getpid() -> int
+
+@extern("C")
+pub def __os_cpu_count() -> int
+
+@extern("C")
+pub def __os_system(cmd: str) -> int
+
+@extern("C")
 pub def __os_exit(code: int) -> none
 
-# --- Public API (thin wrappers) ---
+# --- Public API ---
 
 ## Get an environment variable value. Returns empty string if not set.
 pub def getenv(key: str) -> str:
 	unsafe:
 		return __os_getenv(key)
 
+## Set an environment variable.
+pub def setenv(key: str, val: str) -> none:
+	unsafe:
+		__os_setenv(key, val)
+
 ## Get the current working directory.
 pub def getcwd() -> str:
 	unsafe:
 		return __os_getcwd()
 
-## Get the platform name: "darwin", "linux", or "windows".
+## Change the current working directory. Returns 0 on success.
+pub def chdir(path: str) -> int:
+	unsafe:
+		return __os_chdir(path)
+
+## Get the platform identifier: "darwin", "linux", or "windows".
 pub def platform() -> str:
 	unsafe:
 		return __os_platform()
+
+## Get the OS name: "macOS", "Linux", "Windows".
+pub def name() -> str:
+	unsafe:
+		return __os_name()
+
+## Get the CPU architecture: "arm64", "x86_64", etc.
+pub def arch() -> str:
+	unsafe:
+		return __os_arch()
+
+## Get the system hostname.
+pub def hostname() -> str:
+	unsafe:
+		return __os_hostname()
+
+## Get the current process ID.
+pub def getpid() -> int:
+	unsafe:
+		return __os_getpid()
+
+## Get the number of CPU cores.
+pub def cpu_count() -> int:
+	unsafe:
+		return __os_cpu_count()
+
+## Run a shell command. Returns the exit code.
+pub def system(cmd: str) -> int:
+	unsafe:
+		return __os_system(cmd)
 
 ## Exit the program with a status code.
 pub def exit(code: int) -> none:
