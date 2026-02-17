@@ -1,0 +1,67 @@
+# Test strings module - core functionality
+import strings
+
+def main() -> int:
+    # --- Case conversion ---
+    print(strings.upper("hello world"))
+    print(strings.lower("HELLO WORLD"))
+    print(strings.capitalize("hELLO wORLD"))
+    print(strings.title("the quick brown fox"))
+
+    # --- Search ---
+    print(strings.starts_with("hello", "hel"))
+    print(strings.starts_with("hello", "xyz"))
+    print(strings.ends_with("hello.desi", ".desi"))
+    print(strings.index_of("hello world", "world"))
+    print(strings.index_of("hello", "xyz"))
+    print(strings.contains("hello world", "world"))
+    print(strings.count("mississippi", "ss"))
+
+    # --- Transform ---
+    print(strings.trim("  hello  "))
+    print(strings.trim_left("  hello  "))
+    print(strings.trim_right("  hello  "))
+    print(strings.replace("foo bar foo", "foo", "baz"))
+    print(strings.repeat("ab", 3))
+    print(strings.reverse("hello"))
+
+    # --- Character checks ---
+    print(strings.is_empty(""))
+    print(strings.is_empty("x"))
+    print(strings.is_digit("12345"))
+    print(strings.is_digit("123a5"))
+    print(strings.is_alpha("Hello"))
+    print(strings.is_alnum("abc123"))
+    print(strings.is_space("   "))
+    print(strings.is_upper("ABC"))
+    print(strings.is_lower("abc"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# HELLO WORLD
+# hello world
+# Hello world
+# The Quick Brown Fox
+# true
+# false
+# true
+# 6
+# -1
+# true
+# 2
+# hello
+# hello  
+#   hello
+# baz bar baz
+# ababab
+# olleh
+# true
+# false
+# true
+# false
+# true
+# true
+# true
+# true
+# true

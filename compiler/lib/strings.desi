@@ -1,0 +1,197 @@
+# Strings module — string utility functions
+#
+# Provides case conversion, searching, trimming, and character checks.
+# All functions take str arguments and return str or bool.
+#
+# Usage:
+#   import strings
+#   let upper = strings.upper("hello")        # "HELLO"
+#   let trimmed = strings.trim("  hi  ")      # "hi"
+#   let found = strings.starts_with("abc", "ab")  # true
+
+# --- C runtime bindings (private) ---
+
+@extern("C")
+def __strings_upper(s: str) -> str
+
+@extern("C")
+def __strings_lower(s: str) -> str
+
+@extern("C")
+def __strings_capitalize(s: str) -> str
+
+@extern("C")
+def __strings_title(s: str) -> str
+
+@extern("C")
+def __strings_starts_with(s: str, prefix: str) -> bool
+
+@extern("C")
+def __strings_ends_with(s: str, suffix: str) -> bool
+
+@extern("C")
+def __strings_index_of(s: str, sub: str) -> int
+
+@extern("C")
+def __strings_contains(s: str, sub: str) -> bool
+
+@extern("C")
+def __strings_count(s: str, sub: str) -> int
+
+@extern("C")
+def __strings_trim(s: str) -> str
+
+@extern("C")
+def __strings_trim_left(s: str) -> str
+
+@extern("C")
+def __strings_trim_right(s: str) -> str
+
+@extern("C")
+def __strings_replace(s: str, old: str, new: str) -> str
+
+@extern("C")
+def __strings_repeat(s: str, n: int) -> str
+
+@extern("C")
+def __strings_reverse(s: str) -> str
+
+@extern("C")
+def __strings_is_empty(s: str) -> bool
+
+@extern("C")
+def __strings_is_digit(s: str) -> bool
+
+@extern("C")
+def __strings_is_alpha(s: str) -> bool
+
+@extern("C")
+def __strings_is_alnum(s: str) -> bool
+
+@extern("C")
+def __strings_is_space(s: str) -> bool
+
+@extern("C")
+def __strings_is_upper(s: str) -> bool
+
+@extern("C")
+def __strings_is_lower(s: str) -> bool
+
+# --- Public API: Case Conversion ---
+
+## Convert all characters to uppercase.
+pub def upper(s: str) -> str:
+	unsafe:
+		return __strings_upper(s)
+
+## Convert all characters to lowercase.
+pub def lower(s: str) -> str:
+	unsafe:
+		return __strings_lower(s)
+
+## Capitalize the first letter, lowercase the rest.
+pub def capitalize(s: str) -> str:
+	unsafe:
+		return __strings_capitalize(s)
+
+## Title case: capitalize the first letter of each word.
+pub def title(s: str) -> str:
+	unsafe:
+		return __strings_title(s)
+
+# --- Public API: Search ---
+
+## Check if s starts with the given prefix.
+pub def starts_with(s: str, prefix: str) -> bool:
+	unsafe:
+		return __strings_starts_with(s, prefix)
+
+## Check if s ends with the given suffix.
+pub def ends_with(s: str, suffix: str) -> bool:
+	unsafe:
+		return __strings_ends_with(s, suffix)
+
+## Return the index of the first occurrence of sub in s, or -1.
+pub def index_of(s: str, sub: str) -> int:
+	unsafe:
+		return __strings_index_of(s, sub)
+
+## Check if s contains the substring sub.
+pub def contains(s: str, sub: str) -> bool:
+	unsafe:
+		return __strings_contains(s, sub)
+
+## Count non-overlapping occurrences of sub in s.
+pub def count(s: str, sub: str) -> int:
+	unsafe:
+		return __strings_count(s, sub)
+
+# --- Public API: Transform ---
+
+## Remove whitespace from both ends.
+pub def trim(s: str) -> str:
+	unsafe:
+		return __strings_trim(s)
+
+## Remove whitespace from the left.
+pub def trim_left(s: str) -> str:
+	unsafe:
+		return __strings_trim_left(s)
+
+## Remove whitespace from the right.
+pub def trim_right(s: str) -> str:
+	unsafe:
+		return __strings_trim_right(s)
+
+## Replace all occurrences of old with new in s.
+pub def replace(s: str, old: str, new: str) -> str:
+	unsafe:
+		return __strings_replace(s, old, new)
+
+## Repeat s n times.
+pub def repeat(s: str, n: int) -> str:
+	unsafe:
+		return __strings_repeat(s, n)
+
+## Reverse a string.
+pub def reverse(s: str) -> str:
+	unsafe:
+		return __strings_reverse(s)
+
+# --- Public API: Character Checks ---
+
+## Check if s is empty ("").
+pub def is_empty(s: str) -> bool:
+	unsafe:
+		return __strings_is_empty(s)
+
+## Check if all characters are digits (0-9).
+pub def is_digit(s: str) -> bool:
+	unsafe:
+		return __strings_is_digit(s)
+
+## Check if all characters are alphabetic (a-z, A-Z).
+pub def is_alpha(s: str) -> bool:
+	unsafe:
+		return __strings_is_alpha(s)
+
+## Check if all characters are alphanumeric.
+pub def is_alnum(s: str) -> bool:
+	unsafe:
+		return __strings_is_alnum(s)
+
+## Check if all characters are whitespace.
+pub def is_space(s: str) -> bool:
+	unsafe:
+		return __strings_is_space(s)
+
+## Check if all characters are uppercase.
+pub def is_upper(s: str) -> bool:
+	unsafe:
+		return __strings_is_upper(s)
+
+## Check if all characters are lowercase.
+pub def is_lower(s: str) -> bool:
+	unsafe:
+		return __strings_is_lower(s)
+
