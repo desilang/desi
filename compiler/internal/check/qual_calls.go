@@ -61,6 +61,7 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 	namesTab := ex.ParamNames[fe.Name.Name]
 	metaTab := ex.FuncExtern[fe.Name.Name]
 	defaultsTab := ex.FuncDefaults[fe.Name.Name]
+	declsTab := ex.FuncDecls[fe.Name.Name]
 
 	set = &OverloadSet{Name: fe.Name.Name}
 	for i, ft := range cands {
@@ -86,13 +87,18 @@ func (c *checker) moduleQualifiedOverloadSet(fe *ast.FieldExpr) (set *OverloadSe
 		if i < len(defaultsTab) {
 			defaults = defaultsTab[i]
 		}
+		var decl *ast.FuncDecl
+		if i < len(declsTab) {
+			decl = declsTab[i]
+		}
 		set.Add(&FuncCand{
-			Decl:       nil,
+			Decl:       nil, // Keep nil to avoid borrow checker regressions
 			Type:       ft,
 			Modes:      modes,
 			Extern:     ext,
 			ParamNames: cloneNames(pnames),
 			Defaults:   cloneBools(defaults),
+			ModuleDecl: decl, // Stored for lowerer's overload dispatch
 		})
 	}
 	return set, id, true

@@ -84,3 +84,29 @@ pub def crypto_random() -> int:
 	unsafe:
 		return __random_crypto_random()
 
+# --- Int-list overloads ---
+
+@extern("C")
+def __random_choice_int(items: list[int]) -> int
+
+@extern("C")
+def __random_shuffle_int(items: list[int]) -> list[int]
+
+@extern("C")
+def __random_sample_int(items: list[int], k: int) -> list[int]
+
+## Random element from an int list.
+pub def choice(items: list[int]) -> int:
+	unsafe:
+		return __random_choice_int(items)
+
+## Return a shuffled copy of an int list (not in-place).
+pub def shuffle(items: list[int]) -> list[int]:
+	unsafe:
+		return __random_shuffle_int(items)
+
+## k random elements from an int list without replacement.
+pub def sample(items: list[int], k: int) -> list[int]:
+	unsafe:
+		return __random_sample_int(items, k)
+

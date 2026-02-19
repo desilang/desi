@@ -83,6 +83,11 @@ type Info struct {
 	// DbgCalls tracks dbg() calls with their source location and expression text.
 	// Key: the CallExpr node for dbg(), Value: debug info for emission
 	DbgCalls map[*ast.CallExpr]*DbgCallInfo
+
+	// ChosenOverloads tracks which overload was selected for each call site.
+	// Key: the CallExpr node, Value: the chosen FuncCand.
+	// Used by the lowerer to emit the correct C symbol for overloaded functions.
+	ChosenOverloads map[*ast.CallExpr]*FuncCand
 }
 
 // DbgCallInfo stores metadata for a dbg() call to emit [file:line] expr = value
@@ -110,6 +115,7 @@ type FuncCand struct {
 	Extern     bool            // true if this candidate represents an @extern declaration
 	ParamNames []string        // E-2: parameter names by index (len == arity), may be nil/empty
 	Defaults   []bool          // M14: param has default value (index-aligned with Type.Params)
+	ModuleDecl *ast.FuncDecl   // module pub def FuncDecl (for lowerer overload dispatch only)
 }
 
 // OverloadSet groups candidate functions by name.
@@ -137,6 +143,7 @@ func NewInfo() *Info {
 		StdlibImports:       make(map[string]bool),
 		BoolConversions:     make(map[ast.Expr]*types.Class),
 		DbgCalls:            make(map[*ast.CallExpr]*DbgCallInfo),
+		ChosenOverloads:     make(map[*ast.CallExpr]*FuncCand),
 	}
 	addPreludeBuiltins(info)
 	return info

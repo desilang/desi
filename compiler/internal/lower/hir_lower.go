@@ -103,6 +103,55 @@ func isExternFunction(fd *ast.FuncDecl) bool {
 	return false
 }
 
+// extractExternFromWrapper walks a pub def wrapper's body to find the @extern
+// function it calls. Handles the common pattern:
+//
+//	pub def choice(items: list[int]) -> int:
+//	    unsafe:
+//	        return __random_choice_int(items)
+//
+// Returns the inner function name (e.g., "__random_choice_int"), or "" if not found.
+func extractExternFromWrapper(fd *ast.FuncDecl) string {
+	if fd == nil || fd.Body == nil {
+		return ""
+	}
+	// Walk the body's statements to find CallExpr nodes
+	for _, stmt := range fd.Body.Stmts {
+		if name := extractCallFromStmt(stmt); name != "" {
+			return name
+		}
+	}
+	return ""
+}
+
+func extractCallFromStmt(stmt ast.Stmt) string {
+	switch s := stmt.(type) {
+	case *ast.ReturnStmt:
+		if s.Value != nil {
+			if call, ok := s.Value.(*ast.CallExpr); ok {
+				if id, ok := call.Callee.(*ast.Ident); ok {
+					return id.Name
+				}
+			}
+		}
+	case *ast.ExprStmt:
+		if call, ok := s.Expr.(*ast.CallExpr); ok {
+			if id, ok := call.Callee.(*ast.Ident); ok {
+				return id.Name
+			}
+		}
+	case *ast.UnsafeBlock:
+		if s.Body != nil {
+			for _, inner := range s.Body.Stmts {
+				if name := extractCallFromStmt(inner); name != "" {
+					return name
+				}
+			}
+		}
+	}
+	return ""
+}
+
 func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool) *hir.Func {
 	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals)
 }
@@ -538,7 +587,7 @@ func (ls *lowerState) nameOf(e ast.Expr) string {
 	return ""
 }
 
-func (ls *lowerState) calleeName(e ast.Expr) string {
+func (ls *lowerState) calleeName(e ast.Expr, callExpr ...*ast.CallExpr) string {
 	switch x := e.(type) {
 	case *ast.Ident:
 		// First check if this is a lambda variable (e.g., "double" -> "__lam$0")
@@ -580,12 +629,34 @@ func (ls *lowerState) calleeName(e ast.Expr) string {
 			if id, ok := x.X.(*ast.Ident); ok {
 				if _, isModule := ls.info.R.Imports[id.Name]; isModule {
 					// It's a qualified call like time.strftime
-					// Check if this function is @extern in the imported module
 					funcName := x.Name.Name
+
+					// Check if the type checker chose a specific overload for this call
+					if len(callExpr) > 0 && callExpr[0] != nil {
+						if chosen, ok := ls.info.ChosenOverloads[callExpr[0]]; ok {
+							// Try Decl first, then ModuleDecl
+							decl := chosen.Decl
+							if decl == nil {
+								decl = chosen.ModuleDecl
+							}
+							if decl != nil {
+								if isExternFunction(decl) {
+									return decl.Name.Name
+								}
+								// For pub def wrappers, find the @extern function they call
+								if innerName := extractExternFromWrapper(decl); innerName != "" {
+									return innerName
+								}
+								return mangleDesiName(decl.Name.Name)
+							}
+						}
+					}
+
+					// Fallback: check first candidate
 					if set, ok := ls.info.Funcs[funcName]; ok && len(set.Cands) > 0 {
 						cand := set.Cands[0]
 						if cand.Extern {
-							return funcName // @extern: use unmangeld name
+							return funcName // @extern: use unmangled name
 						}
 					}
 					// Non-extern: mangle to match definition

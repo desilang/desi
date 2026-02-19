@@ -193,6 +193,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						ret = types.FutureOf(ret)
 					}
 					c.info.Types[call] = ret
+					c.info.ChosenOverloads[call] = chosen
 					return ret
 				case 0:
 					c.add(diagAt("DTE0101", fe.Name.Span, "no matching overload"))
@@ -259,6 +260,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						ret = types.FutureOf(ret)
 					}
 					c.info.Types[call] = ret
+					c.info.ChosenOverloads[call] = chosen
 					return ret
 				case 0:
 					if !hasCands(set) {
