@@ -1,0 +1,62 @@
+# re module — regular expressions (POSIX extended syntax)
+#
+# Provides regex matching, searching, and text manipulation.
+# Uses POSIX regex.h — available on macOS/Linux with no external deps.
+#
+# Usage:
+#   import re
+#   if re.is_match("[0-9]+", "abc123"):
+#       print("found digits")
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __re_match(pattern: str, s: str) -> bool
+
+@extern("C")
+def __re_is_match(pattern: str, s: str) -> bool
+
+@extern("C")
+def __re_search(pattern: str, s: str) -> str
+
+@extern("C")
+def __re_findall(pattern: str, s: str) -> list[str]
+
+@extern("C")
+def __re_replace(pattern: str, s: str, repl: str) -> str
+
+@extern("C")
+def __re_split(pattern: str, s: str) -> list[str]
+
+# --- Public API ---
+
+## Test if entire string matches pattern.
+pub def full_match(pattern: str, s: str) -> bool:
+	unsafe:
+		return __re_match(pattern, s)
+
+## Test if pattern matches anywhere in string.
+pub def is_match(pattern: str, s: str) -> bool:
+	unsafe:
+		return __re_is_match(pattern, s)
+
+## Find first match, return matched substring (empty if none).
+pub def search(pattern: str, s: str) -> str:
+	unsafe:
+		return __re_search(pattern, s)
+
+## Find all non-overlapping matches.
+pub def findall(pattern: str, s: str) -> list[str]:
+	unsafe:
+		return __re_findall(pattern, s)
+
+## Replace all matches with replacement string.
+pub def replace(pattern: str, s: str, repl: str) -> str:
+	unsafe:
+		return __re_replace(pattern, s, repl)
+
+## Split string by regex pattern.
+pub def split(pattern: str, s: str) -> list[str]:
+	unsafe:
+		return __re_split(pattern, s)
+

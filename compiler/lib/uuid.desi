@@ -1,0 +1,36 @@
+# uuid module — UUID generation
+#
+# Generates RFC 4122 v4 UUIDs using /dev/urandom.
+#
+# Usage:
+#   import uuid
+#   let id = uuid.v4()
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __uuid_v4() -> str
+
+@extern("C")
+def __uuid_is_valid(s: str) -> bool
+
+@extern("C")
+def __uuid_nil() -> str
+
+# --- Public API ---
+
+## Generate a random UUID v4.
+pub def v4() -> str:
+	unsafe:
+		return __uuid_v4()
+
+## Check if string is a valid UUID format.
+pub def is_valid(s: str) -> bool:
+	unsafe:
+		return __uuid_is_valid(s)
+
+## Return the nil UUID (all zeros).
+pub def nil() -> str:
+	unsafe:
+		return __uuid_nil()
+

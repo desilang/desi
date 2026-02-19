@@ -1,0 +1,21 @@
+# Test regex module
+import re
+
+def main() -> int:
+    print(re.full_match("[0-9]+", "12345"))
+    print(re.full_match("[0-9]+", "abc"))
+    print(re.is_match("[0-9]+", "abc123"))
+    print(re.search("[0-9]+", "abc123def"))
+    print(re.findall("[0-9]+", "a1b2c3"))
+    print(re.replace("[0-9]", "a1b2c3", "X"))
+    print(re.split("[,]+", "a,b,,c"))
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# false
+# true
+# 123
+# ["1", "2", "3"]
+# aXbXcX
+# ["a", "b", "c"]
