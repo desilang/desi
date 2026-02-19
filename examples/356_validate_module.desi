@@ -1,0 +1,46 @@
+import validate
+
+def main() -> int:
+    # Email
+    print(validate.is_email("user@example.com"))
+    print(validate.is_email("invalid"))
+    print(validate.is_email("a@b.c"))
+
+    # URL
+    print(validate.is_url("https://example.com"))
+    print(validate.is_url("not a url"))
+
+    # IPv4
+    print(validate.is_ipv4("192.168.1.1"))
+    print(validate.is_ipv4("256.1.1.1"))
+
+    # Hex
+    print(validate.is_hex("deadbeef"))
+    print(validate.is_hex("0xCAFE"))
+    print(validate.is_hex("xyz"))
+
+    # JSON
+    print(validate.is_json("{\"key\": 1}"))
+    print(validate.is_json("hello"))
+
+    # Semver
+    print(validate.is_semver("1.2.3"))
+    print(validate.is_semver("abc"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# false
+# true
+# true
+# false
+# true
+# false
+# true
+# true
+# false
+# true
+# false
+# true
+# false

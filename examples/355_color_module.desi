@@ -1,0 +1,25 @@
+import color
+
+def main() -> int:
+    # Test color stripping to verify ANSI wrap works
+    let styled = color.red("hello")
+    print(color.strip(styled))
+
+    let bold = color.bold("world")
+    print(color.strip(bold))
+
+    # RGB
+    let rgb_text = color.rgb("test", 255, 128, 0)
+    print(color.strip(rgb_text))
+
+    # Verify styled text is longer (has ANSI codes)
+    print(len(styled) > 5)
+    print(len(bold) > 5)
+    0
+
+# EXPECTED_OUTPUT:
+# hello
+# world
+# test
+# true
+# true
