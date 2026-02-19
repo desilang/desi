@@ -103,7 +103,9 @@ pub def add(a: int, b: int) -> int:
 > | `bool` | `int` | 0 = false, non-zero = true |
 > | `float` | `double` | |
 > | `none` | `void` | |
-> | `list[str]` | ❌ | **Not supported** via `@extern("C")` module path |
+> | `list[T]` | `DesiList*` | C function returns/accepts `DesiList*` pointer |
+> | `dict[K,V]` | `DesiDict*` | C function returns/accepts `DesiDict*` pointer |
+> | `set[T]` | `DesiSet*` | C function returns/accepts `DesiSet*` pointer |
 
 ### 3. No Registration Needed
 
@@ -198,7 +200,7 @@ Adding functions to an existing module (e.g., `strings`) is simpler — same ste
 
 | Module | Functions | C File | Status |
 |--------|-----------|--------|--------|
-| `strings` | 35 | `strings.c` | Complete |
+| `strings` | 38 | `strings.c` | Complete (incl. split/join/splitlines) |
 | `os` | 12 | `os.c` | Complete |
 | `path` | 12 | `path.c` | Complete |
 | `log` | 6 | `log.c` | Complete |
@@ -209,8 +211,5 @@ Adding functions to an existing module (e.g., `strings`) is simpler — same ste
 
 ## Known Limitations
 
-- **`list[str]` return types** are not supported through the `@extern("C")` module path.
-  Functions like `split()` and `join()` that return/accept lists must be implemented as
-  builtin string methods (`.split()`, `.join()`) rather than module functions.
 - **Variadic arguments** are not supported in `@extern("C")` declarations.
 - **Struct return types** are not yet supported through the module path.
