@@ -1,0 +1,86 @@
+# random module — random number generation
+#
+# Provides PRNG and cryptographically secure random functions.
+# Uses /dev/urandom for secure random on macOS/Linux.
+#
+# Usage:
+#   import random
+#   let n = random.randint(1, 100)
+#   let f = random.random()
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __random_seed(n: int) -> none
+
+@extern("C")
+def __random_randint(a: int, b: int) -> int
+
+@extern("C")
+def __random_random() -> float
+
+@extern("C")
+def __random_uniform(a: float, b: float) -> float
+
+@extern("C")
+def __random_choice(items: list[str]) -> str
+
+@extern("C")
+def __random_shuffle(items: list[str]) -> list[str]
+
+@extern("C")
+def __random_sample(items: list[str], k: int) -> list[str]
+
+@extern("C")
+def __random_hex(n: int) -> str
+
+@extern("C")
+def __random_crypto_random() -> int
+
+# --- Public API ---
+
+## Seed the random number generator.
+pub def seed(n: int) -> none:
+	unsafe:
+		__random_seed(n)
+
+## Random integer in [a, b] inclusive.
+pub def randint(a: int, b: int) -> int:
+	unsafe:
+		return __random_randint(a, b)
+
+## Random float in [0.0, 1.0).
+pub def random() -> float:
+	unsafe:
+		return __random_random()
+
+## Random float in [a, b].
+pub def uniform(a: float, b: float) -> float:
+	unsafe:
+		return __random_uniform(a, b)
+
+## Random element from a list.
+pub def choice(items: list[str]) -> str:
+	unsafe:
+		return __random_choice(items)
+
+## Return a shuffled copy of the list (not in-place).
+pub def shuffle(items: list[str]) -> list[str]:
+	unsafe:
+		return __random_shuffle(items)
+
+## k random elements without replacement.
+pub def sample(items: list[str], k: int) -> list[str]:
+	unsafe:
+		return __random_sample(items, k)
+
+## Random hex string of n bytes (2*n hex characters).
+pub def hex(n: int) -> str:
+	unsafe:
+		return __random_hex(n)
+
+## Cryptographically secure random integer from /dev/urandom.
+pub def crypto_random() -> int:
+	unsafe:
+		return __random_crypto_random()
+
