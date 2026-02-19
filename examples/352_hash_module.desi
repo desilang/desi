@@ -1,0 +1,23 @@
+# Test hash module
+import hash
+
+def main() -> int:
+    # MD5
+    print(hash.md5("hello"))
+
+    # SHA-256
+    print(hash.sha256("hello"))
+
+    # SHA-512 length
+    print(len(hash.sha512("hello")) == 128)
+
+    # HMAC length
+    print(len(hash.hmac_sha256("key", "msg")) == 64)
+
+    0
+
+# EXPECTED_OUTPUT:
+# 5d41402abc4b2a76b9719d911017c592
+# 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+# true
+# true
