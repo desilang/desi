@@ -437,7 +437,7 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 	var src []byte
 
 	// Lower to HIR using the IMPORTED module's type info (not the main module's info)
-	hm := lower.LowerModuleFromSourceWithOptions(mod, impRes.Info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true})
+	hm := lower.LowerModuleFromSourceWithOptions(mod, impRes.Info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true, IsImportedModule: true})
 
 	return hm, src, mod, nil
 }

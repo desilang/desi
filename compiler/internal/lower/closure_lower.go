@@ -102,7 +102,7 @@ func lowerImportedModule(
 	// For now, use nil info since we don't have full type info for imports
 	// TODO: Enhance to share type info across modules
 	// Skip built-in enums (Option/Result) since they're already emitted from entry module
-	impHIR := LowerModuleFromSourceWithOptions(mod, nil, src, LowerModuleOptions{SkipBuiltinEnums: true})
+	impHIR := LowerModuleFromSourceWithOptions(mod, nil, src, LowerModuleOptions{SkipBuiltinEnums: true, IsImportedModule: true})
 
 	for _, fn := range impHIR.Funcs {
 		// Skip built-in constructors if already emitted
@@ -126,17 +126,25 @@ func lowerImportedModule(
 			continue
 		}
 
-		// Create namespaced function name: modulePrefix_functionName
+		// Determine the original (unmangled) function name.
+		// Module functions with IsImportedModule=true get __desi$ prefix;
+		// strip it to recover the original name for namespacing.
+		originalName := fn.Name
+		if strings.HasPrefix(fn.Name, "__desi$") {
+			originalName = strings.TrimPrefix(fn.Name, "__desi$")
+		}
+
+		// Create namespaced function name using ORIGINAL name: modulePrefix_functionName
 		// e.g., math_add for import math; math.add()
-		namespacedName := modulePrefix + "_" + fn.Name
+		namespacedName := modulePrefix + "_" + originalName
 
 		// Check if we already have this function
 		if emittedFuncs[namespacedName] {
 			continue
 		}
 
-		// Also emit with the original name for from-imports
-		// e.g., "from math import add" should make "add" available
+		// Emit with original name (mangled or not — module_lower.go already
+		// emits unmangled aliases, so this covers both)
 		if !emittedFuncs[fn.Name] {
 			out.Funcs = append(out.Funcs, fn)
 			emittedFuncs[fn.Name] = true
@@ -144,7 +152,6 @@ func lowerImportedModule(
 
 		// Emit the namespaced version for qualified calls
 		if !emittedFuncs[namespacedName] {
-			// Clone the function with new name
 			clonedFn := cloneHIRFunc(fn, namespacedName)
 			out.Funcs = append(out.Funcs, clonedFn)
 			emittedFuncs[namespacedName] = true
