@@ -1,0 +1,80 @@
+import fs
+
+def main() -> int:
+    # Setup: create a temp directory
+    let dir = "/tmp/desi_fs_test"
+    fs.mkdir(dir)
+    print(fs.is_dir(dir))
+
+    # write + read
+    let path = "/tmp/desi_fs_test/hello.txt"
+    fs.write(path, "hello world")
+    print(fs.read(path))
+
+    # exists, is_file
+    print(fs.exists(path))
+    print(fs.is_file(path))
+    print(fs.is_dir(path))
+
+    # size
+    print(fs.size(path))
+
+    # append
+    fs.append(path, "\nline2")
+    print(fs.read(path))
+
+    # read_lines / write_lines
+    let lines = fs.read_lines(path)
+    print(lines)
+    fs.write_lines("/tmp/desi_fs_test/lines.txt", ["alpha", "beta", "gamma"])
+    print(fs.read("/tmp/desi_fs_test/lines.txt"))
+
+    # list_dir
+    let entries = fs.list_dir(dir)
+    print(len(entries) >= 2)
+
+    # copy
+    fs.copy(path, "/tmp/desi_fs_test/copy.txt")
+    print(fs.read("/tmp/desi_fs_test/copy.txt"))
+
+    # move
+    fs.move("/tmp/desi_fs_test/copy.txt", "/tmp/desi_fs_test/moved.txt")
+    print(fs.exists("/tmp/desi_fs_test/copy.txt"))
+    print(fs.exists("/tmp/desi_fs_test/moved.txt"))
+
+    # abs
+    let a = fs.abs("/tmp/desi_fs_test/hello.txt")
+    print(a != "")
+
+    # remove
+    fs.remove("/tmp/desi_fs_test/hello.txt")
+    fs.remove("/tmp/desi_fs_test/lines.txt")
+    fs.remove("/tmp/desi_fs_test/moved.txt")
+    print(fs.exists("/tmp/desi_fs_test/hello.txt"))
+
+    # cleanup
+    fs.remove(dir)
+
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# hello world
+# true
+# true
+# false
+# 11
+# hello world
+# line2
+# [hello world, line2]
+# alpha
+# beta
+# gamma
+# 
+# true
+# hello world
+# line2
+# false
+# true
+# true
+# false
