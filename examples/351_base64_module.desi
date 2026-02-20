@@ -1,0 +1,22 @@
+import base64
+
+def main() -> int:
+    # Standard encode/decode
+    print(base64.encode("Hello, World!"))
+    print(base64.decode("SGVsbG8sIFdvcmxkIQ=="))
+
+    # Another roundtrip
+    print(base64.decode(base64.encode("Desi")))
+
+    # URL-safe
+    print(base64.url_encode("Hello+World/Test"))
+    print(base64.url_decode("SGVsbG8rV29ybGQvVGVzdA"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# SGVsbG8sIFdvcmxkIQ==
+# Hello, World!
+# Desi
+# SGVsbG8rV29ybGQvVGVzdA
+# Hello+World/Test

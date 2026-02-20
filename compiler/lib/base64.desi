@@ -1,0 +1,45 @@
+# base64 module — Base64 encoding and decoding
+#
+# RFC 4648 compliant. Supports standard and URL-safe variants.
+#
+# Usage:
+#   import base64
+#   let encoded = base64.encode("Hello, World!")
+#   let decoded = base64.decode(encoded)
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __base64_encode(s: str) -> str
+
+@extern("C")
+def __base64_decode(s: str) -> str
+
+@extern("C")
+def __base64_url_encode(s: str) -> str
+
+@extern("C")
+def __base64_url_decode(s: str) -> str
+
+# --- Public API ---
+
+## Encode a string to Base64.
+pub def encode(s: str) -> str:
+	unsafe:
+		return __base64_encode(s)
+
+## Decode a Base64 string.
+pub def decode(s: str) -> str:
+	unsafe:
+		return __base64_decode(s)
+
+## Encode to URL-safe Base64 (no padding, +→-, /→_).
+pub def url_encode(s: str) -> str:
+	unsafe:
+		return __base64_url_encode(s)
+
+## Decode URL-safe Base64.
+pub def url_decode(s: str) -> str:
+	unsafe:
+		return __base64_url_decode(s)
+
