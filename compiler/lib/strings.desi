@@ -116,11 +116,14 @@ def __strings_truncate(s: str, max_len: int, suffix: str) -> str
 @extern("C")
 def __strings_slugify(s: str) -> str
 
-# NOTE: split()/join()/splitlines() are available as string methods:
-#   "a,b,c".split(",")   -> ["a", "b", "c"]
-#   ",".join(["a","b"])   -> "a,b"
-# list[str] return types are not yet supported through @extern("C") module path.
+@extern("C")
+def __strings_split(s: str, sep: str) -> list[str]
 
+@extern("C")
+def __strings_join(sep: str, parts: list[str]) -> str
+
+@extern("C")
+def __strings_splitlines(s: str) -> list[str]
 
 
 ## Convert all characters to uppercase.
@@ -311,3 +314,20 @@ pub def truncate(s: str, max_len: int, suffix: str) -> str:
 pub def slugify(s: str) -> str:
 	unsafe:
 		return __strings_slugify(s)
+
+# --- Public API: Split / Join ---
+
+## Split string by separator, returns list of parts.
+pub def split(s: str, sep: str) -> list[str]:
+	unsafe:
+		return __strings_split(s, sep)
+
+## Join list of strings with separator.
+pub def join(sep: str, parts: list[str]) -> str:
+	unsafe:
+		return __strings_join(sep, parts)
+
+## Split string by newlines.
+pub def splitlines(s: str) -> list[str]:
+	unsafe:
+		return __strings_splitlines(s)

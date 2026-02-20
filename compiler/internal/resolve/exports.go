@@ -181,14 +181,90 @@ func CollectExports(mod *ast.Module) *Exports {
 	// ========================================================================
 	collectClasses(mod, out)
 
-	// Helper to resolve type from name, including exported classes from this module
-	resolveType := func(name string) (types.T, bool) {
-		// First try built-in types
-		if t, ok := types.FromName(name); ok {
+	// resolveTypeName resolves an AST TypeName to a types.T, handling generic
+	// containers (list[T], dict[K,V], set[T]), tuples, unions, and simple types.
+	var resolveTypeName func(tn *ast.TypeName) (types.T, bool)
+	resolveTypeName = func(tn *ast.TypeName) (types.T, bool) {
+		if tn == nil {
+			return nil, false
+		}
+
+		// Handle tuple types: (int, str, ...)
+		if len(tn.TupleTypes) > 0 {
+			elems := make([]types.T, len(tn.TupleTypes))
+			for i, tt := range tn.TupleTypes {
+				t, ok := resolveTypeName(tt)
+				if !ok {
+					return nil, false
+				}
+				elems[i] = t
+			}
+			return types.TupleOf(elems...), true
+		}
+
+		// Handle union types: int|str|none
+		if len(tn.UnionTypes) > 0 {
+			// For now, treat unions as Any (the type system handles them at check time)
+			return types.Any, true
+		}
+
+		// Handle generic containers: list[T], dict[K,V], set[T], Option[T], Result[T,E]
+		if len(tn.Params) > 0 {
+			switch tn.Name {
+			case "list":
+				if len(tn.Params) == 1 {
+					elem, ok := resolveTypeName(tn.Params[0])
+					if !ok {
+						return nil, false
+					}
+					return types.ListOf(elem), true
+				}
+			case "dict":
+				if len(tn.Params) == 2 {
+					k, ok := resolveTypeName(tn.Params[0])
+					if !ok {
+						return nil, false
+					}
+					v, ok := resolveTypeName(tn.Params[1])
+					if !ok {
+						return nil, false
+					}
+					return types.DictOf(k, v), true
+				}
+			case "set":
+				if len(tn.Params) == 1 {
+					elem, ok := resolveTypeName(tn.Params[0])
+					if !ok {
+						return nil, false
+					}
+					return types.SetOf(elem), true
+				}
+			case "Option":
+				if len(tn.Params) == 1 {
+					elem, ok := resolveTypeName(tn.Params[0])
+					if !ok {
+						return nil, false
+					}
+					return types.OptionOf(elem), true
+				}
+			case "Result":
+				if len(tn.Params) == 2 {
+					okT, ok1 := resolveTypeName(tn.Params[0])
+					errT, ok2 := resolveTypeName(tn.Params[1])
+					if !ok1 || !ok2 {
+						return nil, false
+					}
+					return types.ResultOf(okT, errT), true
+				}
+			}
+		}
+
+		// Simple type: try built-in types first
+		if t, ok := types.FromName(tn.Name); ok {
 			return t, true
 		}
 		// Then try classes exported from this module (with full method info)
-		if cls, ok := out.Classes[name]; ok {
+		if cls, ok := out.Classes[tn.Name]; ok {
 			return cls, true
 		}
 		return nil, false
@@ -214,7 +290,7 @@ func CollectExports(mod *ast.Module) *Exports {
 				okTypes = false
 				break
 			}
-			if t, ok := resolveType(p.Type.Name); ok {
+			if t, ok := resolveTypeName(p.Type); ok {
 				// If this is a variadic parameter, wrap in list[T]
 				if p.Variadic {
 					params[i] = types.ListOf(t)
@@ -233,7 +309,7 @@ func CollectExports(mod *ast.Module) *Exports {
 		if fn.RetType == nil {
 			continue
 		}
-		rt, ok := resolveType(fn.RetType.Name)
+		rt, ok := resolveTypeName(fn.RetType)
 		if !ok {
 			continue
 		}
