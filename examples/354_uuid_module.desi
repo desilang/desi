@@ -1,0 +1,16 @@
+# Test uuid module
+import uuid
+
+def main() -> int:
+    let id = uuid.v4()
+    print(uuid.is_valid(id))
+    print(len(id) == 36)
+    print(uuid.nil())
+    print(uuid.is_valid("not-a-uuid"))
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# true
+# 00000000-0000-0000-0000-000000000000
+# false
