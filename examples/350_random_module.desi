@@ -1,0 +1,55 @@
+# Test random module
+import random
+
+def main() -> int:
+    random.seed(42)
+
+    # randint
+    let n = random.randint(1, 100)
+    print(n > 0)
+    print(n <= 100)
+
+    # random float
+    let f = random.random()
+    print(f >= 0.0)
+    print(f < 1.0)
+
+    # uniform
+    let u = random.uniform(5.0, 10.0)
+    print(u >= 5.0)
+    print(u <= 10.0)
+
+    # choice
+    let items = ["a", "b", "c"]
+    let c = random.choice(items)
+    print(c != "")
+
+    # shuffle
+    let shuffled = random.shuffle(items)
+    print(len(shuffled) == 3)
+
+    # sample
+    let picked = random.sample(items, 2)
+    print(len(picked) == 2)
+
+    # hex
+    let h = random.hex(4)
+    print(len(h) == 8)
+
+    # crypto_random
+    print(random.crypto_random() >= 0)
+
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
+# true
