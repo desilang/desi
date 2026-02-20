@@ -125,6 +125,74 @@ DesiList* __random_sample(DesiList* items, int k) {
 }
 
 // ============================================================
+// Int-list overloads (type_tag 0 = int, stored as (void*)(intptr_t))
+// ============================================================
+
+int __random_choice_int(DesiList* items) {
+    if (!items) return 0;
+    int64_t len = list_len(items);
+    if (len == 0) return 0;
+    ensure_seeded();
+    int64_t idx = (int64_t)(rand() % (int)len);
+    return (int)(intptr_t)list_get(items, idx);
+}
+
+DesiList* __random_shuffle_int(DesiList* items) {
+    DesiList* result = list_new(0, NULL); // type_tag 0 = int
+    if (!items) return result;
+    int64_t len = list_len(items);
+    if (len == 0) return result;
+    ensure_seeded();
+
+    int n = (int)len;
+    int* indices = (int*)malloc(n * sizeof(int));
+    if (!indices) return result;
+    for (int i = 0; i < n; i++) indices[i] = i;
+
+    for (int i = n - 1; i > 0; i--) {
+        int j = rand() % (i + 1);
+        int tmp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = tmp;
+    }
+
+    for (int i = 0; i < n; i++) {
+        intptr_t val = (intptr_t)list_get(items, (int64_t)indices[i]);
+        list_append(result, (void*)val, 0);
+    }
+    free(indices);
+    return result;
+}
+
+DesiList* __random_sample_int(DesiList* items, int k) {
+    DesiList* result = list_new(0, NULL);
+    if (!items || k <= 0) return result;
+    int64_t len = list_len(items);
+    if (len == 0) return result;
+    int n = (int)len;
+    if (k > n) k = n;
+    ensure_seeded();
+
+    int* indices = (int*)malloc(n * sizeof(int));
+    if (!indices) return result;
+    for (int i = 0; i < n; i++) indices[i] = i;
+
+    for (int i = 0; i < k; i++) {
+        int j = i + (rand() % (n - i));
+        int tmp = indices[i];
+        indices[i] = indices[j];
+        indices[j] = tmp;
+    }
+
+    for (int i = 0; i < k; i++) {
+        intptr_t val = (intptr_t)list_get(items, (int64_t)indices[i]);
+        list_append(result, (void*)val, 0);
+    }
+    free(indices);
+    return result;
+}
+
+// ============================================================
 // Secure/hex random
 // ============================================================
 

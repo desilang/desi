@@ -35,6 +35,10 @@ type Exports struct {
 	// FuncDefaults[name][i][j] is true if parameter j of overload i has a default value.
 	FuncDefaults map[string][][]bool
 
+	// FuncDecls is index-aligned with Funcs[name]: the AST FuncDecl per overload.
+	// Used by the lowerer to extract the underlying @extern function from pub def wrappers.
+	FuncDecls map[string][]*ast.FuncDecl
+
 	// Classes maps a class name to its type information.
 	// Allows "from module import ClassName" to work with class types.
 	Classes map[string]*types.Class
@@ -168,6 +172,7 @@ func CollectExports(mod *ast.Module) *Exports {
 		ParamNames:   map[string][][]string{},
 		FuncExtern:   map[string][]ExternMeta{},
 		FuncDefaults: map[string][][]bool{},
+		FuncDecls:    map[string][]*ast.FuncDecl{},
 
 		Classes: map[string]*types.Class{},
 		Globals: map[string]types.T{},
@@ -370,6 +375,7 @@ func CollectExports(mod *ast.Module) *Exports {
 			break
 		}
 		out.FuncExtern[name] = append(out.FuncExtern[name], meta)
+		out.FuncDecls[name] = append(out.FuncDecls[name], fn)
 	}
 
 	// Handle nested classes (collectClasses already populated out.Classes with top-level classes)

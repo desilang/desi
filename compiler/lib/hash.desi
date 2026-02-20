@@ -13,6 +13,9 @@
 def __hash_md5(s: str) -> str
 
 @extern("C")
+def __hash_sha1(s: str) -> str
+
+@extern("C")
 def __hash_sha256(s: str) -> str
 
 @extern("C")
@@ -30,6 +33,11 @@ def __hash_file(path: str) -> str
 pub def md5(s: str) -> str:
 	unsafe:
 		return __hash_md5(s)
+
+## SHA-1 hex digest (40 chars). Useful for git hashes.
+pub def sha1(s: str) -> str:
+	unsafe:
+		return __hash_sha1(s)
 
 ## SHA-256 hex digest (64 chars).
 pub def sha256(s: str) -> str:

@@ -11,7 +11,7 @@ import (
 )
 
 func (ls *lowerState) lowerVariadicCall(x *ast.CallExpr, ft *types.Func) hir.Value {
-	callee := ls.calleeName(x.Callee)
+	callee := ls.calleeName(x.Callee, x)
 
 	// Fixed params
 	nFixed := len(ft.Params) - 1
@@ -907,7 +907,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// 1. Variadic calls (M14)
 	// Look up the function by name to get its signature
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		// Special case: print() - don't use standard variadic lowering
 		// We handle print with custom print_item calls for proper formatting
 		if calleeName == "print" {
@@ -991,7 +991,7 @@ handlePrint:
 
 	// taskgroup_new() -> TaskGroup*
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "taskgroup_new" && len(x.Args) == 0 {
 			res := ls.b.FreshTemp("taskgroup")
 			ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: []hir.Value{}, Type: "ptr"})
@@ -1001,7 +1001,7 @@ handlePrint:
 
 	// 1.5. len() builtin
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "len" && len(x.Args) == 1 {
 			if argT := ls.info.Types[x.Args[0]]; argT != nil {
 				// Lower argument
@@ -1055,7 +1055,7 @@ handlePrint:
 
 	// 1.6. sum(), min(), max(), any(), all() builtins
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 
 		// TaskGroup() - zero-arg constructor
 		if calleeName == "TaskGroup" && len(x.Args) == 0 {
@@ -1297,7 +1297,7 @@ handlePrint:
 	// foldl is alias for reduce (left-to-right)
 	// foldr processes right-to-left
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if (calleeName == "reduce" || calleeName == "foldl" || calleeName == "foldr") && len(x.Args) == 3 {
 			funcExpr := x.Args[0]
 			iterExpr := x.Args[1]
@@ -1421,7 +1421,7 @@ handlePrint:
 	}
 
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "open" && len(x.Args) == 2 {
 			return ls.lowerFileOpen(x.Args)
 		}
@@ -1431,7 +1431,7 @@ handlePrint:
 	// assert(condition) or assert(condition, message)
 	// Calls __assert_check which aborts if condition is false
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "assert" && len(x.Args) >= 1 && len(x.Args) <= 2 {
 			// Lower the condition
 			condVal := ls.lowerExpr(x.Args[0])
@@ -1456,7 +1456,7 @@ handlePrint:
 	// 1.8. set_recursion_limit(n) - configure maximum recursion depth
 	// Like Python's sys.setrecursionlimit(n)
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "set_recursion_limit" && len(x.Args) == 1 {
 			// Lower the limit value
 			limitVal := ls.lowerExpr(x.Args[0])
@@ -1475,7 +1475,7 @@ handlePrint:
 
 	// 1.9. Hot reload state serialization builtins
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 
 		// is_reload() -> bool
 		if calleeName == "is_reload" && len(x.Args) == 0 {
@@ -1687,7 +1687,7 @@ handlePrint:
 	// Supports multiple arguments - prints each separated by space, ending with newline
 	// Supports keyword args: sep (default " "), end (default "\n")
 	if ls.info != nil {
-		calleeName := ls.calleeName(x.Callee)
+		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "print" {
 			// Default sep and end as HIR values
 			var sepHIR hir.Value = hir.ConstStr{Text: " "}
@@ -2200,7 +2200,7 @@ skipMethodCall:
 
 			// Heuristic: if callee name matches class name, it's a constructor.
 			// This avoids issues where ls.info.Idents/Types lookup fails for the class name identifier.
-			callee := ls.calleeName(x.Callee)
+			callee := ls.calleeName(x.Callee, x)
 			if callee == cls.Name {
 				isConstructor = true
 			}
@@ -2365,7 +2365,7 @@ skipMethodCall:
 	}
 
 	// Legacy/Default behavior
-	callee := ls.calleeName(x.Callee)
+	callee := ls.calleeName(x.Callee, x)
 	var args []hir.Value
 	for _, a := range x.Args {
 		args = append(args, ls.lowerExpr(a))

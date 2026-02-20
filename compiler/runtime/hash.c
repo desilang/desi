@@ -38,6 +38,13 @@ char* __hash_md5(const char* input) {
     return to_hex(digest, CC_MD5_DIGEST_LENGTH);
 }
 
+char* __hash_sha1(const char* input) {
+    if (!input) return strdup("");
+    unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+    CC_SHA1(input, (CC_LONG)strlen(input), digest);
+    return to_hex(digest, CC_SHA1_DIGEST_LENGTH);
+}
+
 char* __hash_sha256(const char* input) {
     if (!input) return strdup("");
     unsigned char digest[CC_SHA256_DIGEST_LENGTH];
