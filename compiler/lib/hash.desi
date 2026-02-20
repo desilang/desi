@@ -1,0 +1,53 @@
+# hash module — cryptographic hashing
+#
+# Provides MD5, SHA-256, SHA-512, HMAC, and file hashing.
+# Uses CommonCrypto (macOS) / OpenSSL (Linux).
+#
+# Usage:
+#   import hash
+#   let digest = hash.sha256("hello")
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __hash_md5(s: str) -> str
+
+@extern("C")
+def __hash_sha256(s: str) -> str
+
+@extern("C")
+def __hash_sha512(s: str) -> str
+
+@extern("C")
+def __hash_hmac_sha256(key: str, msg: str) -> str
+
+@extern("C")
+def __hash_file(path: str) -> str
+
+# --- Public API ---
+
+## MD5 hex digest (32 chars). Use SHA-256 for security.
+pub def md5(s: str) -> str:
+	unsafe:
+		return __hash_md5(s)
+
+## SHA-256 hex digest (64 chars).
+pub def sha256(s: str) -> str:
+	unsafe:
+		return __hash_sha256(s)
+
+## SHA-512 hex digest (128 chars).
+pub def sha512(s: str) -> str:
+	unsafe:
+		return __hash_sha512(s)
+
+## HMAC-SHA256 hex digest.
+pub def hmac_sha256(key: str, msg: str) -> str:
+	unsafe:
+		return __hash_hmac_sha256(key, msg)
+
+## SHA-256 hash of a file's contents.
+pub def hash_file(path: str) -> str:
+	unsafe:
+		return __hash_file(path)
+
