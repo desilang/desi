@@ -1,0 +1,20 @@
+import env
+import os
+
+def main() -> int:
+    # Set via os, then check env
+    os.setenv("DESI_TEST_KEY", "hello123")
+    print(env.is_set("DESI_TEST_KEY"))
+    print(env.get("DESI_TEST_KEY", "default"))
+
+    # Nonexistent key with default
+    print(env.get("NONEXISTENT_KEY_12345", "fallback"))
+    print(env.is_set("NONEXISTENT_KEY_12345"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# true
+# hello123
+# fallback
+# false

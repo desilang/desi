@@ -1,0 +1,78 @@
+# validate module — input validation
+#
+# Common validation checks that devs always need.
+# No language ships this built-in — Desi exclusive.
+#
+# Usage:
+#   import validate
+#   if validate.is_email(input):
+#       print("Valid email")
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __validate_is_email(s: str) -> bool
+
+@extern("C")
+def __validate_is_url(s: str) -> bool
+
+@extern("C")
+def __validate_is_ipv4(s: str) -> bool
+
+@extern("C")
+def __validate_is_ipv6(s: str) -> bool
+
+@extern("C")
+def __validate_is_hex(s: str) -> bool
+
+@extern("C")
+def __validate_is_json(s: str) -> bool
+
+@extern("C")
+def __validate_is_uuid(s: str) -> bool
+
+@extern("C")
+def __validate_is_semver(s: str) -> bool
+
+# --- Public API ---
+
+## Check if string is a valid email format.
+pub def is_email(s: str) -> bool:
+	unsafe:
+		return __validate_is_email(s)
+
+## Check if string is a valid URL (http/https).
+pub def is_url(s: str) -> bool:
+	unsafe:
+		return __validate_is_url(s)
+
+## Check if string is a valid IPv4 address.
+pub def is_ipv4(s: str) -> bool:
+	unsafe:
+		return __validate_is_ipv4(s)
+
+## Check if string is a valid IPv6 address.
+pub def is_ipv6(s: str) -> bool:
+	unsafe:
+		return __validate_is_ipv6(s)
+
+## Check if string is a valid hex value.
+pub def is_hex(s: str) -> bool:
+	unsafe:
+		return __validate_is_hex(s)
+
+## Check if string looks like valid JSON.
+pub def is_json(s: str) -> bool:
+	unsafe:
+		return __validate_is_json(s)
+
+## Check if string is a valid UUID format.
+pub def is_uuid(s: str) -> bool:
+	unsafe:
+		return __validate_is_uuid(s)
+
+## Check if string is a valid semantic version (e.g., "1.2.3").
+pub def is_semver(s: str) -> bool:
+	unsafe:
+		return __validate_is_semver(s)
+

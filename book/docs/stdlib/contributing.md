@@ -208,6 +208,16 @@ Adding functions to an existing module (e.g., `strings`) is simpler — same ste
 | `json` | 4 | `json.c` | Complete |
 | `time` | 10+ | `time.c` | Complete |
 | `sync` | — | `mutex.c`, `rwlock.c`, etc. | Complete |
+| `random` | 9 | `random.c` | Complete (incl. crypto_random) |
+| `base64` | 4 | `base64.c` | Complete (RFC 4648) |
+| `hash` | 5 | `hash.c` | Complete (CommonCrypto) |
+| `re` | 6 | `re.c` | Complete (POSIX regex.h) |
+| `uuid` | 3 | `uuid.c` | Complete (/dev/urandom) |
+| `color` | 20 | `color.c` | Complete (ANSI + RGB) ★ |
+| `validate` | 8 | `validate.c` | Complete ★ |
+| `env` | 5 | `env.c` | Complete (dotenv-inspired) ★ |
+
+> ★ = Desi exclusive — not available as a built-in in Python, Go, Rust, or JavaScript
 
 ## Known Limitations
 

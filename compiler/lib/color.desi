@@ -1,0 +1,148 @@
+# color module — terminal text styling
+#
+# ANSI colors, styles, backgrounds, and 24-bit true color.
+# No external dependencies.
+#
+# Usage:
+#   import color
+#   print(color.red("Error!"))
+#   print(color.bold(color.green("Success")))
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __color_red(s: str) -> str
+@extern("C")
+def __color_green(s: str) -> str
+@extern("C")
+def __color_yellow(s: str) -> str
+@extern("C")
+def __color_blue(s: str) -> str
+@extern("C")
+def __color_magenta(s: str) -> str
+@extern("C")
+def __color_cyan(s: str) -> str
+@extern("C")
+def __color_white(s: str) -> str
+@extern("C")
+def __color_gray(s: str) -> str
+
+@extern("C")
+def __color_bold(s: str) -> str
+@extern("C")
+def __color_dim(s: str) -> str
+@extern("C")
+def __color_italic(s: str) -> str
+@extern("C")
+def __color_underline(s: str) -> str
+@extern("C")
+def __color_strike(s: str) -> str
+
+@extern("C")
+def __color_bg_red(s: str) -> str
+@extern("C")
+def __color_bg_green(s: str) -> str
+@extern("C")
+def __color_bg_yellow(s: str) -> str
+@extern("C")
+def __color_bg_blue(s: str) -> str
+
+@extern("C")
+def __color_rgb(s: str, r: int, g: int, b: int) -> str
+@extern("C")
+def __color_bg_rgb(s: str, r: int, g: int, b: int) -> str
+
+@extern("C")
+def __color_strip(s: str) -> str
+
+# --- Public API: Foreground Colors ---
+
+pub def red(s: str) -> str:
+	unsafe:
+		return __color_red(s)
+
+pub def green(s: str) -> str:
+	unsafe:
+		return __color_green(s)
+
+pub def yellow(s: str) -> str:
+	unsafe:
+		return __color_yellow(s)
+
+pub def blue(s: str) -> str:
+	unsafe:
+		return __color_blue(s)
+
+pub def magenta(s: str) -> str:
+	unsafe:
+		return __color_magenta(s)
+
+pub def cyan(s: str) -> str:
+	unsafe:
+		return __color_cyan(s)
+
+pub def white(s: str) -> str:
+	unsafe:
+		return __color_white(s)
+
+pub def gray(s: str) -> str:
+	unsafe:
+		return __color_gray(s)
+
+# --- Public API: Styles ---
+
+pub def bold(s: str) -> str:
+	unsafe:
+		return __color_bold(s)
+
+pub def dim(s: str) -> str:
+	unsafe:
+		return __color_dim(s)
+
+pub def italic(s: str) -> str:
+	unsafe:
+		return __color_italic(s)
+
+pub def underline(s: str) -> str:
+	unsafe:
+		return __color_underline(s)
+
+pub def strike(s: str) -> str:
+	unsafe:
+		return __color_strike(s)
+
+# --- Public API: Backgrounds ---
+
+pub def bg_red(s: str) -> str:
+	unsafe:
+		return __color_bg_red(s)
+
+pub def bg_green(s: str) -> str:
+	unsafe:
+		return __color_bg_green(s)
+
+pub def bg_yellow(s: str) -> str:
+	unsafe:
+		return __color_bg_yellow(s)
+
+pub def bg_blue(s: str) -> str:
+	unsafe:
+		return __color_bg_blue(s)
+
+# --- Public API: RGB ---
+
+## 24-bit true color foreground.
+pub def rgb(s: str, r: int, g: int, b: int) -> str:
+	unsafe:
+		return __color_rgb(s, r, g, b)
+
+## 24-bit true color background.
+pub def bg_rgb(s: str, r: int, g: int, b: int) -> str:
+	unsafe:
+		return __color_bg_rgb(s, r, g, b)
+
+## Remove all ANSI escape codes.
+pub def strip(s: str) -> str:
+	unsafe:
+		return __color_strip(s)
+
