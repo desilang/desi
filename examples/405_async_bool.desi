@@ -1,0 +1,19 @@
+# EXPECTED_OUTPUT:
+# 42 is even
+# 7 is odd
+
+# Test async with bool return type
+
+async def is_even(n: int) -> bool:
+    return n % 2 == 0
+
+def main() -> int:
+    let f1 = is_even(42)
+    let f2 = is_even(7)
+    let r1 = await f1
+    let r2 = await f2
+    if r1:
+        print("42 is even")
+    if not r2:
+        print("7 is odd")
+    return 0

@@ -1,0 +1,44 @@
+# EXPECTED_OUTPUT:
+# 49
+# Hello Desi
+# 42
+# 60
+
+# Test async with different return types and patterns
+
+async def compute(x: int) -> int:
+    return x * x
+
+async def greet(name: str) -> str:
+    return "Hello " + name
+
+async def add(a: int, b: int) -> int:
+    return a + b
+
+async def double(x: int) -> int:
+    return x * 2
+
+def main() -> int:
+    # Test 1: async int return
+    let f1 = compute(7)
+    let r1 = await f1
+    print(str(r1))
+
+    # Test 2: async str return
+    let f2 = greet("Desi")
+    let r2 = await f2
+    print(r2)
+
+    # Test 3: async multi-param
+    let f3 = add(20, 22)
+    let r3 = await f3
+    print(str(r3))
+
+    # Test 4: parallel async calls
+    let fa = double(10)
+    let fb = double(20)
+    let a = await fa
+    let b = await fb
+    print(str(a + b))
+
+    return 0
