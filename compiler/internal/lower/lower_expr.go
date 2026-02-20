@@ -908,7 +908,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			// await <expr>
 			dst := ls.b.FreshTemp("await")
 			fut := ls.lowerExpr(x.X)
-			ls.b.Emit(&hir.Await{Dst: dst, Fut: fut})
+
+			// Determine the result type from the type checker.
+			// The type of the await expression is the inner type of the Future.
+			resultTy := ""
+			if ls.info != nil {
+				if t := ls.info.Types[e]; t != nil {
+					resultTy = desiTypeToLLVM(t)
+				}
+			}
+
+			ls.b.Emit(&hir.Await{Dst: dst, Fut: fut, ResultType: resultTy})
 			return dst
 		} else if x.Op == "-" {
 			// Unary minus: 0 - x

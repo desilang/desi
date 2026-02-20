@@ -922,9 +922,31 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				m.ensureDecl("declare ptr @__future_new()")
 				m.tempTypes[strings.TrimPrefix(x.Dst.String(), "%")] = "ptr"
 			case *hir.Await:
-				wprintf(&m.funcs, "  %s = call i64 @__await_blocking(%s)\n", x.Dst.String(), m.ptrOperand(x.Fut))
+				rawDst := fmt.Sprintf("%%await_raw_%d", m.tempID)
+				m.tempID++
+				wprintf(&m.funcs, "  %s = call i64 @__await_blocking(%s)\n", rawDst, m.ptrOperand(x.Fut))
 				m.ensureDecl("declare i64 @__await_blocking(ptr)")
-				m.tempTypes[strings.TrimPrefix(x.Dst.String(), "%")] = "i64"
+
+				// Narrow i64 result to the expected type
+				dstName := strings.TrimPrefix(x.Dst.String(), "%")
+				switch x.ResultType {
+				case "i32":
+					wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", x.Dst.String(), rawDst)
+					m.tempTypes[dstName] = "i32"
+				case "ptr":
+					wprintf(&m.funcs, "  %s = inttoptr i64 %s to ptr\n", x.Dst.String(), rawDst)
+					m.tempTypes[dstName] = "ptr"
+				case "i1":
+					wprintf(&m.funcs, "  %s = trunc i64 %s to i1\n", x.Dst.String(), rawDst)
+					m.tempTypes[dstName] = "i1"
+				case "double":
+					wprintf(&m.funcs, "  %s = bitcast i64 %s to double\n", x.Dst.String(), rawDst)
+					m.tempTypes[dstName] = "double"
+				default:
+					// No narrowing — use i64 as-is (or default to i32 for backwards compat)
+					wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", x.Dst.String(), rawDst)
+					m.tempTypes[dstName] = "i32"
+				}
 			case *hir.FutureComplete:
 				wprintf(&m.funcs, "  call void @__future_complete(%s, %s)\n", m.ptrOperand(x.Fut), m.i32Operand(x.Val))
 				m.ensureDecl("declare void @__future_complete(ptr, i64)")

@@ -4,6 +4,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
+	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // LowerAsyncFunc lowers an async function declaration into two HIR functions:
@@ -80,9 +81,26 @@ func LowerAsyncFunc(fd *ast.FuncDecl, src []byte, info *check.Info, globalNames 
 
 	// Rename the body function and prepend the future param
 	bodyFunc.Name = name + "$body"
-	bodyFunc.Params = append([]hir.Param{{Name: "__future__"}}, bodyFunc.Params...)
+	bodyFunc.Params = append([]hir.Param{{Name: "__future__", Type: "ptr"}}, bodyFunc.Params...)
 
-	return wb.Func(), bodyFunc
+	// The body function must return i64 for the C runtime's int64_t transport.
+	// The LLVM backend will auto-widen the final `ret` value using sext/ptrtoint.
+	bodyFunc.RetType = "i64"
+
+	// Copy param types from body to wrapper so wrapper params match the body's types
+	// (skip the __future__ param which is body-only).
+	wrapperFunc := wb.Func()
+	for i, bp := range bodyFunc.Params {
+		if i == 0 { // skip __future__
+			continue
+		}
+		wIdx := i - 1
+		if wIdx < len(wrapperFunc.Params) && bp.Type != "" {
+			wrapperFunc.Params[wIdx].Type = bp.Type
+		}
+	}
+
+	return wrapperFunc, bodyFunc
 }
 
 // itoa converts a small int to string without importing strconv.
@@ -95,4 +113,30 @@ func itoa(n int) string {
 		return string(digits[n])
 	}
 	return itoa(n/10) + string(digits[n%10])
+}
+
+// desiTypeToLLVM maps a Desi type checker type to an LLVM IR type string.
+func desiTypeToLLVM(t types.T) string {
+	if t == nil {
+		return ""
+	}
+	switch {
+	case types.Equal(t, types.Int):
+		return "i32"
+	case types.Equal(t, types.Bool):
+		return "i1"
+	case types.Equal(t, types.Str):
+		return "ptr"
+	case types.Equal(t, types.Float):
+		return "double"
+	case types.Equal(t, types.None):
+		return "void"
+	}
+	// Structs, classes, lists, dicts, enums → all ptr
+	switch t.(type) {
+	case *types.Struct, *types.Class, *types.List, *types.Dict,
+		*types.Enum, *types.Tuple, *types.Set, *types.Future:
+		return "ptr"
+	}
+	return "i32" // default to i32 for unknown
 }

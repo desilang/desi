@@ -492,7 +492,37 @@ func (m *Module) emitRet(r *hir.Ret) {
 		retTy = "i32" // default
 	}
 	ty, val := m.operand(r.Val)
-	_ = ty // We use retTy from function signature, not operand type
+
+	// Auto-widen if function returns i64 but operand is narrower (async body)
+	if retTy == "i64" && ty != "i64" {
+		switch ty {
+		case "i32":
+			tmp := fmt.Sprintf("%%ret_sext_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = sext i32 %s to i64\n", tmp, val)
+			wprintf(&m.funcs, "  ret i64 %s\n", tmp)
+			return
+		case "ptr":
+			tmp := fmt.Sprintf("%%ret_p2i_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = ptrtoint ptr %s to i64\n", tmp, val)
+			wprintf(&m.funcs, "  ret i64 %s\n", tmp)
+			return
+		case "i1":
+			tmp := fmt.Sprintf("%%ret_zext_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = zext i1 %s to i64\n", tmp, val)
+			wprintf(&m.funcs, "  ret i64 %s\n", tmp)
+			return
+		case "double":
+			tmp := fmt.Sprintf("%%ret_d2i_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = bitcast double %s to i64\n", tmp, val)
+			wprintf(&m.funcs, "  ret i64 %s\n", tmp)
+			return
+		}
+	}
+
 	wprintf(&m.funcs, "  ret %s %s\n", retTy, val)
 }
 
