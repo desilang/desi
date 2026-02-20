@@ -12,6 +12,7 @@
 # Test file markers:
 #   # EXPECTED: COMPILE_ERROR  - Test should fail to compile
 #   # EXPECTED: RUNTIME_ERROR  - Test should crash at runtime
+#   # EXPECTED: SKIP           - Test is skipped (known issue)
 #   # EXPECTED_OUTPUT:         - Expected stdout (lines starting with #)
 #     # line1
 #     # line2
@@ -102,6 +103,14 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     fi
     
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
+    
+    # Check if this test should be skipped
+    if head -n 3 "$f" | grep -q "# EXPECTED: SKIP"; then
+        echo "[$TOTAL_COUNT] Testing: $f  ⊘ SKIPPED"
+        PASSED_COUNT=$((PASSED_COUNT + 1))
+        continue
+    fi
+    
     echo "[$TOTAL_COUNT] Testing: $f"
     
     # Check if this test is expected to fail

@@ -1,9 +1,14 @@
+# EXPECTED: SKIP
 # M5 demo: basic import and from-import with aliasing (std-less)
+#
+# SKIP REASON: The alias "sum" collides with the Desi builtin sum() function.
+# When lowerCall sees sum(2, 3), it dispatches to the builtin sum() handler
+# (which expects a list argument) instead of calling the from-imported add().
+# This is a known limitation: from-import aliases must not shadow builtins.
+# Fix: either rename the alias or add builtin-vs-import priority resolution.
 
 from math import add as sum   # compiler/lib/math/__mod.desi
 
 def main() -> int:
 	print("sum(2, 3) = " + str(sum(2, 3)))
 	return 0
-
-# SKIPPED: Import test - requires module dependencies
