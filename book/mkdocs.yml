@@ -125,6 +125,7 @@ nav:
     - Time: stdlib/time.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md
+    - Async & Await: concurrency/async.md
     - Mutex: concurrency/mutex.md
     - RwLock: concurrency/rwlock.md
     - Channels: concurrency/channels.md
