@@ -19,6 +19,10 @@ Practical, example-driven docs. Start here:
   **4a:** `str` on `+` when either side is `str` (coerces int/float/bool).
   **4d:** Slice steps `s[i:j:k]` and short forms. In M5, **string slices type to `str`**.
 
+- **Module Function Mangling:** [module-mangling.md](./module-mangling.md)
+  How `__desi$` name mangling prevents C symbol collisions for module functions,
+  how to add new stdlib modules, and how to register new builtins.
+
 ---
 
 ## CLI quick refs

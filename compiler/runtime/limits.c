@@ -24,13 +24,14 @@ static int64_t __max_recursion = 1000;
 
 /*
  * Call enter - increment depth and check limit
- * Called at the start of every user function
+ * Called at the start of every user function.
+ * func_name is used in the panic message if recursion depth is exceeded.
  */
-void __desi_call_enter(void) {
+void __desi_call_enter(const char* func_name) {
     __call_depth++;
     if (__call_depth > __max_recursion) {
-        fprintf(stderr, "Desi panic: maximum recursion depth exceeded (%lld)\n", 
-                (long long)__max_recursion);
+        fprintf(stderr, "Desi panic: maximum recursion depth exceeded (%lld) in '%s'\n", 
+                (long long)__max_recursion, func_name ? func_name : "<unknown>");
         exit(1);
     }
 }

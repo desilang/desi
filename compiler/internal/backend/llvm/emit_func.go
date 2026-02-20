@@ -134,8 +134,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			firstBlock = false
 		} else if firstBlock && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
 			// Emit call depth tracking for user functions (skip main and __top__)
-			m.ensureDecl("declare void @__desi_call_enter()")
-			wprintf(&m.funcs, "  call void @__desi_call_enter()\n")
+			m.ensureDecl("declare void @__desi_call_enter(ptr)")
+			// Create a string constant for the function name (strip internal prefixes)
+			displayName := strings.TrimPrefix(fn.Name, "__desi$")
+			fnNameStr, fnNameLen := m.ensureCStringGlobal(displayName, false)
+			fnNameGEP := fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", fnNameLen, fnNameLen, fnNameStr)
+			wprintf(&m.funcs, "  call void @__desi_call_enter(ptr %s)\n", fnNameGEP)
 			firstBlock = false
 		}
 
