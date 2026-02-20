@@ -35,62 +35,74 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
-// mangleDesiName adds __desi$ prefix to avoid C stdlib collisions.
-// Only mangles specific function names known to conflict with C stdlib.
+// mangleDesiName adds __desi$ prefix to avoid C symbol collisions.
+// Mangles names known to conflict with C stdlib/POSIX functions.
+// The C standard library is stable — this list is not a maintenance burden.
 func mangleDesiName(name string) string {
-	// Only mangle names that are known to conflict with C stdlib functions
-	// These are C standard library functions that Desi might want to use as names
-	cStdlibConflicts := map[string]bool{
-		// time.h
-		"strftime": true, "ctime": true, "time": true, "clock": true,
-		"difftime": true, "mktime": true, "asctime": true, "gmtime": true,
-		"localtime": true,
-		// stdio.h
-		"getchar": true, "putchar": true, "puts": true, "gets": true,
-		"scanf": true, "sprintf": true, "sscanf": true, "fopen": true,
-		"fclose": true, "fread": true, "fwrite": true, "fgets": true,
-		"fputs": true, "fgetc": true, "fputc": true, "feof": true,
-		"ferror": true, "fflush": true, "fseek": true, "ftell": true,
-		"rewind": true, "remove": true, "rename": true, "tmpfile": true,
-		"tmpnam": true, "perror": true,
-		// stdlib.h
-		"atoi": true, "atof": true, "atol": true, "strtol": true,
-		"strtod": true, "rand": true, "srand": true, "abort": true,
-		"atexit": true, "getenv": true, "system": true, "bsearch": true,
-		"qsort": true, "div": true, "ldiv": true, "labs": true,
-		"exit": true, "malloc": true, "free": true, "calloc": true,
-		"realloc": true,
-		// unistd.h (POSIX)
-		"getcwd": true, "chdir": true, "access": true, "read": true,
-		"write": true, "close": true, "sleep": true, "usleep": true,
-		"fork": true, "execve": true, "pipe": true, "dup": true,
-		"dup2": true, "isatty": true, "getpid": true, "setenv": true,
-		"unsetenv": true, "gethostname": true, "sysconf": true, "uname": true,
-		// string.h
-		"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
-		"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,
-		"strstr": true, "strlen": true, "strerror": true, "strtok": true,
-		"memcpy": true, "memmove": true, "memcmp": true, "memset": true,
-		"memchr": true,
-		// math.h
-		"sin": true, "cos": true, "tan": true, "asin": true, "acos": true,
-		"atan": true, "atan2": true, "sinh": true, "cosh": true, "tanh": true,
-		"exp": true, "exp2": true, "log": true, "log2": true, "log10": true,
-		"pow": true, "sqrt": true, "cbrt": true, "hypot": true,
-		"ceil": true, "floor": true, "round": true, "trunc": true,
-		"fabs": true, "fmod": true, "remainder": true, "fmax": true, "fmin": true,
-		"copysign": true, "fdim": true, "nan": true, "abs": true,
-		// ctype.h
-		"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
-		"isupper": true, "islower": true, "toupper": true, "tolower": true,
-		// libgen.h / unistd.h (path operations)
-		"basename": true, "dirname": true, "realpath": true, "stat": true,
-	}
-
 	if cStdlibConflicts[name] {
 		return "__desi$" + name
 	}
 	return name
+}
+
+// cStdlibConflicts is the set of C stdlib/POSIX function names that Desi
+// function names could collide with. The C standard library is stable and
+// doesn't add new functions, so this list is comprehensive and final.
+var cStdlibConflicts = map[string]bool{
+	// time.h
+	"strftime": true, "ctime": true, "time": true, "clock": true,
+	"difftime": true, "mktime": true, "asctime": true, "gmtime": true,
+	"localtime": true,
+	// stdio.h
+	"getchar": true, "putchar": true, "puts": true, "gets": true,
+	"scanf": true, "sprintf": true, "sscanf": true, "fopen": true,
+	"fclose": true, "fread": true, "fwrite": true, "fgets": true,
+	"fputs": true, "fgetc": true, "fputc": true, "feof": true,
+	"ferror": true, "fflush": true, "fseek": true, "ftell": true,
+	"rewind": true, "remove": true, "rename": true, "tmpfile": true,
+	"tmpnam": true, "perror": true,
+	// stdlib.h
+	"atoi": true, "atof": true, "atol": true, "strtol": true,
+	"strtod": true, "rand": true, "srand": true, "abort": true,
+	"atexit": true, "getenv": true, "system": true, "bsearch": true,
+	"qsort": true, "div": true, "ldiv": true, "labs": true,
+	"exit": true, "malloc": true, "free": true, "calloc": true,
+	"realloc": true,
+	// unistd.h (POSIX)
+	"getcwd": true, "chdir": true, "access": true, "read": true,
+	"write": true, "close": true, "sleep": true, "usleep": true,
+	"fork": true, "execve": true, "pipe": true, "dup": true,
+	"dup2": true, "isatty": true, "getpid": true, "setenv": true,
+	"unsetenv": true, "gethostname": true, "sysconf": true, "uname": true,
+	// string.h
+	"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
+	"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,
+	"strstr": true, "strlen": true, "strerror": true, "strtok": true,
+	"memcpy": true, "memmove": true, "memcmp": true, "memset": true,
+	"memchr": true,
+	// math.h
+	"sin": true, "cos": true, "tan": true, "asin": true, "acos": true,
+	"atan": true, "atan2": true, "sinh": true, "cosh": true, "tanh": true,
+	"exp": true, "exp2": true, "log": true, "log2": true, "log10": true,
+	"pow": true, "sqrt": true, "cbrt": true, "hypot": true,
+	"ceil": true, "floor": true, "round": true, "trunc": true,
+	"fabs": true, "fmod": true, "remainder": true, "fmax": true, "fmin": true,
+	"copysign": true, "fdim": true, "nan": true, "abs": true,
+	// ctype.h
+	"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
+	"isupper": true, "islower": true, "toupper": true, "tolower": true,
+	// libgen.h / sys/stat.h / dirent.h (path + filesystem operations)
+	"basename": true, "dirname": true, "realpath": true, "stat": true,
+	"mkdir": true, "rmdir": true, "unlink": true, "opendir": true,
+	"closedir": true, "readdir": true, "link": true, "symlink": true,
+	"lstat": true, "fstat": true, "chmod": true, "chown": true,
+	// fcntl.h / signal.h
+	"creat": true, "fcntl": true, "signal": true,
+	// Additional POSIX / common C names
+	"select": true, "poll": true, "socket": true, "bind": true,
+	"listen": true, "accept": true, "connect": true, "send": true,
+	"recv": true, "shutdown": true, "mmap": true, "munmap": true,
+	"copy": true, "move": true, "append": true,
 }
 
 // isExternFunction checks if a function has @extern decorator

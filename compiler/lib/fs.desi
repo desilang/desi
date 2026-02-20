@@ -1,0 +1,134 @@
+# fs module — file system operations
+#
+# Read, write, copy, move, and query files and directories.
+# No language ships all of these as a built-in module.
+#
+# Usage:
+#   import fs
+#   let content = fs.read("config.txt")
+#   fs.write("output.txt", "hello")
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __fs_read(path: str) -> str
+
+@extern("C")
+def __fs_write(path: str, content: str) -> bool
+
+@extern("C")
+def __fs_append(path: str, content: str) -> bool
+
+@extern("C")
+def __fs_read_lines(path: str) -> list[str]
+
+@extern("C")
+def __fs_write_lines(path: str, lines: list[str]) -> bool
+
+@extern("C")
+def __fs_exists(path: str) -> bool
+
+@extern("C")
+def __fs_is_file(path: str) -> bool
+
+@extern("C")
+def __fs_is_dir(path: str) -> bool
+
+@extern("C")
+def __fs_size(path: str) -> int
+
+@extern("C")
+def __fs_mkdir(path: str) -> bool
+
+@extern("C")
+def __fs_list_dir(path: str) -> list[str]
+
+@extern("C")
+def __fs_remove(path: str) -> bool
+
+@extern("C")
+def __fs_copy(src: str, dst: str) -> bool
+
+@extern("C")
+def __fs_move(src: str, dst: str) -> bool
+
+@extern("C")
+def __fs_abs(path: str) -> str
+
+# --- Public API ---
+
+## Read entire file as a string. Returns "" on error.
+pub def read(path: str) -> str:
+	unsafe:
+		return __fs_read(path)
+
+## Write string to file (overwrites existing).
+pub def write(path: str, content: str) -> bool:
+	unsafe:
+		return __fs_write(path, content)
+
+## Append string to end of file.
+pub def append(path: str, content: str) -> bool:
+	unsafe:
+		return __fs_append(path, content)
+
+## Read file as list of lines (strips newlines).
+pub def read_lines(path: str) -> list[str]:
+	unsafe:
+		return __fs_read_lines(path)
+
+## Write list of lines to file (adds newline after each).
+pub def write_lines(path: str, lines: list[str]) -> bool:
+	unsafe:
+		return __fs_write_lines(path, lines)
+
+## Check if path exists (file or directory).
+pub def exists(path: str) -> bool:
+	unsafe:
+		return __fs_exists(path)
+
+## Check if path is a regular file.
+pub def is_file(path: str) -> bool:
+	unsafe:
+		return __fs_is_file(path)
+
+## Check if path is a directory.
+pub def is_dir(path: str) -> bool:
+	unsafe:
+		return __fs_is_dir(path)
+
+## Get file size in bytes. Returns -1 on error.
+pub def size(path: str) -> int:
+	unsafe:
+		return __fs_size(path)
+
+## Create directory (with parents, like mkdir -p).
+pub def mkdir(path: str) -> bool:
+	unsafe:
+		return __fs_mkdir(path)
+
+## List directory contents (skips . and ..).
+pub def list_dir(path: str) -> list[str]:
+	unsafe:
+		return __fs_list_dir(path)
+
+## Remove file or empty directory.
+pub def remove(path: str) -> bool:
+	unsafe:
+		return __fs_remove(path)
+
+## Copy file from src to dst.
+pub def copy(src: str, dst: str) -> bool:
+	unsafe:
+		return __fs_copy(src, dst)
+
+## Move/rename file from src to dst.
+pub def move(src: str, dst: str) -> bool:
+	unsafe:
+		return __fs_move(src, dst)
+
+## Resolve to absolute path.
+pub def abs(path: str) -> str:
+	unsafe:
+		return __fs_abs(path)
+
