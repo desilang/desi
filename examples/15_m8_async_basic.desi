@@ -1,6 +1,5 @@
-# EXPECTED: COMPILE_ERROR
-# expect: compile_error
-# reason: Async functions not fully implemented
+# EXPECTED_OUTPUT:
+# ok
 
 async def add1(x: int) -> int:
     return x + 1
@@ -10,5 +9,3 @@ def main() -> int:
     let n = await fut
     print("ok")
     0
-
-# SKIPPED: Async test - requires runtime async support

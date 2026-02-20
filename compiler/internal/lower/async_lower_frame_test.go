@@ -11,14 +11,17 @@ import (
 )
 
 func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
-	// async def foo(n:int) -> int:
-	//   a = await A(n)
+	// async def foo() -> int:
+	//   a = await A()
 	//   b = await B(a)
+	//
+	// Thread-spawn model: body receives __future__ param,
+	// executes sequentially (no frame save/restore needed).
 	fd := &ast.FuncDecl{
 		Name:  ast.Ident{Name: "foo"},
 		Async: true,
 		Body: &ast.Block{Stmts: []ast.Stmt{
-			&ast.AssignStmt{ // a := await A(n)
+			&ast.AssignStmt{ // a := await A()
 				LHS: []ast.Expr{&ast.Ident{Name: "a"}},
 				RHS: []ast.Expr{&ast.UnaryExpr{Op: "await", X: &ast.CallExpr{Callee: &ast.Ident{Name: "A"}}}},
 			},
@@ -29,32 +32,33 @@ func TestM8H_AsyncLower_FrameSaveRestore(t *testing.T) {
 		}},
 	}
 
-	w, p := lower.LowerAsyncFunc(fd, nil, nil, nil)
+	w, body := lower.LowerAsyncFunc(fd, nil, nil, nil)
 
-	// Pretty-print poll HIR
-	var pout bytes.Buffer
-	hir.Print(&pout, p)
-	out := pout.String()
-
-	// Poll signature carries a frame param.
-	if !strings.Contains(out, "func foo$poll(%frame)") {
-		t.Fatalf("poll missing frame param in header:\n%s", out)
+	// Wrapper: creates future and spawns body (0 user params)
+	var wbuf bytes.Buffer
+	hir.Print(&wbuf, w)
+	wout := wbuf.String()
+	if !strings.Contains(wout, "func foo") {
+		t.Fatalf("wrapper missing func header:\n%s", wout)
+	}
+	if !strings.Contains(wout, "future.spawn") {
+		t.Fatalf("wrapper missing spawn call:\n%s", wout)
 	}
 
-	// We save before suspending (Tier-0: at least fut via frame slot).
-	if !strings.Contains(out, "frame.set frame.fut") {
-		t.Fatalf("expected frame.set before suspend; got:\n%s", out)
+	// Body: has __future__ param, executes A() and B(a) sequentially
+	var bout bytes.Buffer
+	hir.Print(&bout, body)
+	out := bout.String()
+
+	if !strings.Contains(out, "func foo$body(%__future__)") {
+		t.Fatalf("body missing __future__ param in header:\n%s", out)
 	}
 
-	// On resume, we restore (Tier-0: fut).
-	if !strings.Contains(out, "= frame.get frame.fut") {
-		t.Fatalf("expected frame.get on resume; got:\n%s", out)
+	// Body should contain the await calls for A and B
+	if !strings.Contains(out, "call A") {
+		t.Fatalf("body missing call to A:\n%s", out)
 	}
-
-	// Ensure multiple states exist (two awaits + final).
-	if !strings.Contains(out, "block state2") {
-		t.Fatalf("expected state2 block in poll; got:\n%s", out)
+	if !strings.Contains(out, "call B") {
+		t.Fatalf("body missing call to B:\n%s", out)
 	}
-
-	_ = w
 }
