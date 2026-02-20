@@ -12,6 +12,7 @@ import (
 // LowerModuleOptions controls module lowering behavior.
 type LowerModuleOptions struct {
 	SkipBuiltinEnums bool // Don't generate Option/Result constructors
+	IsImportedModule bool // Force-mangle all non-extern function definitions
 }
 
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
@@ -159,7 +160,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			out.Funcs = append(out.Funcs, w, p)
 			continue
 		}
-		out.Funcs = append(out.Funcs, LowerFuncFromDecl(fd, info, src, globalNames))
+		out.Funcs = append(out.Funcs, LowerFuncFromDeclEx(fd, info, src, globalNames, opts.IsImportedModule))
 	}
 
 	// Generate constructors for struct declarations

@@ -222,6 +222,12 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 				}
 				if local != "" && tmod != nil {
 					info.FromItems[local] = tmod
+					// Also store the original name for aliased imports.
+					// The resolver rewrites AST identifiers from alias → original,
+					// so calleeName sees the original name and needs to find it here.
+					if it.Alias != nil && it.Name.Name != local {
+						info.FromItems[it.Name.Name] = tmod
+					}
 					// Store qualified path for nested class lookup (e.g., "Inner" -> "Container.Inner")
 					if len(it.Path) > 1 {
 						info.FromItemPaths[local] = strings.Join(it.Path, ".")

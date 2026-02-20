@@ -35,74 +35,27 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 // LowerBlockFromSource behaves like LowerBlock but can materialize string literals
 // by scanning the original source using (line,col) from StrLit.Span.
 // LowerFuncFromDecl lowers a function declaration to HIR, including its parameters.
-// mangleDesiName adds __desi$ prefix to avoid C symbol collisions.
-// Mangles names known to conflict with C stdlib/POSIX functions.
-// The C standard library is stable — this list is not a maintenance burden.
-func mangleDesiName(name string) string {
-	if cStdlibConflicts[name] {
-		return "__desi$" + name
-	}
-	return name
+// desiBuiltins are Desi compiler intrinsics with special lowering in lowerCall.
+// These must NOT be mangled even when from-imported, because lowerCall checks
+// calleeName == "print" etc. for builtin dispatch.
+var desiBuiltins = map[string]bool{
+	"print": true, "len": true, "str": true, "int": true, "float": true, "bool": true,
+	"type_of": true, "assert": true, "open": true, "dbg": true,
+	"sum": true, "min": true, "max": true, "any": true, "all": true,
+	"sorted": true, "reversed": true, "zip": true, "enumerate": true,
+	"map": true, "filter": true, "reduce": true, "foldl": true, "foldr": true,
+	"range": true, "input": true, "hash": true, "id": true, "chr": true, "ord": true,
+	"set_recursion_limit": true, "is_reload": true, "reload_count": true,
+	"state_file": true, "write_state": true, "read_state": true, "delete_state": true,
 }
 
-// cStdlibConflicts is the set of C stdlib/POSIX function names that Desi
-// function names could collide with. The C standard library is stable and
-// doesn't add new functions, so this list is comprehensive and final.
-var cStdlibConflicts = map[string]bool{
-	// time.h
-	"strftime": true, "ctime": true, "time": true, "clock": true,
-	"difftime": true, "mktime": true, "asctime": true, "gmtime": true,
-	"localtime": true,
-	// stdio.h
-	"getchar": true, "putchar": true, "puts": true, "gets": true,
-	"scanf": true, "sprintf": true, "sscanf": true, "fopen": true,
-	"fclose": true, "fread": true, "fwrite": true, "fgets": true,
-	"fputs": true, "fgetc": true, "fputc": true, "feof": true,
-	"ferror": true, "fflush": true, "fseek": true, "ftell": true,
-	"rewind": true, "remove": true, "rename": true, "tmpfile": true,
-	"tmpnam": true, "perror": true,
-	// stdlib.h
-	"atoi": true, "atof": true, "atol": true, "strtol": true,
-	"strtod": true, "rand": true, "srand": true, "abort": true,
-	"atexit": true, "getenv": true, "system": true, "bsearch": true,
-	"qsort": true, "div": true, "ldiv": true, "labs": true,
-	"exit": true, "malloc": true, "free": true, "calloc": true,
-	"realloc": true,
-	// unistd.h (POSIX)
-	"getcwd": true, "chdir": true, "access": true, "read": true,
-	"write": true, "close": true, "sleep": true, "usleep": true,
-	"fork": true, "execve": true, "pipe": true, "dup": true,
-	"dup2": true, "isatty": true, "getpid": true, "setenv": true,
-	"unsetenv": true, "gethostname": true, "sysconf": true, "uname": true,
-	// string.h
-	"strcpy": true, "strncpy": true, "strcat": true, "strncat": true,
-	"strcmp": true, "strncmp": true, "strchr": true, "strrchr": true,
-	"strstr": true, "strlen": true, "strerror": true, "strtok": true,
-	"memcpy": true, "memmove": true, "memcmp": true, "memset": true,
-	"memchr": true,
-	// math.h
-	"sin": true, "cos": true, "tan": true, "asin": true, "acos": true,
-	"atan": true, "atan2": true, "sinh": true, "cosh": true, "tanh": true,
-	"exp": true, "exp2": true, "log": true, "log2": true, "log10": true,
-	"pow": true, "sqrt": true, "cbrt": true, "hypot": true,
-	"ceil": true, "floor": true, "round": true, "trunc": true,
-	"fabs": true, "fmod": true, "remainder": true, "fmax": true, "fmin": true,
-	"copysign": true, "fdim": true, "nan": true, "abs": true,
-	// ctype.h
-	"isalpha": true, "isdigit": true, "isalnum": true, "isspace": true,
-	"isupper": true, "islower": true, "toupper": true, "tolower": true,
-	// libgen.h / sys/stat.h / dirent.h (path + filesystem operations)
-	"basename": true, "dirname": true, "realpath": true, "stat": true,
-	"mkdir": true, "rmdir": true, "unlink": true, "opendir": true,
-	"closedir": true, "readdir": true, "link": true, "symlink": true,
-	"lstat": true, "fstat": true, "chmod": true, "chown": true,
-	// fcntl.h / signal.h
-	"creat": true, "fcntl": true, "signal": true,
-	// Additional POSIX / common C names
-	"select": true, "poll": true, "socket": true, "bind": true,
-	"listen": true, "accept": true, "connect": true, "send": true,
-	"recv": true, "shutdown": true, "mmap": true, "munmap": true,
-	"copy": true, "move": true, "append": true,
+// mangleDesiName adds __desi$ prefix to a Desi function name.
+// This is called on the DEFINITION side of module-imported functions
+// to prevent their pub def wrappers from shadowing C/POSIX symbols.
+// User-defined functions are NOT mangled (they need their original names
+// for callbacks, lambdas, and hot-reload).
+func mangleDesiName(name string) string {
+	return "__desi$" + name
 }
 
 // isExternFunction checks if a function has @extern decorator
@@ -164,19 +117,29 @@ func extractCallFromStmt(stmt ast.Stmt) string {
 	return ""
 }
 
+// LowerFuncFromDecl lowers a function declaration to HIR.
+// Used for user-defined functions — does NOT mangle names.
 func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool) *hir.Func {
-	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals)
+	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals, false)
+}
+
+// LowerFuncFromDeclEx lowers a function declaration with an option to force-mangle.
+// Used for imported module functions — always mangles non-extern definitions to
+// prevent pub def wrappers from shadowing C/POSIX symbols.
+func LowerFuncFromDeclEx(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool, forceMangleModule bool) *hir.Func {
+	return lowerFuncFromDeclWithContext(fd, info, src, "", nil, globals, forceMangleModule)
 }
 
 // LowerFuncForDunderNew lowers a __new__ method with context to prevent recursive constructor calls
 func LowerFuncForDunderNew(fd *ast.FuncDecl, info *check.Info, src []byte, className string, selfPtr hir.Value, globals map[string]bool) *hir.Func {
-	return lowerFuncFromDeclWithContext(fd, info, src, className, selfPtr, globals)
+	return lowerFuncFromDeclWithContext(fd, info, src, className, selfPtr, globals, false)
 }
 
-func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value, globals map[string]bool) *hir.Func {
-	// Mangle function name to avoid C stdlib collisions (unless @extern)
+func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte, dunderNewClass string, selfPtr hir.Value, globals map[string]bool, forceMangleModule bool) *hir.Func {
+	// Determine function name for LLVM IR
 	funcName := fd.Name.Name
-	if !isExternFunction(fd) {
+	if !isExternFunction(fd) && forceMangleModule {
+		// Module-imported function: always mangle to avoid C symbol collisions
 		funcName = mangleDesiName(funcName)
 	}
 	b := hir.NewFunc(funcName)
@@ -624,16 +587,61 @@ func (ls *lowerState) calleeName(e ast.Expr, callExpr ...*ast.CallExpr) string {
 		}
 		// Check if this function is @extern - if so, use the declared name directly
 		if ls.info != nil {
+			// First, check ChosenOverloads — this handles from-import calls
+			// where the function came from a module (e.g., from math import sin)
+			if len(callExpr) > 0 && callExpr[0] != nil {
+				if chosen, ok := ls.info.ChosenOverloads[callExpr[0]]; ok {
+					decl := chosen.Decl
+					if decl == nil {
+						decl = chosen.ModuleDecl
+					}
+					if decl != nil {
+						if isExternFunction(decl) {
+							return decl.Name.Name
+						}
+						// For pub def wrappers, find the @extern function they call
+						if innerName := extractExternFromWrapper(decl); innerName != "" {
+							return innerName
+						}
+						return mangleDesiName(decl.Name.Name)
+					}
+				}
+			}
+
 			if set, ok := ls.info.Funcs[x.Name]; ok && len(set.Cands) > 0 {
 				cand := set.Cands[0]
 				if cand.Extern && cand.Decl != nil {
 					// The @extern function's declared name IS the C function name
 					return cand.Decl.Name.Name
 				}
+				// Check if this is an imported module function (has ModuleDecl)
+				decl := cand.Decl
+				if decl == nil {
+					decl = cand.ModuleDecl
+				}
+				if decl != nil && cand.ModuleDecl != nil {
+					// This function came from a module — resolve to @extern or mangle
+					if innerName := extractExternFromWrapper(decl); innerName != "" {
+						return innerName
+					}
+					return mangleDesiName(decl.Name.Name)
+				}
 			}
 		}
-		// Mangle non-extern function calls to match mangled definitions
-		return mangleDesiName(x.Name)
+		// If this is a from-import function, its definition is mangled — match it.
+		// Only mangle lowercase names (functions). Uppercase names are classes
+		// (Mutex, Channel, etc.) which have separate lowering paths.
+		// Also exclude Desi builtins (print, len, etc.) which have special
+		// lowering in lowerCall and must keep their original names.
+		if ls.info != nil && ls.info.R != nil {
+			if _, isFromImport := ls.info.R.FromItems[x.Name]; isFromImport {
+				if len(x.Name) > 0 && x.Name[0] >= 'a' && x.Name[0] <= 'z' && !desiBuiltins[x.Name] {
+					return mangleDesiName(x.Name)
+				}
+			}
+		}
+		// Local function call — use original name (user functions are NOT mangled)
+		return x.Name
 	case *ast.FieldExpr:
 		// Check if this is a module-qualified call (e.g., "math.add")
 		if ls.info != nil && ls.info.R != nil {
