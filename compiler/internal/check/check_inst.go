@@ -63,68 +63,117 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 		inferred = make(map[string]types.T)
 	}
 
+	// Detect arg style: all-positional, all-named, or mixed.
+	hasPositional := false
+	hasNamed := false
 	for _, arg := range call.ArgNodes {
 		if arg.Name == nil {
-			c.add(diagAt("DTE0106", arg.Expr.SpanOf(), "struct initialization requires named arguments"))
-			continue
-		}
-		name := arg.Name.Name
-		if seen[name] {
-			c.add(diagAt("DTE0107", arg.Name.Span, "duplicate argument '"+name+"'"))
-			continue
-		}
-		seen[name] = true
-
-		f, ok := fields[name]
-		if !ok {
-			c.add(diagAt("DTE0108", arg.Name.Span, "unknown field '"+name+"' in struct '"+d.Name.Name+"'"))
-			continue
-		}
-
-		// Check type.
-		valT := c.typ(arg.Expr)
-		var fieldT types.T = types.None
-
-		// Get resolved field type from struct definition
-		if st != nil {
-			for _, sf := range st.Fields {
-				if sf.Name == name {
-					fieldT = sf.Type
-					break
-				}
-			}
+			hasPositional = true
 		} else {
-			// Fallback (shouldn't happen if struct was collected)
-			if f.Type != nil {
-				if t, ok := types.FromName(f.Type.Name); ok {
-					fieldT = t
-				}
-			}
-		}
-
-		// Try to unify field type (pattern) with value type (concrete) to infer type params
-		if inferred != nil {
-			_ = unify(fieldT, valT, inferred)
-			// Substitute known type params into fieldT for checking
-			fieldT = substitute(fieldT, inferred)
-		}
-
-		if !types.Assignable(fieldT, valT) {
-			c.add(diagAt("DTE0104", arg.Expr.SpanOf(), "field '"+name+"' expects type "+fieldT.String()))
-		}
-
-		// Mark as moved if not a copy type
-		if !isCopyType(valT) {
-			if name, ok := c.baseLvalue(arg.Expr); ok {
-				c.moved.mark(name, arg.Expr.SpanOf())
-			}
+			hasNamed = true
 		}
 	}
 
-	// Check missing fields.
-	for _, f := range d.Fields {
-		if !seen[f.Name.Name] {
-			c.add(diagAt("DTE0109", call.Span, "missing field '"+f.Name.Name+"' in struct initialization"))
+	if hasPositional && hasNamed {
+		c.add(diagAt("DTE0106", call.Span, "struct initialization cannot mix positional and named arguments"))
+	} else if hasPositional {
+		// --- Positional mode: map args to fields by declaration order ---
+		if len(call.ArgNodes) != len(d.Fields) {
+			c.add(diagAt("DTE0109", call.Span,
+				fmt.Sprintf("struct '%s' has %d fields but got %d arguments", d.Name.Name, len(d.Fields), len(call.ArgNodes))))
+		} else {
+			for i, arg := range call.ArgNodes {
+				f := d.Fields[i]
+				name := f.Name.Name
+				seen[name] = true
+
+				valT := c.typ(arg.Expr)
+				var fieldT types.T = types.None
+
+				if st != nil {
+					for _, sf := range st.Fields {
+						if sf.Name == name {
+							fieldT = sf.Type
+							break
+						}
+					}
+				} else if f.Type != nil {
+					if t, ok := types.FromName(f.Type.Name); ok {
+						fieldT = t
+					}
+				}
+
+				if inferred != nil {
+					_ = unify(fieldT, valT, inferred)
+					fieldT = substitute(fieldT, inferred)
+				}
+
+				if !types.Assignable(fieldT, valT) {
+					c.add(diagAt("DTE0104", arg.Expr.SpanOf(), "field '"+name+"' expects type "+fieldT.String()))
+				}
+
+				if !isCopyType(valT) {
+					if lv, ok := c.baseLvalue(arg.Expr); ok {
+						c.moved.mark(lv, arg.Expr.SpanOf())
+					}
+				}
+			}
+		}
+	} else {
+		// --- Named mode: original behavior ---
+		for _, arg := range call.ArgNodes {
+			name := arg.Name.Name
+			if seen[name] {
+				c.add(diagAt("DTE0107", arg.Name.Span, "duplicate argument '"+name+"'"))
+				continue
+			}
+			seen[name] = true
+
+			f, ok := fields[name]
+			if !ok {
+				c.add(diagAt("DTE0108", arg.Name.Span, "unknown field '"+name+"' in struct '"+d.Name.Name+"'"))
+				continue
+			}
+
+			valT := c.typ(arg.Expr)
+			var fieldT types.T = types.None
+
+			if st != nil {
+				for _, sf := range st.Fields {
+					if sf.Name == name {
+						fieldT = sf.Type
+						break
+					}
+				}
+			} else {
+				if f.Type != nil {
+					if t, ok := types.FromName(f.Type.Name); ok {
+						fieldT = t
+					}
+				}
+			}
+
+			if inferred != nil {
+				_ = unify(fieldT, valT, inferred)
+				fieldT = substitute(fieldT, inferred)
+			}
+
+			if !types.Assignable(fieldT, valT) {
+				c.add(diagAt("DTE0104", arg.Expr.SpanOf(), "field '"+name+"' expects type "+fieldT.String()))
+			}
+
+			if !isCopyType(valT) {
+				if lv, ok := c.baseLvalue(arg.Expr); ok {
+					c.moved.mark(lv, arg.Expr.SpanOf())
+				}
+			}
+		}
+
+		// Check missing fields (only in named mode — positional checks arity above).
+		for _, f := range d.Fields {
+			if !seen[f.Name.Name] {
+				c.add(diagAt("DTE0109", call.Span, "missing field '"+f.Name.Name+"' in struct initialization"))
+			}
 		}
 	}
 

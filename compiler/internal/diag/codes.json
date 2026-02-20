@@ -367,6 +367,26 @@
       "title": "value is not callable",
       "help": "only functions can be called"
     },
+    "struct_mixed_args": {
+      "id": "DTE0106",
+      "title": "cannot mix positional and named arguments in struct initialization",
+      "help": "use either all positional arguments (by field order) or all named arguments; do not mix them"
+    },
+    "struct_duplicate_field": {
+      "id": "DTE0107",
+      "title": "duplicate field in struct initialization",
+      "help": "each field should be specified exactly once"
+    },
+    "struct_unknown_field": {
+      "id": "DTE0108",
+      "title": "unknown field in struct initialization",
+      "help": "check the field name against the struct definition"
+    },
+    "struct_missing_field": {
+      "id": "DTE0109",
+      "title": "missing field or wrong arity in struct initialization",
+      "help": "provide all required fields — either by name or positionally in declaration order"
+    },
     "missing_stdlib_import": {
       "id": "DTE0200",
       "title": "missing stdlib import",

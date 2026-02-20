@@ -1,0 +1,24 @@
+# EXPECTED_OUTPUT:
+# 3
+# 4
+# 10
+# 20
+
+# Test struct initialization with positional and named arguments
+
+struct Point:
+	pub x: int
+	pub y: int
+
+def main() -> int:
+	# Positional args (by declaration order)
+	let p1 = Point(3, 4)
+	print(str(p1.x))
+	print(str(p1.y))
+
+	# Named args (explicit field names)
+	let p2 = Point(x=10, y=20)
+	print(str(p2.x))
+	print(str(p2.y))
+
+	return 0
