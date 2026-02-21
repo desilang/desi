@@ -22,11 +22,13 @@ func (*FutureComplete) isStmt() {}
 
 // Await awaits a future and produces a value into a temp.
 // In sync contexts, codegen maps this to a blocking await stub.
-// In async contexts, this node will not survive final lowering (expanded by M8B).
+// ResultType (e.g., "i32", "ptr") tells the LLVM backend how to narrow
+// the i64 transport value returned by __await_blocking.
 // Example print:   await %fut -> %t2
 type Await struct {
-	Fut Value
-	Dst Temp
+	Fut        Value
+	Dst        Temp
+	ResultType string // LLVM type to narrow to: "i32", "ptr", "i1", "double", ""
 }
 
 func (*Await) isStmt() {}
