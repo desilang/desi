@@ -1,0 +1,19 @@
+# EXPECTED_OUTPUT:
+# 30
+
+# Test async function chaining (sequential await)
+
+async def step1(x: int) -> int:
+    return x + 10
+
+async def step2(x: int) -> int:
+    return x * 2
+
+def main() -> int:
+    # Chain: step1(5) -> 15, step2(15) -> 30
+    let f1 = step1(5)
+    let v1 = await f1
+    let f2 = step2(v1)
+    let v2 = await f2
+    print(str(v2))
+    return 0
