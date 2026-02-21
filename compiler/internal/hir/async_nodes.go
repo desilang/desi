@@ -30,3 +30,15 @@ type Await struct {
 }
 
 func (*Await) isStmt() {}
+
+// FutureSpawn spawns a body function on a background thread with args.
+// The BodyFn is called with (future_ptr, args...) and its return value
+// is used to complete the future automatically.
+// Example print:   future.spawn %fut, @body_fn, [arg0, arg1]
+type FutureSpawn struct {
+	Fut    Value   // future handle (ptr)
+	BodyFn string  // name of the body function
+	Args   []Value // user arguments to pass
+}
+
+func (*FutureSpawn) isStmt() {}

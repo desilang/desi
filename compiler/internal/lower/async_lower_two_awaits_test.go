@@ -45,15 +45,17 @@ func TestAsyncLower_TwoAwaits_StateMachineShape(t *testing.T) {
 		}},
 	}
 
-	w, p := lower.LowerAsyncFunc(fn, nil, nil, nil)
+	w, body := lower.LowerAsyncFunc(fn, nil, nil, nil)
 
 	var buf bytes.Buffer
-	// Wrapper sanity
+
+	// Wrapper: creates future, spawns body with 1 param
 	hir.Print(&buf, w)
 	wout := buf.String()
 	for _, want := range []string{
 		"func foo",
 		" = future.new",
+		"future.spawn",
 		"ret %",
 	} {
 		if !strings.Contains(wout, want) {
@@ -61,31 +63,19 @@ func TestAsyncLower_TwoAwaits_StateMachineShape(t *testing.T) {
 		}
 	}
 
-	// Poll should contain a multi-state dispatch and three states (0,1 -> pending; 2 -> complete)
+	// Body: has __future__ + n params, contains actual function body with awaits
 	buf.Reset()
-	hir.Print(&buf, p)
-	pout := buf.String()
+	hir.Print(&buf, body)
+	bout := buf.String()
 
 	wantLines := []string{
-		"func foo$poll",
-		"  block entry",
-		// at least the first comparison
-		"call __eq_i32(frame.state, 0)",
-		"if %t", // generic shape
-		// state blocks
-		"  block state0",
-		"    frame.state = 1",
-		"    ret false",
-		"  block state1",
-		"    frame.state = 2",
-		"    ret false",
-		"  block state2",
-		"    future.complete frame.fut, 0",
-		"    ret true",
+		"func foo$body",
+		"%__future__",
+		"%n",
 	}
 	for _, w := range wantLines {
-		if !strings.Contains(pout, w) {
-			t.Fatalf("poll missing line %q in:\n%s", w, pout)
+		if !strings.Contains(bout, w) {
+			t.Fatalf("body missing %q in:\n%s", w, bout)
 		}
 	}
 }

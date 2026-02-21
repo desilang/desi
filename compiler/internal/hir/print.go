@@ -108,6 +108,12 @@ func Print(w io.Writer, n interface{}) {
 				wprintf(w, "    await %s -> %s\n", s.Fut.String(), s.Dst.String())
 			case *FutureComplete:
 				wprintf(w, "    future.complete %s, %s\n", s.Fut.String(), s.Val.String())
+			case *FutureSpawn:
+				wprintf(w, "    future.spawn %s, @%s", s.Fut.String(), s.BodyFn)
+				for _, a := range s.Args {
+					wprintf(w, ", %s", a.String())
+				}
+				wprintf(w, "\n")
 
 			// ------- M8H frame sugar -------
 			case *FrameSet:

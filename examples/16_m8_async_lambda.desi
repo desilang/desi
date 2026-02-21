@@ -1,6 +1,5 @@
-# EXPECTED: COMPILE_ERROR
-# expect: compile_error
-# reason: Async functions and old => lambda syntax not fully implemented
+# EXPECTED_OUTPUT:
+# async lambda demo - compile only
 
 async def inc(x: int) -> int:
 	x + 1
@@ -8,5 +7,3 @@ async def inc(x: int) -> int:
 def main() -> int:
 	print("async lambda demo - compile only")
 	0
-
-# SKIPPED: Async test - requires runtime async support

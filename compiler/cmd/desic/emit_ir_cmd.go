@@ -274,15 +274,15 @@ func findMainFunc(m *ast.Module) *ast.FuncDecl {
 // markAsyncWrappers scans HIR for pairs "<name>" and "<name>$poll" and marks "<name>"
 // as an async wrapper in the LLVM module so calls to it are emitted as 'call ptr'.
 func markAsyncWrappers(lm *llvm.Module, hm *hir.Module) {
-	seenPoll := map[string]bool{}
+	seenBody := map[string]bool{}
 	for _, f := range hm.Funcs {
-		if strings.HasSuffix(f.Name, "$poll") {
-			base := strings.TrimSuffix(f.Name, "$poll")
-			seenPoll[base] = true
+		if strings.HasSuffix(f.Name, "$body") {
+			base := strings.TrimSuffix(f.Name, "$body")
+			seenBody[base] = true
 		}
 	}
 	for _, f := range hm.Funcs {
-		if seenPoll[f.Name] {
+		if seenBody[f.Name] {
 			lm.MarkAsyncWrapper(f.Name)
 		}
 	}

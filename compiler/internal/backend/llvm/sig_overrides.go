@@ -66,4 +66,14 @@ func init() {
 	SetFuncSig("list_reduce", "ptr", nil)
 	SetFuncSig("list_any", "i1", nil)
 	SetFuncSig("list_all", "i1", nil)
+
+	// Async/future runtime overrides
+	SetFuncSig("__future_new", "ptr", nil)
+	SetFuncSig("__future_complete", "void", []string{"ptr", "i64"})
+	SetFuncSig("__await_blocking", "i64", []string{"ptr"})
+	SetFuncSig("__future_spawn_0", "void", []string{"ptr", "ptr"})
+	SetFuncSig("__future_spawn_1", "void", []string{"ptr", "ptr", "i64"})
+	SetFuncSig("__future_spawn_2", "void", []string{"ptr", "ptr", "i64", "i64"})
+	SetFuncSig("__future_spawn_3", "void", []string{"ptr", "ptr", "i64", "i64", "i64"})
+	SetFuncSig("__future_spawn_4", "void", []string{"ptr", "ptr", "i64", "i64", "i64", "i64"})
 }

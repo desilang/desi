@@ -41,11 +41,11 @@ func TestAsyncLower_Smoke_WrapperAndPoll(t *testing.T) {
 		}},
 	}
 
-	w, p := lower.LowerAsyncFunc(fn, nil, nil, nil)
+	w, body := lower.LowerAsyncFunc(fn, nil, nil, nil)
 
 	var buf bytes.Buffer
 
-	// Wrapper expectations
+	// Wrapper: creates future, spawns body, returns future
 	hir.Print(&buf, w)
 	wout := buf.String()
 	if !strings.Contains(wout, "func foo") {
@@ -54,30 +54,25 @@ func TestAsyncLower_Smoke_WrapperAndPoll(t *testing.T) {
 	if !strings.Contains(wout, " = future.new") {
 		t.Fatalf("wrapper missing future.new:\n%s", wout)
 	}
+	if !strings.Contains(wout, "future.spawn") {
+		t.Fatalf("wrapper missing spawn call:\n%s", wout)
+	}
 	if !strings.Contains(wout, "ret %") {
 		t.Fatalf("wrapper should return a future handle:\n%s", wout)
 	}
 
-	// Poll expectations
+	// Body: has __future__ param + original param, contains the function body
 	buf.Reset()
-	hir.Print(&buf, p)
-	pout := buf.String()
+	hir.Print(&buf, body)
+	bout := buf.String()
 
-	want := []string{
-		"func foo$poll",
-		"  block entry",
-		"    %t1 = call __eq_i32(frame.state, 0)",
-		"    if %t1 then state0 else state1",
-		"  block state0",
-		"    frame.state = 1",
-		"    ret false",
-		"  block state1",
-		"    future.complete frame.fut, 0",
-		"    ret true",
+	if !strings.Contains(bout, "func foo$body") {
+		t.Fatalf("body missing func header:\n%s", bout)
 	}
-	for _, line := range want {
-		if !strings.Contains(pout, line) {
-			t.Fatalf("poll missing line %q in:\n%s", line, pout)
-		}
+	if !strings.Contains(bout, "%__future__") {
+		t.Fatalf("body missing __future__ param:\n%s", bout)
+	}
+	if !strings.Contains(bout, "%n") {
+		t.Fatalf("body missing original param n:\n%s", bout)
 	}
 }

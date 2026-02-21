@@ -920,12 +920,51 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 			case *hir.FutureNew:
 				wprintf(&m.funcs, "  %s = call ptr @__future_new()\n", x.Dst.String())
 				m.ensureDecl("declare ptr @__future_new()")
+				m.tempTypes[strings.TrimPrefix(x.Dst.String(), "%")] = "ptr"
 			case *hir.Await:
-				wprintf(&m.funcs, "  %s = call i32 @__await_blocking(%s)\n", x.Dst.String(), m.ptrOperand(x.Fut))
-				m.ensureDecl("declare i32 @__await_blocking(ptr)")
+				wprintf(&m.funcs, "  %s = call i64 @__await_blocking(%s)\n", x.Dst.String(), m.ptrOperand(x.Fut))
+				m.ensureDecl("declare i64 @__await_blocking(ptr)")
+				m.tempTypes[strings.TrimPrefix(x.Dst.String(), "%")] = "i64"
 			case *hir.FutureComplete:
 				wprintf(&m.funcs, "  call void @__future_complete(%s, %s)\n", m.ptrOperand(x.Fut), m.i32Operand(x.Val))
-				m.ensureDecl("declare void @__future_complete(ptr, i32)")
+				m.ensureDecl("declare void @__future_complete(ptr, i64)")
+			case *hir.FutureSpawn:
+				// Emit: call void @__future_spawn_N(ptr %fut, ptr @body, i64 %a0, ...)
+				// ptrOperand includes the type prefix (e.g., "ptr %x")
+				nArgs := len(x.Args)
+				spawnFn := fmt.Sprintf("__future_spawn_%d", nArgs)
+				// Build arg string — fut is ptr, body is ptr, args are i64
+				argStr := fmt.Sprintf("%s, ptr @%s", m.ptrOperand(x.Fut), x.BodyFn)
+				for _, a := range x.Args {
+					// Each arg must be i64 for the C runtime. Widen from source type.
+					aty, aval := m.operand(a)
+					var i64val string
+					switch aty {
+					case "i64":
+						i64val = aval
+					case "i32":
+						tmp := fmt.Sprintf("%%sext_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %s = sext i32 %s to i64\n", tmp, aval)
+						i64val = tmp
+					case "ptr":
+						tmp := fmt.Sprintf("%%p2i_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %s = ptrtoint ptr %s to i64\n", tmp, aval)
+						i64val = tmp
+					default:
+						// Fallback: just use the raw value (may fail for unusual types)
+						i64val = aval
+					}
+					argStr += fmt.Sprintf(", i64 %s", i64val)
+				}
+				wprintf(&m.funcs, "  call void @%s(%s)\n", spawnFn, argStr)
+				// Build declaration
+				declParams := "ptr, ptr"
+				for i := 0; i < nArgs; i++ {
+					declParams += ", i64"
+				}
+				m.ensureDecl(fmt.Sprintf("declare void @%s(%s)", spawnFn, declParams))
 			}
 		}
 
