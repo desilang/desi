@@ -283,29 +283,29 @@ func (c *checker) typ(e ast.Expr) types.T {
 			return nil
 		}
 
-		// Validate all keys have the same type
-		for _, key := range x.Keys {
+		// Check all keys — widen to Any if mixed types
+		for _, key := range x.Keys[1:] {
 			keyType := c.typ(key)
 			if keyType == nil {
 				continue
 			}
 			if !types.Equal(keyType, kt) {
-				c.add(diagAt("DTE0104", key.SpanOf(), "dict key type mismatch"))
+				kt = types.Any // Widen to Any for heterogeneous keys
 			}
 		}
 
-		// Validate all values have the same type
-		for _, val := range x.Values {
+		// Check all values — widen to Any if mixed types
+		for _, val := range x.Values[1:] {
 			valType := c.typ(val)
 			if valType == nil {
 				continue
 			}
 			if !types.Equal(valType, vt) {
-				c.add(diagAt("DTE0104", val.SpanOf(), "dict value type mismatch"))
+				vt = types.Any // Widen to Any for heterogeneous values
 			}
 		}
 
-		// Return dict[K, V] type
+		// Return dict[K, V] type (K/V may be widened to Any)
 		t := types.DictOf(kt, vt)
 		c.info.Types[x] = t
 		return t

@@ -45,6 +45,10 @@ def __http_url_encode(s: str) -> str
 @extern("C")
 def __http_url_decode(s: str) -> str
 
+# JSON serialization (from json.c runtime, used by *_json convenience methods)
+@extern("C")
+def __json_stringify(node: Any) -> str
+
 # ============================================================
 # Response Type
 # ============================================================
@@ -69,7 +73,7 @@ pub def get(url: str) -> Response:
 		)
 		return resp
 
-# Perform a POST request with a body
+# Perform a POST request with a string body
 pub def post(url: str, body: str) -> Response:
 	unsafe:
 		let raw = __http_post(url, body)
@@ -80,7 +84,20 @@ pub def post(url: str, body: str) -> Response:
 		)
 		return resp
 
-# Perform a PUT request with a body
+# Perform a POST request with auto-JSON serialization
+# Accepts dict, list, int, float, bool, str, or any serializable value
+pub def post_json(url: str, data: Any) -> Response:
+	unsafe:
+		let body = __json_stringify(data)
+		let raw = __http_post(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a PUT request with a string body
 pub def put(url: str, body: str) -> Response:
 	unsafe:
 		let raw = __http_put(url, body)
@@ -91,9 +108,33 @@ pub def put(url: str, body: str) -> Response:
 		)
 		return resp
 
-# Perform a PATCH request with a body
+# Perform a PUT request with auto-JSON serialization
+pub def put_json(url: str, data: Any) -> Response:
+	unsafe:
+		let body = __json_stringify(data)
+		let raw = __http_put(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a PATCH request with a string body
 pub def patch(url: str, body: str) -> Response:
 	unsafe:
+		let raw = __http_patch(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a PATCH request with auto-JSON serialization
+pub def patch_json(url: str, data: Any) -> Response:
+	unsafe:
+		let body = __json_stringify(data)
 		let raw = __http_patch(url, body)
 		let resp = Response(
 			status=__http_response_status(raw),
