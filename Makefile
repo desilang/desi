@@ -11,6 +11,22 @@ RUNTIME_SRC = compiler/runtime
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
 
+# OpenSSL detection for HTTPS support (Homebrew or system)
+OPENSSL_PREFIX := $(shell brew --prefix openssl 2>/dev/null || echo "")
+ifeq ($(OPENSSL_PREFIX),)
+  # Try standard system paths
+  ifneq ($(wildcard /usr/include/openssl/ssl.h),)
+    OPENSSL_CFLAGS =
+    OPENSSL_LDFLAGS = -lssl -lcrypto
+  else
+    OPENSSL_CFLAGS =
+    OPENSSL_LDFLAGS =
+  endif
+else
+  OPENSSL_CFLAGS = -I$(OPENSSL_PREFIX)/include
+  OPENSSL_LDFLAGS = -L$(OPENSSL_PREFIX)/lib -lssl -lcrypto
+endif
+
 # Auto-discover all .c files in runtime (excluding decimal subdirectory and desi_host)
 RUNTIME_SRCS = $(filter-out $(RUNTIME_SRC)/desi_host.c,$(wildcard $(RUNTIME_SRC)/*.c))
 RUNTIME_OBJS = $(patsubst $(RUNTIME_SRC)/%.c,$(BUILD_DIR)/%.o,$(RUNTIME_SRCS))
@@ -51,7 +67,7 @@ $(LIB_DESI): $(RUNTIME_OBJS) $(BUILD_DIR)/desi_decimal.o
 
 $(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
 	@echo "==> Compiling $<..."
-	$(CC) -c $< -o $@
+	$(CC) $(OPENSSL_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB)
 	@echo "==> Compiling decimal wrapper..."

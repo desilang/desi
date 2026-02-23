@@ -186,6 +186,45 @@ func CollectExports(mod *ast.Module) *Exports {
 	// ========================================================================
 	collectClasses(mod, out)
 
+	// ========================================================================
+	// FIRST-B: Collect struct declarations (so function return types can reference them)
+	// ========================================================================
+	structTypes := map[string]*types.Struct{}
+	for _, d := range mod.Decls {
+		sd, ok := d.(*ast.StructDecl)
+		if !ok {
+			continue
+		}
+		fields := make([]types.Field, len(sd.Fields))
+		allResolved := true
+		for i, f := range sd.Fields {
+			var ft types.T
+			if f.Type != nil {
+				if t, ok := types.FromName(f.Type.Name); ok {
+					ft = t
+				} else {
+					allResolved = false
+					break
+				}
+			} else {
+				allResolved = false
+				break
+			}
+			fields[i] = types.Field{
+				Name:  f.Name.Name,
+				Type:  ft,
+				IsPub: f.Pub,
+			}
+		}
+		if !allResolved {
+			continue
+		}
+		structTypes[sd.Name.Name] = &types.Struct{
+			Name:   sd.Name.Name,
+			Fields: fields,
+		}
+	}
+
 	// resolveTypeName resolves an AST TypeName to a types.T, handling generic
 	// containers (list[T], dict[K,V], set[T]), tuples, unions, and simple types.
 	var resolveTypeName func(tn *ast.TypeName) (types.T, bool)
@@ -271,6 +310,10 @@ func CollectExports(mod *ast.Module) *Exports {
 		// Then try classes exported from this module (with full method info)
 		if cls, ok := out.Classes[tn.Name]; ok {
 			return cls, true
+		}
+		// Then try structs defined in this module
+		if st, ok := structTypes[tn.Name]; ok {
+			return st, true
 		}
 		return nil, false
 	}

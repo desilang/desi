@@ -374,6 +374,14 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	// Dead code elimination
 	if runtime.GOOS == "darwin" {
 		clangArgs = append(clangArgs, "-Wl,-dead_strip")
+		// HTTPS TLS via OpenSSL (Homebrew or system)
+		if opensslPrefix := detectOpenSSLPrefix(); opensslPrefix != "" {
+			clangArgs = append(clangArgs, "-L"+opensslPrefix+"/lib", "-lssl", "-lcrypto")
+		}
+	} else if runtime.GOOS == "linux" {
+		clangArgs = append(clangArgs, "-Wl,--gc-sections")
+		// HTTPS TLS via system OpenSSL
+		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
 	} else {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 	}
@@ -569,8 +577,14 @@ func runSingleTest(testFile string, verbose bool) int {
 	// Dead-code elimination
 	if runtime.GOOS == "darwin" {
 		clangArgs = append(clangArgs, "-Wl,-dead_strip")
+		// HTTPS TLS via OpenSSL (Homebrew or system)
+		if opensslPrefix := detectOpenSSLPrefix(); opensslPrefix != "" {
+			clangArgs = append(clangArgs, "-L"+opensslPrefix+"/lib", "-lssl", "-lcrypto")
+		}
 	} else if runtime.GOOS == "linux" {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
+		// HTTPS TLS via system OpenSSL
+		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
 	}
 
 	// Runtime library
@@ -740,4 +754,34 @@ func quote(s string) string {
 		return `"` + s + `"`
 	}
 	return `"` + strings.ReplaceAll(s, `"`, `\"`) + `"`
+}
+
+// detectOpenSSLPrefix finds the OpenSSL installation prefix for HTTPS support.
+// Checks: Homebrew (macOS), then common system paths.
+func detectOpenSSLPrefix() string {
+	// Try Homebrew first (macOS common case)
+	if out, err := exec.Command("brew", "--prefix", "openssl").Output(); err == nil {
+		prefix := strings.TrimSpace(string(out))
+		if prefix != "" {
+			// Verify the lib actually exists
+			if _, err := os.Stat(filepath.Join(prefix, "lib", "libssl.a")); err == nil {
+				return prefix
+			}
+			if _, err := os.Stat(filepath.Join(prefix, "lib", "libssl.dylib")); err == nil {
+				return prefix
+			}
+		}
+	}
+	// Try common system paths
+	for _, prefix := range []string{"/usr", "/usr/local", "/opt/homebrew"} {
+		libPath := filepath.Join(prefix, "lib", "libssl.a")
+		if _, err := os.Stat(libPath); err == nil {
+			return prefix
+		}
+		libPath = filepath.Join(prefix, "lib", "libssl.so")
+		if _, err := os.Stat(libPath); err == nil {
+			return prefix
+		}
+	}
+	return ""
 }

@@ -1,0 +1,158 @@
+# HTTP module - HTTP client for Desi
+# Self-contained: POSIX sockets + platform TLS (no libcurl)
+# Supports HTTP/1.1, HTTPS, IPv4+IPv6, redirects, chunked encoding
+
+# ============================================================
+# C Runtime Bindings
+# ============================================================
+
+@extern("C")
+def __http_get(url: str) -> Any
+
+@extern("C")
+def __http_post(url: str, body: str) -> Any
+
+@extern("C")
+def __http_put(url: str, body: str) -> Any
+
+@extern("C")
+def __http_patch(url: str, body: str) -> Any
+
+@extern("C")
+def __http_delete(url: str) -> Any
+
+@extern("C")
+def __http_head(url: str) -> Any
+
+@extern("C")
+def __http_options(url: str) -> Any
+
+@extern("C")
+def __http_request(method: str, url: str, body: str, headers: str) -> Any
+
+@extern("C")
+def __http_response_status(resp: Any) -> int
+
+@extern("C")
+def __http_response_body(resp: Any) -> str
+
+@extern("C")
+def __http_response_headers(resp: Any) -> str
+
+@extern("C")
+def __http_url_encode(s: str) -> str
+
+@extern("C")
+def __http_url_decode(s: str) -> str
+
+# ============================================================
+# Response Type
+# ============================================================
+
+struct Response:
+	pub status: int
+	pub body: str
+	pub headers: str
+
+# ============================================================
+# Public API
+# ============================================================
+
+# Perform a GET request
+pub def get(url: str) -> Response:
+	unsafe:
+		let raw = __http_get(url)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a POST request with a body
+pub def post(url: str, body: str) -> Response:
+	unsafe:
+		let raw = __http_post(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a PUT request with a body
+pub def put(url: str, body: str) -> Response:
+	unsafe:
+		let raw = __http_put(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a PATCH request with a body
+pub def patch(url: str, body: str) -> Response:
+	unsafe:
+		let raw = __http_patch(url, body)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a DELETE request
+pub def delete(url: str) -> Response:
+	unsafe:
+		let raw = __http_delete(url)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a HEAD request (body will be empty)
+pub def head(url: str) -> Response:
+	unsafe:
+		let raw = __http_head(url)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform an OPTIONS request
+pub def options(url: str) -> Response:
+	unsafe:
+		let raw = __http_options(url)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a custom HTTP request with method, URL, body, and headers
+# Headers should be in "Key: Value\r\n" format
+pub def request(method: str, url: str, body: str, headers: str) -> Response:
+	unsafe:
+		let raw = __http_request(method, url, body, headers)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# URL-encode a string (RFC 3986)
+pub def url_encode(s: str) -> str:
+	unsafe:
+		return __http_url_encode(s)
+
+# URL-decode a string
+pub def url_decode(s: str) -> str:
+	unsafe:
+		return __http_url_decode(s)
