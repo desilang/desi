@@ -117,6 +117,7 @@ nav:
     - Keywords: reference/keywords.md
     - desic doc: reference/desic-doc.md
   - Standard Library:
+    - HTTP: stdlib/http.md
     - JSON: stdlib/json.md
     - Math: stdlib/math.md
     - Logging: stdlib/log.md
