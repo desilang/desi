@@ -75,6 +75,8 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseSpawn()
 	case token.KW_select:
 		return p.parseSelect()
+	case token.KW_assert:
+		return p.parseAssert()
 	default:
 		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()
@@ -274,5 +276,29 @@ func (p *Parser) parseReturn() ast.Stmt {
 	return &ast.ReturnStmt{
 		Value: e,
 		Span:  ast.JoinSpan(start, lastSpan(e, start)),
+	}
+}
+
+// assert <expr> [, "message"]
+func (p *Parser) parseAssert() ast.Stmt {
+	start := spanPos(p.file, p.cur)
+	p.next() // 'assert'
+
+	// Parse condition expression
+	cond := p.parseExpr()
+
+	// Optional message after comma
+	var msg ast.Expr
+	if p.accept(token.COMMA) {
+		msg = p.parseExpr()
+	}
+
+	if !p.accept(token.NL) && p.cur.Tok != token.EOF && p.cur.Tok != token.Dedent {
+		p.errExpected(spanPos(p.file, p.cur), "newline")
+	}
+	return &ast.AssertStmt{
+		Cond: cond,
+		Msg:  msg,
+		Span: ast.JoinSpan(start, lastSpan(cond, start)),
 	}
 }

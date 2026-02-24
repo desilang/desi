@@ -80,6 +80,12 @@ void __panic_expect(const char* msg) {
     exit(1);
 }
 
+// Assert failure handler
+void __desi_assert_fail(const char* msg) {
+    fprintf(stderr, "assertion failed: %s\n", msg);
+    exit(1);
+}
+
 // Math helper functions for float special values
 #include <math.h>
 

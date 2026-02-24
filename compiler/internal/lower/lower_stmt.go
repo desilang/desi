@@ -617,6 +617,34 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	case *ast.PassStmt:
 		// pass is a no-op - nothing to emit
 
+	case *ast.AssertStmt:
+		// Lower assert: if !cond { __desi_assert_fail("line N: assertion failed[: message]") }
+		cond := ls.lowerExpr(s.Cond)
+
+		// Build failure message with line number
+		line := s.Span.Start.Line
+		msg := fmt.Sprintf("line %d: assertion failed", line)
+		if s.Msg != nil {
+			if strLit, ok := s.Msg.(*ast.StrLit); ok {
+				msg = fmt.Sprintf("line %d: %s", line, strLit.Value)
+			}
+		}
+
+		// Create failure block
+		failBlk := ls.b.NewBlock("assert_fail")
+		oldCur := ls.b.Block()
+
+		ls.b.SetBlock(failBlk)
+		// Call __desi_assert_fail(msg) which prints and exits
+		ls.b.Emit(&hir.Call{Fn: "__desi_assert_fail", Args: []hir.Value{hir.ConstStr{Text: msg}}})
+		ls.b.SetBlock(oldCur)
+
+		// Emit: if !cond goto failBlk
+		// Negate condition: the fail block runs when cond is FALSE
+		negCond := ls.b.FreshTemp("assert_neg")
+		ls.b.Emit(&hir.BinaryOp{Op: "==", LHS: cond, RHS: hir.ConstBool{Value: false}, Dst: negCond, Type: "i1"})
+		ls.b.Emit(&hir.If{Cond: negCond, Then: failBlk, Else: nil})
+
 	case *ast.UnsafeBlock:
 		// unsafe block: just lower the inner statements (unsafe is a type-checker concept)
 		for _, stmt := range s.Body.Stmts {
