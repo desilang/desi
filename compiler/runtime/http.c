@@ -43,7 +43,7 @@ static void ensure_wsa(void) {
 
 /* ---- TCP connection ---- */
 
-static DESI_SOCKET tcp_connect(const char *host, const char *port) {
+static DESI_SOCKET tcp_connect(const char *host, const char *port, int timeout_secs) {
     ensure_wsa();
     struct addrinfo hints, *res, *rp;
     memset(&hints, 0, sizeof(hints));
@@ -57,7 +57,23 @@ static DESI_SOCKET tcp_connect(const char *host, const char *port) {
     for (rp = res; rp; rp = rp->ai_next) {
         fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
         if (fd == DESI_INVALID_SOCKET) continue;
-        if (connect(fd, rp->ai_addr, (int)rp->ai_addrlen) == 0) break;
+        if (connect(fd, rp->ai_addr, (int)rp->ai_addrlen) == 0) {
+            /* Set read/write timeouts on the connected socket */
+            if (timeout_secs > 0) {
+#ifdef _WIN32
+                DWORD tv = (DWORD)(timeout_secs * 1000);
+                setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof(tv));
+                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, (const char *)&tv, sizeof(tv));
+#else
+                struct timeval tv;
+                tv.tv_sec = timeout_secs;
+                tv.tv_usec = 0;
+                setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+                setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
+            }
+            break;
+        }
         DESI_CLOSE_SOCKET(fd);
         fd = DESI_INVALID_SOCKET;
     }
@@ -265,7 +281,7 @@ static HttpResponse *make_error(const char *msg) {
 
 static HttpResponse *http_do_request(const char *method, const char *url,
                                      const char *body_data, const char *extra_headers,
-                                     int max_redirects) {
+                                     int max_redirects, int timeout_secs) {
     ParsedURL parsed;
     if (parse_url(url, &parsed) != 0)
         return make_error("invalid URL");
@@ -274,9 +290,9 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     memset(&conn, 0, sizeof(conn));
     conn.fd = DESI_INVALID_SOCKET;
 
-    conn.fd = tcp_connect(parsed.host, parsed.port);
+    conn.fd = tcp_connect(parsed.host, parsed.port, timeout_secs);
     if (conn.fd == DESI_INVALID_SOCKET)
-        return make_error("connection failed");
+        return make_error("connection failed (timeout or unreachable)");
 
     if (strcmp(parsed.scheme, "https") == 0) {
         if (tls_handshake(&conn, parsed.host) != 0) {
@@ -369,7 +385,7 @@ static HttpResponse *http_do_request(const char *method, const char *url,
 
             const char *rm = (status == 303) ? "GET" : method;
             const char *rb = (status == 303) ? NULL : body_data;
-            HttpResponse *r = http_do_request(rm, final_url, rb, extra_headers, max_redirects - 1);
+            HttpResponse *r = http_do_request(rm, final_url, rb, extra_headers, max_redirects - 1, timeout_secs);
             free(redir_url);
             return r;
         }
@@ -406,19 +422,23 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     return r;
 }
 
-/* ==== Public API (called from Desi via @extern) ==== */
+#define HTTP_DEFAULT_TIMEOUT 30
 
 void *__http_request(const char *method, const char *url, const char *body, const char *headers) {
-    return http_do_request(method, url, body, headers, 10);
+    return http_do_request(method, url, body, headers, 10, HTTP_DEFAULT_TIMEOUT);
 }
 
-void *__http_get(const char *url)               { return http_do_request("GET",     url, NULL, NULL, 10); }
-void *__http_post(const char *url, const char *body)  { return http_do_request("POST",    url, body, "Content-Type: application/json\r\n", 10); }
-void *__http_put(const char *url, const char *body)   { return http_do_request("PUT",     url, body, "Content-Type: application/json\r\n", 10); }
-void *__http_patch(const char *url, const char *body)  { return http_do_request("PATCH",   url, body, "Content-Type: application/json\r\n", 10); }
-void *__http_delete(const char *url)            { return http_do_request("DELETE",  url, NULL, NULL, 10); }
-void *__http_head(const char *url)              { return http_do_request("HEAD",    url, NULL, NULL, 10); }
-void *__http_options(const char *url)           { return http_do_request("OPTIONS", url, NULL, NULL, 10); }
+void *__http_request_timeout(const char *method, const char *url, const char *body, const char *headers, int timeout_secs) {
+    return http_do_request(method, url, body, headers, 10, timeout_secs > 0 ? timeout_secs : HTTP_DEFAULT_TIMEOUT);
+}
+
+void *__http_get(const char *url)               { return http_do_request("GET",     url, NULL, NULL, 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_post(const char *url, const char *body)  { return http_do_request("POST",    url, body, "Content-Type: application/json\r\n", 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_put(const char *url, const char *body)   { return http_do_request("PUT",     url, body, "Content-Type: application/json\r\n", 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_patch(const char *url, const char *body)  { return http_do_request("PATCH",   url, body, "Content-Type: application/json\r\n", 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_delete(const char *url)            { return http_do_request("DELETE",  url, NULL, NULL, 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_head(const char *url)              { return http_do_request("HEAD",    url, NULL, NULL, 10, HTTP_DEFAULT_TIMEOUT); }
+void *__http_options(const char *url)           { return http_do_request("OPTIONS", url, NULL, NULL, 10, HTTP_DEFAULT_TIMEOUT); }
 
 int32_t __http_response_status(void *resp) {
     return resp ? ((HttpResponse *)resp)->status : -1;
