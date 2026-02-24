@@ -727,9 +727,9 @@ char* __dict_to_json_str(void* raw) {
             buf[pos++] = '"';
             buf[pos++] = ':';
 
-            /* === Value (type-aware) === */
+            /* === Value (type-aware, per-entry) === */
             char val_tmp[256];
-            int vtt = d->value_type_tag;
+            int vtt = entry->value_type_tag;
 
             /* For Any-typed dicts, the value_type_tag may be 0 (int).
                We try to detect the actual type from the value_size and

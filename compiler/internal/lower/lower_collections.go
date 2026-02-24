@@ -172,7 +172,12 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		}
 
 		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, keyInt, keyStr, keyFloat, keyPtr, valPtr, valTypeTag}})
+		// When value type is Any, use the actual per-entry type tag
+		insertTag := valTypeTag
+		if entryValType != nil && types.Equal(ls.info.Types[d].(*types.Dict).Val, types.Any) {
+			insertTag = getTypeTag(entryValType)
+		}
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{res, keyInt, keyStr, keyFloat, keyPtr, valPtr, insertTag}})
 	}
 
 	return res
