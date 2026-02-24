@@ -245,6 +245,98 @@ def test_request_json():
 		print("FAIL: request_json")
 
 # ============================================================
+# Test 19: build_query - dict to URL-encoded query string
+# ============================================================
+def test_build_query():
+	let qs = http.build_query({"q": "hello world", "page": "1"})
+	# Query string should be URL-encoded key=val pairs
+	let resp = http.get("https://httpbin.org/get?" + qs)
+	let data = http.parse_json(resp.body)
+	let args = json.object_get(data, "args")
+	let q = json.object_get(args, "q")
+	if json.get_string(q) == "hello world":
+		print("PASS: build_query")
+	else:
+		print("FAIL: build_query")
+
+# ============================================================
+# Test 20: post_form - URL-encoded form POST
+# ============================================================
+def test_post_form():
+	let resp = http.post_form("https://httpbin.org/post", {"username": "alice", "password": "secret"})
+	let data = http.parse_json(resp.body)
+	let form = json.object_get(data, "form")
+	let user = json.object_get(form, "username")
+	if json.get_string(user) == "alice":
+		print("PASS: post_form")
+	else:
+		print("FAIL: post_form")
+
+# ============================================================
+# Test 21: basic_auth header builder
+# ============================================================
+def test_basic_auth():
+	let header = http.basic_auth("alice", "password123")
+	let resp = http.request("GET", "https://httpbin.org/headers", "", header)
+	let data = http.parse_json(resp.body)
+	let headers = json.object_get(data, "headers")
+	let auth = json.object_get(headers, "Authorization")
+	# base64("alice:password123") = "YWxpY2U6cGFzc3dvcmQxMjM="
+	if json.get_string(auth) == "Basic YWxpY2U6cGFzc3dvcmQxMjM=":
+		print("PASS: basic_auth")
+	else:
+		print("FAIL: basic_auth, got: " + json.get_string(auth))
+
+# ============================================================
+# Test 22: bearer_auth header builder
+# ============================================================
+def test_bearer_auth():
+	let header = http.bearer_auth("my-secret-token")
+	let resp = http.request("GET", "https://httpbin.org/headers", "", header)
+	let data = http.parse_json(resp.body)
+	let headers = json.object_get(data, "headers")
+	let auth = json.object_get(headers, "Authorization")
+	if json.get_string(auth) == "Bearer my-secret-token":
+		print("PASS: bearer_auth")
+	else:
+		print("FAIL: bearer_auth")
+
+# ============================================================
+# Test 23: is_ok / is_client_error / is_server_error helpers
+# ============================================================
+def test_response_helpers():
+	let r200 = http.get("https://httpbin.org/status/200")
+	let r404 = http.get("https://httpbin.org/status/404")
+	let r500 = http.get("https://httpbin.org/status/500")
+	
+	let ok_pass = http.is_ok(r200) and http.is_ok(r404) == false
+	let client_pass = http.is_client_error(r404) and http.is_client_error(r200) == false
+	let server_pass = http.is_server_error(r500) and http.is_server_error(r200) == false
+	
+	if ok_pass and client_pass and server_pass:
+		print("PASS: Response helpers (is_ok, is_client_error, is_server_error)")
+	else:
+		print("FAIL: Response helpers")
+
+# ============================================================
+# Test 24: POST form with mixed-type values
+# ============================================================
+def test_post_form_mixed():
+	let resp = http.post_form("https://httpbin.org/post", {
+		"name": "desi",
+		"count": 42,
+		"active": true
+	})
+	let data = http.parse_json(resp.body)
+	let form = json.object_get(data, "form")
+	let name = json.object_get(form, "name")
+	let count = json.object_get(form, "count")
+	if json.get_string(name) == "desi" and json.get_string(count) == "42":
+		print("PASS: post_form (mixed types)")
+	else:
+		print("FAIL: post_form (mixed types)")
+
+# ============================================================
 # Main: Run all tests
 # ============================================================
 def main() -> int:
@@ -268,6 +360,12 @@ def main() -> int:
 	test_parse_json_nested()
 	test_empty_post()
 	test_request_json()
+	test_build_query()
+	test_post_form()
+	test_basic_auth()
+	test_bearer_auth()
+	test_response_helpers()
+	test_post_form_mixed()
 	
-	print("=== All 18 tests complete ===")
+	print("=== All 24 tests complete ===")
 	return 0
