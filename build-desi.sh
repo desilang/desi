@@ -30,8 +30,20 @@ echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
+# Detect if the source uses HTTP module (needs OpenSSL)
+EXTRA_LINK_FLAGS=""
+if grep -q "^import http" "$INPUT" 2>/dev/null; then
+    # Add OpenSSL linker flags
+    if [ -d "/opt/homebrew/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/opt/homebrew/lib -lssl -lcrypto"
+    elif [ -d "/usr/local/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/usr/local/lib -lssl -lcrypto"
+    else
+        EXTRA_LINK_FLAGS="-lssl -lcrypto"
+    fi
+fi
 # Link against libdesi.a (static runtime) with dead code elimination
-clang build/program.o -Lbuild -ldesi -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
+clang build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o

@@ -1,9 +1,7 @@
-# HTTP Client - Comprehensive Test
+# HTTP Client - Comprehensive Test (requires network access)
+# Run manually: desic run examples/407_http_client.desi
 # Tests GET, POST, JSON, timeouts, URL encode/decode, custom headers,
 # response parsing, and error handling patterns
-#
-# NOTE: This test requires network access (httpbin.org).
-# Run manually: desic run examples/407_http_client.desi
 
 import http
 import json
