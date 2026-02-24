@@ -2370,6 +2370,32 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// String equality/inequality: use strcmp instead of pointer comparison
+		if (x.Op == "==" || x.Op == "!=") && ls.info != nil {
+			lhsType := ls.info.Types[x.Lhs]
+			if types.Equal(lhsType, types.Str) {
+				cmpResult := ls.b.FreshTemp("strcmp_res")
+				ls.b.Emit(&hir.Call{
+					Fn:   "strcmp",
+					Args: []hir.Value{lhs, rhs},
+					Dst:  cmpResult,
+					Type: "i32",
+				})
+				dst := ls.b.FreshTemp("str_eq")
+				cmpVal := "0"
+				cmpOp := x.Op
+				if x.Op == "==" {
+					// strcmp returns 0 for equal
+					ls.b.Emit(&hir.BinaryOp{Op: "==", LHS: cmpResult, RHS: hir.ConstInt{Text: cmpVal, Type: "i32"}, Dst: dst, Type: "i1"})
+				} else {
+					// != : strcmp != 0
+					ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: cmpResult, RHS: hir.ConstInt{Text: cmpVal, Type: "i32"}, Dst: dst, Type: "i1"})
+				}
+				_ = cmpOp
+				return dst
+			}
+		}
+
 		dst := ls.b.FreshTemp("binop")
 		ls.b.Emit(&hir.BinaryOp{
 			Op:   x.Op,
