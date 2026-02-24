@@ -664,3 +664,134 @@ char* __json_stringify(JsonNode* node) {
     
     return buf;
 }
+
+/* ---- Dict-to-JSON bridge ---- */
+/* Converts a Desi runtime dict_t* directly to a JSON string. */
+/* This avoids the JsonNode intermediate representation.       */
+
+#include "dict.h"
+
+static void json_buf_grow(char** buf, size_t* cap, size_t needed) {
+    while (*cap < needed) {
+        *cap *= 2;
+        *buf = (char*)realloc(*buf, *cap);
+    }
+}
+
+char* __dict_to_json_str(void* raw) {
+    if (!raw) return strdup("null");
+    dict_t* d = (dict_t*)raw;
+
+    size_t cap = 256, pos = 0;
+    char* buf = (char*)malloc(cap);
+    buf[pos++] = '{';
+
+    int first = 1;
+    for (size_t i = 0; i < d->bucket_count; i++) {
+        dict_entry_t* entry = d->buckets[i];
+        while (entry) {
+            /* comma separator */
+            if (!first) {
+                json_buf_grow(&buf, &cap, pos + 2);
+                buf[pos++] = ',';
+            }
+            first = 0;
+
+            /* === Key (always JSON-quoted) === */
+            char key_tmp[128];
+            switch (d->key_type_tag) {
+                case TYPE_TAG_STR:
+                    snprintf(key_tmp, sizeof(key_tmp), "%s",
+                             entry->key_str ? entry->key_str : "");
+                    break;
+                case TYPE_TAG_INT:
+                    snprintf(key_tmp, sizeof(key_tmp), "%lld",
+                             (long long)entry->key_int);
+                    break;
+                case TYPE_TAG_BOOL:
+                    snprintf(key_tmp, sizeof(key_tmp), "%s",
+                             entry->key_int ? "true" : "false");
+                    break;
+                case TYPE_TAG_FLOAT:
+                    snprintf(key_tmp, sizeof(key_tmp), "%g",
+                             entry->key_float);
+                    break;
+                default:
+                    snprintf(key_tmp, sizeof(key_tmp), "unknown");
+            }
+            size_t klen = strlen(key_tmp);
+            json_buf_grow(&buf, &cap, pos + klen + 4);
+            buf[pos++] = '"';
+            memcpy(buf + pos, key_tmp, klen);
+            pos += klen;
+            buf[pos++] = '"';
+            buf[pos++] = ':';
+
+            /* === Value (type-aware) === */
+            char val_tmp[256];
+            int vtt = d->value_type_tag;
+
+            /* For Any-typed dicts, the value_type_tag may be 0 (int).
+               We try to detect the actual type from the value_size and
+               the first few bytes. This is heuristic but covers the
+               common case of dict[str, Any]. */
+            if (d->value_to_str_fn != NULL) {
+                /* Custom to-string: treat as quoted string */
+                char* s = d->value_to_str_fn(entry->value);
+                size_t slen = s ? strlen(s) : 4;
+                json_buf_grow(&buf, &cap, pos + slen + 3);
+                if (s) {
+                    buf[pos++] = '"';
+                    memcpy(buf + pos, s, slen);
+                    pos += slen;
+                    buf[pos++] = '"';
+                } else {
+                    memcpy(buf + pos, "null", 4);
+                    pos += 4;
+                }
+            } else if (vtt == TYPE_TAG_STR) {
+                char* str_val = *(char**)entry->value;
+                if (!str_val) str_val = "";
+                size_t slen = strlen(str_val);
+                json_buf_grow(&buf, &cap, pos + slen + 3);
+                buf[pos++] = '"';
+                memcpy(buf + pos, str_val, slen);
+                pos += slen;
+                buf[pos++] = '"';
+            } else if (vtt == TYPE_TAG_BOOL) {
+                int64_t bv = 0;
+                if (d->value_size >= sizeof(int64_t))
+                    memcpy(&bv, entry->value, sizeof(int64_t));
+                const char* bs = bv ? "true" : "false";
+                size_t blen = strlen(bs);
+                json_buf_grow(&buf, &cap, pos + blen + 1);
+                memcpy(buf + pos, bs, blen);
+                pos += blen;
+            } else if (vtt == TYPE_TAG_FLOAT) {
+                double fv = 0.0;
+                if (d->value_size >= sizeof(double))
+                    memcpy(&fv, entry->value, sizeof(double));
+                int n = snprintf(val_tmp, sizeof(val_tmp), "%g", fv);
+                json_buf_grow(&buf, &cap, pos + n + 1);
+                memcpy(buf + pos, val_tmp, n);
+                pos += n;
+            } else {
+                /* Default: integer */
+                int64_t iv = 0;
+                if (d->value_size >= sizeof(int64_t))
+                    memcpy(&iv, entry->value, sizeof(int64_t));
+                int n = snprintf(val_tmp, sizeof(val_tmp), "%lld", (long long)iv);
+                json_buf_grow(&buf, &cap, pos + n + 1);
+                memcpy(buf + pos, val_tmp, n);
+                pos += n;
+            }
+
+            entry = entry->next;
+        }
+    }
+
+    json_buf_grow(&buf, &cap, pos + 2);
+    buf[pos++] = '}';
+    buf[pos] = '\0';
+    return buf;
+}
