@@ -103,6 +103,15 @@ type ReturnStmt struct {
 func (*ReturnStmt) isStmt()             {}
 func (s *ReturnStmt) SpanOf() diag.Span { return s.Span }
 
+type AssertStmt struct {
+	Cond Expr // condition to assert (required)
+	Msg  Expr // optional message expression (typically StrLit)
+	Span diag.Span
+}
+
+func (*AssertStmt) isStmt()             {}
+func (s *AssertStmt) SpanOf() diag.Span { return s.Span }
+
 type ExprStmt struct {
 	Expr Expr
 	Span diag.Span

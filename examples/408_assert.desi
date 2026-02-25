@@ -1,0 +1,29 @@
+# EXPECTED_OUTPUT:
+# test 1: assert true passed
+# test 2: assert expression passed
+# test 3: assert comparison passed
+# test 4: multi-assert passed
+# all assert tests passed
+
+def main() -> int:
+	# Test 1: Basic assert true
+	assert true
+	print("test 1: assert true passed")
+
+	# Test 2: Assert with expression
+	let x = 42
+	assert x == 42
+	print("test 2: assert expression passed")
+
+	# Test 3: Assert with comparison
+	assert 10 > 5
+	print("test 3: assert comparison passed")
+
+	# Test 4: Multiple asserts in sequence
+	assert 1 + 1 == 2
+	assert 3 != 4
+	assert true and true
+	print("test 4: multi-assert passed")
+
+	print("all assert tests passed")
+	return 0
