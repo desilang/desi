@@ -507,3 +507,74 @@ const char *__http_url_decode(const char *s) {
     out[j] = '\0';
     return out;
 }
+
+/* ---- Query string builder ---- */
+
+/* Convert a dict[str, str] to a URL-encoded query string: key=val&key2=val2 */
+#include "dict.h"
+const char *__dict_to_query_str(void *raw) {
+    if (!raw) return strdup("");
+    dict_t *d = (dict_t *)raw;
+
+    size_t bufsize = 256;
+    char *buf = (char *)malloc(bufsize);
+    size_t pos = 0;
+    int first = 1;
+
+    for (size_t i = 0; i < d->bucket_count; i++) {
+        dict_entry_t *entry = d->buckets[i];
+        while (entry) {
+            /* Separator */
+            if (!first) { buf[pos++] = '&'; }
+            first = 0;
+
+            /* Key (must be string for query params) */
+            const char *key = entry->key_str ? entry->key_str : "";
+            const char *enc_key = __http_url_encode(key);
+            size_t klen = strlen(enc_key);
+
+            /* Value */
+            char *val_raw = NULL;
+            int vtt = entry->value_type_tag;
+            if (vtt == 1) { /* TYPE_TAG_STR */
+                val_raw = *(char **)entry->value;
+            } else if (vtt == 0) { /* TYPE_TAG_INT */
+                val_raw = (char *)malloc(32);
+                int64_t iv = 0;
+                memcpy(&iv, entry->value, sizeof(int64_t));
+                snprintf(val_raw, 32, "%lld", (long long)iv);
+            } else if (vtt == 2) { /* TYPE_TAG_BOOL */
+                int64_t bv = 0;
+                memcpy(&bv, entry->value, sizeof(int64_t));
+                val_raw = strdup(bv ? "true" : "false");
+            } else if (vtt == 3) { /* TYPE_TAG_FLOAT */
+                val_raw = (char *)malloc(64);
+                double fv = 0.0;
+                memcpy(&fv, entry->value, sizeof(double));
+                snprintf(val_raw, 64, "%g", fv);
+            } else {
+                val_raw = strdup("");
+            }
+            const char *enc_val = __http_url_encode(val_raw ? val_raw : "");
+            size_t vlen = strlen(enc_val);
+
+            /* Ensure buffer fits key=val */
+            while (pos + klen + 1 + vlen + 2 >= bufsize) {
+                bufsize *= 2;
+                buf = (char *)realloc(buf, bufsize);
+            }
+
+            memcpy(buf + pos, enc_key, klen); pos += klen;
+            buf[pos++] = '=';
+            memcpy(buf + pos, enc_val, vlen); pos += vlen;
+
+            /* Free temporaries for non-string types */
+            if (vtt != 1 && val_raw) free(val_raw);
+
+            entry = entry->next;
+        }
+    }
+    buf[pos] = '\0';
+    return buf;
+}
+

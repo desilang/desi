@@ -57,6 +57,15 @@ def __http_url_decode(s: str) -> str
 @extern("C")
 def __dict_to_json_str(data: Any) -> str
 
+# Dict-to-query-string bridge (from http.c runtime)
+# Converts a Desi dict_t to URL-encoded key=val&key=val query string
+@extern("C")
+def __dict_to_query_str(data: Any) -> str
+
+# Base64 encode (for Basic auth headers)
+@extern("C")
+def __base64_encode(s: str) -> str
+
 # ============================================================
 # Response Type
 # ============================================================
@@ -235,3 +244,62 @@ pub def url_decode(s: str) -> str:
 pub def parse_json(text: str) -> Any:
 	unsafe:
 		return __json_parse(text)
+
+# ============================================================
+# Query String & Form Helpers
+# ============================================================
+
+# Build a URL-encoded query string from a dict
+# Example: build_query({"q": "hello world", "page": "1"}) -> "q=hello%20world&page=1"
+pub def build_query(params: Any) -> str:
+	unsafe:
+		return __dict_to_query_str(params)
+
+# Perform a POST request with form-encoded body (application/x-www-form-urlencoded)
+pub def post_form(url: str, data: Any) -> Response:
+	unsafe:
+		let body = __dict_to_query_str(data)
+		let raw = __http_request("POST", url, body, "Content-Type: application/x-www-form-urlencoded\r\n")
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# ============================================================
+# Authentication Helpers
+# ============================================================
+
+# Build a Basic auth header value: "Basic base64(user:pass)"
+# Use with: http.request("GET", url, "", http.basic_auth(user, pass))
+pub def basic_auth(user: str, password: str) -> str:
+	unsafe:
+		let credentials = user + ":" + password
+		let encoded = __base64_encode(credentials)
+		return "Authorization: Basic " + encoded + "\r\n"
+
+# Build a Bearer token auth header: "Authorization: Bearer <token>"
+# Use with: http.request("GET", url, "", http.bearer_auth(token))
+pub def bearer_auth(token: str) -> str:
+	return "Authorization: Bearer " + token + "\r\n"
+
+# ============================================================
+# Response Helpers
+# ============================================================
+
+# Check if a response status is successful (200-299)
+pub def is_ok(resp: Response) -> bool:
+	return resp.status >= 200 and resp.status < 300
+
+# Check if a response is a redirect (301, 302, 303, 307, 308)
+pub def is_redirect(resp: Response) -> bool:
+	return resp.status == 301 or resp.status == 302 or resp.status == 303 or resp.status == 307 or resp.status == 308
+
+# Check if a response is a client error (400-499)
+pub def is_client_error(resp: Response) -> bool:
+	return resp.status >= 400 and resp.status < 500
+
+# Check if a response is a server error (500-599)
+pub def is_server_error(resp: Response) -> bool:
+	return resp.status >= 500 and resp.status < 600
