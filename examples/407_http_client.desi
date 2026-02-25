@@ -1,0 +1,275 @@
+# HTTP Client - Comprehensive Test
+# Tests GET, POST, JSON, timeouts, URL encode/decode, custom headers,
+# response parsing, and error handling patterns
+#
+# NOTE: This test requires network access (httpbin.org).
+# Run manually: desic run examples/407_http_client.desi
+
+import http
+import json
+
+# ============================================================
+# Test 1: Basic GET request
+# ============================================================
+def test_get():
+	let resp = http.get("https://httpbin.org/get")
+	if resp.status == 200:
+		print("PASS: GET request")
+	else:
+		print("FAIL: GET request, status=" + str(resp.status))
+
+# ============================================================
+# Test 2: GET with URL-encoded query parameters
+# ============================================================
+def test_get_with_params():
+	let query = http.url_encode("hello world & desi=lang")
+	let url = "https://httpbin.org/get?q=" + query
+	let resp = http.get(url)
+	let data = http.parse_json(resp.body)
+	let args = json.object_get(data, "args")
+	let q = json.object_get(args, "q")
+	if json.get_string(q) == "hello world & desi=lang":
+		print("PASS: GET with URL-encoded params")
+	else:
+		print("FAIL: GET with URL-encoded params")
+
+# ============================================================
+# Test 3: POST with raw string body
+# ============================================================
+def test_post_string():
+	let resp = http.post("https://httpbin.org/post", "raw string body")
+	let data = http.parse_json(resp.body)
+	let sent = json.object_get(data, "data")
+	if json.get_string(sent) == "raw string body":
+		print("PASS: POST string body")
+	else:
+		print("FAIL: POST string body")
+
+# ============================================================
+# Test 4: POST JSON - homogeneous dict[str, str]
+# ============================================================
+def test_post_json_strings():
+	let resp = http.post_json("https://httpbin.org/post", {"name": "desi", "lang": "systems"})
+	let data = http.parse_json(resp.body)
+	let j = json.object_get(data, "json")
+	let name = json.object_get(j, "name")
+	if json.get_string(name) == "desi":
+		print("PASS: POST JSON (string dict)")
+	else:
+		print("FAIL: POST JSON (string dict)")
+
+# ============================================================
+# Test 5: POST JSON - heterogeneous dict[str, Any]
+# Per-entry type tags: str + int + bool mixed values
+# ============================================================
+def test_post_json_mixed():
+	let resp = http.post_json("https://httpbin.org/post", {
+		"name": "desi",
+		"version": 1,
+		"active": true
+	})
+	let data = http.parse_json(resp.body)
+	let j = json.object_get(data, "json")
+	
+	let name = json.object_get(j, "name")
+	let ver = json.object_get(j, "version")
+	let active = json.object_get(j, "active")
+	
+	let name_ok = json.get_string(name) == "desi"
+	let ver_ok = json.get_int(ver) == 1
+	let active_ok = json.get_bool(active) == true
+	
+	if name_ok and ver_ok and active_ok:
+		print("PASS: POST JSON (mixed: str + int + bool)")
+	else:
+		print("FAIL: POST JSON (mixed types)")
+
+# ============================================================
+# Test 6: PUT request
+# ============================================================
+def test_put():
+	let put_body = "{\"update\": true}"
+	let resp = http.put("https://httpbin.org/put", put_body)
+	if resp.status == 200:
+		print("PASS: PUT request")
+	else:
+		print("FAIL: PUT request")
+
+# ============================================================
+# Test 7: PUT with auto-JSON
+# ============================================================
+def test_put_json():
+	let resp = http.put_json("https://httpbin.org/put", {"field": "updated"})
+	let data = http.parse_json(resp.body)
+	let j = json.object_get(data, "json")
+	let field = json.object_get(j, "field")
+	if json.get_string(field) == "updated":
+		print("PASS: PUT JSON")
+	else:
+		print("FAIL: PUT JSON")
+
+# ============================================================
+# Test 8: PATCH request
+# ============================================================
+def test_patch():
+	let resp = http.patch_json("https://httpbin.org/patch", {"status": "active"})
+	let data = http.parse_json(resp.body)
+	let j = json.object_get(data, "json")
+	let status = json.object_get(j, "status")
+	if json.get_string(status) == "active":
+		print("PASS: PATCH JSON")
+	else:
+		print("FAIL: PATCH JSON")
+
+# ============================================================
+# Test 9: DELETE request
+# ============================================================
+def test_delete():
+	let resp = http.delete("https://httpbin.org/delete")
+	if resp.status == 200:
+		print("PASS: DELETE request")
+	else:
+		print("FAIL: DELETE request")
+
+# ============================================================
+# Test 10: HEAD request (body empty per HTTP spec)
+# ============================================================
+def test_head():
+	let resp = http.head("https://httpbin.org/get")
+	if resp.status == 200:
+		print("PASS: HEAD request")
+	else:
+		print("FAIL: HEAD request")
+
+# ============================================================
+# Test 11: Custom request with headers
+# ============================================================
+def test_custom_headers():
+	let resp = http.request(
+		"GET",
+		"https://httpbin.org/headers",
+		"",
+		"X-Custom-Header: desi-lang\r\nX-Version: 1.0\r\n"
+	)
+	let data = http.parse_json(resp.body)
+	let headers = json.object_get(data, "headers")
+	let custom = json.object_get(headers, "X-Custom-Header")
+	if json.get_string(custom) == "desi-lang":
+		print("PASS: Custom headers")
+	else:
+		print("FAIL: Custom headers")
+
+# ============================================================
+# Test 12: HTTP status codes (200, 201, 404, 500)
+# ============================================================
+def test_status_codes():
+	let r200 = http.get("https://httpbin.org/status/200")
+	let r404 = http.get("https://httpbin.org/status/404")
+	let r500 = http.get("https://httpbin.org/status/500")
+	
+	if r200.status == 200 and r404.status == 404 and r500.status == 500:
+		print("PASS: Status codes (200, 404, 500)")
+	else:
+		print("FAIL: Status codes")
+
+# ============================================================
+# Test 13: Redirect following (302 -> 200)
+# ============================================================
+def test_redirect():
+	let resp = http.get("https://httpbin.org/redirect/1")
+	if resp.status == 200:
+		print("PASS: Redirect following")
+	else:
+		print("FAIL: Redirect following, status=" + str(resp.status))
+
+# ============================================================
+# Test 14: Custom timeout (5 seconds)
+# ============================================================
+def test_timeout():
+	let resp = http.request_timeout("GET", "https://httpbin.org/get", "", "", 5)
+	if resp.status == 200:
+		print("PASS: Custom timeout (5s)")
+	else:
+		print("FAIL: Custom timeout")
+
+# ============================================================
+# Test 15: URL encode/decode roundtrip
+# ============================================================
+def test_url_encode_decode():
+	let original = "hello world/path?key=value&foo=bar"
+	let encoded = http.url_encode(original)
+	let decoded = http.url_decode(encoded)
+	if decoded == original:
+		print("PASS: URL encode/decode roundtrip")
+	else:
+		print("FAIL: URL encode/decode")
+
+# ============================================================
+# Test 16: Nested JSON response parsing
+# ============================================================
+def test_parse_json_nested():
+	let resp = http.post_json("https://httpbin.org/post", {"user": "alice"})
+	let data = http.parse_json(resp.body)
+	
+	# Access nested: data.headers.Host
+	let headers = json.object_get(data, "headers")
+	let host = json.object_get(headers, "Host")
+	
+	# Access: data.url
+	let url = json.object_get(data, "url")
+	
+	if json.get_string(host) == "httpbin.org":
+		print("PASS: Nested JSON parsing")
+	else:
+		print("FAIL: Nested JSON parsing")
+
+# ============================================================
+# Test 17: Empty body POST
+# ============================================================
+def test_empty_post():
+	let resp = http.post("https://httpbin.org/post", "")
+	if resp.status == 200:
+		print("PASS: Empty body POST")
+	else:
+		print("FAIL: Empty body POST")
+
+# ============================================================
+# Test 18: request_json with custom method + timeout
+# ============================================================
+def test_request_json():
+	let resp = http.request_json("POST", "https://httpbin.org/post", {"method": "custom"}, 10)
+	let data = http.parse_json(resp.body)
+	let j = json.object_get(data, "json")
+	let m = json.object_get(j, "method")
+	if json.get_string(m) == "custom":
+		print("PASS: request_json (custom method + timeout)")
+	else:
+		print("FAIL: request_json")
+
+# ============================================================
+# Main: Run all tests
+# ============================================================
+def main() -> int:
+	print("=== HTTP Client Tests ===")
+	
+	test_get()
+	test_get_with_params()
+	test_post_string()
+	test_post_json_strings()
+	test_post_json_mixed()
+	test_put()
+	test_put_json()
+	test_patch()
+	test_delete()
+	test_head()
+	test_custom_headers()
+	test_status_codes()
+	test_redirect()
+	test_timeout()
+	test_url_encode_decode()
+	test_parse_json_nested()
+	test_empty_post()
+	test_request_json()
+	
+	print("=== All 18 tests complete ===")
+	return 0
