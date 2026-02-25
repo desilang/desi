@@ -154,6 +154,7 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
         if (keys_equal(d, entry, key_int, key_str, key_float, key_ptr)) {
             // Update existing value
             memcpy(entry->value, value, d->value_size);
+            entry->value_type_tag = value_type_tag;
             return;
         }
         entry = entry->next;
@@ -194,6 +195,7 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
         return;
     }
     memcpy(new_entry->value, value, d->value_size);
+    new_entry->value_type_tag = value_type_tag;
     
     // Insert at head of bucket chain
     new_entry->next = d->buckets[index];
@@ -501,8 +503,9 @@ char* dict_to_str(dict_t* d) {
             buffer[pos++] = ':';
             buffer[pos++] = ' ';
             
-            // Format value based on type
+            // Format value based on per-entry type tag (supports Any-typed dicts)
             char val_str[256];
+            int vtt = entry->value_type_tag;
             
             // Use function pointer if available (custom types)
             if (d->value_to_str_fn != NULL) {
@@ -512,16 +515,16 @@ char* dict_to_str(dict_t* d) {
                 } else {
                     snprintf(val_str, sizeof(val_str), "<null>");
                 }
-            } else if (d->value_type_tag == TYPE_TAG_STR) {
+            } else if (vtt == TYPE_TAG_STR) {
                 char* str_val = *(char**)entry->value;
                 snprintf(val_str, sizeof(val_str), "\"%s\"", str_val ? str_val : "null");
-            } else if (d->value_type_tag == TYPE_TAG_BOOL) {
+            } else if (vtt == TYPE_TAG_BOOL) {
                 int64_t bool_val = 0;
                 if (d->value_size >= sizeof(int64_t)) {
                     memcpy(&bool_val, entry->value, sizeof(int64_t));
                 }
                 snprintf(val_str, sizeof(val_str), "%s", bool_val ? "true" : "false");
-            } else if (d->value_type_tag == TYPE_TAG_FLOAT) {
+            } else if (vtt == TYPE_TAG_FLOAT) {
                 double float_val = 0.0;
                 if (d->value_size >= sizeof(double)) {
                     memcpy(&float_val, entry->value, sizeof(double));

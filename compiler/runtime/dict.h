@@ -30,6 +30,7 @@ typedef struct dict_entry {
     double key_float;           // Float key
     void* key_ptr;              // Custom type key (owned, malloc'd copy)
     void* value;                // Generic value pointer
+    int value_type_tag;         // Per-entry value type tag (for Any-typed dicts)
     struct dict_entry* next;    // Chaining for collisions
 } dict_entry_t;
 
