@@ -98,9 +98,16 @@ typedef struct {
     char* extra_headers;    /* additional headers (optional) */
 } HttpServerResponse;
 
-/* ---- Route Handler (function pointer: request → response) ---- */
-
+/* ---- Handler callback typedef ---- */
+/* Desi handler: takes request ptr, returns response ptr */
 typedef HttpServerResponse* (*route_handler_fn)(HttpServerRequest* req);
+
+/* Global Desi dispatch function — set via __http_server_set_handler before listen() */
+static route_handler_fn __desi_http_handler = NULL;
+
+void __http_server_set_handler(route_handler_fn fn) {
+    __desi_http_handler = fn;
+}
 
 /* ---- Route Entry ---- */
 
@@ -564,8 +571,12 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
     HttpServerResponse* resp = NULL;
     int resp_owned = 0;   /* whether we need to free resp */
 
-    /* Route dispatch */
-    if (srv->route_count > 0) {
+    /* Dispatch to Desi handler if registered */
+    if (__desi_http_handler) {
+        resp = __desi_http_handler(req);
+        resp_owned = 1;
+    } else if (srv->route_count > 0) {
+        /* C-level route dispatch */
         Route* route = match_route(srv, req->method, req->path);
         if (route && route->handler) {
             resp = route->handler(req);
