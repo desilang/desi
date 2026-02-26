@@ -17,23 +17,23 @@ def handle_request(req: Any) -> Any:
 
 	# Route: GET /
 	if path == "/":
-		return http.response(200, "<html><body><h1>Welcome to Desi!</h1><p>Server is running.</p></body></html>", "text/html; charset=utf-8")
+		return http.html(200, "<html><body><h1>Welcome to Desi!</h1><p>Server is running.</p></body></html>")
 
 	# Route: GET /api/health
 	if path == "/api/health":
-		return http.response(200, "{\"status\":\"healthy\",\"server\":\"desi\"}", "application/json")
+		return http.json_text(200, "{\"status\":\"healthy\",\"server\":\"desi\"}")
 
 	# Route: * /api/echo — echo request info as JSON
 	if path == "/api/echo":
 		let query = http.req_query(req)
-		return http.response(200, "{\"method\":\"" + method + "\",\"path\":\"" + path + "\",\"query\":\"" + query + "\"}", "application/json")
+		return http.json_text(200, "{\"method\":\"" + method + "\",\"path\":\"" + path + "\",\"query\":\"" + query + "\"}")
 
 	# Route: GET /text
 	if path == "/text":
-		return http.response(200, "Hello from plain text!", "text/plain; charset=utf-8")
+		return http.text(200, "Hello from plain text!")
 
 	# Default: 404
-	return http.response(404, "{\"error\":\"not found\",\"path\":\"" + path + "\"}", "application/json")
+	return http.json_text(404, "{\"error\":\"not found\",\"path\":\"" + path + "\"}")
 
 def main() -> int:
 	print("Starting Desi HTTP Server with routing...")

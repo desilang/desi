@@ -76,45 +76,55 @@ func isExternFunction(fd *ast.FuncDecl) bool {
 //	        return __random_choice_int(items)
 //
 // Returns the inner function name (e.g., "__random_choice_int"), or "" if not found.
+// Only inlines when the wrapper is a pure pass-through (same number of args).
+// Wrappers that add constant args (e.g., content-type) are NOT inlined.
 func extractExternFromWrapper(fd *ast.FuncDecl) string {
 	if fd == nil || fd.Body == nil {
 		return ""
 	}
+	wrapperParamCount := len(fd.Params)
 	// Walk the body's statements to find CallExpr nodes
 	for _, stmt := range fd.Body.Stmts {
-		if name := extractCallFromStmt(stmt); name != "" {
+		if name, innerArgCount := extractCallFromStmt(stmt); name != "" {
+			// Only inline if wrapper is a pure pass-through:
+			// wrapper param count must match inner call arg count.
+			// If inner call has MORE args, the wrapper adds constant args
+			// (e.g., http.json_text adds "application/json") — don't inline.
+			if innerArgCount > wrapperParamCount {
+				return "" // Don't inline — call the wrapper function instead
+			}
 			return name
 		}
 	}
 	return ""
 }
 
-func extractCallFromStmt(stmt ast.Stmt) string {
+func extractCallFromStmt(stmt ast.Stmt) (string, int) {
 	switch s := stmt.(type) {
 	case *ast.ReturnStmt:
 		if s.Value != nil {
 			if call, ok := s.Value.(*ast.CallExpr); ok {
 				if id, ok := call.Callee.(*ast.Ident); ok {
-					return id.Name
+					return id.Name, len(call.Args)
 				}
 			}
 		}
 	case *ast.ExprStmt:
 		if call, ok := s.Expr.(*ast.CallExpr); ok {
 			if id, ok := call.Callee.(*ast.Ident); ok {
-				return id.Name
+				return id.Name, len(call.Args)
 			}
 		}
 	case *ast.UnsafeBlock:
 		if s.Body != nil {
 			for _, inner := range s.Body.Stmts {
-				if name := extractCallFromStmt(inner); name != "" {
-					return name
+				if name, count := extractCallFromStmt(inner); name != "" {
+					return name, count
 				}
 			}
 		}
 	}
-	return ""
+	return "", 0
 }
 
 // LowerFuncFromDecl lowers a function declaration to HIR.
