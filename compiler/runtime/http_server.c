@@ -3,24 +3,26 @@
  *
  * Phase 3A: TCP listener + accept loop
  * Phase 3B: Request parsing + response builder (JSON, HTML, text, custom)
+ * Phase 3C: Route table + handler dispatch + graceful shutdown
  *
  * Public API (called from Desi via extern):
  *   Server lifecycle:
- *     __http_server_new(port)             → create server, bind, listen
- *     __http_server_run(server)           → blocking accept loop
+ *     __http_server_new(port)              → create server, bind, listen
+ *     __http_server_route(srv,method,path,handler) → register route
+ *     __http_server_run(server)            → blocking accept loop
  *
  *   Response builders:
- *     __http_resp_new(status, body, content_type) → HttpResponse*
- *     __http_resp_status(resp)            → int
- *     __http_resp_body(resp)              → const char*
- *     __http_resp_content_type(resp)      → const char*
+ *     __http_resp_new(status, body, content_type) → HttpServerResponse*
+ *     __http_resp_status(resp)             → int
+ *     __http_resp_body(resp)               → const char*
+ *     __http_resp_content_type(resp)       → const char*
  *
  *   Request accessors:
- *     __http_req_method(req)              → const char*
- *     __http_req_path(req)                → const char*
- *     __http_req_body(req)                → const char*
- *     __http_req_header(req, name)        → const char*
- *     __http_req_query(req)               → const char*
+ *     __http_req_method(req)               → const char*
+ *     __http_req_path(req)                 → const char*
+ *     __http_req_body(req)                 → const char*
+ *     __http_req_header(req, name)         → const char*
+ *     __http_req_query(req)                → const char*
  */
 
 #include <stdio.h>
@@ -28,6 +30,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <signal.h>
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -49,6 +52,32 @@
   #define ensure_wsa_server() ((void)0)
 #endif
 
+/* ============================================================
+ * Graceful Shutdown
+ * ============================================================ */
+
+static volatile sig_atomic_t server_running = 1;
+
+static void shutdown_handler(int sig) {
+    (void)sig;
+    server_running = 0;
+    printf("\n\033[33mShutting down server...\033[0m\n");
+    fflush(stdout);
+}
+
+static void install_signal_handlers(void) {
+    struct sigaction sa;
+    sa.sa_handler = shutdown_handler;
+    sa.sa_flags = 0;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+}
+
+/* ============================================================
+ * Data Structures
+ * ============================================================ */
+
 /* ---- Server Request (parsed from raw HTTP) ---- */
 
 typedef struct {
@@ -69,11 +98,27 @@ typedef struct {
     char* extra_headers;    /* additional headers (optional) */
 } HttpServerResponse;
 
+/* ---- Route Handler (function pointer: request → response) ---- */
+
+typedef HttpServerResponse* (*route_handler_fn)(HttpServerRequest* req);
+
+/* ---- Route Entry ---- */
+
+#define MAX_ROUTES 256
+
+typedef struct {
+    char method[16];
+    char path[1024];
+    route_handler_fn handler;
+} Route;
+
 /* ---- Server ---- */
 
 typedef struct {
     server_socket_t fd;
     int port;
+    Route routes[MAX_ROUTES];
+    int route_count;
 } HttpServer;
 
 /* ============================================================
@@ -104,7 +149,6 @@ static HttpServerRequest* parse_request(const char* raw, int raw_len) {
 
     /* Extract path (and query string if present) */
     i = 0;
-    const char* query_start = NULL;
     while (p < line_end && *p != ' ' && *p != '?' && i < 1023) {
         req->path[i++] = *p++;
     }
@@ -296,6 +340,7 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
         "Content-Length: %d\r\n"
         "Connection: close\r\n"
         "Server: Desi/0.1\r\n"
+        "Access-Control-Allow-Origin: *\r\n"
         "%s"
         "\r\n",
         resp->status, status_text(resp->status),
@@ -311,18 +356,88 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
 }
 
 /* ============================================================
+ * Route Registration (Desi extern)
+ * ============================================================ */
+
+void __http_server_route(HttpServer* srv, const char* method,
+                         const char* path, route_handler_fn handler) {
+    if (!srv || srv->route_count >= MAX_ROUTES) {
+        fprintf(stderr, "http_server: route table full or server NULL\n");
+        return;
+    }
+    Route* r = &srv->routes[srv->route_count++];
+    strncpy(r->method, method, sizeof(r->method) - 1);
+    strncpy(r->path, path, sizeof(r->path) - 1);
+    r->handler = handler;
+}
+
+/* ============================================================
+ * Route Matching
+ * ============================================================ */
+
+static Route* match_route(HttpServer* srv, const char* method, const char* path) {
+    if (!srv) return NULL;
+
+    /* Exact match first */
+    for (int i = 0; i < srv->route_count; i++) {
+        Route* r = &srv->routes[i];
+        /* Match method (case-insensitive) and exact path */
+        if (strcasecmp(r->method, method) == 0 && strcmp(r->path, path) == 0) {
+            return r;
+        }
+    }
+
+    /* Wildcard: "*" method matches any method */
+    for (int i = 0; i < srv->route_count; i++) {
+        Route* r = &srv->routes[i];
+        if (strcmp(r->method, "*") == 0 && strcmp(r->path, path) == 0) {
+            return r;
+        }
+    }
+
+    return NULL;
+}
+
+/* ============================================================
+ * Default Responses
+ * ============================================================ */
+
+static HttpServerResponse default_404 = {
+    .status = 404,
+    .body = "{\"error\":\"not found\"}",
+    .content_type = "application/json",
+    .extra_headers = NULL
+};
+
+static HttpServerResponse default_405 = {
+    .status = 405,
+    .body = "{\"error\":\"method not allowed\"}",
+    .content_type = "application/json",
+    .extra_headers = NULL
+};
+
+/* Check if path exists but method doesn't match */
+static int path_exists(HttpServer* srv, const char* path) {
+    for (int i = 0; i < srv->route_count; i++) {
+        if (strcmp(srv->routes[i].path, path) == 0) return 1;
+    }
+    return 0;
+}
+
+/* ============================================================
  * Server: Create + Accept Loop
  * ============================================================ */
 
 HttpServer* __http_server_new(int port) {
     ensure_wsa_server();
 
-    HttpServer* srv = (HttpServer*)malloc(sizeof(HttpServer));
+    HttpServer* srv = (HttpServer*)calloc(1, sizeof(HttpServer));
     if (!srv) {
         fprintf(stderr, "http_server: malloc failed\n");
         return NULL;
     }
     srv->port = port;
+    srv->route_count = 0;
 
     /* Create socket */
     srv->fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -361,9 +476,9 @@ HttpServer* __http_server_new(int port) {
     return srv;
 }
 
-/* ---- Handle a single client connection (Phase 3A: echo) ---- */
+/* ---- Handle a single client connection ---- */
 
-static void handle_client(server_socket_t client_fd) {
+static void handle_client(HttpServer* srv, server_socket_t client_fd) {
     /* Read request (up to 8KB) */
     char buf[8192];
     ssize_t nread = recv(client_fd, buf, sizeof(buf) - 1, 0);
@@ -384,30 +499,45 @@ static void handle_client(server_socket_t client_fd) {
         return;
     }
 
-    /* Phase 3A: default echo response with request info */
-    char body[2048];
-    snprintf(body, sizeof(body),
-        "{\"status\":\"ok\",\"server\":\"desi\","
-        "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
-        req->method, req->path, req->query);
+    HttpServerResponse* resp = NULL;
+    int resp_owned = 0;   /* whether we need to free resp */
 
-    HttpServerResponse resp;
-    resp.status = 200;
-    resp.body = body;
-    resp.content_type = "application/json";
-    resp.extra_headers = "Access-Control-Allow-Origin: *\r\n";
+    /* Route dispatch */
+    if (srv->route_count > 0) {
+        Route* route = match_route(srv, req->method, req->path);
+        if (route && route->handler) {
+            resp = route->handler(req);
+            resp_owned = 1;
+        } else if (path_exists(srv, req->path)) {
+            resp = &default_405;
+        } else {
+            resp = &default_404;
+        }
+    } else {
+        /* No routes registered — echo mode (Phase 3A fallback) */
+        char body[2048];
+        snprintf(body, sizeof(body),
+            "{\"status\":\"ok\",\"server\":\"desi\","
+            "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
+            req->method, req->path, req->query);
 
-    send_response(client_fd, &resp);
+        resp = __http_resp_new(200, body, "application/json");
+        resp_owned = 1;
+    }
+
+    send_response(client_fd, resp);
     CLOSE_SOCKET(client_fd);
 
     /* Log */
-    printf("%s %s → %d\n", req->method, req->path, resp.status);
+    int status = resp ? resp->status : 500;
+    printf("%s %s → %d\n", req->method, req->path, status);
     fflush(stdout);
 
+    if (resp_owned) free_response(resp);
     free_request(req);
 }
 
-/* ---- Blocking accept loop ---- */
+/* ---- Blocking accept loop with graceful shutdown ---- */
 
 void __http_server_run(HttpServer* srv) {
     if (!srv) {
@@ -415,10 +545,21 @@ void __http_server_run(HttpServer* srv) {
         return;
     }
 
-    printf("Desi HTTP Server listening on http://0.0.0.0:%d\n", srv->port);
+    install_signal_handlers();
+
+    printf("\033[32m✓ Desi HTTP Server listening on http://0.0.0.0:%d\033[0m\n", srv->port);
+    if (srv->route_count > 0) {
+        printf("  Routes:\n");
+        for (int i = 0; i < srv->route_count; i++) {
+            printf("    %s %s\n", srv->routes[i].method, srv->routes[i].path);
+        }
+    } else {
+        printf("  (no routes — echo mode)\n");
+    }
+    printf("  Press Ctrl+C to stop\n\n");
     fflush(stdout);
 
-    while (1) {
+    while (server_running) {
         struct sockaddr_in client_addr;
         socklen_t client_len = sizeof(client_addr);
 
@@ -426,10 +567,16 @@ void __http_server_run(HttpServer* srv) {
             (struct sockaddr*)&client_addr, &client_len);
 
         if (client_fd == INVALID_SOCK) {
+            if (!server_running) break;  /* shutdown signal */
             fprintf(stderr, "http_server: accept() failed: %s\n", strerror(errno));
             continue;
         }
 
-        handle_client(client_fd);
+        handle_client(srv, client_fd);
     }
+
+    /* Cleanup */
+    CLOSE_SOCKET(srv->fd);
+    printf("\033[32m✓ Server stopped\033[0m\n");
+    fflush(stdout);
 }
