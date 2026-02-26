@@ -127,9 +127,26 @@ typedef struct {
     int route_cap;      /* current capacity */
 } HttpServer;
 
+static void free_server(HttpServer* srv) {
+    if (!srv) return;
+    if (srv->fd != INVALID_SOCK) CLOSE_SOCKET(srv->fd);
+    free(srv->routes);
+    free(srv);
+}
+
 /* ============================================================
  * Request Parsing
  * ============================================================ */
+
+/* Extract Content-Length from raw headers (returns -1 if not found) */
+static int parse_content_length(const char* headers) {
+    if (!headers) return -1;
+    const char* cl = strcasestr(headers, "Content-Length:");
+    if (!cl) return -1;
+    cl += 15; /* skip "Content-Length:" */
+    while (*cl == ' ') cl++;
+    return atoi(cl);
+}
 
 static HttpServerRequest* parse_request(const char* raw, int raw_len) {
     HttpServerRequest* req = (HttpServerRequest*)calloc(1, sizeof(HttpServerRequest));
@@ -184,6 +201,13 @@ static HttpServerRequest* parse_request(const char* raw, int raw_len) {
         /* Body starts after \r\n\r\n */
         const char* body_start = headers_end + 4;
         int body_len = raw_len - (int)(body_start - raw);
+
+        /* Validate against Content-Length if present */
+        int expected_len = parse_content_length(req->headers);
+        if (expected_len >= 0 && expected_len < body_len) {
+            body_len = expected_len; /* trust Content-Length over raw data */
+        }
+
         if (body_len > 0) {
             req->body = (char*)malloc(body_len + 1);
             if (req->body) {
@@ -548,8 +572,8 @@ HttpServer* __http_server_new(int port) {
 /* ---- Handle a single client connection ---- */
 
 static void handle_client(HttpServer* srv, server_socket_t client_fd) {
-    /* Read request (up to 8KB) */
-    char buf[8192];
+    /* Read request (up to 64KB) */
+    char buf[65536];
     ssize_t nread = recv(client_fd, buf, sizeof(buf) - 1, 0);
     if (nread <= 0) {
         CLOSE_SOCKET(client_fd);
@@ -648,8 +672,9 @@ void __http_server_run(HttpServer* srv) {
         handle_client(srv, client_fd);
     }
 
-    /* Cleanup */
-    CLOSE_SOCKET(srv->fd);
+    /* Cleanup — free server struct, routes, and socket */
+    free_server(srv);
+    __desi_http_handler = NULL; /* reset global handler */
     printf("\033[32m✓ Server stopped\033[0m\n");
     fflush(stdout);
 }
