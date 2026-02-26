@@ -303,3 +303,103 @@ pub def is_client_error(resp: Response) -> bool:
 # Check if a response is a server error (500-599)
 pub def is_server_error(resp: Response) -> bool:
 	return resp.status >= 500 and resp.status < 600
+
+# ============================================================
+# Server — C Runtime Bindings
+# ============================================================
+
+@extern("C")
+def __http_server_new(port: int) -> Any
+
+@extern("C")
+def __http_server_run(server: Any) -> none
+
+# Response builders
+@extern("C")
+def __http_resp_new(status: int, body: str, content_type: str) -> Any
+
+@extern("C")
+def __http_resp_status(resp: Any) -> int
+
+@extern("C")
+def __http_resp_body(resp: Any) -> str
+
+@extern("C")
+def __http_resp_content_type(resp: Any) -> str
+
+# Request accessors
+@extern("C")
+def __http_req_method(req: Any) -> str
+
+@extern("C")
+def __http_req_path(req: Any) -> str
+
+@extern("C")
+def __http_req_body(req: Any) -> str
+
+@extern("C")
+def __http_req_header(req: Any, name: str) -> str
+
+@extern("C")
+def __http_req_query(req: Any) -> str
+
+# ============================================================
+# Server — Public API
+# ============================================================
+
+# Create a new HTTP server bound to the given port
+pub def server(port: int) -> Any:
+	return __http_server_new(port)
+
+# Start the server's accept loop (blocks forever)
+pub def listen(srv: Any) -> none:
+	__http_server_run(srv)
+
+# ============================================================
+# Server — Response Builders
+# ============================================================
+
+# Build a plain text response
+pub def text(status: int, body: str) -> Any:
+	return __http_resp_new(status, body, "text/plain; charset=utf-8")
+
+# Build a JSON response from a string
+pub def json_text(status: int, body: str) -> Any:
+	return __http_resp_new(status, body, "application/json")
+
+# Build a JSON response from a dict
+pub def json(status: int, data: dict[str, Any]) -> Any:
+	let body = __dict_to_json_str(data)
+	return __http_resp_new(status, body, "application/json")
+
+# Build an HTML response
+pub def html(status: int, body: str) -> Any:
+	return __http_resp_new(status, body, "text/html; charset=utf-8")
+
+# Build a response with custom content type
+pub def response(status: int, body: str, content_type: str) -> Any:
+	return __http_resp_new(status, body, content_type)
+
+# ============================================================
+# Server — Request Accessors
+# ============================================================
+
+# Get the HTTP method of a server request
+pub def req_method(req: Any) -> str:
+	return __http_req_method(req)
+
+# Get the path of a server request
+pub def req_path(req: Any) -> str:
+	return __http_req_path(req)
+
+# Get the body of a server request
+pub def req_body(req: Any) -> str:
+	return __http_req_body(req)
+
+# Get a header value from a server request
+pub def req_header(req: Any, name: str) -> str:
+	return __http_req_header(req, name)
+
+# Get the query string of a server request
+pub def req_query(req: Any) -> str:
+	return __http_req_query(req)
