@@ -460,6 +460,11 @@ pub def req_param(req: Any, key: str) -> str:
 pub def req_path_param(req: Any, name: str) -> str:
 	return __http_req_path_param(req, name)
 
+# Parse request body as JSON (returns JSON node, or none if invalid)
+pub def req_json(req: Any) -> Any:
+	return __http_req_json(req)
+
+
 # ============================================================
 # Server — Configuration
 # ============================================================
