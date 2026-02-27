@@ -1,0 +1,25 @@
+# EXPECTED: SKIP
+# Supervisor test — sync.Supervisor with submit + stop
+# Demonstrates the thread pool with auto-restart
+
+import sync
+
+def worker():
+	print("Worker task executed")
+
+def main() -> int:
+	print("Creating supervisor with 4 workers...")
+	using sup = sync.Supervisor():
+		print("Pool size: " + str(sup.pool_size()))
+		print("Is running: " + str(sup.is_running()))
+
+		# Submit tasks to the pool
+		sup.submit(worker)
+		sup.submit(worker)
+		sup.submit(worker)
+
+		print("Stopping supervisor...")
+		sup.stop()
+
+	print("Supervisor test complete!")
+	return 0

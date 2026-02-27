@@ -117,6 +117,21 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.info.Types[call] = taskGroupType
 				return taskGroupType
 
+			case "Supervisor":
+				// sync.Supervisor() - no arguments (default: 4 workers, one_for_one)
+				if len(args) != 0 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Supervisor takes no arguments"))
+					return nil
+				}
+				// DSY0001: Supervisor must be used with 'using' guard
+				if !c.inUsingInit {
+					c.add(diagAt("DSY0001", call.Span,
+						"Supervisor requires RAII cleanup - use 'using sup = sync.Supervisor():'"))
+				}
+				supervisorType := types.SupervisorOf()
+				c.info.Types[call] = supervisorType
+				return supervisorType
+
 			case "RwLock":
 				// sync.RwLock(value) -> RwLock<T> where T is inferred from argument
 				if len(args) != 1 {
@@ -278,6 +293,31 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		// Not a module import - try instance method call
 		// Original instance method handling
 		recvT := c.typ(fe.X)
+
+		// Intercept Supervisor method calls early — Supervisor is not a class type
+		// so class dispatch won't handle it
+		if _, ok := recvT.(*types.Supervisor); ok {
+			switch fe.Name.Name {
+			case "submit", "start_child":
+				if len(argsNodes) > 0 {
+					for _, a := range argsNodes {
+						c.typ(a.Expr)
+					}
+				}
+				c.info.Types[call] = types.None
+				return types.None
+			case "stop":
+				c.info.Types[call] = types.None
+				return types.None
+			case "pool_size", "child_count":
+				c.info.Types[call] = types.Int
+				return types.Int
+			case "is_running":
+				c.info.Types[call] = types.Bool
+				return types.Bool
+			}
+		}
+
 		if recvT != nil {
 			typeName := recvT.String()
 			methodName := fe.Name.Name
@@ -493,7 +533,29 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			}
 		}
 
-		// Handle enum variant constructor calls: EnumType.Variant(...)
+		// Handle Supervisor method calls: sup.submit(fn), sup.stop(), etc.
+		if _, ok := receiverType.(*types.Supervisor); ok {
+			switch fe.Name.Name {
+			case "submit", "start_child":
+				// Takes a function argument, returns none
+				if len(argsNodes) > 0 {
+					for _, a := range argsNodes {
+						c.typ(a.Expr) // type check args
+					}
+				}
+				c.info.Types[call] = types.None
+				return types.None
+			case "stop":
+				c.info.Types[call] = types.None
+				return types.None
+			case "pool_size", "child_count":
+				c.info.Types[call] = types.Int
+				return types.Int
+			case "is_running":
+				c.info.Types[call] = types.Bool
+				return types.Bool
+			}
+		}
 		// The FieldExpr (e.g., Status.Pending) should have been resolved to a function type by typFieldExpr
 		// We hust need to extract and return the return type
 		constructorType := c.typFieldExpr(fe)
@@ -1023,6 +1085,18 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				taskGroupType := types.TaskGroupOf()
 				c.info.Types[call] = taskGroupType
 				return taskGroupType
+			}
+
+			// Imported Supervisor class constructor: Supervisor()
+			// This handles `from sync import Supervisor` + `Supervisor()`
+			if id.Name == "Supervisor" && len(args) == 0 {
+				if !c.inUsingInit {
+					c.add(diagAt("DSY0001", call.Span,
+						"Supervisor requires RAII cleanup - use 'using sup = sync.Supervisor():'"))
+				}
+				supervisorType := types.SupervisorOf()
+				c.info.Types[call] = supervisorType
+				return supervisorType
 			}
 
 			// Built-in rc(value) function - creates Rc[T] from value type

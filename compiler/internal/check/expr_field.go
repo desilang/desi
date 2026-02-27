@@ -401,6 +401,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveTaskGroupMethod(x)
 	}
 
+	// Handle Supervisor methods: submit, start_child, stop, pool_size, child_count, is_running
+	if _, ok := t.(*types.Supervisor); ok {
+		return c.resolveSupervisorMethod(x)
+	}
+
 	// Handle RwLock methods: read, write, try_read, try_write
 	if rw, ok := t.(*types.RwLock); ok {
 		return c.resolveRwLockMethod(x, rw)
@@ -1360,6 +1365,39 @@ func (c *checker) resolveTaskGroupMethod(x *ast.FieldExpr) types.T {
 		methodType = types.FuncOf(nil, types.Bool, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on TaskGroup"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveSupervisorMethod resolves methods on Supervisor: submit, start_child, stop, pool_size, child_count, is_running
+func (c *checker) resolveSupervisorMethod(x *ast.FieldExpr) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "submit":
+		// submit(fn: Any) -> none — enqueue work to pool
+		methodType = types.FuncOf([]types.T{types.Any}, types.None, false)
+	case "start_child":
+		// start_child(fn: Any) -> none — start persistent child
+		methodType = types.FuncOf([]types.T{types.Any}, types.None, false)
+	case "stop":
+		// stop() -> none — drain queue, join threads, free
+		methodType = types.FuncOf(nil, types.None, false)
+	case "pool_size":
+		// pool_size() -> int — number of pool worker threads
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "child_count":
+		// child_count() -> int — number of persistent children
+		methodType = types.FuncOf(nil, types.Int, false)
+	case "is_running":
+		// is_running() -> bool — check if supervisor is still running
+		methodType = types.FuncOf(nil, types.Bool, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Supervisor"))
 		return nil
 	}
 

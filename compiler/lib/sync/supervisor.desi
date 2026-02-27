@@ -1,0 +1,61 @@
+# Supervisor - Thread pool with auto-restart for concurrent workloads
+# Uses C runtime implementation (supervisor.c)
+#
+# Usage as worker pool:
+#   let sup = sync.Supervisor()             # 4 workers, one_for_one
+#   sup.submit(fn)                           # enqueue task
+#   sup.stop()                               # drain + join + free
+#
+# Usage as persistent children:
+#   let sup = sync.Supervisor()
+#   sup.start_child(worker_fn)               # auto-restarted on crash
+#   sup.stop()
+#
+# Strategies:
+#   "one_for_one"  - restart only the crashed child (default)
+#   "one_for_all"  - restart all children if one crashes
+
+pub class Supervisor:
+	pub mut _handle: int  # Opaque handle to C runtime supervisor
+
+	pub def __new__(self):
+		# Constructor - creates a new supervisor (4 workers, one_for_one)
+		# Implemented via C runtime: supervisor_new(0, 4)
+		pass
+
+	pub def submit(self, fn: Any) -> none:
+		# Submit a task to the worker pool
+		# Workers dequeue and execute tasks concurrently
+		# Implemented via C runtime: supervisor_submit(sup, fn, arg)
+		pass
+
+	pub def start_child(self, fn: Any) -> none:
+		# Start a persistent child (auto-restarted on crash)
+		# Implemented via C runtime: supervisor_start_child(sup, fn, arg)
+		pass
+
+	pub def stop(self) -> none:
+		# Drain work queue, signal shutdown, join all threads, free
+		# Implemented via C runtime: supervisor_stop(sup)
+		pass
+
+	pub def pool_size(self) -> int:
+		# Get number of pool worker threads
+		# Implemented via C runtime: supervisor_pool_size(sup)
+		pass
+
+	pub def child_count(self) -> int:
+		# Get number of persistent children
+		# Implemented via C runtime: supervisor_child_count(sup)
+		pass
+
+	pub def is_running(self) -> bool:
+		# Check if the supervisor is still running
+		# Implemented via C runtime: supervisor_is_running(sup)
+		pass
+
+	# RAII cleanup: stop the supervisor
+	pub def __close__(self) -> none:
+		# Drains queue, joins threads, frees resources
+		# Implemented via C runtime: supervisor_stop(sup)
+		pass

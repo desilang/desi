@@ -1,5 +1,5 @@
 # Sync module - Concurrency primitives
-# Exports: Mutex, MutexGuard, Channel, Sender, Receiver, TaskGroup, RwLock, ReadGuard, WriteGuard, Semaphore, Atomic
+# Exports: Mutex, MutexGuard, Channel, Sender, Receiver, TaskGroup, RwLock, ReadGuard, WriteGuard, Semaphore, Atomic, Supervisor
 
 from sync.mutex import Mutex, MutexGuard
 from sync.channel import Channel, Sender, Receiver
@@ -7,3 +7,4 @@ from sync.taskgroup import TaskGroup
 from sync.rwlock import RwLock, ReadGuard, WriteGuard
 from sync.semaphore import Semaphore
 from sync.atomic import Atomic
+from sync.supervisor import Supervisor
