@@ -88,6 +88,10 @@ typedef struct {
     char* headers;          /* raw headers string */
     char* body;             /* request body (POST/PUT) */
     int  body_len;
+    /* Path parameters from pattern matching (e.g. /users/:id) */
+    char param_names[8][64];   /* up to 8 path params */
+    char param_values[8][256];
+    int  param_count;
 } HttpServerRequest;
 
 /* ---- Server Response ---- */
@@ -118,6 +122,20 @@ typedef struct {
     route_handler_fn handler;
 } Route;
 
+/* ---- Middleware callback ---- */
+typedef HttpServerResponse* (*middleware_fn)(HttpServerRequest* req);
+
+/* ---- Rate limiter bucket (token bucket per IP) ---- */
+typedef struct {
+    uint32_t ip;            /* IPv4 address */
+    int      tokens;        /* remaining tokens */
+    time_t   last_refill;   /* last refill timestamp */
+} RateBucket;
+
+#define MAX_RATE_BUCKETS 1024
+#define RATE_DEFAULT_MAX   60  /* requests per window */
+#define RATE_DEFAULT_WINDOW 60 /* seconds */
+
 /* ---- Server (dynamic route table, no fixed limit) ---- */
 
 typedef struct {
@@ -126,8 +144,16 @@ typedef struct {
     Route* routes;      /* dynamic array */
     int route_count;
     int route_cap;      /* current capacity */
-    char static_prefix[256]; /* URL prefix for static files, e.g. "/static" */
-    char static_dir[1024];   /* filesystem directory, e.g. "./public" */
+    char static_prefix[256]; /* URL prefix for static files */
+    char static_dir[1024];   /* filesystem directory */
+    int  max_body_size;      /* max request body in bytes (0 = default 1MB) */
+    /* Middleware chain */
+    middleware_fn middlewares[16];  /* up to 16 middleware functions */
+    int middleware_count;
+    /* Rate limiter */
+    RateBucket rate_buckets[MAX_RATE_BUCKETS];
+    int rate_max;          /* max tokens (0 = disabled) */
+    int rate_window;       /* refill window in seconds */
 } HttpServer;
 
 static void free_server(HttpServer* srv) {
@@ -290,6 +316,160 @@ const char* __http_req_header(HttpServerRequest* req, const char* name) {
 
 const char* __http_req_query(HttpServerRequest* req) {
     return req ? req->query : "";
+}
+
+/* ---- Query parameter extraction: ?key=val&key2=val2 → value for key ---- */
+
+const char* __http_req_param(HttpServerRequest* req, const char* key) {
+    if (!req || !key || req->query[0] == '\0') return "";
+    int key_len = (int)strlen(key);
+    const char* p = req->query;
+    while (*p) {
+        /* Match key */
+        if (strncmp(p, key, key_len) == 0 && p[key_len] == '=') {
+            p += key_len + 1;  /* skip key= */
+            /* Return value (static buffer, caller copies in Desi) */
+            static __thread char param_buf[1024];
+            int i = 0;
+            while (*p && *p != '&' && i < 1023) {
+                param_buf[i++] = *p++;
+            }
+            param_buf[i] = '\0';
+            return param_buf;
+        }
+        /* Skip to next & */
+        while (*p && *p != '&') p++;
+        if (*p == '&') p++;
+    }
+    return "";
+}
+
+/* ---- Path parameter accessor: /users/:id → value for "id" ---- */
+
+const char* __http_req_path_param(HttpServerRequest* req, const char* name) {
+    if (!req || !name) return "";
+    for (int i = 0; i < req->param_count; i++) {
+        if (strcmp(req->param_names[i], name) == 0) {
+            return req->param_values[i];
+        }
+    }
+    return "";
+}
+
+/* ---- Path pattern matching with :param capture ---- */
+/* Pattern: /users/:id/posts/:post_id
+ * Path:    /users/42/posts/hello
+ * Extracts: id=42, post_id=hello */
+static int match_path_pattern(const char* pattern, const char* path,
+                               HttpServerRequest* req) {
+    req->param_count = 0;
+    const char* pp = pattern;
+    const char* rp = path;
+
+    while (*pp && *rp) {
+        if (*pp == ':') {
+            /* Extract param name */
+            pp++;  /* skip : */
+            char name[64];
+            int ni = 0;
+            while (*pp && *pp != '/' && ni < 63) {
+                name[ni++] = *pp++;
+            }
+            name[ni] = '\0';
+
+            /* Extract param value */
+            char val[256];
+            int vi = 0;
+            while (*rp && *rp != '/' && vi < 255) {
+                val[vi++] = *rp++;
+            }
+            val[vi] = '\0';
+
+            if (req->param_count < 8) {
+                strncpy(req->param_names[req->param_count], name, 63);
+                strncpy(req->param_values[req->param_count], val, 255);
+                req->param_count++;
+            }
+        } else {
+            if (*pp != *rp) return 0;  /* mismatch */
+            pp++;
+            rp++;
+        }
+    }
+    /* Both must be consumed (or pattern ends with param at end) */
+    return (*pp == '\0' && *rp == '\0');
+}
+
+/* ============================================================
+ * Rate Limiter (token bucket per IP)
+ * ============================================================ */
+
+static int rate_limit_check(HttpServer* srv, uint32_t client_ip) {
+    if (srv->rate_max <= 0) return 1;  /* disabled */
+
+    time_t now = time(NULL);
+    RateBucket* bucket = NULL;
+    RateBucket* oldest = &srv->rate_buckets[0];
+
+    /* Find existing bucket or oldest for eviction */
+    for (int i = 0; i < MAX_RATE_BUCKETS; i++) {
+        RateBucket* b = &srv->rate_buckets[i];
+        if (b->ip == client_ip && b->last_refill > 0) {
+            bucket = b;
+            break;
+        }
+        if (b->last_refill < oldest->last_refill) {
+            oldest = b;
+        }
+    }
+
+    if (!bucket) {
+        /* New IP — use oldest bucket (eviction) */
+        bucket = oldest;
+        bucket->ip = client_ip;
+        bucket->tokens = srv->rate_max;
+        bucket->last_refill = now;
+    }
+
+    /* Refill tokens based on elapsed time */
+    int elapsed = (int)(now - bucket->last_refill);
+    if (elapsed > 0) {
+        int refill = (elapsed * srv->rate_max) / srv->rate_window;
+        bucket->tokens += refill;
+        if (bucket->tokens > srv->rate_max) bucket->tokens = srv->rate_max;
+        bucket->last_refill = now;
+    }
+
+    /* Consume a token */
+    if (bucket->tokens > 0) {
+        bucket->tokens--;
+        return 1;  /* allowed */
+    }
+    return 0;  /* rate limited */
+}
+
+/* ============================================================
+ * Server Configuration (Desi extern)
+ * ============================================================ */
+
+/* Set maximum request body size (default 1MB if not set) */
+void __http_server_max_body(HttpServer* srv, int max_bytes) {
+    if (srv) srv->max_body_size = max_bytes;
+}
+
+/* Register a middleware function */
+void __http_server_use(HttpServer* srv, middleware_fn fn) {
+    if (srv && srv->middleware_count < 16) {
+        srv->middlewares[srv->middleware_count++] = fn;
+    }
+}
+
+/* Enable rate limiting: max requests per window (seconds) */
+void __http_server_rate_limit(HttpServer* srv, int max_requests, int window_secs) {
+    if (!srv) return;
+    srv->rate_max = max_requests;
+    srv->rate_window = window_secs > 0 ? window_secs : RATE_DEFAULT_WINDOW;
+    memset(srv->rate_buckets, 0, sizeof(srv->rate_buckets));
 }
 
 /* ============================================================
@@ -617,10 +797,11 @@ void __http_server_route(HttpServer* srv, const char* method,
  * Route Matching
  * ============================================================ */
 
-static Route* match_route(HttpServer* srv, const char* method, const char* path) {
+static Route* match_route(HttpServer* srv, const char* method, const char* path,
+                           HttpServerRequest* req) {
     if (!srv) return NULL;
 
-    /* Exact match first */
+    /* Pass 1: exact match (method + path) */
     for (int i = 0; i < srv->route_count; i++) {
         Route* r = &srv->routes[i];
         if (strcasecmp(r->method, method) == 0 && strcmp(r->path, path) == 0) {
@@ -628,10 +809,20 @@ static Route* match_route(HttpServer* srv, const char* method, const char* path)
         }
     }
 
-    /* Wildcard: "*" method matches any method */
+    /* Pass 2: wildcard method "*" with exact path */
     for (int i = 0; i < srv->route_count; i++) {
         Route* r = &srv->routes[i];
         if (strcmp(r->method, "*") == 0 && strcmp(r->path, path) == 0) {
+            return r;
+        }
+    }
+
+    /* Pass 3: path pattern matching with :param capture */
+    for (int i = 0; i < srv->route_count; i++) {
+        Route* r = &srv->routes[i];
+        if (strchr(r->path, ':') == NULL) continue;  /* skip non-pattern routes */
+        if (strcasecmp(r->method, method) != 0 && strcmp(r->method, "*") != 0) continue;
+        if (match_path_pattern(r->path, path, req)) {
             return r;
         }
     }
@@ -728,6 +919,15 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
     tv.tv_usec = 0;
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
+    /* Get client IP for rate limiting */
+    struct sockaddr_in peer_addr;
+    socklen_t peer_len = sizeof(peer_addr);
+    uint32_t client_ip = 0;
+    if (getpeername(client_fd, (struct sockaddr*)&peer_addr, &peer_len) == 0) {
+        client_ip = peer_addr.sin_addr.s_addr;
+    }
+
+    int max_body = srv->max_body_size > 0 ? srv->max_body_size : (1024 * 1024); /* default 1MB */
     int requests_served = 0;
 
     while (requests_served < KEEPALIVE_MAX_REQUESTS) {
@@ -753,23 +953,67 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
         /* Determine if connection should persist */
         int keep_alive = should_keep_alive(req);
 
+        /* ---- Body size enforcement ---- */
+        if (req->body_len > max_body) {
+            HttpServerResponse resp413 = {.status = 413, .body = "{\"error\":\"payload too large\"}",
+                .content_type = "application/json", .extra_headers = NULL};
+            send_response_ka(client_fd, &resp413, 0);
+            printf("%s %s → 413 [body %d > %d]\n", req->method, req->path, req->body_len, max_body);
+            fflush(stdout);
+            free_request(req);
+            break;  /* close connection on oversized body */
+        }
+
+        /* ---- Rate limiting ---- */
+        if (!rate_limit_check(srv, client_ip)) {
+            HttpServerResponse resp429 = {.status = 429, .body = "{\"error\":\"too many requests\"}",
+                .content_type = "application/json",
+                .extra_headers = "Retry-After: 60\r\n"};
+            send_response_ka(client_fd, &resp429, keep_alive);
+            printf("%s %s → 429 [rate limited]\n", req->method, req->path);
+            fflush(stdout);
+            requests_served++;
+            free_request(req);
+            if (!keep_alive) break;
+            continue;
+        }
+
+        /* ---- Middleware chain ---- */
         HttpServerResponse* resp = NULL;
         int resp_owned = 0;
 
-        /* Dispatch to Desi handler if registered */
-        if (__desi_http_handler) {
-            resp = __desi_http_handler(req);
-            resp_owned = 1;
-        } else if (srv->route_count > 0) {
-            /* C-level route dispatch */
-            Route* route = match_route(srv, req->method, req->path);
-            if (route && route->handler) {
-                resp = route->handler(req);
+        for (int m = 0; m < srv->middleware_count; m++) {
+            resp = srv->middlewares[m](req);
+            if (resp) {
                 resp_owned = 1;
-            } else if (path_exists(srv, req->path)) {
-                resp = &default_405;
+                break;  /* middleware short-circuited */
+            }
+        }
+
+        /* ---- Route dispatch (if middleware didn't handle) ---- */
+        if (!resp) {
+            if (__desi_http_handler) {
+                resp = __desi_http_handler(req);
+                resp_owned = 1;
+            } else if (srv->route_count > 0) {
+                Route* route = match_route(srv, req->method, req->path, req);
+                if (route && route->handler) {
+                    resp = route->handler(req);
+                    resp_owned = 1;
+                } else if (path_exists(srv, req->path)) {
+                    resp = &default_405;
+                } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
+                    printf("%s %s → 200 [static]%s\n", req->method, req->path,
+                           keep_alive ? " [ka]" : "");
+                    fflush(stdout);
+                    requests_served++;
+                    free_request(req);
+                    if (!keep_alive) break;
+                    continue;
+                } else {
+                    resp = &default_404;
+                }
             } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
-                /* Static file served — log and continue */
                 printf("%s %s → 200 [static]%s\n", req->method, req->path,
                        keep_alive ? " [ka]" : "");
                 fflush(stdout);
@@ -778,27 +1022,16 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 if (!keep_alive) break;
                 continue;
             } else {
-                resp = &default_404;
-            }
-        } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
-            /* Static file served (no routes mode) — log and continue */
-            printf("%s %s → 200 [static]%s\n", req->method, req->path,
-                   keep_alive ? " [ka]" : "");
-            fflush(stdout);
-            requests_served++;
-            free_request(req);
-            if (!keep_alive) break;
-            continue;
-        } else {
-            /* No routes registered — echo mode */
-            char body[2048];
-            snprintf(body, sizeof(body),
-                "{\"status\":\"ok\",\"server\":\"desi\","
-                "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
-                req->method, req->path, req->query);
+                /* No routes registered — echo mode */
+                char body[2048];
+                snprintf(body, sizeof(body),
+                    "{\"status\":\"ok\",\"server\":\"desi\","
+                    "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
+                    req->method, req->path, req->query);
 
-            resp = __http_resp_new(200, body, "application/json");
-            resp_owned = 1;
+                resp = __http_resp_new(200, body, "application/json");
+                resp_owned = 1;
+            }
         }
 
         send_response_ka(client_fd, resp, keep_alive);

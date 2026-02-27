@@ -76,4 +76,22 @@ func init() {
 	SetFuncSig("__future_spawn_2", "void", []string{"ptr", "ptr", "i64", "i64"})
 	SetFuncSig("__future_spawn_3", "void", []string{"ptr", "ptr", "i64", "i64", "i64"})
 	SetFuncSig("__future_spawn_4", "void", []string{"ptr", "ptr", "i64", "i64", "i64", "i64"})
+
+	// HTTP server runtime overrides
+	SetFuncSig("__http_server_new", "ptr", nil)
+	SetFuncSig("__http_req_method", "ptr", nil)
+	SetFuncSig("__http_req_path", "ptr", nil)
+	SetFuncSig("__http_req_body", "ptr", nil)
+	SetFuncSig("__http_req_header", "ptr", nil)
+	SetFuncSig("__http_req_query", "ptr", nil)
+	SetFuncSig("__http_req_param", "ptr", nil)
+	SetFuncSig("__http_req_path_param", "ptr", nil)
+	SetFuncSig("__http_resp_new", "ptr", nil)
+	SetFuncSig("__http_server_set_handler", "void", nil)
+	SetFuncSig("__http_server_route", "void", nil)
+	SetFuncSig("__http_server_run", "void", nil)
+	SetFuncSig("__http_server_static", "void", nil)
+	SetFuncSig("__http_server_max_body", "void", nil)
+	SetFuncSig("__http_server_use", "void", nil)
+	SetFuncSig("__http_server_rate_limit", "void", nil)
 }
