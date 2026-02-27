@@ -100,9 +100,9 @@ func TestDictLit_EmptyDict_Success(t *testing.T) {
 	}
 }
 
-func TestDictLit_InconsistentKeyTypes_Error(t *testing.T) {
+func TestDictLit_InconsistentKeyTypes_WidensToAny(t *testing.T) {
 	// def main():
-	//   let d = {"a": 1, 2: 3}  // Mixed str and int keys
+	//   let d = {"a": 1, 2: 3}  // Mixed str and int keys → dict[Any, int]
 	dictLit := &ast.DictLit{
 		Keys: []ast.Expr{
 			&ast.StrLit{Value: "a"},
@@ -125,14 +125,30 @@ func TestDictLit_InconsistentKeyTypes_Error(t *testing.T) {
 	}
 
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
-	diags, _ := Check(mod)
+	diags, info := Check(mod)
 
-	mustHaveSomeDiagContaining(t, diags, "key type mismatch")
+	mustNoDiags(t, diags)
+
+	// Verify key type widened to Any
+	dictType := info.Types[dictLit]
+	if dictType == nil {
+		t.Fatal("dict literal has no type")
+	}
+	dt, ok := dictType.(*types.Dict)
+	if !ok {
+		t.Fatalf("expected dict type, got %T", dictType)
+	}
+	if !types.Equal(dt.Key, types.Any) {
+		t.Errorf("expected key type Any (widened), got %v", dt.Key)
+	}
+	if !types.Equal(dt.Val, types.Int) {
+		t.Errorf("expected value type int, got %v", dt.Val)
+	}
 }
 
-func TestDictLit_InconsistentValueTypes_Error(t *testing.T) {
+func TestDictLit_InconsistentValueTypes_WidensToAny(t *testing.T) {
 	// def main():
-	//   let d = {"a": 1, "b": "two"}  // Mixed int and str values
+	//   let d = {"a": 1, "b": "two"}  // Mixed int and str values → dict[str, Any]
 	dictLit := &ast.DictLit{
 		Keys: []ast.Expr{
 			&ast.StrLit{Value: "a"},
@@ -155,9 +171,25 @@ func TestDictLit_InconsistentValueTypes_Error(t *testing.T) {
 	}
 
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
-	diags, _ := Check(mod)
+	diags, info := Check(mod)
 
-	mustHaveSomeDiagContaining(t, diags, "value type mismatch")
+	mustNoDiags(t, diags)
+
+	// Verify value type widened to Any
+	dictType := info.Types[dictLit]
+	if dictType == nil {
+		t.Fatal("dict literal has no type")
+	}
+	dt, ok := dictType.(*types.Dict)
+	if !ok {
+		t.Fatalf("expected dict type, got %T", dictType)
+	}
+	if !types.Equal(dt.Key, types.Str) {
+		t.Errorf("expected key type str, got %v", dt.Key)
+	}
+	if !types.Equal(dt.Val, types.Any) {
+		t.Errorf("expected value type Any (widened), got %v", dt.Val)
+	}
 }
 
 func TestDictLit_SingleEntry(t *testing.T) {

@@ -405,7 +405,12 @@ static const char* status_text(int status) {
  * Send Response on Wire
  * ============================================================ */
 
-static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
+/* Keep-alive idle timeout in seconds */
+#define KEEPALIVE_TIMEOUT_SECS 15
+/* Max requests per keep-alive connection */
+#define KEEPALIVE_MAX_REQUESTS 100
+
+static void send_response_ka(server_socket_t client_fd, HttpServerResponse* resp, int keep_alive) {
     if (!resp) {
         /* Default 500 response */
         const char* err = "HTTP/1.1 500 Internal Server Error\r\n"
@@ -417,6 +422,7 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
     }
 
     int body_len = resp->body ? (int)strlen(resp->body) : 0;
+    const char* conn_header = keep_alive ? "keep-alive" : "close";
 
     /* Build response header */
     char header[4096];
@@ -424,7 +430,7 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: %s\r\n"
         "Content-Length: %d\r\n"
-        "Connection: close\r\n"
+        "Connection: %s\r\n"
         "Server: Desi/0.1\r\n"
         "Access-Control-Allow-Origin: *\r\n"
         "%s"
@@ -432,6 +438,7 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
         resp->status, status_text(resp->status),
         resp->content_type ? resp->content_type : "text/plain",
         body_len,
+        conn_header,
         resp->extra_headers ? resp->extra_headers : "");
 
     /* Send header + body */
@@ -439,6 +446,29 @@ static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
     if (body_len > 0) {
         send(client_fd, resp->body, body_len, 0);
     }
+}
+
+/* Backward compat wrapper */
+static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
+    send_response_ka(client_fd, resp, 0);
+}
+
+/* ============================================================
+ * Determine keep-alive from request headers
+ * HTTP/1.1 default is keep-alive; HTTP/1.0 default is close
+ * ============================================================ */
+
+static int should_keep_alive(HttpServerRequest* req) {
+    if (!req || !req->headers) return 0;
+    char buf[64];
+    const char* conn = find_header_safe(req->headers, "Connection", buf, sizeof(buf));
+    if (conn == buf) {
+        /* Explicit Connection header */
+        if (strcasecmp(buf, "close") == 0) return 0;
+        if (strcasecmp(buf, "keep-alive") == 0) return 1;
+    }
+    /* HTTP/1.1 defaults to keep-alive */
+    return 1;
 }
 
 /* ============================================================
@@ -478,7 +508,6 @@ static Route* match_route(HttpServer* srv, const char* method, const char* path)
     /* Exact match first */
     for (int i = 0; i < srv->route_count; i++) {
         Route* r = &srv->routes[i];
-        /* Match method (case-insensitive) and exact path */
         if (strcasecmp(r->method, method) == 0 && strcmp(r->path, path) == 0) {
             return r;
         }
@@ -575,69 +604,87 @@ HttpServer* __http_server_new(int port) {
     return srv;
 }
 
-/* ---- Handle a single client connection ---- */
+/* ---- Handle a single client connection (with keep-alive) ---- */
 
 static void handle_client(HttpServer* srv, server_socket_t client_fd) {
-    /* Read request (up to 64KB) */
-    char buf[65536];
-    ssize_t nread = recv(client_fd, buf, sizeof(buf) - 1, 0);
-    if (nread <= 0) {
-        CLOSE_SOCKET(client_fd);
-        return;
-    }
-    buf[nread] = '\0';
+    /* Set idle timeout on the socket for keep-alive */
+    struct timeval tv;
+    tv.tv_sec = KEEPALIVE_TIMEOUT_SECS;
+    tv.tv_usec = 0;
+    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
-    /* Parse request */
-    HttpServerRequest* req = parse_request(buf, (int)nread);
-    if (!req) {
-        const char* bad = "HTTP/1.1 400 Bad Request\r\n"
-                          "Content-Length: 11\r\nConnection: close\r\n\r\n"
-                          "Bad Request";
-        send(client_fd, bad, strlen(bad), 0);
-        CLOSE_SOCKET(client_fd);
-        return;
-    }
+    int requests_served = 0;
 
-    HttpServerResponse* resp = NULL;
-    int resp_owned = 0;   /* whether we need to free resp */
-
-    /* Dispatch to Desi handler if registered */
-    if (__desi_http_handler) {
-        resp = __desi_http_handler(req);
-        resp_owned = 1;
-    } else if (srv->route_count > 0) {
-        /* C-level route dispatch */
-        Route* route = match_route(srv, req->method, req->path);
-        if (route && route->handler) {
-            resp = route->handler(req);
-            resp_owned = 1;
-        } else if (path_exists(srv, req->path)) {
-            resp = &default_405;
-        } else {
-            resp = &default_404;
+    while (requests_served < KEEPALIVE_MAX_REQUESTS) {
+        /* Read request (up to 64KB) */
+        char buf[65536];
+        ssize_t nread = recv(client_fd, buf, sizeof(buf) - 1, 0);
+        if (nread <= 0) {
+            /* Connection closed by client or timeout */
+            break;
         }
-    } else {
-        /* No routes registered — echo mode (Phase 3A fallback) */
-        char body[2048];
-        snprintf(body, sizeof(body),
-            "{\"status\":\"ok\",\"server\":\"desi\","
-            "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
-            req->method, req->path, req->query);
+        buf[nread] = '\0';
 
-        resp = __http_resp_new(200, body, "application/json");
-        resp_owned = 1;
+        /* Parse request */
+        HttpServerRequest* req = parse_request(buf, (int)nread);
+        if (!req) {
+            const char* bad = "HTTP/1.1 400 Bad Request\r\n"
+                              "Content-Length: 11\r\nConnection: close\r\n\r\n"
+                              "Bad Request";
+            send(client_fd, bad, strlen(bad), 0);
+            break;
+        }
+
+        /* Determine if connection should persist */
+        int keep_alive = should_keep_alive(req);
+
+        HttpServerResponse* resp = NULL;
+        int resp_owned = 0;
+
+        /* Dispatch to Desi handler if registered */
+        if (__desi_http_handler) {
+            resp = __desi_http_handler(req);
+            resp_owned = 1;
+        } else if (srv->route_count > 0) {
+            /* C-level route dispatch */
+            Route* route = match_route(srv, req->method, req->path);
+            if (route && route->handler) {
+                resp = route->handler(req);
+                resp_owned = 1;
+            } else if (path_exists(srv, req->path)) {
+                resp = &default_405;
+            } else {
+                resp = &default_404;
+            }
+        } else {
+            /* No routes registered — echo mode */
+            char body[2048];
+            snprintf(body, sizeof(body),
+                "{\"status\":\"ok\",\"server\":\"desi\","
+                "\"request\":{\"method\":\"%s\",\"path\":\"%s\",\"query\":\"%s\"}}",
+                req->method, req->path, req->query);
+
+            resp = __http_resp_new(200, body, "application/json");
+            resp_owned = 1;
+        }
+
+        send_response_ka(client_fd, resp, keep_alive);
+        requests_served++;
+
+        /* Log */
+        int status = resp ? resp->status : 500;
+        printf("%s %s → %d%s\n", req->method, req->path, status,
+               keep_alive ? " [ka]" : "");
+        fflush(stdout);
+
+        if (resp_owned) free_response(resp);
+        free_request(req);
+
+        /* Close connection if not keep-alive */
+        if (!keep_alive) break;
     }
 
-    send_response(client_fd, resp);
     CLOSE_SOCKET(client_fd);
-
-    /* Log */
-    int status = resp ? resp->status : 500;
-    printf("%s %s → %d\n", req->method, req->path, status);
-    fflush(stdout);
-
-    if (resp_owned) free_response(resp);
-    free_request(req);
 }
 
 /* ---- Client task for supervisor pool dispatch ---- */
