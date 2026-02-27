@@ -397,6 +397,12 @@ pub def delete(srv: Any, path: str, handler: Any) -> none:
 pub def patch(srv: Any, path: str, handler: Any) -> none:
 	return
 
+# Serve static files from a directory
+# Maps URL prefix to filesystem dir (e.g. http.serve_static(srv, "/static", "./public"))
+# Note: lowerer intercepts and emits __http_server_static(srv, prefix, dir)
+pub def serve_static(srv: Any, prefix: str, dir: str) -> none:
+	return
+
 # ============================================================
 # Server — Response Builders
 # ============================================================

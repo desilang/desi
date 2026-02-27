@@ -277,6 +277,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 							return hir.ConstNull{}
 						}
 					}
+				case "serve_static":
+					// http.serve_static(srv, prefix, dir) → __http_server_static(srv, prefix, dir)
+					if len(x.Args) == 3 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						prefixVal := ls.lowerExpr(x.Args[1])
+						dirVal := ls.lowerExpr(x.Args[2])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_static", Args: []hir.Value{srvVal, prefixVal, dirVal}})
+						return hir.ConstNull{}
+					}
 				}
 			}
 			if t, ok := feXType.(*types.Dict); ok {
