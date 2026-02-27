@@ -133,7 +133,154 @@ HTTPS requires OpenSSL to be installed:
 
 If OpenSSL is not found, HTTP requests still work; only HTTPS will fail with a connection error.
 
+---
+
+## HTTP Server
+
+Build web servers and APIs with Desi's built-in HTTP server.
+
+### Creating a Server
+
+```desi
+import http
+
+def handler(req: Any) -> Any:
+    let path = http.req_path(req)
+    let method = http.req_method(req)
+    return http.text(200, "Hello from Desi!")
+
+def main() -> int:
+    let srv = http.server(8080)
+    print("Listening on port 8080...")
+    http.serve(srv, handler)
+    return 0
+```
+
+### Request Accessors
+
+Inside your handler function, use these to inspect the incoming request:
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `http.req_method(req)` | `str` | HTTP method (`"GET"`, `"POST"`, etc.) |
+| `http.req_path(req)` | `str` | Request path (`"/users"`) |
+| `http.req_body(req)` | `str` | Request body text |
+| `http.req_header(req, name)` | `str` | Value of a specific header |
+| `http.req_query(req)` | `str` | Query string (`"page=1&limit=10"`) |
+
+### Response Builders
+
+Return responses from your handler:
+
+```desi
+# Plain text
+return http.text(200, "Hello!")
+
+# JSON from a string
+return http.json_text(200, '{"status": "ok"}')
+
+# JSON from a dict (auto-serialized)
+return http.json(200, {"name": "alice", "age": 30})
+
+# HTML
+return http.html(200, "<h1>Welcome!</h1>")
+
+# Custom content type
+return http.response(200, data, "application/xml")
+```
+
+| Function | Content-Type |
+|----------|-------------|
+| `http.text(status, body)` | `text/plain` |
+| `http.json_text(status, body)` | `application/json` |
+| `http.json(status, data)` | `application/json` (auto-serialized) |
+| `http.html(status, body)` | `text/html` |
+| `http.response(status, body, ct)` | Custom |
+
+---
+
+## Response Helpers
+
+Check response status categories:
+
+```desi
+let resp = http.get("https://api.example.com/data")
+
+if http.is_ok(resp):
+    print("Success!")
+elif http.is_client_error(resp):
+    print("Client error:", resp.status)
+elif http.is_server_error(resp):
+    print("Server error:", resp.status)
+```
+
+| Function | True when |
+|----------|-----------|
+| `http.is_ok(resp)` | Status 200-299 |
+| `http.is_redirect(resp)` | Status 301/302/303/307/308 |
+| `http.is_client_error(resp)` | Status 400-499 |
+| `http.is_server_error(resp)` | Status 500-599 |
+
+---
+
+## Authentication
+
+### Basic Auth
+
+```desi
+let headers = http.basic_auth("user", "password")
+let resp = http.request("GET", "https://api.example.com/secret", "", headers)
+```
+
+### Bearer Token
+
+```desi
+let headers = http.bearer_auth("my-api-token")
+let resp = http.request("GET", "https://api.example.com/data", "", headers)
+```
+
+---
+
+## Form Data & Query Strings
+
+### POST Form
+
+Send form-encoded data (like HTML form submissions):
+
+```desi
+let resp = http.post_form("https://example.com/login", {
+    "username": "alice",
+    "password": "secret"
+})
+```
+
+### Build Query String
+
+Convert a dict to a URL query string:
+
+```desi
+let qs = http.build_query({"q": "hello world", "page": "1"})
+# "q=hello%20world&page=1"
+```
+
+---
+
+## Request Timeouts
+
+Control how long requests wait before failing:
+
+```desi
+# Custom request with 10-second timeout
+let resp = http.request_timeout("GET", url, "", "", 10)
+
+# JSON request with 30-second timeout
+let resp = http.request_json("POST", url, {"key": "val"}, 30)
+```
+
+---
+
 ## See Also
 
 - [JSON Module](json.md) — For parsing JSON responses
 - [Strings Module](strings.md) — For string manipulation
+

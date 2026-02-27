@@ -117,11 +117,129 @@ The HTTP module required fixing struct export resolution in the resolver:
 5. Rebuild with `make clean && make`
 6. Test with `desic run test_file.desi`
 
-## Known Limitations (Phase 1)
+## Known Limitations (Phase 1 Client)
 
-- No timeouts (connections may hang)
 - No proxy support
 - No cookie persistence
 - No custom TLS certificate configuration
 - No HTTP/2 support
 - `post_json()`/`put_json()`/`patch_json()` auto-serialize via `__json_stringify`, but mixed-type dicts passed as `Any` may not serialize correctly at the C level
+
+---
+
+## HTTP Server
+
+The http module includes a built-in HTTP server for building web applications and APIs.
+
+### Architecture
+
+```
+http.__mod.desi         ← Desi API: server(), serve(), text(), json(), etc.
+     ↓ (extern "C" calls)
+http.c                  ← C runtime: accept loop, request parsing, response writing
+     ↓ (lowerer intercepts)
+lower_call.go           ← Intercepts http.serve(srv, handler) to emit handler registration
+```
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_new(port)` | Create server bound to port |
+| `__http_server_run(server)` | Start accept loop (blocks) |
+| `__http_server_set_handler(fn)` | Register Desi function as request handler |
+| `__http_resp_new(status, body, ct)` | Build HTTP response |
+| `__http_req_method(req)` | Get request method |
+| `__http_req_path(req)` | Get request path |
+| `__http_req_body(req)` | Get request body |
+| `__http_req_header(req, name)` | Get specific header |
+| `__http_req_query(req)` | Get query string |
+
+### Response Builders
+
+| Desi Function | C Content-Type |
+|---------------|----------------|
+| `http.text(status, body)` | `text/plain; charset=utf-8` |
+| `http.json_text(status, body)` | `application/json` |
+| `http.json(status, data)` | `application/json` (auto-serializes dict) |
+| `http.html(status, body)` | `text/html; charset=utf-8` |
+| `http.response(status, body, ct)` | Custom content type |
+
+### Lowerer Integration
+
+`http.serve(srv, handler)` is intercepted by the lowerer in `lower_call.go`:
+1. Emits `__http_server_set_handler(@handler)` — registers the Desi function as a C callback
+2. Emits `__http_server_run(srv)` — starts the accept loop
+
+The Desi function body for `serve()` is never executed — it's a stub for the type checker.
+
+---
+
+## Query String & Form Helpers
+
+| Desi Function | Purpose |
+|---------------|---------|
+| `http.build_query(params)` | Dict → URL-encoded query string |
+| `http.post_form(url, data)` | POST with `application/x-www-form-urlencoded` |
+
+### C Runtime
+
+| C Function | Purpose |
+|------------|---------|
+| `__dict_to_query_str(data)` | Dict to `key=val&key=val` |
+
+---
+
+## Authentication Helpers
+
+| Desi Function | Result |
+|---------------|--------|
+| `http.basic_auth(user, pass)` | `Authorization: Basic base64(user:pass)\r\n` |
+| `http.bearer_auth(token)` | `Authorization: Bearer <token>\r\n` |
+
+### C Runtime
+
+| C Function | Purpose |
+|------------|---------|
+| `__base64_encode(s)` | Base64 encoding for Basic auth |
+
+---
+
+## Response Helpers
+
+Pure Desi functions (no C runtime needed):
+
+| Function | Returns |
+|----------|---------|
+| `http.is_ok(resp)` | `true` if status 200-299 |
+| `http.is_redirect(resp)` | `true` if status 301/302/303/307/308 |
+| `http.is_client_error(resp)` | `true` if status 400-499 |
+| `http.is_server_error(resp)` | `true` if status 500-599 |
+
+---
+
+## Request Timeout Support
+
+The `request_timeout()` function adds configurable timeouts:
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_request_timeout(method, url, body, headers, timeout_secs)` | Request with timeout |
+
+Desi API:
+```desi
+let resp = http.request_timeout("GET", url, "", "", 10)  # 10s timeout
+let resp = http.request_json("POST", url, data, 30)      # JSON + 30s timeout
+```
+
+---
+
+## Adding New Features
+
+1. Add C implementation in `compiler/runtime/http.c`
+2. Add `@extern("C")` binding in `compiler/lib/http/__mod.desi`
+3. Add `pub def` wrapper function with documentation comment
+4. Update OpenSSL/platform flags if needed in `Makefile` and `run_build_cmd.go`
+5. Rebuild with `make clean && make`
+6. Test with `desic run test_file.desi`
+
