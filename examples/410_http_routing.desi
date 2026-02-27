@@ -1,0 +1,42 @@
+# EXPECTED: SKIP
+# HTTP Server with Desi routing — Phase 3C test
+# Run with: desic run examples/410_http_routing.desi
+# Test with:
+#   curl http://localhost:9090/            → HTML welcome page
+#   curl http://localhost:9090/api/health  → JSON health check
+#   curl http://localhost:9090/api/echo    → JSON echo
+#   curl http://localhost:9090/text        → plain text
+#   curl http://localhost:9090/unknown     → 404 not found
+
+import http
+
+# Dispatch handler — called for every request by the C server
+def handle_request(req: Any) -> Any:
+	let path = http.req_path(req)
+	let method = http.req_method(req)
+
+	# Route: GET /
+	if path == "/":
+		return http.response(200, "<html><body><h1>Welcome to Desi!</h1><p>Server is running.</p></body></html>", "text/html; charset=utf-8")
+
+	# Route: GET /api/health
+	if path == "/api/health":
+		return http.response(200, "{\"status\":\"healthy\",\"server\":\"desi\"}", "application/json")
+
+	# Route: * /api/echo — echo request info as JSON
+	if path == "/api/echo":
+		let query = http.req_query(req)
+		return http.response(200, "{\"method\":\"" + method + "\",\"path\":\"" + path + "\",\"query\":\"" + query + "\"}", "application/json")
+
+	# Route: GET /text
+	if path == "/text":
+		return http.response(200, "Hello from plain text!", "text/plain; charset=utf-8")
+
+	# Default: 404
+	return http.response(404, "{\"error\":\"not found\",\"path\":\"" + path + "\"}", "application/json")
+
+def main() -> int:
+	print("Starting Desi HTTP Server with routing...")
+	let srv = http.server(9090)
+	http.serve(srv, handle_request)
+	return 0

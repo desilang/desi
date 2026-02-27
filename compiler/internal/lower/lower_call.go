@@ -200,6 +200,25 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// Handle http.serve(srv, handler) — register handler + start server
+			if id, ok := fe.X.(*ast.Ident); ok && id.Name == "http" {
+				switch fe.Name.Name {
+				case "serve":
+					// http.serve(srv, handler_fn)
+					// → __http_server_set_handler(@handler_fn)
+					// → __http_server_run(srv)
+					if len(x.Args) == 2 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						// Get the handler function name from the second arg
+						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__http_server_set_handler", Args: []hir.Value{fnRef}})
+							ls.b.Emit(&hir.Call{Fn: "__http_server_run", Args: []hir.Value{srvVal}})
+							return hir.ConstInt{Text: "0"}
+						}
+					}
+				}
+			}
 			if t, ok := feXType.(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
 			}

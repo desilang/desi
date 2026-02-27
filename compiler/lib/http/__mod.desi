@@ -343,6 +343,10 @@ def __http_req_header(req: Any, name: str) -> str
 @extern("C")
 def __http_req_query(req: Any) -> str
 
+# Handler registration (passes Desi function as C function pointer)
+@extern("C")
+def __http_server_set_handler(handler: Any) -> none
+
 # ============================================================
 # Server — Public API
 # ============================================================
@@ -351,9 +355,16 @@ def __http_req_query(req: Any) -> str
 pub def server(port: int) -> Any:
 	return __http_server_new(port)
 
-# Start the server's accept loop (blocks forever)
+# Start the server's accept loop (blocks forever, no routing — echo mode)
 pub def listen(srv: Any) -> none:
 	__http_server_run(srv)
+
+# Start the server with a Desi dispatch handler
+# The handler receives a request and must return a response
+# Example: http.serve(srv, my_handler)
+# Note: this body is replaced by the lowerer at the user's callsite
+pub def serve(srv: Any, handler: Any) -> none:
+	print("http.serve: handler registered")
 
 # ============================================================
 # Server — Response Builders
