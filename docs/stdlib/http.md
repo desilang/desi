@@ -175,6 +175,36 @@ The Desi function body for `serve()` is never executed — it's a stub for the t
 
 ---
 
+## Concurrency Architecture
+
+The HTTP server uses a **Supervisor thread pool** for concurrent request handling:
+
+```
+Main Thread                 Supervisor Pool (8 workers)
+    │                           │
+    ├── accept() ──→ submit ──→ Worker 1: handle_client()
+    ├── accept() ──→ submit ──→ Worker 2: handle_client()
+    ├── accept() ──→ submit ──→ Worker 3: handle_client()
+    │   ...                     ...
+    └── SIGINT ──→ supervisor_stop() ──→ drain + join
+```
+
+### Implementation (`http_server.c`)
+
+- `ClientTask` struct bundles `HttpServer*` + `client_fd`
+- `client_task_fn()` wrapper calls `handle_client()` then frees the task
+- `__http_server_run()` creates a Supervisor with 8 workers (ONE_FOR_ONE)
+- Each accepted connection is dispatched via `supervisor_submit()`
+- Graceful shutdown: `supervisor_stop()` drains queue, joins workers
+
+### Thread-Safety
+
+- **`find_header_safe()`** — uses caller-provided stack buffer (not static)
+- **Route table** — read-only during accept loop (set before `run()`)
+- **`__desi_http_handler`** — global function pointer, set once before `run()`
+
+---
+
 ## Query String & Form Helpers
 
 | Desi Function | Purpose |
