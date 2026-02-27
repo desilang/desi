@@ -118,9 +118,14 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return taskGroupType
 
 			case "Supervisor":
-				// sync.Supervisor() - no arguments (default: 4 workers, one_for_one)
-				if len(args) != 0 {
-					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Supervisor takes no arguments"))
+				// sync.Supervisor() or sync.Supervisor(N)
+				// 0 args = default 4 workers, 1 arg = custom pool size
+				if len(args) > 1 {
+					c.add(diagAt("DTE0046", fe.Name.Span, "sync.Supervisor takes 0 or 1 arguments (optional pool size)"))
+					return nil
+				}
+				if len(args) == 1 && !types.Equal(args[0], types.Int) {
+					c.add(diagAt("DTE0104", fe.Name.Span, "sync.Supervisor pool size must be an int"))
 					return nil
 				}
 				// DSY0001: Supervisor must be used with 'using' guard
@@ -1087,9 +1092,9 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				return taskGroupType
 			}
 
-			// Imported Supervisor class constructor: Supervisor()
-			// This handles `from sync import Supervisor` + `Supervisor()`
-			if id.Name == "Supervisor" && len(args) == 0 {
+			// Imported Supervisor class constructor: Supervisor() or Supervisor(N)
+			// This handles `from sync import Supervisor` + `Supervisor()` or `Supervisor(8)`
+			if id.Name == "Supervisor" && len(args) <= 1 {
 				if !c.inUsingInit {
 					c.add(diagAt("DSY0001", call.Span,
 						"Supervisor requires RAII cleanup - use 'using sup = sync.Supervisor():'"))

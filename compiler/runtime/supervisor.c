@@ -111,16 +111,45 @@ static void* child_wrapper(void* arg) {
             sup->children[idx].restart_count++;
 
             if (sup->strategy == SUPERVISOR_ONE_FOR_ALL) {
-                /* Restart ALL children */
+                /* ONE_FOR_ALL: restart ALL children when one crashes */
+                fprintf(stderr, "[supervisor] child %d exited, restarting ALL children (one_for_all)\n", idx);
+
+                /* Mark all other alive children for restart by bumping their restart_count */
+                for (int i = 0; i < sup->num_children; i++) {
+                    if (i != idx && sup->children[i].alive) {
+                        sup->children[i].restart_count++;
+                    }
+                }
+
+                /* Restart all children (including the crashed one) */
+                for (int i = 0; i < sup->num_children; i++) {
+                    /* Skip children that exceeded max restarts */
+                    if (sup->children[i].restart_count > sup->max_restarts) continue;
+
+                    ChildWrapperCtx* ctx = malloc(sizeof(ChildWrapperCtx));
+                    if (!ctx) continue;
+                    ctx->sup = sup;
+                    ctx->child_index = i;
+                    sup->children[i].alive = false;
+
+                    DESI_MUTEX_UNLOCK(sup->lock);
+#ifdef _WIN32
+                    sup->children[i].thread = CreateThread(
+                        NULL, 0, (LPTHREAD_START_ROUTINE)child_wrapper,
+                        ctx, 0, NULL);
+#else
+                    pthread_create(&sup->children[i].thread, NULL,
+                        child_wrapper, ctx);
+                    pthread_detach(sup->children[i].thread);
+#endif
+                    DESI_MUTEX_LOCK(sup->lock);
+                }
+
                 DESI_MUTEX_UNLOCK(sup->lock);
-                /* Signal all children to stop (they'll restart via their wrappers) */
-                /* For now, just restart this one — full one_for_all needs
-                   cancellation tokens which we'll add with structured concurrency */
-                fprintf(stderr, "[supervisor] child %d exited, restarting (one_for_all)\n", idx);
-                DESI_MUTEX_LOCK(sup->lock);
+                return NULL;
             }
 
-            /* Restart this child */
+            /* ONE_FOR_ONE: restart only the crashed child */
             fprintf(stderr, "[supervisor] child %d restarting (%d/%d)\n",
                 idx, sup->children[idx].restart_count, sup->max_restarts);
 
