@@ -559,27 +559,31 @@ func Assignable(dst, src T) bool {
 		return false
 	}
 
-	// Special case: Empty collections (list[none], dict[none, none], set[none])
-	// are assignable to any typed collection of the same kind.
-	if _, ok := dst.(*List); ok {
+	// Collection covariance: list[str] is assignable to list[Any],
+	// dict[str, str] is assignable to dict[str, Any], etc.
+	// Also handles empty collections (list[none], dict[none, none], set[none]).
+	if dstList, ok := dst.(*List); ok {
 		if srcList, ok := src.(*List); ok {
 			if kindOf(srcList.Elem) == NoneKind {
-				return true
+				return true // empty list
 			}
+			return Assignable(dstList.Elem, srcList.Elem)
 		}
 	}
-	if _, ok := dst.(*Dict); ok {
+	if dstDict, ok := dst.(*Dict); ok {
 		if srcDict, ok := src.(*Dict); ok {
 			if kindOf(srcDict.Key) == NoneKind && kindOf(srcDict.Val) == NoneKind {
-				return true
+				return true // empty dict
 			}
+			return Assignable(dstDict.Key, srcDict.Key) && Assignable(dstDict.Val, srcDict.Val)
 		}
 	}
-	if _, ok := dst.(*Set); ok {
+	if dstSet, ok := dst.(*Set); ok {
 		if srcSet, ok := src.(*Set); ok {
 			if kindOf(srcSet.Elem) == NoneKind || kindOf(srcSet.Elem) == AnyKind {
-				return true
+				return true // empty set
 			}
+			return Assignable(dstSet.Elem, srcSet.Elem)
 		}
 	}
 
