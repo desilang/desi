@@ -451,3 +451,31 @@ pub def req_header(req: Any, name: str) -> str:
 # Get the query string of a server request
 pub def req_query(req: Any) -> str:
 	return __http_req_query(req)
+
+# Get a query parameter value by key (e.g. ?name=alice → req_param(req, "name") → "alice")
+pub def req_param(req: Any, key: str) -> str:
+	return __http_req_param(req, key)
+
+# Get a path parameter value (e.g. /users/:id → req_path_param(req, "id"))
+pub def req_path_param(req: Any, name: str) -> str:
+	return __http_req_path_param(req, name)
+
+# ============================================================
+# Server — Configuration
+# ============================================================
+
+# Set maximum request body size in bytes (default: 1MB)
+# Example: http.max_body(srv, 1024 * 512)  # 512KB
+pub def max_body(srv: Any, max_bytes: int) -> none:
+	return
+
+# Register a middleware function (runs before route handlers)
+# Middleware returns none to pass through, or a response to short-circuit
+# Note: lowerer intercepts http.use() and emits __http_server_use(srv, @fn)
+pub def use(srv: Any, middleware: Any) -> none:
+	return
+
+# Enable rate limiting: max requests per window (seconds)
+# Example: http.rate_limit(srv, 60, 60)  # 60 requests per 60 seconds per IP
+pub def rate_limit(srv: Any, max_requests: int, window_secs: int) -> none:
+	return

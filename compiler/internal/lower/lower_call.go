@@ -286,6 +286,36 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						ls.b.Emit(&hir.Call{Fn: "__http_server_static", Args: []hir.Value{srvVal, prefixVal, dirVal}})
 						return hir.ConstNull{}
 					}
+
+				case "max_body":
+					// http.max_body(srv, max_bytes) → __http_server_max_body(srv, max_bytes)
+					if len(x.Args) == 2 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						maxVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_max_body", Args: []hir.Value{srvVal, maxVal}})
+						return hir.ConstNull{}
+					}
+
+				case "use":
+					// http.use(srv, middleware_fn) → __http_server_use(srv, @middleware_fn)
+					if len(x.Args) == 2 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						if mwIdent, ok := x.Args[1].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: mwIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__http_server_use", Args: []hir.Value{srvVal, fnRef}})
+							return hir.ConstNull{}
+						}
+					}
+
+				case "rate_limit":
+					// http.rate_limit(srv, max, window) → __http_server_rate_limit(srv, max, window)
+					if len(x.Args) == 3 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						maxVal := ls.lowerExpr(x.Args[1])
+						windowVal := ls.lowerExpr(x.Args[2])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_rate_limit", Args: []hir.Value{srvVal, maxVal, windowVal}})
+						return hir.ConstNull{}
+					}
 				}
 			}
 			if t, ok := feXType.(*types.Dict); ok {
