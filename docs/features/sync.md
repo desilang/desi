@@ -49,6 +49,7 @@ The `sync` module provides thread-safe concurrency primitives for multi-threaded
 | `Sender<T>` | Send handle for Channel |
 | `Receiver<T>` | Receive handle for Channel |
 | `TaskGroup` | Structured concurrency for managing spawned tasks |
+| `Supervisor` | Thread pool with work queue and auto-restart |
 
 ---
 
@@ -416,6 +417,93 @@ using tg = sync.TaskGroup():
 
 ---
 
+## Supervisor
+
+### Overview
+
+A `Supervisor` provides a thread pool with work queue and persistent children with auto-restart. Inspired by Elixir/OTP supervision trees.
+
+```desi
+import sync
+
+def worker():
+    print("Worker task executed")
+
+def main() -> int:
+    using sup = sync.Supervisor():   # REQUIRED: using guard (DSY0001 error if not)
+        sup.submit(worker)           # Enqueue work to pool
+        sup.submit(worker)
+        sup.stop()                   # Drain + join + free
+    return 0
+```
+
+> [!IMPORTANT]
+> **Supervisor MUST be used with `using` guard.** Creating a Supervisor without `using` is a compile error (DSY0001).
+> This ensures proper RAII cleanup: `supervisor_stop()` is called automatically.
+
+### Supervisor Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `submit(fn)` | `none` | Enqueue a task to the worker pool |
+| `start_child(fn)` | `none` | Start a persistent child (auto-restarted on crash) |
+| `stop()` | `none` | Drain queue, signal shutdown, join all threads |
+| `pool_size()` | `int` | Get number of pool worker threads |
+| `child_count()` | `int` | Get number of persistent children |
+| `is_running()` | `bool` | Check if supervisor is still running |
+
+### Restart Strategies
+
+| Strategy | Behavior |
+|----------|----------|
+| `ONE_FOR_ONE` (default) | Restart only the crashed child |
+| `ONE_FOR_ALL` | Restart all children if one crashes |
+
+### Pool vs Persistent Children
+
+**Pool workers** (`submit`): Short-lived tasks dispatched from a ring buffer queue. Pool threads dequeue and execute tasks, then wait for more work.
+
+**Persistent children** (`start_child`): Long-running tasks that are auto-restarted if they exit. Rate-limited: max 5 restarts per 60-second window (configurable).
+
+### Idempotent Stop
+
+`supervisor_stop()` is idempotent — safe to call multiple times. This is critical for RAII safety because both explicit `sup.stop()` and the automatic `__close__` call `supervisor_stop()`.
+
+### Implementation Details
+
+#### C Runtime (`supervisor.c`)
+
+| C Function | Desi Operation |
+|------------|----------------|
+| `supervisor_new(strategy, workers)` | `sync.Supervisor()` |
+| `supervisor_submit(sup, fn, arg)` | `sup.submit(fn)` |
+| `supervisor_start_child(sup, fn, arg)` | `sup.start_child(fn)` |
+| `supervisor_stop(sup)` | `sup.stop()` / RAII `__close__` |
+| `supervisor_pool_size(sup)` | `sup.pool_size()` |
+| `supervisor_child_count(sup)` | `sup.child_count()` |
+| `__supervisor_is_running(sup)` | `sup.is_running()` |
+
+#### Performance
+
+- Ring buffer work queue: O(1) enqueue/dequeue, dynamic growth
+- Lock contention minimized: workers only hold lock during dequeue
+- No allocation per task submission (pre-allocated ring buffer)
+
+#### Compiler Integration
+
+1. **Type**: `types/supervisor.go` — `*types.Supervisor` type
+2. **Type Checking**: `expr_call.go` — constructor + method dispatch (intercepted before class dispatch)
+3. **Field Resolution**: `expr_field.go` — method signatures via `resolveSupervisorMethod`
+4. **Lowering**: `lower_call.go` — constructor → `supervisor_new(0, 4)`, methods → C runtime calls
+
+### Diagnostics
+
+| Code | Severity | Condition | Message |
+|------|----------|-----------|---------|
+| `DSY0001` | **Error** | Supervisor without `using` | "Supervisor must be used with 'using' guard" |
+
+---
+
 ## Usage Guide
 
 ### Basic Usage
@@ -660,15 +748,23 @@ let m = Mutex(42)
 - `tx.send(v)` / `tx.try_send(v)` for sending
 - `rx.recv()` / `rx.try_recv()` for receiving
 - `sync.TaskGroup()` constructor
+- `tg.run(fn)` spawn tasks
 - `tg.wait()` wait for all tasks
 - `tg.cancel()` cancel all tasks
 - `tg.is_cancelled()` check cancel status
+- `sync.Supervisor()` constructor
+- `sup.submit(fn)` enqueue work to pool
+- `sup.start_child(fn)` persistent children with auto-restart
+- `sup.stop()` drain + join + free (idempotent)
+- `sup.pool_size()`, `sup.child_count()`, `sup.is_running()`
+- ONE_FOR_ONE restart strategy
 - Both `import sync` and `from sync import` styles
 
 ### 🚧 Planned
 
-- [ ] `TaskGroup.spawn()` for spawning tasks in group
-- [ ] `RwLock<T>` for reader-writer locks
+- [ ] ONE_FOR_ALL full implementation (restart all children)
+- [ ] Configurable restart limits per Supervisor instance
+- [ ] Supervisor trees (nested supervisors)
 
 ---
 

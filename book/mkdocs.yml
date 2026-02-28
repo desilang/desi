@@ -132,6 +132,7 @@ nav:
     - Channels: concurrency/channels.md
     - Channel (detail): concurrency/channel.md
     - TaskGroup: concurrency/taskgroup.md
+    - Supervisor: concurrency/supervisor.md
     - Select: concurrency/select.md
     - Atomic: concurrency/atomic.md
     - Semaphore: concurrency/semaphore.md
