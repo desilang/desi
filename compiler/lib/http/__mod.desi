@@ -359,13 +359,42 @@ pub def server(port: int) -> Any:
 pub def listen(srv: Any) -> none:
 	__http_server_run(srv)
 
-# Start the server with a Desi dispatch handler
-# The handler receives a request and must return a response
-# Example: http.serve(srv, my_handler)
+# Start the server with a Desi dispatch handler (2-arg form)
+# Or start the server with registered routes only (1-arg form)
+# Example: http.serve(srv, my_handler)  OR  http.serve(srv)
 # Note: lowerer intercepts http.serve() at callsite and emits
-#   __http_server_set_handler(@handler) + __http_server_run(srv)
+#   2-arg: __http_server_set_handler(@handler) + __http_server_run(srv)
+#   1-arg: __http_server_run(srv) (uses registered routes)
 # This body is never executed — it exists only for the type checker.
+pub def serve(srv: Any) -> none:
+	return
+
 pub def serve(srv: Any, handler: Any) -> none:
+	return
+
+# ============================================================
+# Server — Route Registration
+# ============================================================
+
+# Register a route handler for a specific method and path
+# Note: lowerer intercepts and emits __http_server_route(srv, method, path, @handler)
+pub def route(srv: Any, method: str, path: str, handler: Any) -> none:
+	return
+
+# Convenience route helpers
+pub def get(srv: Any, path: str, handler: Any) -> none:
+	return
+
+pub def post(srv: Any, path: str, handler: Any) -> none:
+	return
+
+pub def put(srv: Any, path: str, handler: Any) -> none:
+	return
+
+pub def delete(srv: Any, path: str, handler: Any) -> none:
+	return
+
+pub def patch(srv: Any, path: str, handler: Any) -> none:
 	return
 
 # ============================================================

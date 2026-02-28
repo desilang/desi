@@ -220,21 +220,61 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
-			// Handle http.serve(srv, handler) — register handler + start server
+			// Handle http.serve(srv, handler), http.serve(srv), http.route(), http.get/post/put/delete/patch()
 			if id, ok := fe.X.(*ast.Ident); ok && id.Name == "http" {
 				switch fe.Name.Name {
 				case "serve":
-					// http.serve(srv, handler_fn)
-					// → __http_server_set_handler(@handler_fn)
-					// → __http_server_run(srv)
 					if len(x.Args) == 2 {
+						// http.serve(srv, handler_fn) — single handler mode
+						// → __http_server_set_handler(@handler_fn)
+						// → __http_server_run(srv)
 						srvVal := ls.lowerExpr(x.Args[0])
-						// Get the handler function name from the second arg
 						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
 							fnRef := hir.FuncRef{Name: handlerIdent.Name}
 							ls.b.Emit(&hir.Call{Fn: "__http_server_set_handler", Args: []hir.Value{fnRef}})
 							ls.b.Emit(&hir.Call{Fn: "__http_server_run", Args: []hir.Value{srvVal}})
 							return hir.ConstInt{Text: "0"}
+						}
+					} else if len(x.Args) == 1 {
+						// http.serve(srv) — route-table mode (routes registered prior)
+						// → __http_server_run(srv)
+						srvVal := ls.lowerExpr(x.Args[0])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_run", Args: []hir.Value{srvVal}})
+						return hir.ConstInt{Text: "0"}
+					}
+
+				case "route":
+					// http.route(srv, method, path, handler)
+					// → __http_server_route(srv, method, path, @handler)
+					if len(x.Args) == 4 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						methodVal := ls.lowerExpr(x.Args[1])
+						pathVal := ls.lowerExpr(x.Args[2])
+						if handlerIdent, ok := x.Args[3].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__http_server_route", Args: []hir.Value{srvVal, methodVal, pathVal, fnRef}})
+							return hir.ConstNull{}
+						}
+					}
+
+				case "get", "post", "put", "delete", "patch":
+					// http.get(srv, path, handler) → __http_server_route(srv, "GET", path, @handler)
+					if len(x.Args) == 3 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						pathVal := ls.lowerExpr(x.Args[1])
+						methodStr := map[string]string{
+							"get": "GET", "post": "POST", "put": "PUT",
+							"delete": "DELETE", "patch": "PATCH",
+						}[fe.Name.Name]
+						if handlerIdent, ok := x.Args[2].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__http_server_route", Args: []hir.Value{
+								srvVal,
+								hir.ConstStr{Text: methodStr},
+								pathVal,
+								fnRef,
+							}})
+							return hir.ConstNull{}
 						}
 					}
 				}
