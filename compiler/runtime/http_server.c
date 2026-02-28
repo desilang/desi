@@ -356,6 +356,15 @@ const char* __http_req_path_param(HttpServerRequest* req, const char* name) {
     return "";
 }
 
+/* ---- Parse request body as JSON ---- */
+/* Forward declare __json_parse from json.c */
+extern void* __json_parse(const char* text);
+
+void* __http_req_json(HttpServerRequest* req) {
+    if (!req || !req->body || req->body_len == 0) return NULL;
+    return __json_parse(req->body);
+}
+
 /* ---- Path pattern matching with :param capture ---- */
 /* Pattern: /users/:id/posts/:post_id
  * Path:    /users/42/posts/hello

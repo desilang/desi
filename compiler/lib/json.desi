@@ -153,3 +153,62 @@ pub def get_int(node: Any) -> int:
 pub def get_float(node: Any) -> float:
     unsafe:
         return __json_get_float(node)
+
+# ============================================================
+# JSON Builders (create nodes programmatically)
+# ============================================================
+
+# Create an empty JSON object: {}
+pub def new_object() -> Any:
+    unsafe:
+        return __json_new_object()
+
+# Create an empty JSON array: []
+pub def new_array() -> Any:
+    unsafe:
+        return __json_new_array()
+
+# Create a JSON string node
+pub def new_string(s: str) -> Any:
+    unsafe:
+        return __json_new_string(s)
+
+# Create a JSON number node
+pub def new_number(n: float) -> Any:
+    unsafe:
+        return __json_new_number(n)
+
+# Create a JSON boolean node
+pub def new_bool(b: bool) -> Any:
+    unsafe:
+        return __json_new_bool(b)
+
+# Create a JSON null node
+pub def new_null() -> Any:
+    unsafe:
+        return __json_new_null()
+
+# Set a key-value pair on a JSON object (adds or updates)
+pub def set(obj: Any, key: str, val: Any) -> none:
+    unsafe:
+        __json_object_set(obj, key, val)
+
+# Push a value to a JSON array
+pub def push(arr: Any, val: Any) -> none:
+    unsafe:
+        __json_array_push(arr, val)
+
+# Remove a key from a JSON object
+pub def remove(obj: Any, key: str) -> none:
+    unsafe:
+        __json_object_remove(obj, key)
+
+# Get all keys of a JSON object as a JSON array of strings
+pub def keys(obj: Any) -> Any:
+    unsafe:
+        return __json_object_keys(obj)
+
+# Get object key at index (for iteration)
+pub def object_key(obj: Any, index: int) -> str:
+    unsafe:
+        return __json_object_key(obj, index)

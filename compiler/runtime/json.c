@@ -557,6 +557,117 @@ JsonNode* __json_object_get(JsonNode* node, const char* key) {
 }
 
 // ============================================================
+// JSON Builders (create nodes programmatically)
+// ============================================================
+
+JsonNode* __json_new_object(void) {
+    JsonNode* node = json_alloc(JSON_OBJECT);
+    node->object.cap = 8;
+    node->object.keys = (char**)malloc(8 * sizeof(char*));
+    node->object.values = (JsonNode**)malloc(8 * sizeof(JsonNode*));
+    node->object.len = 0;
+    return node;
+}
+
+JsonNode* __json_new_array(void) {
+    JsonNode* node = json_alloc(JSON_ARRAY);
+    node->array.cap = 8;
+    node->array.items = (JsonNode**)malloc(8 * sizeof(JsonNode*));
+    node->array.len = 0;
+    return node;
+}
+
+JsonNode* __json_new_string(const char* str) {
+    JsonNode* node = json_alloc(JSON_STRING);
+    node->str_val = strdup(str ? str : "");
+    return node;
+}
+
+JsonNode* __json_new_number(double val) {
+    JsonNode* node = json_alloc(JSON_NUMBER);
+    node->num_val = val;
+    return node;
+}
+
+JsonNode* __json_new_bool(int val) {
+    JsonNode* node = json_alloc(JSON_BOOL);
+    node->bool_val = val ? 1 : 0;
+    return node;
+}
+
+JsonNode* __json_new_null(void) {
+    return json_alloc(JSON_NULL);
+}
+
+// Set a key-value pair on a JSON object (adds or updates)
+void __json_object_set(JsonNode* obj, const char* key, JsonNode* val) {
+    if (!obj || obj->type != JSON_OBJECT || !key) return;
+
+    // Check if key already exists — update in place
+    for (int i = 0; i < obj->object.len; i++) {
+        if (strcmp(obj->object.keys[i], key) == 0) {
+            __json_free(obj->object.values[i]);
+            obj->object.values[i] = val;
+            return;
+        }
+    }
+
+    // New key — grow if needed
+    if (obj->object.len >= obj->object.cap) {
+        obj->object.cap *= 2;
+        obj->object.keys = (char**)realloc(obj->object.keys,
+            obj->object.cap * sizeof(char*));
+        obj->object.values = (JsonNode**)realloc(obj->object.values,
+            obj->object.cap * sizeof(JsonNode*));
+    }
+    obj->object.keys[obj->object.len] = strdup(key);
+    obj->object.values[obj->object.len] = val;
+    obj->object.len++;
+}
+
+// Push a value to a JSON array
+void __json_array_push(JsonNode* arr, JsonNode* val) {
+    if (!arr || arr->type != JSON_ARRAY) return;
+
+    if (arr->array.len >= arr->array.cap) {
+        arr->array.cap *= 2;
+        arr->array.items = (JsonNode**)realloc(arr->array.items,
+            arr->array.cap * sizeof(JsonNode*));
+    }
+    arr->array.items[arr->array.len++] = val;
+}
+
+// Remove a key from a JSON object
+void __json_object_remove(JsonNode* obj, const char* key) {
+    if (!obj || obj->type != JSON_OBJECT || !key) return;
+
+    for (int i = 0; i < obj->object.len; i++) {
+        if (strcmp(obj->object.keys[i], key) == 0) {
+            free(obj->object.keys[i]);
+            __json_free(obj->object.values[i]);
+            // Shift remaining entries
+            for (int j = i; j < obj->object.len - 1; j++) {
+                obj->object.keys[j] = obj->object.keys[j + 1];
+                obj->object.values[j] = obj->object.values[j + 1];
+            }
+            obj->object.len--;
+            return;
+        }
+    }
+}
+
+// Get all keys of a JSON object as a JSON array of strings
+JsonNode* __json_object_keys(JsonNode* obj) {
+    JsonNode* arr = __json_new_array();
+    if (!obj || obj->type != JSON_OBJECT) return arr;
+
+    for (int i = 0; i < obj->object.len; i++) {
+        __json_array_push(arr, __json_new_string(obj->object.keys[i]));
+    }
+    return arr;
+}
+
+// ============================================================
 // Stringify
 // ============================================================
 

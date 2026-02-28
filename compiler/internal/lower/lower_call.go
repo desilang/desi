@@ -1832,6 +1832,72 @@ handlePrint:
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_get", Args: []hir.Value{nodeVal, keyVal}, Type: "ptr"})
 				return dst
 			}
+			// JSON Builder methods
+			if method == "new_object" && len(x.Args) == 0 {
+				dst := ls.b.FreshTemp("json_obj")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_object", Args: nil, Type: "ptr"})
+				return dst
+			}
+			if method == "new_array" && len(x.Args) == 0 {
+				dst := ls.b.FreshTemp("json_arr")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_array", Args: nil, Type: "ptr"})
+				return dst
+			}
+			if method == "new_string" && len(x.Args) >= 1 {
+				strVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_str_node")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_string", Args: []hir.Value{strVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "new_number" && len(x.Args) >= 1 {
+				numVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_num_node")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_number", Args: []hir.Value{numVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "new_bool" && len(x.Args) >= 1 {
+				boolVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_bool_node")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_bool", Args: []hir.Value{boolVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "new_null" && len(x.Args) == 0 {
+				dst := ls.b.FreshTemp("json_null_node")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_null", Args: nil, Type: "ptr"})
+				return dst
+			}
+			if method == "set" && len(x.Args) >= 3 {
+				objVal := ls.lowerExpr(x.Args[0])
+				keyVal := ls.lowerExpr(x.Args[1])
+				valVal := ls.lowerExpr(x.Args[2])
+				ls.b.Emit(&hir.Call{Fn: "__json_object_set", Args: []hir.Value{objVal, keyVal, valVal}})
+				return hir.ConstNull{}
+			}
+			if method == "push" && len(x.Args) >= 2 {
+				arrVal := ls.lowerExpr(x.Args[0])
+				valVal := ls.lowerExpr(x.Args[1])
+				ls.b.Emit(&hir.Call{Fn: "__json_array_push", Args: []hir.Value{arrVal, valVal}})
+				return hir.ConstNull{}
+			}
+			if method == "remove" && len(x.Args) >= 2 {
+				objVal := ls.lowerExpr(x.Args[0])
+				keyVal := ls.lowerExpr(x.Args[1])
+				ls.b.Emit(&hir.Call{Fn: "__json_object_remove", Args: []hir.Value{objVal, keyVal}})
+				return hir.ConstNull{}
+			}
+			if method == "keys" && len(x.Args) >= 1 {
+				objVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp("json_keys")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_keys", Args: []hir.Value{objVal}, Type: "ptr"})
+				return dst
+			}
+			if method == "object_key" && len(x.Args) >= 2 {
+				objVal := ls.lowerExpr(x.Args[0])
+				indexVal := ls.lowerExpr(x.Args[1])
+				dst := ls.b.FreshTemp("json_obj_key")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_key", Args: []hir.Value{objVal, indexVal}, Type: "ptr"})
+				return dst
+			}
 		}
 
 		// Handle math module functions (hardcoded like json module)
