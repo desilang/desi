@@ -158,9 +158,11 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 				case "Supervisor":
 					// sync.Supervisor() -> supervisor_new(0, 4)
-					// strategy=0 (ONE_FOR_ONE), workers=4
-					if len(x.Args) != 0 {
-						panic("sync.Supervisor takes no arguments")
+					// sync.Supervisor(8) -> supervisor_new(0, 8)
+					// strategy=0 (ONE_FOR_ONE), workers=N (default 4)
+					var workersArg hir.Value = hir.ConstInt{Text: "4"} // default
+					if len(x.Args) == 1 {
+						workersArg = ls.lowerExpr(x.Args[0])
 					}
 					res := ls.b.FreshTemp("supervisor")
 					ls.b.Emit(&hir.Call{
@@ -168,7 +170,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						Fn:  "supervisor_new",
 						Args: []hir.Value{
 							hir.ConstInt{Text: "0"}, // ONE_FOR_ONE
-							hir.ConstInt{Text: "4"}, // 4 pool workers
+							workersArg,
 						},
 						Type: "ptr",
 					})
@@ -585,7 +587,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					return res
 				case "is_running":
 					res := ls.b.FreshTemp("is_running")
-					ls.b.Emit(&hir.Call{Dst: res, Fn: "__supervisor_is_running", Args: []hir.Value{supVal}, Type: "i32"})
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "__supervisor_is_running", Args: []hir.Value{supVal}, Type: "i1"})
 					return res
 				case "submit":
 					// sup.submit(fn) -> supervisor_submit(sup, fn, NULL)
@@ -1143,15 +1145,19 @@ handlePrint:
 			return res
 		}
 
-		// Supervisor() - zero-arg constructor (from-import path)
-		if calleeName == "Supervisor" && len(x.Args) == 0 {
+		// Supervisor() or Supervisor(N) - optional pool size (from-import path)
+		if calleeName == "Supervisor" && len(x.Args) <= 1 {
+			var workersArg hir.Value = hir.ConstInt{Text: "4"} // default
+			if len(x.Args) == 1 {
+				workersArg = ls.lowerExpr(x.Args[0])
+			}
 			res := ls.b.FreshTemp("supervisor")
 			ls.b.Emit(&hir.Call{
 				Dst: res,
 				Fn:  "supervisor_new",
 				Args: []hir.Value{
 					hir.ConstInt{Text: "0"}, // ONE_FOR_ONE
-					hir.ConstInt{Text: "4"}, // 4 pool workers
+					workersArg,
 				},
 				Type: "ptr",
 			})
