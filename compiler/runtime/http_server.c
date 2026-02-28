@@ -126,6 +126,8 @@ typedef struct {
     Route* routes;      /* dynamic array */
     int route_count;
     int route_cap;      /* current capacity */
+    char static_prefix[256]; /* URL prefix for static files, e.g. "/static" */
+    char static_dir[1024];   /* filesystem directory, e.g. "./public" */
 } HttpServer;
 
 static void free_server(HttpServer* srv) {
@@ -472,6 +474,119 @@ static int should_keep_alive(HttpServerRequest* req) {
 }
 
 /* ============================================================
+ * Static File Serving
+ * ============================================================ */
+
+static const char* mime_for_ext(const char* path) {
+    const char* dot = strrchr(path, '.');
+    if (!dot) return "application/octet-stream";
+    dot++;
+    if (strcasecmp(dot, "html") == 0 || strcasecmp(dot, "htm") == 0)
+        return "text/html; charset=utf-8";
+    if (strcasecmp(dot, "css") == 0)  return "text/css; charset=utf-8";
+    if (strcasecmp(dot, "js") == 0)   return "text/javascript; charset=utf-8";
+    if (strcasecmp(dot, "json") == 0) return "application/json";
+    if (strcasecmp(dot, "png") == 0)  return "image/png";
+    if (strcasecmp(dot, "jpg") == 0 || strcasecmp(dot, "jpeg") == 0)
+        return "image/jpeg";
+    if (strcasecmp(dot, "gif") == 0)  return "image/gif";
+    if (strcasecmp(dot, "svg") == 0)  return "image/svg+xml";
+    if (strcasecmp(dot, "ico") == 0)  return "image/x-icon";
+    if (strcasecmp(dot, "webp") == 0) return "image/webp";
+    if (strcasecmp(dot, "woff") == 0) return "font/woff";
+    if (strcasecmp(dot, "woff2") == 0) return "font/woff2";
+    if (strcasecmp(dot, "ttf") == 0)  return "font/ttf";
+    if (strcasecmp(dot, "otf") == 0)  return "font/otf";
+    if (strcasecmp(dot, "txt") == 0)  return "text/plain; charset=utf-8";
+    if (strcasecmp(dot, "xml") == 0)  return "text/xml; charset=utf-8";
+    if (strcasecmp(dot, "pdf") == 0)  return "application/pdf";
+    if (strcasecmp(dot, "zip") == 0)  return "application/zip";
+    if (strcasecmp(dot, "mp4") == 0)  return "video/mp4";
+    if (strcasecmp(dot, "webm") == 0) return "video/webm";
+    if (strcasecmp(dot, "mp3") == 0)  return "audio/mpeg";
+    if (strcasecmp(dot, "wasm") == 0) return "application/wasm";
+    return "application/octet-stream";
+}
+
+void __http_server_static(HttpServer* srv, const char* prefix, const char* dir) {
+    if (!srv) return;
+    strncpy(srv->static_prefix, prefix, sizeof(srv->static_prefix) - 1);
+    strncpy(srv->static_dir, dir, sizeof(srv->static_dir) - 1);
+}
+
+/* Try to serve a static file. Returns 1 if served, 0 if not a static path. */
+static int try_serve_static(HttpServer* srv, server_socket_t client_fd,
+                            HttpServerRequest* req, int keep_alive) {
+    if (srv->static_prefix[0] == '\0') return 0;  /* no static dir configured */
+    if (strcmp(req->method, "GET") != 0) return 0; /* only GET for static */
+
+    int prefix_len = (int)strlen(srv->static_prefix);
+    if (strncmp(req->path, srv->static_prefix, prefix_len) != 0) return 0;
+
+    /* Build filesystem path */
+    const char* rel = req->path + prefix_len;
+    if (rel[0] == '/') rel++;  /* skip leading slash after prefix */
+
+    /* Security: reject directory traversal and dangerous characters.
+     * Block: ".." (raw and URL-encoded %2e), backticks, backslash */
+    if (strstr(rel, "..") != NULL ||
+        strstr(rel, "%2e") != NULL || strstr(rel, "%2E") != NULL ||
+        strchr(rel, '`') != NULL ||
+        strchr(rel, '\\') != NULL) {
+        HttpServerResponse resp403 = {.status = 403, .body = "Forbidden",
+            .content_type = "text/plain", .extra_headers = NULL};
+        send_response_ka(client_fd, &resp403, keep_alive);
+        return 1;
+    }
+
+    char filepath[2048];
+    snprintf(filepath, sizeof(filepath), "%s/%s", srv->static_dir, rel);
+
+    /* If path is empty or ends with /, try index.html */
+    int flen = (int)strlen(filepath);
+    if (flen > 0 && (filepath[flen - 1] == '/' || rel[0] == '\0')) {
+        if (filepath[flen - 1] != '/') strcat(filepath, "/");
+        strcat(filepath, "index.html");
+    }
+
+    FILE* f = fopen(filepath, "rb");
+    if (!f) return 0;  /* file not found, fall through to 404 */
+
+    /* Get file size */
+    fseek(f, 0, SEEK_END);
+    long file_size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    /* Read file */
+    char* file_data = (char*)malloc(file_size + 1);
+    if (!file_data) {
+        fclose(f);
+        return 0;
+    }
+    fread(file_data, 1, file_size, f);
+    fclose(f);
+    file_data[file_size] = '\0';
+
+    /* Send response */
+    const char* mime = mime_for_ext(filepath);
+    const char* conn = keep_alive ? "keep-alive" : "close";
+    char header[4096];
+    int hdr_len = snprintf(header, sizeof(header),
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: %s\r\n"
+        "Content-Length: %ld\r\n"
+        "Connection: %s\r\n"
+        "Server: Desi/0.1\r\n"
+        "Cache-Control: public, max-age=3600\r\n"
+        "\r\n", mime, file_size, conn);
+
+    send(client_fd, header, hdr_len, 0);
+    send(client_fd, file_data, file_size, 0);
+    free(file_data);
+    return 1;
+}
+
+/* ============================================================
  * Route Registration (Desi extern)
  * ============================================================ */
 
@@ -653,9 +768,27 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 resp_owned = 1;
             } else if (path_exists(srv, req->path)) {
                 resp = &default_405;
+            } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
+                /* Static file served — log and continue */
+                printf("%s %s → 200 [static]%s\n", req->method, req->path,
+                       keep_alive ? " [ka]" : "");
+                fflush(stdout);
+                requests_served++;
+                free_request(req);
+                if (!keep_alive) break;
+                continue;
             } else {
                 resp = &default_404;
             }
+        } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
+            /* Static file served (no routes mode) — log and continue */
+            printf("%s %s → 200 [static]%s\n", req->method, req->path,
+                   keep_alive ? " [ka]" : "");
+            fflush(stdout);
+            requests_served++;
+            free_request(req);
+            if (!keep_alive) break;
+            continue;
         } else {
             /* No routes registered — echo mode */
             char body[2048];
