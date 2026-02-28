@@ -156,6 +156,24 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: nil, Type: "ptr"})
 					return res
 
+				case "Supervisor":
+					// sync.Supervisor() -> supervisor_new(0, 4)
+					// strategy=0 (ONE_FOR_ONE), workers=4
+					if len(x.Args) != 0 {
+						panic("sync.Supervisor takes no arguments")
+					}
+					res := ls.b.FreshTemp("supervisor")
+					ls.b.Emit(&hir.Call{
+						Dst: res,
+						Fn:  "supervisor_new",
+						Args: []hir.Value{
+							hir.ConstInt{Text: "0"}, // ONE_FOR_ONE
+							hir.ConstInt{Text: "4"}, // 4 pool workers
+						},
+						Type: "ptr",
+					})
+					return res
+
 				case "RwLock":
 					// sync.RwLock(value) -> rwlock_new(boxed_value)
 					if len(x.Args) != 1 {
@@ -547,6 +565,48 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					optResult := ls.b.FreshTemp("try_recv_opt")
 					ls.b.Emit(&hir.Call{Dst: optResult, Fn: "Option.Some", Args: []hir.Value{boxPtr}, Type: "ptr"})
 					return optResult
+				}
+			}
+
+			// Supervisor methods: submit, start_child, stop, pool_size, child_count, is_running
+			if _, ok := feXType.(*types.Supervisor); ok {
+				supVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "stop":
+					ls.b.Emit(&hir.Call{Fn: "supervisor_stop", Args: []hir.Value{supVal}})
+					return hir.ConstNull{}
+				case "pool_size":
+					res := ls.b.FreshTemp("pool_size")
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "supervisor_pool_size", Args: []hir.Value{supVal}, Type: "i32"})
+					return res
+				case "child_count":
+					res := ls.b.FreshTemp("child_count")
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "supervisor_child_count", Args: []hir.Value{supVal}, Type: "i32"})
+					return res
+				case "is_running":
+					res := ls.b.FreshTemp("is_running")
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "__supervisor_is_running", Args: []hir.Value{supVal}, Type: "i32"})
+					return res
+				case "submit":
+					// sup.submit(fn) -> supervisor_submit(sup, fn, NULL)
+					if len(x.Args) > 0 {
+						if fnIdent, ok := x.Args[0].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: fnIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "supervisor_submit", Args: []hir.Value{supVal, fnRef, hir.ConstNull{}}})
+							return hir.ConstNull{}
+						}
+					}
+					return hir.ConstNull{}
+				case "start_child":
+					// sup.start_child(fn) -> supervisor_start_child(sup, fn, NULL)
+					if len(x.Args) > 0 {
+						if fnIdent, ok := x.Args[0].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: fnIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "supervisor_start_child", Args: []hir.Value{supVal, fnRef, hir.ConstNull{}}})
+							return hir.ConstNull{}
+						}
+					}
+					return hir.ConstNull{}
 				}
 			}
 
@@ -1080,6 +1140,21 @@ handlePrint:
 		if calleeName == "TaskGroup" && len(x.Args) == 0 {
 			res := ls.b.FreshTemp("taskgroup")
 			ls.b.Emit(&hir.Call{Dst: res, Fn: "taskgroup_new", Args: []hir.Value{}, Type: "ptr"})
+			return res
+		}
+
+		// Supervisor() - zero-arg constructor (from-import path)
+		if calleeName == "Supervisor" && len(x.Args) == 0 {
+			res := ls.b.FreshTemp("supervisor")
+			ls.b.Emit(&hir.Call{
+				Dst: res,
+				Fn:  "supervisor_new",
+				Args: []hir.Value{
+					hir.ConstInt{Text: "0"}, // ONE_FOR_ONE
+					hir.ConstInt{Text: "4"}, // 4 pool workers
+				},
+				Type: "ptr",
+			})
 			return res
 		}
 
