@@ -31,6 +31,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#include "supervisor.h"
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -232,9 +233,10 @@ static void free_request(HttpServerRequest* req) {
 }
 
 /* Find a header value by name (case-insensitive) */
-static const char* find_header(const char* headers, const char* name) {
+/* Thread-safe: writes into caller-provided buffer */
+static const char* find_header_safe(const char* headers, const char* name,
+                                     char* out_buf, int out_buf_size) {
     if (!headers || !name) return "";
-    static char value_buf[1024];
 
     int name_len = strlen(name);
     const char* p = headers;
@@ -246,11 +248,11 @@ static const char* find_header(const char* headers, const char* name) {
             while (*p == ' ') p++;
             /* Copy until \r\n or end */
             int i = 0;
-            while (*p && *p != '\r' && *p != '\n' && i < 1023) {
-                value_buf[i++] = *p++;
+            while (*p && *p != '\r' && *p != '\n' && i < out_buf_size - 1) {
+                out_buf[i++] = *p++;
             }
-            value_buf[i] = '\0';
-            return value_buf;
+            out_buf[i] = '\0';
+            return out_buf;
         }
         /* Skip to next line */
         while (*p && *p != '\n') p++;
@@ -277,7 +279,11 @@ const char* __http_req_body(HttpServerRequest* req) {
 
 const char* __http_req_header(HttpServerRequest* req, const char* name) {
     if (!req || !req->headers) return "";
-    return find_header(req->headers, name);
+    /* Thread-safe: use stack-allocated buffer, return strdup */
+    char buf[1024];
+    const char* val = find_header_safe(req->headers, name, buf, sizeof(buf));
+    if (val == buf) return strdup(buf);  /* caller must free, but Desi GC handles it */
+    return "";
 }
 
 const char* __http_req_query(HttpServerRequest* req) {
@@ -634,7 +640,23 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
     free_request(req);
 }
 
-/* ---- Blocking accept loop with graceful shutdown ---- */
+/* ---- Client task for supervisor pool dispatch ---- */
+
+typedef struct {
+    HttpServer*      srv;
+    server_socket_t  client_fd;
+} ClientTask;
+
+static void client_task_fn(void* arg) {
+    ClientTask* task = (ClientTask*)arg;
+    handle_client(task->srv, task->client_fd);
+    free(task);
+}
+
+/* Default pool size for HTTP server workers */
+#define HTTP_SERVER_POOL_SIZE 8
+
+/* ---- Blocking accept loop with Supervisor pool + graceful shutdown ---- */
 
 void __http_server_run(HttpServer* srv) {
     if (!srv) {
@@ -644,7 +666,16 @@ void __http_server_run(HttpServer* srv) {
 
     install_signal_handlers();
 
+    /* Create supervisor with worker pool for concurrent request handling */
+    Supervisor* sup = supervisor_new(0, HTTP_SERVER_POOL_SIZE);  /* ONE_FOR_ONE, 8 workers */
+    if (!sup) {
+        fprintf(stderr, "http_server: failed to create supervisor\n");
+        free_server(srv);
+        return;
+    }
+
     printf("\033[32m✓ Desi HTTP Server listening on http://0.0.0.0:%d\033[0m\n", srv->port);
+    printf("  Workers: %d\n", HTTP_SERVER_POOL_SIZE);
     if (srv->route_count > 0) {
         printf("  Routes:\n");
         for (int i = 0; i < srv->route_count; i++) {
@@ -669,8 +700,21 @@ void __http_server_run(HttpServer* srv) {
             continue;
         }
 
-        handle_client(srv, client_fd);
+        /* Dispatch to supervisor pool for concurrent handling */
+        ClientTask* task = (ClientTask*)malloc(sizeof(ClientTask));
+        if (task) {
+            task->srv = srv;
+            task->client_fd = client_fd;
+            supervisor_submit(sup, client_task_fn, task);
+        } else {
+            /* Fallback: handle synchronously if malloc fails */
+            handle_client(srv, client_fd);
+        }
     }
+
+    /* Graceful shutdown: drain queue, join workers, free supervisor */
+    supervisor_stop(sup);
+    free(sup);  /* supervisor_stop doesn't free the struct itself (idempotent design) */
 
     /* Cleanup — free server struct, routes, and socket */
     free_server(srv);
