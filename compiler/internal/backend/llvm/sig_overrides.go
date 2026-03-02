@@ -100,6 +100,18 @@ func init() {
 	SetFuncSig("__http_req_cookie", "ptr", nil)
 	SetFuncSig("__http_resp_cookie", "void", nil)
 
+	// WebSocket runtime overrides
+	SetFuncSig("__ws_send", "void", nil)
+	SetFuncSig("__ws_broadcast", "void", nil)
+	SetFuncSig("__ws_close", "void", nil)
+	SetFuncSig("__ws_join", "void", nil)
+	SetFuncSig("__ws_leave", "void", nil)
+	SetFuncSig("__ws_to_room", "void", nil)
+	SetFuncSig("__ws_set_path", "void", nil)
+	SetFuncSig("__ws_set_on_message", "void", nil)
+	SetFuncSig("__ws_set_on_open", "void", nil)
+	SetFuncSig("__ws_set_on_close", "void", nil)
+
 	// JSON runtime overrides
 	SetFuncSig("__json_parse", "ptr", nil)
 	SetFuncSig("__json_stringify", "ptr", nil)

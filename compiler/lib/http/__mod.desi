@@ -506,3 +506,49 @@ pub def get_cookie(req: Any, name: str) -> str:
 # Automatically adds HttpOnly, SameSite=Lax, Path=/
 pub def set_cookie(resp: Any, name: str, value: str, max_age: int) -> none:
 	__http_resp_cookie(resp, name, value, max_age)
+
+# ============================================================
+# WebSocket API
+# ============================================================
+
+# Register a WebSocket endpoint with message handler
+# Handler: def on_message(conn: int, msg: str) -> none
+# Note: lowerer intercepts http.ws() and emits __ws_set_path + __ws_set_on_message
+pub def ws(srv: Any, path: str, handler: Any) -> none:
+	return
+
+# Set handler called when a WebSocket client connects
+# Handler: def on_open(conn: int) -> none
+# Note: lowerer intercepts and emits __ws_set_on_open
+pub def ws_on_open(srv: Any, handler: Any) -> none:
+	return
+
+# Set handler called when a WebSocket client disconnects
+# Handler: def on_close(conn: int) -> none
+# Note: lowerer intercepts and emits __ws_set_on_close
+pub def ws_on_close(srv: Any, handler: Any) -> none:
+	return
+
+# Send a text message to a single WebSocket connection
+pub def ws_send(conn: int, msg: str) -> none:
+	__ws_send(conn, msg)
+
+# Broadcast a text message to all connected WebSocket clients
+pub def ws_broadcast(srv: Any, msg: str) -> none:
+	__ws_broadcast(msg)
+
+# Close a WebSocket connection
+pub def ws_close(conn: int) -> none:
+	__ws_close(conn)
+
+# Join a room (for targeted broadcasting)
+pub def ws_join(conn: int, room: str) -> none:
+	__ws_join(conn, room)
+
+# Leave a room
+pub def ws_leave(conn: int, room: str) -> none:
+	__ws_leave(conn, room)
+
+# Broadcast a message to all clients in a specific room
+pub def ws_to_room(srv: Any, room: str, msg: str) -> none:
+	__ws_to_room(room, msg)
