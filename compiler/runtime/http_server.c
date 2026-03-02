@@ -975,6 +975,10 @@ HttpServer* __http_server_new(int port) {
     srv->routes = NULL;
     srv->route_count = 0;
     srv->route_cap = 0;
+    /* Default CORS: allow all origins (can be overridden via __http_server_cors) */
+    srv->cors_origin = strdup("*");
+    srv->cors_methods = strdup("GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    srv->cors_headers = strdup("Content-Type, Authorization, X-Requested-With");
 
     /* Create socket */
     srv->fd = socket(AF_INET, SOCK_STREAM, 0);
