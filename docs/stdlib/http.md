@@ -154,6 +154,27 @@ lower_call.go           ← Intercepts http.serve(srv, handler) to emit handler 
 | `__http_req_body(req)` | Get request body |
 | `__http_req_header(req, name)` | Get specific header |
 | `__http_req_query(req)` | Get query string |
+| `__http_req_param(req, key)` | Get query parameter |
+| `__http_req_path_param(req, name)` | Get path parameter (`:id`) |
+| `__http_server_route(srv, method, path, fn)` | Register route handler |
+| `__http_server_static(srv, prefix, dir)` | Register static file serving |
+| `__http_server_max_body(srv, bytes)` | Set max request body size |
+| `__http_server_use(srv, fn)` | Register middleware |
+| `__http_server_rate_limit(srv, max, window)` | Configure rate limiting |
+| `__http_resp_header(resp, key, value)` | Add custom response header |
+| `__http_server_cors(srv, origin)` | Configure CORS (default: `*`) |
+| `__http_req_cookie(req, name)` | Read cookie from request |
+| `__http_resp_cookie(resp, name, value, max_age)` | Set cookie on response |
+| `__ws_send(fd, msg)` | Send text to WS connection |
+| `__ws_broadcast(msg)` | Broadcast to all WS clients |
+| `__ws_close(fd)` | Close WS connection |
+| `__ws_join(fd, room)` | Join a WS room |
+| `__ws_leave(fd, room)` | Leave a WS room |
+| `__ws_to_room(room, msg)` | Broadcast to WS room |
+| `__ws_set_path(path)` | Set WS endpoint path |
+| `__ws_set_on_message(fn)` | Register WS message handler |
+| `__ws_set_on_open(fn)` | Register WS connect handler |
+| `__ws_set_on_close(fn)` | Register WS disconnect handler |
 
 ### Response Builders
 
@@ -654,3 +675,117 @@ All cookies automatically include:
 | `__http_req_cookie(req, name)` | Parse `Cookie:` header, return value |
 | `__http_resp_cookie(resp, name, value, max_age)` | Append `Set-Cookie` header |
 
+---
+
+## WebSockets
+
+Full-duplex, persistent connections for real-time features (chat, live updates, games).
+
+### Register a WebSocket Endpoint
+
+```desi
+import http
+
+def on_message(conn: int, msg: str) -> none:
+    print("Received: " + msg)
+    http.ws_send(conn, "Echo: " + msg)
+
+def main() -> int:
+    let srv = http.server(8080)
+    http.ws(srv, "/ws", on_message)
+    http.serve(srv)
+    return 0
+```
+
+Clients connect via `ws://localhost:8080/ws`.
+
+### Lifecycle Hooks
+
+```desi
+def on_open(conn: int) -> none:
+    print("Client connected: " + str(conn))
+
+def on_close(conn: int) -> none:
+    print("Client disconnected: " + str(conn))
+
+http.ws_on_open(srv, on_open)
+http.ws_on_close(srv, on_close)
+```
+
+### Send and Broadcast
+
+```desi
+# Send to one client
+http.ws_send(conn, "hello")
+
+# Broadcast to ALL connected clients
+http.ws_broadcast(srv, "announcement")
+
+# Close a connection
+http.ws_close(conn)
+```
+
+### Rooms
+
+Group clients for targeted messaging:
+
+```desi
+def on_message(conn: int, msg: str) -> none:
+    # Join a room on command
+    if msg == "/join lobby":
+        http.ws_join(conn, "lobby")
+        http.ws_send(conn, "Joined lobby")
+    else:
+        # Send to everyone in the room
+        http.ws_to_room(srv, "lobby", msg)
+
+# Leave a room
+http.ws_leave(conn, "room1")
+```
+
+### Complete Chat Server Example
+
+```desi
+import http
+
+let srv = http.server(0)
+
+def on_open(conn: int) -> none:
+    http.ws_join(conn, "chat")
+    http.ws_to_room(srv, "chat", "User joined!")
+
+def on_close(conn: int) -> none:
+    http.ws_to_room(srv, "chat", "User left!")
+
+def on_message(conn: int, msg: str) -> none:
+    http.ws_to_room(srv, "chat", msg)
+
+def main() -> int:
+    srv = http.server(8080)
+    http.ws(srv, "/ws", on_message)
+    http.ws_on_open(srv, on_open)
+    http.ws_on_close(srv, on_close)
+    http.serve(srv)
+    return 0
+```
+
+### WebSocket API Reference
+
+| Function | Description |
+|----------|-------------|
+| `http.ws(srv, path, handler)` | Register WS endpoint (handler: `conn, msg -> none`) |
+| `http.ws_on_open(srv, handler)` | Set connect handler (`conn -> none`) |
+| `http.ws_on_close(srv, handler)` | Set disconnect handler (`conn -> none`) |
+| `http.ws_send(conn, msg)` | Send text to one client |
+| `http.ws_broadcast(srv, msg)` | Send to all connected clients |
+| `http.ws_close(conn)` | Close a connection |
+| `http.ws_join(conn, room)` | Join a room |
+| `http.ws_leave(conn, room)` | Leave a room |
+| `http.ws_to_room(srv, room, msg)` | Broadcast to a room |
+
+### WebSocket Limits
+
+- Max 256 concurrent connections
+- Max 32 rooms per connection
+- Max 16MB per message frame
+- Auto ping/pong for connection health
