@@ -316,6 +316,25 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						ls.b.Emit(&hir.Call{Fn: "__http_server_rate_limit", Args: []hir.Value{srvVal, maxVal, windowVal}})
 						return hir.ConstNull{}
 					}
+
+				case "cors":
+					// http.cors(srv, origin) → __http_server_cors(srv, origin)
+					if len(x.Args) == 2 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						originVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_cors", Args: []hir.Value{srvVal, originVal}})
+						return hir.ConstNull{}
+					}
+
+				case "header":
+					// http.header(resp, key, value) → __http_resp_header(resp, key, value)
+					if len(x.Args) == 3 {
+						respVal := ls.lowerExpr(x.Args[0])
+						keyVal := ls.lowerExpr(x.Args[1])
+						valVal := ls.lowerExpr(x.Args[2])
+						ls.b.Emit(&hir.Call{Fn: "__http_resp_header", Args: []hir.Value{respVal, keyVal, valVal}})
+						return hir.ConstNull{}
+					}
 				}
 			}
 			if t, ok := feXType.(*types.Dict); ok {

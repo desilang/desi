@@ -154,12 +154,19 @@ typedef struct {
     RateBucket rate_buckets[MAX_RATE_BUCKETS];
     int rate_max;          /* max tokens (0 = disabled) */
     int rate_window;       /* refill window in seconds */
+    /* CORS */
+    char* cors_origin;     /* allowed origin (NULL = no CORS headers) */
+    char* cors_methods;    /* allowed methods */
+    char* cors_headers;    /* allowed headers */
 } HttpServer;
 
 static void free_server(HttpServer* srv) {
     if (!srv) return;
     if (srv->fd != INVALID_SOCK) CLOSE_SOCKET(srv->fd);
     free(srv->routes);
+    free(srv->cors_origin);
+    free(srv->cors_methods);
+    free(srv->cors_headers);
     free(srv);
 }
 
@@ -515,6 +522,94 @@ static void free_response(HttpServerResponse* resp) {
     free(resp);
 }
 
+/* ---- Custom Response Headers ---- */
+
+void __http_resp_header(HttpServerResponse* resp, const char* key, const char* value) {
+    if (!resp || !key || !value) return;
+    /* Build "Key: Value\r\n" */
+    size_t klen = strlen(key);
+    size_t vlen = strlen(value);
+    size_t hdr_len = klen + 2 + vlen + 2; /* key: value\r\n */
+    if (resp->extra_headers) {
+        size_t old_len = strlen(resp->extra_headers);
+        resp->extra_headers = (char*)realloc(resp->extra_headers, old_len + hdr_len + 1);
+        sprintf(resp->extra_headers + old_len, "%s: %s\r\n", key, value);
+    } else {
+        resp->extra_headers = (char*)malloc(hdr_len + 1);
+        sprintf(resp->extra_headers, "%s: %s\r\n", key, value);
+    }
+}
+
+/* ---- CORS Configuration ---- */
+
+void __http_server_cors(HttpServer* srv, const char* origin) {
+    if (!srv || !origin) return;
+    free(srv->cors_origin);
+    free(srv->cors_methods);
+    free(srv->cors_headers);
+    srv->cors_origin = strdup(origin);
+    srv->cors_methods = strdup("GET, POST, PUT, DELETE, PATCH, OPTIONS");
+    srv->cors_headers = strdup("Content-Type, Authorization, X-Requested-With");
+}
+
+/* ---- Cookie Helpers ---- */
+
+/* Parse Cookie header: "name1=val1; name2=val2" → value for name */
+const char* __http_req_cookie(HttpServerRequest* req, const char* name) {
+    static __thread char cookie_val[512];
+    if (!req || !name) return "";
+    const char* cookies = find_header_safe(req->headers, "Cookie",
+                                           cookie_val, sizeof(cookie_val));
+    if (!cookies || !cookies[0]) return "";
+    /* Search for name= in cookie string */
+    size_t nlen = strlen(name);
+    const char* p = cookies;
+    while (*p) {
+        /* skip whitespace */
+        while (*p == ' ') p++;
+        if (strncmp(p, name, nlen) == 0 && p[nlen] == '=') {
+            /* Found it — extract value until ; or end */
+            const char* val_start = p + nlen + 1;
+            const char* val_end = val_start;
+            while (*val_end && *val_end != ';') val_end++;
+            size_t vlen = val_end - val_start;
+            if (vlen >= sizeof(cookie_val)) vlen = sizeof(cookie_val) - 1;
+            memcpy(cookie_val, val_start, vlen);
+            cookie_val[vlen] = '\0';
+            return cookie_val;
+        }
+        /* Skip to next cookie */
+        while (*p && *p != ';') p++;
+        if (*p == ';') p++;
+    }
+    return "";
+}
+
+/* Set-Cookie: name=value; Max-Age=N; Path=/; HttpOnly; SameSite=Lax */
+void __http_resp_cookie(HttpServerResponse* resp, const char* name,
+                        const char* value, int max_age) {
+    if (!resp || !name || !value) return;
+    char cookie_hdr[1024];
+    if (max_age > 0) {
+        snprintf(cookie_hdr, sizeof(cookie_hdr),
+            "Set-Cookie: %s=%s; Max-Age=%d; Path=/; HttpOnly; SameSite=Lax\r\n",
+            name, value, max_age);
+    } else {
+        snprintf(cookie_hdr, sizeof(cookie_hdr),
+            "Set-Cookie: %s=%s; Path=/; HttpOnly; SameSite=Lax\r\n",
+            name, value);
+    }
+    /* Append to extra_headers */
+    if (resp->extra_headers) {
+        size_t old_len = strlen(resp->extra_headers);
+        size_t new_len = strlen(cookie_hdr);
+        resp->extra_headers = (char*)realloc(resp->extra_headers, old_len + new_len + 1);
+        memcpy(resp->extra_headers + old_len, cookie_hdr, new_len + 1);
+    } else {
+        resp->extra_headers = strdup(cookie_hdr);
+    }
+}
+
 /* ============================================================
  * HTTP Status Text
  * ============================================================ */
@@ -623,7 +718,6 @@ static void send_response_ka(server_socket_t client_fd, HttpServerResponse* resp
         "Content-Length: %d\r\n"
         "Connection: %s\r\n"
         "Server: Desi/0.1\r\n"
-        "Access-Control-Allow-Origin: *\r\n"
         "%s"
         "\r\n",
         resp->status, status_text(resp->status),
@@ -987,6 +1081,31 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
             continue;
         }
 
+        /* ---- CORS preflight auto-handler ---- */
+        if (srv->cors_origin && strcmp(req->method, "OPTIONS") == 0) {
+            char cors_hdrs[1024];
+            snprintf(cors_hdrs, sizeof(cors_hdrs),
+                "Access-Control-Allow-Origin: %s\r\n"
+                "Access-Control-Allow-Methods: %s\r\n"
+                "Access-Control-Allow-Headers: %s\r\n"
+                "Access-Control-Max-Age: 86400\r\n",
+                srv->cors_origin,
+                srv->cors_methods ? srv->cors_methods : "GET, POST, PUT, DELETE, PATCH, OPTIONS",
+                srv->cors_headers ? srv->cors_headers : "Content-Type, Authorization");
+            HttpServerResponse preflight = {
+                .status = 204, .body = "",
+                .content_type = "text/plain",
+                .extra_headers = cors_hdrs
+            };
+            send_response_ka(client_fd, &preflight, keep_alive);
+            printf("%s %s → 204 [CORS preflight]\n", req->method, req->path);
+            fflush(stdout);
+            requests_served++;
+            free_request(req);
+            if (!keep_alive) break;
+            continue;
+        }
+
         /* ---- Middleware chain ---- */
         HttpServerResponse* resp = NULL;
         int resp_owned = 0;
@@ -1041,6 +1160,11 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 resp = __http_resp_new(200, body, "application/json");
                 resp_owned = 1;
             }
+        }
+
+        /* ---- Inject CORS origin header if configured ---- */
+        if (srv->cors_origin && resp) {
+            __http_resp_header(resp, "Access-Control-Allow-Origin", srv->cors_origin);
         }
 
         send_response_ka(client_fd, resp, keep_alive);
