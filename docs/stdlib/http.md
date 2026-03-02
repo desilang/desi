@@ -538,11 +538,16 @@ def greet(req: Any) -> Any:
 def create_user(req: Any) -> Any:
     let body = http.req_json(req)
     let name = json.get_string(json.object_get(body, "name"))
-    return http.json(201, {"created": name})
+    let resp = http.json(201, {"created": name})
+    http.set_cookie(resp, "session", "abc123", 3600)
+    return resp
 
 def user_profile(req: Any) -> Any:
     let id = http.req_path_param(req, "id")
-    return http.json(200, {"user_id": id})
+    let session = http.get_cookie(req, "session")
+    let resp = http.json(200, {"user_id": id, "session": session})
+    http.header(resp, "X-Request-Id", "req-42")
+    return resp
 
 def main() -> int:
     let srv = http.server(8080)
@@ -550,6 +555,7 @@ def main() -> int:
     # Security
     http.max_body(srv, 1024 * 512)
     http.rate_limit(srv, 100, 60)
+    http.cors(srv, "*")
 
     # Middleware
     http.use(srv, logger)
@@ -563,3 +569,88 @@ def main() -> int:
     http.serve(srv)
     return 0
 ```
+
+---
+
+## Custom Response Headers
+
+Add arbitrary headers to any response:
+
+### Desi API
+
+```desi
+let resp = http.text(200, "Hello!")
+http.header(resp, "X-Request-Id", "abc-123")
+http.header(resp, "X-Custom", "value")
+return resp
+```
+
+### C Runtime
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_resp_header(resp, key, value)` | Append `Key: Value\r\n` to response `extra_headers` |
+
+---
+
+## CORS (Cross-Origin Resource Sharing)
+
+Enable cross-origin requests from browsers:
+
+### Desi API
+
+```desi
+# Allow all origins
+http.cors(srv, "*")
+
+# Allow specific origin
+http.cors(srv, "https://example.com")
+```
+
+### Behavior
+
+- **Preflight:** `OPTIONS` requests auto-return `204 No Content` with:
+  - `Access-Control-Allow-Origin`, `Access-Control-Allow-Methods`, `Access-Control-Allow-Headers`
+  - `Access-Control-Max-Age: 86400` (24h cache)
+- **Regular requests:** `Access-Control-Allow-Origin` header auto-injected
+- **Defaults:** Methods: `GET, POST, PUT, DELETE, PATCH, OPTIONS`. Headers: `Content-Type, Authorization, X-Requested-With`
+
+### C Runtime
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_cors(srv, origin)` | Configure CORS origin + defaults |
+
+---
+
+## Cookies
+
+Read and write HTTP cookies:
+
+### Desi API
+
+```desi
+# Read cookie from request
+let session = http.get_cookie(req, "session_id")
+
+# Set cookie on response (name, value, max_age_seconds)
+let resp = http.json(200, {"status": "ok"})
+http.set_cookie(resp, "session_id", "abc123", 3600)  # 1 hour
+http.set_cookie(resp, "prefs", "dark", 0)             # session cookie
+return resp
+```
+
+### Security Defaults
+
+All cookies automatically include:
+- `HttpOnly` — not accessible via JavaScript
+- `SameSite=Lax` — CSRF protection
+- `Path=/` — available site-wide
+
+### C Runtime
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_req_cookie(req, name)` | Parse `Cookie:` header, return value |
+| `__http_resp_cookie(resp, name, value, max_age)` | Append `Set-Cookie` header |
+
