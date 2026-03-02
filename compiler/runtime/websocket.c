@@ -25,6 +25,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <errno.h>
 #include "websocket.h"
 
 /* ============================================================

@@ -1071,6 +1071,9 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                     printf("%s %s \xe2\x86\x92 101 [ws upgrade]\n", req->method, req->path);
                     fflush(stdout);
                     free_request(req);
+                    /* Clear the keep-alive recv timeout for WS (persistent conn) */
+                    struct timeval notimeout = {0, 0};
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &notimeout, sizeof(notimeout));
                     ws_do_handshake(client_fd, ws_key);
                     ws_session_loop(client_fd);
                     return; /* connection taken over by WS */
