@@ -273,3 +273,293 @@ let resp = http.request_json("POST", url, data, 30)      # JSON + 30s timeout
 5. Rebuild with `make clean && make`
 6. Test with `desic run test_file.desi`
 
+---
+
+## Routing API
+
+Register handlers for specific HTTP methods and URL patterns:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_route(srv, method, path, fn)` | Register route with method + path |
+
+### Desi API
+
+| Function | Description |
+|----------|-------------|
+| `http.get(srv, path, handler)` | Register GET handler |
+| `http.post(srv, path, handler)` | Register POST handler |
+| `http.put(srv, path, handler)` | Register PUT handler |
+| `http.delete(srv, path, handler)` | Register DELETE handler |
+| `http.patch(srv, path, handler)` | Register PATCH handler |
+| `http.route(srv, method, path, handler)` | Register any method |
+
+### Example
+
+```desi
+import http
+
+def hello(req: Any) -> Any:
+    return http.text(200, "Hello!")
+
+def main() -> int:
+    let srv = http.server(8080)
+    http.get(srv, "/hello", hello)
+    http.serve(srv)
+    return 0
+```
+
+### Route Matching
+
+Routes are matched in priority order:
+1. **Exact match** — method + path
+2. **Wildcard method** — `*` matches any method
+3. **Path patterns** — `:param` segments (see below)
+
+---
+
+## Path Parameters
+
+Use `:param` syntax in route patterns to capture URL segments:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_req_path_param(req, name)` | Get captured path parameter |
+
+### Desi API
+
+```desi
+def user_handler(req: Any) -> Any:
+    let id = http.req_path_param(req, "id")
+    return http.json(200, {"user_id": id})
+
+http.get(srv, "/users/:id", user_handler)
+# GET /users/42 → {"user_id":"42"}
+```
+
+Multiple parameters:
+
+```desi
+def post_handler(req: Any) -> Any:
+    let category = http.req_path_param(req, "category")
+    let slug = http.req_path_param(req, "slug")
+    return http.json(200, {"category": category, "slug": slug})
+
+http.get(srv, "/posts/:category/:slug", post_handler)
+# GET /posts/tech/hello → {"category":"tech","slug":"hello"}
+```
+
+**Implementation:**
+- `match_path_pattern()` splits pattern and path by `/`, matches segments
+- Parameters stored in `HttpServerRequest.param_names[8]` / `param_values[8]`
+- Max 8 parameters per route
+
+---
+
+## Query Parameters
+
+Parse query string parameters from URLs:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_req_param(req, key)` | Extract query parameter by key |
+
+### Desi API
+
+```desi
+def search(req: Any) -> Any:
+    let q = http.req_param(req, "q")       # ?q=desi
+    let page = http.req_param(req, "page") # ?page=2
+    return http.json(200, {"query": q, "page": page})
+
+http.get(srv, "/search", search)
+# GET /search?q=desi&page=2 → {"query":"desi","page":"2"}
+```
+
+Returns `""` if the parameter is not present.
+
+---
+
+## Request Body as JSON
+
+Parse POST/PUT/PATCH request bodies as JSON:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_req_json(req)` | Parse body via `__json_parse()`, returns `JsonNode*` |
+
+### Desi API
+
+```desi
+import http
+import json
+
+def api_handler(req: Any) -> Any:
+    let body = http.req_json(req)
+    let name = json.get_string(json.object_get(body, "name"))
+    return http.json(200, {"hello": name})
+
+http.post(srv, "/api/users", api_handler)
+```
+
+Returns `none` if the body is empty or invalid JSON.
+
+---
+
+## Body Size Limits
+
+Reject oversized request bodies before they consume server memory:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_max_body(srv, max_bytes)` | Set max body size |
+
+### Desi API
+
+```desi
+http.max_body(srv, 1024 * 512)   # 512KB max
+```
+
+- Default: 1MB (1,048,576 bytes)
+- Oversized requests receive `413 Payload Too Large` with JSON error body
+- Checked via `Content-Length` header before reading body
+
+---
+
+## Rate Limiting
+
+Token-bucket rate limiting per client IP:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_rate_limit(srv, max, window)` | Configure rate limiter |
+
+### Desi API
+
+```desi
+http.rate_limit(srv, 60, 60)   # 60 requests per 60 seconds per IP
+```
+
+- Returns `429 Too Many Requests` with `Retry-After` header
+- Token bucket refills based on elapsed time
+- Tracked per IP address (up to 256 buckets)
+
+---
+
+## Middleware
+
+Run functions before route handlers for logging, auth, etc.:
+
+### Server C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `__http_server_use(srv, fn)` | Register middleware function |
+
+### Desi API
+
+```desi
+# Middleware: return none to pass through, return response to short-circuit
+def auth_check(req: Any) -> Any:
+    let token = http.req_header(req, "Authorization")
+    if token == "":
+        return http.json(401, {"error": "unauthorized"})
+    return none   # pass through to route handler
+
+def logger(req: Any) -> Any:
+    print(http.req_method(req) + " " + http.req_path(req))
+    return none
+
+http.use(srv, logger)
+http.use(srv, auth_check)
+```
+
+- Up to 16 middleware functions
+- Executed in registration order
+- Return `none` → continue chain
+- Return response → short-circuit (skip remaining middleware + handler)
+
+---
+
+## Static File Serving
+
+### Desi API
+
+```desi
+http.serve_static(srv, "/static", "./public")
+# GET /static/style.css → serves ./public/style.css
+```
+
+- 25+ MIME types supported
+- 1-hour `Cache-Control` headers
+- **Security:** blocks `..`, `%2e`, backticks, backslashes → `403 Forbidden`
+
+---
+
+## Keep-Alive Connections
+
+HTTP/1.1 keep-alive is enabled by default:
+
+- **Idle timeout:** 15 seconds
+- **Max requests per connection:** 100
+- Respects `Connection: close` header
+- Server logs: `[ka]` for keep-alive, `[close]` for closed
+
+---
+
+## Complete Server Example
+
+```desi
+import http
+import json
+
+def logger(req: Any) -> Any:
+    print(http.req_method(req) + " " + http.req_path(req))
+    return none
+
+def greet(req: Any) -> Any:
+    let name = http.req_param(req, "name")
+    if name == "":
+        name = "stranger"
+    return http.text(200, "Hello, " + name + "!")
+
+def create_user(req: Any) -> Any:
+    let body = http.req_json(req)
+    let name = json.get_string(json.object_get(body, "name"))
+    return http.json(201, {"created": name})
+
+def user_profile(req: Any) -> Any:
+    let id = http.req_path_param(req, "id")
+    return http.json(200, {"user_id": id})
+
+def main() -> int:
+    let srv = http.server(8080)
+
+    # Security
+    http.max_body(srv, 1024 * 512)
+    http.rate_limit(srv, 100, 60)
+
+    # Middleware
+    http.use(srv, logger)
+
+    # Routes
+    http.get(srv, "/greet", greet)
+    http.post(srv, "/users", create_user)
+    http.get(srv, "/users/:id", user_profile)
+    http.serve_static(srv, "/static", "./public")
+
+    http.serve(srv)
+    return 0
+```
