@@ -46,6 +46,18 @@ typedef struct JsonNode {
 | `__json_get_string(ptr)` | `json.get_string()` | `ptr` |
 | `__json_array_get(ptr, i32)` | `json.array_get()` | `ptr` |
 | `__json_object_get(ptr, ptr)` | `json.object_get()` | `ptr` |
+| `__json_object_key(ptr, i32)` | `json.object_key()` | `ptr` |
+| `__json_new_object()` | `json.new_object()` | `ptr` |
+| `__json_new_array()` | `json.new_array()` | `ptr` |
+| `__json_new_string(ptr)` | `json.new_string()` | `ptr` |
+| `__json_new_number(double)` | `json.new_number()` | `ptr` |
+| `__json_new_bool(i32)` | `json.new_bool()` | `ptr` |
+| `__json_new_null()` | `json.new_null()` | `ptr` |
+| `__json_object_set(ptr, ptr, ptr)` | `json.set()` | `void` |
+| `__json_array_push(ptr, ptr)` | `json.push()` | `void` |
+| `__json_object_remove(ptr, ptr)` | `json.remove()` | `void` |
+| `__json_object_keys(ptr)` | `json.keys()` | `ptr` |
+| `__json_free(ptr)` | internal | `void` |
 
 ### 2. Type Checker (`compiler/internal/check/expr_call.go`)
 
@@ -69,20 +81,41 @@ if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
 
 ### 3. Lowering (`compiler/internal/lower/lower_call.go`)
 
-Lowers `json.*` calls to HIR Call instructions around line 774-880:
+Lowers `json.*` calls to HIR Call instructions. Each builder maps to the corresponding C function:
 
 ```go
-if method == "get_int" && len(x.Args) >= 1 {
-    nodeVal := ls.lowerExpr(x.Args[0])
-    dst := ls.b.FreshTemp("json_int")
-    ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_get_int", Args: []hir.Value{nodeVal}, Type: "i64"})
+// Builder example
+if method == "new_object" && len(x.Args) == 0 {
+    dst := ls.b.FreshTemp("json_obj")
+    ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_object", Args: nil, Type: "ptr"})
     return dst
+}
+
+// Void mutation example
+if method == "set" && len(x.Args) >= 3 {
+    objVal := ls.lowerExpr(x.Args[0])
+    keyVal := ls.lowerExpr(x.Args[1])
+    valVal := ls.lowerExpr(x.Args[2])
+    ls.b.Emit(&hir.Call{Fn: "__json_object_set", Args: []hir.Value{objVal, keyVal, valVal}})
+    return hir.ConstNull{}
 }
 ```
 
-### 4. LLVM Emit (`compiler/internal/backend/llvm/emit_call.go`)
+### 4. Sig Overrides (`compiler/internal/backend/llvm/sig_overrides.go`)
 
-Emits correct LLVM IR for each C function around line 130-250:
+All `__json_*` functions are registered in `sig_overrides.go` with correct LLVM return types. This prevents the LLVM backend from defaulting to `i32`:
+
+```go
+SetFuncSig("__json_new_object", "ptr", nil)
+SetFuncSig("__json_object_set", "void", nil)
+// ... etc (19 total)
+```
+
+**Why this is needed:** Without sig overrides, the LLVM IR generator declares unknown extern functions as `declare i32 @fn(...)`, causing type mismatches when the caller expects `ptr` (string/node pointer).
+
+### 5. LLVM Emit (`compiler/internal/backend/llvm/emit_call.go`)
+
+Emits correct LLVM IR for each C function. Example:
 
 ```go
 if c.Fn == "__json_get_int" && len(c.Args) == 1 {
@@ -90,7 +123,6 @@ if c.Fn == "__json_get_int" && len(c.Args) == 1 {
     dst := c.Dst.Name
     _, nodeVal := m.operand(c.Args[0])
     wprintf(&m.funcs, "  %s = call i64 @__json_get_int(ptr %s)\n", dst, nodeVal)
-    // Track type for f-string formatting
     m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"
     return
 }
@@ -100,7 +132,7 @@ if c.Fn == "__json_get_int" && len(c.Args) == 1 {
 - F-string formatting (uses correct printf format)
 - Branch instructions (uses correct LLVM type)
 
-### 5. Type Tracking Pattern
+### 6. Type Tracking Pattern
 
 For functions returning non-i32 types, store in `tempTypes`:
 
@@ -114,14 +146,25 @@ m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"  // or "double", "ptr", "i1"
 
 This prevents `inferType()` from defaulting to `i32`.
 
+## Builder Design
+
+Builders create new `JsonNode*` on the heap via `calloc`/`malloc`:
+
+- **Ownership:** caller owns the node. Nodes set via `object_set`/`array_push` become children of the parent.
+- **Update semantics:** `object_set` on existing key frees the old value before replacing.
+- **Remove:** `object_remove` frees key + value and shifts remaining entries.
+- **Keys:** `object_keys` returns a NEW array of NEW string nodes (caller owns both).
+
 ## Adding New JSON Functions
 
 1. **C Runtime:** Add function in `json.c`
-2. **Type Checker:** Add case in `expr_call.go` json switch
-3. **Lowering:** Add handler in `lower_call.go` json block
-4. **LLVM Emit:** Add emit handler in `emit_call.go`
-5. **Test:** Add test case in example file
-6. **Document:** Update learner and contributor docs
+2. **Sig Override:** Register in `sig_overrides.go` with correct return type
+3. **Type Checker:** Add case in `expr_call.go` json switch
+4. **Lowering:** Add handler in `lower_call.go` json block
+5. **LLVM Emit:** Add emit handler in `emit_call.go`
+6. **Desi API:** Add wrapper in `json.desi`
+7. **Test:** Add test case in example file
+8. **Document:** Update learner (`docs/stdlib/json.md`) and contributor docs
 
 ## Number Handling Design
 
@@ -136,13 +179,16 @@ This gives:
 - Type safety: explicit accessor choice
 - Flexibility: use either depending on context
 
-## Files Changed
+## Files
 
 | File | Purpose |
 |------|---------|
-| `compiler/runtime/json.c` | C runtime functions |
+| `compiler/runtime/json.c` | C runtime (parser, stringify, builders) |
+| `compiler/lib/json.desi` | Desi API wrappers |
 | `compiler/internal/check/expr_call.go` | Type checking |
 | `compiler/internal/lower/lower_call.go` | HIR lowering |
 | `compiler/internal/backend/llvm/emit_call.go` | LLVM IR emit |
-| `book/docs/stdlib/json.md` | Learner documentation |
-| `docs/dev/json_stdlib.md` | Contributor documentation |
+| `compiler/internal/backend/llvm/sig_overrides.go` | LLVM return type overrides |
+| `docs/stdlib/json.md` | Learner documentation |
+| `docs/contributing/stdlib/json_stdlib.md` | Contributor documentation |
+
