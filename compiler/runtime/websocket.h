@@ -41,7 +41,7 @@ extern WsState __ws_state;
 
 /* Handshake + session */
 int  ws_do_handshake(int fd, const char* client_key);
-void ws_session_loop(int client_fd);
+void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len);
 
 /* Frame operations */
 int ws_send_text(int fd, const char* msg, size_t len);

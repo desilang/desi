@@ -116,7 +116,7 @@ static void base64_encode(const uint8_t* in, size_t len, char* out) {
  * WebSocket Handshake (RFC 6455 §4.2.2)
  * ============================================================ */
 
-static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-5AB5DC76B00E";
+static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 int ws_do_handshake(int fd, const char* client_key) {
     if (!client_key || !client_key[0]) return -1;
@@ -142,7 +142,8 @@ int ws_do_handshake(int fd, const char* client_key) {
         "Sec-WebSocket-Accept: %s\r\n"
         "\r\n", accept_key);
 
-    return (int)WS_SEND(fd, response, len);
+    ssize_t sent = WS_SEND(fd, response, len);
+    return (int)sent;
 }
 
 /* ============================================================
@@ -167,11 +168,43 @@ typedef struct {
     size_t payload_len;
 } WsFrame;
 
-/* Read exactly n bytes, returns 0 on success, -1 on failure */
+/* ---- Per-connection recv prebuffer ----
+ * When handle_client reads the HTTP upgrade request via recv(), it may read
+ * bytes belonging to the WebSocket session (e.g. browser pipelined frame).
+ * These leftover bytes are stored here and drained BEFORE calling recv().
+ */
+typedef struct {
+    const uint8_t* data;
+    size_t         len;
+    size_t         pos;
+} WsRecvBuf;
+
+/* Thread-local so each worker's WS session has its own buffer */
+static _Thread_local WsRecvBuf _ws_prebuf = {NULL, 0, 0};
+
+static void ws_set_prebuf(const uint8_t* data, size_t len) {
+    _ws_prebuf.data = data;
+    _ws_prebuf.len  = len;
+    _ws_prebuf.pos  = 0;
+}
+
+/* Read exactly n bytes: drain prebuffer first, then call recv() */
 static int ws_recv_exact(int fd, void* buf, size_t n) {
-    size_t total = 0;
+    uint8_t* out   = (uint8_t*)buf;
+    size_t   total = 0;
+
+    /* 1. Drain prebuffer first */
+    if (_ws_prebuf.data && _ws_prebuf.pos < _ws_prebuf.len) {
+        size_t avail = _ws_prebuf.len - _ws_prebuf.pos;
+        size_t take  = avail < n ? avail : n;
+        memcpy(out, _ws_prebuf.data + _ws_prebuf.pos, take);
+        _ws_prebuf.pos += take;
+        total += take;
+    }
+
+    /* 2. Read remainder from socket */
     while (total < n) {
-        ssize_t r = WS_RECV(fd, (char*)buf + total, n - total);
+        ssize_t r = WS_RECV(fd, out + total, n - total);
         if (r <= 0) return -1;
         total += (size_t)r;
     }
@@ -414,7 +447,12 @@ void __ws_set_on_close(void* fn)   { __ws_state.on_close = fn; }
 typedef void (*ws_message_fn)(int conn_fd, const char* msg);
 typedef void (*ws_lifecycle_fn)(int conn_fd);
 
-void ws_session_loop(int client_fd) {
+void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
+    /* Install any bytes that were already read past the HTTP headers */
+    ws_set_prebuf(prebuf, prebuf_len);
+
+
+
     /* Register connection */
     WsConnection* conn = ws_register_conn(client_fd);
     if (!conn) {
@@ -471,6 +509,9 @@ done:
 
     printf("[ws] client disconnected fd=%d (%d remaining)\n", client_fd, __ws_state.conn_count - 1);
     fflush(stdout);
+
+    /* Clear prebuffer (safety) */
+    ws_set_prebuf(NULL, 0);
 
     ws_unregister_conn(client_fd);
     close(client_fd);
