@@ -595,7 +595,7 @@ return resp
 
 ## CORS (Cross-Origin Resource Sharing)
 
-Enable cross-origin requests from browsers:
+CORS is **enabled by default** with `Access-Control-Allow-Origin: *`. Override for specific origins:
 
 ### Desi API
 
