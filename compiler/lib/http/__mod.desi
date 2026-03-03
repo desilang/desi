@@ -484,3 +484,25 @@ pub def use(srv: Any, middleware: Any) -> none:
 # Example: http.rate_limit(srv, 60, 60)  # 60 requests per 60 seconds per IP
 pub def rate_limit(srv: Any, max_requests: int, window_secs: int) -> none:
 	return
+
+# Set a custom header on a response
+# Example: http.header(resp, "X-Request-Id", "abc123")
+pub def header(resp: Any, key: str, value: str) -> none:
+	__http_resp_header(resp, key, value)
+
+# Enable CORS for the given origin ("*" for any, or specific domain)
+# Automatically handles OPTIONS preflight requests
+# Note: lowerer intercepts http.cors() and emits __http_server_cors(srv, origin)
+pub def cors(srv: Any, origin: str) -> none:
+	return
+
+# Get a cookie value from a request
+# Returns "" if cookie not found
+pub def get_cookie(req: Any, name: str) -> str:
+	return __http_req_cookie(req, name)
+
+# Set a cookie on a response
+# max_age in seconds (0 = session cookie)
+# Automatically adds HttpOnly, SameSite=Lax, Path=/
+pub def set_cookie(resp: Any, name: str, value: str, max_age: int) -> none:
+	__http_resp_cookie(resp, name, value, max_age)

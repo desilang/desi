@@ -95,6 +95,10 @@ func init() {
 	SetFuncSig("__http_server_max_body", "void", nil)
 	SetFuncSig("__http_server_use", "void", nil)
 	SetFuncSig("__http_server_rate_limit", "void", nil)
+	SetFuncSig("__http_resp_header", "void", nil)
+	SetFuncSig("__http_server_cors", "void", nil)
+	SetFuncSig("__http_req_cookie", "ptr", nil)
+	SetFuncSig("__http_resp_cookie", "void", nil)
 
 	// JSON runtime overrides
 	SetFuncSig("__json_parse", "ptr", nil)
