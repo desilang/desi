@@ -335,6 +335,38 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						ls.b.Emit(&hir.Call{Fn: "__http_resp_header", Args: []hir.Value{respVal, keyVal, valVal}})
 						return hir.ConstNull{}
 					}
+
+				case "ws":
+					// http.ws(srv, path, handler) → __ws_set_path(path) + __ws_set_on_message(@handler)
+					if len(x.Args) == 3 {
+						pathVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_set_path", Args: []hir.Value{pathVal}})
+						if handlerIdent, ok := x.Args[2].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_message", Args: []hir.Value{fnRef}})
+						}
+						return hir.ConstNull{}
+					}
+
+				case "ws_on_open":
+					// http.ws_on_open(srv, handler) → __ws_set_on_open(@handler)
+					if len(x.Args) == 2 {
+						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_open", Args: []hir.Value{fnRef}})
+							return hir.ConstNull{}
+						}
+					}
+
+				case "ws_on_close":
+					// http.ws_on_close(srv, handler) → __ws_set_on_close(@handler)
+					if len(x.Args) == 2 {
+						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
+							fnRef := hir.FuncRef{Name: handlerIdent.Name}
+							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_close", Args: []hir.Value{fnRef}})
+							return hir.ConstNull{}
+						}
+					}
 				}
 			}
 			if t, ok := feXType.(*types.Dict); ok {

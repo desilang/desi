@@ -32,6 +32,7 @@
 #include <errno.h>
 #include <signal.h>
 #include "supervisor.h"
+#include "websocket.h"
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -1055,6 +1056,26 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                               "Bad Request";
             send(client_fd, bad, strlen(bad), 0);
             break;
+        }
+
+        /* ---- WebSocket Upgrade Detection ---- */
+        if (req->headers) {
+            char upgrade_buf[64];
+            const char* upgrade = find_header_safe(req->headers, "Upgrade", upgrade_buf, sizeof(upgrade_buf));
+            if (upgrade && strcasecmp(upgrade, "websocket") == 0 &&
+                __ws_state.ws_path[0] && strcmp(req->path, __ws_state.ws_path) == 0) {
+                /* Extract Sec-WebSocket-Key */
+                char key_buf[128];
+                const char* ws_key = find_header_safe(req->headers, "Sec-WebSocket-Key", key_buf, sizeof(key_buf));
+                if (ws_key && ws_key[0]) {
+                    printf("%s %s \xe2\x86\x92 101 [ws upgrade]\n", req->method, req->path);
+                    fflush(stdout);
+                    free_request(req);
+                    ws_do_handshake(client_fd, ws_key);
+                    ws_session_loop(client_fd);
+                    return; /* connection taken over by WS */
+                }
+            }
         }
 
         /* Determine if connection should persist */
