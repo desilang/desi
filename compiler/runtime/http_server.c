@@ -1064,7 +1064,8 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
             char upgrade_buf[64];
             const char* upgrade = find_header_safe(req->headers, "Upgrade", upgrade_buf, sizeof(upgrade_buf));
             if (upgrade && strcasecmp(upgrade, "websocket") == 0 &&
-                __ws_state.ws_path[0] && strcmp(req->path, __ws_state.ws_path) == 0) {
+                (__ws_state.ws_path[0] && strcmp(req->path, __ws_state.ws_path) == 0 ||
+                 ws_find_route(req->path) != NULL)) {
                 /* Extract Sec-WebSocket-Key */
                 char key_buf[128];
                 const char* ws_key = find_header_safe(req->headers, "Sec-WebSocket-Key", key_buf, sizeof(key_buf));

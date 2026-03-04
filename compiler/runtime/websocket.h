@@ -21,6 +21,8 @@
 #define WS_MAX_CONNECTIONS 256
 #define WS_MAX_ROOMS 32
 #define WS_ROOM_NAME_LEN 64
+#define WS_MAX_PATHS 8
+#define WS_DEFAULT_MAX_MSG_SIZE (16 * 1024 * 1024) /* 16 MB */
 
 typedef struct {
     int  fd;
@@ -29,12 +31,24 @@ typedef struct {
 } WsConnection;
 
 typedef struct {
+    char path[1024];
+    void* on_message;   /* void (*)(int, const char*) */
+    void* on_binary;    /* void (*)(int, const char*, size_t) */
+    void* on_open;      /* void (*)(int) */
+    void* on_close;     /* void (*)(int) */
+} WsRoute;
+
+typedef struct {
     WsConnection conns[WS_MAX_CONNECTIONS];
     int conn_count;
-    void* on_message;
-    void* on_open;
-    void* on_close;
-    char  ws_path[1024];
+    void* on_message;   /* default message handler (legacy) */
+    void* on_open;      /* default open handler */
+    void* on_close;     /* default close handler */
+    char  ws_path[1024]; /* primary path (legacy) */
+    WsRoute routes[WS_MAX_PATHS];
+    int route_count;
+    size_t max_message_size; /* 0 = use default (16MB) */
+    int ping_interval_secs;  /* 0 = disabled */
 } WsState;
 
 extern WsState __ws_state;
@@ -45,12 +59,14 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len);
 
 /* Frame operations */
 int ws_send_text(int fd, const char* msg, size_t len);
+int ws_send_binary(int fd, const char* data, size_t len);
 int ws_send_close(int fd, uint16_t code);
 int ws_send_pong(int fd, const char* data, size_t len);
 int ws_send_ping(int fd);
 
 /* Desi API */
 void __ws_send(int conn_fd, const char* msg);
+void __ws_send_binary(int conn_fd, const char* data, int len);
 void __ws_broadcast(const char* msg);
 void __ws_close(int conn_fd);
 void __ws_join(int conn_fd, const char* room);
@@ -60,5 +76,14 @@ void __ws_set_path(const char* path);
 void __ws_set_on_message(void* fn);
 void __ws_set_on_open(void* fn);
 void __ws_set_on_close(void* fn);
+void __ws_set_max_message_size(int size);
+void __ws_set_ping_interval(int secs);
+
+/* Route-based API (multiple WS paths) */
+void __ws_route(const char* path, void* on_message);
+void __ws_route_on_open(const char* path, void* fn);
+void __ws_route_on_close(const char* path, void* fn);
+void __ws_route_on_binary(const char* path, void* fn);
+const WsRoute* ws_find_route(const char* path);
 
 #endif /* DESI_WEBSOCKET_H */

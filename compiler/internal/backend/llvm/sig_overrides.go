@@ -102,6 +102,7 @@ func init() {
 
 	// WebSocket runtime overrides
 	SetFuncSig("__ws_send", "void", nil)
+	SetFuncSig("__ws_send_binary", "void", nil)
 	SetFuncSig("__ws_broadcast", "void", nil)
 	SetFuncSig("__ws_close", "void", nil)
 	SetFuncSig("__ws_join", "void", nil)
@@ -111,6 +112,12 @@ func init() {
 	SetFuncSig("__ws_set_on_message", "void", nil)
 	SetFuncSig("__ws_set_on_open", "void", nil)
 	SetFuncSig("__ws_set_on_close", "void", nil)
+	SetFuncSig("__ws_set_max_message_size", "void", nil)
+	SetFuncSig("__ws_set_ping_interval", "void", nil)
+	SetFuncSig("__ws_route", "void", nil)
+	SetFuncSig("__ws_route_on_open", "void", nil)
+	SetFuncSig("__ws_route_on_close", "void", nil)
+	SetFuncSig("__ws_route_on_binary", "void", nil)
 
 	// JSON runtime overrides
 	SetFuncSig("__json_parse", "ptr", nil)

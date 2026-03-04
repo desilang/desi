@@ -508,7 +508,47 @@ pub def set_cookie(resp: Any, name: str, value: str, max_age: int) -> none:
 	__http_resp_cookie(resp, name, value, max_age)
 
 # ============================================================
-# WebSocket API
+# WebSocket — C Runtime Bindings
+# ============================================================
+
+@extern("C")
+def __ws_send(conn: int, msg: str) -> none
+
+@extern("C")
+def __ws_broadcast(msg: str) -> none
+
+@extern("C")
+def __ws_close(conn: int) -> none
+
+@extern("C")
+def __ws_join(conn: int, room: str) -> none
+
+@extern("C")
+def __ws_leave(conn: int, room: str) -> none
+
+@extern("C")
+def __ws_to_room(room: str, msg: str) -> none
+
+@extern("C")
+def __ws_set_path(path: str) -> none
+
+@extern("C")
+def __ws_set_on_message(fn: Any) -> none
+
+@extern("C")
+def __ws_set_on_open(fn: Any) -> none
+
+@extern("C")
+def __ws_set_on_close(fn: Any) -> none
+
+@extern("C")
+def __ws_set_max_message_size(size: int) -> none
+
+@extern("C")
+def __ws_set_ping_interval(secs: int) -> none
+
+# ============================================================
+# WebSocket — Public API
 # ============================================================
 
 # Register a WebSocket endpoint with message handler
@@ -537,6 +577,10 @@ pub def ws_send(conn: int, msg: str) -> none:
 pub def ws_broadcast(srv: Any, msg: str) -> none:
 	__ws_broadcast(msg)
 
+# Broadcast (no-srv form, for use inside callbacks)
+pub def ws_broadcast(msg: str) -> none:
+	__ws_broadcast(msg)
+
 # Close a WebSocket connection
 pub def ws_close(conn: int) -> none:
 	__ws_close(conn)
@@ -552,3 +596,20 @@ pub def ws_leave(conn: int, room: str) -> none:
 # Broadcast a message to all clients in a specific room
 pub def ws_to_room(srv: Any, room: str, msg: str) -> none:
 	__ws_to_room(room, msg)
+
+# Broadcast to room (no-srv form, for use inside callbacks)
+pub def ws_to_room(room: str, msg: str) -> none:
+	__ws_to_room(room, msg)
+
+# Set maximum incoming WebSocket message size in bytes (default: 16MB)
+# Messages exceeding this limit will be rejected and the connection closed
+# Note: lowerer intercepts and emits __ws_set_max_message_size
+pub def ws_max_message_size(srv: Any, max_bytes: int) -> none:
+	return
+
+# Set ping keepalive interval in seconds (default: disabled)
+# Server sends PING frames at this interval to keep connections alive
+# Set to 0 to disable
+# Note: lowerer intercepts and emits __ws_set_ping_interval
+pub def ws_ping_interval(srv: Any, secs: int) -> none:
+	return
