@@ -46,6 +46,10 @@ type Exports struct {
 	// Globals maps exported global variable names to their types.
 	// Allows "from module import CONST" to work.
 	Globals map[string]types.T
+
+	// TypeAliases maps exported type alias names to their underlying types.
+	// Allows "pub type Server = Any" to be recognized in function signatures.
+	TypeAliases map[string]types.T
 }
 
 // collectClasses extracts public class declarations from a module and populates out.Classes
@@ -174,8 +178,9 @@ func CollectExports(mod *ast.Module) *Exports {
 		FuncDefaults: map[string][][]bool{},
 		FuncDecls:    map[string][]*ast.FuncDecl{},
 
-		Classes: map[string]*types.Class{},
-		Globals: map[string]types.T{},
+		Classes:     map[string]*types.Class{},
+		Globals:     map[string]types.T{},
+		TypeAliases: map[string]types.T{},
 	}
 	if mod == nil {
 		return out
@@ -222,6 +227,33 @@ func CollectExports(mod *ast.Module) *Exports {
 		structTypes[sd.Name.Name] = &types.Struct{
 			Name:   sd.Name.Name,
 			Fields: fields,
+		}
+	}
+
+	// ========================================================================
+	// FIRST-C: Collect type aliases (so function param/return types can reference them)
+	// ========================================================================
+	typeAliases := map[string]types.T{}
+	for _, d := range mod.Decls {
+		td, ok := d.(*ast.TypeAliasDecl)
+		if !ok {
+			continue
+		}
+		if td.Target == nil {
+			continue
+		}
+		// Resolve the target type
+		if t, ok := types.FromName(td.Target.Name); ok {
+			// Wrap in TypeAlias for nominal typing
+			aliasType := &types.TypeAlias{
+				Name:   td.Name.Name,
+				Target: t,
+			}
+			typeAliases[td.Name.Name] = aliasType
+			// Only export pub type aliases
+			if td.Pub {
+				out.TypeAliases[td.Name.Name] = aliasType
+			}
 		}
 	}
 
@@ -314,6 +346,10 @@ func CollectExports(mod *ast.Module) *Exports {
 		// Then try structs defined in this module
 		if st, ok := structTypes[tn.Name]; ok {
 			return st, true
+		}
+		// Then try type aliases defined in this module
+		if alias, ok := typeAliases[tn.Name]; ok {
+			return alias, true
 		}
 		return nil, false
 	}
