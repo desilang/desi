@@ -325,38 +325,57 @@ int ws_send_ping(int fd) {
 /* Global WS state (shared with http_server.c via websocket.h) */
 WsState __ws_state = {0};
 
-/* Register a connection */
+/* Initialize WS state lock — must be called before accepting connections.
+ * NOTE: Only initializes the rwlock. Handler pointers and paths are set
+ * BEFORE this call (by ws_set_path, ws_set_on_message, etc.), so we must
+ * NOT memset the state here. */
+void ws_state_init(void) {
+    DESI_RWLOCK_INIT(__ws_state.lock);
+}
+
+/* Register a connection (caller must NOT hold lock — acquires WRLOCK) */
 static WsConnection* ws_register_conn(int fd) {
+    DESI_RWLOCK_WRLOCK(__ws_state.lock);
+    WsConnection* result = NULL;
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd == 0) {
             __ws_state.conns[i].fd = fd;
             __ws_state.conns[i].room_count = 0;
             __ws_state.conn_count++;
-            return &__ws_state.conns[i];
+            result = &__ws_state.conns[i];
+            break;
         }
     }
-    return NULL; /* full */
+    DESI_RWLOCK_WRUNLOCK(__ws_state.lock);
+    return result;
 }
 
-/* Unregister a connection */
+/* Unregister a connection (caller must NOT hold lock — acquires WRLOCK) */
 static void ws_unregister_conn(int fd) {
+    DESI_RWLOCK_WRLOCK(__ws_state.lock);
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd == fd) {
             __ws_state.conns[i].fd = 0;
             __ws_state.conns[i].room_count = 0;
             __ws_state.conn_count--;
-            return;
+            break;
         }
     }
+    DESI_RWLOCK_WRUNLOCK(__ws_state.lock);
 }
 
-/* Find connection by fd */
+/* Find connection by fd (caller must NOT hold lock — acquires RDLOCK) */
 static WsConnection* ws_find_conn(int fd) {
+    DESI_RWLOCK_RDLOCK(__ws_state.lock);
+    WsConnection* result = NULL;
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
-        if (__ws_state.conns[i].fd == fd)
-            return &__ws_state.conns[i];
+        if (__ws_state.conns[i].fd == fd) {
+            result = &__ws_state.conns[i];
+            break;
+        }
     }
-    return NULL;
+    DESI_RWLOCK_RDUNLOCK(__ws_state.lock);
+    return result;
 }
 
 /* ============================================================
@@ -369,15 +388,17 @@ void __ws_send(int conn_fd, const char* msg) {
     ws_send_text(conn_fd, msg, strlen(msg));
 }
 
-/* Broadcast text to ALL WebSocket connections */
+/* Broadcast text to ALL WebSocket connections (RDLOCK — concurrent readers OK) */
 void __ws_broadcast(const char* msg) {
     if (!msg) return;
     size_t len = strlen(msg);
+    DESI_RWLOCK_RDLOCK(__ws_state.lock);
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd > 0) {
             ws_send_text(__ws_state.conns[i].fd, msg, len);
         }
     }
+    DESI_RWLOCK_RDUNLOCK(__ws_state.lock);
 }
 
 /* Close a WebSocket connection */
@@ -388,40 +409,61 @@ void __ws_close(int conn_fd) {
     close(conn_fd);
 }
 
-/* Join a room */
+/* Join a room (WRLOCK — modifies room state) */
 void __ws_join(int conn_fd, const char* room) {
     if (conn_fd <= 0 || !room) return;
-    WsConnection* conn = ws_find_conn(conn_fd);
-    if (!conn || conn->room_count >= WS_MAX_ROOMS) return;
-    /* Check if already in room */
-    for (int i = 0; i < conn->room_count; i++) {
-        if (strcmp(conn->rooms[i], room) == 0) return;
-    }
-    strncpy(conn->rooms[conn->room_count], room, WS_ROOM_NAME_LEN - 1);
-    conn->rooms[conn->room_count][WS_ROOM_NAME_LEN - 1] = '\0';
-    conn->room_count++;
-}
-
-/* Leave a room */
-void __ws_leave(int conn_fd, const char* room) {
-    if (conn_fd <= 0 || !room) return;
-    WsConnection* conn = ws_find_conn(conn_fd);
-    if (!conn) return;
-    for (int i = 0; i < conn->room_count; i++) {
-        if (strcmp(conn->rooms[i], room) == 0) {
-            /* Shift remaining rooms down */
-            for (int j = i; j < conn->room_count - 1; j++)
-                memcpy(conn->rooms[j], conn->rooms[j+1], WS_ROOM_NAME_LEN);
-            conn->room_count--;
-            return;
+    DESI_RWLOCK_WRLOCK(__ws_state.lock);
+    WsConnection* conn = NULL;
+    for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
+        if (__ws_state.conns[i].fd == conn_fd) {
+            conn = &__ws_state.conns[i];
+            break;
         }
     }
+    if (conn && conn->room_count < WS_MAX_ROOMS) {
+        /* Check if already in room */
+        int already = 0;
+        for (int i = 0; i < conn->room_count; i++) {
+            if (strcmp(conn->rooms[i], room) == 0) { already = 1; break; }
+        }
+        if (!already) {
+            strncpy(conn->rooms[conn->room_count], room, WS_ROOM_NAME_LEN - 1);
+            conn->rooms[conn->room_count][WS_ROOM_NAME_LEN - 1] = '\0';
+            conn->room_count++;
+        }
+    }
+    DESI_RWLOCK_WRUNLOCK(__ws_state.lock);
 }
 
-/* Broadcast to a specific room */
+/* Leave a room (WRLOCK — modifies room state) */
+void __ws_leave(int conn_fd, const char* room) {
+    if (conn_fd <= 0 || !room) return;
+    DESI_RWLOCK_WRLOCK(__ws_state.lock);
+    WsConnection* conn = NULL;
+    for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
+        if (__ws_state.conns[i].fd == conn_fd) {
+            conn = &__ws_state.conns[i];
+            break;
+        }
+    }
+    if (conn) {
+        for (int i = 0; i < conn->room_count; i++) {
+            if (strcmp(conn->rooms[i], room) == 0) {
+                for (int j = i; j < conn->room_count - 1; j++)
+                    memcpy(conn->rooms[j], conn->rooms[j+1], WS_ROOM_NAME_LEN);
+                conn->room_count--;
+                break;
+            }
+        }
+    }
+    DESI_RWLOCK_WRUNLOCK(__ws_state.lock);
+}
+
+/* Broadcast to a specific room (RDLOCK — concurrent readers OK) */
 void __ws_to_room(const char* room, const char* msg) {
     if (!room || !msg) return;
     size_t len = strlen(msg);
+    DESI_RWLOCK_RDLOCK(__ws_state.lock);
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         WsConnection* conn = &__ws_state.conns[i];
         if (conn->fd <= 0) continue;
@@ -432,6 +474,7 @@ void __ws_to_room(const char* room, const char* msg) {
             }
         }
     }
+    DESI_RWLOCK_RDUNLOCK(__ws_state.lock);
 }
 
 /* Set WS endpoint path */
@@ -519,7 +562,7 @@ const WsRoute* ws_find_route(const char* path) {
  * The on_message handler is called as: handler(conn_fd, msg_str)
  * ============================================================ */
 
-#include <pthread.h>
+#include "platform.h"
 
 typedef void (*ws_message_fn)(int conn_fd, const char* msg);
 typedef void (*ws_binary_fn)(int conn_fd, const char* data, size_t len);

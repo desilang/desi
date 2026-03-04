@@ -1275,6 +1275,8 @@ void __http_server_run(HttpServer* srv) {
 
     install_signal_handlers();
 
+    /* Initialize WebSocket state (rwlock) before spawning worker threads */
+    ws_state_init();
     /* Create supervisor with worker pool for concurrent request handling */
     Supervisor* sup = supervisor_new(0, HTTP_SERVER_POOL_SIZE);  /* ONE_FOR_ONE, 8 workers */
     if (!sup) {
