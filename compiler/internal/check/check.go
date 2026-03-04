@@ -136,6 +136,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)
 	ut.countUsesFromTypes(res.Info)
+	ut.countUsesFromTypeAnnotations(mod)
 	res.Diags = append(res.Diags, ut.emitUnusedDiags()...)
 
 	return res

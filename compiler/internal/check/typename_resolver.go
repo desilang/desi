@@ -1,6 +1,8 @@
 package check
 
 import (
+	"strings"
+
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -246,6 +248,26 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 		if sym != nil && sym.Kind == SymFunc && sym.Type != nil {
 			if _, isClass := sym.Type.(*types.Class); isClass {
 				return sym.Type
+			}
+		}
+	}
+
+	// Handle qualified type names: module.TypeName (e.g., "http.Request")
+	if strings.Contains(tn.Name, ".") {
+		parts := strings.SplitN(tn.Name, ".", 2)
+		modName, typeName := parts[0], parts[1]
+		if c.info != nil && c.info.R != nil && c.info.R.ModuleExports != nil {
+			for mpath, ex := range c.info.R.ModuleExports {
+				// Match module path ending (e.g., "http" matches ".../http")
+				if ex != nil && ex.TypeAliases != nil {
+					pathParts := strings.Split(mpath, "/")
+					lastPart := pathParts[len(pathParts)-1]
+					if lastPart == modName || mpath == modName {
+						if t, ok := ex.TypeAliases[typeName]; ok {
+							return t
+						}
+					}
+				}
 			}
 		}
 	}

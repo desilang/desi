@@ -9,9 +9,10 @@
 #   curl http://localhost:9090/unknown     → 404 not found
 
 import http
+from http import Request
 
 # Dispatch handler — called for every request by the C server
-def handle_request(req: Any) -> Any:
+def handle_request(req: Request) -> Any:
 	let path = http.req_path(req)
 	let method = http.req_method(req)
 

@@ -57,6 +57,27 @@ func injectImports(top *Scope, info *resolve.Info) {
 			// PopulateImportedFuncSigs will add constructor to Funcs map
 			// The classType is stored in Type for static method and constant lookups
 			top.Define(&Symbol{Name: local, Kind: SymFunc, Type: classType})
+			continue
+		}
+
+		// Check if it's a type alias (e.g., "from http import Request")
+		isTypeAlias := false
+		var aliasType types.T
+		if mod != nil && info.ModuleExports != nil {
+			for _, ex := range info.ModuleExports {
+				if ex != nil && ex.TypeAliases != nil {
+					if t, ok := ex.TypeAliases[local]; ok {
+						isTypeAlias = true
+						aliasType = t
+						break
+					}
+				}
+			}
+		}
+
+		if isTypeAlias && aliasType != nil {
+			// Register as SymType so resolveType scope lookup finds it
+			top.Define(&Symbol{Name: local, Kind: SymType, Type: aliasType})
 		} else {
 			// Register as SymFunc for function imports
 			top.Define(&Symbol{Name: local, Kind: SymFunc})
