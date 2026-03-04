@@ -284,3 +284,136 @@ let resp = http.request_json("POST", url, {"key": "val"}, 30)
 - [JSON Module](json.md) — For parsing JSON responses
 - [Strings Module](strings.md) — For string manipulation
 
+---
+
+## WebSocket Server
+
+Build real-time applications with Desi's built-in WebSocket support. WebSockets run on the same HTTP server — no extra dependencies.
+
+### Quick Start
+
+```desi
+import http
+
+def on_message(conn: int, msg: str):
+    print("Received: " + msg)
+    http.ws_send(conn, "echo: " + msg)
+
+def handler(req: Any) -> Any:
+    return http.text(200, "Hello!")
+
+def main() -> int:
+    let srv = http.server(8080)
+    http.ws(srv, "/ws", on_message)
+    http.serve(srv, handler)
+    return 0
+```
+
+Connect from browser JavaScript:
+
+```javascript
+const ws = new WebSocket("ws://localhost:8080/ws");
+ws.onopen = () => ws.send("hello");
+ws.onmessage = (e) => console.log(e.data);  // "echo: hello"
+```
+
+### Setting Up WebSocket Routes
+
+Register a WebSocket handler on a path:
+
+```desi
+http.ws(srv, "/ws", on_message)
+```
+
+The `on_message` callback receives every WebSocket message:
+
+```desi
+def on_message(conn: int, msg: str):
+    # conn = connection file descriptor (identifies the client)
+    # msg  = the message text
+    http.ws_send(conn, "got: " + msg)
+```
+
+### Lifecycle Events
+
+Track connections and disconnections:
+
+```desi
+def on_open(conn: int):
+    print("Client connected: " + str(conn))
+
+def on_close(conn: int):
+    print("Client disconnected: " + str(conn))
+
+http.ws_on_open(srv, on_open)
+http.ws_on_close(srv, on_close)
+```
+
+### Sending Messages
+
+```desi
+# Send to a specific client
+http.ws_send(conn, "hello")
+
+# Broadcast to ALL connected clients
+http.ws_broadcast(srv, "announcement!")
+```
+
+### Rooms
+
+Group clients into rooms for targeted messaging:
+
+```desi
+# In on_open or on_message:
+http.ws_join(conn, "lobby")      # join a room
+http.ws_leave(conn, "lobby")     # leave a room
+
+# Send to all clients in a room
+http.ws_to_room(srv, "lobby", "room message!")
+```
+
+### WebSocket API Reference
+
+| Function | Description |
+|----------|-------------|
+| `http.ws(srv, path, on_message)` | Register WS handler on path |
+| `http.ws_on_open(srv, callback)` | Set connection open handler |
+| `http.ws_on_close(srv, callback)` | Set connection close handler |
+| `http.ws_send(conn, msg)` | Send message to one client |
+| `http.ws_broadcast(srv, msg)` | Send to all connected clients |
+| `http.ws_join(conn, room)` | Add client to a room |
+| `http.ws_leave(conn, room)` | Remove client from a room |
+| `http.ws_to_room(srv, room, msg)` | Send to all clients in a room |
+| `http.ws_close(conn)` | Close a specific connection |
+
+### Callback Signatures
+
+| Callback | Signature |
+|----------|-----------|
+| `on_message` | `(conn: int, msg: str)` |
+| `on_open` | `(conn: int)` |
+| `on_close` | `(conn: int)` |
+
+### Example: Chat Server
+
+```desi
+import http
+
+def on_message(conn: int, msg: str):
+    # Broadcast every message to all clients
+    http.ws_broadcast(srv, msg)
+
+def on_open(conn: int):
+    http.ws_join(conn, "chat")
+    http.ws_to_room(srv, "chat", "Someone joined!")
+
+def handler(req: Any) -> Any:
+    return http.html(200, "<h1>Chat</h1>")
+
+def main() -> int:
+    let srv = http.server(8080)
+    http.ws(srv, "/ws", on_message)
+    http.ws_on_open(srv, on_open)
+    http.serve(srv, handler)
+    return 0
+```

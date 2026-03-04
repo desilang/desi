@@ -33,6 +33,7 @@
 #include <signal.h>
 #include "supervisor.h"
 #include "websocket.h"
+#include <netinet/tcp.h>  /* TCP_NODELAY */
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -1068,14 +1069,47 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 char key_buf[128];
                 const char* ws_key = find_header_safe(req->headers, "Sec-WebSocket-Key", key_buf, sizeof(key_buf));
                 if (ws_key && ws_key[0]) {
+                    /* Find the end of HTTP headers (\r\n\r\n) in the raw recv buffer.
+                     * Any bytes after it belong to the WebSocket session — the browser
+                     * may pipeline the first frame in the same TCP segment.
+                     * We replay them through ws_recv_exact before calling recv() again.
+                     * Using a simple portable scan (no memmem dependency). */
+                    const uint8_t* prebuf_data = NULL;
+                    size_t         prebuf_len  = 0;
+                    {
+                        const char* p   = buf;
+                        const char* end = buf + nread - 3; /* need 4 bytes to match */
+                        while (p < end) {
+                            if (p[0] == '\r' && p[1] == '\n' && p[2] == '\r' && p[3] == '\n') {
+                                const char* ws_start = p + 4;
+                                ptrdiff_t   left     = (buf + nread) - ws_start;
+                                if (left > 0) {
+                                    prebuf_data = (const uint8_t*)ws_start;
+                                    prebuf_len  = (size_t)left;
+                                }
+                                break;
+                            }
+                            p++;
+                        }
+                    }
+
+
+
                     printf("%s %s \xe2\x86\x92 101 [ws upgrade]\n", req->method, req->path);
                     fflush(stdout);
                     free_request(req);
-                    /* Clear the keep-alive recv timeout for WS (persistent conn) */
-                    struct timeval notimeout = {0, 0};
-                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &notimeout, sizeof(notimeout));
+
+                    /* Prepare socket for WebSocket */
+                    int nodelay = 1;
+                    setsockopt(client_fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
+                    /* Reset recv timeout to blocking for persistent WS connection.
+                     * NOTE: On macOS, {0, 0} means "zero timeout" (non-blocking), NOT
+                     * "no timeout". Use a large value (24h) to block effectively forever. */
+                    struct timeval ws_timeout = {86400, 0}; /* 24 hours */
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &ws_timeout, sizeof(ws_timeout));
+
                     ws_do_handshake(client_fd, ws_key);
-                    ws_session_loop(client_fd);
+                    ws_session_loop(client_fd, prebuf_data, prebuf_len);
                     return; /* connection taken over by WS */
                 }
             }
@@ -1200,8 +1234,8 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
 
         /* Log */
         int status = resp ? resp->status : 500;
-        printf("%s %s → %d%s\n", req->method, req->path, status,
-               keep_alive ? " [ka]" : "");
+        printf("%s %s → %d%s (fd=%d)\n", req->method, req->path, status,
+               keep_alive ? " [ka]" : "", client_fd);
         fflush(stdout);
 
         if (resp_owned) free_response(resp);

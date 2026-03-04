@@ -1,0 +1,41 @@
+# EXPECTED: SKIP
+# WebSocket Echo Server — demonstrates Desi WebSocket support
+# Run with: desic run examples/412_websocket.desi
+# Open http://localhost:9090 in browser to test
+
+import http
+
+# Called for each WebSocket message received
+def on_message(conn: int, msg: str):
+	print("WS recv: " + msg)
+	http.ws_send(conn, "echo: " + msg)
+
+# Called when a client connects
+def on_open(conn: int):
+	print("WS client connected")
+
+# Called when a client disconnects
+def on_close(conn: int):
+	print("WS client disconnected")
+
+# HTTP handler serves test page
+def handle_request(req: Any) -> Any:
+	let path = http.req_path(req)
+
+	if path == "/":
+		return http.html(200, "<!DOCTYPE html><html><head><title>Desi WS</title></head><body style='font-family:system-ui;background:#0d1117;color:#c9d1d9;max-width:600px;margin:40px auto;padding:0 20px'><h1 style='color:#58a6ff'>Desi WebSocket Echo</h1><div id=s style='padding:8px 12px;border-radius:6px;margin:10px 0;font-weight:600'></div><form id=f style='display:flex;gap:8px;margin:10px 0'><input id=m style='flex:1;padding:8px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#c9d1d9' placeholder='Type a message...'><button style='padding:8px 16px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer'>Send</button></form><div id=log style='font-family:monospace;font-size:14px'></div><script>const s=document.getElementById('s'),log=document.getElementById('log');function add(t,c){const d=document.createElement('div');d.style.cssText='padding:4px 0;border-bottom:1px solid #21262d;color:'+(c||'#8b949e');d.textContent=t;log.prepend(d)}s.textContent='Connecting...';s.style.background='#1c1c1c';s.style.color='#f0ad4e';const ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=()=>{s.textContent='Connected';s.style.background='#0d1117';s.style.color='#3fb950';add('Connected to server','#3fb950')};ws.onmessage=e=>add('Server: '+e.data,'#58a6ff');ws.onerror=()=>{s.textContent='Error';s.style.color='#f85149'};ws.onclose=e=>{s.textContent='Disconnected (code '+e.code+')';s.style.color='#f85149';add('Disconnected: code='+e.code,'#f85149')};document.getElementById('f').onsubmit=e=>{e.preventDefault();const m=document.getElementById('m');if(m.value&&ws.readyState===1){add('You: '+m.value,'#c9d1d9');ws.send(m.value);m.value=''}}</script></body></html>")
+
+	return http.text(404, "not found")
+
+def main() -> int:
+	print("Starting WebSocket Echo Server on :9090")
+	let srv = http.server(9090)
+
+	# Register WebSocket handlers
+	http.ws(srv, "/ws", on_message)
+	http.ws_on_open(srv, on_open)
+	http.ws_on_close(srv, on_close)
+
+	# Start server (blocks)
+	http.serve(srv, handle_request)
+	return 0
