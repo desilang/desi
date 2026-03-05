@@ -350,18 +350,22 @@ static WsConnection* ws_register_conn(int fd) {
     return result;
 }
 
-/* Unregister a connection (caller must NOT hold lock — acquires WRLOCK) */
-static void ws_unregister_conn(int fd) {
+/* Unregister a connection (caller must NOT hold lock — acquires WRLOCK)
+ * Returns remaining count, or -1 if fd was not found (already unregistered). */
+static int ws_unregister_conn(int fd) {
     DESI_RWLOCK_WRLOCK(__ws_state.lock);
+    int remaining = -1;
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd == fd) {
             __ws_state.conns[i].fd = 0;
             __ws_state.conns[i].room_count = 0;
             __ws_state.conn_count--;
+            remaining = __ws_state.conn_count;
             break;
         }
     }
     DESI_RWLOCK_WRUNLOCK(__ws_state.lock);
+    return remaining;
 }
 
 /* Find connection by fd (caller must NOT hold lock — acquires RDLOCK) */
@@ -669,12 +673,17 @@ done:
         ((ws_lifecycle_fn)close_handler)(client_fd);
     }
 
-    printf("[ws] client disconnected fd=%d (%d remaining)\n", client_fd, __ws_state.conn_count - 1);
-    fflush(stdout);
-
     /* Clear prebuffer (safety) */
     ws_set_prebuf(NULL, 0);
 
-    ws_unregister_conn(client_fd);
-    close(client_fd);
+    int remaining = ws_unregister_conn(client_fd);
+    if (remaining >= 0) {
+        printf("[ws] client disconnected fd=%d (%d remaining)\n", client_fd, remaining);
+        fflush(stdout);
+        close(client_fd);
+    } else {
+        /* Already unregistered (e.g. __ws_close called from handler) */
+        printf("[ws] client fd=%d already disconnected\n", client_fd);
+        fflush(stdout);
+    }
 }
