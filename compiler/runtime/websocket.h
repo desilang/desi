@@ -8,16 +8,20 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "platform.h"
+#include "tls.h"
+
+/* Thread-local SSL pointer for current WS session */
+extern _Thread_local DESI_SSL* _ws_current_ssl;
 
 #ifdef _WIN32
   #include <winsock2.h>
-  #define WS_SEND(fd, buf, len) send(fd, buf, len, 0)
-  #define WS_RECV(fd, buf, len) recv(fd, buf, len, 0)
 #else
   #include <sys/socket.h>
-  #define WS_SEND(fd, buf, len) send(fd, buf, len, 0)
-  #define WS_RECV(fd, buf, len) recv(fd, buf, len, 0)
 #endif
+
+/* TLS-aware WS macros: use thread-local SSL for current session */
+#define WS_SEND(fd, buf, len) DESI_SEND(fd, _ws_current_ssl, buf, len)
+#define WS_RECV(fd, buf, len) DESI_RECV(fd, _ws_current_ssl, buf, len)
 
 #define WS_MAX_CONNECTIONS 256
 #define WS_MAX_ROOMS 32
@@ -27,6 +31,7 @@
 
 typedef struct {
     int  fd;
+    DESI_SSL* ssl;  /* non-NULL for WSS connections */
     char rooms[WS_MAX_ROOMS][WS_ROOM_NAME_LEN];
     int  room_count;
 } WsConnection;
@@ -59,8 +64,8 @@ extern WsState __ws_state;
 void ws_state_init(void);
 
 /* Handshake + session */
-int  ws_do_handshake(int fd, const char* client_key);
-void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len);
+int  ws_do_handshake(int fd, const char* client_key, DESI_SSL* ssl);
+void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DESI_SSL* ssl);
 
 /* Frame operations */
 int ws_send_text(int fd, const char* msg, size_t len);
