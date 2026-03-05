@@ -240,8 +240,11 @@ int ws_read_frame(int fd, WsFrame* frame) {
         if (ws_recv_exact(fd, mask, 4) < 0) return -1;
     }
 
-    /* Payload (limit to 16MB) */
-    if (payload_len > 16 * 1024 * 1024) return -1;
+    /* Payload (limit to configurable max or default 16MB) */
+    size_t max_msg = __ws_state.max_message_size > 0
+                   ? __ws_state.max_message_size
+                   : WS_DEFAULT_MAX_MSG_SIZE;
+    if ((uint64_t)payload_len > max_msg) return -1;
 
     frame->payload = (char*)malloc(payload_len + 1);
     if (!frame->payload) return -1;
@@ -296,6 +299,10 @@ static int ws_send_frame(int fd, int opcode, const char* data, size_t len) {
 
 int ws_send_text(int fd, const char* msg, size_t len) {
     return ws_send_frame(fd, WS_OP_TEXT, msg, len);
+}
+
+int ws_send_binary(int fd, const char* data, size_t len) {
+    return ws_send_frame(fd, WS_OP_BINARY, data, len);
 }
 
 int ws_send_close(int fd, uint16_t code) {
@@ -437,6 +444,74 @@ void __ws_set_on_message(void* fn) { __ws_state.on_message = fn; }
 void __ws_set_on_open(void* fn)    { __ws_state.on_open = fn; }
 void __ws_set_on_close(void* fn)   { __ws_state.on_close = fn; }
 
+/* Configure max message size (bytes) */
+void __ws_set_max_message_size(int size) {
+    if (size > 0) __ws_state.max_message_size = (size_t)size;
+}
+
+/* Configure ping interval (seconds, 0 = disabled) */
+void __ws_set_ping_interval(int secs) {
+    __ws_state.ping_interval_secs = secs > 0 ? secs : 0;
+}
+
+/* Send binary message to a single connection */
+void __ws_send_binary(int conn_fd, const char* data, int len) {
+    if (conn_fd <= 0 || !data || len <= 0) return;
+    ws_send_binary(conn_fd, data, (size_t)len);
+}
+
+/* ============================================================
+ * Multiple WS Path (Route) Support
+ * ============================================================ */
+
+void __ws_route(const char* path, void* on_message) {
+    if (!path || __ws_state.route_count >= WS_MAX_PATHS) return;
+    WsRoute* r = &__ws_state.routes[__ws_state.route_count];
+    strncpy(r->path, path, sizeof(r->path) - 1);
+    r->on_message = on_message;
+    __ws_state.route_count++;
+    /* Also set legacy path if this is the first route */
+    if (__ws_state.route_count == 1 && !__ws_state.ws_path[0]) {
+        strncpy(__ws_state.ws_path, path, sizeof(__ws_state.ws_path) - 1);
+    }
+}
+
+void __ws_route_on_open(const char* path, void* fn) {
+    for (int i = 0; i < __ws_state.route_count; i++) {
+        if (strcmp(__ws_state.routes[i].path, path) == 0) {
+            __ws_state.routes[i].on_open = fn;
+            return;
+        }
+    }
+}
+
+void __ws_route_on_close(const char* path, void* fn) {
+    for (int i = 0; i < __ws_state.route_count; i++) {
+        if (strcmp(__ws_state.routes[i].path, path) == 0) {
+            __ws_state.routes[i].on_close = fn;
+            return;
+        }
+    }
+}
+
+void __ws_route_on_binary(const char* path, void* fn) {
+    for (int i = 0; i < __ws_state.route_count; i++) {
+        if (strcmp(__ws_state.routes[i].path, path) == 0) {
+            __ws_state.routes[i].on_binary = fn;
+            return;
+        }
+    }
+}
+
+const WsRoute* ws_find_route(const char* path) {
+    if (!path) return NULL;
+    for (int i = 0; i < __ws_state.route_count; i++) {
+        if (strcmp(__ws_state.routes[i].path, path) == 0)
+            return &__ws_state.routes[i];
+    }
+    return NULL;
+}
+
 /* ============================================================
  * WebSocket Session Loop (called by http_server.c after upgrade)
  *
@@ -444,14 +519,29 @@ void __ws_set_on_close(void* fn)   { __ws_state.on_close = fn; }
  * The on_message handler is called as: handler(conn_fd, msg_str)
  * ============================================================ */
 
+#include <pthread.h>
+
 typedef void (*ws_message_fn)(int conn_fd, const char* msg);
+typedef void (*ws_binary_fn)(int conn_fd, const char* data, size_t len);
 typedef void (*ws_lifecycle_fn)(int conn_fd);
+
+/* Ping keepalive thread — sends PING frames at configured interval */
+static void* ws_ping_thread(void* arg) {
+    int client_fd = (int)(intptr_t)arg;
+    int interval = __ws_state.ping_interval_secs;
+    if (interval <= 0) return NULL;
+    while (1) {
+        sleep((unsigned)interval);
+        /* Check if connection is still registered */
+        if (!ws_find_conn(client_fd)) break;
+        if (ws_send_ping(client_fd) < 0) break;
+    }
+    return NULL;
+}
 
 void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
     /* Install any bytes that were already read past the HTTP headers */
     ws_set_prebuf(prebuf, prebuf_len);
-
-
 
     /* Register connection */
     WsConnection* conn = ws_register_conn(client_fd);
@@ -462,13 +552,28 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
         return;
     }
 
+    /* Determine which handlers to use (legacy or route-based) */
+    void* msg_handler = __ws_state.on_message;
+    void* bin_handler = NULL;
+    void* open_handler = __ws_state.on_open;
+    void* close_handler = __ws_state.on_close;
+
     /* Call on_open handler */
-    if (__ws_state.on_open) {
-        ((ws_lifecycle_fn)__ws_state.on_open)(client_fd);
+    if (open_handler) {
+        ((ws_lifecycle_fn)open_handler)(client_fd);
     }
 
     printf("[ws] client connected fd=%d (%d total)\n", client_fd, __ws_state.conn_count);
     fflush(stdout);
+
+    /* Start ping keepalive thread if configured */
+    pthread_t ping_tid = 0;
+    int has_ping_thread = 0;
+    if (__ws_state.ping_interval_secs > 0) {
+        if (pthread_create(&ping_tid, NULL, ws_ping_thread, (void*)(intptr_t)client_fd) == 0) {
+            has_ping_thread = 1;
+        }
+    }
 
     /* Read frame loop */
     WsFrame frame;
@@ -477,9 +582,17 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
 
         switch (frame.opcode) {
         case WS_OP_TEXT:
+            if (msg_handler) {
+                ((ws_message_fn)msg_handler)(client_fd, frame.payload);
+            }
+            break;
+
         case WS_OP_BINARY:
-            if (__ws_state.on_message) {
-                ((ws_message_fn)__ws_state.on_message)(client_fd, frame.payload);
+            if (bin_handler) {
+                ((ws_binary_fn)bin_handler)(client_fd, frame.payload, frame.payload_len);
+            } else if (msg_handler) {
+                /* Fall back to text handler for binary frames */
+                ((ws_message_fn)msg_handler)(client_fd, frame.payload);
             }
             break;
 
@@ -502,9 +615,15 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
     }
 
 done:
+    /* Stop ping thread if running */
+    if (has_ping_thread) {
+        pthread_cancel(ping_tid);
+        pthread_join(ping_tid, NULL);
+    }
+
     /* Call on_close handler */
-    if (__ws_state.on_close) {
-        ((ws_lifecycle_fn)__ws_state.on_close)(client_fd);
+    if (close_handler) {
+        ((ws_lifecycle_fn)close_handler)(client_fd);
     }
 
     printf("[ws] client disconnected fd=%d (%d remaining)\n", client_fd, __ws_state.conn_count - 1);

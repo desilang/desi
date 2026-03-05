@@ -372,6 +372,16 @@ http.ws_leave(conn, "lobby")     # leave a room
 http.ws_to_room(srv, "lobby", "room message!")
 ```
 
+### Configuration
+
+```desi
+# Set maximum message size (default: 16MB)
+http.ws_max_message_size(srv, 1024 * 1024)  # 1MB limit
+
+# Enable automatic ping keepalive (default: disabled)
+http.ws_ping_interval(srv, 30)  # ping every 30 seconds
+```
+
 ### WebSocket API Reference
 
 | Function | Description |
@@ -379,12 +389,14 @@ http.ws_to_room(srv, "lobby", "room message!")
 | `http.ws(srv, path, on_message)` | Register WS handler on path |
 | `http.ws_on_open(srv, callback)` | Set connection open handler |
 | `http.ws_on_close(srv, callback)` | Set connection close handler |
-| `http.ws_send(conn, msg)` | Send message to one client |
+| `http.ws_send(conn, msg)` | Send text message to one client |
 | `http.ws_broadcast(srv, msg)` | Send to all connected clients |
 | `http.ws_join(conn, room)` | Add client to a room |
 | `http.ws_leave(conn, room)` | Remove client from a room |
 | `http.ws_to_room(srv, room, msg)` | Send to all clients in a room |
 | `http.ws_close(conn)` | Close a specific connection |
+| `http.ws_max_message_size(srv, bytes)` | Set max incoming message size |
+| `http.ws_ping_interval(srv, secs)` | Set ping keepalive interval (0 = off) |
 
 ### Callback Signatures
 
@@ -393,6 +405,15 @@ http.ws_to_room(srv, "lobby", "room message!")
 | `on_message` | `(conn: int, msg: str)` |
 | `on_open` | `(conn: int)` |
 | `on_close` | `(conn: int)` |
+
+### Features
+
+- **Text & binary frames** — both frame types handled
+- **Automatic ping/pong** — configurable keepalive interval
+- **Configurable message size** — prevent memory exhaustion
+- **Rooms** — group clients for targeted messaging
+- **Multiple WS paths** — register handlers on different paths (up to 8)
+- **RFC 6455 compliant** — proper handshake, masking, close frames
 
 ### Example: Chat Server
 
@@ -414,6 +435,7 @@ def main() -> int:
     let srv = http.server(8080)
     http.ws(srv, "/ws", on_message)
     http.ws_on_open(srv, on_open)
+    http.ws_ping_interval(srv, 30)  # keep connections alive
     http.serve(srv, handler)
     return 0
 ```

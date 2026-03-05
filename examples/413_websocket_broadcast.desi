@@ -1,0 +1,84 @@
+# EXPECTED: SKIP
+# WebSocket Broadcast & Rooms Test
+# Run with: desic run examples/413_websocket_broadcast.desi
+# Tests: ws_send, ws_broadcast, ws_join, ws_leave, ws_to_room
+# Open multiple browser tabs at http://localhost:9090 to test
+
+import http
+
+# Track message count per client
+def on_message(conn: int, msg: str):
+	print("Message from " + str(conn) + ": " + msg)
+
+	# Edge case: empty message
+	if msg == "":
+		http.ws_send(conn, "error: empty message")
+		return
+
+	# Command: join a room
+	if msg == "/join lobby":
+		http.ws_join(conn, "lobby")
+		http.ws_send(conn, "Joined lobby")
+		http.ws_to_room("lobby", "User " + str(conn) + " joined lobby")
+		return
+
+	# Command: leave a room
+	if msg == "/leave lobby":
+		http.ws_to_room("lobby", "User " + str(conn) + " left lobby")
+		http.ws_leave(conn, "lobby")
+		http.ws_send(conn, "Left lobby")
+		return
+
+	# Command: join then immediately leave (edge case)
+	if msg == "/join-leave":
+		http.ws_join(conn, "temp")
+		http.ws_leave(conn, "temp")
+		http.ws_send(conn, "Joined and left temp room")
+		return
+
+	# Command: leave room not in (edge case)
+	if msg == "/leave-nonexistent":
+		http.ws_leave(conn, "nonexistent_room")
+		http.ws_send(conn, "Leave nonexistent: no crash")
+		return
+
+	# Command: broadcast to all
+	if msg == "/broadcast":
+		http.ws_broadcast("BROADCAST from " + str(conn))
+		return
+
+	# Command: send to room
+	if msg == "/room lobby":
+		http.ws_to_room("lobby", "Room msg from " + str(conn))
+		return
+
+	# Command: close self
+	if msg == "/close":
+		http.ws_send(conn, "Goodbye!")
+		http.ws_close(conn)
+		return
+
+	# Default: echo back
+	http.ws_send(conn, "echo: " + msg)
+
+def on_open(conn: int):
+	print("Client " + str(conn) + " connected")
+	http.ws_send(conn, "Welcome! Commands: /join lobby, /leave lobby, /broadcast, /room lobby, /close, /join-leave, /leave-nonexistent")
+
+def on_close(conn: int):
+	print("Client " + str(conn) + " disconnected")
+
+def handle_request(req: Any) -> Any:
+	let path = http.req_path(req)
+	if path == "/":
+		return http.html(200, "<!DOCTYPE html><html><body style='font-family:system-ui;background:#0d1117;color:#c9d1d9;max-width:600px;margin:40px auto;padding:0 20px'><h1 style='color:#58a6ff'>WS Broadcast Test</h1><div id=s style='padding:8px 12px;border-radius:6px;margin:10px 0'></div><form id=f style='display:flex;gap:8px;margin:10px 0'><input id=m style='flex:1;padding:8px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#c9d1d9' placeholder='Type: /join lobby, /broadcast, etc'><button style='padding:8px 16px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer'>Send</button></form><div id=log style='font-family:monospace;font-size:13px'></div><script>const s=document.getElementById('s'),log=document.getElementById('log');function add(t,c){const d=document.createElement('div');d.style.cssText='padding:3px 0;border-bottom:1px solid #21262d;color:'+(c||'#8b949e');d.textContent=new Date().toLocaleTimeString()+' '+t;log.prepend(d)}s.textContent='Connecting...';s.style.color='#f0ad4e';const ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=()=>{s.textContent='Connected';s.style.color='#3fb950'};ws.onmessage=e=>add(e.data,'#58a6ff');ws.onerror=()=>{s.textContent='Error';s.style.color='#f85149'};ws.onclose=e=>add('CLOSED: '+e.code,'#f85149');document.getElementById('f').onsubmit=e=>{e.preventDefault();const m=document.getElementById('m');if(m.value){add('You: '+m.value,'#c9d1d9');ws.send(m.value);m.value=''}}</script></body></html>")
+	return http.text(404, "not found")
+
+def main() -> int:
+	print("Starting Broadcast Test Server on :9090")
+	let srv = http.server(9090)
+	http.ws(srv, "/ws", on_message)
+	http.ws_on_open(srv, on_open)
+	http.ws_on_close(srv, on_close)
+	http.serve(srv, handle_request)
+	return 0

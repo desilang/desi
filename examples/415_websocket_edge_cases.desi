@@ -1,0 +1,92 @@
+# EXPECTED: SKIP
+# WebSocket Edge Cases Test
+# Run with: desic run examples/415_websocket_edge_cases.desi
+# Tests edge cases: rapid messages, special characters, close+reconnect, Unicode
+
+import http
+
+def on_message(conn: int, msg: str):
+	# Edge case: very short message (1 char)
+	if msg == "x":
+		http.ws_send(conn, "Got single char")
+		return
+
+	# Edge case: message with special characters
+	if msg == "special":
+		http.ws_send(conn, "Chars: <>&\"'\\n\\t{}[]")
+		return
+
+	# Edge case: message with Unicode
+	if msg == "unicode":
+		http.ws_send(conn, "Unicode: Hello World")
+		return
+
+	# Edge case: send empty string
+	if msg == "send-empty":
+		http.ws_send(conn, "")
+		http.ws_send(conn, "Sent empty string above")
+		return
+
+	# Edge case: rapid echo (test back-pressure)
+	if msg == "rapid":
+		http.ws_send(conn, "rapid-1")
+		http.ws_send(conn, "rapid-2")
+		http.ws_send(conn, "rapid-3")
+		http.ws_send(conn, "rapid-4")
+		http.ws_send(conn, "rapid-5")
+		return
+
+	# Edge case: join same room twice (should be idempotent)
+	if msg == "double-join":
+		http.ws_join(conn, "test-room")
+		http.ws_join(conn, "test-room")
+		http.ws_send(conn, "Double-joined test-room (should be 1 membership)")
+		return
+
+	# Edge case: join max rooms
+	if msg == "max-rooms":
+		http.ws_join(conn, "room-0")
+		http.ws_join(conn, "room-1")
+		http.ws_join(conn, "room-2")
+		http.ws_join(conn, "room-3")
+		http.ws_join(conn, "room-4")
+		http.ws_join(conn, "room-5")
+		http.ws_send(conn, "Joined 6 rooms")
+		return
+
+	# Edge case: send to room with nobody in it
+	if msg == "empty-room":
+		http.ws_to_room("nobody-here", "Should go nowhere")
+		http.ws_send(conn, "Sent to empty room: no crash")
+		return
+
+	# Edge case: close self then send (send should silently fail)
+	if msg == "close-send":
+		http.ws_close(conn)
+		# This ws_send should silently fail since conn is closed
+		http.ws_send(conn, "This should not arrive")
+		return
+
+	# Default: echo with info
+	http.ws_send(conn, "echo (" + str(conn) + "): " + msg)
+
+def on_open(conn: int):
+	http.ws_send(conn, "Edge Case Tester. Commands: x, special, unicode, send-empty, rapid, double-join, max-rooms, empty-room, close-send")
+
+def on_close(conn: int):
+	print("Client " + str(conn) + " disconnected")
+
+def handle_request(req: Any) -> Any:
+	let path = http.req_path(req)
+	if path == "/":
+		return http.html(200, "<!DOCTYPE html><html><body style='font-family:system-ui;background:#0d1117;color:#c9d1d9;max-width:600px;margin:40px auto;padding:0 20px'><h1 style='color:#58a6ff'>WS Edge Cases</h1><div id=s style='padding:8px 12px;border-radius:6px;margin:10px 0'></div><form id=f style='display:flex;gap:8px;margin:10px 0'><input id=m style='flex:1;padding:8px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#c9d1d9' placeholder='Commands: x, special, rapid, etc'><button style='padding:8px 16px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer'>Send</button></form><div style='display:flex;flex-wrap:wrap;gap:4px;margin:8px 0'><button onclick=\"ws.send('x')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>single char</button><button onclick=\"ws.send('special')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>special chars</button><button onclick=\"ws.send('unicode')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>unicode</button><button onclick=\"ws.send('send-empty')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>send empty</button><button onclick=\"ws.send('rapid')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>rapid (5x)</button><button onclick=\"ws.send('double-join')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>double join</button><button onclick=\"ws.send('max-rooms')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>max rooms</button><button onclick=\"ws.send('empty-room')\" style='padding:4px 8px;background:#30363d;color:#c9d1d9;border:none;border-radius:4px;cursor:pointer;font-size:12px'>empty room</button><button onclick=\"ws.send('close-send')\" style='padding:4px 8px;background:#da3633;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:12px'>close+send</button></div><div id=log style='font-family:monospace;font-size:13px;margin-top:10px'></div><script>const s=document.getElementById('s'),log=document.getElementById('log');function add(t,c){const d=document.createElement('div');d.style.cssText='padding:3px 0;border-bottom:1px solid #21262d;color:'+(c||'#8b949e');d.textContent=new Date().toLocaleTimeString()+' '+t;log.prepend(d)}function connect(){s.textContent='Connecting...';s.style.color='#f0ad4e';window.ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=()=>{s.textContent='Connected';s.style.color='#3fb950'};ws.onmessage=e=>add(e.data,'#58a6ff');ws.onerror=()=>{s.textContent='Error';s.style.color='#f85149'};ws.onclose=e=>{s.textContent='Closed: '+e.code;s.style.color='#f85149';add('CLOSED: '+e.code+' — reconnecting in 2s','#f85149');setTimeout(connect,2000)}}connect();document.getElementById('f').onsubmit=e=>{e.preventDefault();const m=document.getElementById('m');if(m.value&&ws.readyState===1){add('You: '+m.value,'#c9d1d9');ws.send(m.value);m.value=''}}</script></body></html>")
+	return http.text(404, "not found")
+
+def main() -> int:
+	print("Starting Edge Case Test Server on :9090")
+	let srv = http.server(9090)
+	http.ws(srv, "/ws", on_message)
+	http.ws_on_open(srv, on_open)
+	http.ws_on_close(srv, on_close)
+	http.serve(srv, handle_request)
+	return 0

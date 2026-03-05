@@ -367,6 +367,74 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 							return hir.ConstNull{}
 						}
 					}
+
+				case "ws_send":
+					// http.ws_send(conn, msg) → __ws_send(conn, msg)
+					if len(x.Args) == 2 {
+						connVal := ls.lowerExpr(x.Args[0])
+						msgVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_send", Args: []hir.Value{connVal, msgVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_broadcast":
+					// http.ws_broadcast(srv, msg) → __ws_broadcast(msg)
+					if len(x.Args) == 2 {
+						msgVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_broadcast", Args: []hir.Value{msgVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_close":
+					// http.ws_close(conn) → __ws_close(conn)
+					if len(x.Args) == 1 {
+						connVal := ls.lowerExpr(x.Args[0])
+						ls.b.Emit(&hir.Call{Fn: "__ws_close", Args: []hir.Value{connVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_join":
+					// http.ws_join(conn, room) → __ws_join(conn, room)
+					if len(x.Args) == 2 {
+						connVal := ls.lowerExpr(x.Args[0])
+						roomVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_join", Args: []hir.Value{connVal, roomVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_leave":
+					// http.ws_leave(conn, room) → __ws_leave(conn, room)
+					if len(x.Args) == 2 {
+						connVal := ls.lowerExpr(x.Args[0])
+						roomVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_leave", Args: []hir.Value{connVal, roomVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_to_room":
+					// http.ws_to_room(srv, room, msg) → __ws_to_room(room, msg)
+					if len(x.Args) == 3 {
+						roomVal := ls.lowerExpr(x.Args[1])
+						msgVal := ls.lowerExpr(x.Args[2])
+						ls.b.Emit(&hir.Call{Fn: "__ws_to_room", Args: []hir.Value{roomVal, msgVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_max_message_size":
+					// http.ws_max_message_size(srv, bytes) → __ws_set_max_message_size(bytes)
+					if len(x.Args) == 2 {
+						sizeVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_set_max_message_size", Args: []hir.Value{sizeVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_ping_interval":
+					// http.ws_ping_interval(srv, secs) → __ws_set_ping_interval(secs)
+					if len(x.Args) == 2 {
+						secsVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_set_ping_interval", Args: []hir.Value{secsVal}})
+						return hir.ConstNull{}
+					}
 				}
 			}
 			if t, ok := feXType.(*types.Dict); ok {
