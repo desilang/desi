@@ -89,6 +89,7 @@ func init() {
 	SetFuncSig("__http_req_path_param", "ptr", nil)
 	SetFuncSig("__http_req_json", "ptr", nil)
 	SetFuncSig("__http_resp_new", "ptr", nil)
+	SetFuncSig("__http_resp_from_file", "ptr", nil)
 	SetFuncSig("__http_server_set_handler", "void", nil)
 	SetFuncSig("__http_server_route", "void", nil)
 	SetFuncSig("__http_server_run", "void", nil)

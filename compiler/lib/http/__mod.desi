@@ -329,6 +329,9 @@ def __http_server_run(server: Any) -> none
 def __http_resp_new(status: int, body: str, content_type: str) -> Any
 
 @extern("C")
+def __http_resp_from_file(status: int, path: str, content_type: str) -> Any
+
+@extern("C")
 def __http_resp_status(resp: Any) -> int
 
 @extern("C")
