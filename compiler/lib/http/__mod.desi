@@ -76,6 +76,13 @@ struct Response:
 	pub headers: str
 
 # ============================================================
+# Opaque Types (nominal type aliases for compile-time safety)
+# ============================================================
+
+pub type Server = Any
+pub type Request = Any
+
+# ============================================================
 # Public API
 # ============================================================
 
@@ -352,11 +359,11 @@ def __http_server_set_handler(handler: Any) -> none
 # ============================================================
 
 # Create a new HTTP server bound to the given port
-pub def server(port: int) -> Any:
+pub def server(port: int) -> Server:
 	return __http_server_new(port)
 
 # Start the server's accept loop (blocks forever, no routing — echo mode)
-pub def listen(srv: Any) -> none:
+pub def listen(srv: Server) -> none:
 	__http_server_run(srv)
 
 # Start the server with a Desi dispatch handler (2-arg form)
@@ -366,10 +373,10 @@ pub def listen(srv: Any) -> none:
 #   2-arg: __http_server_set_handler(@handler) + __http_server_run(srv)
 #   1-arg: __http_server_run(srv) (uses registered routes)
 # This body is never executed — it exists only for the type checker.
-pub def serve(srv: Any) -> none:
+pub def serve(srv: Server) -> none:
 	return
 
-pub def serve(srv: Any, handler: Any) -> none:
+pub def serve(srv: Server, handler: Any) -> none:
 	return
 
 # ============================================================
@@ -378,29 +385,29 @@ pub def serve(srv: Any, handler: Any) -> none:
 
 # Register a route handler for a specific method and path
 # Note: lowerer intercepts and emits __http_server_route(srv, method, path, @handler)
-pub def route(srv: Any, method: str, path: str, handler: Any) -> none:
+pub def route(srv: Server, method: str, path: str, handler: Any) -> none:
 	return
 
 # Convenience route helpers
-pub def get(srv: Any, path: str, handler: Any) -> none:
+pub def get(srv: Server, path: str, handler: Any) -> none:
 	return
 
-pub def post(srv: Any, path: str, handler: Any) -> none:
+pub def post(srv: Server, path: str, handler: Any) -> none:
 	return
 
-pub def put(srv: Any, path: str, handler: Any) -> none:
+pub def put(srv: Server, path: str, handler: Any) -> none:
 	return
 
-pub def delete(srv: Any, path: str, handler: Any) -> none:
+pub def delete(srv: Server, path: str, handler: Any) -> none:
 	return
 
-pub def patch(srv: Any, path: str, handler: Any) -> none:
+pub def patch(srv: Server, path: str, handler: Any) -> none:
 	return
 
 # Serve static files from a directory
 # Maps URL prefix to filesystem dir (e.g. http.serve_static(srv, "/static", "./public"))
 # Note: lowerer intercepts and emits __http_server_static(srv, prefix, dir)
-pub def serve_static(srv: Any, prefix: str, dir: str) -> none:
+pub def serve_static(srv: Server, prefix: str, dir: str) -> none:
 	return
 
 # ============================================================
@@ -433,35 +440,35 @@ pub def response(status: int, body: str, content_type: str) -> Any:
 # ============================================================
 
 # Get the HTTP method of a server request
-pub def req_method(req: Any) -> str:
+pub def req_method(req: Request) -> str:
 	return __http_req_method(req)
 
 # Get the path of a server request
-pub def req_path(req: Any) -> str:
+pub def req_path(req: Request) -> str:
 	return __http_req_path(req)
 
 # Get the body of a server request
-pub def req_body(req: Any) -> str:
+pub def req_body(req: Request) -> str:
 	return __http_req_body(req)
 
 # Get a header value from a server request
-pub def req_header(req: Any, name: str) -> str:
+pub def req_header(req: Request, name: str) -> str:
 	return __http_req_header(req, name)
 
 # Get the query string of a server request
-pub def req_query(req: Any) -> str:
+pub def req_query(req: Request) -> str:
 	return __http_req_query(req)
 
 # Get a query parameter value by key (e.g. ?name=alice → req_param(req, "name") → "alice")
-pub def req_param(req: Any, key: str) -> str:
+pub def req_param(req: Request, key: str) -> str:
 	return __http_req_param(req, key)
 
 # Get a path parameter value (e.g. /users/:id → req_path_param(req, "id"))
-pub def req_path_param(req: Any, name: str) -> str:
+pub def req_path_param(req: Request, name: str) -> str:
 	return __http_req_path_param(req, name)
 
 # Parse request body as JSON (returns JSON node, or none if invalid)
-pub def req_json(req: Any) -> Any:
+pub def req_json(req: Request) -> Any:
 	return __http_req_json(req)
 
 
@@ -471,18 +478,18 @@ pub def req_json(req: Any) -> Any:
 
 # Set maximum request body size in bytes (default: 1MB)
 # Example: http.max_body(srv, 1024 * 512)  # 512KB
-pub def max_body(srv: Any, max_bytes: int) -> none:
+pub def max_body(srv: Server, max_bytes: int) -> none:
 	return
 
 # Register a middleware function (runs before route handlers)
 # Middleware returns none to pass through, or a response to short-circuit
 # Note: lowerer intercepts http.use() and emits __http_server_use(srv, @fn)
-pub def use(srv: Any, middleware: Any) -> none:
+pub def use(srv: Server, middleware: Any) -> none:
 	return
 
 # Enable rate limiting: max requests per window (seconds)
 # Example: http.rate_limit(srv, 60, 60)  # 60 requests per 60 seconds per IP
-pub def rate_limit(srv: Any, max_requests: int, window_secs: int) -> none:
+pub def rate_limit(srv: Server, max_requests: int, window_secs: int) -> none:
 	return
 
 # Set a custom header on a response
@@ -493,12 +500,12 @@ pub def header(resp: Any, key: str, value: str) -> none:
 # Enable CORS for the given origin ("*" for any, or specific domain)
 # Automatically handles OPTIONS preflight requests
 # Note: lowerer intercepts http.cors() and emits __http_server_cors(srv, origin)
-pub def cors(srv: Any, origin: str) -> none:
+pub def cors(srv: Server, origin: str) -> none:
 	return
 
 # Get a cookie value from a request
 # Returns "" if cookie not found
-pub def get_cookie(req: Any, name: str) -> str:
+pub def get_cookie(req: Request, name: str) -> str:
 	return __http_req_cookie(req, name)
 
 # Set a cookie on a response
@@ -554,19 +561,19 @@ def __ws_set_ping_interval(secs: int) -> none
 # Register a WebSocket endpoint with message handler
 # Handler: def on_message(conn: int, msg: str) -> none
 # Note: lowerer intercepts http.ws() and emits __ws_set_path + __ws_set_on_message
-pub def ws(srv: Any, path: str, handler: Any) -> none:
+pub def ws(srv: Server, path: str, handler: Any) -> none:
 	return
 
 # Set handler called when a WebSocket client connects
 # Handler: def on_open(conn: int) -> none
 # Note: lowerer intercepts and emits __ws_set_on_open
-pub def ws_on_open(srv: Any, handler: Any) -> none:
+pub def ws_on_open(srv: Server, handler: Any) -> none:
 	return
 
 # Set handler called when a WebSocket client disconnects
 # Handler: def on_close(conn: int) -> none
 # Note: lowerer intercepts and emits __ws_set_on_close
-pub def ws_on_close(srv: Any, handler: Any) -> none:
+pub def ws_on_close(srv: Server, handler: Any) -> none:
 	return
 
 # Send a text message to a single WebSocket connection
@@ -574,7 +581,7 @@ pub def ws_send(conn: int, msg: str) -> none:
 	__ws_send(conn, msg)
 
 # Broadcast a text message to all connected WebSocket clients
-pub def ws_broadcast(srv: Any, msg: str) -> none:
+pub def ws_broadcast(srv: Server, msg: str) -> none:
 	__ws_broadcast(msg)
 
 # Broadcast (no-srv form, for use inside callbacks)
@@ -594,7 +601,7 @@ pub def ws_leave(conn: int, room: str) -> none:
 	__ws_leave(conn, room)
 
 # Broadcast a message to all clients in a specific room
-pub def ws_to_room(srv: Any, room: str, msg: str) -> none:
+pub def ws_to_room(srv: Server, room: str, msg: str) -> none:
 	__ws_to_room(room, msg)
 
 # Broadcast to room (no-srv form, for use inside callbacks)
@@ -604,12 +611,12 @@ pub def ws_to_room(room: str, msg: str) -> none:
 # Set maximum incoming WebSocket message size in bytes (default: 16MB)
 # Messages exceeding this limit will be rejected and the connection closed
 # Note: lowerer intercepts and emits __ws_set_max_message_size
-pub def ws_max_message_size(srv: Any, max_bytes: int) -> none:
+pub def ws_max_message_size(srv: Server, max_bytes: int) -> none:
 	return
 
 # Set ping keepalive interval in seconds (default: disabled)
 # Server sends PING frames at this interval to keep connections alive
 # Set to 0 to disable
 # Note: lowerer intercepts and emits __ws_set_ping_interval
-pub def ws_ping_interval(srv: Any, secs: int) -> none:
+pub def ws_ping_interval(srv: Server, secs: int) -> none:
 	return
