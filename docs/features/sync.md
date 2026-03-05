@@ -504,6 +504,59 @@ def main() -> int:
 
 ---
 
+## Global Shared State
+
+Sync primitives can be declared at **module scope** for shared state across functions. This is essential for server applications that need to track state across requests.
+
+### Global Atomic Counter
+
+```desi
+import sync
+import http
+from http import Request
+
+let request_count = sync.Atomic(0)   # Module-scope — no UPPER_CASE warning
+
+def handle_request(req: Request) -> Any:
+    request_count.inc()               # Thread-safe increment
+    let count = request_count.load()
+    return http.html(200, raw="<h1>Request #" + str(count) + "</h1>")
+
+def main() -> int:
+    let srv = http.server(9090)
+    http.serve(srv, handle_request)
+    return 0
+```
+
+### Global Mutex for Complex State
+
+```desi
+import sync
+
+let config = sync.Mutex({"debug": true, "max_retries": 3})
+
+def get_config() -> Any:
+    let guard = config.lock()
+    return guard.value
+```
+
+### Supported Global Sync Types
+
+All sync constructors work at module scope:
+
+| Declaration | Type |
+|-------------|------|
+| `let counter = sync.Atomic(0)` | `Atomic` |
+| `let data = sync.Mutex(value)` | `Mutex<T>` |
+| `let rw = sync.RWLock(value)` | `RwLock<T>` |
+| `let ch = sync.Channel(10)` | `Channel<T>` |
+| `let sem = sync.Semaphore(3)` | `Semaphore` |
+
+> [!NOTE]
+> Sync globals are exempt from the UPPER_CASE naming convention because they hold **mutable shared state** by design. The compiler detects `sync.*` constructors and suppresses the naming warning.
+
+---
+
 ## Usage Guide
 
 ### Basic Usage
@@ -759,6 +812,8 @@ let m = Mutex(42)
 - `sup.pool_size()`, `sup.child_count()`, `sup.is_running()`
 - ONE_FOR_ONE restart strategy
 - Both `import sync` and `from sync import` styles
+- **Global shared state**: all sync types work at module scope
+- **Warning suppression**: sync globals exempt from UPPER_CASE naming
 
 ### 🚧 Planned
 
