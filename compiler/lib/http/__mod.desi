@@ -319,6 +319,9 @@ pub def is_server_error(resp: Response) -> bool:
 def __http_server_new(port: int) -> Any
 
 @extern("C")
+def __http_server_new_tls(port: int, cert: str, key: str) -> Any
+
+@extern("C")
 def __http_server_run(server: Any) -> none
 
 # Response builders
@@ -361,6 +364,11 @@ def __http_server_set_handler(handler: Any) -> none
 # Create a new HTTP server bound to the given port
 pub def server(port: int) -> Server:
 	return __http_server_new(port)
+
+# Create a new HTTPS server with TLS certificate and key
+# Example: http.server(9443, "cert.pem", "key.pem")
+pub def server(port: int, cert: str, key: str) -> Server:
+	return __http_server_new_tls(port, cert, key)
 
 # Start the server's accept loop (blocks forever, no routing — echo mode)
 pub def listen(srv: Server) -> none:

@@ -33,6 +33,7 @@
 #include <signal.h>
 #include "supervisor.h"
 #include "websocket.h"
+#include "tls.h"
 #include <netinet/tcp.h>  /* TCP_NODELAY */
 
 #ifdef _WIN32
@@ -160,10 +161,13 @@ typedef struct {
     char* cors_origin;     /* allowed origin (NULL = no CORS headers) */
     char* cors_methods;    /* allowed methods */
     char* cors_headers;    /* allowed headers */
+    /* TLS */
+    DESI_SSL_CTX* ssl_ctx; /* non-NULL = HTTPS mode */
 } HttpServer;
 
 static void free_server(HttpServer* srv) {
     if (!srv) return;
+    if (srv->ssl_ctx) desi_tls_ctx_free(srv->ssl_ctx);
     if (srv->fd != INVALID_SOCK) CLOSE_SOCKET(srv->fd);
     free(srv->routes);
     free(srv->cors_origin);
@@ -698,14 +702,14 @@ static const char* status_text(int status) {
 /* Max requests per keep-alive connection */
 #define KEEPALIVE_MAX_REQUESTS 100
 
-static void send_response_ka(server_socket_t client_fd, HttpServerResponse* resp, int keep_alive) {
+static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServerResponse* resp, int keep_alive) {
     if (!resp) {
         /* Default 500 response */
         const char* err = "HTTP/1.1 500 Internal Server Error\r\n"
                           "Content-Length: 21\r\nConnection: close\r\n"
                           "Server: Desi/0.1\r\n\r\n"
                           "Internal Server Error";
-        send(client_fd, err, strlen(err), 0);
+        DESI_SEND(client_fd, ssl, err, strlen(err));
         return;
     }
 
@@ -729,15 +733,15 @@ static void send_response_ka(server_socket_t client_fd, HttpServerResponse* resp
         resp->extra_headers ? resp->extra_headers : "");
 
     /* Send header + body */
-    send(client_fd, header, hdr_len, 0);
+    DESI_SEND(client_fd, ssl, header, hdr_len);
     if (body_len > 0) {
-        send(client_fd, resp->body, body_len, 0);
+        DESI_SEND(client_fd, ssl, resp->body, body_len);
     }
 }
 
 /* Backward compat wrapper */
 static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
-    send_response_ka(client_fd, resp, 0);
+    send_response_ka(client_fd, NULL, resp, 0);
 }
 
 /* ============================================================
@@ -801,7 +805,7 @@ void __http_server_static(HttpServer* srv, const char* prefix, const char* dir) 
 
 /* Try to serve a static file. Returns 1 if served, 0 if not a static path. */
 static int try_serve_static(HttpServer* srv, server_socket_t client_fd,
-                            HttpServerRequest* req, int keep_alive) {
+                            DESI_SSL* ssl, HttpServerRequest* req, int keep_alive) {
     if (srv->static_prefix[0] == '\0') return 0;  /* no static dir configured */
     if (strcmp(req->method, "GET") != 0) return 0; /* only GET for static */
 
@@ -820,7 +824,7 @@ static int try_serve_static(HttpServer* srv, server_socket_t client_fd,
         strchr(rel, '\\') != NULL) {
         HttpServerResponse resp403 = {.status = 403, .body = "Forbidden",
             .content_type = "text/plain", .extra_headers = NULL};
-        send_response_ka(client_fd, &resp403, keep_alive);
+        send_response_ka(client_fd, ssl, &resp403, keep_alive);
         return 1;
     }
 
@@ -865,8 +869,8 @@ static int try_serve_static(HttpServer* srv, server_socket_t client_fd,
         "Cache-Control: public, max-age=3600\r\n"
         "\r\n", mime, file_size, conn);
 
-    send(client_fd, header, hdr_len, 0);
-    send(client_fd, file_data, file_size, 0);
+    DESI_SEND(client_fd, ssl, header, hdr_len);
+    DESI_SEND(client_fd, ssl, file_data, file_size);
     free(file_data);
     return 1;
 }
@@ -1019,9 +1023,26 @@ HttpServer* __http_server_new(int port) {
     return srv;
 }
 
+/* Create an HTTPS server with TLS certificate and key */
+HttpServer* __http_server_new_tls(int port, const char* cert_path, const char* key_path) {
+    HttpServer* srv = __http_server_new(port);
+    if (!srv) return NULL;
+
+    /* Initialize TLS context */
+    srv->ssl_ctx = desi_tls_ctx_new(cert_path, key_path);
+    if (!srv->ssl_ctx) {
+        fprintf(stderr, "http_server: failed to initialize TLS with cert=%s key=%s\n",
+                cert_path, key_path);
+        free_server(srv);
+        return NULL;
+    }
+
+    return srv;
+}
+
 /* ---- Handle a single client connection (with keep-alive) ---- */
 
-static void handle_client(HttpServer* srv, server_socket_t client_fd) {
+static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* ssl) {
     /* Set idle timeout on the socket for keep-alive */
     struct timeval tv;
     tv.tv_sec = KEEPALIVE_TIMEOUT_SECS;
@@ -1042,7 +1063,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
     while (requests_served < KEEPALIVE_MAX_REQUESTS) {
         /* Read request (up to 64KB) */
         char buf[65536];
-        ssize_t nread = recv(client_fd, buf, sizeof(buf) - 1, 0);
+        ssize_t nread = DESI_RECV(client_fd, ssl, buf, sizeof(buf) - 1);
         if (nread <= 0) {
             /* Connection closed by client or timeout */
             break;
@@ -1055,7 +1076,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
             const char* bad = "HTTP/1.1 400 Bad Request\r\n"
                               "Content-Length: 11\r\nConnection: close\r\n\r\n"
                               "Bad Request";
-            send(client_fd, bad, strlen(bad), 0);
+            DESI_SEND(client_fd, ssl, bad, strlen(bad));
             break;
         }
 
@@ -1110,7 +1131,9 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &ws_timeout, sizeof(ws_timeout));
 
                     ws_do_handshake(client_fd, ws_key);
+                    /* TODO: pass ssl to ws_session_loop for wss:// support */
                     ws_session_loop(client_fd, prebuf_data, prebuf_len);
+                    if (ssl) desi_tls_close(ssl);
                     return; /* connection taken over by WS */
                 }
             }
@@ -1123,7 +1146,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
         if (req->body_len > max_body) {
             HttpServerResponse resp413 = {.status = 413, .body = "{\"error\":\"payload too large\"}",
                 .content_type = "application/json", .extra_headers = NULL};
-            send_response_ka(client_fd, &resp413, 0);
+            send_response_ka(client_fd, ssl, &resp413, 0);
             printf("%s %s → 413 [body %d > %d]\n", req->method, req->path, req->body_len, max_body);
             fflush(stdout);
             free_request(req);
@@ -1135,7 +1158,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
             HttpServerResponse resp429 = {.status = 429, .body = "{\"error\":\"too many requests\"}",
                 .content_type = "application/json",
                 .extra_headers = "Retry-After: 60\r\n"};
-            send_response_ka(client_fd, &resp429, keep_alive);
+            send_response_ka(client_fd, ssl, &resp429, keep_alive);
             printf("%s %s → 429 [rate limited]\n", req->method, req->path);
             fflush(stdout);
             requests_served++;
@@ -1160,7 +1183,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 .content_type = "text/plain",
                 .extra_headers = cors_hdrs
             };
-            send_response_ka(client_fd, &preflight, keep_alive);
+            send_response_ka(client_fd, ssl, &preflight, keep_alive);
             printf("%s %s → 204 [CORS preflight]\n", req->method, req->path);
             fflush(stdout);
             requests_served++;
@@ -1193,7 +1216,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                     resp_owned = 1;
                 } else if (path_exists(srv, req->path)) {
                     resp = &default_405;
-                } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
+                } else if (try_serve_static(srv, client_fd, ssl, req, keep_alive)) {
                     printf("%s %s → 200 [static]%s\n", req->method, req->path,
                            keep_alive ? " [ka]" : "");
                     fflush(stdout);
@@ -1204,7 +1227,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
                 } else {
                     resp = &default_404;
                 }
-            } else if (try_serve_static(srv, client_fd, req, keep_alive)) {
+            } else if (try_serve_static(srv, client_fd, ssl, req, keep_alive)) {
                 printf("%s %s → 200 [static]%s\n", req->method, req->path,
                        keep_alive ? " [ka]" : "");
                 fflush(stdout);
@@ -1230,7 +1253,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
             __http_resp_header(resp, "Access-Control-Allow-Origin", srv->cors_origin);
         }
 
-        send_response_ka(client_fd, resp, keep_alive);
+        send_response_ka(client_fd, ssl, resp, keep_alive);
         requests_served++;
 
         /* Log */
@@ -1246,6 +1269,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
         if (!keep_alive) break;
     }
 
+    if (ssl) desi_tls_close(ssl);
     CLOSE_SOCKET(client_fd);
 }
 
@@ -1254,11 +1278,12 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd) {
 typedef struct {
     HttpServer*      srv;
     server_socket_t  client_fd;
+    DESI_SSL*        ssl;
 } ClientTask;
 
 static void client_task_fn(void* arg) {
     ClientTask* task = (ClientTask*)arg;
-    handle_client(task->srv, task->client_fd);
+    handle_client(task->srv, task->client_fd, task->ssl);
     free(task);
 }
 
@@ -1285,8 +1310,10 @@ void __http_server_run(HttpServer* srv) {
         return;
     }
 
-    printf("\033[32m✓ Desi HTTP Server listening on http://0.0.0.0:%d\033[0m\n", srv->port);
+    const char* proto = srv->ssl_ctx ? "https" : "http";
+    printf("\033[32m✓ Desi HTTP Server listening on %s://0.0.0.0:%d\033[0m\n", proto, srv->port);
     printf("  Workers: %d\n", HTTP_SERVER_POOL_SIZE);
+    if (srv->ssl_ctx) printf("  TLS: enabled\n");
     if (srv->route_count > 0) {
         printf("  Routes:\n");
         for (int i = 0; i < srv->route_count; i++) {
@@ -1311,15 +1338,27 @@ void __http_server_run(HttpServer* srv) {
             continue;
         }
 
+        /* TLS handshake (if HTTPS mode) */
+        DESI_SSL* conn_ssl = NULL;
+        if (srv->ssl_ctx) {
+            conn_ssl = desi_tls_accept(srv->ssl_ctx, client_fd);
+            if (!conn_ssl) {
+                /* Handshake failed — close and continue */
+                CLOSE_SOCKET(client_fd);
+                continue;
+            }
+        }
+
         /* Dispatch to supervisor pool for concurrent handling */
         ClientTask* task = (ClientTask*)malloc(sizeof(ClientTask));
         if (task) {
             task->srv = srv;
             task->client_fd = client_fd;
+            task->ssl = conn_ssl;
             supervisor_submit(sup, client_task_fn, task);
         } else {
             /* Fallback: handle synchronously if malloc fails */
-            handle_client(srv, client_fd);
+            handle_client(srv, client_fd, conn_ssl);
         }
     }
 

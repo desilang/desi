@@ -79,6 +79,7 @@ func init() {
 
 	// HTTP server runtime overrides
 	SetFuncSig("__http_server_new", "ptr", nil)
+	SetFuncSig("__http_server_new_tls", "ptr", nil)
 	SetFuncSig("__http_req_method", "ptr", nil)
 	SetFuncSig("__http_req_path", "ptr", nil)
 	SetFuncSig("__http_req_body", "ptr", nil)
