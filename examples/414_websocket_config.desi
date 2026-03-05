@@ -5,6 +5,7 @@
 # Test with browser — try sending very large messages to test size limit
 
 import http
+from http import Request
 
 def on_message(conn: int, msg: str):
 	print("Received message: " + msg)
@@ -20,7 +21,7 @@ def on_open(conn: int):
 def on_close(conn: int):
 	print("Client disconnected: " + str(conn))
 
-def handle_request(req: Any) -> Any:
+def handle_request(req: Request) -> Any:
 	let path = http.req_path(req)
 	if path == "/":
 		return http.html(200, "<!DOCTYPE html><html><body style='font-family:system-ui;background:#0d1117;color:#c9d1d9;max-width:600px;margin:40px auto;padding:0 20px'><h1 style='color:#58a6ff'>WS Config Test</h1><p style='color:#8b949e'>Max message: 1KB | Ping: 10s</p><div id=s style='padding:8px 12px;border-radius:6px;margin:10px 0'></div><form id=f style='display:flex;gap:8px;margin:10px 0'><input id=m style='flex:1;padding:8px;border:1px solid #30363d;border-radius:6px;background:#161b22;color:#c9d1d9' placeholder='Type a message...'><button style='padding:8px 16px;background:#238636;color:#fff;border:none;border-radius:6px;cursor:pointer'>Send</button></form><button onclick=\"ws.send('A'.repeat(500));add('Sent 500 chars','#c9d1d9')\" style='padding:6px 12px;background:#1f6feb;color:#fff;border:none;border-radius:6px;cursor:pointer;margin:4px'>Send 500 chars</button><button onclick=\"ws.send('B'.repeat(2000));add('Sent 2000 chars (should fail)','#f0ad4e')\" style='padding:6px 12px;background:#da3633;color:#fff;border:none;border-radius:6px;cursor:pointer;margin:4px'>Send 2000 chars (over limit)</button><div id=log style='font-family:monospace;font-size:13px;margin-top:10px'></div><script>const s=document.getElementById('s'),log=document.getElementById('log');function add(t,c){const d=document.createElement('div');d.style.cssText='padding:3px 0;border-bottom:1px solid #21262d;color:'+(c||'#8b949e');d.textContent=new Date().toLocaleTimeString()+' '+t;log.prepend(d)}s.textContent='Connecting...';s.style.color='#f0ad4e';const ws=new WebSocket('ws://'+location.host+'/ws');ws.onopen=()=>{s.textContent='Connected';s.style.color='#3fb950'};ws.onmessage=e=>add(e.data,'#58a6ff');ws.onerror=()=>{s.textContent='Error';s.style.color='#f85149'};ws.onclose=e=>{s.textContent='Closed: '+e.code;s.style.color='#f85149';add('CLOSED: code='+e.code,'#f85149')};document.getElementById('f').onsubmit=e=>{e.preventDefault();const m=document.getElementById('m');if(m.value){add('You: '+m.value,'#c9d1d9');ws.send(m.value);m.value=''}}</script></body></html>")

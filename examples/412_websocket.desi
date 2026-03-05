@@ -4,6 +4,7 @@
 # Open http://localhost:9090 in browser to test
 
 import http
+from http import Request
 
 # Called for each WebSocket message received
 def on_message(conn: int, msg: str):
@@ -19,7 +20,7 @@ def on_close(conn: int):
 	print("WS client disconnected")
 
 # HTTP handler serves test page
-def handle_request(req: Any) -> Any:
+def handle_request(req: Request) -> Any:
 	let path = http.req_path(req)
 
 	if path == "/":

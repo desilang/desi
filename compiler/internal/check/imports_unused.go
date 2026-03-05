@@ -123,6 +123,42 @@ func (u *usageTracker) countUsesFromTypes(info *Info) {
 	}
 }
 
+// countUsesFromTypeAnnotations scans function declarations for type alias
+// names used in parameter or return type annotations (e.g., "req: Request").
+func (u *usageTracker) countUsesFromTypeAnnotations(mod *ast.Module) {
+	if mod == nil {
+		return
+	}
+	for _, d := range mod.Decls {
+		fn, ok := d.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		// Check parameter types
+		for _, p := range fn.Params {
+			if p.Type != nil {
+				u.markTypeNameUsed(p.Type.Name)
+			}
+		}
+		// Check return type
+		if fn.RetType != nil {
+			u.markTypeNameUsed(fn.RetType.Name)
+		}
+	}
+}
+
+// markTypeNameUsed checks if a type name (possibly dotted) refers to a
+// from-import and marks it as used.
+func (u *usageTracker) markTypeNameUsed(name string) {
+	if name == "" {
+		return
+	}
+	// Direct match: "Request" from "from http import Request"
+	if _, ok := u.fromLoc[name]; ok {
+		u.usedFrom[name]++
+	}
+}
+
 // emitUnusedDiags returns DMW0004/DMW0005 diagnostics for bindings never used.
 func (u *usageTracker) emitUnusedDiags() []diag.Diagnostic {
 	var out []diag.Diagnostic
