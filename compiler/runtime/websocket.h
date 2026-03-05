@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "platform.h"
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -49,9 +50,13 @@ typedef struct {
     int route_count;
     size_t max_message_size; /* 0 = use default (16MB) */
     int ping_interval_secs;  /* 0 = disabled */
+    DesiPlatformRwLock lock; /* thread-safe access to connections/rooms */
 } WsState;
 
 extern WsState __ws_state;
+
+/* Initialize WS state (must be called before accepting connections) */
+void ws_state_init(void);
 
 /* Handshake + session */
 int  ws_do_handshake(int fd, const char* client_key);
