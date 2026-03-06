@@ -286,6 +286,75 @@ let resp = http.request_json("POST", url, {"key": "val"}, 30)
 
 ---
 
+## HTTPS Server (TLS)
+
+Desi supports HTTPS servers with TLS encryption out of the box. Provide a certificate and key to enable TLS:
+
+### Creating an HTTPS Server
+
+```desi
+import http
+
+def handler(req: Any) -> Any:
+    return http.json(200, {"secure": true, "message": "Hello over TLS!"})
+
+def main() -> int:
+    # Pass cert and key to enable TLS
+    let srv = http.server(9443, "cert.pem", "key.pem")
+    http.serve(srv, handler)
+    return 0
+```
+
+Without cert/key, `http.server(port)` creates a plain HTTP server (existing behavior).
+
+### Generating a Self-Signed Certificate
+
+For development and testing:
+
+```bash
+openssl req -x509 -newkey rsa:2048 -keyout key.pem -out cert.pem \
+    -days 365 -nodes -subj "/CN=localhost"
+```
+
+### Testing with curl
+
+```bash
+# -k flag accepts self-signed certificates
+curl -k https://localhost:9443/
+```
+
+### HTTPS + WebSockets (WSS)
+
+WebSocket upgrades over TLS connections automatically use `wss://`:
+
+```desi
+import http
+
+def on_message(conn: int, msg: str):
+    http.ws_send(conn, "secure echo: " + msg)
+
+def main() -> int:
+    let srv = http.server(9443, "cert.pem", "key.pem")
+    http.ws(srv, "/ws", on_message)
+    http.serve(srv)
+    return 0
+```
+
+Connect from browser:
+
+```javascript
+const ws = new WebSocket("wss://localhost:9443/ws");
+ws.onmessage = (e) => console.log(e.data);
+```
+
+### TLS Requirements
+
+- **macOS**: `brew install openssl`
+- **Linux**: `libssl-dev` (usually pre-installed)
+- TLS 1.2+ enforced (no SSLv3 or TLS 1.0/1.1)
+
+---
+
 ## WebSocket Server
 
 Build real-time applications with Desi's built-in WebSocket support. WebSockets run on the same HTTP server — no extra dependencies.

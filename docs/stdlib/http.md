@@ -789,3 +789,94 @@ def main() -> int:
 - Max 32 rooms per connection
 - Max 16MB per message frame
 - Auto ping/pong for connection health
+
+---
+
+## TLS / HTTPS Server
+
+The HTTP server supports TLS via OpenSSL for HTTPS and WSS connections.
+
+### Architecture
+
+```
+http.server(9443, "cert.pem", "key.pem")
+    ↓ Desi overload
+__http_server_new_tls(port, cert, key)      ← creates SSL_CTX
+    ↓
+__http_server_run(srv)                       ← accept loop
+    ↓ accept() → desi_tls_accept(ctx, fd) → SSL*
+handle_client(srv, fd, ssl)                  ← per-connection
+    ↓ DESI_SEND/DESI_RECV macros auto-dispatch TLS or raw
+```
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `tls.h` | Forward-declared SSL types, `DESI_SEND`/`DESI_RECV` macros |
+| `tls.c` | OpenSSL wrapper: SSL_CTX creation, handshake, send/recv, cleanup |
+| `http_server.c` | Integrated: `ssl_ctx` on `HttpServer`, `ssl` per-connection |
+
+### C Runtime Functions
+
+| C Function | Purpose |
+|------------|---------|
+| `desi_tls_ctx_new(cert, key)` | Create `SSL_CTX*`, load cert/key, set TLS 1.2+ minimum |
+| `desi_tls_accept(ctx, fd)` | Wrap accepted fd in `SSL*`, do TLS handshake |
+| `desi_tls_send(ssl, buf, len)` | `SSL_write` wrapper |
+| `desi_tls_recv(ssl, buf, len)` | `SSL_read` wrapper |
+| `desi_tls_close(ssl)` | `SSL_shutdown` + `SSL_free` |
+| `desi_tls_ctx_free(ctx)` | `SSL_CTX_free` |
+| `__http_server_new_tls(port, cert, key)` | Create HTTPS server with TLS context |
+
+### Auto-Dispatch Macros
+
+`DESI_SEND` and `DESI_RECV` (defined in `tls.h`) auto-select TLS or raw sockets:
+
+```c
+#define DESI_SEND(fd, ssl, buf, len) \
+    ((ssl) ? desi_tls_send((ssl), (buf), (len)) : send((fd), (buf), (len), 0))
+
+#define DESI_RECV(fd, ssl, buf, len) \
+    ((ssl) ? desi_tls_recv((ssl), (buf), (len)) : recv((fd), (buf), (len), 0))
+```
+
+Used in all send/recv call sites in `http_server.c` (7 locations). When `ssl == NULL` (plain HTTP), falls through to raw sockets with zero overhead.
+
+### Per-Connection SSL Lifecycle
+
+1. `accept()` returns `client_fd`
+2. If `srv->ssl_ctx != NULL`: `desi_tls_accept(ctx, fd)` → `SSL*`
+3. `SSL*` threaded through `handle_client(srv, fd, ssl)` → `send_response_ka(fd, ssl, ...)` → `try_serve_static(srv, fd, ssl, ...)`
+4. On connection close: `desi_tls_close(ssl)` then `CLOSE_SOCKET(fd)`
+
+### Compile-Time Detection
+
+`tls.c` uses `__has_include(<openssl/ssl.h>)` to detect OpenSSL at compile time. If unavailable, stub functions return `NULL`/`-1` — the server starts in HTTP-only mode.
+
+### Error Handling
+
+- **SSL_CTX creation errors** (bad cert/key) — logged and `__http_server_new_tls` returns `NULL`
+- **Handshake failures** — `SSL_ERROR_SSL` logged with full OpenSSL error string; `SSL_ERROR_SYSCALL` (plain-HTTP probes) silenced
+- **Send/recv errors** — `DESI_SEND`/`DESI_RECV` return `-1`, connection closed normally
+
+### Build System
+
+Already handled — no changes needed:
+
+- **Makefile**: `$(OPENSSL_CFLAGS)` passed to `$(CC)`, `tls.c` auto-discovered by wildcard
+- **run_build_cmd.go**: `detectOpenSSLPrefix()` finds Homebrew/system OpenSSL, links `-lssl -lcrypto`
+- **watch_cmd.go**: Same OpenSSL detection for hot-reload builds
+
+### Desi API
+
+```desi
+# Plain HTTP (existing)
+let srv = http.server(8080)
+
+# HTTPS with TLS (new overload)
+let srv = http.server(9443, "cert.pem", "key.pem")
+```
+
+Internally maps to `__http_server_new_tls(port, cert, key)` via Desi function overloading.
+

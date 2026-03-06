@@ -1,0 +1,36 @@
+# EXPECTED: SKIP
+# HTTPS Server with TLS — Phase 4 test
+# Run with: desic run examples/416_https_server.desi
+# Test with:
+#   curl -k https://localhost:9443/           → HTML welcome page
+#   curl -k https://localhost:9443/api/health → JSON health check
+#
+# NOTE: Uses self-signed cert, so curl needs -k (insecure) flag
+
+import http
+from http import Request
+
+# Dispatch handler — called for every request by the C server
+def handle_request(req: Request) -> Any:
+	let path = http.req_path(req)
+
+	# Route: GET /
+	if path == "/":
+		return http.html(200, "<html><body><h1>Secure Desi Server</h1><p>TLS is working!</p></body></html>")
+
+	# Route: GET /api/health
+	if path == "/api/health":
+		return http.json_text(200, "{\"status\":\"healthy\",\"tls\":true}")
+
+	# Route: GET /text
+	if path == "/text":
+		return http.text(200, "Hello over TLS!")
+
+	# Default: 404
+	return http.json_text(404, "{\"error\":\"not found\",\"path\":\"" + path + "\"}")
+
+def main() -> int:
+	print("Starting Desi HTTPS Server with TLS...")
+	let srv = http.server(9443, "examples/test_cert.pem", "examples/test_key.pem")
+	http.serve(srv, handle_request)
+	return 0
