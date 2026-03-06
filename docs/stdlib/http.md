@@ -148,7 +148,8 @@ lower_call.go           ← Intercepts http.serve(srv, handler) to emit handler 
 | `__http_server_new(port)` | Create server bound to port |
 | `__http_server_run(server)` | Start accept loop (blocks) |
 | `__http_server_set_handler(fn)` | Register Desi function as request handler |
-| `__http_resp_new(status, body, ct)` | Build HTTP response |
+| `__http_resp_new(status, body, ct)` | Build HTTP response from string |
+| `__http_resp_from_file(status, path, ct)` | Build HTTP response from file contents |
 | `__http_req_method(req)` | Get request method |
 | `__http_req_path(req)` | Get request path |
 | `__http_req_body(req)` | Get request body |
@@ -183,8 +184,34 @@ lower_call.go           ← Intercepts http.serve(srv, handler) to emit handler 
 | `http.text(status, body)` | `text/plain; charset=utf-8` |
 | `http.json_text(status, body)` | `application/json` |
 | `http.json(status, data)` | `application/json` (auto-serializes dict) |
-| `http.html(status, body)` | `text/html; charset=utf-8` |
+| `http.html(status, path)` | `text/html; charset=utf-8` (reads from file) |
+| `http.html(status, raw="...")` | `text/html; charset=utf-8` (inline string) |
 | `http.response(status, body, ct)` | Custom content type |
+
+#### `http.html()` — File-Based API
+
+`http.html()` defaults to reading HTML from a file. Use the `raw=` named argument for inline strings.
+
+```desi
+# Serve HTML from file (default)
+http.html(200, "templates/index.html")
+
+# Serve inline HTML string
+http.html(200, raw="<h1>Hello World</h1>")
+
+# Custom content type (3rd positional or content_type= kwarg)
+http.html(200, "data.xml", "application/xml")
+http.html(200, raw="<data/>", content_type="application/xml")
+```
+
+**Named Arguments:**
+
+| Kwarg | Type | Description |
+|-------|------|-------------|
+| `raw=` | `str` | Inline HTML string (bypasses file reading) |
+| `content_type=` | `str` | Override default `text/html; charset=utf-8` |
+
+**Error Handling:** If the file cannot be opened, returns a `500` response with an error message.
 
 ### Lowerer Integration
 
@@ -192,7 +219,13 @@ lower_call.go           ← Intercepts http.serve(srv, handler) to emit handler 
 1. Emits `__http_server_set_handler(@handler)` — registers the Desi function as a C callback
 2. Emits `__http_server_run(srv)` — starts the accept loop
 
-The Desi function body for `serve()` is never executed — it's a stub for the type checker.
+`http.html(...)` is also intercepted by the lowerer to handle named arguments:
+- **No `raw=`**: positional arg is file path → emits `__http_resp_from_file(status, path, ct)`
+- **`raw=` present**: kwarg value is inline body → emits `__http_resp_new(status, body, ct)`
+- **`content_type=` present**: overrides default `"text/html; charset=utf-8"`
+
+Type checker (`expr_call.go`) has a special case for `http.html` with named args, bypassing
+normal overload resolution and accepting `raw=`/`content_type=` kwargs.
 
 ---
 
