@@ -90,6 +90,7 @@ func init() {
 	SetFuncSig("__http_req_json", "ptr", nil)
 	SetFuncSig("__http_resp_new", "ptr", nil)
 	SetFuncSig("__http_resp_from_file", "ptr", nil)
+	SetFuncSig("__http_request_no_redirect", "ptr", nil)
 	SetFuncSig("__http_server_set_handler", "void", nil)
 	SetFuncSig("__http_server_route", "void", nil)
 	SetFuncSig("__http_server_run", "void", nil)
@@ -120,6 +121,7 @@ func init() {
 	SetFuncSig("__ws_route_on_open", "void", nil)
 	SetFuncSig("__ws_route_on_close", "void", nil)
 	SetFuncSig("__ws_route_on_binary", "void", nil)
+	SetFuncSig("__ws_conn_count", "i32", nil)
 
 	// JSON runtime overrides
 	SetFuncSig("__json_parse", "ptr", nil)

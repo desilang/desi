@@ -33,6 +33,9 @@ def __http_request(method: str, url: str, body: str, headers: str) -> Any
 @extern("C")
 def __http_request_timeout(method: str, url: str, body: str, headers: str, timeout_secs: int) -> Any
 
+@extern("C")
+def __http_request_no_redirect(method: str, url: str, body: str, headers: str) -> Any
+
 # JSON parser (from json.c runtime, for auto-parsing response bodies)
 @extern("C")
 def __json_parse(text: str) -> Any
@@ -229,6 +232,18 @@ pub def request_json(method: str, url: str, data: Any, timeout: int) -> Response
 	unsafe:
 		let body = __dict_to_json_str(data)
 		let raw = __http_request_timeout(method, url, body, "Content-Type: application/json\r\n", timeout)
+		let resp = Response(
+			status=__http_response_status(raw),
+			body=__http_response_body(raw),
+			headers=__http_response_headers(raw)
+		)
+		return resp
+
+# Perform a custom HTTP request without following redirects
+# Returns the raw redirect response (301/302/etc.) instead of following Location header
+pub def request_no_redirect(method: str, url: str, body: str, headers: str) -> Response:
+	unsafe:
+		let raw = __http_request_no_redirect(method, url, body, headers)
 		let resp = Response(
 			status=__http_response_status(raw),
 			body=__http_response_body(raw),
@@ -565,6 +580,9 @@ def __ws_set_max_message_size(size: int) -> none
 @extern("C")
 def __ws_set_ping_interval(secs: int) -> none
 
+@extern("C")
+def __ws_conn_count() -> int
+
 # ============================================================
 # WebSocket — Public API
 # ============================================================
@@ -631,3 +649,12 @@ pub def ws_max_message_size(srv: Server, max_bytes: int) -> none:
 # Note: lowerer intercepts and emits __ws_set_ping_interval
 pub def ws_ping_interval(srv: Server, secs: int) -> none:
 	return
+
+# Send a binary message to a single WebSocket connection
+# Note: lowerer intercepts and emits __ws_send_binary(conn, data, len)
+pub def ws_send_binary(conn: int, data: str) -> none:
+	return
+
+# Get the number of currently active WebSocket connections
+pub def ws_conn_count() -> int:
+	return __ws_conn_count()

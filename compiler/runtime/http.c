@@ -432,6 +432,10 @@ void *__http_request_timeout(const char *method, const char *url, const char *bo
     return http_do_request(method, url, body, headers, 10, timeout_secs > 0 ? timeout_secs : HTTP_DEFAULT_TIMEOUT);
 }
 
+void *__http_request_no_redirect(const char *method, const char *url, const char *body, const char *headers) {
+    return http_do_request(method, url, body, headers, 0, HTTP_DEFAULT_TIMEOUT);
+}
+
 void *__http_get(const char *url)               { return http_do_request("GET",     url, NULL, NULL, 10, HTTP_DEFAULT_TIMEOUT); }
 void *__http_post(const char *url, const char *body)  { return http_do_request("POST",    url, body, "Content-Type: application/json\r\n", 10, HTTP_DEFAULT_TIMEOUT); }
 void *__http_put(const char *url, const char *body)   { return http_do_request("PUT",     url, body, "Content-Type: application/json\r\n", 10, HTTP_DEFAULT_TIMEOUT); }
