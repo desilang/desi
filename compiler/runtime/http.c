@@ -444,7 +444,10 @@ static HttpResponse *http_do_request(const char *method, const char *url,
                 final_url = abs_buf;
             }
 
-            buf_free(&raw); free(resp_hdrs); conn_close(&conn);
+            buf_free(&raw);
+            /* Store cookies from redirect response before following */
+            store_cookies(parsed.host, resp_hdrs);
+            free(resp_hdrs); conn_close(&conn);
 
             const char *rm = (status == 303) ? "GET" : method;
             const char *rb = (status == 303) ? NULL : body_data;
