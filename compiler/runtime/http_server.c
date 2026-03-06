@@ -508,6 +508,32 @@ HttpServerResponse* __http_resp_new(int status, const char* body, const char* co
     return resp;
 }
 
+HttpServerResponse* __http_resp_from_file(int status, const char* path, const char* content_type) {
+    if (!path) return __http_resp_new(500, "http.html: no file path provided", "text/plain");
+    FILE* f = fopen(path, "rb");
+    if (!f) {
+        char errbuf[256];
+        snprintf(errbuf, sizeof(errbuf), "http.html: cannot open file '%s'", path);
+        fprintf(stderr, "%s\n", errbuf);
+        return __http_resp_new(500, errbuf, "text/plain");
+    }
+    fseek(f, 0, SEEK_END);
+    long len = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char* buf = (char*)malloc(len + 1);
+    if (!buf) { fclose(f); return __http_resp_new(500, "http.html: out of memory", "text/plain"); }
+    size_t read = fread(buf, 1, len, f);
+    fclose(f);
+    buf[read] = '\0';
+    HttpServerResponse* resp = (HttpServerResponse*)calloc(1, sizeof(HttpServerResponse));
+    if (!resp) { free(buf); return NULL; }
+    resp->status = status;
+    resp->body = buf;
+    resp->content_type = content_type ? strdup(content_type) : strdup("text/html; charset=utf-8");
+    resp->extra_headers = NULL;
+    return resp;
+}
+
 int __http_resp_status(HttpServerResponse* resp) {
     return resp ? resp->status : 0;
 }

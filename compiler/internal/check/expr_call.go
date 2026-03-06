@@ -177,6 +177,21 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		// Stdlib modules (json, math, etc.) use @extern wrapper functions and
 		// are resolved through normal module resolution, not hardcoded handling.
 		if set, base, isImport := c.moduleQualifiedOverloadSet(fe); isImport {
+			// Special case: http.html() accepts kwargs (raw=, content_type=)
+			// Lowerer handles dispatch; type checker just validates and approves.
+			if base.Name == "http" && fe.Name.Name == "html" && hasNamed {
+				for _, a := range argsNodes {
+					c.typ(a.Expr)
+					if a.Name != nil {
+						kwName := a.Name.Name
+						if kwName != "raw" && kwName != "content_type" {
+							c.add(diagAt("DTE0001", a.Name.Span, fmt.Sprintf("http.html() got unexpected keyword argument '%s'", kwName)))
+						}
+					}
+				}
+				c.info.Types[call] = types.Any
+				return types.Any
+			}
 			if !hasNamed {
 				// Legacy positional path
 				args := make([]types.T, len(argsNodes))
