@@ -1130,9 +1130,8 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                     struct timeval ws_timeout = {86400, 0}; /* 24 hours */
                     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &ws_timeout, sizeof(ws_timeout));
 
-                    ws_do_handshake(client_fd, ws_key);
-                    /* TODO: pass ssl to ws_session_loop for wss:// support */
-                    ws_session_loop(client_fd, prebuf_data, prebuf_len);
+                    ws_do_handshake(client_fd, ws_key, ssl);
+                    ws_session_loop(client_fd, prebuf_data, prebuf_len, ssl);
                     if (ssl) desi_tls_close(ssl);
                     return; /* connection taken over by WS */
                 }

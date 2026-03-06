@@ -28,6 +28,10 @@
 #include <errno.h>
 #include "websocket.h"
 
+/* Thread-local SSL pointer: set by ws_do_handshake / ws_session_loop
+ * so WS_SEND/WS_RECV macros auto-dispatch to TLS or raw sockets */
+_Thread_local DESI_SSL* _ws_current_ssl = NULL;
+
 /* ============================================================
  * Minimal SHA-1 (RFC 3174) — protocol handshake only
  * ============================================================ */
@@ -118,8 +122,9 @@ static void base64_encode(const uint8_t* in, size_t len, char* out) {
 
 static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-int ws_do_handshake(int fd, const char* client_key) {
+int ws_do_handshake(int fd, const char* client_key, DESI_SSL* ssl) {
     if (!client_key || !client_key[0]) return -1;
+    _ws_current_ssl = ssl; /* set for WS_SEND macro */
 
     /* Concatenate key + magic GUID */
     char concat[256];
@@ -334,12 +339,13 @@ void ws_state_init(void) {
 }
 
 /* Register a connection (caller must NOT hold lock — acquires WRLOCK) */
-static WsConnection* ws_register_conn(int fd) {
+static WsConnection* ws_register_conn(int fd, DESI_SSL* ssl) {
     DESI_RWLOCK_WRLOCK(__ws_state.lock);
     WsConnection* result = NULL;
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd == 0) {
             __ws_state.conns[i].fd = fd;
+            __ws_state.conns[i].ssl = ssl;
             __ws_state.conns[i].room_count = 0;
             __ws_state.conn_count++;
             result = &__ws_state.conns[i];
@@ -389,26 +395,37 @@ static WsConnection* ws_find_conn(int fd) {
 /* Send text message to a single connection */
 void __ws_send(int conn_fd, const char* msg) {
     if (conn_fd <= 0 || !msg) return;
+    WsConnection* conn = ws_find_conn(conn_fd);
+    DESI_SSL* saved = _ws_current_ssl;
+    _ws_current_ssl = conn ? conn->ssl : NULL;
     ws_send_text(conn_fd, msg, strlen(msg));
+    _ws_current_ssl = saved;
 }
 
 /* Broadcast text to ALL WebSocket connections (RDLOCK — concurrent readers OK) */
 void __ws_broadcast(const char* msg) {
     if (!msg) return;
     size_t len = strlen(msg);
+    DESI_SSL* saved = _ws_current_ssl;
     DESI_RWLOCK_RDLOCK(__ws_state.lock);
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         if (__ws_state.conns[i].fd > 0) {
+            _ws_current_ssl = __ws_state.conns[i].ssl;
             ws_send_text(__ws_state.conns[i].fd, msg, len);
         }
     }
     DESI_RWLOCK_RDUNLOCK(__ws_state.lock);
+    _ws_current_ssl = saved;
 }
 
 /* Close a WebSocket connection */
 void __ws_close(int conn_fd) {
     if (conn_fd <= 0) return;
+    WsConnection* conn = ws_find_conn(conn_fd);
+    DESI_SSL* saved = _ws_current_ssl;
+    _ws_current_ssl = conn ? conn->ssl : NULL;
     ws_send_close(conn_fd, 1000); /* 1000 = normal closure */
+    _ws_current_ssl = saved;
     ws_unregister_conn(conn_fd);
     close(conn_fd);
 }
@@ -467,18 +484,21 @@ void __ws_leave(int conn_fd, const char* room) {
 void __ws_to_room(const char* room, const char* msg) {
     if (!room || !msg) return;
     size_t len = strlen(msg);
+    DESI_SSL* saved = _ws_current_ssl;
     DESI_RWLOCK_RDLOCK(__ws_state.lock);
     for (int i = 0; i < WS_MAX_CONNECTIONS; i++) {
         WsConnection* conn = &__ws_state.conns[i];
         if (conn->fd <= 0) continue;
         for (int r = 0; r < conn->room_count; r++) {
             if (strcmp(conn->rooms[r], room) == 0) {
+                _ws_current_ssl = conn->ssl;
                 ws_send_text(conn->fd, msg, len);
                 break;
             }
         }
     }
     DESI_RWLOCK_RDUNLOCK(__ws_state.lock);
+    _ws_current_ssl = saved;
 }
 
 /* Set WS endpoint path */
@@ -580,18 +600,25 @@ static void* ws_ping_thread(void* arg) {
     while (1) {
         sleep((unsigned)interval);
         /* Check if connection is still registered */
-        if (!ws_find_conn(client_fd)) break;
-        if (ws_send_ping(client_fd) < 0) break;
+        WsConnection* conn = ws_find_conn(client_fd);
+        if (!conn) break;
+        DESI_SSL* saved = _ws_current_ssl;
+        _ws_current_ssl = conn->ssl;
+        if (ws_send_ping(client_fd) < 0) { _ws_current_ssl = saved; break; }
+        _ws_current_ssl = saved;
     }
     return NULL;
 }
 
-void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len) {
+void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DESI_SSL* ssl) {
+    /* Set thread-local SSL for WS_SEND/WS_RECV macros */
+    _ws_current_ssl = ssl;
+
     /* Install any bytes that were already read past the HTTP headers */
     ws_set_prebuf(prebuf, prebuf_len);
 
-    /* Register connection */
-    WsConnection* conn = ws_register_conn(client_fd);
+    /* Register connection (stores SSL for cross-thread API use) */
+    WsConnection* conn = ws_register_conn(client_fd, ssl);
     if (!conn) {
         fprintf(stderr, "[ws] max connections reached, closing fd=%d\n", client_fd);
         ws_send_close(client_fd, 1013); /* Try Again */

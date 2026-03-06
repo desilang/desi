@@ -103,7 +103,13 @@ DESI_SSL* desi_tls_accept(DESI_SSL_CTX* ctx, int fd) {
             unsigned long ossl_err = ERR_get_error();
             char errbuf[256];
             ERR_error_string_n(ossl_err, errbuf, sizeof(errbuf));
-            fprintf(stderr, "[tls] Handshake error (fd=%d): %s\n", fd, errbuf);
+            /* Distinguish self-signed cert warnings from real errors */
+            if (strstr(errbuf, "certificate unknown") != NULL) {
+                /* Expected with self-signed certs — browser rejects then retries */
+                fprintf(stderr, "[tls] Client rejected certificate (fd=%d) — expected with self-signed certs\n", fd);
+            } else {
+                fprintf(stderr, "[tls] Handshake error (fd=%d): %s\n", fd, errbuf);
+            }
         }
         SSL_free(ssl);
         return NULL;
