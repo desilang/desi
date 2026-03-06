@@ -103,6 +103,20 @@ func init() {
 	SetFuncSig("__http_req_cookie", "ptr", nil)
 	SetFuncSig("__http_resp_cookie", "void", nil)
 
+	// Shutdown
+	SetFuncSig("__http_server_shutdown", "void", nil)
+
+	// Multipart form accessors
+	SetFuncSig("__http_req_form_field", "ptr", nil)
+	SetFuncSig("__http_req_form_file", "ptr", nil)
+	SetFuncSig("__http_req_form_filename", "ptr", nil)
+	SetFuncSig("__http_req_form_file_size", "i32", nil)
+
+	// Client cookie jar
+	SetFuncSig("__http_enable_cookies", "void", nil)
+	SetFuncSig("__http_disable_cookies", "void", nil)
+	SetFuncSig("__http_clear_cookies", "void", nil)
+
 	// WebSocket runtime overrides
 	SetFuncSig("__ws_send", "void", nil)
 	SetFuncSig("__ws_send_binary", "void", nil)
