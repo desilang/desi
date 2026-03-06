@@ -121,8 +121,18 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 			}
 
 			// Check 2: Global constants should be UPPER_CASE (Warning)
-			// We simply check if the first letter is lowercase for a heuristic
-			if len(ls.Name.Name) > 0 {
+			// Skip for sync module types (sync.Atomic, sync.Mutex, etc.) — they're mutable by design
+			isSyncGlobal := false
+			if ls.Value != nil {
+				if ce, ok := ls.Value.(*ast.CallExpr); ok {
+					if fe, ok := ce.Callee.(*ast.FieldExpr); ok {
+						if modId, ok := fe.X.(*ast.Ident); ok && modId.Name == "sync" {
+							isSyncGlobal = true
+						}
+					}
+				}
+			}
+			if !isSyncGlobal && len(ls.Name.Name) > 0 {
 				first := ls.Name.Name[0]
 				if first >= 'a' && first <= 'z' {
 					out = append(out, diagAt("DW0008", ls.Name.Span, "global constant '"+ls.Name.Name+"' should be UPPER_CASE"))
@@ -174,6 +184,23 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 								}
 								t = &types.Struct{Name: id.Name, Fields: fields}
 								break
+							}
+						}
+					}
+					// Module-qualified constructors: sync.Atomic(0), sync.Mutex(v), etc.
+					if fe, ok := v.Callee.(*ast.FieldExpr); ok {
+						if modId, ok := fe.X.(*ast.Ident); ok && modId.Name == "sync" {
+							switch fe.Name.Name {
+							case "Atomic":
+								t = types.AtomicOf()
+							case "Mutex":
+								t = types.MutexOf(types.Any)
+							case "RWLock":
+								t = types.RwLockOf(types.Any)
+							case "Channel":
+								t = types.ChannelOf(types.Any)
+							case "Semaphore":
+								t = types.SemaphoreOf()
 							}
 						}
 					}
