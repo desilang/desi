@@ -117,6 +117,14 @@ func init() {
 	SetFuncSig("__http_disable_cookies", "void", nil)
 	SetFuncSig("__http_clear_cookies", "void", nil)
 
+	// TLS certificate configuration
+	SetFuncSig("__http_set_ca_bundle", "void", nil)
+	SetFuncSig("__http_set_client_cert", "void", nil)
+
+	// Proxy configuration
+	SetFuncSig("__http_set_proxy", "void", nil)
+	SetFuncSig("__http_clear_proxy", "void", nil)
+
 	// WebSocket runtime overrides
 	SetFuncSig("__ws_send", "void", nil)
 	SetFuncSig("__ws_send_binary", "void", nil)

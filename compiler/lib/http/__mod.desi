@@ -36,6 +36,20 @@ def __http_request_timeout(method: str, url: str, body: str, headers: str, timeo
 @extern("C")
 def __http_request_no_redirect(method: str, url: str, body: str, headers: str) -> Any
 
+# TLS certificate configuration
+@extern("C")
+def __http_set_ca_bundle(path: str) -> none
+
+@extern("C")
+def __http_set_client_cert(cert: str, key: str) -> none
+
+# Proxy configuration
+@extern("C")
+def __http_set_proxy(host: str, port: int) -> none
+
+@extern("C")
+def __http_clear_proxy() -> none
+
 # JSON parser (from json.c runtime, for auto-parsing response bodies)
 @extern("C")
 def __json_parse(text: str) -> Any
@@ -607,6 +621,34 @@ pub def disable_cookies() -> none:
 # Clear all stored cookies
 pub def clear_cookies() -> none:
 	__http_clear_cookies()
+
+# ============================================================
+# Client — TLS Certificate Configuration
+# ============================================================
+
+# Set a custom CA bundle file for HTTPS certificate verification
+# Example: http.set_ca_bundle("/path/to/ca-bundle.crt")
+pub def set_ca_bundle(path: str) -> none:
+	__http_set_ca_bundle(path)
+
+# Set a client certificate and key for mutual TLS (mTLS)
+# Example: http.set_client_cert("client.pem", "client-key.pem")
+pub def set_client_cert(cert: str, key: str) -> none:
+	__http_set_client_cert(cert, key)
+
+# ============================================================
+# Client — Proxy Configuration
+# ============================================================
+
+# Route all HTTP/HTTPS client requests through a proxy
+# HTTPS requests use HTTP CONNECT tunnel through the proxy
+# Example: http.set_proxy("proxy.example.com", 8080)
+pub def set_proxy(host: str, port: int) -> none:
+	__http_set_proxy(host, port)
+
+# Clear proxy configuration (connect directly to target)
+pub def clear_proxy() -> none:
+	__http_clear_proxy()
 
 # ============================================================
 # WebSocket — C Runtime Bindings

@@ -17,6 +17,23 @@ typedef struct {
 
 static int _openssl_initialized = 0;
 
+/* Custom TLS configuration (set via Desi API before requests) */
+static char _custom_ca_bundle[1024] = {0};
+static char _custom_client_cert[1024] = {0};
+static char _custom_client_key[1024] = {0};
+
+void __http_set_ca_bundle(const char* path) {
+    if (path) strncpy(_custom_ca_bundle, path, sizeof(_custom_ca_bundle) - 1);
+    else _custom_ca_bundle[0] = '\0';
+}
+
+void __http_set_client_cert(const char* cert, const char* key) {
+    if (cert) strncpy(_custom_client_cert, cert, sizeof(_custom_client_cert) - 1);
+    else _custom_client_cert[0] = '\0';
+    if (key) strncpy(_custom_client_key, key, sizeof(_custom_client_key) - 1);
+    else _custom_client_key[0] = '\0';
+}
+
 static int tls_handshake(Connection *c, const char *host) {
     if (!_openssl_initialized) {
         SSL_library_init();
@@ -32,8 +49,20 @@ static int tls_handshake(Connection *c, const char *host) {
     st->ctx = SSL_CTX_new(method);
     if (!st->ctx) { free(st); return -1; }
 
-    /* Use system certificate store */
-    SSL_CTX_set_default_verify_paths(st->ctx);
+    /* Use custom CA bundle if set, otherwise system defaults */
+    if (_custom_ca_bundle[0]) {
+        SSL_CTX_load_verify_locations(st->ctx, _custom_ca_bundle, NULL);
+    } else {
+        SSL_CTX_set_default_verify_paths(st->ctx);
+    }
+
+    /* Use client certificate if set (for mTLS) */
+    if (_custom_client_cert[0]) {
+        SSL_CTX_use_certificate_file(st->ctx, _custom_client_cert, SSL_FILETYPE_PEM);
+        if (_custom_client_key[0]) {
+            SSL_CTX_use_PrivateKey_file(st->ctx, _custom_client_key, SSL_FILETYPE_PEM);
+        }
+    }
 
     st->ssl = SSL_new(st->ctx);
     if (!st->ssl) {
