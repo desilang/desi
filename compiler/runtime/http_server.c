@@ -1090,7 +1090,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
     int requests_served = 0;
 
     while (requests_served < KEEPALIVE_MAX_REQUESTS) {
-        /* Read request (up to 64KB) */
+        /* Read request headers first */
         char buf[65536];
         ssize_t nread = DESI_RECV(client_fd, ssl, buf, sizeof(buf) - 1);
         if (nread <= 0) {
@@ -1099,8 +1099,49 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
         }
         buf[nread] = '\0';
 
-        /* Parse request */
-        HttpServerRequest* req = parse_request(buf, (int)nread);
+        /* Check if we have complete headers (\r\n\r\n) */
+        char* hdr_end = strstr(buf, "\r\n\r\n");
+        if (!hdr_end) {
+            const char* bad = "HTTP/1.1 400 Bad Request\r\n"
+                              "Content-Length: 11\r\nConnection: close\r\n\r\n"
+                              "Bad Request";
+            DESI_SEND(client_fd, ssl, bad, strlen(bad));
+            break;
+        }
+
+        /* Check Content-Length: read full body if needed */
+        char* raw_buf = buf;
+        int raw_len = (int)nread;
+        char* heap_buf = NULL;  /* track separately for free */
+
+        int cl = parse_content_length(buf);
+        if (cl > 0) {
+            int hdr_size = (int)(hdr_end + 4 - buf);
+            int body_received = (int)nread - hdr_size;
+
+            if (body_received < cl) {
+                int total_needed = hdr_size + cl;
+                heap_buf = (char*)malloc(total_needed + 1);
+                memcpy(heap_buf, buf, nread);
+                int total_read = (int)nread;
+
+                while (total_read < total_needed) {
+                    int to_read = total_needed - total_read;
+                    if (to_read > 65536) to_read = 65536;
+                    ssize_t n = DESI_RECV(client_fd, ssl, heap_buf + total_read, to_read);
+                    if (n <= 0) break;
+                    total_read += (int)n;
+                }
+                heap_buf[total_read] = '\0';
+                raw_buf = heap_buf;
+                raw_len = total_read;
+            }
+        }
+
+        /* Parse request from the complete raw data */
+        HttpServerRequest* req = parse_request(raw_buf, raw_len);
+        if (heap_buf) free(heap_buf);
+
         if (!req) {
             const char* bad = "HTTP/1.1 400 Bad Request\r\n"
                               "Content-Length: 11\r\nConnection: close\r\n\r\n"
