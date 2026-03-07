@@ -41,6 +41,26 @@ static void ensure_wsa(void) {
 #define ensure_wsa() ((void)0)
 #endif
 
+/* ---- HTTP Proxy Configuration ---- */
+
+static char _proxy_host[256] = {0};
+static char _proxy_port[16] = {0};
+
+void __http_set_proxy(const char* host, int port) {
+    if (host && host[0]) {
+        strncpy(_proxy_host, host, sizeof(_proxy_host) - 1);
+        snprintf(_proxy_port, sizeof(_proxy_port), "%d", port);
+    } else {
+        _proxy_host[0] = '\0';
+        _proxy_port[0] = '\0';
+    }
+}
+
+void __http_clear_proxy(void) {
+    _proxy_host[0] = '\0';
+    _proxy_port[0] = '\0';
+}
+
 /* ---- TCP connection ---- */
 
 static DESI_SOCKET tcp_connect(const char *host, const char *port, int timeout_secs) {
@@ -294,14 +314,46 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     memset(&conn, 0, sizeof(conn));
     conn.fd = DESI_INVALID_SOCKET;
 
-    conn.fd = tcp_connect(parsed.host, parsed.port, timeout_secs);
-    if (conn.fd == DESI_INVALID_SOCKET)
-        return make_error("connection failed (timeout or unreachable)");
+    int using_proxy = (_proxy_host[0] != '\0');
 
-    if (strcmp(parsed.scheme, "https") == 0) {
-        if (tls_handshake(&conn, parsed.host) != 0) {
-            DESI_CLOSE_SOCKET(conn.fd);
-            return make_error("TLS handshake failed");
+    if (using_proxy) {
+        /* Connect to proxy instead of target */
+        conn.fd = tcp_connect(_proxy_host, _proxy_port, timeout_secs);
+        if (conn.fd == DESI_INVALID_SOCKET)
+            return make_error("proxy connection failed");
+
+        if (strcmp(parsed.scheme, "https") == 0) {
+            /* HTTPS through proxy: send CONNECT tunnel */
+            char connect_req[512];
+            snprintf(connect_req, sizeof(connect_req),
+                "CONNECT %s:%s HTTP/1.1\r\nHost: %s:%s\r\n\r\n",
+                parsed.host, parsed.port, parsed.host, parsed.port);
+            send(conn.fd, connect_req, (int)strlen(connect_req), 0);
+
+            /* Read proxy response (expect 200) */
+            char proxy_resp[1024];
+            int n = (int)recv(conn.fd, proxy_resp, sizeof(proxy_resp) - 1, 0);
+            if (n <= 0 || !strstr(proxy_resp, "200")) {
+                DESI_CLOSE_SOCKET(conn.fd);
+                return make_error("proxy CONNECT tunnel failed");
+            }
+
+            /* Now do TLS handshake through the tunnel */
+            if (tls_handshake(&conn, parsed.host) != 0) {
+                DESI_CLOSE_SOCKET(conn.fd);
+                return make_error("TLS handshake through proxy failed");
+            }
+        }
+    } else {
+        conn.fd = tcp_connect(parsed.host, parsed.port, timeout_secs);
+        if (conn.fd == DESI_INVALID_SOCKET)
+            return make_error("connection failed (timeout or unreachable)");
+
+        if (strcmp(parsed.scheme, "https") == 0) {
+            if (tls_handshake(&conn, parsed.host) != 0) {
+                DESI_CLOSE_SOCKET(conn.fd);
+                return make_error("TLS handshake failed");
+            }
         }
     }
 

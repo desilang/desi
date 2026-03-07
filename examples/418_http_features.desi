@@ -1,0 +1,76 @@
+# EXPECTED: SKIP
+# HTTP/WS Feature Test — Tests new Batch 1-3 features
+# Run manually: desic run examples/418_http_features.desi
+#
+# Tests:
+#   - Redirect control (no-follow)
+#   - Cookie persistence (client)
+#   - WebSocket connection count
+#   - Server with multipart form upload
+#   - Graceful shutdown
+
+import http
+import json
+
+# ============================================================
+# Test 1: request_no_redirect — stops at 302 without following
+# ============================================================
+def test_no_redirect():
+	let resp = http.request_no_redirect("GET", "https://httpbin.org/redirect/1", "", "")
+	if resp.status == 302:
+		print("PASS: request_no_redirect (got 302)")
+	else:
+		print("FAIL: request_no_redirect, status=" + str(resp.status))
+
+# ============================================================
+# Test 2: Cookie persistence — enable, make request, check replay
+# ============================================================
+def test_cookie_persistence():
+	http.enable_cookies()
+	# httpbin.org/cookies/set?name=value sets a cookie via Set-Cookie header
+	let resp = http.get("https://httpbin.org/cookies/set/session/desi123")
+	# Now request cookies endpoint — our cookie should be sent back
+	let resp2 = http.get("https://httpbin.org/cookies")
+	let data = http.parse_json(resp2.body)
+	let cookies = json.object_get(data, "cookies")
+	let session = json.object_get(cookies, "session")
+	if json.get_string(session) == "desi123":
+		print("PASS: Cookie persistence (auto store/replay)")
+	else:
+		print("FAIL: Cookie persistence, got body: " + resp2.body)
+	http.clear_cookies()
+	http.disable_cookies()
+
+# ============================================================
+# Test 3: WebSocket connection count (0 when no server running)
+# ============================================================
+def test_ws_conn_count():
+	let count = http.ws_conn_count()
+	if count == 0:
+		print("PASS: ws_conn_count (0 with no server)")
+	else:
+		print("FAIL: ws_conn_count, got " + str(count))
+
+# ============================================================
+# Test 4: Request with custom timeout
+# ============================================================
+def test_request_timeout():
+	let resp = http.request_timeout("GET", "https://httpbin.org/delay/1", "", "", 10)
+	if resp.status == 200:
+		print("PASS: request_timeout (waited for slow response)")
+	else:
+		print("FAIL: request_timeout, status=" + str(resp.status))
+
+# ============================================================
+# Main
+# ============================================================
+def main() -> int:
+	print("=== HTTP/WS Feature Tests (Batch 1-3) ===")
+
+	test_no_redirect()
+	test_cookie_persistence()
+	test_ws_conn_count()
+	test_request_timeout()
+
+	print("=== All feature tests complete ===")
+	return 0

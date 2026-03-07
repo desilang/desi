@@ -1,0 +1,41 @@
+# EXPECTED: SKIP
+# HTTP Server — Multipart Form Upload Test
+# Run manually: desic run examples/419_http_server_upload.desi
+# Then test with: curl -F "name=alice" -F "avatar=@photo.jpg" http://localhost:8080/upload
+#
+# Tests:
+#   - Multipart form field parsing (http.req_form_field)
+#   - File upload handling (http.req_form_file, http.req_form_filename, http.req_form_file_size)
+#   - Graceful shutdown (http.shutdown)
+
+import http
+from http import Request
+
+def handler(req: Request) -> Any:
+	let method = http.req_method(req)
+	let path = http.req_path(req)
+
+	if path == "/upload" and method == "POST":
+		# Get form fields
+		let name = http.req_form_field(req, "name")
+		let file_data = http.req_form_file(req, "avatar")
+		let filename = http.req_form_filename(req, "avatar")
+		let file_size = http.req_form_file_size(req, "avatar")
+
+		let body = "Name: " + name + "\nFilename: " + filename + "\nFile size: " + str(file_size) + " bytes\n"
+
+		return http.text(200, body)
+
+	if path == "/shutdown":
+		http.shutdown()
+		return http.text(200, "Shutting down...")
+
+	return http.text(200, "Upload server running. POST to /upload with multipart form data.")
+
+def main() -> int:
+	let srv = http.server(8080)
+	print("Upload server running on http://localhost:8080")
+	print("  POST /upload - multipart form upload")
+	print("  GET /shutdown - stop server")
+	http.serve(srv, handler)
+	return 0
