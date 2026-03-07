@@ -336,68 +336,67 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						return hir.ConstNull{}
 					}
 
+				case "html":
+					// http.html(status, "file.html")                    → __http_resp_from_file
+					// http.html(status, raw="<h1>Hi</h1>")              → __http_resp_new
+					// content_type= kwarg or 3rd positional overrides default ct
+					var statusVal hir.Value
+					var bodyVal hir.Value
+					var pathVal hir.Value
+					var ctVal hir.Value
+					isRaw := false
 
-                        case "html":
-                                // http.html(status, "file.html")                    → __http_resp_from_file
-                                // http.html(status, raw="<h1>Hi</h1>")              → __http_resp_new
-                                // content_type= kwarg or 3rd positional overrides default ct
-                                var statusVal hir.Value
-                                var bodyVal hir.Value
-                                var pathVal hir.Value
-                                var ctVal hir.Value
-                                isRaw := false
+					if len(x.ArgNodes) > 0 {
+						posIdx := 0
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								kwName := an.Name.Name
+								if kwName == "raw" {
+									bodyVal = ls.lowerExpr(an.Expr)
+									isRaw = true
+								} else if kwName == "content_type" {
+									ctVal = ls.lowerExpr(an.Expr)
+								}
+							} else {
+								val := ls.lowerExpr(an.Expr)
+								switch posIdx {
+								case 0:
+									statusVal = val
+								case 1:
+									pathVal = val
+								case 2:
+									ctVal = val
+								}
+								posIdx++
+							}
+						}
+					} else if len(x.Args) >= 1 {
+						statusVal = ls.lowerExpr(x.Args[0])
+						if len(x.Args) >= 2 {
+							pathVal = ls.lowerExpr(x.Args[1])
+						}
+						if len(x.Args) >= 3 {
+							ctVal = ls.lowerExpr(x.Args[2])
+						}
+					}
 
-                                if len(x.ArgNodes) > 0 {
-                                        posIdx := 0
-                                        for _, an := range x.ArgNodes {
-                                                if an.Name != nil {
-                                                        kwName := an.Name.Name
-                                                        if kwName == "raw" {
-                                                                bodyVal = ls.lowerExpr(an.Expr)
-                                                                isRaw = true
-                                                        } else if kwName == "content_type" {
-                                                                ctVal = ls.lowerExpr(an.Expr)
-                                                        }
-                                                } else {
-                                                        val := ls.lowerExpr(an.Expr)
-                                                        switch posIdx {
-                                                        case 0:
-                                                                statusVal = val
-                                                        case 1:
-                                                                pathVal = val
-                                                        case 2:
-                                                                ctVal = val
-                                                        }
-                                                        posIdx++
-                                                }
-                                        }
-                                } else if len(x.Args) >= 1 {
-                                        statusVal = ls.lowerExpr(x.Args[0])
-                                        if len(x.Args) >= 2 {
-                                                pathVal = ls.lowerExpr(x.Args[1])
-                                        }
-                                        if len(x.Args) >= 3 {
-                                                ctVal = ls.lowerExpr(x.Args[2])
-                                        }
-                                }
-
-                                if statusVal != nil {
-                                        if ctVal == nil {
-                                                ctVal = hir.ConstStr{Text: "text/html; charset=utf-8"}
-                                        }
-                                        dst := ls.b.FreshTemp("html_resp")
-                                        if isRaw {
-                                                if bodyVal == nil {
-                                                        bodyVal = hir.ConstStr{Text: ""}
-                                                }
-                                                ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_new", Args: []hir.Value{statusVal, bodyVal, ctVal}, Type: "ptr"})
-                                        } else if pathVal != nil {
-                                                ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_from_file", Args: []hir.Value{statusVal, pathVal, ctVal}, Type: "ptr"})
-                                        } else {
-                                                break
-                                        }
-                                        return dst
-                                }
+					if statusVal != nil {
+						if ctVal == nil {
+							ctVal = hir.ConstStr{Text: "text/html; charset=utf-8"}
+						}
+						dst := ls.b.FreshTemp("html_resp")
+						if isRaw {
+							if bodyVal == nil {
+								bodyVal = hir.ConstStr{Text: ""}
+							}
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_new", Args: []hir.Value{statusVal, bodyVal, ctVal}, Type: "ptr"})
+						} else if pathVal != nil {
+							ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_from_file", Args: []hir.Value{statusVal, pathVal, ctVal}, Type: "ptr"})
+						} else {
+							break
+						}
+						return dst
+					}
 				case "ws":
 					// http.ws(srv, path, handler) → __ws_set_path(path) + __ws_set_on_message(@handler)
 					if len(x.Args) == 3 {
@@ -495,6 +494,16 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					if len(x.Args) == 2 {
 						secsVal := ls.lowerExpr(x.Args[1])
 						ls.b.Emit(&hir.Call{Fn: "__ws_set_ping_interval", Args: []hir.Value{secsVal}})
+						return hir.ConstNull{}
+					}
+
+				case "ws_send_binary":
+					if len(x.Args) == 2 {
+						connVal := ls.lowerExpr(x.Args[0])
+						dataVal := ls.lowerExpr(x.Args[1])
+						lenTmp := ls.b.FreshTemp("binlen")
+						ls.b.Emit(&hir.Call{Dst: lenTmp, Fn: "__desi_str_len", Args: []hir.Value{dataVal}, Type: "i64"})
+						ls.b.Emit(&hir.Call{Fn: "__ws_send_binary", Args: []hir.Value{connVal, dataVal, lenTmp}})
 						return hir.ConstNull{}
 					}
 				}

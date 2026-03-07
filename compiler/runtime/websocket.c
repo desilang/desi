@@ -527,6 +527,11 @@ void __ws_send_binary(int conn_fd, const char* data, int len) {
     ws_send_binary(conn_fd, data, (size_t)len);
 }
 
+/* Return current number of active WebSocket connections */
+int32_t __ws_conn_count(void) {
+    return (int32_t)__ws_state.conn_count;
+}
+
 /* ============================================================
  * Multiple WS Path (Route) Support
  * ============================================================ */
