@@ -266,8 +266,11 @@ static HttpServerRequest* parse_request(const char* raw, int raw_len) {
     return req;
 }
 
+static void free_form_data(void); /* forward decl */
+
 static void free_request(HttpServerRequest* req) {
     if (!req) return;
+    free_form_data(); /* clean up any parsed multipart data */
     free(req->headers);
     free(req->body);
     free(req);
@@ -1396,4 +1399,222 @@ void __http_server_run(HttpServer* srv) {
     __desi_http_handler = NULL; /* reset global handler */
     printf("\033[32m✓ Server stopped\033[0m\n");
     fflush(stdout);
+}
+
+/* Programmatic shutdown — callable from Desi code */
+void __http_server_shutdown(void) {
+    server_running = 0;
+}
+
+/* ============================================================
+ * Multipart Form Data Parser (RFC 2046)
+ * ============================================================ */
+
+#define MAX_FORM_PARTS 32
+
+typedef struct {
+    char name[128];
+    char filename[256];     /* empty if not a file upload */
+    char content_type[128]; /* for file uploads */
+    char* data;
+    int  data_len;
+} FormPart;
+
+typedef struct {
+    FormPart parts[MAX_FORM_PARTS];
+    int count;
+} FormData;
+
+/* Thread-local form data for current request */
+static __thread FormData* _current_form = NULL;
+
+static char* find_boundary(const char* content_type) {
+    const char* bp = strstr(content_type, "boundary=");
+    if (!bp) return NULL;
+    bp += 9;
+    /* Skip optional quotes */
+    if (*bp == '"') bp++;
+    size_t len = 0;
+    while (bp[len] && bp[len] != '"' && bp[len] != '\r' && bp[len] != '\n' && bp[len] != ';')
+        len++;
+    char* result = (char*)malloc(len + 1);
+    memcpy(result, bp, len);
+    result[len] = '\0';
+    return result;
+}
+
+static void parse_multipart(HttpServerRequest* req) {
+    if (_current_form) return; /* already parsed */
+    if (!req->headers || !req->body) return;
+
+    /* Find Content-Type header with boundary */
+    const char* ct = NULL;
+    const char* p = req->headers;
+    while (*p) {
+        if (strncasecmp(p, "Content-Type:", 13) == 0) {
+            ct = p + 13;
+            while (*ct == ' ') ct++;
+            break;
+        }
+        const char* eol = strstr(p, "\r\n");
+        if (!eol) break;
+        p = eol + 2;
+    }
+    if (!ct || !strstr(ct, "multipart/form-data")) return;
+
+    char* boundary = find_boundary(ct);
+    if (!boundary) return;
+
+    _current_form = (FormData*)calloc(1, sizeof(FormData));
+
+    /* Build full boundary markers */
+    size_t blen = strlen(boundary);
+    char* delim = (char*)malloc(blen + 5);
+    sprintf(delim, "--%s", boundary);
+    size_t dlen = strlen(delim);
+
+    const char* body = req->body;
+    int body_len = req->body_len;
+
+    /* Find first boundary */
+    const char* pos = memmem(body, body_len, delim, dlen);
+    if (!pos) { free(boundary); free(delim); return; }
+
+    while (pos && _current_form->count < MAX_FORM_PARTS) {
+        pos += dlen;
+        if (pos[0] == '-' && pos[1] == '-') break; /* closing boundary */
+        if (pos[0] == '\r') pos += 2; /* skip CRLF */
+
+        /* Parse part headers */
+        FormPart* part = &_current_form->parts[_current_form->count];
+        memset(part, 0, sizeof(FormPart));
+
+        const char* hdr_end = strstr(pos, "\r\n\r\n");
+        if (!hdr_end) break;
+
+        /* Extract Content-Disposition fields */
+        const char* disp = strstr(pos, "name=\"");
+        if (disp && disp < hdr_end) {
+            disp += 6;
+            const char* end = strchr(disp, '"');
+            if (end && end < hdr_end) {
+                size_t nlen = (size_t)(end - disp);
+                if (nlen >= sizeof(part->name)) nlen = sizeof(part->name) - 1;
+                memcpy(part->name, disp, nlen);
+            }
+        }
+
+        const char* fname = strstr(pos, "filename=\"");
+        if (fname && fname < hdr_end) {
+            fname += 10;
+            const char* end = strchr(fname, '"');
+            if (end && end < hdr_end) {
+                size_t flen = (size_t)(end - fname);
+                if (flen >= sizeof(part->filename)) flen = sizeof(part->filename) - 1;
+                memcpy(part->filename, fname, flen);
+            }
+        }
+
+        /* Extract Content-Type if present */
+        const char* pct = strstr(pos, "Content-Type:");
+        if (pct && pct < hdr_end) {
+            pct += 13;
+            while (*pct == ' ') pct++;
+            const char* end = strstr(pct, "\r\n");
+            if (end && end <= hdr_end) {
+                size_t ctlen = (size_t)(end - pct);
+                if (ctlen >= sizeof(part->content_type)) ctlen = sizeof(part->content_type) - 1;
+                memcpy(part->content_type, pct, ctlen);
+            }
+        }
+
+        /* Data starts after headers */
+        const char* data_start = hdr_end + 4;
+
+        /* Find next boundary */
+        const char* remaining = data_start;
+        size_t remain_len = body_len - (size_t)(data_start - body);
+        const char* next = memmem(remaining, remain_len, delim, dlen);
+        if (!next) break;
+
+        /* Data ends 2 bytes before next boundary (CRLF before boundary) */
+        size_t data_len = (size_t)(next - data_start);
+        if (data_len >= 2) data_len -= 2; /* remove trailing CRLF */
+
+        part->data = (char*)malloc(data_len + 1);
+        memcpy(part->data, data_start, data_len);
+        part->data[data_len] = '\0';
+        part->data_len = (int)data_len;
+
+        _current_form->count++;
+        pos = next;
+    }
+
+    free(boundary);
+    free(delim);
+}
+
+static void free_form_data(void) {
+    if (!_current_form) return;
+    for (int i = 0; i < _current_form->count; i++) {
+        free(_current_form->parts[i].data);
+    }
+    free(_current_form);
+    _current_form = NULL;
+}
+
+/* Get a form field value by name (for text fields) */
+const char* __http_req_form_field(void* raw_req, const char* name) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    parse_multipart(req);
+    if (!_current_form || !name) return "";
+    for (int i = 0; i < _current_form->count; i++) {
+        if (strcmp(_current_form->parts[i].name, name) == 0 &&
+            _current_form->parts[i].filename[0] == '\0') {
+            return _current_form->parts[i].data ? _current_form->parts[i].data : "";
+        }
+    }
+    return "";
+}
+
+/* Get uploaded file data by field name */
+const char* __http_req_form_file(void* raw_req, const char* name) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    parse_multipart(req);
+    if (!_current_form || !name) return "";
+    for (int i = 0; i < _current_form->count; i++) {
+        if (strcmp(_current_form->parts[i].name, name) == 0 &&
+            _current_form->parts[i].filename[0] != '\0') {
+            return _current_form->parts[i].data ? _current_form->parts[i].data : "";
+        }
+    }
+    return "";
+}
+
+/* Get uploaded filename by field name */
+const char* __http_req_form_filename(void* raw_req, const char* name) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    parse_multipart(req);
+    if (!_current_form || !name) return "";
+    for (int i = 0; i < _current_form->count; i++) {
+        if (strcmp(_current_form->parts[i].name, name) == 0 &&
+            _current_form->parts[i].filename[0] != '\0') {
+            return _current_form->parts[i].filename;
+        }
+    }
+    return "";
+}
+
+/* Get file data length by field name */
+int32_t __http_req_form_file_size(void* raw_req, const char* name) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    parse_multipart(req);
+    if (!_current_form || !name) return 0;
+    for (int i = 0; i < _current_form->count; i++) {
+        if (strcmp(_current_form->parts[i].name, name) == 0 &&
+            _current_form->parts[i].filename[0] != '\0') {
+            return _current_form->parts[i].data_len;
+        }
+    }
+    return 0;
 }

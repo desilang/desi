@@ -279,6 +279,10 @@ static HttpResponse *make_error(const char *msg) {
 
 /* ---- Core request ---- */
 
+/* Cookie jar forward declarations */
+static void store_cookies(const char* domain, const char* resp_headers);
+static char* build_cookie_header(const char* domain);
+
 static HttpResponse *http_do_request(const char *method, const char *url,
                                      const char *body_data, const char *extra_headers,
                                      int max_redirects, int timeout_secs) {
@@ -333,6 +337,13 @@ static HttpResponse *http_do_request(const char *method, const char *url,
         buf_append(&req, extra_headers, strlen(extra_headers));
         if (req.len >= 2 && (req.data[req.len-2] != '\r' || req.data[req.len-1] != '\n'))
             buf_append(&req, "\r\n", 2);
+    }
+
+    /* Inject stored cookies for this domain */
+    char* cookie_hdr = build_cookie_header(parsed.host);
+    if (cookie_hdr) {
+        buf_append(&req, cookie_hdr, strlen(cookie_hdr));
+        free(cookie_hdr);
     }
 
     buf_append(&req, "\r\n", 2);
@@ -419,6 +430,10 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     r->status = status;
     r->body = resp_body.data ? resp_body.data : strdup("");
     r->headers = resp_hdrs;
+
+    /* Store any Set-Cookie headers in cookie jar */
+    store_cookies(parsed.host, resp_hdrs);
+
     return r;
 }
 
@@ -580,5 +595,119 @@ const char *__dict_to_query_str(void *raw) {
     }
     buf[pos] = '\0';
     return buf;
+}
+
+/* ============================================================
+ * HTTP Client Cookie Jar
+ * ============================================================ */
+
+#define MAX_COOKIES 128
+#define MAX_COOKIE_LEN 4096
+
+typedef struct {
+    char domain[256];
+    char name[128];
+    char value[MAX_COOKIE_LEN];
+    char path[256];
+} CookieEntry;
+
+static CookieEntry _cookie_jar[MAX_COOKIES];
+static int _cookie_count = 0;
+static int _cookies_enabled = 0;
+
+void __http_enable_cookies(void) {
+    _cookies_enabled = 1;
+}
+
+void __http_disable_cookies(void) {
+    _cookies_enabled = 0;
+}
+
+void __http_clear_cookies(void) {
+    _cookie_count = 0;
+}
+
+/* Store cookies from Set-Cookie response headers */
+static void store_cookies(const char* domain, const char* resp_headers) {
+    if (!_cookies_enabled || !resp_headers) return;
+    const char* p = resp_headers;
+    while (*p) {
+#ifdef _WIN32
+        int match = (_strnicmp(p, "Set-Cookie:", 11) == 0);
+#else
+        int match = (strncasecmp(p, "Set-Cookie:", 11) == 0);
+#endif
+        if (match) {
+            const char* val = p + 11;
+            while (*val == ' ') val++;
+            /* Extract name=value (up to ; or CRLF) */
+            const char* eq = strchr(val, '=');
+            const char* end = strchr(val, ';');
+            const char* crlf = strstr(val, "\r\n");
+            if (!end || (crlf && crlf < end)) end = crlf;
+            if (!end) end = val + strlen(val);
+
+            if (eq && eq < end && _cookie_count < MAX_COOKIES) {
+                CookieEntry* c = &_cookie_jar[_cookie_count];
+                size_t nlen = (size_t)(eq - val);
+                if (nlen >= sizeof(c->name)) nlen = sizeof(c->name) - 1;
+                memcpy(c->name, val, nlen);
+                c->name[nlen] = '\0';
+
+                const char* vstart = eq + 1;
+                size_t vlen = (size_t)(end - vstart);
+                if (vlen >= sizeof(c->value)) vlen = sizeof(c->value) - 1;
+                memcpy(c->value, vstart, vlen);
+                c->value[vlen] = '\0';
+
+                strncpy(c->domain, domain, sizeof(c->domain) - 1);
+                strcpy(c->path, "/");
+
+                /* Check for existing cookie with same name+domain and update */
+                int found = 0;
+                for (int i = 0; i < _cookie_count; i++) {
+                    if (strcmp(_cookie_jar[i].name, c->name) == 0 &&
+                        strcmp(_cookie_jar[i].domain, c->domain) == 0) {
+                        memcpy(_cookie_jar[i].value, c->value, sizeof(c->value));
+                        found = 1;
+                        break;
+                    }
+                }
+                if (!found) _cookie_count++;
+            }
+        }
+        const char* eol = strstr(p, "\r\n");
+        if (!eol) break;
+        p = eol + 2;
+    }
+}
+
+/* Build Cookie header string for a given domain */
+static char* build_cookie_header(const char* domain) {
+    if (!_cookies_enabled || _cookie_count == 0) return NULL;
+    char buf[4096];
+    int pos = 0;
+    int first = 1;
+    memcpy(buf, "Cookie: ", 8);
+    pos = 8;
+
+    for (int i = 0; i < _cookie_count; i++) {
+        /* Simple domain matching: cookie domain matches if it's a suffix */
+        const char* cd = _cookie_jar[i].domain;
+        size_t cdlen = strlen(cd);
+        size_t dlen = strlen(domain);
+        if (dlen >= cdlen && strcmp(domain + dlen - cdlen, cd) == 0) {
+            if (!first) { buf[pos++] = ';'; buf[pos++] = ' '; }
+            int written = snprintf(buf + pos, sizeof(buf) - pos, "%s=%s",
+                                   _cookie_jar[i].name, _cookie_jar[i].value);
+            if (written > 0) pos += written;
+            first = 0;
+        }
+    }
+    if (first) return NULL; /* no matching cookies */
+    buf[pos++] = '\r';
+    buf[pos++] = '\n';
+    buf[pos] = '\0';
+    return strdup(buf);
 }
 

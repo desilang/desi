@@ -375,6 +375,33 @@ def __http_req_query(req: Any) -> str
 @extern("C")
 def __http_server_set_handler(handler: Any) -> none
 
+# Server shutdown
+@extern("C")
+def __http_server_shutdown() -> none
+
+# Multipart form data accessors
+@extern("C")
+def __http_req_form_field(req: Any, name: str) -> str
+
+@extern("C")
+def __http_req_form_file(req: Any, name: str) -> str
+
+@extern("C")
+def __http_req_form_filename(req: Any, name: str) -> str
+
+@extern("C")
+def __http_req_form_file_size(req: Any, name: str) -> int
+
+# Cookie jar (client)
+@extern("C")
+def __http_enable_cookies() -> none
+
+@extern("C")
+def __http_disable_cookies() -> none
+
+@extern("C")
+def __http_clear_cookies() -> none
+
 # ============================================================
 # Server — Public API
 # ============================================================
@@ -497,6 +524,25 @@ pub def req_path_param(req: Request, name: str) -> str:
 pub def req_json(req: Request) -> Any:
 	return __http_req_json(req)
 
+# Get a multipart form field value by name
+# Example: http.req_form_field(req, "username")
+pub def req_form_field(req: Request, name: str) -> str:
+	return __http_req_form_field(req, name)
+
+# Get uploaded file data by field name (returns raw file data as str)
+# Example: http.req_form_file(req, "avatar")
+pub def req_form_file(req: Request, name: str) -> str:
+	return __http_req_form_file(req, name)
+
+# Get the original filename of an uploaded file
+# Example: http.req_form_filename(req, "avatar") → "photo.jpg"
+pub def req_form_filename(req: Request, name: str) -> str:
+	return __http_req_form_filename(req, name)
+
+# Get the size in bytes of an uploaded file
+pub def req_form_file_size(req: Request, name: str) -> int:
+	return __http_req_form_file_size(req, name)
+
 
 # ============================================================
 # Server — Configuration
@@ -539,6 +585,28 @@ pub def get_cookie(req: Request, name: str) -> str:
 # Automatically adds HttpOnly, SameSite=Lax, Path=/
 pub def set_cookie(resp: Any, name: str, value: str, max_age: int) -> none:
 	__http_resp_cookie(resp, name, value, max_age)
+
+# Programmatically stop the server's accept loop
+# Triggers graceful shutdown (drain queue, join workers)
+pub def shutdown() -> none:
+	__http_server_shutdown()
+
+# ============================================================
+# Client — Cookie Persistence
+# ============================================================
+
+# Enable automatic cookie storage and replay for HTTP client requests
+# Cookies from Set-Cookie response headers are stored and sent on matching requests
+pub def enable_cookies() -> none:
+	__http_enable_cookies()
+
+# Disable automatic cookie handling (does not clear stored cookies)
+pub def disable_cookies() -> none:
+	__http_disable_cookies()
+
+# Clear all stored cookies
+pub def clear_cookies() -> none:
+	__http_clear_cookies()
 
 # ============================================================
 # WebSocket — C Runtime Bindings
