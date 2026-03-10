@@ -56,6 +56,12 @@
   #define ensure_wsa_server() ((void)0)
 #endif
 
+/* Gzip compression support */
+#include "http/gzip.h"
+
+/* Minimum body size for gzip compression (1KB) */
+#define GZIP_MIN_SIZE 1024
+
 /* ============================================================
  * Graceful Shutdown
  * ============================================================ */
@@ -731,7 +737,7 @@ static const char* status_text(int status) {
 /* Max requests per keep-alive connection */
 #define KEEPALIVE_MAX_REQUESTS 100
 
-static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServerResponse* resp, int keep_alive) {
+static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServerResponse* resp, int keep_alive, int accept_gzip) {
     if (!resp) {
         /* Default 500 response */
         const char* err = "HTTP/1.1 500 Internal Server Error\r\n"
@@ -745,32 +751,57 @@ static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServe
     int body_len = resp->body ? (int)strlen(resp->body) : 0;
     const char* conn_header = keep_alive ? "keep-alive" : "close";
 
+    /* Try gzip compression for text bodies > GZIP_MIN_SIZE */
+    unsigned char* gzip_body = NULL;
+    size_t gzip_len = 0;
+    int use_gzip = 0;
+
+    if (accept_gzip && desi_gzip_available() && body_len > GZIP_MIN_SIZE && resp->body) {
+        /* Only compress text-like content types */
+        const char* ct = resp->content_type ? resp->content_type : "text/plain";
+        if (strstr(ct, "text/") || strstr(ct, "json") || strstr(ct, "xml") ||
+            strstr(ct, "javascript") || strstr(ct, "css")) {
+            gzip_body = desi_gzip_compress((const unsigned char*)resp->body, body_len, &gzip_len);
+            if (gzip_body && gzip_len < (size_t)body_len) {
+                use_gzip = 1;
+            } else {
+                free(gzip_body);
+                gzip_body = NULL;
+            }
+        }
+    }
+
     /* Build response header */
     char header[4096];
     int hdr_len = snprintf(header, sizeof(header),
         "HTTP/1.1 %d %s\r\n"
         "Content-Type: %s\r\n"
         "Content-Length: %d\r\n"
+        "%s"
         "Connection: %s\r\n"
         "Server: Desi/0.1\r\n"
         "%s"
         "\r\n",
         resp->status, status_text(resp->status),
         resp->content_type ? resp->content_type : "text/plain",
-        body_len,
+        use_gzip ? (int)gzip_len : body_len,
+        use_gzip ? "Content-Encoding: gzip\r\nVary: Accept-Encoding\r\n" : "",
         conn_header,
         resp->extra_headers ? resp->extra_headers : "");
 
     /* Send header + body */
     DESI_SEND(client_fd, ssl, header, hdr_len);
-    if (body_len > 0) {
+    if (use_gzip) {
+        DESI_SEND(client_fd, ssl, (const char*)gzip_body, (int)gzip_len);
+        free(gzip_body);
+    } else if (body_len > 0) {
         DESI_SEND(client_fd, ssl, resp->body, body_len);
     }
 }
 
 /* Backward compat wrapper */
 static void send_response(server_socket_t client_fd, HttpServerResponse* resp) {
-    send_response_ka(client_fd, NULL, resp, 0);
+    send_response_ka(client_fd, NULL, resp, 0, 0);
 }
 
 /* ============================================================
@@ -853,7 +884,7 @@ static int try_serve_static(HttpServer* srv, server_socket_t client_fd,
         strchr(rel, '\\') != NULL) {
         HttpServerResponse resp403 = {.status = 403, .body = "Forbidden",
             .content_type = "text/plain", .extra_headers = NULL};
-        send_response_ka(client_fd, ssl, &resp403, keep_alive);
+        send_response_ka(client_fd, ssl, &resp403, keep_alive, 0);
         return 1;
     }
 
@@ -1211,11 +1242,21 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
         /* Determine if connection should persist */
         int keep_alive = should_keep_alive(req);
 
+        /* ---- Detect client gzip support ---- */
+        int accept_gzip = 0;
+        if (req->headers) {
+            char ae_buf[128];
+            const char* ae = find_header_safe(req->headers, "Accept-Encoding", ae_buf, sizeof(ae_buf));
+            if (ae == ae_buf && strstr(ae_buf, "gzip")) {
+                accept_gzip = 1;
+            }
+        }
+
         /* ---- Body size enforcement ---- */
         if (req->body_len > max_body) {
             HttpServerResponse resp413 = {.status = 413, .body = "{\"error\":\"payload too large\"}",
                 .content_type = "application/json", .extra_headers = NULL};
-            send_response_ka(client_fd, ssl, &resp413, 0);
+            send_response_ka(client_fd, ssl, &resp413, 0, 0);
             printf("%s %s → 413 [body %d > %d]\n", req->method, req->path, req->body_len, max_body);
             fflush(stdout);
             free_request(req);
@@ -1227,7 +1268,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
             HttpServerResponse resp429 = {.status = 429, .body = "{\"error\":\"too many requests\"}",
                 .content_type = "application/json",
                 .extra_headers = "Retry-After: 60\r\n"};
-            send_response_ka(client_fd, ssl, &resp429, keep_alive);
+            send_response_ka(client_fd, ssl, &resp429, keep_alive, 0);
             printf("%s %s → 429 [rate limited]\n", req->method, req->path);
             fflush(stdout);
             requests_served++;
@@ -1252,7 +1293,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                 .content_type = "text/plain",
                 .extra_headers = cors_hdrs
             };
-            send_response_ka(client_fd, ssl, &preflight, keep_alive);
+            send_response_ka(client_fd, ssl, &preflight, keep_alive, 0);
             printf("%s %s → 204 [CORS preflight]\n", req->method, req->path);
             fflush(stdout);
             requests_served++;
@@ -1322,7 +1363,7 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
             __http_resp_header(resp, "Access-Control-Allow-Origin", srv->cors_origin);
         }
 
-        send_response_ka(client_fd, ssl, resp, keep_alive);
+        send_response_ka(client_fd, ssl, resp, keep_alive, accept_gzip);
         requests_served++;
 
         /* Log */
