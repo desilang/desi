@@ -28,6 +28,9 @@
   #include "http/tls_openssl.h"
 #endif
 
+/* Gzip decompression support */
+#include "http/gzip.h"
+
 #ifdef _WIN32
 static int _wsa_initialized = 0;
 static void ensure_wsa(void) {
@@ -376,7 +379,11 @@ static HttpResponse *http_do_request(const char *method, const char *url,
 
     buf_append(&req, "User-Agent: Desi/1.0\r\n", 22);
     buf_append(&req, "Accept: */*\r\n", 13);
-    buf_append(&req, "Accept-Encoding: identity\r\n", 27);
+    if (desi_gzip_available()) {
+        buf_append(&req, "Accept-Encoding: gzip, identity\r\n", 33);
+    } else {
+        buf_append(&req, "Accept-Encoding: identity\r\n", 27);
+    }
     buf_append(&req, "Connection: close\r\n", 19);
 
     if (body_data && strlen(body_data) > 0) {
@@ -475,6 +482,24 @@ static HttpResponse *http_do_request(const char *method, const char *url,
             read_body_content_length(&conn, &resp_body, leftover, left_len, atol(cl));
         } else {
             read_body_until_close(&conn, &resp_body, leftover, left_len);
+        }
+    }
+
+    /* Auto-decompress gzip response */
+    if (resp_body.data && resp_body.len > 0) {
+        const char* ce = find_header(resp_hdrs, "Content-Encoding");
+        if (ce && strncasecmp(ce, "gzip", 4) == 0 && desi_gzip_available()) {
+            size_t dec_len = 0;
+            unsigned char* dec = desi_gzip_decompress(
+                (const unsigned char*)resp_body.data, resp_body.len, &dec_len);
+            if (dec) {
+                free(resp_body.data);
+                resp_body.data = (char*)dec;
+                resp_body.len = dec_len;
+                /* Null-terminate for string use */
+                resp_body.data = realloc(resp_body.data, dec_len + 1);
+                resp_body.data[dec_len] = '\0';
+            }
         }
     }
 

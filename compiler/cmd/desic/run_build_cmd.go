@@ -378,10 +378,14 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		if opensslPrefix := detectOpenSSLPrefix(); opensslPrefix != "" {
 			clangArgs = append(clangArgs, "-L"+opensslPrefix+"/lib", "-lssl", "-lcrypto")
 		}
+		// Gzip compression via system zlib
+		clangArgs = append(clangArgs, "-lz")
 	} else if runtime.GOOS == "linux" {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 		// HTTPS TLS via system OpenSSL
 		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
+		// Gzip compression via system zlib
+		clangArgs = append(clangArgs, "-lz")
 	} else {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 	}
@@ -581,10 +585,14 @@ func runSingleTest(testFile string, verbose bool) int {
 		if opensslPrefix := detectOpenSSLPrefix(); opensslPrefix != "" {
 			clangArgs = append(clangArgs, "-L"+opensslPrefix+"/lib", "-lssl", "-lcrypto")
 		}
+		// Gzip compression via system zlib
+		clangArgs = append(clangArgs, "-lz")
 	} else if runtime.GOOS == "linux" {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 		// HTTPS TLS via system OpenSSL
 		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
+		// Gzip compression via system zlib
+		clangArgs = append(clangArgs, "-lz")
 	}
 
 	// Runtime library
