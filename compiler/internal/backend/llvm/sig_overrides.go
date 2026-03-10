@@ -112,6 +112,13 @@ func init() {
 	SetFuncSig("__http_req_form_filename", "ptr", nil)
 	SetFuncSig("__http_req_form_file_size", "i32", nil)
 
+	// SSE (Server-Sent Events)
+	SetFuncSig("__http_sse_start", "i32", nil)
+	SetFuncSig("__http_sse_send_data", "void", nil)
+	SetFuncSig("__http_sse_send", "void", nil)
+	SetFuncSig("__http_sse_close", "void", nil)
+	SetFuncSig("__http_sse_response", "ptr", nil)
+
 	// Client cookie jar
 	SetFuncSig("__http_enable_cookies", "void", nil)
 	SetFuncSig("__http_disable_cookies", "void", nil)

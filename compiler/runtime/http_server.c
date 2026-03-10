@@ -101,6 +101,9 @@ typedef struct {
     char param_names[8][64];   /* up to 8 path params */
     char param_values[8][256];
     int  param_count;
+    /* Connection info for SSE (set by handle_client before dispatch) */
+    server_socket_t _fd;    /* raw socket fd */
+    void*           _ssl;   /* DESI_SSL* or NULL */
 } HttpServerRequest;
 
 /* ---- Server Response ---- */
@@ -1306,6 +1309,10 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
         HttpServerResponse* resp = NULL;
         int resp_owned = 0;
 
+        /* Set connection info on request for SSE access */
+        req->_fd = client_fd;
+        req->_ssl = (void*)ssl;
+
         for (int m = 0; m < srv->middleware_count; m++) {
             resp = srv->middlewares[m](req);
             if (resp) {
@@ -1356,6 +1363,16 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                 resp = __http_resp_new(200, body, "application/json");
                 resp_owned = 1;
             }
+        }
+
+        /* ---- SSE sentinel: handler took over the connection ---- */
+        if (resp && resp->status == -2) {
+            printf("%s %s → SSE [stream] (fd=%d)\n", req->method, req->path, client_fd);
+            fflush(stdout);
+            if (resp_owned) free_response(resp);
+            free_request(req);
+            /* Connection is managed by SSE handler — don't close socket */
+            return;
         }
 
         /* ---- Inject CORS origin header if configured ---- */
@@ -1699,4 +1716,95 @@ int32_t __http_req_form_file_size(void* raw_req, const char* name) {
         }
     }
     return 0;
+}
+
+/* ============================================================
+ * SSE (Server-Sent Events)
+ *
+ * Usage from Desi:
+ *   http.sse_start(req)              → send SSE headers
+ *   http.sse_send(req, data)         → send a data event
+ *   http.sse_send(req, data, event)  → send a named event
+ *   http.sse_close(req)              → close the SSE stream
+ *
+ * Handler returns http.sse_response() → sentinel (status -2)
+ * so handle_client knows the connection is managed by SSE.
+ * ============================================================ */
+
+/* Send SSE response headers to begin streaming */
+int __http_sse_start(void* raw_req) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    if (!req) return 0;
+
+    const char* headers =
+        "HTTP/1.1 200 OK\r\n"
+        "Content-Type: text/event-stream\r\n"
+        "Cache-Control: no-cache\r\n"
+        "Connection: keep-alive\r\n"
+        "X-Accel-Buffering: no\r\n"
+        "Server: Desi/0.1\r\n"
+        "\r\n";
+
+    DESI_SEND(req->_fd, (DESI_SSL*)req->_ssl, headers, strlen(headers));
+    return 1;
+}
+
+/* Internal: write SSE data lines to buffer, return new len */
+static int sse_write_data(char* buf, int len, int buf_size, const char* data) {
+    const char* p = data;
+    while (*p) {
+        const char* nl = strchr(p, '\n');
+        if (nl) {
+            int line_len = (int)(nl - p);
+            len += snprintf(buf + len, buf_size - len, "data: %.*s\n", line_len, p);
+            p = nl + 1;
+        } else {
+            len += snprintf(buf + len, buf_size - len, "data: %s\n", p);
+            break;
+        }
+    }
+    /* Empty line terminates the event */
+    len += snprintf(buf + len, buf_size - len, "\n");
+    return len;
+}
+
+/* Send an SSE data-only event (no event type) */
+void __http_sse_send_data(void* raw_req, const char* data) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    if (!req || !data) return;
+
+    char buf[8192];
+    int len = sse_write_data(buf, 0, sizeof(buf), data);
+    DESI_SEND(req->_fd, (DESI_SSL*)req->_ssl, buf, len);
+}
+
+/* Send an SSE event with a named event type */
+void __http_sse_send(void* raw_req, const char* data, const char* event) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    if (!req || !data) return;
+
+    char buf[8192];
+    int len = 0;
+
+    /* Event type line */
+    if (event && strlen(event) > 0) {
+        len += snprintf(buf + len, sizeof(buf) - len, "event: %s\n", event);
+    }
+
+    len = sse_write_data(buf, len, sizeof(buf), data);
+    DESI_SEND(req->_fd, (DESI_SSL*)req->_ssl, buf, len);
+}
+
+/* Close the SSE stream */
+void __http_sse_close(void* raw_req) {
+    HttpServerRequest* req = (HttpServerRequest*)raw_req;
+    if (!req) return;
+
+    if (req->_ssl) desi_tls_close((DESI_SSL*)req->_ssl);
+    CLOSE_SOCKET(req->_fd);
+}
+
+/* Create sentinel response for SSE (status -2) */
+void* __http_sse_response(void) {
+    return __http_resp_new(-2, "", "text/event-stream");
 }

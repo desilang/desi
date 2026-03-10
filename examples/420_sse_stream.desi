@@ -1,0 +1,42 @@
+# EXPECTED: SKIP
+# SSE (Server-Sent Events) streaming test
+# Run manually: desic run examples/420_sse_stream.desi
+# Then test with: curl -N http://localhost:8099/events
+#
+# Expected: Server sends 5 SSE events with 500ms delay, then closes.
+
+import http
+import time
+from http import Request
+
+def handler(req: Request) -> Any:
+	let path = http.req_path(req)
+
+	if path == "/events":
+		# Start SSE stream
+		http.sse_start(req)
+
+		# Send 5 events with delay
+		let mut i = 0
+		while i < 5:
+			http.sse_send(req, "Event number " + str(i))
+			time.sleep(0.5)
+			i := i + 1
+
+		# Send a named event
+		http.sse_send_event(req, "{\"done\": true}", "complete")
+
+		# Close the stream
+		http.sse_close(req)
+
+		# Return sentinel so server knows we managed the connection
+		return http.sse_response()
+
+	return http.text(200, "Visit /events for SSE stream")
+
+def main() -> int:
+	let srv = http.server(8099)
+	print("SSE server running on http://localhost:8099")
+	print("Test with: curl -N http://localhost:8099/events")
+	http.serve(srv, handler)
+	return 0
