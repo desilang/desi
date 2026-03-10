@@ -518,6 +518,18 @@ pub def html(status: int, body: str) -> Any:
 pub def response(status: int, body: str, content_type: str) -> Any:
 	return __http_resp_new(status, body, content_type)
 
+# Serve an HTML file from disk
+# Example: return http.html_file("templates/index.html")
+pub def html_file(path: str) -> Any:
+	unsafe:
+		return __http_resp_from_file(200, path, "text/html; charset=utf-8")
+
+# Serve a file from disk with custom status and content type
+# Example: return http.file_response(200, "data.json", "application/json")
+pub def file_response(status: int, path: str, content_type: str) -> Any:
+	unsafe:
+		return __http_resp_from_file(status, path, content_type)
+
 # ============================================================
 # Server — Request Accessors
 # ============================================================
