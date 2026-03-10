@@ -1,0 +1,103 @@
+# Bytes — Binary data type
+# EXPECTED_OUTPUT:
+# === Bytes Type Tests ===
+# PASS: from_str + len
+# PASS: to_str roundtrip
+# PASS: get byte
+# PASS: slice
+# PASS: concat
+# PASS: to_hex
+# PASS: from_hex roundtrip
+# PASS: repeat
+# PASS: index_of
+# PASS: equality
+# PASS: set byte
+# All bytes tests passed!
+
+import bytes
+
+def main() -> int:
+	print("=== Bytes Type Tests ===")
+
+	# from_str + len
+	let b = bytes.from_str("hello")
+	if bytes.len(b) == 5:
+		print("PASS: from_str + len")
+	else:
+		print("FAIL: from_str + len")
+
+	# to_str roundtrip
+	let s = bytes.to_str(b)
+	if s == "hello":
+		print("PASS: to_str roundtrip")
+	else:
+		print("FAIL: to_str roundtrip")
+
+	# get byte (h = 104)
+	if bytes.get(b, 0) == 104:
+		print("PASS: get byte")
+	else:
+		print("FAIL: get byte, got " + str(bytes.get(b, 0)))
+
+	# slice
+	let sl = bytes.slice(b, 0, 3)
+	if bytes.to_str(sl) == "hel":
+		print("PASS: slice")
+	else:
+		print("FAIL: slice")
+
+	# concat
+	let b2 = bytes.from_str(" world")
+	let joined = bytes.concat(b, b2)
+	if bytes.to_str(joined) == "hello world":
+		print("PASS: concat")
+	else:
+		print("FAIL: concat")
+
+	# to_hex
+	let hex = bytes.to_hex(bytes.from_str("AB"))
+	if hex == "4142":
+		print("PASS: to_hex")
+	else:
+		print("FAIL: to_hex, got " + hex)
+
+	# from_hex roundtrip
+	let from_hex = bytes.from_hex("48656c6c6f")
+	if bytes.to_str(from_hex) == "Hello":
+		print("PASS: from_hex roundtrip")
+	else:
+		print("FAIL: from_hex roundtrip")
+
+	# repeat
+	let zeroes = bytes.repeat(0, 4)
+	if bytes.len(zeroes) == 4 and bytes.get(zeroes, 0) == 0:
+		print("PASS: repeat")
+	else:
+		print("FAIL: repeat")
+
+	# index_of
+	let data = bytes.from_str("abcde")
+	if bytes.index_of(data, 99) == 2:
+		print("PASS: index_of")
+	else:
+		print("FAIL: index_of")
+
+	# equality
+	let a = bytes.from_str("test")
+	let a2 = bytes.from_str("test")
+	let c = bytes.from_str("other")
+	if bytes.equal(a, a2) and not bytes.equal(a, c):
+		print("PASS: equality")
+	else:
+		print("FAIL: equality")
+
+	# set byte
+	let mut_b = bytes.from_str("ABC")
+	bytes.set(mut_b, 0, 90)
+	if bytes.get(mut_b, 0) == 90:
+		print("PASS: set byte")
+	else:
+		print("FAIL: set byte")
+
+	print("All bytes tests passed!")
+	return 0
