@@ -96,6 +96,7 @@ func init() {
 	SetFuncSig("__http_server_run", "void", nil)
 	SetFuncSig("__http_server_static", "void", nil)
 	SetFuncSig("__http_server_max_body", "void", nil)
+	SetFuncSig("__http_server_timeout", "void", nil)
 	SetFuncSig("__http_server_use", "void", nil)
 	SetFuncSig("__http_server_rate_limit", "void", nil)
 	SetFuncSig("__http_resp_header", "void", nil)
