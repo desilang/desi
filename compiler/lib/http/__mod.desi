@@ -640,6 +640,11 @@ pub def sse_response() -> Any:
 pub def max_body(srv: Server, max_bytes: int) -> none:
 	return
 
+# Set per-request timeout in seconds (default: 15s)
+# Example: http.timeout(srv, 30)  # 30 seconds
+pub def timeout(srv: Server, seconds: int) -> none:
+	return
+
 # Register a middleware function (runs before route handlers)
 # Middleware returns none to pass through, or a response to short-circuit
 # Note: lowerer intercepts http.use() and emits __http_server_use(srv, @fn)

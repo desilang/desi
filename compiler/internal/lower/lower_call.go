@@ -296,6 +296,15 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						return hir.ConstNull{}
 					}
 
+				case "timeout":
+					// http.timeout(srv, seconds) → __http_server_timeout(srv, seconds)
+					if len(x.Args) == 2 {
+						srvVal := ls.lowerExpr(x.Args[0])
+						secsVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__http_server_timeout", Args: []hir.Value{srvVal, secsVal}})
+						return hir.ConstNull{}
+					}
+
 				case "use":
 					// http.use(srv, middleware_fn) → __http_server_use(srv, @middleware_fn)
 					if len(x.Args) == 2 {

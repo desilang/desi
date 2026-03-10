@@ -172,6 +172,8 @@ typedef struct {
     char* cors_headers;    /* allowed headers */
     /* TLS */
     DESI_SSL_CTX* ssl_ctx; /* non-NULL = HTTPS mode */
+    /* Request timeout */
+    int request_timeout;    /* per-request timeout in seconds (0 = default 30s) */
 } HttpServer;
 
 static void free_server(HttpServer* srv) {
@@ -489,6 +491,11 @@ static int rate_limit_check(HttpServer* srv, uint32_t client_ip) {
 /* Set maximum request body size (default 1MB if not set) */
 void __http_server_max_body(HttpServer* srv, int max_bytes) {
     if (srv) srv->max_body_size = max_bytes;
+}
+
+/* Set per-request timeout in seconds (default 15s if not set) */
+void __http_server_timeout(HttpServer* srv, int timeout_secs) {
+    if (srv && timeout_secs > 0) srv->request_timeout = timeout_secs;
 }
 
 /* Register a middleware function */
@@ -1106,9 +1113,10 @@ HttpServer* __http_server_new_tls(int port, const char* cert_path, const char* k
 /* ---- Handle a single client connection (with keep-alive) ---- */
 
 static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* ssl) {
-    /* Set idle timeout on the socket for keep-alive */
+    /* Set request timeout on the socket */
+    int req_timeout = srv->request_timeout > 0 ? srv->request_timeout : KEEPALIVE_TIMEOUT_SECS;
     struct timeval tv;
-    tv.tv_sec = KEEPALIVE_TIMEOUT_SECS;
+    tv.tv_sec = req_timeout;
     tv.tv_usec = 0;
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
 
@@ -1149,6 +1157,17 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
         char* heap_buf = NULL;  /* track separately for free */
 
         int cl = parse_content_length(buf);
+        if (cl > max_body) {
+            /* Reject BEFORE reading body — prevents memory exhaustion */
+            const char* r413 = "HTTP/1.1 413 Payload Too Large\r\n"
+                               "Content-Type: application/json\r\n"
+                               "Content-Length: 30\r\nConnection: close\r\n\r\n"
+                               "{\"error\":\"payload too large\"}";
+            DESI_SEND(client_fd, ssl, r413, strlen(r413));
+            printf("→ 413 [Content-Length %d > %d, rejected pre-read]\n", cl, max_body);
+            fflush(stdout);
+            break;
+        }
         if (cl > 0) {
             int hdr_size = (int)(hdr_end + 4 - buf);
             int body_received = (int)nread - hdr_size;
