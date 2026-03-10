@@ -406,6 +406,22 @@ def __http_req_form_filename(req: Any, name: str) -> str
 @extern("C")
 def __http_req_form_file_size(req: Any, name: str) -> int
 
+# SSE (Server-Sent Events)
+@extern("C")
+def __http_sse_start(req: Any) -> int
+
+@extern("C")
+def __http_sse_send_data(req: Any, data: str) -> none
+
+@extern("C")
+def __http_sse_send(req: Any, data: str, event: str) -> none
+
+@extern("C")
+def __http_sse_close(req: Any) -> none
+
+@extern("C")
+def __http_sse_response() -> Any
+
 # Cookie jar (client)
 @extern("C")
 def __http_enable_cookies() -> none
@@ -556,6 +572,51 @@ pub def req_form_filename(req: Request, name: str) -> str:
 # Get the size in bytes of an uploaded file
 pub def req_form_file_size(req: Request, name: str) -> int:
 	return __http_req_form_file_size(req, name)
+
+# ============================================================
+# Server — SSE (Server-Sent Events)
+# ============================================================
+
+# Start an SSE stream on the request connection.
+# Sends HTTP headers for text/event-stream.
+# Call this BEFORE sending events.
+# Example:
+#   http.sse_start(req)
+#   http.sse_send(req, "hello")
+#   http.sse_close(req)
+#   return http.sse_response()
+pub def sse_start(req: Request) -> int:
+	unsafe:
+		return __http_sse_start(req)
+
+# Send an SSE data event.
+# Example: http.sse_send(req, "hello world")
+pub def sse_send(req: Request, data: str) -> none:
+	unsafe:
+		__http_sse_send_data(req, data)
+
+# Send an SSE event with a named event type.
+# Example: http.sse_send_event(req, "{\"count\": 5}", "update")
+pub def sse_send_event(req: Request, data: str, event: str) -> none:
+	unsafe:
+		__http_sse_send(req, data, event)
+
+# Close the SSE stream and the underlying connection.
+pub def sse_close(req: Request) -> none:
+	unsafe:
+		__http_sse_close(req)
+
+# Return this from a handler that uses SSE.
+# Tells the server not to send a normal response.
+# Example:
+#   def handler(req: Request) -> Any:
+#       http.sse_start(req)
+#       http.sse_send(req, "hello")
+#       http.sse_close(req)
+#       return http.sse_response()
+pub def sse_response() -> Any:
+	unsafe:
+		return __http_sse_response()
 
 
 # ============================================================
