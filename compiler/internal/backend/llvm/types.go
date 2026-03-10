@@ -30,6 +30,8 @@ func llvmType(t types.T) string {
 			return "i1"
 		case "str":
 			return "ptr"
+		case "bytes":
+			return "ptr"
 		case "none":
 			return "ptr"
 		default:

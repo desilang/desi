@@ -1,0 +1,142 @@
+# bytes — Binary data module
+#
+# Provides length-prefixed binary data type for safe handling of
+# binary content without null-byte truncation.
+#
+# Usage:
+#   import bytes
+#
+#   let b = bytes.from_str("hello")
+#   let n = bytes.len(b)             # 5
+#   let c = bytes.get(b, 0)          # 104 (ascii 'h')
+#   let s = bytes.slice(b, 0, 3)     # bytes: "hel"
+#   let text = bytes.to_str(b)       # "hello"
+#   let hex = bytes.to_hex(b)        # "68656c6c6f"
+
+# ============================================================
+# Extern bindings (C runtime)
+# ============================================================
+
+@extern("C")
+def __bytes_new(data: Any, length: int) -> bytes
+
+@extern("C")
+def __bytes_from_str(s: str) -> bytes
+
+@extern("C")
+def __bytes_to_str(b: bytes) -> str
+
+@extern("C")
+def __bytes_len(b: bytes) -> int
+
+@extern("C")
+def __bytes_get(b: bytes, index: int) -> int
+
+@extern("C")
+def __bytes_set(b: bytes, index: int, value: int) -> none
+
+@extern("C")
+def __bytes_slice(b: bytes, start: int, end: int) -> bytes
+
+@extern("C")
+def __bytes_concat(a: bytes, b: bytes) -> bytes
+
+@extern("C")
+def __bytes_equal(a: bytes, b: bytes) -> int
+
+@extern("C")
+def __bytes_free(b: bytes) -> none
+
+@extern("C")
+def __bytes_to_hex(b: bytes) -> str
+
+@extern("C")
+def __bytes_from_hex(hex: str) -> bytes
+
+@extern("C")
+def __bytes_repeat(value: int, count: int) -> bytes
+
+@extern("C")
+def __bytes_index_of(b: bytes, value: int) -> int
+
+# ============================================================
+# Public API
+# ============================================================
+
+# Create bytes from a string
+# Example: let b = bytes.from_str("hello world")
+pub def from_str(s: str) -> bytes:
+	unsafe:
+		return __bytes_from_str(s)
+
+# Convert bytes to string (may truncate at null bytes)
+# Example: let s = bytes.to_str(b)
+pub def to_str(b: bytes) -> str:
+	unsafe:
+		return __bytes_to_str(b)
+
+# Get the length of bytes
+# Example: let n = bytes.len(b)
+pub def len(b: bytes) -> int:
+	unsafe:
+		return __bytes_len(b)
+
+# Get byte at index (returns -1 for out of bounds)
+# Example: let c = bytes.get(b, 0)  # first byte
+pub def get(b: bytes, index: int) -> int:
+	unsafe:
+		return __bytes_get(b, index)
+
+# Set byte at index
+# Example: bytes.set(b, 0, 65)  # set first byte to 'A'
+pub def set(b: bytes, index: int, value: int) -> none:
+	unsafe:
+		__bytes_set(b, index, value)
+
+# Slice bytes [start, end) — returns new bytes
+# Example: let s = bytes.slice(b, 0, 3)
+pub def slice(b: bytes, start: int, end: int) -> bytes:
+	unsafe:
+		return __bytes_slice(b, start, end)
+
+# Concatenate two bytes — returns new bytes
+# Example: let combined = bytes.concat(a, b)
+pub def concat(a: bytes, b: bytes) -> bytes:
+	unsafe:
+		return __bytes_concat(a, b)
+
+# Check equality of two bytes
+# Example: if bytes.equal(a, b): print("same")
+pub def equal(a: bytes, b: bytes) -> bool:
+	unsafe:
+		return __bytes_equal(a, b) != 0
+
+# Free bytes (manual memory management)
+# Example: bytes.free(b)
+pub def free(b: bytes) -> none:
+	unsafe:
+		__bytes_free(b)
+
+# Convert bytes to hex string
+# Example: bytes.to_hex(b)  # "48656c6c6f"
+pub def to_hex(b: bytes) -> str:
+	unsafe:
+		return __bytes_to_hex(b)
+
+# Create bytes from hex string
+# Example: let b = bytes.from_hex("48656c6c6f")
+pub def from_hex(hex: str) -> bytes:
+	unsafe:
+		return __bytes_from_hex(hex)
+
+# Create bytes of given count filled with a value
+# Example: let zeroes = bytes.repeat(0, 1024)
+pub def repeat(value: int, count: int) -> bytes:
+	unsafe:
+		return __bytes_repeat(value, count)
+
+# Find first occurrence of byte value, returns -1 if not found
+# Example: let pos = bytes.index_of(b, 10)  # find newline
+pub def index_of(b: bytes, value: int) -> int:
+	unsafe:
+		return __bytes_index_of(b, value)

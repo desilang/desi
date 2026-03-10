@@ -53,6 +53,9 @@ const (
 	// Decimal kind (arbitrary precision)
 	DecimalKind
 
+	// Binary data kind (length-prefixed)
+	BytesKind
+
 	// Container kinds
 	ListKind
 	SetKind
@@ -109,6 +112,9 @@ var (
 
 	// Arbitrary precision decimal
 	Decimal = &basic{kind: DecimalKind, name: "decimal"}
+
+	// Length-prefixed binary data
+	Bytes = &basic{kind: BytesKind, name: "bytes"}
 
 	// Platform-sized integers (keep IntKind for backward compatibility with types.Equal)
 	USize = &basic{kind: IntKind, name: "usize"}
@@ -711,6 +717,10 @@ func FromName(name string) (T, bool) {
 	// Decimal (arbitrary precision)
 	case "decimal":
 		return Decimal, true
+
+	// Binary data
+	case "bytes":
+		return Bytes, true
 
 	// Aliases
 	case "byte":

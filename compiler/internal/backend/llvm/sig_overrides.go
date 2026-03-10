@@ -170,4 +170,20 @@ func init() {
 	SetFuncSig("__json_object_remove", "void", nil)
 	SetFuncSig("__json_object_keys", "ptr", nil)
 	SetFuncSig("__json_free", "void", nil)
+
+	// Bytes runtime overrides
+	SetFuncSig("__bytes_new", "ptr", nil)
+	SetFuncSig("__bytes_from_str", "ptr", nil)
+	SetFuncSig("__bytes_to_str", "ptr", nil)
+	SetFuncSig("__bytes_len", "i32", nil)
+	SetFuncSig("__bytes_get", "i32", nil)
+	SetFuncSig("__bytes_set", "void", nil)
+	SetFuncSig("__bytes_slice", "ptr", nil)
+	SetFuncSig("__bytes_concat", "ptr", nil)
+	SetFuncSig("__bytes_equal", "i32", nil)
+	SetFuncSig("__bytes_free", "void", nil)
+	SetFuncSig("__bytes_to_hex", "ptr", nil)
+	SetFuncSig("__bytes_from_hex", "ptr", nil)
+	SetFuncSig("__bytes_repeat", "ptr", nil)
+	SetFuncSig("__bytes_index_of", "i32", nil)
 }
