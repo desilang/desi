@@ -67,6 +67,7 @@
  * ============================================================ */
 
 static volatile sig_atomic_t server_running = 1;
+static volatile int active_connections = 0;  /* active in-flight requests */
 
 static void shutdown_handler(int sig) {
     (void)sig;
@@ -1113,6 +1114,8 @@ HttpServer* __http_server_new_tls(int port, const char* cert_path, const char* k
 /* ---- Handle a single client connection (with keep-alive) ---- */
 
 static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* ssl) {
+    __sync_fetch_and_add(&active_connections, 1);
+
     /* Set request timeout on the socket */
     int req_timeout = srv->request_timeout > 0 ? srv->request_timeout : KEEPALIVE_TIMEOUT_SECS;
     struct timeval tv;
@@ -1415,8 +1418,10 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
         if (!keep_alive) break;
     }
 
+    /* --- Cleanup below this point (all paths exit handle_client) --- */
     if (ssl) desi_tls_close(ssl);
     CLOSE_SOCKET(client_fd);
+    __sync_fetch_and_sub(&active_connections, 1);
 }
 
 /* ---- Client task for supervisor pool dispatch ---- */
@@ -1509,6 +1514,11 @@ void __http_server_run(HttpServer* srv) {
     }
 
     /* Graceful shutdown: drain queue, join workers, free supervisor */
+    int active = __sync_fetch_and_add(&active_connections, 0);
+    if (active > 0) {
+        printf("\033[33m⏳ Draining %d active connection(s)...\033[0m\n", active);
+        fflush(stdout);
+    }
     supervisor_stop(sup);
     free(sup);  /* supervisor_stop doesn't free the struct itself (idempotent design) */
 
