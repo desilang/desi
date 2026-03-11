@@ -1243,6 +1243,10 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                 char key_buf[128];
                 const char* ws_key = find_header_safe(req->headers, "Sec-WebSocket-Key", key_buf, sizeof(key_buf));
                 if (ws_key && ws_key[0]) {
+                    /* Extract Sec-WebSocket-Extensions header */
+                    char ext_buf[256] = {0};
+                    find_header_safe(req->headers, "Sec-WebSocket-Extensions", ext_buf, sizeof(ext_buf));
+
                     /* Find the end of HTTP headers (\r\n\r\n) in the raw recv buffer.
                      * Any bytes after it belong to the WebSocket session — the browser
                      * may pipeline the first frame in the same TCP segment.
@@ -1282,7 +1286,9 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                     struct timeval ws_timeout = {86400, 0}; /* 24 hours */
                     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &ws_timeout, sizeof(ws_timeout));
 
-                    ws_do_handshake(client_fd, ws_key, ssl);
+                    int ws_compressed = 0;
+                    ws_do_handshake_ext(client_fd, ws_key, ssl,
+                                        ext_buf[0] ? ext_buf : NULL, &ws_compressed);
                     ws_session_loop(client_fd, prebuf_data, prebuf_len, ssl);
                     if (ssl) desi_tls_close(ssl);
                     return; /* connection taken over by WS */

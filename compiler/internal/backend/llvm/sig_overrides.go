@@ -147,6 +147,7 @@ func init() {
 	SetFuncSig("__ws_set_on_close", "void", nil)
 	SetFuncSig("__ws_set_max_message_size", "void", nil)
 	SetFuncSig("__ws_set_ping_interval", "void", nil)
+	SetFuncSig("__ws_set_compression", "void", nil)
 	SetFuncSig("__ws_route", "void", nil)
 	SetFuncSig("__ws_route_on_open", "void", nil)
 	SetFuncSig("__ws_route_on_close", "void", nil)

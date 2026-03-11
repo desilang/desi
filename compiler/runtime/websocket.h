@@ -34,6 +34,7 @@ typedef struct {
     DESI_SSL* ssl;  /* non-NULL for WSS connections */
     char rooms[WS_MAX_ROOMS][WS_ROOM_NAME_LEN];
     int  room_count;
+    int  compression; /* 1 = permessage-deflate negotiated */
 } WsConnection;
 
 typedef struct {
@@ -55,6 +56,7 @@ typedef struct {
     int route_count;
     size_t max_message_size; /* 0 = use default (16MB) */
     int ping_interval_secs;  /* 0 = disabled */
+    int compression_enabled; /* 1 = offer permessage-deflate */
     DesiPlatformRwLock lock; /* thread-safe access to connections/rooms */
 } WsState;
 
@@ -65,6 +67,8 @@ void ws_state_init(void);
 
 /* Handshake + session */
 int  ws_do_handshake(int fd, const char* client_key, DESI_SSL* ssl);
+int  ws_do_handshake_ext(int fd, const char* client_key, DESI_SSL* ssl,
+                         const char* extensions, int* compression_out);
 void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DESI_SSL* ssl);
 
 /* Frame operations */
@@ -88,6 +92,7 @@ void __ws_set_on_open(void* fn);
 void __ws_set_on_close(void* fn);
 void __ws_set_max_message_size(int size);
 void __ws_set_ping_interval(int secs);
+void __ws_set_compression(int enabled);
 
 /* Route-based API (multiple WS paths) */
 void __ws_route(const char* path, void* on_message);
