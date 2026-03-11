@@ -184,6 +184,76 @@ static void conn_close(Connection *c) {
     }
 }
 
+/* ---- Connection Pool (reuse TCP connections for same host:port) ---- */
+
+#define CONN_POOL_SIZE 16
+#define CONN_POOL_TTL  30  /* seconds */
+
+typedef struct {
+    char       host[256];
+    char       port[16];
+    Connection conn;
+    time_t     last_used;
+    int        in_use;
+} PoolEntry;
+
+static PoolEntry _conn_pool[CONN_POOL_SIZE] = {0};
+
+/* Check if a socket is still alive (not closed by server) */
+static int conn_is_alive(Connection* c) {
+    if (c->fd == DESI_INVALID_SOCKET) return 0;
+    char probe;
+    ssize_t n = recv(c->fd, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
+    if (n == 0) return 0;  /* server closed */
+    if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return 0;
+    return 1;
+}
+
+/* Get a pooled connection for host:port, or NULL if none available */
+static Connection* pool_get(const char* host, const char* port) {
+    time_t now = time(NULL);
+    for (int i = 0; i < CONN_POOL_SIZE; i++) {
+        if (_conn_pool[i].in_use &&
+            strcmp(_conn_pool[i].host, host) == 0 &&
+            strcmp(_conn_pool[i].port, port) == 0 &&
+            (now - _conn_pool[i].last_used) < CONN_POOL_TTL) {
+            if (conn_is_alive(&_conn_pool[i].conn)) {
+                _conn_pool[i].in_use = 0;  /* remove from pool */
+                return &_conn_pool[i].conn;
+            } else {
+                /* Dead connection — close and remove */
+                conn_close(&_conn_pool[i].conn);
+                _conn_pool[i].in_use = 0;
+            }
+        }
+    }
+    /* Cleanup expired entries while we're here */
+    for (int i = 0; i < CONN_POOL_SIZE; i++) {
+        if (_conn_pool[i].in_use && (now - _conn_pool[i].last_used) >= CONN_POOL_TTL) {
+            conn_close(&_conn_pool[i].conn);
+            _conn_pool[i].in_use = 0;
+        }
+    }
+    return NULL;
+}
+
+/* Return a connection to the pool for reuse */
+static void pool_put(const char* host, const char* port, Connection* c) {
+    if (!c || c->fd == DESI_INVALID_SOCKET) return;
+    for (int i = 0; i < CONN_POOL_SIZE; i++) {
+        if (!_conn_pool[i].in_use) {
+            strncpy(_conn_pool[i].host, host, sizeof(_conn_pool[i].host) - 1);
+            strncpy(_conn_pool[i].port, port, sizeof(_conn_pool[i].port) - 1);
+            _conn_pool[i].conn = *c;
+            _conn_pool[i].last_used = time(NULL);
+            _conn_pool[i].in_use = 1;
+            return;
+        }
+    }
+    /* Pool full — close the connection */
+    conn_close(c);
+}
+
 /* ---- HTTP protocol helpers ---- */
 
 static int send_all(Connection *c, const char *data, size_t len) {
@@ -319,6 +389,15 @@ static HttpResponse *http_do_request(const char *method, const char *url,
 
     int using_proxy = (_proxy_host[0] != '\0');
 
+    /* Check connection pool first (skip for proxy connections) */
+    if (!using_proxy) {
+        Connection* pooled = pool_get(parsed.host, parsed.port);
+        if (pooled) {
+            conn = *pooled;
+            goto have_connection;
+        }
+    }
+
     if (using_proxy) {
         /* Connect to proxy instead of target */
         conn.fd = tcp_connect(_proxy_host, _proxy_port, timeout_secs);
@@ -360,6 +439,8 @@ static HttpResponse *http_do_request(const char *method, const char *url,
         }
     }
 
+have_connection:;
+
     /* Build request */
     Buffer req;
     buf_init(&req);
@@ -384,7 +465,7 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     } else {
         buf_append(&req, "Accept-Encoding: identity\r\n", 27);
     }
-    buf_append(&req, "Connection: close\r\n", 19);
+    buf_append(&req, "Connection: keep-alive\r\n", 24);
 
     if (body_data && strlen(body_data) > 0) {
         char cl[64];
@@ -504,7 +585,18 @@ static HttpResponse *http_do_request(const char *method, const char *url,
     }
 
     buf_free(&raw);
-    conn_close(&conn);
+
+    /* Return connection to pool if keep-alive response */
+    const char* conn_hdr = find_header(resp_hdrs, "Connection");
+    int server_keepalive = 1; /* HTTP/1.1 default */
+    if (conn_hdr && strncasecmp(conn_hdr, "close", 5) == 0) {
+        server_keepalive = 0;
+    }
+    if (server_keepalive) {
+        pool_put(parsed.host, parsed.port, &conn);
+    } else {
+        conn_close(&conn);
+    }
 
     HttpResponse *r = (HttpResponse *)calloc(1, sizeof(HttpResponse));
     r->status = status;
