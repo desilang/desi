@@ -114,6 +114,8 @@ typedef struct {
     char* body;
     char* content_type;
     char* extra_headers;    /* additional headers (optional) */
+    char* file_path;        /* if set, stream from disk instead of body */
+    long  file_size;        /* file size for Content-Length (when streaming) */
 } HttpServerResponse;
 
 /* ---- Handler callback typedef ---- */
@@ -540,17 +542,30 @@ HttpServerResponse* __http_resp_from_file(int status, const char* path, const ch
     fseek(f, 0, SEEK_END);
     long len = ftell(f);
     fseek(f, 0, SEEK_SET);
-    char* buf = (char*)malloc(len + 1);
-    if (!buf) { fclose(f); return __http_resp_new(500, "http.html: out of memory", "text/plain"); }
-    size_t read = fread(buf, 1, len, f);
-    fclose(f);
-    buf[read] = '\0';
+
     HttpServerResponse* resp = (HttpServerResponse*)calloc(1, sizeof(HttpServerResponse));
-    if (!resp) { free(buf); return NULL; }
+    if (!resp) { fclose(f); return NULL; }
     resp->status = status;
-    resp->body = buf;
     resp->content_type = content_type ? strdup(content_type) : strdup("text/html; charset=utf-8");
     resp->extra_headers = NULL;
+
+    /* For large files (>64KB), use streaming mode: store path, don't load into memory */
+    if (len > 65536) {
+        fclose(f);
+        resp->body = NULL;
+        resp->file_path = strdup(path);
+        resp->file_size = len;
+    } else {
+        /* Small files: load into memory (fast, allows gzip) */
+        char* buf = (char*)malloc(len + 1);
+        if (!buf) { fclose(f); free(resp); return __http_resp_new(500, "http.html: out of memory", "text/plain"); }
+        size_t nread = fread(buf, 1, len, f);
+        fclose(f);
+        buf[nread] = '\0';
+        resp->body = buf;
+        resp->file_path = NULL;
+        resp->file_size = 0;
+    }
     return resp;
 }
 
@@ -759,7 +774,7 @@ static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServe
         return;
     }
 
-    int body_len = resp->body ? (int)strlen(resp->body) : 0;
+    int body_len = resp->body ? (int)strlen(resp->body) : (resp->file_path ? (int)resp->file_size : 0);
     const char* conn_header = keep_alive ? "keep-alive" : "close";
 
     /* Try gzip compression for text bodies > GZIP_MIN_SIZE */
@@ -805,6 +820,17 @@ static void send_response_ka(server_socket_t client_fd, DESI_SSL* ssl, HttpServe
     if (use_gzip) {
         DESI_SEND(client_fd, ssl, (const char*)gzip_body, (int)gzip_len);
         free(gzip_body);
+    } else if (resp->file_path) {
+        /* Stream from disk in 64KB chunks — avoids loading large files into memory */
+        FILE* sf = fopen(resp->file_path, "rb");
+        if (sf) {
+            char chunk[65536];
+            size_t n;
+            while ((n = fread(chunk, 1, sizeof(chunk), sf)) > 0) {
+                DESI_SEND(client_fd, ssl, chunk, (int)n);
+            }
+            fclose(sf);
+        }
     } else if (body_len > 0) {
         DESI_SEND(client_fd, ssl, resp->body, body_len);
     }
