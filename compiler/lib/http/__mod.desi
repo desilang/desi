@@ -838,6 +838,13 @@ pub def ws_max_message_size(srv: Server, max_bytes: int) -> none:
 pub def ws_ping_interval(srv: Server, secs: int) -> none:
 	return
 
+# Enable/disable WebSocket permessage-deflate compression (RFC 7692)
+# When enabled, text/binary frames are compressed with zlib deflate
+# Example: http.ws_compression(srv, true)
+# Note: lowerer intercepts and emits __ws_set_compression
+pub def ws_compression(srv: Server, enabled: bool) -> none:
+	return
+
 # Send a binary message to a single WebSocket connection
 # Note: lowerer intercepts and emits __ws_send_binary(conn, data, len)
 pub def ws_send_binary(conn: int, data: str) -> none:

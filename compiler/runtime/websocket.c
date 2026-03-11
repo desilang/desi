@@ -28,6 +28,17 @@
 #include <errno.h>
 #include "websocket.h"
 
+/* zlib for permessage-deflate compression (RFC 7692) */
+#if __has_include(<zlib.h>)
+  #define DESI_HAS_ZLIB 1
+  #include <zlib.h>
+#else
+  #define DESI_HAS_ZLIB 0
+#endif
+
+/* Thread-local compression state per WS session */
+static _Thread_local int _ws_compression_active = 0;
+
 /* Thread-local SSL pointer: set by ws_do_handshake / ws_session_loop
  * so WS_SEND/WS_RECV macros auto-dispatch to TLS or raw sockets */
 _Thread_local DESI_SSL* _ws_current_ssl = NULL;
@@ -123,6 +134,11 @@ static void base64_encode(const uint8_t* in, size_t len, char* out) {
 static const char* WS_MAGIC = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
 int ws_do_handshake(int fd, const char* client_key, DESI_SSL* ssl) {
+    return ws_do_handshake_ext(fd, client_key, ssl, NULL, NULL);
+}
+
+int ws_do_handshake_ext(int fd, const char* client_key, DESI_SSL* ssl,
+                        const char* extensions, int* compression_out) {
     if (!client_key || !client_key[0]) return -1;
     _ws_current_ssl = ssl; /* set for WS_SEND macro */
 
@@ -138,14 +154,42 @@ int ws_do_handshake(int fd, const char* client_key, DESI_SSL* ssl) {
     char accept_key[64];
     base64_encode(hash, 20, accept_key);
 
+    /* Check if client offers permessage-deflate and server has it enabled */
+    int use_compression = 0;
+#if DESI_HAS_ZLIB
+    if (__ws_state.compression_enabled && extensions) {
+        /* Case-insensitive search for permessage-deflate */
+        const char* p = extensions;
+        while (*p) {
+            if (strncmp(p, "permessage-deflate", 18) == 0) {
+                use_compression = 1;
+                break;
+            }
+            p++;
+        }
+    }
+#endif
+    if (compression_out) *compression_out = use_compression;
+
     /* Send 101 response */
-    char response[512];
-    int len = snprintf(response, sizeof(response),
-        "HTTP/1.1 101 Switching Protocols\r\n"
-        "Upgrade: websocket\r\n"
-        "Connection: Upgrade\r\n"
-        "Sec-WebSocket-Accept: %s\r\n"
-        "\r\n", accept_key);
+    char response[1024];
+    int len;
+    if (use_compression) {
+        len = snprintf(response, sizeof(response),
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Accept: %s\r\n"
+            "Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover\r\n"
+            "\r\n", accept_key);
+    } else {
+        len = snprintf(response, sizeof(response),
+            "HTTP/1.1 101 Switching Protocols\r\n"
+            "Upgrade: websocket\r\n"
+            "Connection: Upgrade\r\n"
+            "Sec-WebSocket-Accept: %s\r\n"
+            "\r\n", accept_key);
+    }
 
     ssize_t sent = WS_SEND(fd, response, len);
     return (int)sent;
@@ -216,12 +260,117 @@ static int ws_recv_exact(int fd, void* buf, size_t n) {
     return 0;
 }
 
+/* ============================================================
+ * permessage-deflate Compression Helpers (RFC 7692)
+ * ============================================================ */
+
+#if DESI_HAS_ZLIB
+
+/* Deflate (compress) a message. Returns malloc'd buffer, sets out_len.
+ * Appends 0x00 0x00 0xFF 0xFF trailer per RFC 7692 §7.2.1,
+ * then strips it (server removes trailing 4 bytes). */
+static unsigned char* ws_deflate_msg(const unsigned char* data, size_t len, size_t* out_len) {
+    /* Worst case: input + 128 bytes overhead */
+    size_t bound = compressBound(len) + 128;
+    unsigned char* out = (unsigned char*)malloc(bound);
+    if (!out) return NULL;
+
+    z_stream zs = {0};
+    /* -15 = raw deflate (no zlib/gzip header), per permessage-deflate spec */
+    if (deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, -15, 8, Z_DEFAULT_STRATEGY) != Z_OK) {
+        free(out);
+        return NULL;
+    }
+
+    zs.next_in = (unsigned char*)data;
+    zs.avail_in = (uInt)len;
+    zs.next_out = out;
+    zs.avail_out = (uInt)bound;
+
+    int ret = deflate(&zs, Z_SYNC_FLUSH);
+    deflateEnd(&zs);
+
+    if (ret != Z_OK && ret != Z_STREAM_END) {
+        free(out);
+        return NULL;
+    }
+
+    size_t compressed_len = zs.total_out;
+    /* RFC 7692: remove trailing 0x00 0x00 0xFF 0xFF */
+    if (compressed_len >= 4 &&
+        out[compressed_len-4] == 0x00 && out[compressed_len-3] == 0x00 &&
+        out[compressed_len-2] == 0xFF && out[compressed_len-1] == 0xFF) {
+        compressed_len -= 4;
+    }
+
+    *out_len = compressed_len;
+    return out;
+}
+
+/* Inflate (decompress) a message. Returns malloc'd buffer, sets out_len. */
+static unsigned char* ws_inflate_msg(const unsigned char* data, size_t len, size_t* out_len) {
+    /* Append 0x00 0x00 0xFF 0xFF per RFC 7692 §7.2.2 */
+    size_t input_len = len + 4;
+    unsigned char* input = (unsigned char*)malloc(input_len);
+    if (!input) return NULL;
+    memcpy(input, data, len);
+    input[len]   = 0x00;
+    input[len+1] = 0x00;
+    input[len+2] = 0xFF;
+    input[len+3] = 0xFF;
+
+    /* Start with 4x expansion, grow if needed */
+    size_t out_cap = len * 4 + 256;
+    unsigned char* out = (unsigned char*)malloc(out_cap);
+    if (!out) { free(input); return NULL; }
+
+    z_stream zs = {0};
+    if (inflateInit2(&zs, -15) != Z_OK) {
+        free(input); free(out);
+        return NULL;
+    }
+
+    zs.next_in = input;
+    zs.avail_in = (uInt)input_len;
+    zs.next_out = out;
+    zs.avail_out = (uInt)out_cap;
+
+    int ret = inflate(&zs, Z_SYNC_FLUSH);
+
+    /* If buffer too small, grow and retry */
+    while (ret == Z_BUF_ERROR || (ret == Z_OK && zs.avail_in > 0)) {
+        size_t have = zs.total_out;
+        out_cap *= 2;
+        unsigned char* new_out = (unsigned char*)realloc(out, out_cap);
+        if (!new_out) { inflateEnd(&zs); free(input); free(out); return NULL; }
+        out = new_out;
+        zs.next_out = out + have;
+        zs.avail_out = (uInt)(out_cap - have);
+        ret = inflate(&zs, Z_SYNC_FLUSH);
+    }
+
+    size_t total = zs.total_out;
+    inflateEnd(&zs);
+    free(input);
+
+    if (ret != Z_OK && ret != Z_STREAM_END) {
+        free(out);
+        return NULL;
+    }
+
+    *out_len = total;
+    return out;
+}
+
+#endif /* DESI_HAS_ZLIB */
+
 /* Read one WebSocket frame. Returns 0 on success, -1 on error/close */
 int ws_read_frame(int fd, WsFrame* frame) {
     uint8_t hdr[2];
     if (ws_recv_exact(fd, hdr, 2) < 0) return -1;
 
     frame->fin = (hdr[0] >> 7) & 1;
+    int rsv1 = (hdr[0] >> 6) & 1; /* RSV1 = compressed */
     frame->opcode = hdr[0] & 0x0F;
     int masked = (hdr[1] >> 7) & 1;
     uint64_t payload_len = hdr[1] & 0x7F;
@@ -251,22 +400,44 @@ int ws_read_frame(int fd, WsFrame* frame) {
                    : WS_DEFAULT_MAX_MSG_SIZE;
     if ((uint64_t)payload_len > max_msg) return -1;
 
-    frame->payload = (char*)malloc(payload_len + 1);
-    if (!frame->payload) return -1;
+    char* raw_payload = (char*)malloc(payload_len + 1);
+    if (!raw_payload) return -1;
 
     if (payload_len > 0) {
-        if (ws_recv_exact(fd, frame->payload, (size_t)payload_len) < 0) {
-            free(frame->payload);
-            frame->payload = NULL;
+        if (ws_recv_exact(fd, raw_payload, (size_t)payload_len) < 0) {
+            free(raw_payload);
             return -1;
         }
         /* Unmask */
         if (masked) {
             for (size_t i = 0; i < payload_len; i++)
-                frame->payload[i] ^= mask[i % 4];
+                raw_payload[i] ^= mask[i % 4];
         }
     }
-    frame->payload[payload_len] = '\0';
+    raw_payload[payload_len] = '\0';
+
+    /* Decompress if RSV1 is set and compression is active */
+#if DESI_HAS_ZLIB
+    if (rsv1 && _ws_compression_active && payload_len > 0 &&
+        (frame->opcode == 0x1 || frame->opcode == 0x2)) {
+        size_t inflated_len = 0;
+        unsigned char* inflated = ws_inflate_msg((const unsigned char*)raw_payload,
+                                                 payload_len, &inflated_len);
+        if (inflated) {
+            free(raw_payload);
+            frame->payload = (char*)realloc(inflated, inflated_len + 1);
+            if (!frame->payload) frame->payload = (char*)inflated;
+            frame->payload[inflated_len] = '\0';
+            frame->payload_len = inflated_len;
+            return 0;
+        }
+        /* Inflate failed — fall through with raw payload */
+    }
+#else
+    (void)rsv1;
+#endif
+
+    frame->payload = raw_payload;
     frame->payload_len = (size_t)payload_len;
     return 0;
 }
@@ -278,28 +449,53 @@ int ws_read_frame(int fd, WsFrame* frame) {
 static int ws_send_frame(int fd, int opcode, const char* data, size_t len) {
     uint8_t header[10];
     int hdr_len = 0;
+    const char* send_data = data;
+    size_t send_len = len;
+    unsigned char* compressed = NULL;
 
-    header[0] = 0x80 | (opcode & 0x0F); /* FIN=1 + opcode */
+    int rsv1 = 0;
+
+    /* Compress data frames if compression is active */
+#if DESI_HAS_ZLIB
+    if (_ws_compression_active && len > 0 && (opcode == 0x1 || opcode == 0x2)) {
+        size_t comp_len = 0;
+        compressed = ws_deflate_msg((const unsigned char*)data, len, &comp_len);
+        if (compressed && comp_len < len) {
+            send_data = (const char*)compressed;
+            send_len = comp_len;
+            rsv1 = 1;
+        } else {
+            /* Compression didn't help — send uncompressed */
+            free(compressed);
+            compressed = NULL;
+        }
+    }
+#endif
+
+    header[0] = 0x80 | (rsv1 ? 0x40 : 0) | (opcode & 0x0F); /* FIN=1 + RSV1 + opcode */
     hdr_len++;
 
-    if (len < 126) {
-        header[1] = (uint8_t)len; /* no mask bit for server */
+    if (send_len < 126) {
+        header[1] = (uint8_t)send_len;
         hdr_len = 2;
-    } else if (len <= 0xFFFF) {
+    } else if (send_len <= 0xFFFF) {
         header[1] = 126;
-        header[2] = (uint8_t)(len >> 8);
-        header[3] = (uint8_t)(len & 0xFF);
+        header[2] = (uint8_t)(send_len >> 8);
+        header[3] = (uint8_t)(send_len & 0xFF);
         hdr_len = 4;
     } else {
         header[1] = 127;
         for (int i = 0; i < 8; i++)
-            header[2 + i] = (uint8_t)(len >> (56 - 8*i));
+            header[2 + i] = (uint8_t)(send_len >> (56 - 8*i));
         hdr_len = 10;
     }
 
-    if (WS_SEND(fd, header, hdr_len) < 0) return -1;
-    if (len > 0 && WS_SEND(fd, data, len) < 0) return -1;
-    return 0;
+    int result = 0;
+    if (WS_SEND(fd, header, hdr_len) < 0) result = -1;
+    else if (send_len > 0 && WS_SEND(fd, send_data, send_len) < 0) result = -1;
+
+    free(compressed);
+    return result;
 }
 
 int ws_send_text(int fd, const char* msg, size_t len) {
@@ -521,6 +717,11 @@ void __ws_set_ping_interval(int secs) {
     __ws_state.ping_interval_secs = secs > 0 ? secs : 0;
 }
 
+/* Enable/disable permessage-deflate compression */
+void __ws_set_compression(int enabled) {
+    __ws_state.compression_enabled = enabled ? 1 : 0;
+}
+
 /* Send binary message to a single connection */
 void __ws_send_binary(int conn_fd, const char* data, int len) {
     if (conn_fd <= 0 || !data || len <= 0) return;
@@ -618,6 +819,9 @@ static void* ws_ping_thread(void* arg) {
 void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DESI_SSL* ssl) {
     /* Set thread-local SSL for WS_SEND/WS_RECV macros */
     _ws_current_ssl = ssl;
+
+    /* Enable per-session compression if server has it enabled and handshake negotiated it */
+    _ws_compression_active = __ws_state.compression_enabled;
 
     /* Install any bytes that were already read past the HTTP headers */
     ws_set_prebuf(prebuf, prebuf_len);

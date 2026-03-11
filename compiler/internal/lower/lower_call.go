@@ -506,6 +506,14 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						return hir.ConstNull{}
 					}
 
+				case "ws_compression":
+					// http.ws_compression(srv, enabled) → __ws_set_compression(enabled)
+					if len(x.Args) == 2 {
+						enabledVal := ls.lowerExpr(x.Args[1])
+						ls.b.Emit(&hir.Call{Fn: "__ws_set_compression", Args: []hir.Value{enabledVal}})
+						return hir.ConstNull{}
+					}
+
 				case "ws_send_binary":
 					if len(x.Args) == 2 {
 						connVal := ls.lowerExpr(x.Args[0])
