@@ -12,7 +12,7 @@ compiler/runtime/http.c                ← Core HTTP logic (URL parsing, request
 compiler/runtime/http/http_internal.h  ← Shared types (Buffer, Connection, ParsedURL)
 compiler/runtime/http/tls_apple.h      ← macOS TLS (OpenSSL via Homebrew)
 compiler/runtime/http/tls_openssl.h    ← Linux TLS (system OpenSSL)
-compiler/runtime/http/tls_win.h        ← Windows TLS (HTTP-only stub)
+compiler/runtime/http/tls_win.h        ← Windows TLS (Schannel SSPI)
 ```
 
 ## Why This Design?
@@ -69,7 +69,9 @@ Uses system OpenSSL/LibreSSL directly. Available on virtually all distributions.
 
 ### Windows (`tls_win.h`)
 
-Stub — HTTP works, HTTPS returns error. Full Schannel implementation deferred.
+Full Schannel (SSPI) implementation for client-side TLS. Uses `InitializeSecurityContext` handshake loop, `EncryptMessage`/`DecryptMessage` for data transfer, and Windows system certificate store. Supports TLS 1.2 and 1.3. Links `secur32.lib` + `crypt32.lib` (system libraries).
+
+Server-side TLS on Windows uses Schannel via `tls.c` (`#elif defined(_WIN32)` block): `AcceptSecurityContext` handshake, PEM-to-DER certificate conversion via `CryptStringToBinaryA`, RSA private key import via `CryptDecodeObjectEx`.
 
 ## Build System Integration
 
@@ -105,7 +107,7 @@ The HTTP module required fixing struct export resolution in the resolver:
 |---------|---------------------|---------|
 | Sockets | `socket()`, `connect()` | `winsock2.h` (`WSAStartup`) |
 | DNS | `getaddrinfo()` | `getaddrinfo()` |
-| TLS | OpenSSL `SSL_*` | Stub (HTTP only) |
+| TLS | OpenSSL `SSL_*` | Schannel (SSPI) |
 | Close | `close(fd)` | `closesocket(fd)` |
 
 ## Adding New Features
@@ -117,11 +119,8 @@ The HTTP module required fixing struct export resolution in the resolver:
 5. Rebuild with `make clean && make`
 6. Test with `desic run test_file.desi`
 
-## Known Limitations (Phase 1 Client)
+## Known Limitations
 
-- No proxy support
-- No cookie persistence
-- No custom TLS certificate configuration
 - No HTTP/2 support
 - `post_json()`/`put_json()`/`patch_json()` auto-serialize via `__json_stringify`, but mixed-type dicts passed as `Any` may not serialize correctly at the C level
 
@@ -562,6 +561,56 @@ http.serve_static(srv, "/static", "./public")
 
 ---
 
+## Connection Timeout (Server)
+
+Configure how long the server waits for client data before closing idle connections:
+
+### Desi API
+
+```desi
+http.timeout(srv, 30)   # 30 seconds
+```
+
+- Default: 15 seconds
+- Uses `SO_RCVTIMEO` socket option
+- Mitigates slow client denial-of-service attacks (e.g., Slowloris)
+
+---
+
+## Graceful Drain
+
+The server tracks active connections and drains them during shutdown:
+
+- Atomic `active_connections` counter incremented/decremented in `handle_client()`
+- Shutdown logs number of active connections being drained
+- `supervisor_stop()` drains request queue and joins worker threads
+
+---
+
+## Response Streaming
+
+Large file responses (>64KB) are streamed from disk to avoid memory exhaustion:
+
+- `__http_resp_from_file()` stores file path and size instead of loading entire file
+- `send_response_ka()` reads files in 64KB chunks via `fread()` + `DESI_SEND()`
+- Small files (<64KB) are still loaded into memory for gzip eligibility
+- `Content-Length` header uses `file_size` for streaming responses
+
+---
+
+## HTTP Client Connection Pooling
+
+The HTTP client reuses TCP connections for the same host:port:
+
+- 16-slot pool with 30-second idle TTL
+- `pool_get()` checks if pooled connection is alive via `recv(MSG_PEEK)`
+- `pool_put()` stores connections after keep-alive responses
+- Sends `Connection: keep-alive` header (instead of `close`)
+- Server `Connection: close` responses skip pool and close immediately
+- Expired connections cleaned up lazily during pool lookups
+
+---
+
 ## Keep-Alive Connections
 
 HTTP/1.1 keep-alive is enabled by default:
@@ -798,6 +847,27 @@ def main() -> int:
     http.ws(srv, "/ws", on_message)
     http.ws_on_open(srv, on_open)
     http.ws_on_close(srv, on_close)
+
+### WebSocket Compression (permessage-deflate)
+
+Enable wire-level compression for WebSocket messages using the permessage-deflate extension (RFC 7692):
+
+```desi
+http.ws_compression(srv, true)
+```
+
+- Negotiated during the WebSocket handshake via `Sec-WebSocket-Extensions` header
+- Uses zlib raw deflate (`-15` window bits) per-frame
+- RSV1 bit indicates compressed frames
+- Only compresses when the result is smaller than the original
+- Uses `server_no_context_takeover` + `client_no_context_takeover`
+
+**How it works:**
+
+1. Client sends `Sec-WebSocket-Extensions: permessage-deflate` in upgrade request
+2. Server echoes the extension in the 101 response (if compression enabled)
+3. Outgoing text/binary frames: deflated and RSV1 bit set
+4. Incoming frames with RSV1: inflated before delivering to handler
     http.serve(srv)
     return 0
 ```

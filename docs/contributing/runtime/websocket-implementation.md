@@ -143,6 +143,38 @@ Not available on macOS. `websocket.h` uses platform-conditional macros:
 #endif
 ```
 
+## Compression (permessage-deflate, RFC 7692)
+
+WebSocket supports per-frame compression via the permessage-deflate extension.
+
+### Negotiation
+
+During the handshake, `ws_do_handshake_ext()` checks `Sec-WebSocket-Extensions` for `permessage-deflate`. If found and server has compression enabled, the 101 response includes:
+
+```
+Sec-WebSocket-Extensions: permessage-deflate; server_no_context_takeover; client_no_context_takeover
+```
+
+### Frame Processing
+
+- **Send** (`ws_send_frame`): If `_ws_compression_active` is set and frame is text/binary, deflate payload via `ws_deflate_msg()`. Set RSV1 bit (0x40) on the first header byte. Only compresses when result is smaller than original.
+- **Receive** (`ws_read_frame`): If RSV1 bit is set and compression is active, inflate payload via `ws_inflate_msg()`.
+
+### zlib Details
+
+- Raw deflate (window bits = `-15`, no zlib/gzip header)
+- RFC 7692 §7.2.1: Strip trailing `0x00 0x00 0xFF 0xFF` on compress
+- RFC 7692 §7.2.2: Append `0x00 0x00 0xFF 0xFF` before decompress
+- Uses `_Thread_local int _ws_compression_active` for per-session state
+
+### Configuration
+
+```desi
+http.ws_compression(srv, true)   # enable compression
+```
+
+Lowered to `__ws_set_compression(1)` which sets `__ws_state.compression_enabled`.
+
 ## Lowering (Compiler → Runtime)
 
 The compiler lowers Desi API calls to C runtime functions:
@@ -158,12 +190,14 @@ The compiler lowers Desi API calls to C runtime functions:
 | `http.ws_join(conn, room)` | `__ws_join(conn, room)` |
 | `http.ws_leave(conn, room)` | `__ws_leave(conn, room)` |
 | `http.ws_to_room(srv, room, msg)` | `__ws_to_room(srv, room, msg)` |
+| `http.ws_compression(srv, enabled)` | `__ws_set_compression(enabled)` |
 
 ## Related Files
 
-- `compiler/runtime/websocket.c` — Core implementation
-- `compiler/runtime/websocket.h` — Headers and platform macros
-- `compiler/runtime/http_server.c` — Upgrade detection
-- `compiler/internal/lower/lower_call.go` — Lowering (lines ~339–369)
+- `compiler/runtime/websocket.c` — Core implementation (handshake, frames, compression)
+- `compiler/runtime/websocket.h` — Headers, platform macros, `WsConnection` struct
+- `compiler/runtime/http_server.c` — Upgrade detection, extension header extraction
+- `compiler/internal/lower/lower_call.go` — Lowering (ws_compression at ~line 509)
 - `compiler/internal/backend/llvm/sig_overrides.go` — Runtime signatures
 - `examples/412_websocket.desi` — Example echo server
+
