@@ -107,3 +107,136 @@ int __os_system(const char* cmd) {
 void __os_exit(int code) {
     exit(code);
 }
+
+// ============================================================
+// File I/O
+// ============================================================
+
+#include <sys/stat.h>
+#include <dirent.h>
+#include <errno.h>
+
+// Forward declare DesiList from list.h
+typedef struct {
+    void** data;
+    size_t length;
+    size_t capacity;
+    int type_tag;
+    char* (*to_str_fn)(void*);
+} DesiList;
+extern DesiList* list_new(int type_tag, char* (*to_str_fn)(void*));
+extern void list_append(DesiList* list, void* item, int type_tag);
+
+// Read entire file as string. Returns empty string on error.
+char* __os_read_file(const char* path) {
+    if (!path) return strdup("");
+    FILE* f = fopen(path, "rb");
+    if (!f) return strdup("");
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size < 0) { fclose(f); return strdup(""); }
+    char* buf = (char*)malloc((size_t)size + 1);
+    if (!buf) { fclose(f); return strdup(""); }
+    size_t nread = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[nread] = '\0';
+    return buf;
+}
+
+// Write string to file (creates or overwrites). Returns 0 on success.
+int __os_write_file(const char* path, const char* data) {
+    if (!path || !data) return -1;
+    FILE* f = fopen(path, "wb");
+    if (!f) return -1;
+    size_t len = strlen(data);
+    size_t written = fwrite(data, 1, len, f);
+    fclose(f);
+    return (written == len) ? 0 : -1;
+}
+
+// Append string to file (creates if needed). Returns 0 on success.
+int __os_append_file(const char* path, const char* data) {
+    if (!path || !data) return -1;
+    FILE* f = fopen(path, "ab");
+    if (!f) return -1;
+    size_t len = strlen(data);
+    size_t written = fwrite(data, 1, len, f);
+    fclose(f);
+    return (written == len) ? 0 : -1;
+}
+
+// Check if path exists (file or directory)
+int __os_exists(const char* path) {
+    if (!path) return 0;
+    struct stat st;
+    return stat(path, &st) == 0;
+}
+
+// Check if path is a regular file
+int __os_is_file(const char* path) {
+    if (!path) return 0;
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return S_ISREG(st.st_mode);
+}
+
+// Check if path is a directory
+int __os_is_dir(const char* path) {
+    if (!path) return 0;
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+    return S_ISDIR(st.st_mode);
+}
+
+// Get file size in bytes, returns -1 on error
+long __os_file_size(const char* path) {
+    if (!path) return -1;
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (long)st.st_size;
+}
+
+// Create directory. Returns 0 on success.
+int __os_mkdir(const char* path) {
+    if (!path) return -1;
+#ifdef _WIN32
+    return _mkdir(path);
+#else
+    return mkdir(path, 0755);
+#endif
+}
+
+// Remove directory. Returns 0 on success.
+int __os_rmdir(const char* path) {
+    if (!path) return -1;
+    return rmdir(path);
+}
+
+// Remove file. Returns 0 on success.
+int __os_remove(const char* path) {
+    if (!path) return -1;
+    return remove(path);
+}
+
+// Rename file or directory. Returns 0 on success.
+int __os_rename(const char* old_path, const char* new_path) {
+    if (!old_path || !new_path) return -1;
+    return rename(old_path, new_path);
+}
+
+// List directory contents, returns list of filenames (excludes . and ..)
+DesiList* __os_listdir(const char* path) {
+    DesiList* result = list_new(1, NULL); // type_tag 1 = str
+    if (!path) return result;
+    DIR* dir = opendir(path);
+    if (!dir) return result;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+        list_append(result, (void*)strdup(entry->d_name), 1);
+    }
+    closedir(dir);
+    return result;
+}
