@@ -117,10 +117,11 @@ let decoded = http.url_decode("hello%20world")    # "hello world"
 
 ## Features
 
-- **HTTP and HTTPS** — TLS via OpenSSL (macOS/Linux)
+- **HTTP and HTTPS** — TLS via OpenSSL (macOS/Linux) or Schannel (Windows)
 - **IPv4 and IPv6** — dual-stack support
 - **Redirects** — automatic following (301, 302, 303, 307, 308)
 - **Chunked encoding** — handles `Transfer-Encoding: chunked`
+- **Connection pooling** — reuses TCP connections for the same host
 - **No dependencies** — ships with the compiler, no pip/npm needed
 
 ## HTTPS Requirements
@@ -129,9 +130,9 @@ HTTPS requires OpenSSL to be installed:
 
 - **macOS**: `brew install openssl` (auto-detected from Homebrew)
 - **Linux**: Usually pre-installed (`libssl-dev` package)
-- **Windows**: HTTP only in Phase 1
+- **Windows**: Schannel (built-in, no external dependencies)
 
-If OpenSSL is not found, HTTP requests still work; only HTTPS will fail with a connection error.
+If OpenSSL is not found on macOS/Linux, HTTP requests still work; only HTTPS will fail with a connection error.
 
 ---
 
@@ -352,6 +353,7 @@ ws.onmessage = (e) => console.log(e.data);
 - **macOS**: `brew install openssl`
 - **Linux**: `libssl-dev` (usually pre-installed)
 - TLS 1.2+ enforced (no SSLv3 or TLS 1.0/1.1)
+- **Windows**: Uses Schannel (built-in, no external dependencies)
 
 ---
 
@@ -449,7 +451,12 @@ http.ws_max_message_size(srv, 1024 * 1024)  # 1MB limit
 
 # Enable automatic ping keepalive (default: disabled)
 http.ws_ping_interval(srv, 30)  # ping every 30 seconds
+
+# Enable permessage-deflate compression (RFC 7692)
+http.ws_compression(srv, true)
 ```
+
+Compression reduces message sizes by 60-80% for text-heavy WebSocket traffic. It's negotiated automatically during the handshake — clients that don't support it will continue to work uncompressed.
 
 ### WebSocket API Reference
 
@@ -466,6 +473,7 @@ http.ws_ping_interval(srv, 30)  # ping every 30 seconds
 | `http.ws_close(conn)` | Close a specific connection |
 | `http.ws_max_message_size(srv, bytes)` | Set max incoming message size |
 | `http.ws_ping_interval(srv, secs)` | Set ping keepalive interval (0 = off) |
+| `http.ws_compression(srv, enabled)` | Enable/disable permessage-deflate compression |
 
 ### Callback Signatures
 
@@ -482,6 +490,7 @@ http.ws_ping_interval(srv, 30)  # ping every 30 seconds
 - **Configurable message size** — prevent memory exhaustion
 - **Rooms** — group clients for targeted messaging
 - **Multiple WS paths** — register handlers on different paths (up to 8)
+- **Compression** — permessage-deflate (RFC 7692) reduces bandwidth
 - **RFC 6455 compliant** — proper handshake, masking, close frames
 
 ### Example: Chat Server
@@ -505,6 +514,46 @@ def main() -> int:
     http.ws(srv, "/ws", on_message)
     http.ws_on_open(srv, on_open)
     http.ws_ping_interval(srv, 30)  # keep connections alive
+    http.ws_compression(srv, true)   # compress messages
     http.serve(srv, handler)
     return 0
 ```
+
+---
+
+## Server Security & Performance
+
+Desi's HTTP server includes built-in production hardening:
+
+### Request Body Limits
+
+```desi
+http.max_body(srv, 1024 * 512)   # 512KB max body size
+```
+
+Oversized requests receive `413 Payload Too Large` before the body is read, preventing memory exhaustion.
+
+### Connection Timeout
+
+```desi
+http.timeout(srv, 30)   # 30-second timeout
+```
+
+Closes idle connections after the specified seconds. Protects against slow client attacks (Slowloris). Default: 15 seconds.
+
+### Rate Limiting
+
+```desi
+http.rate_limit(srv, 100, 60)   # 100 requests per 60 seconds per IP
+```
+
+Returns `429 Too Many Requests` with a `Retry-After` header when exceeded.
+
+### Server Security API Reference
+
+| Function | Description |
+|----------|-------------|
+| `http.max_body(srv, bytes)` | Set max request body size (default: 1MB) |
+| `http.timeout(srv, secs)` | Set connection timeout (default: 15s) |
+| `http.rate_limit(srv, max, window)` | Configure per-IP rate limiting |
+| `http.cors(srv, origin)` | Configure CORS (default: `*`) |
