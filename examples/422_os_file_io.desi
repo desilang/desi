@@ -1,0 +1,65 @@
+# Test os module - file I/O functions
+import os
+
+def main() -> int:
+    # --- Write and Read ---
+    let rc = os.write_file("/tmp/desi_os_test.txt", "hello desi")
+    print(rc)
+    let content = os.read_file("/tmp/desi_os_test.txt")
+    print(content)
+
+    # --- Append ---
+    os.append_file("/tmp/desi_os_test.txt", " world")
+    let content2 = os.read_file("/tmp/desi_os_test.txt")
+    print(content2)
+
+    # --- Exists, is_file, is_dir ---
+    print(os.exists("/tmp/desi_os_test.txt"))
+    print(os.is_file("/tmp/desi_os_test.txt"))
+    print(os.is_dir("/tmp/desi_os_test.txt"))
+    print(os.is_dir("/tmp"))
+
+    # --- File size ---
+    let sz = os.file_size("/tmp/desi_os_test.txt")
+    print(sz)
+
+    # --- mkdir, listdir, rmdir ---
+    os.mkdir("/tmp/desi_os_testdir")
+    print(os.is_dir("/tmp/desi_os_testdir"))
+    os.write_file("/tmp/desi_os_testdir/a.txt", "aaa")
+    let files = os.listdir("/tmp/desi_os_testdir")
+    print(files)
+
+    # --- Rename ---
+    os.rename("/tmp/desi_os_testdir/a.txt", "/tmp/desi_os_testdir/b.txt")
+    print(os.exists("/tmp/desi_os_testdir/a.txt"))
+    print(os.exists("/tmp/desi_os_testdir/b.txt"))
+
+    # --- Remove ---
+    os.remove("/tmp/desi_os_testdir/b.txt")
+    print(os.exists("/tmp/desi_os_testdir/b.txt"))
+    os.rmdir("/tmp/desi_os_testdir")
+    print(os.exists("/tmp/desi_os_testdir"))
+
+    # --- Cleanup ---
+    os.remove("/tmp/desi_os_test.txt")
+    print(os.exists("/tmp/desi_os_test.txt"))
+
+    0
+
+# EXPECTED_OUTPUT:
+# 0
+# hello desi
+# hello desi world
+# true
+# true
+# false
+# true
+# 16
+# true
+# ["a.txt"]
+# false
+# true
+# false
+# false
+# false

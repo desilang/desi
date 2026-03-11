@@ -48,6 +48,44 @@ pub def __os_system(cmd: str) -> int
 @extern("C")
 pub def __os_exit(code: int) -> none
 
+# --- File I/O bindings ---
+
+@extern("C")
+pub def __os_read_file(path: str) -> str
+
+@extern("C")
+pub def __os_write_file(path: str, data: str) -> int
+
+@extern("C")
+pub def __os_append_file(path: str, data: str) -> int
+
+@extern("C")
+pub def __os_exists(path: str) -> bool
+
+@extern("C")
+pub def __os_is_file(path: str) -> bool
+
+@extern("C")
+pub def __os_is_dir(path: str) -> bool
+
+@extern("C")
+pub def __os_file_size(path: str) -> int
+
+@extern("C")
+pub def __os_mkdir(path: str) -> int
+
+@extern("C")
+pub def __os_rmdir(path: str) -> int
+
+@extern("C")
+pub def __os_remove(path: str) -> int
+
+@extern("C")
+pub def __os_rename(old_path: str, new_path: str) -> int
+
+@extern("C")
+pub def __os_listdir(path: str) -> list[str]
+
 # --- Public API ---
 
 ## Get an environment variable value. Returns empty string if not set.
@@ -109,4 +147,66 @@ pub def system(cmd: str) -> int:
 pub def exit(code: int) -> none:
 	unsafe:
 		__os_exit(code)
+
+# --- Public API: File I/O ---
+
+## Read entire file as string. Returns empty string on error.
+pub def read_file(path: str) -> str:
+	unsafe:
+		return __os_read_file(path)
+
+## Write string to file (creates or overwrites). Returns 0 on success.
+pub def write_file(path: str, data: str) -> int:
+	unsafe:
+		return __os_write_file(path, data)
+
+## Append string to file (creates if needed). Returns 0 on success.
+pub def append_file(path: str, data: str) -> int:
+	unsafe:
+		return __os_append_file(path, data)
+
+## Check if a path exists (file or directory).
+pub def exists(path: str) -> bool:
+	unsafe:
+		return __os_exists(path)
+
+## Check if path is a regular file.
+pub def is_file(path: str) -> bool:
+	unsafe:
+		return __os_is_file(path)
+
+## Check if path is a directory.
+pub def is_dir(path: str) -> bool:
+	unsafe:
+		return __os_is_dir(path)
+
+## Get file size in bytes. Returns -1 on error.
+pub def file_size(path: str) -> int:
+	unsafe:
+		return __os_file_size(path)
+
+## Create a directory. Returns 0 on success.
+pub def mkdir(path: str) -> int:
+	unsafe:
+		return __os_mkdir(path)
+
+## Remove an empty directory. Returns 0 on success.
+pub def rmdir(path: str) -> int:
+	unsafe:
+		return __os_rmdir(path)
+
+## Remove a file. Returns 0 on success.
+pub def remove(path: str) -> int:
+	unsafe:
+		return __os_remove(path)
+
+## Rename a file or directory. Returns 0 on success.
+pub def rename(old_path: str, new_path: str) -> int:
+	unsafe:
+		return __os_rename(old_path, new_path)
+
+## List directory contents (excludes . and ..).
+pub def listdir(path: str) -> list[str]:
+	unsafe:
+		return __os_listdir(path)
 
