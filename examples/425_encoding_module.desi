@@ -1,0 +1,38 @@
+# Test encoding module — hex and base64
+import encoding
+
+def main() -> int:
+	# Hex encoding
+	let hex = encoding.hex_encode("Hello")
+	print(hex)
+
+	let decoded = encoding.hex_decode(hex)
+	print(decoded)
+
+	let hex_upper = encoding.hex_encode_upper("Hello")
+	print(hex_upper)
+
+	# Base64
+	let b64 = encoding.base64_encode("Hello, World!")
+	print(b64)
+
+	let b64_decoded = encoding.base64_decode(b64)
+	print(b64_decoded)
+
+	# URL-safe base64
+	let url_b64 = encoding.base64_url_encode("Hello, World!")
+	print(url_b64)
+
+	let url_decoded = encoding.base64_url_decode(url_b64)
+	print(url_decoded)
+
+	0
+
+# EXPECTED_OUTPUT:
+# 48656c6c6f
+# Hello
+# 48656C6C6F
+# SGVsbG8sIFdvcmxkIQ==
+# Hello, World!
+# SGVsbG8sIFdvcmxkIQ
+# Hello, World!
