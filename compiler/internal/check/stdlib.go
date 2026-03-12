@@ -18,4 +18,5 @@ var StdlibModules = map[string]bool{
 	"encoding": true,
 	"template": true,
 	"net":      true,
+	"datetime": true,
 }

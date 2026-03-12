@@ -1,0 +1,62 @@
+# Test datetime module — parsing, formatting, arithmetic, calendar
+import datetime
+
+def main() -> int:
+	# ISO 8601 parsing
+	let ts = datetime.parse_date("2024-06-15")
+	let formatted = datetime.to_date_str(ts)
+	print(formatted)
+
+	# Date arithmetic
+	let next_month = datetime.add_months("2024-01-31", 1)
+	print(next_month)
+
+	let next_week = datetime.add_days("2024-06-15", 7)
+	print(next_week)
+
+	let next_year = datetime.add_years("2024-02-29", 1)
+	print(next_year)
+
+	# Date diff
+	let diff = datetime.diff_days("2024-12-31", "2024-01-01")
+	print(str(diff))
+
+	# Calendar utilities
+	let dim = datetime.days_in_month(2024, 2)
+	print(str(dim))
+
+	let dim_regular = datetime.days_in_month(2023, 2)
+	print(str(dim_regular))
+
+	let day_name = datetime.weekday_name("2024-06-15")
+	print(day_name)
+
+	let mname = datetime.month_name(6)
+	print(mname)
+
+	# Validation
+	let valid = datetime.is_valid("2024-02-29")
+	print(str(valid))
+
+	let invalid = datetime.is_valid("2023-02-29")
+	print(str(invalid))
+
+	# Compare
+	let cmp = datetime.compare("2024-06-15", "2024-01-01")
+	print(str(cmp))
+
+	0
+
+# EXPECTED_OUTPUT:
+# 2024-06-15
+# 2024-02-29
+# 2024-06-22
+# 2025-02-28
+# 365
+# 29
+# 28
+# Saturday
+# June
+# true
+# false
+# 1

@@ -1,0 +1,138 @@
+# datetime module — date and time operations
+#
+# High-level date/time with ISO 8601 support.
+# For timestamps and sleep, use the time module.
+#
+# Usage:
+#   import datetime
+#   let today = datetime.today()
+#   let future = datetime.add_days(today, 30)
+#   let diff = datetime.diff_days(future, today)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __datetime_parse_date(date_str: str) -> float
+
+@extern("C")
+pub def __datetime_parse(datetime_str: str) -> float
+
+@extern("C")
+pub def __datetime_to_date_str(ts: float) -> str
+
+@extern("C")
+pub def __datetime_to_str(ts: float) -> str
+
+@extern("C")
+pub def __datetime_today() -> str
+
+@extern("C")
+pub def __datetime_now() -> str
+
+@extern("C")
+pub def __datetime_add_days(date_str: str, days: int) -> str
+
+@extern("C")
+pub def __datetime_add_months(date_str: str, months: int) -> str
+
+@extern("C")
+pub def __datetime_add_years(date_str: str, years: int) -> str
+
+@extern("C")
+pub def __datetime_diff_days(date1: str, date2: str) -> int
+
+@extern("C")
+pub def __datetime_days_in_month(year: int, month: int) -> int
+
+@extern("C")
+pub def __datetime_is_weekend(date_str: str) -> int
+
+@extern("C")
+pub def __datetime_weekday_name(date_str: str) -> str
+
+@extern("C")
+pub def __datetime_month_name(month: int) -> str
+
+@extern("C")
+pub def __datetime_week_number(date_str: str) -> int
+
+@extern("C")
+pub def __datetime_is_valid(date_str: str) -> int
+
+@extern("C")
+pub def __datetime_compare(date1: str, date2: str) -> int
+
+# --- Public API ---
+
+# Parsing
+pub def parse_date(date_str: str) -> float:
+	"""Parse ISO 8601 date 'YYYY-MM-DD' to timestamp."""
+	return __datetime_parse_date(date_str)
+
+pub def parse(datetime_str: str) -> float:
+	"""Parse ISO 8601 datetime 'YYYY-MM-DDTHH:MM:SS' to timestamp."""
+	return __datetime_parse(datetime_str)
+
+# Formatting
+pub def to_date_str(ts: float) -> str:
+	"""Format timestamp to 'YYYY-MM-DD'."""
+	return __datetime_to_date_str(ts)
+
+pub def to_str(ts: float) -> str:
+	"""Format timestamp to 'YYYY-MM-DDTHH:MM:SS'."""
+	return __datetime_to_str(ts)
+
+# Current date/time
+pub def today() -> str:
+	"""Get today's date as 'YYYY-MM-DD'."""
+	return __datetime_today()
+
+pub def now() -> str:
+	"""Get current datetime as 'YYYY-MM-DDTHH:MM:SS'."""
+	return __datetime_now()
+
+# Arithmetic
+pub def add_days(date_str: str, days: int) -> str:
+	"""Add days to a date string. Returns new date."""
+	return __datetime_add_days(date_str, days)
+
+pub def add_months(date_str: str, months: int) -> str:
+	"""Add months to a date. Handles month lengths."""
+	return __datetime_add_months(date_str, months)
+
+pub def add_years(date_str: str, years: int) -> str:
+	"""Add years to a date."""
+	return __datetime_add_years(date_str, years)
+
+pub def diff_days(date1: str, date2: str) -> int:
+	"""Days between two dates (date1 - date2)."""
+	return __datetime_diff_days(date1, date2)
+
+# Calendar utilities
+pub def days_in_month(year: int, month: int) -> int:
+	"""Number of days in a month (handles leap years)."""
+	return __datetime_days_in_month(year, month)
+
+pub def is_weekend(date_str: str) -> bool:
+	"""Check if a date falls on Saturday or Sunday."""
+	return __datetime_is_weekend(date_str) == 1
+
+pub def weekday_name(date_str: str) -> str:
+	"""Get weekday name ('Monday', 'Tuesday', etc.)."""
+	return __datetime_weekday_name(date_str)
+
+pub def month_name(month: int) -> str:
+	"""Get month name ('January', 'February', etc.)."""
+	return __datetime_month_name(month)
+
+pub def week_number(date_str: str) -> int:
+	"""ISO week number (1-53)."""
+	return __datetime_week_number(date_str)
+
+pub def is_valid(date_str: str) -> bool:
+	"""Check if a date string is valid."""
+	return __datetime_is_valid(date_str) == 1
+
+pub def compare(date1: str, date2: str) -> int:
+	"""Compare two dates: -1 (before), 0 (equal), 1 (after)."""
+	return __datetime_compare(date1, date2)
