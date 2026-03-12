@@ -1,0 +1,49 @@
+# csv module — CSV parsing and writing
+#
+# RFC 4180 compliant: handles quoted fields, escaped quotes,
+# commas and newlines inside fields.
+#
+# Usage:
+#   import csv
+#   let rows = csv.parse("name,age\nAlice,30\nBob,25")
+#   let data = csv.read_file("data.csv")
+#   csv.write_file("out.csv", rows)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __csv_parse(data: str) -> list[list[str]]
+
+@extern("C")
+pub def __csv_parse_delim(data: str, delim: str) -> list[list[str]]
+
+@extern("C")
+pub def __csv_format(rows: list[list[str]]) -> str
+
+@extern("C")
+pub def __csv_read_file(path: str) -> list[list[str]]
+
+@extern("C")
+pub def __csv_write_file(path: str, rows: list[list[str]]) -> int
+
+# --- Public API ---
+
+pub def parse(data: str) -> list[list[str]]:
+	"""Parse a CSV string into a list of rows (list of fields)."""
+	return __csv_parse(data)
+
+pub def parse_delim(data: str, delim: str) -> list[list[str]]:
+	"""Parse a delimited string with custom delimiter."""
+	return __csv_parse_delim(data, delim)
+
+pub def format(rows: list[list[str]]) -> str:
+	"""Format rows into a CSV string."""
+	return __csv_format(rows)
+
+pub def read_file(path: str) -> list[list[str]]:
+	"""Read a CSV file and return rows."""
+	return __csv_read_file(path)
+
+pub def write_file(path: str, rows: list[list[str]]) -> int:
+	"""Write rows to a CSV file. Returns 0 on success, -1 on failure."""
+	return __csv_write_file(path, rows)

@@ -14,4 +14,5 @@ var StdlibModules = map[string]bool{
 	"io":      true,
 	"sync":    true,
 	"strings": true,
+	"csv":     true,
 }

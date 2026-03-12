@@ -1,0 +1,39 @@
+# Test csv module — parsing and formatting
+import csv
+
+def main() -> int:
+	# Parse CSV string
+	let data = "name,age,city\nAlice,30,NYC\nBob,25,LA"
+	let rows = csv.parse(data)
+	print(len(rows))
+
+	# Access first row (header)
+	let header = rows[0]
+	print(header[0])
+	print(header[1])
+	print(header[2])
+
+	# Access data row
+	let row1 = rows[1]
+	print(row1[0])
+	print(row1[1])
+	print(row1[2])
+
+	# Format back to CSV
+	let formatted = csv.format(rows)
+	print(formatted)
+
+	0
+
+# EXPECTED_OUTPUT:
+# 3
+# name
+# age
+# city
+# Alice
+# 30
+# NYC
+# name,age,city
+# Alice,30,NYC
+# Bob,25,LA
+#
