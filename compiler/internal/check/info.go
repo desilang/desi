@@ -403,6 +403,44 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"condition", "message"},
 	)
 
+	// assert_eq(expected: T, actual: T) -> none  — for int, str, bool
+	for _, k := range []types.T{types.Int, types.Str, types.Bool} {
+		addN("assert_eq",
+			[]types.T{k, k},
+			[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+			types.None,
+			[]string{"expected", "actual"},
+		)
+	}
+	// assert_eq(expected: T, actual: T, message: str) -> none
+	for _, k := range []types.T{types.Int, types.Str, types.Bool} {
+		addN("assert_eq",
+			[]types.T{k, k, types.Str},
+			[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+			types.None,
+			[]string{"expected", "actual", "message"},
+		)
+	}
+
+	// assert_ne(a: T, b: T) -> none  — for int, str, bool
+	for _, k := range []types.T{types.Int, types.Str, types.Bool} {
+		addN("assert_ne",
+			[]types.T{k, k},
+			[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+			types.None,
+			[]string{"a", "b"},
+		)
+	}
+	// assert_ne(a: T, b: T, message: str) -> none
+	for _, k := range []types.T{types.Int, types.Str, types.Bool} {
+		addN("assert_ne",
+			[]types.T{k, k, types.Str},
+			[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
+			types.None,
+			[]string{"a", "b", "message"},
+		)
+	}
+
 	// --- reduce/fold builtins ---
 	// reduce(func, iterable, initial) -> AccT  (left-to-right fold)
 	// foldl(func, iterable, initial) -> AccT   (alias for reduce)
