@@ -1,0 +1,116 @@
+# net module — low-level networking (TCP, UDP, DNS)
+#
+# Provides raw socket operations for custom protocols.
+# For HTTP/WebSocket, use the http module instead.
+#
+# Usage:
+#   import net
+#   let fd = net.dial("example.com", 80)
+#   net.send(fd, "GET / HTTP/1.0\r\n\r\n")
+#   let response = net.recv(fd, 4096)
+#   net.close(fd)
+
+# --- C runtime bindings ---
+
+# TCP Client
+@extern("C")
+pub def __net_dial(host: str, port: int) -> int
+
+@extern("C")
+pub def __net_send(fd: int, data: str) -> int
+
+@extern("C")
+pub def __net_recv(fd: int, max_bytes: int) -> str
+
+@extern("C")
+pub def __net_close(fd: int) -> none
+
+# TCP Server
+@extern("C")
+pub def __net_listen(host: str, port: int) -> int
+
+@extern("C")
+pub def __net_accept(server_fd: int) -> int
+
+@extern("C")
+pub def __net_peer_addr(fd: int) -> str
+
+# UDP
+@extern("C")
+pub def __net_udp_open(host: str, port: int) -> int
+
+@extern("C")
+pub def __net_udp_send(fd: int, host: str, port: int, data: str) -> int
+
+@extern("C")
+pub def __net_udp_recv(fd: int, max_bytes: int) -> str
+
+# DNS
+@extern("C")
+pub def __net_resolve(hostname: str) -> str
+
+# Socket options
+@extern("C")
+pub def __net_set_nonblocking(fd: int) -> int
+
+@extern("C")
+pub def __net_set_timeout(fd: int, timeout_ms: int) -> int
+
+# --- Public API ---
+
+# TCP Client
+pub def dial(host: str, port: int) -> int:
+	"""Connect to host:port via TCP. Returns socket fd (-1 on error)."""
+	return __net_dial(host, port)
+
+pub def send(fd: int, data: str) -> int:
+	"""Send data on a TCP socket. Returns bytes sent (-1 on error)."""
+	return __net_send(fd, data)
+
+pub def recv(fd: int, max_bytes: int) -> str:
+	"""Receive up to max_bytes from socket. Returns data string."""
+	return __net_recv(fd, max_bytes)
+
+pub def close(fd: int) -> none:
+	"""Close a socket."""
+	__net_close(fd)
+
+# TCP Server
+pub def listen(host: str, port: int) -> int:
+	"""Listen on host:port. Returns server socket fd (-1 on error)."""
+	return __net_listen(host, port)
+
+pub def accept(server_fd: int) -> int:
+	"""Accept a connection. Returns client fd (-1 on error)."""
+	return __net_accept(server_fd)
+
+pub def peer_addr(fd: int) -> str:
+	"""Get peer address as 'ip:port' string."""
+	return __net_peer_addr(fd)
+
+# UDP
+pub def udp_open(host: str, port: int) -> int:
+	"""Open a UDP socket, bind to host:port. Returns fd (-1 on error)."""
+	return __net_udp_open(host, port)
+
+pub def udp_send(fd: int, host: str, port: int, data: str) -> int:
+	"""Send UDP datagram to host:port. Returns bytes sent."""
+	return __net_udp_send(fd, host, port, data)
+
+pub def udp_recv(fd: int, max_bytes: int) -> str:
+	"""Receive UDP datagram. Returns data string."""
+	return __net_udp_recv(fd, max_bytes)
+
+# DNS
+pub def resolve(hostname: str) -> str:
+	"""Resolve hostname to IP address string."""
+	return __net_resolve(hostname)
+
+# Socket options
+pub def set_nonblocking(fd: int) -> int:
+	"""Set socket to non-blocking mode. Returns 0 on success."""
+	return __net_set_nonblocking(fd)
+
+pub def set_timeout(fd: int, timeout_ms: int) -> int:
+	"""Set socket timeout in milliseconds. Returns 0 on success."""
+	return __net_set_timeout(fd, timeout_ms)
