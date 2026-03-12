@@ -1,0 +1,64 @@
+# encoding module — hex and base64 encoding/decoding
+#
+# Provides hex and base64 encoding utilities.
+#
+# Usage:
+#   import encoding
+#   let hex = encoding.hex_encode("hello")
+#   let decoded = encoding.hex_decode(hex)
+#   let b64 = encoding.base64_encode("hello")
+
+# --- C runtime bindings (hex) ---
+
+@extern("C")
+pub def __encoding_hex_encode(data: str) -> str
+
+@extern("C")
+pub def __encoding_hex_decode(hex: str) -> str
+
+@extern("C")
+pub def __encoding_hex_encode_upper(data: str) -> str
+
+# --- C runtime bindings (base64 — from base64.c) ---
+
+@extern("C")
+pub def __base64_encode(data: str) -> str
+
+@extern("C")
+pub def __base64_decode(data: str) -> str
+
+@extern("C")
+pub def __base64_url_encode(data: str) -> str
+
+@extern("C")
+pub def __base64_url_decode(data: str) -> str
+
+# --- Public API ---
+
+pub def hex_encode(data: str) -> str:
+	"""Encode a string to lowercase hex."""
+	return __encoding_hex_encode(data)
+
+pub def hex_decode(hex: str) -> str:
+	"""Decode a hex string to bytes."""
+	return __encoding_hex_decode(hex)
+
+pub def hex_encode_upper(data: str) -> str:
+	"""Encode a string to uppercase hex."""
+	return __encoding_hex_encode_upper(data)
+
+pub def base64_encode(data: str) -> str:
+	"""Encode a string to base64."""
+	return __base64_encode(data)
+
+pub def base64_decode(data: str) -> str:
+	"""Decode a base64 string."""
+	return __base64_decode(data)
+
+pub def base64_url_encode(data: str) -> str:
+	"""Encode a string to URL-safe base64 (no padding)."""
+	return __base64_url_encode(data)
+
+pub def base64_url_decode(data: str) -> str:
+	"""Decode a URL-safe base64 string."""
+	return __base64_url_decode(data)
