@@ -1,0 +1,72 @@
+# Test assert_eq / assert_ne edge cases
+
+# Edge case: zero values
+@test
+def test_zero_values() -> none:
+	assert_eq(0, 0, "zero equals zero")
+	assert_ne(0, 1, "zero not equal to one")
+
+# Edge case: negative numbers
+@test
+def test_negative_numbers() -> none:
+	assert_eq(-1, -1, "negative equals negative")
+	assert_ne(-1, 1, "negative not equal to positive")
+	assert_eq(-100 + 50, -50, "negative arithmetic")
+
+# Edge case: empty strings
+@test
+def test_empty_strings() -> none:
+	assert_eq("", "", "empty string equals empty string")
+	assert_ne("", "a", "empty not equal to non-empty")
+
+# Edge case: strings with special chars
+@test
+def test_special_chars() -> none:
+	assert_eq("hello world", "hello world", "spaces preserved")
+	assert_ne("Hello", "hello", "case sensitive")
+
+# Edge case: boolean identity
+@test
+def test_boolean_identity() -> none:
+	assert_eq(true, true)
+	assert_eq(false, false)
+	assert_ne(true, false)
+	assert_ne(false, true)
+
+# Edge case: boolean from comparisons
+@test
+def test_boolean_expressions() -> none:
+	assert_eq(1 < 2, true, "1 < 2 is true")
+	assert_eq(2 < 1, false, "2 < 1 is false")
+	assert_ne(1 == 2, true, "1 == 2 is not true")
+
+# Edge case: computed values
+@test
+def test_computed_values() -> none:
+	let x = 10
+	let y = 20
+	assert_eq(x + y, 30, "addition")
+	assert_eq(x * y, 200, "multiplication")
+	assert_ne(x, y, "x != y")
+
+# Edge case: string concatenation
+@test
+def test_string_concat() -> none:
+	let greeting = "Hello"
+	let name = "World"
+	assert_eq(f"{greeting}, {name}!", "Hello, World!", "f-string concat")
+
+def main() -> int:
+	test_zero_values()
+	test_negative_numbers()
+	test_empty_strings()
+	test_special_chars()
+	test_boolean_identity()
+	test_boolean_expressions()
+	test_computed_values()
+	test_string_concat()
+	print("all edge case assertions passed!")
+	0
+
+# EXPECTED_OUTPUT:
+# all edge case assertions passed!
