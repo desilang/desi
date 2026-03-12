@@ -1,0 +1,34 @@
+# Test parameter defaults
+def add(a: int, b: int = 10) -> int:
+	return a + b
+
+def greet(name: str, greeting: str = "Hello") -> str:
+	return f"{greeting}, {name}!"
+
+def multi_defaults(x: int, y: int = 5, z: int = 100) -> int:
+	return x + y + z
+
+def main() -> int:
+	# Int defaults
+	print(add(5))
+	print(add(5, 20))
+
+	# String defaults
+	print(greet("World"))
+	print(greet("Alice", "Hey"))
+
+	# Multiple defaults - only first required
+	print(multi_defaults(1))
+	print(multi_defaults(1, 2))
+	print(multi_defaults(1, 2, 3))
+
+	0
+
+# EXPECTED_OUTPUT:
+# 15
+# 25
+# Hello, World!
+# Hey, Alice!
+# 106
+# 103
+# 6
