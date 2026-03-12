@@ -2823,6 +2823,37 @@ skipMethodCall:
 		args = append(args, ls.lowerExpr(a))
 	}
 
+	// M14: Fill in default values for omitted arguments.
+	// If the callee has more params than supplied args, and those params
+	// have default expressions, lower the defaults and append to args.
+	if ls.info != nil && len(x.Args) > 0 || ls.info != nil {
+		var decl *ast.FuncDecl
+		// Try to find the FuncDecl for this callee
+		if id, ok := x.Callee.(*ast.Ident); ok {
+			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+				decl = set.Cands[0].Decl
+			}
+		} else if fe, ok := x.Callee.(*ast.FieldExpr); ok {
+			// Module-qualified: mod.func
+			qualName := ""
+			if base, ok := fe.X.(*ast.Ident); ok {
+				qualName = base.Name + "." + fe.Name.Name
+			}
+			if qualName != "" {
+				if set, ok := ls.info.Funcs[qualName]; ok && len(set.Cands) > 0 {
+					decl = set.Cands[0].Decl
+				}
+			}
+		}
+		if decl != nil && len(x.Args) < len(decl.Params) {
+			for i := len(x.Args); i < len(decl.Params); i++ {
+				if decl.Params[i].Default != nil {
+					args = append(args, ls.lowerExpr(decl.Params[i].Default))
+				}
+			}
+		}
+	}
+
 	// Append captured values for lambdas with captures
 	if ls.info != nil && ls.info.LambdaCaptures != nil {
 		if captures, ok := ls.info.LambdaCaptures[callee]; ok {
