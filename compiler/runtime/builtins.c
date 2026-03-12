@@ -86,6 +86,72 @@ void __desi_assert_fail(const char* msg) {
     exit(1);
 }
 
+// Assert equality failure: shows expected vs actual
+void __desi_assert_eq_fail(const char* expected, const char* actual, const char* context) {
+    fprintf(stderr, "assertion failed: %s\n", context);
+    fprintf(stderr, "  expected: %s\n", expected ? expected : "(null)");
+    fprintf(stderr, "    actual: %s\n", actual ? actual : "(null)");
+    exit(1);
+}
+
+// Assert inequality failure: shows the duplicate value
+void __desi_assert_ne_fail(const char* value, const char* context) {
+    fprintf(stderr, "assertion failed: %s\n", context);
+    fprintf(stderr, "  values should differ but both are: %s\n", value ? value : "(null)");
+    exit(1);
+}
+
+// Assert equality check for integers
+void __desi_assert_eq_int(int32_t expected, int32_t actual, const char* context) {
+    if (expected != actual) {
+        char exp_buf[32], act_buf[32];
+        snprintf(exp_buf, sizeof(exp_buf), "%d", expected);
+        snprintf(act_buf, sizeof(act_buf), "%d", actual);
+        __desi_assert_eq_fail(exp_buf, act_buf, context);
+    }
+}
+
+// Assert inequality check for integers
+void __desi_assert_ne_int(int32_t a, int32_t b, const char* context) {
+    if (a == b) {
+        char buf[32];
+        snprintf(buf, sizeof(buf), "%d", a);
+        __desi_assert_ne_fail(buf, context);
+    }
+}
+
+// Assert equality check for strings
+void __desi_assert_eq_str(const char* expected, const char* actual, const char* context) {
+    if (!expected) expected = "";
+    if (!actual) actual = "";
+    if (strcmp(expected, actual) != 0) {
+        __desi_assert_eq_fail(expected, actual, context);
+    }
+}
+
+// Assert inequality check for strings
+void __desi_assert_ne_str(const char* a, const char* b, const char* context) {
+    if (!a) a = "";
+    if (!b) b = "";
+    if (strcmp(a, b) == 0) {
+        __desi_assert_ne_fail(a, context);
+    }
+}
+
+// Assert equality check for booleans
+void __desi_assert_eq_bool(int expected, int actual, const char* context) {
+    if (expected != actual) {
+        __desi_assert_eq_fail(expected ? "true" : "false", actual ? "true" : "false", context);
+    }
+}
+
+// Assert inequality check for booleans
+void __desi_assert_ne_bool(int a, int b, const char* context) {
+    if (a == b) {
+        __desi_assert_ne_fail(a ? "true" : "false", context);
+    }
+}
+
 // Math helper functions for float special values
 #include <math.h>
 

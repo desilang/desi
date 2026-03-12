@@ -1837,6 +1837,76 @@ handlePrint:
 			// Return none/void
 			return nil
 		}
+
+		// assert_eq(expected, actual) / assert_eq(expected, actual, msg)
+		if calleeName == "assert_eq" && len(x.Args) >= 2 && len(x.Args) <= 3 {
+			expectedVal := ls.lowerExpr(x.Args[0])
+			actualVal := ls.lowerExpr(x.Args[1])
+
+			// Build context message
+			line := 0
+			if x.Callee != nil {
+				line = x.Callee.SpanOf().Start.Line
+			}
+			contextMsg := fmt.Sprintf("line %d: assert_eq failed", line)
+			if len(x.Args) == 3 {
+				if strLit, ok := x.Args[2].(*ast.StrLit); ok {
+					contextMsg = fmt.Sprintf("line %d: %s", line, strLit.Value)
+				}
+			}
+			contextVal := hir.ConstStr{Text: contextMsg}
+
+			// Determine type and call appropriate runtime function
+			fnName := "__desi_assert_eq_int" // default
+			if ls.info != nil {
+				if t := ls.info.Types[x.Args[0]]; t != nil {
+					switch t {
+					case types.Str:
+						fnName = "__desi_assert_eq_str"
+					case types.Bool:
+						fnName = "__desi_assert_eq_bool"
+					default:
+						fnName = "__desi_assert_eq_int"
+					}
+				}
+			}
+			ls.b.Emit(&hir.Call{Fn: fnName, Args: []hir.Value{expectedVal, actualVal, contextVal}})
+			return nil
+		}
+
+		// assert_ne(a, b) / assert_ne(a, b, msg)
+		if calleeName == "assert_ne" && len(x.Args) >= 2 && len(x.Args) <= 3 {
+			aVal := ls.lowerExpr(x.Args[0])
+			bVal := ls.lowerExpr(x.Args[1])
+
+			line := 0
+			if x.Callee != nil {
+				line = x.Callee.SpanOf().Start.Line
+			}
+			contextMsg := fmt.Sprintf("line %d: assert_ne failed", line)
+			if len(x.Args) == 3 {
+				if strLit, ok := x.Args[2].(*ast.StrLit); ok {
+					contextMsg = fmt.Sprintf("line %d: %s", line, strLit.Value)
+				}
+			}
+			contextVal := hir.ConstStr{Text: contextMsg}
+
+			fnName := "__desi_assert_ne_int" // default
+			if ls.info != nil {
+				if t := ls.info.Types[x.Args[0]]; t != nil {
+					switch t {
+					case types.Str:
+						fnName = "__desi_assert_ne_str"
+					case types.Bool:
+						fnName = "__desi_assert_ne_bool"
+					default:
+						fnName = "__desi_assert_ne_int"
+					}
+				}
+			}
+			ls.b.Emit(&hir.Call{Fn: fnName, Args: []hir.Value{aVal, bVal, contextVal}})
+			return nil
+		}
 	}
 
 	// 1.8. set_recursion_limit(n) - configure maximum recursion depth

@@ -72,6 +72,51 @@ def assert(condition: bool, message: str) -> none
 
 ---
 
+## Assert Equality / Inequality
+
+### assert_eq
+
+Checks that two values are **equal**. On failure, shows diff output:
+
+```desi
+assert_eq(42, 42)          # passes
+assert_eq(1 + 1, 3)        # fails with:
+# assertion failed: line 2: assert_eq failed
+#   expected: 2
+#     actual: 3
+
+assert_eq("hello", "hello", "greeting check")  # with custom message
+```
+
+**Signatures:**
+```desi
+def assert_eq(expected: int, actual: int) -> none
+def assert_eq(expected: str, actual: str) -> none
+def assert_eq(expected: bool, actual: bool) -> none
+def assert_eq(expected: T, actual: T, message: str) -> none
+```
+
+### assert_ne
+
+Checks that two values are **not equal**:
+
+```desi
+assert_ne(1, 2)             # passes
+assert_ne(42, 42)            # fails with:
+# assertion failed: line 2: assert_ne failed
+#   values should differ but both are: 42
+
+assert_ne("a", "b", "must be different")  # with custom message
+```
+
+**Signatures:**
+```desi
+def assert_ne(a: int, b: int) -> none
+def assert_ne(a: str, b: str) -> none
+def assert_ne(a: bool, b: bool) -> none
+def assert_ne(a: T, b: T, message: str) -> none
+```
+
 ## @test Decorator
 
 Mark test functions with the `@test` decorator:
