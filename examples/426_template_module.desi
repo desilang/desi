@@ -1,0 +1,38 @@
+# Test template module — placeholder rendering and HTML escaping
+import template
+
+def main() -> int:
+	# Basic template rendering
+	let result = template.render(
+		"Hello, {{name}}! Welcome to {{city}}.",
+		["name", "city"],
+		["Alice", "Wonderland"]
+	)
+	print(result)
+
+	# Render with pairs
+	let result2 = template.render_pairs(
+		"{{greeting}}, {{who}}!",
+		["greeting", "Hi", "who", "World"]
+	)
+	print(result2)
+
+	# Unknown keys preserved
+	let result3 = template.render(
+		"{{known}} and {{unknown}}",
+		["known"],
+		["found"]
+	)
+	print(result3)
+
+	# HTML escaping
+	let safe = template.escape_html("<script>alert('xss')</script>")
+	print(safe)
+
+	0
+
+# EXPECTED_OUTPUT:
+# Hello, Alice! Welcome to Wonderland.
+# Hi, World!
+# found and {{unknown}}
+# &lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;

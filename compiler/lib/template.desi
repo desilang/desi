@@ -1,0 +1,33 @@
+# template module — simple string template rendering
+#
+# Supports {{key}} placeholder substitution and HTML escaping.
+#
+# Usage:
+#   import template
+#   let result = template.render("Hello, {{name}}!", ["name"], ["World"])
+#   let safe = template.escape_html("<script>alert('xss')</script>")
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __template_render(tmpl: str, keys: list[str], values: list[str]) -> str
+
+@extern("C")
+pub def __template_render_pairs(tmpl: str, pairs: list[str]) -> str
+
+@extern("C")
+pub def __template_escape_html(input: str) -> str
+
+# --- Public API ---
+
+pub def render(tmpl: str, keys: list[str], values: list[str]) -> str:
+	"""Render a template by replacing {{key}} placeholders with values."""
+	return __template_render(tmpl, keys, values)
+
+pub def render_pairs(tmpl: str, pairs: list[str]) -> str:
+	"""Render a template using key-value pairs list: [key1, val1, key2, val2, ...]."""
+	return __template_render_pairs(tmpl, pairs)
+
+pub def escape_html(input: str) -> str:
+	"""Escape HTML special characters (&, <, >, quotes)."""
+	return __template_escape_html(input)

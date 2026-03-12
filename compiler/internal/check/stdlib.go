@@ -16,4 +16,5 @@ var StdlibModules = map[string]bool{
 	"strings": true,
 	"csv":      true,
 	"encoding": true,
+	"template": true,
 }
