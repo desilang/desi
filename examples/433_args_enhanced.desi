@@ -1,0 +1,39 @@
+# Test enhanced args module — declarative flags, auto-help, subcommands
+import args
+
+def main() -> int:
+	# Set up declarative flags
+	args.set_description("My Desi CLI App")
+	args.define("--name", "-n", "User name", "World")
+	args.define("--port", "-p", "Server port", "8080")
+	args.define_bool("--verbose", "-v", "Enable verbose output")
+
+	# Test get_defined (uses defaults when no args passed)
+	let name = args.get_defined("--name")
+	print(name)
+
+	let port = args.get_defined("--port")
+	print(port)
+
+	# Test subcommand (empty when none)
+	let cmd = args.subcommand()
+	print(f"sub: {cmd}")
+
+	# Test validate (no required flags = ok)
+	let err = args.validate()
+	print(f"valid: {err}")
+
+	# Test help check (returns 0 when --help not present)
+	let helped = args.check_help()
+	print(str(helped))
+
+	print("args enhanced ok")
+	0
+
+# EXPECTED_OUTPUT:
+# World
+# 8080
+# sub: 
+# valid: 
+# 0
+# args enhanced ok
