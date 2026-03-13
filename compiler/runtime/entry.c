@@ -5,11 +5,12 @@
 
 // Forward declarations
 extern void __desi_runtime_init(void);
+extern void __args_init(int argc, char** argv);
 extern int __top__(void);
 
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    // Store CLI arguments for the args module
+    __args_init(argc, argv);
     
     // Initialize the Desi runtime (streams, scheduler, etc.)
     __desi_runtime_init();

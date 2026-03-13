@@ -111,3 +111,63 @@ assertion failed: line 5: values should match
   expected: 42
     actual: 99
 ```
+
+---
+
+## datetime Module
+**Files:** `compiler/runtime/datetime.c`, `compiler/lib/datetime.desi`
+
+High-level date/time operations with ISO 8601 support. Builds on top of `time.c` (which provides timestamps and sleep).
+
+### Architecture
+- ISO parsing: `sscanf()` with `YYYY-MM-DD` and `YYYY-MM-DDTHH:MM:SS` (also supports space separator)
+- Month arithmetic: manual year/month rollover with day clamping to `days_in_month`
+- Calendar: `strftime("%V")` for ISO week number, `tm_wday` for weekday
+- Date validation: verifies year/month/day ranges against `days_in_month`
+
+### API
+| Function | Signature |
+|---|---|
+| `datetime.parse_date` | `(date_str: str) -> float` |
+| `datetime.parse` | `(datetime_str: str) -> float` |
+| `datetime.to_date_str` | `(ts: float) -> str` |
+| `datetime.to_str` | `(ts: float) -> str` |
+| `datetime.today` | `() -> str` |
+| `datetime.now` | `() -> str` |
+| `datetime.add_days` | `(date: str, n: int) -> str` |
+| `datetime.add_months` | `(date: str, n: int) -> str` |
+| `datetime.add_years` | `(date: str, n: int) -> str` |
+| `datetime.diff_days` | `(d1: str, d2: str) -> int` |
+| `datetime.days_in_month` | `(year: int, month: int) -> int` |
+| `datetime.is_weekend` | `(date: str) -> bool` |
+| `datetime.weekday_name` | `(date: str) -> str` |
+| `datetime.month_name` | `(month: int) -> str` |
+| `datetime.week_number` | `(date: str) -> int` |
+| `datetime.is_valid` | `(date: str) -> bool` |
+| `datetime.compare` | `(d1: str, d2: str) -> int` |
+
+---
+
+## args Module
+**Files:** `compiler/runtime/args.c`, `compiler/lib/args.desi`, `compiler/runtime/entry.c` (modified)
+
+CLI argument parsing. `entry.c` calls `__args_init(argc, argv)` before runtime init to save args globally.
+
+### Architecture
+- `__args_init()` stores `argc`/`argv` in globals at program start
+- Flag parsing: scans for `--name value` and `--name=value` formats via `strcmp`/`strncmp`
+- Positional args: skips entries starting with `-` and flag values
+- **Name collision fix**: `all()` renamed to `argv()` because `all` collided with the builtin `all()` function (returns `bool`/`i1`), causing the lowerer to emit wrong LLVM IR return type
+
+### API
+| Function | Signature |
+|---|---|
+| `args.count` | `() -> int` |
+| `args.program` | `() -> str` |
+| `args.get_arg` | `(index: int) -> str` |
+| `args.argv` | `() -> list[str]` |
+| `args.positional` | `() -> list[str]` |
+| `args.has_flag` | `(name: str) -> int` |
+| `args.get_flag` | `(name: str, default: str) -> str` |
+| `args.get_flag_int` | `(name: str, default: int) -> int` |
+| `args.is_flag_set` | `(name: str) -> int` |

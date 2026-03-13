@@ -1,0 +1,30 @@
+# Test args module — CLI argument parsing
+# NOTE: when run via `desic run`, no user args are passed
+# so we test default behavior. Use `desic build` + run binary
+# to test with real CLI args.
+import args
+
+def main() -> int:
+	# Count should be 0 (no user args via desic run)
+	let n = args.count()
+	print(str(n))
+
+	# Default flag values
+	let name = args.get_flag("--name", "World")
+	print(name)
+
+	let port = args.get_flag_int("--port", 8080)
+	print(str(port))
+
+	let verbose = args.has_flag("--verbose")
+	print(str(verbose))
+
+	print("args ok")
+	0
+
+# EXPECTED_OUTPUT:
+# 0
+# World
+# 8080
+# 0
+# args ok
