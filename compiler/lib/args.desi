@@ -74,3 +74,79 @@ pub def get_flag_int(name: str, default_val: int) -> int:
 pub def is_flag_set(name: str) -> int:
 	"""Check if a boolean flag is set. Returns 1 or 0."""
 	return __args_get_flag_bool(name)
+
+# --- New extern bindings ---
+
+@extern("C")
+pub def __args_set_description(desc: str) -> int
+
+@extern("C")
+pub def __args_define(long_name: str, short_name: str, description: str, default_val: str) -> int
+
+@extern("C")
+pub def __args_define_bool(long_name: str, short_name: str, description: str) -> int
+
+@extern("C")
+pub def __args_require(flag_name: str) -> int
+
+@extern("C")
+pub def __args_print_help() -> int
+
+@extern("C")
+pub def __args_check_help() -> int
+
+@extern("C")
+pub def __args_validate() -> str
+
+@extern("C")
+pub def __args_get_defined(long_name: str) -> str
+
+@extern("C")
+pub def __args_subcommand() -> str
+
+@extern("C")
+pub def __args_subcommand_args() -> list[str]
+
+# --- Declarative Flag API ---
+
+pub def set_description(desc: str) -> int:
+	"""Set program description for help output."""
+	return __args_set_description(desc)
+
+pub def define(long_name: str, short_name: str, description: str, default_val: str) -> int:
+	"""Define a flag with long name, short name, description, and default."""
+	return __args_define(long_name, short_name, description, default_val)
+
+pub def define_bool(long_name: str, short_name: str, description: str) -> int:
+	"""Define a boolean flag (present/absent, no value)."""
+	return __args_define_bool(long_name, short_name, description)
+
+pub def require(flag_name: str) -> int:
+	"""Mark a defined flag as required."""
+	return __args_require(flag_name)
+
+pub def print_help() -> int:
+	"""Print auto-generated help text."""
+	return __args_print_help()
+
+pub def check_help() -> int:
+	"""Check --help/-h and print help if present. Returns 1 if shown."""
+	return __args_check_help()
+
+pub def validate() -> str:
+	"""Validate required flags. Returns '' if ok, error message if missing."""
+	return __args_validate()
+
+pub def get_defined(long_name: str) -> str:
+	"""Get flag value (checks both long and short names, uses default)."""
+	return __args_get_defined(long_name)
+
+# --- Subcommands ---
+
+pub def subcommand() -> str:
+	"""Get subcommand (first non-flag argument)."""
+	return __args_subcommand()
+
+pub def subcommand_args() -> list[str]:
+	"""Get arguments after the subcommand."""
+	return __args_subcommand_args()
