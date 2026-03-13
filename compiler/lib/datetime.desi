@@ -136,3 +136,104 @@ pub def is_valid(date_str: str) -> bool:
 pub def compare(date1: str, date2: str) -> int:
 	"""Compare two dates: -1 (before), 0 (equal), 1 (after)."""
 	return __datetime_compare(date1, date2)
+
+# --- New extern bindings ---
+
+@extern("C")
+pub def __datetime_parse_duration(dur_str: str) -> float
+
+@extern("C")
+pub def __datetime_format_duration(seconds: float) -> str
+
+@extern("C")
+pub def __datetime_age(birthdate: str) -> int
+
+@extern("C")
+pub def __datetime_business_days(start_str: str, end_str: str) -> int
+
+@extern("C")
+pub def __datetime_next_weekday(weekday: str) -> str
+
+@extern("C")
+pub def __datetime_last_weekday(weekday: str) -> str
+
+@extern("C")
+pub def __datetime_start_of_week(date_str: str) -> str
+
+@extern("C")
+pub def __datetime_end_of_week(date_str: str) -> str
+
+@extern("C")
+pub def __datetime_start_of_month(date_str: str) -> str
+
+@extern("C")
+pub def __datetime_end_of_month(date_str: str) -> str
+
+@extern("C")
+pub def __datetime_quarter(date_str: str) -> int
+
+@extern("C")
+pub def __datetime_is_leap_year(year: int) -> int
+
+@extern("C")
+pub def __datetime_day_of_year(date_str: str) -> int
+
+# --- Duration ---
+
+pub def parse_duration(dur_str: str) -> float:
+	"""Parse human-readable duration ('2h 30m', '1d 12h') to seconds."""
+	return __datetime_parse_duration(dur_str)
+
+pub def format_duration(seconds: float) -> str:
+	"""Format seconds to compact duration string ('1d 2h 30m')."""
+	return __datetime_format_duration(seconds)
+
+# --- Age & Business Days (Desi-unique) ---
+
+pub def age(birthdate: str) -> int:
+	"""Calculate age in years from birthdate 'YYYY-MM-DD'."""
+	return __datetime_age(birthdate)
+
+pub def business_days(start_date: str, end_date: str) -> int:
+	"""Count business days (Mon-Fri) between two dates."""
+	return __datetime_business_days(start_date, end_date)
+
+# --- Relative Dates ---
+
+pub def next_weekday(day_name: str) -> str:
+	"""Next occurrence of a weekday ('Monday', 'Fri', etc.)."""
+	return __datetime_next_weekday(day_name)
+
+pub def last_weekday(day_name: str) -> str:
+	"""Last (most recent) occurrence of a weekday."""
+	return __datetime_last_weekday(day_name)
+
+# --- Period Boundaries ---
+
+pub def start_of_week(date_str: str) -> str:
+	"""Get Monday of the week containing the given date."""
+	return __datetime_start_of_week(date_str)
+
+pub def end_of_week(date_str: str) -> str:
+	"""Get Sunday of the week containing the given date."""
+	return __datetime_end_of_week(date_str)
+
+pub def start_of_month(date_str: str) -> str:
+	"""Get first day of the month ('YYYY-MM-01')."""
+	return __datetime_start_of_month(date_str)
+
+pub def end_of_month(date_str: str) -> str:
+	"""Get last day of the month."""
+	return __datetime_end_of_month(date_str)
+
+pub def quarter(date_str: str) -> int:
+	"""Get quarter (1-4) from date string."""
+	return __datetime_quarter(date_str)
+
+pub def is_leap_year(year: int) -> bool:
+	"""Check if a year is a leap year."""
+	return __datetime_is_leap_year(year) == 1
+
+pub def day_of_year(date_str: str) -> int:
+	"""Day of year (1-366) from date string."""
+	return __datetime_day_of_year(date_str)
