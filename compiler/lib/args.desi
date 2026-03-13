@@ -1,0 +1,76 @@
+# args module — CLI argument parsing
+#
+# Simple flag parsing for command-line programs.
+#
+# Usage:
+#   import args
+#   let name = args.get_flag("--name", "World")
+#   let verbose = args.has_flag("--verbose")
+#   let port = args.get_flag_int("--port", 8080)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __args_count() -> int
+
+@extern("C")
+pub def __args_program() -> str
+
+@extern("C")
+pub def __args_positional() -> list[str]
+
+@extern("C")
+pub def __args_all() -> list[str]
+
+@extern("C")
+pub def __args_get(index: int) -> str
+
+@extern("C")
+pub def __args_has_flag(name: str) -> int
+
+@extern("C")
+pub def __args_get_flag(name: str, default_val: str) -> str
+
+@extern("C")
+pub def __args_get_flag_int(name: str, default_val: int) -> int
+
+@extern("C")
+pub def __args_get_flag_bool(name: str) -> int
+
+# --- Public API ---
+
+pub def count() -> int:
+	"""Number of arguments (excluding program name)."""
+	return __args_count()
+
+pub def program() -> str:
+	"""Get the program name (argv[0])."""
+	return __args_program()
+
+pub def positional() -> list[str]:
+	"""Get all positional (non-flag) arguments."""
+	return __args_positional()
+
+pub def argv() -> list[str]:
+	"""Get all arguments as a list."""
+	return __args_all()
+
+pub def get_arg(index: int) -> str:
+	"""Get argument at index (0-based, after program name)."""
+	return __args_get(index)
+
+pub def has_flag(name: str) -> int:
+	"""Check if a flag exists (e.g., '--verbose' or '-v'). Returns 1 or 0."""
+	return __args_has_flag(name)
+
+pub def get_flag(name: str, default_val: str) -> str:
+	"""Get flag value (--name value or --name=value)."""
+	return __args_get_flag(name, default_val)
+
+pub def get_flag_int(name: str, default_val: int) -> int:
+	"""Get flag value as integer."""
+	return __args_get_flag_int(name, default_val)
+
+pub def is_flag_set(name: str) -> int:
+	"""Check if a boolean flag is set. Returns 1 or 0."""
+	return __args_get_flag_bool(name)
