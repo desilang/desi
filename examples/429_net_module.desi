@@ -1,0 +1,36 @@
+# Test net module — DNS resolution and TCP loopback
+import net
+
+def main() -> int:
+	# Test DNS resolution
+	let ip = net.resolve("localhost")
+	print(ip)
+
+	# Test TCP loopback: listen, dial, send, recv
+	let srv = net.listen("127.0.0.1", 19876)
+	let client = net.dial("127.0.0.1", 19876)
+	let peer = net.accept(srv)
+
+	# Send from client, recv on server side
+	net.send(client, "hello desi")
+	let data = net.recv(peer, 1024)
+	print(data)
+
+	# Send reply
+	net.send(peer, "pong")
+	let reply = net.recv(client, 1024)
+	print(reply)
+
+	# Cleanup
+	net.close(client)
+	net.close(peer)
+	net.close(srv)
+
+	print("net ok")
+	0
+
+# EXPECTED_OUTPUT:
+# ::1
+# hello desi
+# pong
+# net ok
