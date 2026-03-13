@@ -1,0 +1,107 @@
+# Test db module — Query Builder + ORM
+import db
+
+def main() -> int:
+	# === PostgreSQL dialect ===
+	db.use_postgres()
+
+	# --- SELECT ---
+	db.find("users")
+	db.columns("name")
+	db.columns("email")
+	db.where("age", ">", "21")
+	db.where("active", "=", "1")
+	db.order_by("name", 0)
+	db.limit(10)
+	let q1 = db.build_sql()
+	print(q1)
+
+	# --- INSERT ---
+	db.insert_into("users")
+	db.set_field("name", "Alice")
+	db.set_field("email", "alice@example.com")
+	db.set_field("age", "30")
+	let q2 = db.build_sql()
+	print(q2)
+
+	# --- UPDATE ---
+	db.update_table("users")
+	db.set_field("name", "Alice Smith")
+	db.where("id", "=", "1")
+	let q3 = db.build_sql()
+	print(q3)
+
+	# --- DELETE ---
+	db.remove("users")
+	db.where("id", "=", "5")
+	let q4 = db.build_sql()
+	print(q4)
+
+	# --- JOIN ---
+	db.find("orders")
+	db.columns("orders.id")
+	db.columns("users.name")
+	db.join("INNER", "users", "users.id = orders.user_id")
+	db.where("orders.total", ">", "100")
+	let q5 = db.build_sql()
+	print(q5)
+
+	# === ORM Model Definition ===
+	db.use_postgres()
+	db.model("users")
+	db.auto_field("id")
+	db.char_field("name", 100, 0, 0)
+	db.char_field("email", 255, 0, 1)
+	db.int_field("age", 0, 0)
+	db.text_field("bio", 1)
+	db.bool_field("active", 1, 0)
+	db.datetime_field("created_at", 0, 1, 0)
+	db.json_field("metadata", 1)
+
+	# Generate CREATE TABLE (Postgres)
+	let create_pg = db.create_table_sql("users")
+	print(create_pg)
+
+	# Switch to MySQL and regenerate
+	db.use_mysql()
+	let create_my = db.create_table_sql("users")
+	print(create_my)
+
+	# Model stats
+	let mc = db.model_count()
+	print(f"models: {str(mc)}")
+	let fc = db.field_count("users")
+	print(f"fields: {str(fc)}")
+
+	print("db ok")
+	0
+
+# EXPECTED_OUTPUT:
+# SELECT name, email FROM users WHERE age > 21 AND active = 1 ORDER BY name LIMIT 10
+# INSERT INTO users (name, email, age) VALUES ('Alice', 'alice@example.com', 30)
+# UPDATE users SET name = 'Alice Smith' WHERE id = 1
+# DELETE FROM users WHERE id = 5
+# SELECT orders.id, users.name FROM orders INNER JOIN users ON users.id = orders.user_id WHERE orders.total > 100
+# CREATE TABLE IF NOT EXISTS users (
+#   id SERIAL PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   email VARCHAR(255) NOT NULL UNIQUE,
+#   age INTEGER NOT NULL DEFAULT 0,
+#   bio TEXT,
+#   active BOOLEAN NOT NULL DEFAULT TRUE,
+#   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+#   metadata JSONB
+# )
+# CREATE TABLE IF NOT EXISTS users (
+#   id INT AUTO_INCREMENT PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   email VARCHAR(255) NOT NULL UNIQUE,
+#   age INTEGER NOT NULL DEFAULT 0,
+#   bio TEXT,
+#   active TINYINT(1) NOT NULL DEFAULT TRUE,
+#   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+#   metadata JSON
+# ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+# models: 1
+# fields: 8
+# db ok

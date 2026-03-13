@@ -1,0 +1,173 @@
+# redis module — Redis client
+#
+# Pure RESP protocol client. No external dependencies.
+#
+# Usage:
+#   import redis
+#   redis.connect("localhost", 6379)
+#   redis.set("key", "value")
+#   let val = redis.get("key")
+#   redis.close()
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __redis_connect(host: str, port: int) -> int
+
+@extern("C")
+pub def __redis_close() -> int
+
+@extern("C")
+pub def __redis_ping() -> str
+
+@extern("C")
+pub def __redis_set(key: str, value: str) -> int
+
+@extern("C")
+pub def __redis_get(key: str) -> str
+
+@extern("C")
+pub def __redis_del(key: str) -> int
+
+@extern("C")
+pub def __redis_exists(key: str) -> int
+
+@extern("C")
+pub def __redis_setex(key: str, seconds: int, value: str) -> int
+
+@extern("C")
+pub def __redis_expire(key: str, seconds: int) -> int
+
+@extern("C")
+pub def __redis_ttl(key: str) -> int
+
+@extern("C")
+pub def __redis_incr(key: str) -> int
+
+@extern("C")
+pub def __redis_decr(key: str) -> int
+
+@extern("C")
+pub def __redis_hset(key: str, field: str, value: str) -> int
+
+@extern("C")
+pub def __redis_hget(key: str, field: str) -> str
+
+@extern("C")
+pub def __redis_hdel(key: str, field: str) -> int
+
+@extern("C")
+pub def __redis_lpush(key: str, value: str) -> int
+
+@extern("C")
+pub def __redis_rpush(key: str, value: str) -> int
+
+@extern("C")
+pub def __redis_lpop(key: str) -> str
+
+@extern("C")
+pub def __redis_rpop(key: str) -> str
+
+@extern("C")
+pub def __redis_llen(key: str) -> int
+
+@extern("C")
+pub def __redis_flushdb() -> int
+
+@extern("C")
+pub def __redis_is_connected() -> int
+
+# --- Public API ---
+
+# Connection
+pub def connect(host: str, port: int) -> int:
+	"""Connect to Redis server. Returns 0 on success."""
+	return __redis_connect(host, port)
+
+pub def close() -> int:
+	"""Close Redis connection."""
+	return __redis_close()
+
+pub def ping() -> str:
+	"""Ping Redis server. Returns 'PONG' if connected."""
+	return __redis_ping()
+
+pub def is_connected() -> int:
+	"""Check if connected. Returns 1 or 0."""
+	return __redis_is_connected()
+
+# String commands
+pub def set_val(key: str, value: str) -> int:
+	"""SET key value. Returns 0 on success."""
+	return __redis_set(key, value)
+
+pub def get_val(key: str) -> str:
+	"""GET key. Returns value or empty string."""
+	return __redis_get(key)
+
+pub def del_key(key: str) -> int:
+	"""DEL key. Returns number of keys deleted."""
+	return __redis_del(key)
+
+pub def exists(key: str) -> int:
+	"""EXISTS key. Returns 1 if exists, 0 otherwise."""
+	return __redis_exists(key)
+
+pub def setex(key: str, seconds: int, value: str) -> int:
+	"""SET with expiry. Returns 0 on success."""
+	return __redis_setex(key, seconds, value)
+
+pub def expire(key: str, seconds: int) -> int:
+	"""Set TTL on existing key."""
+	return __redis_expire(key, seconds)
+
+pub def ttl(key: str) -> int:
+	"""Get remaining TTL in seconds. -1 if no expiry, -2 if not found."""
+	return __redis_ttl(key)
+
+pub def incr(key: str) -> int:
+	"""Increment integer value by 1. Returns new value."""
+	return __redis_incr(key)
+
+pub def decr(key: str) -> int:
+	"""Decrement integer value by 1. Returns new value."""
+	return __redis_decr(key)
+
+# Hash commands
+pub def hset(key: str, field: str, value: str) -> int:
+	"""HSET key field value."""
+	return __redis_hset(key, field, value)
+
+pub def hget(key: str, field: str) -> str:
+	"""HGET key field."""
+	return __redis_hget(key, field)
+
+pub def hdel(key: str, field: str) -> int:
+	"""HDEL key field."""
+	return __redis_hdel(key, field)
+
+# List commands
+pub def lpush(key: str, value: str) -> int:
+	"""LPUSH — push to head of list. Returns list length."""
+	return __redis_lpush(key, value)
+
+pub def rpush(key: str, value: str) -> int:
+	"""RPUSH — push to tail of list. Returns list length."""
+	return __redis_rpush(key, value)
+
+pub def lpop(key: str) -> str:
+	"""LPOP — pop from head of list."""
+	return __redis_lpop(key)
+
+pub def rpop(key: str) -> str:
+	"""RPOP — pop from tail of list."""
+	return __redis_rpop(key)
+
+pub def llen(key: str) -> int:
+	"""LLEN — get list length."""
+	return __redis_llen(key)
+
+# Utility
+pub def flushdb() -> int:
+	"""FLUSHDB — delete all keys in current database."""
+	return __redis_flushdb()
