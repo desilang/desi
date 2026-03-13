@@ -1,0 +1,107 @@
+# fmt module — string and number formatting
+#
+# Advanced formatting beyond f-strings: padding, alignment,
+# number formatting, currency, ordinals, and more.
+#
+# Usage:
+#   import fmt
+#   let price = fmt.currency(1234.5, "$")
+#   let table_cell = fmt.pad_right("Name", 20, " ")
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __fmt_pad_left(s: str, width: int, fill: str) -> str
+
+@extern("C")
+pub def __fmt_pad_right(s: str, width: int, fill: str) -> str
+
+@extern("C")
+pub def __fmt_center(s: str, width: int, fill: str) -> str
+
+@extern("C")
+pub def __fmt_truncate(s: str, max_len: int) -> str
+
+@extern("C")
+pub def __fmt_comma(n: int) -> str
+
+@extern("C")
+pub def __fmt_fixed(val: float, decimals: int) -> str
+
+@extern("C")
+pub def __fmt_percent(val: float, decimals: int) -> str
+
+@extern("C")
+pub def __fmt_currency(val: float, symbol: str) -> str
+
+@extern("C")
+pub def __fmt_ordinal(n: int) -> str
+
+@extern("C")
+pub def __fmt_repeat(s: str, count: int) -> str
+
+@extern("C")
+pub def __fmt_reverse(s: str) -> str
+
+@extern("C")
+pub def __fmt_join(separator: str, items: list[str]) -> str
+
+@extern("C")
+pub def __fmt_bytes(bytes_val: int) -> str
+
+# --- Public API ---
+
+# String alignment
+pub def pad_left(s: str, width: int, fill: str) -> str:
+	"""Left-pad string to width. pad_left('hi', 10, '.') -> '........hi'"""
+	return __fmt_pad_left(s, width, fill)
+
+pub def pad_right(s: str, width: int, fill: str) -> str:
+	"""Right-pad string to width. pad_right('hi', 10, '.') -> 'hi........'"""
+	return __fmt_pad_right(s, width, fill)
+
+pub def center(s: str, width: int, fill: str) -> str:
+	"""Center string in width. center('hi', 10, '-') -> '----hi----'"""
+	return __fmt_center(s, width, fill)
+
+pub def truncate(s: str, max_len: int) -> str:
+	"""Truncate with ellipsis. truncate('hello world', 8) -> 'hello...'"""
+	return __fmt_truncate(s, max_len)
+
+# Number formatting
+pub def comma(n: int) -> str:
+	"""Format integer with commas. comma(1234567) -> '1,234,567'"""
+	return __fmt_comma(n)
+
+pub def fixed(val: float, decimals: int) -> str:
+	"""Fixed decimal places. fixed(3.14159, 2) -> '3.14'"""
+	return __fmt_fixed(val, decimals)
+
+pub def percent(val: float, decimals: int) -> str:
+	"""Format as percentage. percent(0.857, 1) -> '85.7%'"""
+	return __fmt_percent(val, decimals)
+
+pub def currency(val: float, symbol: str) -> str:
+	"""Format as currency. currency(1234.5, '$') -> '$1,234.50'"""
+	return __fmt_currency(val, symbol)
+
+pub def ordinal(n: int) -> str:
+	"""Ordinal number. ordinal(3) -> '3rd', ordinal(11) -> '11th'"""
+	return __fmt_ordinal(n)
+
+# String utilities
+pub def repeat(s: str, count: int) -> str:
+	"""Repeat a string n times. repeat('ha', 3) -> 'hahaha'"""
+	return __fmt_repeat(s, count)
+
+pub def reverse(s: str) -> str:
+	"""Reverse a string. reverse('hello') -> 'olleh'"""
+	return __fmt_reverse(s)
+
+pub def join(separator: str, items: list[str]) -> str:
+	"""Join list with separator. join(', ', ['a','b','c']) -> 'a, b, c'"""
+	return __fmt_join(separator, items)
+
+pub def bytes(n: int) -> str:
+	"""Human-readable byte size. bytes(1536) -> '1.5 KB'"""
+	return __fmt_bytes(n)
