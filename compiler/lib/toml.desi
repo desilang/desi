@@ -1,0 +1,68 @@
+# toml module — TOML config file parsing
+#
+# Parse TOML configuration files with section support.
+#
+# Usage:
+#   import toml
+#   toml.parse_file("config.toml")
+#   let port = toml.get_int("server.port", 8080)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __toml_parse(input: str) -> int
+
+@extern("C")
+pub def __toml_parse_file(path: str) -> int
+
+@extern("C")
+pub def __toml_get(key: str) -> str
+
+@extern("C")
+pub def __toml_get_default(key: str, default_val: str) -> str
+
+@extern("C")
+pub def __toml_get_int(key: str, default_val: int) -> int
+
+@extern("C")
+pub def __toml_get_bool(key: str, default_val: int) -> int
+
+@extern("C")
+pub def __toml_has_key(key: str) -> int
+
+@extern("C")
+pub def __toml_count() -> int
+
+# --- Public API ---
+
+pub def parse(input: str) -> int:
+	"""Parse TOML string. Returns number of entries parsed."""
+	return __toml_parse(input)
+
+pub def parse_file(path: str) -> int:
+	"""Parse TOML file. Returns number of entries parsed."""
+	return __toml_parse_file(path)
+
+pub def get(key: str) -> str:
+	"""Get string value by dotted key (e.g., 'server.port')."""
+	return __toml_get(key)
+
+pub def get_default(key: str, default_val: str) -> str:
+	"""Get string value with default."""
+	return __toml_get_default(key, default_val)
+
+pub def get_int(key: str, default_val: int) -> int:
+	"""Get integer value."""
+	return __toml_get_int(key, default_val)
+
+pub def get_bool(key: str, default_val: int) -> int:
+	"""Get boolean value (true/false/yes/no/1/0)."""
+	return __toml_get_bool(key, default_val)
+
+pub def has_key(key: str) -> int:
+	"""Check if key exists. Returns 1 or 0."""
+	return __toml_has_key(key)
+
+pub def entry_count() -> int:
+	"""Get number of parsed entries."""
+	return __toml_count()

@@ -21,4 +21,6 @@ var StdlibModules = map[string]bool{
 	"datetime": true,
 	"args":     true,
 	"fmt":      true,
+	"compress": true,
+	"toml":     true,
 }

@@ -1,0 +1,47 @@
+# compress module — gzip/zlib compression
+#
+# Compress and decompress strings and files using zlib.
+#
+# Usage:
+#   import compress
+#   let compressed = compress.deflate("hello world")
+#   let original = compress.inflate(compressed)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __compress_deflate(input: str) -> str
+
+@extern("C")
+pub def __compress_inflate(hex_data: str) -> str
+
+@extern("C")
+pub def __compress_ratio(original: str, compressed_hex: str) -> int
+
+@extern("C")
+pub def __compress_gzip_file(input_path: str, output_path: str) -> int
+
+@extern("C")
+pub def __compress_gunzip_file(input_path: str, output_path: str) -> int
+
+# --- Public API ---
+
+pub def deflate(input: str) -> str:
+	"""Compress string data. Returns hex-encoded compressed data."""
+	return __compress_deflate(input)
+
+pub def inflate(compressed: str) -> str:
+	"""Decompress hex-encoded compressed data back to string."""
+	return __compress_inflate(compressed)
+
+pub def ratio(original: str, compressed: str) -> int:
+	"""Compression ratio as percentage (e.g., 45 = 45% of original)."""
+	return __compress_ratio(original, compressed)
+
+pub def gzip_file(input_path: str, output_path: str) -> int:
+	"""Compress a file using gzip. Returns 0 on success."""
+	return __compress_gzip_file(input_path, output_path)
+
+pub def gunzip_file(input_path: str, output_path: str) -> int:
+	"""Decompress a gzip file. Returns 0 on success."""
+	return __compress_gunzip_file(input_path, output_path)
