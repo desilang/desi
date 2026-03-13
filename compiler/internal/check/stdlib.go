@@ -20,4 +20,5 @@ var StdlibModules = map[string]bool{
 	"net":      true,
 	"datetime": true,
 	"args":     true,
+	"fmt":      true,
 }

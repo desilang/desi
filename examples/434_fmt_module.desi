@@ -1,0 +1,75 @@
+# Test fmt module — string and number formatting
+import fmt
+
+def main() -> int:
+	# String padding
+	let left = fmt.pad_left("hi", 10, ".")
+	print(left)
+
+	let right = fmt.pad_right("hi", 10, ".")
+	print(right)
+
+	let centered = fmt.center("hi", 10, "-")
+	print(centered)
+
+	# Truncation
+	let trunc = fmt.truncate("hello world", 8)
+	print(trunc)
+
+	# Number formatting
+	let big = fmt.comma(1234567)
+	print(big)
+
+	let pi = fmt.fixed(3.14159, 2)
+	print(pi)
+
+	let pct = fmt.percent(0.857, 1)
+	print(pct)
+
+	# Currency
+	let price = fmt.currency(1234.5, "$")
+	print(price)
+
+	# Ordinals
+	print(fmt.ordinal(1))
+	print(fmt.ordinal(2))
+	print(fmt.ordinal(3))
+	print(fmt.ordinal(11))
+	print(fmt.ordinal(22))
+
+	# String utilities
+	let rep = fmt.repeat("ha", 3)
+	print(rep)
+
+	let rev = fmt.reverse("hello")
+	print(rev)
+
+	# Byte formatting
+	let size = fmt.bytes(1536)
+	print(size)
+
+	let big_size = fmt.bytes(1073741824)
+	print(big_size)
+
+	print("fmt ok")
+	0
+
+# EXPECTED_OUTPUT:
+# ........hi
+# hi........
+# ----hi----
+# hello...
+# 1,234,567
+# 3.14
+# 85.7%
+# $1,234.50
+# 1st
+# 2nd
+# 3rd
+# 11th
+# 22nd
+# hahaha
+# olleh
+# 1.5 KB
+# 1.0 GB
+# fmt ok
