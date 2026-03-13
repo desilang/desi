@@ -23,4 +23,6 @@ var StdlibModules = map[string]bool{
 	"fmt":      true,
 	"compress": true,
 	"toml":     true,
+	"db":       true,
+	"redis":    true,
 }

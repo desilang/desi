@@ -1,0 +1,257 @@
+# db module — Database ORM and Query Builder
+#
+# Django-inspired ORM with SQL query builder.
+# Supports PostgreSQL and MySQL with shared API.
+#
+# Usage:
+#   import db
+#
+#   # Define model
+#   db.model("users")
+#   db.auto_field("id")
+#   db.char_field("name", 100, 0, 0)
+#   db.int_field("age", 0, 0)
+#
+#   # Query builder
+#   db.select("users")
+#   db.where("age", ">", "21")
+#   let sql = db.build_sql()
+
+# --- Query Builder C bindings ---
+
+@extern("C")
+pub def __db_set_dialect(dialect: int) -> int
+
+@extern("C")
+pub def __db_select(table: str) -> int
+
+@extern("C")
+pub def __db_insert_into(table: str) -> int
+
+@extern("C")
+pub def __db_update_table(table: str) -> int
+
+@extern("C")
+pub def __db_delete_from(table: str) -> int
+
+@extern("C")
+pub def __db_columns(col: str) -> int
+
+@extern("C")
+pub def __db_where(column: str, op: str, value: str) -> int
+
+@extern("C")
+pub def __db_set(column: str, value: str) -> int
+
+@extern("C")
+pub def __db_join(join_type: str, table: str, on_clause: str) -> int
+
+@extern("C")
+pub def __db_order_by(column: str, desc: int) -> int
+
+@extern("C")
+pub def __db_limit(n: int) -> int
+
+@extern("C")
+pub def __db_offset(n: int) -> int
+
+@extern("C")
+pub def __db_returning() -> int
+
+@extern("C")
+pub def __db_build_sql() -> str
+
+# --- ORM C bindings ---
+
+@extern("C")
+pub def __orm_set_dialect(dialect: int) -> int
+
+@extern("C")
+pub def __orm_model(table_name: str) -> int
+
+@extern("C")
+pub def __orm_auto_field(name: str) -> int
+
+@extern("C")
+pub def __orm_int_field(name: str, default_val: int, nullable: int) -> int
+
+@extern("C")
+pub def __orm_bigint_field(name: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_char_field(name: str, max_length: int, nullable: int, unique_flag: int) -> int
+
+@extern("C")
+pub def __orm_text_field(name: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_bool_field(name: str, default_val: int, nullable: int) -> int
+
+@extern("C")
+pub def __orm_float_field(name: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_datetime_field(name: str, auto_now: int, auto_now_add: int, nullable: int) -> int
+
+@extern("C")
+pub def __orm_json_field(name: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_foreign_key(name: str, ref_table: str, ref_field: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_create_table_sql(table_name: str) -> str
+
+@extern("C")
+pub def __orm_drop_table_sql(table_name: str) -> str
+
+@extern("C")
+pub def __orm_add_column_sql(table_name: str, col_name: str) -> str
+
+@extern("C")
+pub def __orm_model_count() -> int
+
+@extern("C")
+pub def __orm_field_count(table_name: str) -> int
+
+# ============================================================
+# Public API — Dialect
+# ============================================================
+
+pub def use_postgres() -> int:
+	"""Set dialect to PostgreSQL."""
+	__db_set_dialect(0)
+	return __orm_set_dialect(0)
+
+pub def use_mysql() -> int:
+	"""Set dialect to MySQL."""
+	__db_set_dialect(1)
+	return __orm_set_dialect(1)
+
+# ============================================================
+# Public API — Query Builder
+# ============================================================
+
+pub def find(table: str) -> int:
+	"""Start a SELECT query. db.find('users')..."""
+	return __db_select(table)
+
+pub def insert_into(table: str) -> int:
+	"""Start an INSERT query."""
+	return __db_insert_into(table)
+
+pub def update_table(table: str) -> int:
+	"""Start an UPDATE query."""
+	return __db_update_table(table)
+
+pub def remove(table: str) -> int:
+	"""Start a DELETE query. db.remove('users')..."""
+	return __db_delete_from(table)
+
+pub def columns(col: str) -> int:
+	"""Add column to SELECT."""
+	return __db_columns(col)
+
+pub def where(column: str, op: str, value: str) -> int:
+	"""Add WHERE clause."""
+	return __db_where(column, op, value)
+
+pub def set_field(column: str, value: str) -> int:
+	"""Add SET clause for INSERT/UPDATE."""
+	return __db_set(column, value)
+
+pub def join(join_type: str, table: str, on_clause: str) -> int:
+	"""Add JOIN clause."""
+	return __db_join(join_type, table, on_clause)
+
+pub def order_by(column: str, desc: int) -> int:
+	"""Add ORDER BY clause. desc=1 for DESC."""
+	return __db_order_by(column, desc)
+
+pub def limit(n: int) -> int:
+	"""Set LIMIT."""
+	return __db_limit(n)
+
+pub def offset(n: int) -> int:
+	"""Set OFFSET."""
+	return __db_offset(n)
+
+pub def returning() -> int:
+	"""Enable RETURNING * (Postgres only)."""
+	return __db_returning()
+
+pub def build_sql() -> str:
+	"""Build and return the SQL string."""
+	return __db_build_sql()
+
+# ============================================================
+# Public API — ORM Model Definition
+# ============================================================
+
+pub def model(table_name: str) -> int:
+	"""Start defining a model (table)."""
+	return __orm_model(table_name)
+
+pub def auto_field(name: str) -> int:
+	"""Add auto-increment primary key field."""
+	return __orm_auto_field(name)
+
+pub def int_field(name: str, default_val: int, nullable: int) -> int:
+	"""Add integer field."""
+	return __orm_int_field(name, default_val, nullable)
+
+pub def bigint_field(name: str, nullable: int) -> int:
+	"""Add big integer field."""
+	return __orm_bigint_field(name, nullable)
+
+pub def char_field(name: str, max_length: int, nullable: int, unique_flag: int) -> int:
+	"""Add VARCHAR field."""
+	return __orm_char_field(name, max_length, nullable, unique_flag)
+
+pub def text_field(name: str, nullable: int) -> int:
+	"""Add unlimited text field."""
+	return __orm_text_field(name, nullable)
+
+pub def bool_field(name: str, default_val: int, nullable: int) -> int:
+	"""Add boolean field."""
+	return __orm_bool_field(name, default_val, nullable)
+
+pub def float_field(name: str, nullable: int) -> int:
+	"""Add float/double field."""
+	return __orm_float_field(name, nullable)
+
+pub def datetime_field(name: str, auto_now: int, auto_now_add: int, nullable: int) -> int:
+	"""Add datetime/timestamp field."""
+	return __orm_datetime_field(name, auto_now, auto_now_add, nullable)
+
+pub def json_field(name: str, nullable: int) -> int:
+	"""Add JSON field (JSONB on Postgres, JSON on MySQL)."""
+	return __orm_json_field(name, nullable)
+
+pub def foreign_key(name: str, ref_table: str, ref_field: str, nullable: int) -> int:
+	"""Add foreign key field."""
+	return __orm_foreign_key(name, ref_table, ref_field, nullable)
+
+# ============================================================
+# Public API — ORM SQL Generation
+# ============================================================
+
+pub def create_table_sql(table_name: str) -> str:
+	"""Generate CREATE TABLE SQL for a registered model."""
+	return __orm_create_table_sql(table_name)
+
+pub def drop_table_sql(table_name: str) -> str:
+	"""Generate DROP TABLE SQL."""
+	return __orm_drop_table_sql(table_name)
+
+pub def add_column_sql(table_name: str, col_name: str) -> str:
+	"""Generate ALTER TABLE ADD COLUMN SQL."""
+	return __orm_add_column_sql(table_name, col_name)
+
+pub def model_count() -> int:
+	"""Get number of registered models."""
+	return __orm_model_count()
+
+pub def field_count(table_name: str) -> int:
+	"""Get field count for a model."""
+	return __orm_field_count(table_name)
