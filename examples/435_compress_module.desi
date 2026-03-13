@@ -1,0 +1,32 @@
+# Test compress module — deflate/inflate
+import compress
+
+def main() -> int:
+	# Compress a string
+	let original = "Hello, World! This is a test of the Desi compression module."
+	let compressed = compress.deflate(original)
+	print(f"compressed length: {str(len(compressed))}")
+
+	# Decompress
+	let restored = compress.inflate(compressed)
+	print(restored)
+
+	# Verify roundtrip
+	if original == restored:
+		print("roundtrip: ok")
+	else:
+		print("roundtrip: FAIL")
+
+	# Compression ratio
+	let r = compress.ratio(original, compressed)
+	print(f"ratio: {str(r)}%")
+
+	print("compress ok")
+	0
+
+# EXPECTED_OUTPUT:
+# compressed length: 132
+# Hello, World! This is a test of the Desi compression module.
+# roundtrip: ok
+# ratio: 110%
+# compress ok

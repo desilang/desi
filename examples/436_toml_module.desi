@@ -1,0 +1,55 @@
+# Test toml module — TOML config parsing
+import toml
+
+def main() -> int:
+	# Parse inline TOML
+	let config = "title = \"My App\"\nversion = \"1.0\"\n\n[server]\nhost = \"localhost\"\nport = 8080\ndebug = true\n\n[database]\nurl = \"postgres://localhost:5432/mydb\"\nmax_connections = 10"
+
+	let n = toml.parse(config)
+	print(f"entries: {str(n)}")
+
+	# Get values
+	let title = toml.get("title")
+	print(title)
+
+	let host = toml.get("server.host")
+	print(host)
+
+	let port = toml.get_int("server.port", 3000)
+	print(str(port))
+
+	let debug = toml.get_bool("server.debug", 0)
+	print(str(debug))
+
+	let db_url = toml.get("database.url")
+	print(db_url)
+
+	let max_conn = toml.get_int("database.max_connections", 5)
+	print(str(max_conn))
+
+	# Default for missing key
+	let missing = toml.get_default("server.timeout", "30s")
+	print(missing)
+
+	# Has key
+	let has = toml.has_key("server.port")
+	print(str(has))
+
+	let no_has = toml.has_key("server.timeout")
+	print(str(no_has))
+
+	print("toml ok")
+	0
+
+# EXPECTED_OUTPUT:
+# entries: 7
+# My App
+# localhost
+# 8080
+# 1
+# postgres://localhost:5432/mydb
+# 10
+# 30s
+# 1
+# 0
+# toml ok
