@@ -62,3 +62,52 @@ Simple `{{key}}` placeholder substitution engine. Uses parallel `keys`/`values` 
 **File:** `compiler/internal/lower/lower_call.go`
 
 The parser and type checker already supported parameter defaults (`def foo(x: int, y: int = 10)`), but the lowerer was not injecting default values at call sites when fewer arguments were passed. Fixed by resolving the callee's `FuncDecl` via `ls.info.Funcs` at the fallthrough call path and lowering default expressions for omitted parameters.
+
+---
+
+## net Module
+**Files:** `compiler/runtime/net.c`, `compiler/lib/net.desi`
+
+Raw TCP/UDP sockets and DNS resolution. Sits below `http.c`/`websocket.c` — provides direct socket access for custom protocols.
+
+### Architecture
+- TCP client: `__net_dial` uses `getaddrinfo()` → `socket()` → `connect()` (IPv4/IPv6)
+- TCP server: `__net_listen` binds with `SO_REUSEADDR`, backlog 128
+- UDP: standard `sendto()`/`recvfrom()` with `SOCK_DGRAM`
+- DNS: `__net_resolve` uses `getaddrinfo()` → `inet_ntop()`
+- Cross-platform: POSIX on macOS/Linux, WinSock2 on Windows
+
+### API
+| Function | Signature |
+|---|---|
+| `net.dial` | `(host: str, port: int) -> int` |
+| `net.send` | `(fd: int, data: str) -> int` |
+| `net.recv` | `(fd: int, max_bytes: int) -> str` |
+| `net.close` | `(fd: int) -> none` |
+| `net.listen` | `(host: str, port: int) -> int` |
+| `net.accept` | `(server_fd: int) -> int` |
+| `net.peer_addr` | `(fd: int) -> str` |
+| `net.udp_open` | `(host: str, port: int) -> int` |
+| `net.udp_send` | `(fd: int, host: str, port: int, data: str) -> int` |
+| `net.udp_recv` | `(fd: int, max_bytes: int) -> str` |
+| `net.resolve` | `(hostname: str) -> str` |
+| `net.set_nonblocking` | `(fd: int) -> int` |
+| `net.set_timeout` | `(fd: int, timeout_ms: int) -> int` |
+
+---
+
+## assert_eq / assert_ne Builtins
+**Files:** `compiler/runtime/builtins.c`, `compiler/internal/lower/lower_call.go`, `compiler/internal/check/info.go`
+
+Value-comparison assertions with diff output. The lowerer recognizes `assert_eq`/`assert_ne` calls (like `assert`), determines the argument type from the checker, and dispatches to the appropriate typed C runtime function.
+
+### Runtime Functions
+- `__desi_assert_eq_int/str/bool(expected, actual, context)` — compare, show diff on mismatch
+- `__desi_assert_ne_int/str/bool(a, b, context)` — compare, show value on match
+
+### Failure Output
+```
+assertion failed: line 5: values should match
+  expected: 42
+    actual: 99
+```
