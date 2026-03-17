@@ -255,3 +255,121 @@ pub def model_count() -> int:
 pub def field_count(table_name: str) -> int:
 	"""Get field count for a model."""
 	return __orm_field_count(table_name)
+
+# ============================================================
+# PostgreSQL Wire Protocol C bindings
+# ============================================================
+
+@extern("C")
+pub def __pg_connect(host: str, port: int, dbname: str, user: str, password: str) -> int
+
+@extern("C")
+pub def __pg_close() -> int
+
+@extern("C")
+pub def __pg_is_connected() -> int
+
+@extern("C")
+pub def __pg_last_error() -> str
+
+@extern("C")
+pub def __pg_query(sql: str) -> int
+
+@extern("C")
+pub def __pg_execute(sql: str) -> int
+
+@extern("C")
+pub def __pg_row_count() -> int
+
+@extern("C")
+pub def __pg_col_count() -> int
+
+@extern("C")
+pub def __pg_col_name(idx: int) -> str
+
+@extern("C")
+pub def __pg_get_value(row: int, col: int) -> str
+
+@extern("C")
+pub def __pg_get_field(row: int, col_name: str) -> str
+
+# ============================================================
+# Public API — Connection
+# ============================================================
+
+pub def connect_pg(host: str, port: int, dbname: str, user: str, password: str) -> int:
+	"""Connect to PostgreSQL. Returns 0 on success."""
+	return __pg_connect(host, port, dbname, user, password)
+
+pub def close_connection() -> int:
+	"""Close the current database connection."""
+	return __pg_close()
+
+pub def is_connected() -> int:
+	"""Check if connected. Returns 1 or 0."""
+	return __pg_is_connected()
+
+pub def last_error() -> str:
+	"""Get last error message."""
+	return __pg_last_error()
+
+# ============================================================
+# Public API — Query Execution
+# ============================================================
+
+pub def query(sql: str) -> int:
+	"""Execute a SELECT query. Returns number of rows, or -1 on error."""
+	return __pg_query(sql)
+
+pub def execute(sql: str) -> int:
+	"""Execute INSERT/UPDATE/DELETE. Returns affected rows, or -1 on error."""
+	return __pg_execute(sql)
+
+# ============================================================
+# Public API — Result Access
+# ============================================================
+
+pub def row_count() -> int:
+	"""Number of rows in the last query result."""
+	return __pg_row_count()
+
+pub def col_count() -> int:
+	"""Number of columns in the last query result."""
+	return __pg_col_count()
+
+pub def col_name(idx: int) -> str:
+	"""Get column name by index."""
+	return __pg_col_name(idx)
+
+pub def get_value(row: int, col: int) -> str:
+	"""Get field value by row and column index."""
+	return __pg_get_value(row, col)
+
+pub def get_field(row: int, col_name: str) -> str:
+	"""Get field value by row and column name."""
+	return __pg_get_field(row, col_name)
+
+# ============================================================
+# Debug Helpers
+# ============================================================
+
+@extern("C")
+pub def __pg_set_debug(enabled: int) -> int
+
+@extern("C")
+pub def __pg_dump_results() -> int
+
+@extern("C")
+pub def __pg_connection_info() -> str
+
+pub def set_debug(enabled: int) -> int:
+	"""Enable/disable debug mode. Logs protocol details to stderr."""
+	return __pg_set_debug(enabled)
+
+pub def dump_results() -> int:
+	"""Print last query result set to stderr (debug)."""
+	return __pg_dump_results()
+
+pub def connection_info() -> str:
+	"""Get connection info string (debug)."""
+	return __pg_connection_info()
