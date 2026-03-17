@@ -257,119 +257,118 @@ pub def field_count(table_name: str) -> int:
 	return __orm_field_count(table_name)
 
 # ============================================================
-# PostgreSQL Wire Protocol C bindings
+# Unified Dispatch C bindings (db_dispatch.c)
 # ============================================================
 
 @extern("C")
-pub def __pg_connect(host: str, port: int, dbname: str, user: str, password: str) -> int
+pub def __db_connect(driver: str, host: str, port: int, dbname: str, user: str, password: str) -> int
 
 @extern("C")
-pub def __pg_close() -> int
+pub def __db_close() -> int
 
 @extern("C")
-pub def __pg_is_connected() -> int
+pub def __db_is_connected() -> int
 
 @extern("C")
-pub def __pg_last_error() -> str
+pub def __db_last_error() -> str
 
 @extern("C")
-pub def __pg_query(sql: str) -> int
+pub def __db_query_exec(sql: str) -> int
 
 @extern("C")
-pub def __pg_execute(sql: str) -> int
+pub def __db_execute_stmt(sql: str) -> int
 
 @extern("C")
-pub def __pg_row_count() -> int
+pub def __db_row_count() -> int
 
 @extern("C")
-pub def __pg_col_count() -> int
+pub def __db_col_count() -> int
 
 @extern("C")
-pub def __pg_col_name(idx: int) -> str
+pub def __db_col_name_at(idx: int) -> str
 
 @extern("C")
-pub def __pg_get_value(row: int, col: int) -> str
+pub def __db_get_value_at(row: int, col: int) -> str
 
 @extern("C")
-pub def __pg_get_field(row: int, col_name: str) -> str
+pub def __db_get_field_by(row: int, col_name: str) -> str
+
+@extern("C")
+pub def __db_debug_mode(enabled: int) -> int
+
+@extern("C")
+pub def __db_dump() -> int
+
+@extern("C")
+pub def __db_conn_info() -> str
+
+@extern("C")
+pub def __db_driver() -> str
 
 # ============================================================
-# Public API — Connection
+# Unified Public API
 # ============================================================
 
-pub def connect_pg(host: str, port: int, dbname: str, user: str, password: str) -> int:
-	"""Connect to PostgreSQL. Returns 0 on success."""
-	return __pg_connect(host, port, dbname, user, password)
+pub def connect(driver: str, host: str, port: int, dbname: str, user: str, password: str) -> int:
+	"""Connect to database. driver: 'postgres'/'pg' or 'mysql'/'my'. Returns 0 on success."""
+	return __db_connect(driver, host, port, dbname, user, password)
 
-pub def close_connection() -> int:
-	"""Close the current database connection."""
-	return __pg_close()
+pub def close() -> int:
+	"""Close the active database connection."""
+	return __db_close()
 
 pub def is_connected() -> int:
 	"""Check if connected. Returns 1 or 0."""
-	return __pg_is_connected()
+	return __db_is_connected()
 
 pub def last_error() -> str:
 	"""Get last error message."""
-	return __pg_last_error()
-
-# ============================================================
-# Public API — Query Execution
-# ============================================================
+	return __db_last_error()
 
 pub def query(sql: str) -> int:
 	"""Execute a SELECT query. Returns number of rows, or -1 on error."""
-	return __pg_query(sql)
+	return __db_query_exec(sql)
 
 pub def execute(sql: str) -> int:
-	"""Execute INSERT/UPDATE/DELETE. Returns affected rows, or -1 on error."""
-	return __pg_execute(sql)
-
-# ============================================================
-# Public API — Result Access
-# ============================================================
+	"""Execute INSERT/UPDATE/DELETE/DDL. Returns affected rows, or -1 on error."""
+	return __db_execute_stmt(sql)
 
 pub def row_count() -> int:
 	"""Number of rows in the last query result."""
-	return __pg_row_count()
+	return __db_row_count()
 
 pub def col_count() -> int:
 	"""Number of columns in the last query result."""
-	return __pg_col_count()
+	return __db_col_count()
 
 pub def col_name(idx: int) -> str:
 	"""Get column name by index."""
-	return __pg_col_name(idx)
+	return __db_col_name_at(idx)
 
 pub def get_value(row: int, col: int) -> str:
 	"""Get field value by row and column index."""
-	return __pg_get_value(row, col)
+	return __db_get_value_at(row, col)
 
 pub def get_field(row: int, col_name: str) -> str:
 	"""Get field value by row and column name."""
-	return __pg_get_field(row, col_name)
+	return __db_get_field_by(row, col_name)
+
+pub def driver() -> str:
+	"""Get active driver name ('postgres', 'mysql', or 'none')."""
+	return __db_driver()
 
 # ============================================================
 # Debug Helpers
 # ============================================================
 
-@extern("C")
-pub def __pg_set_debug(enabled: int) -> int
-
-@extern("C")
-pub def __pg_dump_results() -> int
-
-@extern("C")
-pub def __pg_connection_info() -> str
-
 pub def set_debug(enabled: int) -> int:
-	"""Enable/disable debug mode. Logs protocol details to stderr."""
-	return __pg_set_debug(enabled)
+	"""Enable/disable debug logging for all drivers."""
+	return __db_debug_mode(enabled)
 
 pub def dump_results() -> int:
-	"""Print last query result set to stderr (debug)."""
-	return __pg_dump_results()
+	"""Print last query result set to stderr."""
+	return __db_dump()
 
 pub def connection_info() -> str:
-	"""Get connection info string (debug)."""
-	return __pg_connection_info()
+	"""Get connection info string."""
+	return __db_conn_info()
