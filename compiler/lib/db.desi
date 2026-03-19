@@ -328,6 +328,63 @@ pub def table_exists(table_name: str) -> int:
 	return __db_table_exists(table_name)
 
 # ============================================================
+# Transaction C bindings (db_transaction.c)
+# ============================================================
+
+@extern("C")
+pub def __db_begin() -> int
+
+@extern("C")
+pub def __db_commit() -> int
+
+@extern("C")
+pub def __db_rollback_tx() -> int
+
+@extern("C")
+pub def __db_in_transaction() -> int
+
+@extern("C")
+pub def __db_savepoint(name: str) -> int
+
+@extern("C")
+pub def __db_savepoint_rollback(name: str) -> int
+
+@extern("C")
+pub def __db_savepoint_release(name: str) -> int
+
+# ============================================================
+# Public API — Transactions
+# ============================================================
+
+pub def begin() -> int:
+	"""Begin a transaction. Like Django's transaction.atomic() start."""
+	return __db_begin()
+
+pub def commit() -> int:
+	"""Commit the active transaction."""
+	return __db_commit()
+
+pub def rollback_tx() -> int:
+	"""Rollback the active transaction."""
+	return __db_rollback_tx()
+
+pub def in_transaction() -> int:
+	"""Check if inside a transaction. Returns 1 or 0."""
+	return __db_in_transaction()
+
+pub def savepoint(name: str) -> int:
+	"""Create a savepoint (nested transaction)."""
+	return __db_savepoint(name)
+
+pub def savepoint_rollback(name: str) -> int:
+	"""Rollback to a savepoint."""
+	return __db_savepoint_rollback(name)
+
+pub def savepoint_release(name: str) -> int:
+	"""Release a savepoint."""
+	return __db_savepoint_release(name)
+
+# ============================================================
 # Unified Dispatch C bindings (db_dispatch.c)
 # ============================================================
 
