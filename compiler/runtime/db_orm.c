@@ -453,3 +453,20 @@ int32_t __orm_field_count(const char* table_name) {
     }
     return 0;
 }
+
+// Get model name by index (for migration system)
+const char* __orm_model_name(int32_t index) {
+    if (index < 0 || index >= g_model_count) return "";
+    return g_models[index].name;
+}
+
+// Get field name by table name and field index (for migration system)
+const char* __orm_field_name(const char* table_name, int32_t field_index) {
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            if (field_index < 0 || field_index >= g_models[i].field_count) return "";
+            return g_models[i].fields[field_index].name;
+        }
+    }
+    return "";
+}
