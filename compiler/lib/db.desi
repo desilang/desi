@@ -292,6 +292,42 @@ pub def field_count(table_name: str) -> int:
 	return __orm_field_count(table_name)
 
 # ============================================================
+# Migration C bindings (db_migrate.c)
+# ============================================================
+
+@extern("C")
+pub def __db_migrate() -> int
+
+@extern("C")
+pub def __db_rollback() -> int
+
+@extern("C")
+pub def __db_migration_status() -> str
+
+@extern("C")
+pub def __db_table_exists(table_name: str) -> int
+
+# ============================================================
+# Public API — Migrations
+# ============================================================
+
+pub def migrate() -> int:
+	"""Apply pending migrations. Creates/alters tables to match registered models. Returns count of applied operations."""
+	return __db_migrate()
+
+pub def rollback() -> int:
+	"""Rollback last migration version. Returns count of rolled-back operations."""
+	return __db_rollback()
+
+pub def migration_status() -> str:
+	"""Get migration history as formatted string."""
+	return __db_migration_status()
+
+pub def table_exists(table_name: str) -> int:
+	"""Check if a table exists in the database. Returns 1 or 0."""
+	return __db_table_exists(table_name)
+
+# ============================================================
 # Unified Dispatch C bindings (db_dispatch.c)
 # ============================================================
 
