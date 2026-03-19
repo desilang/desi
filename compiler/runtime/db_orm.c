@@ -30,7 +30,12 @@ typedef enum {
     FIELD_DATETIME,
     FIELD_DATE,
     FIELD_JSON,
-    FIELD_FOREIGN_KEY
+    FIELD_FOREIGN_KEY,
+    FIELD_UUID,        // UUID (PG native, VARCHAR(36) on MySQL)
+    FIELD_ARRAY,       // Array type (PG only: TEXT[], INT[], etc.)
+    FIELD_INET,        // INET type (PG only, VARCHAR(45) on MySQL)
+    FIELD_DECIMAL,     // DECIMAL(precision, scale)
+    FIELD_CUSTOM       // pass-through: any native DB type string
 } FieldType;
 
 typedef struct {
@@ -42,9 +47,12 @@ typedef struct {
     int primary_key;
     int auto_now;        // set to current time on create
     int auto_now_add;    // set to current time on update
+    int precision;       // for DECIMAL
+    int scale;           // for DECIMAL
     char default_val[256];
     char ref_table[128]; // for FOREIGN_KEY
     char ref_field[64];  // for FOREIGN_KEY
+    char custom_type[128]; // for FIELD_CUSTOM and FIELD_ARRAY element type
 } FieldDef;
 
 typedef struct {
@@ -219,12 +227,87 @@ int32_t __orm_foreign_key(const char* name, const char* ref_table, const char* r
 }
 
 // ============================================================
+// New Field Types
+// ============================================================
+
+// Add UUIDField
+int32_t __orm_uuid_field(const char* name, int32_t nullable, int32_t unique) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_UUID;
+    f->nullable = nullable;
+    f->unique = unique;
+    return 0;
+}
+
+// Add ArrayField (PG only — element type as string: "TEXT", "INTEGER", etc.)
+int32_t __orm_array_field(const char* name, const char* element_type, int32_t nullable) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_ARRAY;
+    f->nullable = nullable;
+    if (element_type) strncpy(f->custom_type, element_type, sizeof(f->custom_type) - 1);
+    else strncpy(f->custom_type, "TEXT", sizeof(f->custom_type) - 1);
+    return 0;
+}
+
+// Add InetField (PG: INET, MySQL: VARCHAR(45))
+int32_t __orm_inet_field(const char* name, int32_t nullable) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_INET;
+    f->nullable = nullable;
+    return 0;
+}
+
+// Add DecimalField
+int32_t __orm_decimal_field(const char* name, int32_t precision, int32_t scale, int32_t nullable) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_DECIMAL;
+    f->precision = precision > 0 ? precision : 10;
+    f->scale = scale >= 0 ? scale : 2;
+    f->nullable = nullable;
+    return 0;
+}
+
+// Add CustomField — pass-through for ANY native DB type
+int32_t __orm_custom_field(const char* name, const char* type_str, int32_t nullable) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_CUSTOM;
+    f->nullable = nullable;
+    if (type_str) strncpy(f->custom_type, type_str, sizeof(f->custom_type) - 1);
+    return 0;
+}
+
+// ============================================================
 // SQL Generation from Models
 // ============================================================
 
 // Get SQL type string for a field
 static const char* sql_type(FieldDef* f, int dialect) {
-    static char buf[64];
+    static char buf[128];
     switch (f->type) {
         case FIELD_AUTO:
             if (dialect == 0) return "SERIAL PRIMARY KEY";
@@ -243,13 +326,30 @@ static const char* sql_type(FieldDef* f, int dialect) {
             if (dialect == 0) return "DOUBLE PRECISION";
             return "DOUBLE";
         case FIELD_DATETIME:
-            if (dialect == 0) return "TIMESTAMP";
+            if (dialect == 0) return "TIMESTAMPTZ";  // timezone-aware (Django-style)
             return "DATETIME";
         case FIELD_DATE: return "DATE";
         case FIELD_JSON:
             if (dialect == 0) return "JSONB";
             return "JSON";
         case FIELD_FOREIGN_KEY: return "INTEGER";
+        case FIELD_UUID:
+            if (dialect == 0) return "UUID";
+            return "VARCHAR(36)";
+        case FIELD_ARRAY:
+            if (dialect == 0) {
+                snprintf(buf, sizeof(buf), "%s[]", f->custom_type);
+                return buf;
+            }
+            return "JSON"; // MySQL fallback: store arrays as JSON
+        case FIELD_INET:
+            if (dialect == 0) return "INET";
+            return "VARCHAR(45)";
+        case FIELD_DECIMAL:
+            snprintf(buf, sizeof(buf), "DECIMAL(%d,%d)", f->precision, f->scale);
+            return buf;
+        case FIELD_CUSTOM:
+            return f->custom_type;  // pass-through: user provides exact DB type
         default: return "TEXT";
     }
 }

@@ -232,6 +232,41 @@ pub def foreign_key(name: str, ref_table: str, ref_field: str, nullable: int) ->
 	"""Add foreign key field."""
 	return __orm_foreign_key(name, ref_table, ref_field, nullable)
 
+@extern("C")
+pub def __orm_uuid_field(name: str, nullable: int, unique_flag: int) -> int
+
+@extern("C")
+pub def __orm_array_field(name: str, element_type: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_inet_field(name: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_decimal_field(name: str, precision: int, scale: int, nullable: int) -> int
+
+@extern("C")
+pub def __orm_custom_field(name: str, type_str: str, nullable: int) -> int
+
+pub def uuid_field(name: str, nullable: int, unique_flag: int) -> int:
+	"""Add UUID field (PG native UUID, VARCHAR(36) on MySQL)."""
+	return __orm_uuid_field(name, nullable, unique_flag)
+
+pub def array_field(name: str, element_type: str, nullable: int) -> int:
+	"""Add array field (PG: TEXT[], INTEGER[], etc. MySQL: JSON fallback)."""
+	return __orm_array_field(name, element_type, nullable)
+
+pub def inet_field(name: str, nullable: int) -> int:
+	"""Add IP address field (PG: INET, MySQL: VARCHAR(45))."""
+	return __orm_inet_field(name, nullable)
+
+pub def decimal_field(name: str, precision: int, scale: int, nullable: int) -> int:
+	"""Add DECIMAL(precision, scale) field."""
+	return __orm_decimal_field(name, precision, scale, nullable)
+
+pub def custom_field(name: str, type_str: str, nullable: int) -> int:
+	"""Add field with any native DB type (pass-through). Example: custom_field('data', 'HSTORE', 0)"""
+	return __orm_custom_field(name, type_str, nullable)
+
 # ============================================================
 # Public API — ORM SQL Generation
 # ============================================================
