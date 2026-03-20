@@ -39,7 +39,7 @@ Decl              = FuncDecl
 FuncDecl          = { Decorator } ["pub"] "def" Ident "(" [ ParamList ] ")" [ "->" Type ] ":" NL Indent Block Dedent ;
 
 ParamList         = "(" [Param { "," Param }] ")" ;
-Param             = [ ParamMode ] Ident [ ":" Type ] [ "=" Expr ] ;
+Param             = [ ParamMode ] [ "*" | "**" ] Ident [ ":" Type ] [ "=" Expr ] ;  (* "*" = varargs, "**" = kwargs *)
 ParamMode         = "ref" | "inout" ;
 
 Decorator         = "@" Ident [ "(" [ ArgList ] ")" ] NL ;
@@ -142,7 +142,8 @@ IndexSuffix       = "[" SliceIdx "]" ;
 SliceIdx          = [ Expr ] [ ":" [ Expr ] [ ":" [ Expr ] ] ] ;
 FieldSuffix       = "." Ident ;
 
-ArgList           = Expr { "," Expr } [ "," ] ;
+ArgList           = Arg { "," Arg } [ "," ] ;
+Arg               = [ Ident "=" ] Expr ;                          (* named arguments: key=value *)
 
 Primary           = Literal
                   | Ident
