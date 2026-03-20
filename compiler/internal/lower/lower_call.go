@@ -98,6 +98,124 @@ func (ls *lowerState) lowerVariadicCall(x *ast.CallExpr, ft *types.Func) hir.Val
 	return dst
 }
 
+func (ls *lowerState) lowerKwargsCall(x *ast.CallExpr, cand *check.FuncCand) hir.Value {
+	callee := ls.calleeName(x.Callee, x)
+	ft := cand.Type
+
+	// Determine how many non-kwargs params there are
+	nParams := len(ft.Params)
+	kwargsIdx := nParams - 1 // kwargs is always last param
+
+	// Lower positional args (non-kwargs params)
+	var args []hir.Value
+
+	// Collect positional and named args from ArgNodes or Args
+	argSource := x.ArgNodes
+	if len(argSource) == 0 && len(x.Args) > 0 {
+		// Fallback to legacy Args
+		for i := 0; i < kwargsIdx && i < len(x.Args); i++ {
+			args = append(args, ls.lowerExpr(x.Args[i]))
+		}
+	} else {
+		// Use ArgNodes — separate positional from named
+		for _, an := range argSource {
+			if an.Name == nil {
+				// positional arg
+				args = append(args, ls.lowerExpr(an.Expr))
+			}
+		}
+	}
+
+	// Build kwargs dict
+	// Get the value type from the dict type
+	var valTypeTag hir.Value = hir.ConstInt{Text: "1", Type: "i32"} // default: str (TYPE_TAG_STR=1)
+	if kwargsIdx >= 0 && kwargsIdx < len(ft.Params) {
+		if dictT, ok := ft.Params[kwargsIdx].(*types.Dict); ok {
+			valTypeTag = getTypeTag(dictT.Val)
+		}
+	}
+
+	// dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, to_str_fn)
+	dictRes := ls.b.FreshTemp("kwargs_dict")
+	ls.b.Emit(&hir.Call{Dst: dictRes, Fn: "dict_new", Args: []hir.Value{
+		hir.ConstInt{Text: "1", Type: "i32"},  // key_type_tag = str
+		hir.ConstInt{Text: "0", Type: "i64"},  // key_size = 0 (primitives)
+		hir.ConstInt{Text: "8", Type: "i64"},  // value_size = 8
+		valTypeTag,                             // value_type_tag
+		hir.ConstNull{},                        // key_hash_fn
+		hir.ConstNull{},                        // key_eq_fn
+		hir.ConstNull{},                        // to_str_fn
+	}})
+
+	// Determine if kwargs value type is Any (mixed types)
+	isAnyVal := false
+	if kwargsIdx >= 0 && kwargsIdx < len(ft.Params) {
+		if dictT, ok := ft.Params[kwargsIdx].(*types.Dict); ok {
+			isAnyVal = types.Equal(dictT.Val, types.Any)
+		}
+	}
+
+	// Insert each kwargs entry
+	for _, an := range argSource {
+		if an.Name == nil {
+			continue // skip positional
+		}
+		keyVal := hir.ConstStr{Text: an.Name.Name}
+		val := ls.lowerExpr(an.Expr)
+
+		// Determine the actual type of this value for proper lowering
+		var entryValType types.T
+		if ls.info != nil {
+			entryValType = ls.info.Types[an.Expr]
+		}
+		isFloatVal := entryValType == types.Float || entryValType == types.F32 || entryValType == types.F64
+
+		// Spill value to stack pointer for dict_insert
+		valPtr := ls.b.FreshTemp("kw_val_ptr")
+		ls.b.Emit(&hir.Alloca{Dst: valPtr, Type: "i64", Count: 1})
+
+		if isFloatVal {
+			// Float: use BitCast to preserve bits
+			val64 := ls.b.FreshTemp("kw_val64")
+			ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		} else {
+			// int, str, bool, ptr: use Cast
+			val64 := ls.b.FreshTemp("kw_val64")
+			ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
+		}
+
+		// For Any-typed kwargs, use per-entry type tag
+		insertTag := valTypeTag
+		if isAnyVal && entryValType != nil {
+			insertTag = getTypeTag(entryValType)
+		}
+
+		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{
+			dictRes,
+			hir.ConstInt{Text: "0", Type: "i64"}, // key_int (unused)
+			keyVal,                                 // key_str
+			hir.ConstFloat{Text: "0.0"},           // key_float (unused)
+			hir.ConstNull{},                        // key_ptr (unused)
+			valPtr,                                 // &value
+			insertTag,                              // value_type_tag (per-entry for Any)
+		}})
+	}
+
+	// Append dict as last arg (kwargs param)
+	args = append(args, dictRes)
+
+	// Determine return type
+	retType := lowerType(ft.Ret)
+
+	// Emit call
+	dst := ls.b.FreshTemp("call")
+	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
+	return dst
+}
+
 func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 	// 0. Method calls (FieldExpr callee)
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok {
@@ -1350,6 +1468,13 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 			for _, cand := range set.Cands {
 				if cand.Type != nil && cand.Type.Variadic {
 					return ls.lowerVariadicCall(x, cand.Type)
+				}
+			}
+
+			// Check if any candidate has **kwargs
+			for _, cand := range set.Cands {
+				if cand.Type != nil && cand.Type.HasKwargs {
+					return ls.lowerKwargsCall(x, cand)
 				}
 			}
 		}
