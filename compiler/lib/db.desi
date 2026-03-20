@@ -675,4 +675,11 @@ pub def do_insert() -> int:
 	"""Execute INSERT with all fields set via db.set(). Supports up to 32 fields."""
 	return __qs_do_insert()
 
+pub def create(**fields: str) -> int:
+	"""Django-style INSERT. Call db.objects(table) first.
+	Usage: db.objects("users"); db.create(name="Alice", age="30")"""
+	for key, value in fields.items():
+		__qs_set_field(key, value)
+	return __qs_do_insert()
+
 
