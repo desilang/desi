@@ -208,3 +208,7 @@ All varargs examples are provided inline throughout this document:
 - **Quick Start**: See opening section for basic usage
 - **Named Arguments**: See "Named Arguments with Varargs" section
 - **Common Patterns**: See "Common Patterns" section
+
+## See Also
+
+- [Keyword Arguments (**kwargs)](kwargs.md) — collect named arguments as a `dict[str, T]`

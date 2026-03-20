@@ -118,6 +118,59 @@ def main():
 !!! note "Variadic Parameter Position"
     The variadic parameter must be last in the parameter list.
 
+### Keyword Arguments (`**kwargs`)
+
+Use `**` prefix to accept keyword arguments as a dictionary:
+
+```desi
+def create_user(**fields: str) -> int:
+    print("creating user")
+    0
+
+def main():
+    create_user(name="Alice", email="alice@test.com")
+```
+
+The `**kwargs` parameter becomes `dict[str, T]` inside the function body.
+
+#### Mixed Types with `Any`
+
+For Django-style calls with different value types, use `**kwargs: Any`:
+
+```desi
+def insert(**fields: Any) -> int:
+    print("inserting record")
+    0
+
+def main():
+    # Mix of str, int, float, and bool values
+    insert(name="Alice", age=30, score=3.14, active=true)
+```
+
+#### Combining Positional and Kwargs
+
+You can mix regular positional parameters with `**kwargs`:
+
+```desi
+def create(table: str, **fields: Any) -> int:
+    print("table: " + table)
+    0
+
+def main():
+    create("users", name="Alice", age=30, email="alice@test.com")
+```
+
+**Rules:**
+
+1. Only ONE `**kwargs` parameter allowed per function
+2. `**kwargs` must be the LAST parameter
+3. Cannot have both `*args` and `**kwargs` in the same function
+4. No default value allowed for `**kwargs`
+
+!!! tip "Python Developers"
+    Desi's `**kwargs` works just like Python's — if you know Django's
+    `User.objects.create(name="Alice", age=30)`, you'll feel right at home.
+
 ## Return Values
 
 ### Single Return
