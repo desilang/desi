@@ -1,5 +1,5 @@
 # Example 439: **kwargs support
-# Demonstrates Python-style keyword arguments with str and Any types
+# Demonstrates Python-style keyword arguments with dict iteration
 # EXPECTED_OUTPUT:
 # === str kwargs ===
 # str kwargs received
@@ -8,6 +8,12 @@
 # === Positional + kwargs ===
 # table: users
 # insert kwargs received
+# === Dict key iteration ===
+# name
+# email
+# === Dict items iteration ===
+# name = Alice
+# email = alice@test.com
 
 def show_str_kwargs(**opts: str) -> int:
 	print("str kwargs received")
@@ -22,6 +28,16 @@ def insert_with_table(table: str, **fields: Any) -> int:
 	print("insert kwargs received")
 	0
 
+def show_keys(**fields: str) -> int:
+	for key in fields:
+		print(key)
+	0
+
+def show_items(**fields: str) -> int:
+	for key, value in fields.items():
+		print(key + " = " + value)
+	0
+
 def main() -> int:
 	print("=== str kwargs ===")
 	show_str_kwargs(name="Alice", email="alice@test.com")
@@ -31,5 +47,11 @@ def main() -> int:
 
 	print("=== Positional + kwargs ===")
 	insert_with_table("users", name="Alice", age=30, email="alice@test.com")
+
+	print("=== Dict key iteration ===")
+	show_keys(name="Alice", email="alice@test.com")
+
+	print("=== Dict items iteration ===")
+	show_items(name="Alice", email="alice@test.com")
 
 	0
