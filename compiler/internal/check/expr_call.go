@@ -362,15 +362,23 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 						args[i] = c.typ(a.Expr)
 					}
 
-					if len(args) != len(method.Params) {
+					// Skip 'self' parameter for instance method calls.
+					// Cross-file class methods include 'self' in Params but
+					// the caller doesn't pass it explicitly.
+					methodParams := method.Params
+					if len(methodParams) > 0 && methodParams[0].Name.Name == "self" {
+						methodParams = methodParams[1:]
+					}
+
+					if len(args) != len(methodParams) {
 						c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch"))
 						return nil
 					}
 
 					for i := range args {
 						var paramT types.T = types.None
-						if method.Params[i].Type != nil {
-							if t, ok := types.FromName(method.Params[i].Type.Name); ok {
+						if methodParams[i].Type != nil {
+							if t, ok := types.FromName(methodParams[i].Type.Name); ok {
 								paramT = t
 							}
 						}

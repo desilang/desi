@@ -1,0 +1,109 @@
+# Django-like ORM test with clean API
+# EXPECTED_OUTPUT:
+# === Desi ORM Test ===
+# Created 4 users
+# Total: 4
+# Adults (age>21): 3
+# Minors (age<18): 1
+# Name has 'li': 2
+# User 1: Alice
+# Updated: 1
+# Avg age: 26.7500000000000000
+# Sum age: 107
+# Deleted: 1
+# Remaining: 3
+# After commit: 4
+# After rollback: 4
+# === Done ===
+import db
+
+def main() -> int:
+	print("=== Desi ORM Test ===")
+	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+
+	db.execute("DROP TABLE IF EXISTS users")
+	db.execute("CREATE TABLE users (id SERIAL PRIMARY KEY, name VARCHAR(100), email VARCHAR(255), age INTEGER, active BOOLEAN DEFAULT true)")
+
+	# CREATE
+	db.objects("users")
+	db.insert3("name", "Alice", "email", "alice@test.com", "age", "30")
+	db.objects("users")
+	db.insert3("name", "Bob", "email", "bob@test.com", "age", "25")
+	db.objects("users")
+	db.insert3("name", "Charlie", "email", "charlie@test.com", "age", "17")
+	db.objects("users")
+	db.insert3("name", "Diana", "email", "diana@test.com", "age", "35")
+	print("Created 4 users")
+
+	# COUNT
+	db.objects("users")
+	let total = db.count()
+	print(f"Total: {str(total)}")
+
+	# FILTER
+	db.objects("users")
+	db.filter_by("age__gt", "21")
+	let adults = db.fetch_all()
+	print(f"Adults (age>21): {str(adults)}")
+
+	db.objects("users")
+	db.filter_by("age__lt", "18")
+	let minors = db.fetch_all()
+	print(f"Minors (age<18): {str(minors)}")
+
+	db.objects("users")
+	db.filter_by("name__contains", "li")
+	let cn = db.count()
+	print(f"Name has 'li': {str(cn)}")
+
+	# GET by id
+	db.objects("users")
+	db.get_by_id(1)
+	let uname = db.get_field(0, "name")
+	print(f"User 1: {uname}")
+
+	# UPDATE
+	db.objects("users")
+	db.filter_by("age__lt", "18")
+	let upd = db.update("active", "false")
+	print(f"Updated: {str(upd)}")
+
+	# AGGREGATION
+	db.objects("users")
+	let avg_age = db.get_avg("age")
+	print(f"Avg age: {avg_age}")
+	db.objects("users")
+	let sum_age = db.get_sum("age")
+	print(f"Sum age: {sum_age}")
+
+	# DELETE
+	db.objects("users")
+	db.filter_by("age__lt", "18")
+	let del_n = db.delete()
+	print(f"Deleted: {str(del_n)}")
+	db.objects("users")
+	let remain = db.count()
+	print(f"Remaining: {str(remain)}")
+
+	# TRANSACTION: commit
+	db.begin()
+	db.objects("users")
+	db.insert3("name", "Eve", "email", "eve@test.com", "age", "28")
+	db.commit()
+	db.objects("users")
+	let ac = db.count()
+	print(f"After commit: {str(ac)}")
+
+	# TRANSACTION: rollback
+	db.begin()
+	db.objects("users")
+	db.insert3("name", "Frank", "email", "frank@test.com", "age", "40")
+	db.rollback_tx()
+	db.objects("users")
+	let ar = db.count()
+	print(f"After rollback: {str(ar)}")
+
+	db.execute("DROP TABLE users")
+	db.close()
+	print("=== Done ===")
+	0

@@ -119,9 +119,14 @@ func collectClasses(mod *ast.Module, out *Exports) {
 			}
 
 			// Build the method function type (including private methods for dunders)
+			// NOTE: We INCLUDE self as the first parameter (typed as the class type)
+			// to match the convention used by same-file classes (check_type.go).
+			// typFieldExpr strips self when creating the bound method type.
 			params := make([]types.T, 0, len(method.Params))
 			for _, p := range method.Params {
 				if p.Name.Name == "self" {
+					// Include self as the class type (first param)
+					params = append(params, classType)
 					continue
 				}
 				if p.Type == nil {
@@ -129,8 +134,15 @@ func collectClasses(mod *ast.Module, out *Exports) {
 				}
 				t, ok := types.FromName(p.Type.Name)
 				if !ok {
-					// Unknown type (e.g., generic type param T) - treat as Any
-					t = types.Any
+					// Check if it's a class type from this module
+					if cls, found := out.Classes[p.Type.Name]; found {
+						t = cls
+					} else if p.Type.Name == name {
+						// Self-referential: param is the same class
+						t = classType
+					} else {
+						t = types.Any
+					}
 				}
 				params = append(params, t)
 			}
@@ -138,6 +150,12 @@ func collectClasses(mod *ast.Module, out *Exports) {
 			if method.RetType != nil {
 				if t, ok := types.FromName(method.RetType.Name); ok {
 					retType = t
+				} else if cls, found := out.Classes[method.RetType.Name]; found {
+					// Return type is another class from same module
+					retType = cls
+				} else if method.RetType.Name == name {
+					// Self-referential: method returns same class
+					retType = classType
 				}
 			}
 			methodFunc := types.FuncOf(params, retType, false)

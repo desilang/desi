@@ -500,3 +500,179 @@ pub def dump_results() -> int:
 pub def connection_info() -> str:
 	"""Get connection info string."""
 	return __db_conn_info()
+
+# ============================================================
+# ORM CRUD C bindings (db_crud.c)
+# ============================================================
+
+@extern("C")
+pub def __qs_reset(table: str) -> int
+
+@extern("C")
+pub def __qs_filter(lookup: str, val: str) -> int
+
+@extern("C")
+pub def __qs_exclude(lookup: str, val: str) -> int
+
+@extern("C")
+pub def __qs_order_by(col: str) -> int
+
+@extern("C")
+pub def __qs_limit(n: int) -> int
+
+@extern("C")
+pub def __qs_offset(n: int) -> int
+
+@extern("C")
+pub def __qs_fetch() -> int
+
+@extern("C")
+pub def __qs_row_count() -> int
+
+@extern("C")
+pub def __qs_count() -> int
+
+@extern("C")
+pub def __qs_exists() -> int
+
+@extern("C")
+pub def __qs_update(col: str, val: str) -> int
+
+@extern("C")
+pub def __qs_delete() -> int
+
+@extern("C")
+pub def __qs_aggregate(func: str, col: str) -> str
+
+@extern("C")
+pub def __qs_create1(k1: str, v1: str) -> int
+
+@extern("C")
+pub def __qs_create2(k1: str, v1: str, k2: str, v2: str) -> int
+
+@extern("C")
+pub def __qs_create3(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str) -> int
+
+@extern("C")
+pub def __qs_create4(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str, k4: str, v4: str) -> int
+
+@extern("C")
+pub def __qs_create5(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str, k4: str, v4: str, k5: str, v5: str) -> int
+
+@extern("C")
+pub def __qs_get_by_id(id_val: int) -> int
+
+@extern("C")
+pub def __qs_set_field(key: str, val: str) -> int
+
+@extern("C")
+pub def __qs_do_insert() -> int
+
+# ============================================================
+# Public ORM API — Django-style QuerySet
+#
+# Usage:
+#   db.objects("users")             # set active table
+#   db.filter("age__gt", "21")     # add WHERE
+#   db.order_by("-name")           # add ORDER BY
+#   let n = db.all()               # execute SELECT, returns row count
+#   let c = db.count()             # SELECT COUNT(*)
+# ============================================================
+
+pub def objects(table: str) -> int:
+	"""Set active table for ORM queries (like Django's Model.objects)."""
+	return __qs_reset(table)
+
+pub def filter_by(lookup: str, val: str) -> int:
+	"""Add WHERE condition. Supports Django lookups: age__lt, name__contains, etc."""
+	return __qs_filter(lookup, val)
+
+pub def exclude(lookup: str, val: str) -> int:
+	"""Add WHERE NOT condition."""
+	return __qs_exclude(lookup, val)
+
+pub def sort_by(col: str) -> int:
+	"""Order results. Use '-name' for DESC (like Django's .order_by())."""
+	return __qs_order_by(col)
+
+pub def set_limit(n: int) -> int:
+	"""Limit result count for ORM queryset."""
+	return __qs_limit(n)
+
+pub def set_offset(n: int) -> int:
+	"""Offset results for ORM queryset (for pagination)."""
+	return __qs_offset(n)
+
+pub def fetch_all() -> int:
+	"""Execute SELECT and return row count (like Django's .all())."""
+	return __qs_fetch()
+
+pub def rows() -> int:
+	"""Row count from last query."""
+	return __qs_row_count()
+
+pub def count() -> int:
+	"""Return COUNT(*) for current queryset (like Django's QuerySet.count())."""
+	return __qs_count()
+
+pub def exists() -> int:
+	"""Check if any rows match. Returns 1 or 0 (like Django's QuerySet.exists())."""
+	return __qs_exists()
+
+pub def update(col: str, val: str) -> int:
+	"""UPDATE matching rows (like Django's QuerySet.update())."""
+	return __qs_update(col, val)
+
+pub def delete() -> int:
+	"""DELETE matching rows (like Django's QuerySet.delete())."""
+	return __qs_delete()
+
+pub def get_avg(col: str) -> str:
+	"""SELECT AVG(col) — returns string."""
+	return __qs_aggregate("AVG", col)
+
+pub def get_sum(col: str) -> str:
+	"""SELECT SUM(col) — returns string."""
+	return __qs_aggregate("SUM", col)
+
+pub def get_min(col: str) -> str:
+	"""SELECT MIN(col) — returns string."""
+	return __qs_aggregate("MIN", col)
+
+pub def get_max(col: str) -> str:
+	"""SELECT MAX(col) — returns string."""
+	return __qs_aggregate("MAX", col)
+
+pub def insert1(k1: str, v1: str) -> int:
+	"""INSERT 1 field. Call db.objects(table) first."""
+	return __qs_create1(k1, v1)
+
+pub def insert2(k1: str, v1: str, k2: str, v2: str) -> int:
+	"""INSERT 2 fields. Call db.objects(table) first."""
+	return __qs_create2(k1, v1, k2, v2)
+
+pub def insert3(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str) -> int:
+	"""INSERT 3 fields. Call db.objects(table) first."""
+	return __qs_create3(k1, v1, k2, v2, k3, v3)
+
+pub def insert4(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str, k4: str, v4: str) -> int:
+	"""INSERT 4 fields. Call db.objects(table) first."""
+	return __qs_create4(k1, v1, k2, v2, k3, v3, k4, v4)
+
+pub def insert5(k1: str, v1: str, k2: str, v2: str, k3: str, v3: str, k4: str, v4: str, k5: str, v5: str) -> int:
+	"""INSERT 5 fields. Call db.objects(table) first."""
+	return __qs_create5(k1, v1, k2, v2, k3, v3, k4, v4, k5, v5)
+
+pub def get_by_id(id_val: int) -> int:
+	"""Get single row by id. Call db.objects(table) first."""
+	return __qs_get_by_id(id_val)
+
+pub def set(key: str, val: str) -> int:
+	"""Set a field for INSERT. Call db.objects(table) first, then set fields, then do_insert()."""
+	return __qs_set_field(key, val)
+
+pub def do_insert() -> int:
+	"""Execute INSERT with all fields set via db.set(). Supports up to 32 fields."""
+	return __qs_do_insert()
+
+
