@@ -64,6 +64,7 @@ type Param struct {
 	Default  Expr      // optional
 	Mode     ParamMode // default is ParamMove (zero value)
 	Variadic bool      // true if *args
+	Kwargs   bool      // true if **kwargs
 	Span     diag.Span
 }
 

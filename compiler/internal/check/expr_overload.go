@@ -37,12 +37,25 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 		// Track duplicates per candidate.
 		seen := map[string]bool{}
 
+		// Determine if this candidate accepts **kwargs
+		hasKwargs := cand.Type != nil && cand.Type.HasKwargs
+		kwargsParamIdx := -1
+		if hasKwargs && n > 0 {
+			kwargsParamIdx = n - 1 // kwargs is always last param
+		}
+
+		// For kwargs candidates, the number of non-kwargs params
+		nonKwargsParams := n
+		if hasKwargs {
+			nonKwargsParams = n - 1
+		}
+
 		// Merge leading unnamed (positional) until we see first named.
 		pos := 0
 		i := 0
 		for i < len(call.ArgNodes) && call.ArgNodes[i].Name == nil {
-			if pos >= n {
-				// too many args for this candidate — let existing arity filtering handle it later
+			if pos >= nonKwargsParams {
+				// too many positional args for this candidate — let existing arity filtering handle it later
 				break
 			}
 			vecE[pos] = call.ArgNodes[i].Expr
@@ -52,6 +65,7 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 		}
 		// Named section
 		valid := true
+		var kwargsCount int
 		for ; i < len(call.ArgNodes); i++ {
 			an := call.ArgNodes[i]
 			if an.Name == nil {
@@ -67,6 +81,22 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 			}
 			idx := indexOfName(pnames, name)
 			if idx < 0 {
+				if hasKwargs {
+					// Unknown name accepted as kwargs entry
+					seen[name] = true
+					kwargsCount++
+					// Type-check: kwargs value must match the dict's value type
+					if kwargsParamIdx >= 0 {
+						if dictT, ok := cand.Type.Params[kwargsParamIdx].(*types.Dict); ok {
+							valT := c.typ(an.Expr)
+							if valT != nil && !types.Assignable(dictT.Val, valT) {
+								valid = false
+								break
+							}
+						}
+					}
+					continue
+				}
 				// remember one unknown to possibly report later
 				if firstUnknown == nil {
 					firstUnknown = an.Name
@@ -87,6 +117,14 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 		if !valid {
 			continue
 		}
+
+		// For kwargs candidates, auto-fill the kwargs param slot
+		if hasKwargs && kwargsParamIdx >= 0 {
+			// The kwargs param is automatically filled (dict built at lowering time)
+			vecE[kwargsParamIdx] = nil // placeholder — actual dict built in lowerer
+			fill++
+		}
+
 		// Ensure vector is fully populated for this candidate.
 		if fill != n {
 			// let existing arity/type machinery handle this; skip for now
@@ -95,7 +133,12 @@ func (c *checker) resolveCallAgainstSet(call *ast.CallExpr, set *OverloadSet, na
 		// Compute types vector
 		vecT := make([]types.T, n)
 		for j := 0; j < n; j++ {
-			vecT[j] = c.typ(vecE[j])
+			if hasKwargs && j == kwargsParamIdx {
+				// kwargs param: type is dict[str, T] as declared
+				vecT[j] = cand.Type.Params[j]
+			} else {
+				vecT[j] = c.typ(vecE[j])
+			}
 		}
 		okMapped = append(okMapped, mapped{cand: cand, vecExpr: vecE, vecType: vecT})
 	}
@@ -566,13 +609,27 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 	out := make([]types.T, n)
 	filled := make([]bool, n)
 
+	// Determine if this candidate accepts **kwargs
+	hasKwargs := cand.Type.HasKwargs
+	kwargsParamIdx := -1
+	if hasKwargs && n > 0 {
+		kwargsParamIdx = n - 1
+	}
+
+	// For kwargs candidates, the number of explicit (non-kwargs) params
+	nonKwargsParams := n
+	if hasKwargs {
+		nonKwargsParams = n - 1
+	}
+
 	// Param name lookup (maybe nil => cannot map names)
 	pnames := candParamNames(cand)
 
 	nameToIdx := map[string]int{}
 	if len(pnames) == n {
 		for i, nm := range pnames {
-			if nm != "" {
+			if nm != "" && !(hasKwargs && i == kwargsParamIdx) {
+				// Don't add kwargs param name to mapping
 				nameToIdx[nm] = i
 			}
 		}
@@ -585,7 +642,7 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 		if a.Name != nil {
 			continue
 		}
-		if next >= n {
+		if next >= nonKwargsParams {
 			if isVariadic {
 				out = append(out, c.typ(a.Expr))
 				continue
@@ -613,6 +670,18 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 
 		idx, ok := nameToIdx[key]
 		if !ok {
+			if hasKwargs {
+				// Unknown named arg accepted as kwargs entry — type-check against dict value type
+				if kwargsParamIdx >= 0 {
+					if dictT, ok := cand.Type.Params[kwargsParamIdx].(*types.Dict); ok {
+						valT := c.typ(a.Expr)
+						if valT != nil && !types.Assignable(dictT.Val, valT) {
+							return nil, false
+						}
+					}
+				}
+				continue // accepted as kwargs entry
+			}
 			// Unknown named arg for this candidate - don't emit error yet,
 			// another candidate may have this param. Just fail this candidate.
 			return nil, false
@@ -624,6 +693,12 @@ func (c *checker) canonicalizeForCandidate(cand *FuncCand, args []ast.CallArg) (
 		}
 		out[idx] = c.typ(a.Expr)
 		filled[idx] = true
+	}
+
+	// For kwargs candidates, auto-fill the kwargs param slot
+	if hasKwargs && kwargsParamIdx >= 0 {
+		out[kwargsParamIdx] = cand.Type.Params[kwargsParamIdx] // dict[str, T]
+		filled[kwargsParamIdx] = true
 	}
 
 	// (3) Fill omitted parameters using defaults; all non-defaulted params must be provided.

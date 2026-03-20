@@ -244,12 +244,16 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 	// Build function type from parameter annotations (surface forms allowed).
 	params := make([]types.T, len(fd.Params))
 	variadic := false
+	hasKwargs := false
 	for i, p := range fd.Params {
 		if p.Type != nil {
 			if tt := c.resolveType(p.Type); tt != nil {
 				// If this is a variadic parameter, wrap in list[T]
 				if p.Variadic {
 					params[i] = types.ListOf(tt)
+				} else if p.Kwargs {
+					// **kwargs: T → dict[str, T]
+					params[i] = types.DictOf(types.Str, tt)
 				} else {
 					params[i] = tt
 				}
@@ -257,6 +261,9 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		}
 		if p.Variadic {
 			variadic = true
+		}
+		if p.Kwargs {
+			hasKwargs = true
 		}
 	}
 	var ret types.T = types.None
@@ -266,6 +273,7 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		}
 	}
 	sig := types.FuncOf(params, ret, variadic)
+	sig.HasKwargs = hasKwargs
 	sig.Name = name
 	sig.IsPub = fd.Pub
 	for _, tp := range fd.TypeParams {
@@ -373,6 +381,14 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 			// So we don't need to wrap it again if we got it from funcType.
 			if funcType == nil {
 				pt = types.ListOf(pt)
+			}
+		}
+
+		if p.Kwargs {
+			// **kwargs: T → dict[str, T] — already wrapped in collectFunc
+			// Only need to wrap if funcType is nil (fallback path)
+			if funcType == nil {
+				pt = types.DictOf(types.Str, pt)
 			}
 		}
 

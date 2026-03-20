@@ -155,12 +155,20 @@ func (p *Parser) parseParams() []ast.Param {
 			p.next()
 		}
 
-		// Check for variadic '*' prefix
+		// Check for kwargs '**' prefix or variadic '*' prefix
 		variadic := false
-		if p.accept(token.STAR) {
+		kwargs := false
+		if p.accept(token.POW) {
+			// ** = kwargs (must check POW before STAR since ** is one token)
+			kwargs = true
+			if seenVariadic {
+				p.errExpected(spanPos(p.file, p.cur), "only one variadic/**kwargs parameter allowed")
+			}
+			seenVariadic = true
+		} else if p.accept(token.STAR) {
 			variadic = true
 			if seenVariadic {
-				p.errExpected(spanPos(p.file, p.cur), "only one variadic parameter allowed")
+				p.errExpected(spanPos(p.file, p.cur), "only one variadic/**kwargs parameter allowed")
 			}
 			seenVariadic = true
 		}
@@ -185,8 +193,8 @@ func (p *Parser) parseParams() []ast.Param {
 			def = p.parseExpr()
 		}
 
-		if variadic && def != nil {
-			p.errExpected(def.SpanOf(), "variadic parameter cannot have default value")
+		if (variadic || kwargs) && def != nil {
+			p.errExpected(def.SpanOf(), "variadic/**kwargs parameter cannot have default value")
 		}
 
 		out = append(out, ast.Param{
@@ -195,6 +203,7 @@ func (p *Parser) parseParams() []ast.Param {
 			Default:  def,
 			Mode:     paramMode,
 			Variadic: variadic,
+			Kwargs:   kwargs,
 			Span:     ast.JoinSpan(paramStart, lastSpan(def, name.Span)),
 		})
 
