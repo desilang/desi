@@ -620,8 +620,30 @@ pub def exists() -> int:
 	return __qs_exists()
 
 pub def update(col: str, val: str) -> int:
-	"""UPDATE matching rows (like Django's QuerySet.update())."""
+	"""UPDATE single column for matching rows."""
 	return __qs_update(col, val)
+
+pub def filter(**lookups: str) -> int:
+	"""Django-style kwargs WHERE. Call db.objects(table) first.
+	Usage: db.filter(name="Alice", age__gt="21")"""
+	for lookup, val in lookups.items():
+		__qs_filter(lookup, val)
+	0
+
+pub def update_fields(**fields: str) -> int:
+	"""Django-style kwargs UPDATE. Call db.objects(table) + db.filter() first.
+	Usage: db.update_fields(email="new@test.com", age="31")"""
+	for col, val in fields.items():
+		__qs_update(col, val)
+	0
+
+pub def get(**filters: str) -> int:
+	"""Get single row matching filters. Returns row count (0 or 1).
+	Usage: db.objects("users"); db.get(name="Alice")"""
+	for lookup, val in filters.items():
+		__qs_filter(lookup, val)
+	__qs_limit(1)
+	return __qs_fetch()
 
 pub def delete() -> int:
 	"""DELETE matching rows (like Django's QuerySet.delete())."""
