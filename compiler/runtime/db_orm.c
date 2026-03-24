@@ -52,6 +52,7 @@ typedef struct {
     char default_val[256];
     char ref_table[128]; // for FOREIGN_KEY
     char ref_field[64];  // for FOREIGN_KEY
+    char on_delete[32];  // for FOREIGN_KEY: CASCADE, PROTECT, SET_NULL, etc.
     char custom_type[128]; // for FIELD_CUSTOM and FIELD_ARRAY element type
 } FieldDef;
 
@@ -97,6 +98,19 @@ int32_t __orm_auto_field(const char* name) {
     memset(f, 0, sizeof(FieldDef));
     strncpy(f->name, name ? name : "id", sizeof(f->name) - 1);
     f->type = FIELD_AUTO;
+    f->primary_key = 1;
+    return 0;
+}
+
+// Add BigAutoField (BIGSERIAL primary key)
+int32_t __orm_bigauto_field(const char* name) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name ? name : "id", sizeof(f->name) - 1);
+    f->type = FIELD_AUTO; // reuse AUTO, SQL gen checks name/pk
     f->primary_key = 1;
     return 0;
 }
@@ -211,8 +225,8 @@ int32_t __orm_json_field(const char* name, int32_t nullable) {
     return 0;
 }
 
-// Add ForeignKey
-int32_t __orm_foreign_key(const char* name, const char* ref_table, const char* ref_field, int32_t nullable) {
+// Add ForeignKey with on_delete
+int32_t __orm_foreign_key(const char* name, const char* ref_table, const char* ref_field, const char* on_delete, int32_t nullable) {
     if (g_current_model < 0) return -1;
     ModelDef* m = &g_models[g_current_model];
     if (m->field_count >= 64) return -1;
@@ -222,6 +236,8 @@ int32_t __orm_foreign_key(const char* name, const char* ref_table, const char* r
     f->type = FIELD_FOREIGN_KEY;
     if (ref_table) strncpy(f->ref_table, ref_table, sizeof(f->ref_table) - 1);
     if (ref_field) strncpy(f->ref_field, ref_field, sizeof(f->ref_field) - 1);
+    if (on_delete && strlen(on_delete) > 0) strncpy(f->on_delete, on_delete, sizeof(f->on_delete) - 1);
+    else strncpy(f->on_delete, "CASCADE", sizeof(f->on_delete) - 1); // default
     f->nullable = nullable;
     return 0;
 }
@@ -388,6 +404,9 @@ char* __orm_create_table_sql(const char* table_name) {
 
         if (f->type == FIELD_FOREIGN_KEY) {
             pos += sprintf(sql + pos, " REFERENCES %s(%s)", f->ref_table, f->ref_field);
+            if (strlen(f->on_delete) > 0) {
+                pos += sprintf(sql + pos, " ON DELETE %s", f->on_delete);
+            }
         }
     }
 

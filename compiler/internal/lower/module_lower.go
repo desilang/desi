@@ -205,6 +205,11 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			methods := LowerClassMethods(cd, info, src, globalNames)
 			out.Funcs = append(out.Funcs, methods...)
 
+			// @model ORM init: generate __orm_init_ClassName for model registration
+			if modelInit := LowerModelInit(cd, info); modelInit != nil {
+				out.Funcs = append(out.Funcs, modelInit)
+			}
+
 			// Monomorphization: Generate specialized versions for generic classes
 			if len(cd.TypeParams) > 0 {
 				monomorphized := LowerMonomorphizedClass(cd, info, src, globalNames)
@@ -284,6 +289,34 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 						}
 					}
 				}
+			}
+		}
+	}
+
+	// Inject @model init calls into __top__ function so models register before main()
+	var modelInitNames []string
+	for _, d := range mod.Decls {
+		if cd, ok := d.(*ast.ClassDecl); ok {
+			if t := info.Types[cd]; t != nil {
+				if cls, ok := t.(*types.Class); ok && cls.IsModel {
+					modelInitNames = append(modelInitNames, fmt.Sprintf("__orm_init_%s", cd.Name.Name))
+				}
+			}
+		}
+	}
+	if len(modelInitNames) > 0 {
+		// Find __top__ function and prepend init calls
+		for _, fn := range out.Funcs {
+			if fn.Name == "__top__" && len(fn.Blocks) > 0 {
+				var initStmts []hir.Stmt
+				for _, initName := range modelInitNames {
+					initStmts = append(initStmts, &hir.Call{
+						Fn:   initName,
+						Type: "void",
+					})
+				}
+				fn.Blocks[0].Stmts = append(initStmts, fn.Blocks[0].Stmts...)
+				break
 			}
 		}
 	}

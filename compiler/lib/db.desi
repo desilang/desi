@@ -97,7 +97,16 @@ pub def __orm_datetime_field(name: str, auto_now: int, auto_now_add: int, nullab
 pub def __orm_json_field(name: str, nullable: int) -> int
 
 @extern("C")
-pub def __orm_foreign_key(name: str, ref_table: str, ref_field: str, nullable: int) -> int
+pub def __orm_foreign_key(name: str, ref_table: str, ref_field: str, on_delete: str, nullable: int) -> int
+
+@extern("C")
+pub def __orm_bigauto_field(name: str) -> int
+
+@extern("C")
+pub def __orm_uuid_field(name: str, nullable: int, unique_flag: int) -> int
+
+@extern("C")
+pub def __orm_decimal_field(name: str, precision: int, scale: int, nullable: int) -> int
 
 @extern("C")
 pub def __orm_create_table_sql(table_name: str) -> str
@@ -228,9 +237,9 @@ pub def json_field(name: str, nullable: int) -> int:
 	"""Add JSON field (JSONB on Postgres, JSON on MySQL)."""
 	return __orm_json_field(name, nullable)
 
-pub def foreign_key(name: str, ref_table: str, ref_field: str, nullable: int) -> int:
-	"""Add foreign key field."""
-	return __orm_foreign_key(name, ref_table, ref_field, nullable)
+pub def foreign_key(name: str, ref_table: str, ref_field: str, on_delete: str, nullable: int) -> int:
+	"""Add foreign key field with on_delete constraint."""
+	return __orm_foreign_key(name, ref_table, ref_field, on_delete, nullable)
 
 @extern("C")
 pub def __orm_uuid_field(name: str, nullable: int, unique_flag: int) -> int
