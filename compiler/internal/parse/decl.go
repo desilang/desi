@@ -305,8 +305,9 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		p.next()
 	}
 
-	// Parse type parameters: name[T1, T2] or name<T1, T2>
+	// Parse type parameters: name[T1, T2] or name<T1, T2> or name(arg1, key=val)
 	var params []*ast.TypeName
+	var kwParams []ast.TypeNameKwArg
 	if p.accept(token.LBRACK) {
 		for {
 			param := p.parseTypeName()
@@ -327,12 +328,36 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 			}
 		}
 		p.expectTypeGT() // Use expectTypeGT for nested generics like Box<Box<int>>
+	} else if p.accept(token.LPAREN) {
+		// Call-like params: CharField(100, unique=true), ForeignKey(User, on_delete=CASCADE)
+		if p.cur.Tok != token.RPAREN {
+			for {
+				// Check for keyword arg: IDENT = value
+				if p.cur.Tok == token.IDENT && p.peek.Tok == token.ASSIGN {
+					key := p.cur.Lexeme
+					p.next() // consume key
+					p.next() // consume =
+					// Value can be IDENT (CASCADE, true, false), INT, or a TypeName
+					val := p.parseTypeConstructorArg()
+					kwParams = append(kwParams, ast.TypeNameKwArg{Key: key, Value: val})
+				} else {
+					// Positional arg: can be IDENT (User, CASCADE), INT (100, 200), true/false
+					param := p.parseTypeConstructorArg()
+					params = append(params, param)
+				}
+				if !p.accept(token.COMMA) {
+					break
+				}
+			}
+		}
+		p.expect(token.RPAREN, ")")
 	}
 
 	firstType := &ast.TypeName{
-		Name:   b.String(),
-		Params: params,
-		Span:   ast.JoinSpan(start, spanPos(p.file, p.cur)),
+		Name:     b.String(),
+		Params:   params,
+		KwParams: kwParams,
+		Span:     ast.JoinSpan(start, spanPos(p.file, p.cur)),
 	}
 
 	// Parse union types: type1|type2|type3
@@ -353,5 +378,30 @@ func (p *Parser) parseTypeName() *ast.TypeName {
 		Name:       "", // Union types don't have a single name
 		UnionTypes: variants,
 		Span:       ast.JoinSpan(start, spanPos(p.file, p.cur)),
+	}
+}
+
+// parseTypeConstructorArg parses a single argument in a type constructor call.
+// Handles: IDENT (User, CASCADE), INT (100, 200), true/false/none keywords.
+// Returns a TypeName where the Name field holds the string representation.
+func (p *Parser) parseTypeConstructorArg() *ast.TypeName {
+	start := spanPos(p.file, p.cur)
+	switch p.cur.Tok {
+	case token.INT_DEC:
+		name := p.cur.Lexeme
+		p.next()
+		return &ast.TypeName{Name: name, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	case token.KW_true:
+		p.next()
+		return &ast.TypeName{Name: "true", Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	case token.KW_false:
+		p.next()
+		return &ast.TypeName{Name: "false", Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	case token.KW_none:
+		p.next()
+		return &ast.TypeName{Name: "none", Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	default:
+		// Regular TypeName (IDENT, dotted paths, etc.)
+		return p.parseTypeName()
 	}
 }

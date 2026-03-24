@@ -1,0 +1,44 @@
+# Example 441: @model decorator for Django-style ORM
+# Demonstrates: @model class syntax, ORM field types, ForeignKey, kwargs, SQL generation
+
+import db
+
+# Explicitly set the SQL dialect (defaults to postgres)
+db.use_postgres()
+
+@model("users")
+class User:
+	pub name: CharField(100)
+	pub email: CharField(200, unique=true)
+	pub age: IntField(default=0)
+	pub active: BoolField(default=true)
+	pub created_at: DateTimeField(auto_now_add=true)
+
+@model("posts")
+class Post:
+	pub title: CharField(200)
+	pub body: TextField(nullable=true)
+	pub author_id: ForeignKey(User, on_delete=CASCADE)
+
+def main() -> int:
+	print(db.create_table_sql("users"))
+	print("---")
+	print(db.create_table_sql("posts"))
+	0
+
+# EXPECTED_OUTPUT:
+# CREATE TABLE IF NOT EXISTS users (
+#   id SERIAL PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   email VARCHAR(200) NOT NULL UNIQUE,
+#   age INTEGER NOT NULL DEFAULT 0,
+#   active BOOLEAN NOT NULL DEFAULT FALSE,
+#   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+# )
+# ---
+# CREATE TABLE IF NOT EXISTS posts (
+#   id SERIAL PRIMARY KEY,
+#   title VARCHAR(200) NOT NULL,
+#   body TEXT,
+#   author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
+# )

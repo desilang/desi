@@ -113,6 +113,22 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		Decl:          d,
 	}
 
+	// Check for @model("tablename") decorator
+	for _, dec := range d.Decorators {
+		if dec.Name.Name == "model" {
+			cls.IsModel = true
+			if len(dec.Args) > 0 {
+				if sl, ok := dec.Args[0].(*ast.StrLit); ok {
+					cls.TableName = sl.Value
+				}
+			}
+			// Default table name to lowercase class name if not specified
+			if cls.TableName == "" {
+				cls.TableName = strings.ToLower(d.Name.Name) + "s"
+			}
+		}
+	}
+
 	// Add type parameters
 	for _, tp := range d.TypeParams {
 		bounds := extractBoundsFromTypeParams(tp)
@@ -414,15 +430,51 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		}
 	}
 
-	// Resolve fields
+	// Resolve fields (with ORM field type handling for @model classes)
 	for _, field := range d.Fields {
-		fieldType := c.resolveType(field.Type)
+		var fieldType types.T
+
+		if cls.IsModel && field.Type != nil {
+			// Check if field type is an ORM field descriptor
+			ormField, desiType := c.resolveOrmField(field.Name.Name, field.Type)
+			if ormField != nil {
+				cls.ModelFields = append(cls.ModelFields, *ormField)
+				fieldType = desiType
+			} else {
+				fieldType = c.resolveType(field.Type)
+			}
+		} else {
+			fieldType = c.resolveType(field.Type)
+		}
+
 		cls.Fields = append(cls.Fields, types.Field{
 			Name:  field.Name.Name,
 			Type:  fieldType,
 			IsPub: field.Pub,
 			IsMut: field.Mut,
 		})
+	}
+
+	// For @model classes: if no field has PrimaryKey, auto-add id: AutoField
+	if cls.IsModel {
+		hasPK := false
+		for _, mf := range cls.ModelFields {
+			if mf.PrimaryKey || mf.Kind == types.OrmAuto || mf.Kind == types.OrmBigAuto {
+				hasPK = true
+				break
+			}
+		}
+		if !hasPK {
+			// Auto-add id: AutoField (like Django)
+			autoID := types.OrmField{
+				Name:       "id",
+				Kind:       types.OrmAuto,
+				PrimaryKey: true,
+			}
+			cls.ModelFields = append([]types.OrmField{autoID}, cls.ModelFields...)
+			// Also add to Fields for the class type
+			cls.Fields = append([]types.Field{{Name: "id", Type: types.Int, IsPub: true}}, cls.Fields...)
+		}
 	}
 
 	// Check nested classes EARLY (before method bodies need them)
@@ -834,4 +886,214 @@ func isFFICompatible(t types.T) bool {
 	}
 	// str, list, dict, set, etc. are NOT FFI-safe
 	return false
+}
+
+// resolveOrmField checks if a TypeName is an ORM field type (AutoField, CharField, etc.)
+// and returns the OrmField descriptor + corresponding Desi runtime type.
+// Returns (nil, nil) if the type name is not an ORM field type.
+func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.OrmField, types.T) {
+	if tn == nil {
+		return nil, nil
+	}
+
+	var kind types.OrmFieldKind
+	var desiType types.T
+	recognized := true
+
+	switch tn.Name {
+	case "AutoField":
+		kind = types.OrmAuto
+		desiType = types.Int
+	case "BigAutoField":
+		kind = types.OrmBigAuto
+		desiType = types.Int
+	case "IntField":
+		kind = types.OrmInt
+		desiType = types.Int
+	case "BigIntField":
+		kind = types.OrmBigInt
+		desiType = types.Int
+	case "CharField":
+		kind = types.OrmChar
+		desiType = types.Str
+	case "TextField":
+		kind = types.OrmText
+		desiType = types.Str
+	case "BoolField":
+		kind = types.OrmBool
+		desiType = types.Bool
+	case "FloatField":
+		kind = types.OrmFloat
+		desiType = types.Float
+	case "DecimalField":
+		kind = types.OrmDecimal
+		desiType = types.Str
+	case "DateTimeField":
+		kind = types.OrmDateTime
+		desiType = types.Str
+	case "UUIDField":
+		kind = types.OrmUUID
+		desiType = types.Str
+	case "JsonField":
+		kind = types.OrmJson
+		desiType = types.Str
+	case "ForeignKey":
+		kind = types.OrmForeignKey
+		desiType = types.Int
+	default:
+		recognized = false
+	}
+
+	if !recognized {
+		return nil, nil
+	}
+
+	of := &types.OrmField{
+		Name: fieldName,
+		Kind: kind,
+	}
+
+	// Set defaults based on field kind
+	switch kind {
+	case types.OrmAuto, types.OrmBigAuto:
+		of.PrimaryKey = true
+	case types.OrmChar:
+		of.MaxLength = 255 // default VARCHAR length
+	}
+
+	// Parse TypeName.Params for field options (bracket or paren positional params)
+	// e.g., CharField(100) or CharField[100] → MaxLength=100
+	// e.g., ForeignKey(User) or ForeignKey[User, CASCADE] → RefTable, RefColumn, OnDelete
+	for i, param := range tn.Params {
+		switch kind {
+		case types.OrmChar:
+			if i == 0 {
+				// First param is max_length for CharField
+				if v := parseIntFromTypeName(param); v > 0 {
+					of.MaxLength = v
+				}
+			}
+		case types.OrmDecimal:
+			if i == 0 {
+				if v := parseIntFromTypeName(param); v > 0 {
+					of.Precision = v
+				}
+			} else if i == 1 {
+				if v := parseIntFromTypeName(param); v > 0 {
+					of.Scale = v
+				}
+			}
+		case types.OrmForeignKey:
+			if i == 0 {
+				// First param: model class name (Django-style)
+				// Resolve class → table name and auto-detect PK column
+				refTable := param.Name
+				refColumn := "id" // default PK column
+				for _, node := range c.info.Types {
+					if cls, ok := node.(*types.Class); ok && cls.IsModel && cls.Name == param.Name {
+						refTable = cls.TableName
+						// Auto-resolve PK column from the referenced model's fields
+						for _, mf := range cls.ModelFields {
+							if mf.PrimaryKey {
+								refColumn = mf.Name
+								break
+							}
+						}
+						break
+					}
+				}
+				of.RefTable = refTable
+				of.RefColumn = refColumn
+				of.OnDelete = "CASCADE" // default on_delete
+			} else if i == 1 {
+				// Second positional param: on_delete (bracket syntax fallback)
+				of.OnDelete = param.Name
+			}
+		case types.OrmInt, types.OrmBigInt:
+			if i == 0 {
+				// First positional param for IntField is default value
+				of.Default = param.Name
+			}
+		}
+
+		// Common options based on param name (bracket syntax flags)
+		switch param.Name {
+		case "nullable":
+			of.Nullable = true
+		case "unique":
+			of.Unique = true
+		case "db_index":
+			of.DbIndex = true
+		case "primary_key":
+			of.PrimaryKey = true
+		case "auto_now":
+			of.AutoNow = true
+		case "auto_now_add":
+			of.AutoNowAdd = true
+		}
+	}
+
+	// Parse TypeName.KwParams for keyword arguments (paren syntax)
+	// e.g., CharField(100, unique=true) → unique kwarg
+	// e.g., ForeignKey(User, on_delete=CASCADE) → on_delete kwarg
+	for _, kw := range tn.KwParams {
+		switch kw.Key {
+		case "on_delete":
+			if kw.Value != nil {
+				of.OnDelete = kw.Value.Name
+			}
+		case "nullable":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.Nullable = true
+			}
+		case "unique":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.Unique = true
+			}
+		case "db_index":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.DbIndex = true
+			}
+		case "primary_key":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.PrimaryKey = true
+			}
+		case "auto_now":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.AutoNow = true
+			}
+		case "auto_now_add":
+			if kw.Value != nil && kw.Value.Name == "true" {
+				of.AutoNowAdd = true
+			}
+		case "default":
+			if kw.Value != nil {
+				of.Default = kw.Value.Name
+			}
+		case "max_length":
+			if kw.Value != nil {
+				if v := parseIntFromTypeName(kw.Value); v > 0 {
+					of.MaxLength = v
+				}
+			}
+		}
+	}
+
+	return of, desiType
+}
+
+// parseIntFromTypeName tries to parse a TypeName as an integer (e.g., for CharField[100])
+func parseIntFromTypeName(tn *ast.TypeName) int {
+	if tn == nil {
+		return 0
+	}
+	n := 0
+	for _, c := range tn.Name {
+		if c >= '0' && c <= '9' {
+			n = n*10 + int(c-'0')
+		} else {
+			return 0
+		}
+	}
+	return n
 }

@@ -459,3 +459,170 @@ func resolveASTTypeNameToT(tn *ast.TypeName, info *check.Info) types.T {
 
 	return nil
 }
+
+// LowerModelInit generates an init function for a @model class.
+// The function emits calls to __orm_model(tablename) + __orm_*_field(...) for each field.
+// This function should be called at program start before main().
+func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
+	var cls *types.Class
+	if t := info.Types[cd]; t != nil {
+		cls, _ = t.(*types.Class)
+	}
+	if cls == nil || !cls.IsModel {
+		return nil
+	}
+
+	// Create init function: __orm_init_ClassName
+	initName := fmt.Sprintf("__orm_init_%s", cd.Name.Name)
+	b := hir.NewFunc(initName)
+	b.Func().RetType = "void"
+
+	entry := hir.NewBlock("entry")
+
+	// 1. Emit __orm_model(tablename)
+	entry.Stmts = append(entry.Stmts, &hir.Call{
+		Fn:   "__orm_model",
+		Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
+		Type: "i32",
+	})
+
+	// 2. Emit field registration for each ORM field
+	for _, mf := range cls.ModelFields {
+		switch mf.Kind {
+		case types.OrmAuto:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_auto_field",
+				Args: []hir.Value{hir.ConstStr{Text: mf.Name}},
+				Type: "i32",
+			})
+		case types.OrmBigAuto:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_bigauto_field",
+				Args: []hir.Value{hir.ConstStr{Text: mf.Name}},
+				Type: "i32",
+			})
+		case types.OrmInt:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_int_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.HasDefault)},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmBigInt:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_bigint_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmChar:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_char_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: fmt.Sprintf("%d", mf.MaxLength)},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+					hir.ConstInt{Text: boolToInt(mf.Unique)},
+				},
+				Type: "i32",
+			})
+		case types.OrmText:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_text_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmBool:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_bool_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.HasDefault)},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmFloat:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_float_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmDecimal:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_decimal_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: fmt.Sprintf("%d", mf.Precision)},
+					hir.ConstInt{Text: fmt.Sprintf("%d", mf.Scale)},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmDateTime:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_datetime_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.AutoNow)},
+					hir.ConstInt{Text: boolToInt(mf.AutoNowAdd)},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmUUID:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_uuid_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+					hir.ConstInt{Text: boolToInt(mf.Unique)},
+				},
+				Type: "i32",
+			})
+		case types.OrmJson:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_json_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		case types.OrmForeignKey:
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_foreign_key",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstStr{Text: mf.RefTable},
+					hir.ConstStr{Text: mf.RefColumn},
+					hir.ConstStr{Text: mf.OnDelete},
+					hir.ConstInt{Text: boolToInt(mf.Nullable)},
+				},
+				Type: "i32",
+			})
+		}
+	}
+
+	entry.Stmts = append(entry.Stmts, &hir.Ret{})
+	b.Func().Blocks = []*hir.Block{entry}
+	return b.Func()
+}
+
+func boolToInt(b bool) string {
+	if b {
+		return "1"
+	}
+	return "0"
+}

@@ -83,19 +83,38 @@ if found > 0:
 
 ## Model Definition
 
-### Field Types
+### Django-Style `@model` Decorator (Recommended)
+
+```desi
+@model("users")
+class User:
+    pub name: CharField(100)
+    pub email: CharField(200, unique=true)
+    pub age: IntField(default=0)
+    pub active: BoolField(default=true)
+
+@model("posts")
+class Post:
+    pub title: CharField(200)
+    pub body: TextField(nullable=true)
+    pub author_id: ForeignKey(User, on_delete=CASCADE)
+```
+
+See the **[Models Guide](models.md)** for all field types, options, and ForeignKey details.
+
+### Procedural API (Low-Level)
 
 ```desi
 db.model("products")
-db.auto_field("id")                              # Auto-increment PK
-db.char_field("name", 200, 0, 0)                 # VARCHAR(200)
-db.text_field("description", 1)                  # TEXT, nullable
-db.int_field("price", 0, 0)                      # INTEGER
-db.float_field("weight", 1)                      # FLOAT, nullable
-db.bool_field("active", 1, 0)                    # BOOLEAN, default true
-db.datetime_field("created_at", 0, 1, 0)         # TIMESTAMP, auto_now_add
-db.json_field("metadata", 1)                     # JSONB/JSON, nullable
-db.foreign_key("category_id", "categories", "id", 0) # FK reference
+db.auto_field("id")
+db.char_field("name", 200, 0, 0)
+db.text_field("description", 1)
+db.int_field("price", 0, 0)
+db.float_field("weight", 1)
+db.bool_field("active", 1, 0)
+db.datetime_field("created_at", 0, 1, 0)
+db.json_field("metadata", 1)
+db.foreign_key("category_id", "categories", "id", "CASCADE", 0)
 ```
 
 ### SQL Generation

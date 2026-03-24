@@ -9,10 +9,18 @@ type Node interface{ SpanOf() diag.Span }
 
 type TypeName struct {
 	Name       string
-	Params     []*TypeName // e.g., list[int], dict[str, int]
-	UnionTypes []*TypeName // e.g., int|float|none (if present, Name is empty)
-	TupleTypes []*TypeName // e.g., (int, str) (if present, Name is empty)
+	Params     []*TypeName    // e.g., list[int], dict[str, int], CharField(100)
+	KwParams   []TypeNameKwArg // keyword params: on_delete=CASCADE, unique=true
+	UnionTypes []*TypeName    // e.g., int|float|none (if present, Name is empty)
+	TupleTypes []*TypeName    // e.g., (int, str) (if present, Name is empty)
 	Span       diag.Span
+}
+
+// TypeNameKwArg represents a keyword argument in a type constructor.
+// e.g., CharField(100, unique=true) → KwParams: [{Key: "unique", Value: "true"}]
+type TypeNameKwArg struct {
+	Key   string
+	Value *TypeName
 }
 
 // TypeParamNode represents a type parameter with optional trait bounds.

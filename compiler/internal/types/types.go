@@ -250,6 +250,49 @@ type Class struct {
 	IsAbstract      bool             // true if class has any abstract methods
 	AbstractMethods map[string]bool  // set of abstract method names
 	Decl            *ast.ClassDecl   // Backlink to AST for monomorphization
+	// ORM model support (@model decorator)
+	IsModel         bool             // true if class has @model decorator
+	TableName       string           // SQL table name from @model("tablename")
+	ModelFields     []OrmField       // ORM field descriptors (populated by type checker)
+}
+
+// OrmFieldKind identifies the ORM field type
+type OrmFieldKind int
+
+const (
+	OrmAuto OrmFieldKind = iota
+	OrmBigAuto
+	OrmInt
+	OrmBigInt
+	OrmChar
+	OrmText
+	OrmBool
+	OrmFloat
+	OrmDecimal
+	OrmDateTime
+	OrmUUID
+	OrmJson
+	OrmForeignKey
+)
+
+// OrmField represents an ORM model field descriptor
+type OrmField struct {
+	Name       string       // field name
+	Kind       OrmFieldKind // AutoField, CharField, etc.
+	MaxLength  int          // for CharField
+	Precision  int          // for DecimalField
+	Scale      int          // for DecimalField
+	Nullable   bool         // nullable=true
+	Unique     bool         // unique=true
+	DbIndex    bool         // db_index=true
+	PrimaryKey bool         // primary_key=true (AutoField is always PK)
+	Default    string       // default value as string
+	HasDefault bool         // whether a default was specified
+	AutoNow    bool         // auto_now=true (DateTimeField)
+	AutoNowAdd bool         // auto_now_add=true (DateTimeField)
+	RefTable   string       // ForeignKey reference table
+	RefColumn  string       // ForeignKey reference column
+	OnDelete   string       // ForeignKey on_delete: CASCADE, PROTECT, etc.
 }
 
 // ClassConstant represents a class-level constant
