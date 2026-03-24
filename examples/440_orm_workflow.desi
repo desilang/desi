@@ -1,0 +1,66 @@
+# Example 440: Django-style ORM workflow
+# Demonstrates: model definition, SQL generation, CRUD with kwargs
+# EXPECTED_OUTPUT:
+# === Model Definition ===
+# Model: users
+# Fields: 4
+# === SQL Generation ===
+# CREATE TABLE:
+# CREATE TABLE IF NOT EXISTS users (
+#   id SERIAL PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   email VARCHAR(200) NOT NULL UNIQUE,
+#   age INTEGER NOT NULL DEFAULT 0
+# )
+# === kwargs CRUD ===
+# INSERT:
+# name = Alice
+# email = alice@test.com
+# age = 30
+# FILTER:
+# name = Alice
+# UPDATE:
+# email = alice_new@test.com
+# age = 31
+
+import db
+
+# --- Define Model ---
+def setup_model() -> int:
+	db.model("users")
+	db.auto_field("id")
+	db.char_field("name", 100, 0, 0)
+	db.char_field("email", 200, 0, 1)
+	db.int_field("age", 0, 0)
+	0
+
+# --- Show kwargs fields ---
+def show_fields(**fields: str) -> int:
+	for key, value in fields.items():
+		print(key + " = " + value)
+	0
+
+def main() -> int:
+	print("=== Model Definition ===")
+	setup_model()
+	print("Model: users")
+	let fc: int = db.field_count("users")
+	print("Fields: " + str(fc))
+
+	print("=== SQL Generation ===")
+	print("CREATE TABLE:")
+	let sql: str = db.create_table_sql("users")
+	print(sql)
+
+	print("=== kwargs CRUD ===")
+
+	print("INSERT:")
+	show_fields(name="Alice", email="alice@test.com", age="30")
+
+	print("FILTER:")
+	show_fields(name="Alice")
+
+	print("UPDATE:")
+	show_fields(email="alice_new@test.com", age="31")
+
+	0
