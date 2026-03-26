@@ -143,18 +143,40 @@ schema_only = true
 
 # Full connection
 [database]
-engine = "mysql"
+engine = "postgres"
 host = "localhost"
-port = 3306
 name = "myapp_db"
 user = "admin"
 password = "secret"
+ssl_mode = "require"
+charset = "UTF8"
+timezone = "UTC"
+prefix = "app1_"
 ```
 
-- `engine` is **required**: `"postgres"` or `"mysql"`
-- `schema_only = true`: only `engine` needed (for SQL generation)
-- Without `schema_only`: `host`, `name`, `user` are required
-- The compiler auto-configures the SQL dialect — no manual `db.use_postgres()` needed
+### Required Fields
+
+| Field | When Required | Description |
+|-------|---------------|-------------|
+| `engine` | Always | `"postgres"` or `"mysql"` |
+| `host` | Not schema_only | Hostname or IP (`"localhost"`, `"192.168.1.100"`) |
+| `name` | Not schema_only | Database name |
+| `user` | Not schema_only | DB username |
+
+### Optional Fields
+
+| Field | Default | Description |
+|-------|---------|-------------|
+| `schema_only` | `false` | If `true`, skip connection fields (SQL generation only) |
+| `port` | `5432` / `3306` | Auto-defaults per engine |
+| `password` | — | DB password |
+| `ssl_mode` | — | `"disable"`, `"require"`, `"verify-ca"`, `"verify-full"` |
+| `charset` | — | Character encoding (`"utf8mb4"`, `"UTF8"`) |
+| `timezone` | — | Connection timezone (`"UTC"`, `"America/Chicago"`) |
+| `prefix` | — | Table name prefix for multi-tenancy |
+| `options` | — | Extra DSN/connection string parameters |
+
+The compiler auto-configures the SQL dialect — no manual `db.use_postgres()` needed
 
 ## Generating SQL
 

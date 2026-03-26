@@ -57,13 +57,20 @@ type Extern struct {
 }
 
 type Database struct {
-	Engine     string // "postgres" or "mysql" (required)
-	SchemaOnly bool   // if true, no connection fields needed
-	Host       string // DB hostname
-	Port       string // DB port (string for manifest parsing)
-	Name       string // database name
-	User       string // DB username
-	Password   string // DB password
+	Engine      string // "postgres" or "mysql" (required)
+	SchemaOnly  bool   // if true, no connection fields needed
+	Host        string // DB hostname or IP address
+	Port        string // DB port (auto-defaults: 5432/postgres, 3306/mysql)
+	Name        string // database name
+	User        string // DB username
+	Password    string // DB password
+	SslMode     string // TLS mode: "disable", "require", "verify-ca", "verify-full"
+	Charset     string // character encoding: "utf8mb4", "UTF8"
+	Timezone    string // connection timezone: "UTC", "America/Chicago"
+	Prefix      string // table name prefix for multi-tenancy: "app1_"
+	MaxConns    string // max open connections (future use)
+	ConnTimeout string // connection timeout in seconds (future use)
+	Options     string // extra DSN/connection string parameters
 }
 
 // EntryPath resolves the absolute entry file (relative to manifest dir).
@@ -220,6 +227,25 @@ func Load(path string) (Manifest, []diag.Diagnostic) {
 					"database.user required (or set schema_only = true)"))
 			}
 		}
+		// Auto-default port based on engine
+		if m.Database.Port == "" {
+			switch m.Database.Engine {
+			case "postgres":
+				m.Database.Port = "5432"
+			case "mysql":
+				m.Database.Port = "3306"
+			}
+		}
+		// Validate ssl_mode if provided
+		if m.Database.SslMode != "" {
+			switch strings.ToLower(m.Database.SslMode) {
+			case "disable", "require", "verify-ca", "verify-full", "prefer", "allow":
+				m.Database.SslMode = strings.ToLower(m.Database.SslMode)
+			default:
+				diags = append(diags, simpleDiag("project.bad_db_ssl", "DPM0009", path,
+					fmt.Sprintf("invalid database.ssl_mode %q (expected disable|require|verify-ca|verify-full)", m.Database.SslMode)))
+			}
+		}
 	}
 	return m, diags
 }
@@ -367,6 +393,20 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 				m.Database.User = parseString(val)
 			case "password":
 				m.Database.Password = parseString(val)
+			case "ssl_mode":
+				m.Database.SslMode = parseString(val)
+			case "charset":
+				m.Database.Charset = parseString(val)
+			case "timezone":
+				m.Database.Timezone = parseString(val)
+			case "prefix":
+				m.Database.Prefix = parseString(val)
+			case "max_conns":
+				m.Database.MaxConns = parseString(val)
+			case "conn_timeout":
+				m.Database.ConnTimeout = parseString(val)
+			case "options":
+				m.Database.Options = parseString(val)
 			default:
 				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: database.%s", key)))
 			}
