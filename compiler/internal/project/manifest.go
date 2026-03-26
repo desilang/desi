@@ -18,6 +18,7 @@ type Manifest struct {
 	Target      Target
 	Diagnostics Diagnostics
 	FFI         FFI
+	Database    Database
 	path        string // absolute path to manifest
 }
 
@@ -53,6 +54,16 @@ type FFI struct {
 type Extern struct {
 	Name string
 	Lib  string
+}
+
+type Database struct {
+	Engine     string // "postgres" or "mysql" (required)
+	SchemaOnly bool   // if true, no connection fields needed
+	Host       string // DB hostname
+	Port       string // DB port (string for manifest parsing)
+	Name       string // database name
+	User       string // DB username
+	Password   string // DB password
 }
 
 // EntryPath resolves the absolute entry file (relative to manifest dir).
@@ -185,6 +196,31 @@ func Load(path string) (Manifest, []diag.Diagnostic) {
 			diags = append(diags, simpleDiag("project.bad_diag_type", "DPM0002", path, "diagnostics.max_errors must be a string containing an integer"))
 		}
 	}
+	// Validate [database] section
+	if m.Database.Engine != "" {
+		switch strings.ToLower(m.Database.Engine) {
+		case "postgres", "mysql":
+			m.Database.Engine = strings.ToLower(m.Database.Engine)
+		default:
+			diags = append(diags, simpleDiag("project.bad_db_engine", "DPM0007", path,
+				fmt.Sprintf("invalid database.engine %q (expected postgres|mysql)", m.Database.Engine)))
+		}
+		// If not schema_only, require connection fields
+		if !m.Database.SchemaOnly {
+			if m.Database.Host == "" {
+				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+					"database.host required (or set schema_only = true)"))
+			}
+			if m.Database.Name == "" {
+				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+					"database.name required (or set schema_only = true)"))
+			}
+			if m.Database.User == "" {
+				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+					"database.user required (or set schema_only = true)"))
+			}
+		}
+	}
 	return m, diags
 }
 
@@ -222,7 +258,7 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 		if strings.HasPrefix(trim, "[") && strings.HasSuffix(trim, "]") {
 			body := strings.TrimSpace(trim[1 : len(trim)-1])
 			switch body {
-			case "package", "build", "target", "diagnostics", "ffi":
+			case "package", "build", "target", "diagnostics", "ffi", "database":
 				s.section = body
 			default:
 				diags = append(diags, simpleDiag("project.unknown_section", "DPM0001", "", fmt.Sprintf("unknown section: %s", body)))
@@ -314,6 +350,25 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 					}
 				}
 				m.FFI.Externs = append(m.FFI.Externs, ex)
+			}
+		case "database":
+			switch key {
+			case "engine":
+				m.Database.Engine = parseString(val)
+			case "schema_only":
+				m.Database.SchemaOnly = parseString(val) == "true"
+			case "host":
+				m.Database.Host = parseString(val)
+			case "port":
+				m.Database.Port = parseString(val)
+			case "name":
+				m.Database.Name = parseString(val)
+			case "user":
+				m.Database.User = parseString(val)
+			case "password":
+				m.Database.Password = parseString(val)
+			default:
+				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: database.%s", key)))
 			}
 		default:
 			// outside any known section

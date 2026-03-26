@@ -13,6 +13,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/lower"
 	"github.com/desilang/desi/compiler/internal/parse"
+	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/lib"
@@ -90,8 +91,17 @@ func init() {
 	// Register LLVM signatures from imports (Tier-0 compat)
 	registerImportClosureSigs(res.Info.R)
 
+	// Try to read desi.mod for [database] config
+	lowerOpts := lower.LowerModuleOptions{}
+	if _, mp, ok := project.FindRoot(filepath.Dir(file)); ok {
+		manifest, mdiags := project.Load(mp)
+		if len(mdiags) == 0 && manifest.Database.Engine != "" {
+			lowerOpts.DbEngine = manifest.Database.Engine
+		}
+	}
+
 	// Lower the entry module to HIR
-	hm := lower.LowerModuleFromSource(mod, res.Info, src)
+	hm := lower.LowerModuleFromSourceWithOptions(mod, res.Info, src, lowerOpts)
 	if hm == nil || len(hm.Funcs) == 0 {
 		term.Eprintln("emit-ir:", filepath.Base(file)+": no functions to lower")
 		term.Flush()

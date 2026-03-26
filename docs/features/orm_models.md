@@ -182,6 +182,23 @@ C Runtime: __orm_create_table_sql() appends
 
 > **Key fix**: `parseTypeName()` has an early guard (line ~228) that validates the current token. `token.LBRACK` must be included in this guard, or the `[items]` handler further down will never be reached.
 
+### 8. Database Config (`desi.mod`)
+
+`[database]` section in `desi.mod` → auto-configures SQL dialect:
+
+```
+Manifest parses [database].engine → "postgres" | "mysql"
+  → emit_ir_cmd.go reads via project.FindRoot()
+  → passes DbEngine to LowerModuleOptions
+  → module_lower.go injects __orm_set_dialect() + __db_set_dialect()
+     at start of __top__, BEFORE model init calls
+```
+
+**Validation** (in `manifest.go`):
+- `engine`: required, must be `postgres` or `mysql`
+- `schema_only = true`: skip connection field validation
+- Without `schema_only`: `host`, `name`, `user` are required (DPM0008)
+
 ## Supported Keyword Arguments
 
 | Key | Used By | Effect |
