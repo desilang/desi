@@ -38,7 +38,7 @@ class User:
 | `TextField` | `pub bio: TextField` | `TEXT` |
 | `IntField` | `pub age: IntField(default=0)` | `INTEGER DEFAULT 0` |
 | `BigIntField` | `pub count: BigIntField` | `BIGINT` |
-| `BoolField` | `pub active: BoolField(default=true)` | `BOOLEAN DEFAULT FALSE` |
+| `BoolField` | `pub active: BoolField(default=true)` | `BOOLEAN DEFAULT TRUE` |
 | `FloatField` | `pub score: FloatField` | `DOUBLE PRECISION` |
 | `DecimalField` | `pub price: DecimalField(10, 2)` | `DECIMAL(10,2)` |
 | `DateTimeField` | `pub created: DateTimeField(auto_now_add=true)` | `TIMESTAMPTZ DEFAULT NOW()` |
@@ -103,6 +103,34 @@ class Session:
     pub user_id: ForeignKey(User, on_delete=CASCADE)
 ```
 
+## Meta Class
+
+Add a nested `class Meta` inside `@model` to declare multi-column constraints and indexes — just like Django:
+
+```desi
+@model("posts")
+class Post:
+    pub title: CharField(200)
+    pub author_id: ForeignKey(User, on_delete=CASCADE)
+
+    class Meta:
+        unique_together: [title, author_id]
+        indexes: [title]
+```
+
+### Meta Options
+
+| Option | Syntax | SQL Output |
+|--------|--------|------------|
+| `unique_together` | `unique_together: [field1, field2]` | `UNIQUE (field1, field2)` in CREATE TABLE |
+| `indexes` | `indexes: [field1]` | `CREATE INDEX idx_table_field1 ON table (field1)` |
+| `ordering` | `ordering: [-created_at]` | *(query builder, not DDL)* |
+| `abstract` | `abstract: true` | *(skip table generation)* |
+
+- Fields are listed in brackets: `[field1, field2]`
+- Prefix with `-` for descending order: `[-created_at]`
+- Multiple constraints are supported
+
 ## Generating SQL
 
 ```desi
@@ -114,7 +142,7 @@ def main() -> int:
     #   name VARCHAR(100) NOT NULL,
     #   email VARCHAR(200) NOT NULL UNIQUE,
     #   age INTEGER NOT NULL DEFAULT 0,
-    #   active BOOLEAN NOT NULL DEFAULT FALSE,
+    #   active BOOLEAN NOT NULL DEFAULT TRUE,
     #   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     # )
     0
@@ -149,6 +177,10 @@ class Post:
     pub title: CharField(200)
     pub body: TextField(nullable=true)
     pub author_id: ForeignKey(User, on_delete=CASCADE)
+
+    class Meta:
+        unique_together: [title, author_id]
+        indexes: [title]
 
 def main() -> int:
     print(db.create_table_sql("users"))

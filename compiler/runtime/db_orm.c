@@ -124,7 +124,7 @@ int32_t __orm_bigauto_field(const char* name) {
 }
 
 // Add IntField
-int32_t __orm_int_field(const char* name, int32_t default_val, int32_t nullable) {
+int32_t __orm_int_field(const char* name, int32_t has_default, int32_t default_val, int32_t nullable) {
     if (g_current_model < 0) return -1;
     ModelDef* m = &g_models[g_current_model];
     if (m->field_count >= 64) return -1;
@@ -133,7 +133,9 @@ int32_t __orm_int_field(const char* name, int32_t default_val, int32_t nullable)
     strncpy(f->name, name, sizeof(f->name) - 1);
     f->type = FIELD_INT;
     f->nullable = nullable;
-    snprintf(f->default_val, sizeof(f->default_val), "%d", default_val);
+    if (has_default) {
+        snprintf(f->default_val, sizeof(f->default_val), "%d", default_val);
+    }
     return 0;
 }
 
@@ -179,7 +181,7 @@ int32_t __orm_text_field(const char* name, int32_t nullable) {
 }
 
 // Add BoolField
-int32_t __orm_bool_field(const char* name, int32_t default_val, int32_t nullable) {
+int32_t __orm_bool_field(const char* name, int32_t has_default, int32_t default_val, int32_t nullable) {
     if (g_current_model < 0) return -1;
     ModelDef* m = &g_models[g_current_model];
     if (m->field_count >= 64) return -1;
@@ -188,7 +190,9 @@ int32_t __orm_bool_field(const char* name, int32_t default_val, int32_t nullable
     strncpy(f->name, name, sizeof(f->name) - 1);
     f->type = FIELD_BOOL;
     f->nullable = nullable;
-    snprintf(f->default_val, sizeof(f->default_val), "%s", default_val ? "TRUE" : "FALSE");
+    if (has_default) {
+        snprintf(f->default_val, sizeof(f->default_val), "%s", default_val ? "TRUE" : "FALSE");
+    }
     return 0;
 }
 
