@@ -503,11 +503,16 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 				Type: "i32",
 			})
 		case types.OrmInt:
+			intDefVal := "0"
+			if mf.Default != "" {
+				intDefVal = mf.Default
+			}
 			entry.Stmts = append(entry.Stmts, &hir.Call{
 				Fn: "__orm_int_field",
 				Args: []hir.Value{
 					hir.ConstStr{Text: mf.Name},
 					hir.ConstInt{Text: boolToInt(mf.HasDefault)},
+					hir.ConstInt{Text: intDefVal},
 					hir.ConstInt{Text: boolToInt(mf.Nullable)},
 				},
 				Type: "i32",
@@ -542,11 +547,16 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 				Type: "i32",
 			})
 		case types.OrmBool:
+			defVal := "0"
+			if mf.Default == "true" {
+				defVal = "1"
+			}
 			entry.Stmts = append(entry.Stmts, &hir.Call{
 				Fn: "__orm_bool_field",
 				Args: []hir.Value{
 					hir.ConstStr{Text: mf.Name},
 					hir.ConstInt{Text: boolToInt(mf.HasDefault)},
+					hir.ConstInt{Text: defVal},
 					hir.ConstInt{Text: boolToInt(mf.Nullable)},
 				},
 				Type: "i32",

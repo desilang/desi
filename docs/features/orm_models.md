@@ -123,10 +123,18 @@ type OrmField struct {
     Nullable   bool
     Unique     bool
     Default    string
+    HasDefault bool          // distinguishes "no default" from "default=0"
     OnDelete   string        // ForeignKey: CASCADE, PROTECT, etc.
     RefTable   string        // ForeignKey: referenced table
     RefColumn  string        // ForeignKey: referenced column
     // + more options ...
+}
+
+type OrmMeta struct {
+    UniqueConstraints [][]string  // [["title", "author_id"]]
+    Indexes           [][]string  // [["title"]]
+    Ordering          []string    // ["-created_at"]
+    Abstract          bool
 }
 ```
 
@@ -139,6 +147,8 @@ __orm_model("tablename")
 __orm_auto_field("id")
 __orm_char_field("name", 100, 0, 0, 0)
 __orm_foreign_key("author_id", "users", "id", "CASCADE", 0)
+__orm_unique_constraint("title,author_id")   # from Meta
+__orm_index("title")                         # from Meta
 ```
 
 `module_lower.go` injects calls to all `__orm_init_*` functions at the start of `__top__`, ensuring model registration happens before `main()`.
@@ -147,8 +157,30 @@ __orm_foreign_key("author_id", "users", "id", "CASCADE", 0)
 
 - `__orm_model(table)` — creates a `ModelDef` entry
 - `__orm_*_field(...)` — adds a `FieldDef` to the current model
-- `__orm_create_table_sql(table)` — generates dialect-specific CREATE TABLE SQL
+- `__orm_unique_constraint(csv)` — registers UNIQUE constraint (comma-separated fields)
+- `__orm_index(csv)` — registers INDEX (comma-separated fields)
+- `__orm_create_table_sql(table)` — generates dialect-specific CREATE TABLE SQL with constraints
 - `FieldDef.on_delete` — emits `ON DELETE CASCADE` etc. in FK constraints
+
+### 7. Meta Class Pipeline
+
+```
+Parser: class Meta { unique_together: [title, author_id] }
+    → parseTypeName() handles LBRACK → TypeName{Params: [{Name:"title"}, {Name:"author_id"}]}
+
+Type Checker: extractMetaOptions() reads nested class Meta fields
+    → cls.Meta.UniqueConstraints = [["title", "author_id"]]
+
+Lowerer: LowerModelInit() emits constraint calls
+    → __orm_unique_constraint("title,author_id")
+    → __orm_index("title")
+
+C Runtime: __orm_create_table_sql() appends
+    → UNIQUE (title,author_id)
+    → CREATE INDEX IF NOT EXISTS idx_posts_title ON posts (title)
+```
+
+> **Key fix**: `parseTypeName()` has an early guard (line ~228) that validates the current token. `token.LBRACK` must be included in this guard, or the `[items]` handler further down will never be reached.
 
 ## Supported Keyword Arguments
 
@@ -189,7 +221,7 @@ bash test_examples.sh
 
 ## Future Work
 
-- [ ] Meta class (ordering, indexes, constraints)
+- [x] Meta class (unique_together, indexes, ordering, abstract)
 - [ ] Auto table creation (`db.create_tables()`)
 - [ ] GeneratedField, CompositePK, choices
 - [ ] Assignment syntax: `pub name = CharField(100)` alternative

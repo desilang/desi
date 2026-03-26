@@ -73,7 +73,7 @@ pub def __orm_model(table_name: str) -> int
 pub def __orm_auto_field(name: str) -> int
 
 @extern("C")
-pub def __orm_int_field(name: str, default_val: int, nullable: int) -> int
+pub def __orm_int_field(name: str, has_default: int, default_val: int, nullable: int) -> int
 
 @extern("C")
 pub def __orm_bigint_field(name: str, nullable: int) -> int
@@ -85,7 +85,7 @@ pub def __orm_char_field(name: str, max_length: int, nullable: int, unique_flag:
 pub def __orm_text_field(name: str, nullable: int) -> int
 
 @extern("C")
-pub def __orm_bool_field(name: str, default_val: int, nullable: int) -> int
+pub def __orm_bool_field(name: str, has_default: int, default_val: int, nullable: int) -> int
 
 @extern("C")
 pub def __orm_float_field(name: str, nullable: int) -> int
@@ -211,9 +211,9 @@ pub def auto_field(name: str) -> int:
 	"""Add auto-increment primary key field."""
 	return __orm_auto_field(name)
 
-pub def int_field(name: str, default_val: int, nullable: int) -> int:
+pub def int_field(name: str, has_default: int, default_val: int, nullable: int) -> int:
 	"""Add integer field."""
-	return __orm_int_field(name, default_val, nullable)
+	return __orm_int_field(name, has_default, default_val, nullable)
 
 pub def bigint_field(name: str, nullable: int) -> int:
 	"""Add big integer field."""
@@ -227,9 +227,9 @@ pub def text_field(name: str, nullable: int) -> int:
 	"""Add unlimited text field."""
 	return __orm_text_field(name, nullable)
 
-pub def bool_field(name: str, default_val: int, nullable: int) -> int:
+pub def bool_field(name: str, has_default: int, default_val: int, nullable: int) -> int:
 	"""Add boolean field."""
-	return __orm_bool_field(name, default_val, nullable)
+	return __orm_bool_field(name, has_default, default_val, nullable)
 
 pub def float_field(name: str, nullable: int) -> int:
 	"""Add float/double field."""

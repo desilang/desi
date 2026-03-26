@@ -1071,6 +1071,7 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 			if i == 0 {
 				// First positional param for IntField is default value
 				of.Default = param.Name
+				of.HasDefault = true
 			}
 		}
 
@@ -1127,6 +1128,7 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 		case "default":
 			if kw.Value != nil {
 				of.Default = kw.Value.Name
+				of.HasDefault = true
 			}
 		case "max_length":
 			if kw.Value != nil {
