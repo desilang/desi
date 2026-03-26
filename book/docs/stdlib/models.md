@@ -131,6 +131,31 @@ class Post:
 - Prefix with `-` for descending order: `[-created_at]`
 - Multiple constraints are supported
 
+## Database Configuration
+
+Configure your database engine in `desi.mod`:
+
+```toml
+# Schema-only (SQL generation, no live DB)
+[database]
+engine = "postgres"
+schema_only = true
+
+# Full connection
+[database]
+engine = "mysql"
+host = "localhost"
+port = 3306
+name = "myapp_db"
+user = "admin"
+password = "secret"
+```
+
+- `engine` is **required**: `"postgres"` or `"mysql"`
+- `schema_only = true`: only `engine` needed (for SQL generation)
+- Without `schema_only`: `host`, `name`, `user` are required
+- The compiler auto-configures the SQL dialect — no manual `db.use_postgres()` needed
+
 ## Generating SQL
 
 ```desi

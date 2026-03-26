@@ -11,8 +11,9 @@ import (
 
 // LowerModuleOptions controls module lowering behavior.
 type LowerModuleOptions struct {
-	SkipBuiltinEnums bool // Don't generate Option/Result constructors
-	IsImportedModule bool // Force-mangle all non-extern function definitions
+	SkipBuiltinEnums bool   // Don't generate Option/Result constructors
+	IsImportedModule bool   // Force-mangle all non-extern function definitions
+	DbEngine         string // "postgres" or "mysql" — auto-injects dialect call in __top__
 }
 
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
@@ -309,6 +310,25 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 		for _, fn := range out.Funcs {
 			if fn.Name == "__top__" && len(fn.Blocks) > 0 {
 				var initStmts []hir.Stmt
+
+				// Auto-inject DB dialect from desi.mod [database].engine
+				if opts.DbEngine != "" {
+					dialect := "0" // postgres
+					if opts.DbEngine == "mysql" {
+						dialect = "1"
+					}
+					initStmts = append(initStmts, &hir.Call{
+						Fn:   "__orm_set_dialect",
+						Args: []hir.Value{hir.ConstInt{Text: dialect}},
+						Type: "i32",
+					})
+					initStmts = append(initStmts, &hir.Call{
+						Fn:   "__db_set_dialect",
+						Args: []hir.Value{hir.ConstInt{Text: dialect}},
+						Type: "i32",
+					})
+				}
+
 				for _, initName := range modelInitNames {
 					initStmts = append(initStmts, &hir.Call{
 						Fn:   initName,
