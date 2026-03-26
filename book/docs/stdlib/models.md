@@ -178,6 +178,49 @@ prefix = "app1_"
 
 The compiler auto-configures the SQL dialect — no manual `db.use_postgres()` needed
 
+## Choices (CHECK Constraints)
+
+Add `choices=` to any field to generate a SQL `CHECK` constraint:
+
+```desi
+@model("articles")
+class Article:
+    pub status: CharField(20, choices=[draft, published, archived])
+```
+
+Generates: `status VARCHAR(20) NOT NULL CHECK (status IN ('draft', 'published', 'archived'))`
+
+## Generated Fields (Computed Columns)
+
+Use `GeneratedField` for columns computed from other fields:
+
+```desi
+@model("people")
+class Person:
+    pub first_name: CharField(50)
+    pub last_name: CharField(50)
+    pub full_name: GeneratedField(expression="first_name || ' ' || last_name", output=CharField(100))
+```
+
+Generates: `full_name VARCHAR(100) GENERATED ALWAYS AS (first_name || ' ' || last_name) STORED`
+
+## Composite Primary Keys
+
+Use `primary_key` in `class Meta` for multi-column primary keys (no auto `id` field):
+
+```desi
+@model("order_items")
+class OrderItem:
+    pub order_id: IntField()
+    pub product_id: IntField()
+    pub quantity: IntField(default=1)
+
+    class Meta:
+        primary_key: [order_id, product_id]
+```
+
+Generates: `PRIMARY KEY (order_id,product_id)` — the auto `id` field is omitted.
+
 ## Generating SQL
 
 ```desi

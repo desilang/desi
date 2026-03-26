@@ -422,6 +422,25 @@ func (p *Parser) parseTypeConstructorArg() *ast.TypeName {
 	case token.KW_none:
 		p.next()
 		return &ast.TypeName{Name: "none", Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	case token.STR:
+		// String literal: used for SQL expressions in GeneratedField, etc.
+		name := p.cur.Lexeme
+		p.next()
+		return &ast.TypeName{Name: name, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+	case token.MINUS:
+		// Negative number prefix: -100, -created_at (ordering)
+		p.next()
+		if p.cur.Tok == token.INT_DEC {
+			name := "-" + p.cur.Lexeme
+			p.next()
+			return &ast.TypeName{Name: name, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+		}
+		if p.cur.Tok == token.IDENT {
+			name := "-" + p.cur.Lexeme
+			p.next()
+			return &ast.TypeName{Name: name, Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
+		}
+		return &ast.TypeName{Name: "-", Span: ast.JoinSpan(start, spanPos(p.file, p.cur))}
 	default:
 		// Regular TypeName (IDENT, dotted paths, etc.)
 		return p.parseTypeName()
