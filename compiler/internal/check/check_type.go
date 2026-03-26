@@ -524,12 +524,41 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 						if f.Type != nil && f.Type.Name == "true" {
 							meta.Abstract = true
 						}
+					case "primary_key":
+						// primary_key: [order_id, product_id] → CompositePK
+						if f.Type != nil && len(f.Type.Params) > 0 {
+							for _, p := range f.Type.Params {
+								if p.Name != "" {
+									meta.CompositePK = append(meta.CompositePK, p.Name)
+								}
+							}
+							}
 					}
 				}
 				cls.Meta = meta
 				break
 			}
 		}
+	}
+
+	// If CompositePK is set, remove the auto-inserted id field
+	if cls.IsModel && cls.Meta != nil && len(cls.Meta.CompositePK) > 0 {
+		var filteredFields []types.OrmField
+		for _, mf := range cls.ModelFields {
+			if mf.Name == "id" && mf.Kind == types.OrmAuto {
+				continue // skip auto-PK — using composite PK instead
+			}
+			filteredFields = append(filteredFields, mf)
+		}
+		cls.ModelFields = filteredFields
+		var filteredClassFields []types.Field
+		for _, f := range cls.Fields {
+			if f.Name == "id" {
+				continue
+			}
+			filteredClassFields = append(filteredClassFields, f)
+		}
+		cls.Fields = filteredClassFields
 	}
 
 	// Check nested classes EARLY (before method bodies need them)
@@ -998,6 +1027,9 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 	case "ForeignKey":
 		kind = types.OrmForeignKey
 		desiType = types.Int
+	case "GeneratedField":
+		kind = types.OrmGenerated
+		desiType = types.Str // default; overridden by output= kwarg
 	default:
 		recognized = false
 	}
@@ -1073,6 +1105,11 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 				of.Default = param.Name
 				of.HasDefault = true
 			}
+		case types.OrmGenerated:
+			if i == 0 {
+				// First positional param is the SQL expression
+				of.Expression = param.Name
+			}
 		}
 
 		// Common options based on param name (bracket syntax flags)
@@ -1134,6 +1171,49 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 			if kw.Value != nil {
 				if v := parseIntFromTypeName(kw.Value); v > 0 {
 					of.MaxLength = v
+				}
+			}
+		case "expression":
+			if kw.Value != nil && kind == types.OrmGenerated {
+				of.Expression = kw.Value.Name
+			}
+		case "output":
+			// GeneratedField output type: output=CharField(255), output=IntField()
+			if kw.Value != nil && kind == types.OrmGenerated {
+				switch kw.Value.Name {
+				case "CharField":
+					of.OutputKind = types.OrmChar
+					of.OutputMaxLen = 255 // default
+					if len(kw.Value.Params) > 0 {
+						if v := parseIntFromTypeName(kw.Value.Params[0]); v > 0 {
+							of.OutputMaxLen = v
+						}
+					}
+					desiType = types.Str
+				case "IntField":
+					of.OutputKind = types.OrmInt
+					desiType = types.Int
+				case "BoolField":
+					of.OutputKind = types.OrmBool
+					desiType = types.Bool
+				case "FloatField":
+					of.OutputKind = types.OrmFloat
+					desiType = types.Float
+				case "TextField":
+					of.OutputKind = types.OrmText
+					desiType = types.Str
+				case "BigIntField":
+					of.OutputKind = types.OrmBigInt
+					desiType = types.Int
+				}
+			}
+		case "choices":
+			// choices=["draft", "published"] → CHECK constraint
+			if kw.Value != nil && len(kw.Value.Params) > 0 {
+				for _, p := range kw.Value.Params {
+					if p.Name != "" {
+						of.Choices = append(of.Choices, p.Name)
+					}
 				}
 			}
 		}

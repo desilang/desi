@@ -35,7 +35,8 @@ typedef enum {
     FIELD_ARRAY,       // Array type (PG only: TEXT[], INT[], etc.)
     FIELD_INET,        // INET type (PG only, VARCHAR(45) on MySQL)
     FIELD_DECIMAL,     // DECIMAL(precision, scale)
-    FIELD_CUSTOM       // pass-through: any native DB type string
+    FIELD_CUSTOM,      // pass-through: any native DB type string
+    FIELD_GENERATED    // GENERATED ALWAYS AS (expr) STORED
 } FieldType;
 
 typedef struct {
@@ -54,6 +55,9 @@ typedef struct {
     char ref_field[64];  // for FOREIGN_KEY
     char on_delete[32];  // for FOREIGN_KEY: CASCADE, PROTECT, SET_NULL, etc.
     char custom_type[128]; // for FIELD_CUSTOM and FIELD_ARRAY element type
+    char choices[512];   // comma-separated choices for CHECK constraint
+    char expression[256]; // for GENERATED: SQL expression
+    char gen_sql_type[64]; // for GENERATED: output SQL type (VARCHAR(255), INTEGER, etc.)
 } FieldDef;
 
 typedef struct {
@@ -68,6 +72,7 @@ typedef struct {
     int unique_count;
     ConstraintDef indexes[16];
     int index_count;
+    char composite_pk[256]; // comma-separated PK fields (empty = use auto PK)
 } ModelDef;
 
 #define MAX_MODELS 32
@@ -355,6 +360,39 @@ int32_t __orm_index(const char* fields_csv) {
     return 0;
 }
 
+// Register a composite primary key
+int32_t __orm_composite_pk(const char* fields_csv) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (fields_csv) strncpy(m->composite_pk, fields_csv, sizeof(m->composite_pk) - 1);
+    return 0;
+}
+
+// Set choices for the last registered field (generates CHECK constraint)
+int32_t __orm_set_choices(const char* choices_csv) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count <= 0) return -1;
+    FieldDef* f = &m->fields[m->field_count - 1]; // last field
+    if (choices_csv) strncpy(f->choices, choices_csv, sizeof(f->choices) - 1);
+    return 0;
+}
+
+// Add GeneratedField (computed column)
+int32_t __orm_generated_field(const char* name, const char* expression, const char* sql_type) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->field_count >= 64) return -1;
+    FieldDef* f = &m->fields[m->field_count++];
+    memset(f, 0, sizeof(FieldDef));
+    strncpy(f->name, name, sizeof(f->name) - 1);
+    f->type = FIELD_GENERATED;
+    if (expression) strncpy(f->expression, expression, sizeof(f->expression) - 1);
+    if (sql_type) strncpy(f->gen_sql_type, sql_type, sizeof(f->gen_sql_type) - 1);
+    else strncpy(f->gen_sql_type, "TEXT", sizeof(f->gen_sql_type) - 1);
+    return 0;
+}
+
 // ============================================================
 // SQL Generation from Models
 // ============================================================
@@ -404,6 +442,8 @@ static const char* sql_type(FieldDef* f, int dialect) {
             return buf;
         case FIELD_CUSTOM:
             return f->custom_type;  // pass-through: user provides exact DB type
+        case FIELD_GENERATED:
+            return f->gen_sql_type; // output type from GeneratedField
         default: return "TEXT";
     }
 }
@@ -428,7 +468,7 @@ char* __orm_create_table_sql(const char* table_name) {
         if (i > 0) pos += sprintf(sql + pos, ",\n");
         pos += sprintf(sql + pos, "  %s %s", f->name, sql_type(f, g_orm_dialect));
 
-        if (f->type != FIELD_AUTO) {
+        if (f->type != FIELD_AUTO && f->type != FIELD_GENERATED) {
             if (!f->nullable) pos += sprintf(sql + pos, " NOT NULL");
             if (f->unique) pos += sprintf(sql + pos, " UNIQUE");
             if (strlen(f->default_val) > 0 && f->type != FIELD_FOREIGN_KEY) {
@@ -438,6 +478,40 @@ char* __orm_create_table_sql(const char* table_name) {
                 if (g_orm_dialect == 0) pos += sprintf(sql + pos, " DEFAULT NOW()");
                 else pos += sprintf(sql + pos, " DEFAULT CURRENT_TIMESTAMP");
             }
+            // CHECK constraint from choices
+            if (strlen(f->choices) > 0) {
+                // Build CHECK (col IN ('val1', 'val2', ...))
+                char choices_copy[512];
+                strncpy(choices_copy, f->choices, sizeof(choices_copy) - 1);
+                choices_copy[sizeof(choices_copy) - 1] = '\0';
+                pos += sprintf(sql + pos, " CHECK (%s IN (", f->name);
+                char* tok = strtok(choices_copy, ",");
+                int first = 1;
+                while (tok) {
+                    if (!first) pos += sprintf(sql + pos, ", ");
+                    // Determine if value is numeric
+                    int is_numeric = 1;
+                    for (char* p = tok; *p; p++) {
+                        if ((*p < '0' || *p > '9') && *p != '-' && *p != '.') {
+                            is_numeric = 0;
+                            break;
+                        }
+                    }
+                    if (is_numeric) {
+                        pos += sprintf(sql + pos, "%s", tok);
+                    } else {
+                        pos += sprintf(sql + pos, "'%s'", tok);
+                    }
+                    first = 0;
+                    tok = strtok(NULL, ",");
+                }
+                pos += sprintf(sql + pos, "))");
+            }
+        }
+
+        // GENERATED ALWAYS AS for computed columns
+        if (f->type == FIELD_GENERATED) {
+            pos += sprintf(sql + pos, " GENERATED ALWAYS AS (%s) STORED", f->expression);
         }
 
         if (f->type == FIELD_FOREIGN_KEY) {
@@ -456,6 +530,11 @@ char* __orm_create_table_sql(const char* table_name) {
         fields_copy[sizeof(fields_copy) - 1] = '\0';
         // Replace commas with ", " for pretty output
         pos += sprintf(sql + pos, ",\n  UNIQUE (%s)", fields_copy);
+    }
+
+    // Append composite primary key
+    if (strlen(model->composite_pk) > 0) {
+        pos += sprintf(sql + pos, ",\n  PRIMARY KEY (%s)", model->composite_pk);
     }
 
     pos += sprintf(sql + pos, "\n)");

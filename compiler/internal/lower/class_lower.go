@@ -623,6 +623,41 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 				},
 				Type: "i32",
 			})
+		case types.OrmGenerated:
+			// Determine SQL type string for the output field
+			sqlType := "TEXT" // default
+			switch mf.OutputKind {
+			case types.OrmChar:
+				sqlType = fmt.Sprintf("VARCHAR(%d)", mf.OutputMaxLen)
+			case types.OrmInt:
+				sqlType = "INTEGER"
+			case types.OrmBigInt:
+				sqlType = "BIGINT"
+			case types.OrmBool:
+				sqlType = "BOOLEAN"
+			case types.OrmFloat:
+				sqlType = "DOUBLE PRECISION"
+			case types.OrmText:
+				sqlType = "TEXT"
+			}
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn: "__orm_generated_field",
+				Args: []hir.Value{
+					hir.ConstStr{Text: mf.Name},
+					hir.ConstStr{Text: mf.Expression},
+					hir.ConstStr{Text: sqlType},
+				},
+				Type: "i32",
+			})
+		}
+
+		// After each field: emit choices if present
+		if len(mf.Choices) > 0 {
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_set_choices",
+				Args: []hir.Value{hir.ConstStr{Text: strings.Join(mf.Choices, ",")}},
+				Type: "i32",
+			})
 		}
 	}
 
@@ -641,6 +676,14 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 			entry.Stmts = append(entry.Stmts, &hir.Call{
 				Fn:   "__orm_index",
 				Args: []hir.Value{hir.ConstStr{Text: strings.Join(idx, ",")}},
+				Type: "i32",
+			})
+		}
+		// composite primary key
+		if len(cls.Meta.CompositePK) > 0 {
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_composite_pk",
+				Args: []hir.Value{hir.ConstStr{Text: strings.Join(cls.Meta.CompositePK, ",")}},
 				Type: "i32",
 			})
 		}

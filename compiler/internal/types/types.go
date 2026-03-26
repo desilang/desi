@@ -263,6 +263,7 @@ type OrmMeta struct {
 	Indexes           [][]string // indexes: [email] → [["email"]]
 	Ordering          []string   // ordering: [-created_at, name] → ["-created_at", "name"]
 	Abstract          bool       // abstract: true → no table generation
+	CompositePK       []string   // primary_key: [order_id, product_id] → ["order_id","product_id"]
 }
 
 // OrmFieldKind identifies the ORM field type
@@ -282,6 +283,7 @@ const (
 	OrmUUID
 	OrmJson
 	OrmForeignKey
+	OrmGenerated // GeneratedField — computed column
 )
 
 // OrmField represents an ORM model field descriptor
@@ -299,9 +301,13 @@ type OrmField struct {
 	HasDefault bool         // whether a default was specified
 	AutoNow    bool         // auto_now=true (DateTimeField)
 	AutoNowAdd bool         // auto_now_add=true (DateTimeField)
-	RefTable   string       // ForeignKey reference table
-	RefColumn  string       // ForeignKey reference column
-	OnDelete   string       // ForeignKey on_delete: CASCADE, PROTECT, etc.
+	RefTable       string       // ForeignKey reference table
+	RefColumn      string       // ForeignKey reference column
+	OnDelete       string       // ForeignKey on_delete: CASCADE, PROTECT, etc.
+	Choices        []string     // choices=["draft","published"] → CHECK constraint
+	Expression     string       // GeneratedField SQL expression
+	OutputKind     OrmFieldKind // GeneratedField output type (e.g., OrmChar)
+	OutputMaxLen   int          // GeneratedField output max_length (for CharField)
 }
 
 // ClassConstant represents a class-level constant
