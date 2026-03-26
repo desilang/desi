@@ -57,9 +57,17 @@ typedef struct {
 } FieldDef;
 
 typedef struct {
+    char fields_csv[256]; // comma-separated field names
+} ConstraintDef;
+
+typedef struct {
     char name[128];      // table name
     FieldDef fields[64];
     int field_count;
+    ConstraintDef unique_constraints[16];
+    int unique_count;
+    ConstraintDef indexes[16];
+    int index_count;
 } ModelDef;
 
 #define MAX_MODELS 32
@@ -318,6 +326,32 @@ int32_t __orm_custom_field(const char* name, const char* type_str, int32_t nulla
 }
 
 // ============================================================
+// Meta Constraint Registration
+// ============================================================
+
+// Register a UNIQUE constraint on multiple columns
+int32_t __orm_unique_constraint(const char* fields_csv) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->unique_count >= 16) return -1;
+    ConstraintDef* c = &m->unique_constraints[m->unique_count++];
+    memset(c, 0, sizeof(ConstraintDef));
+    if (fields_csv) strncpy(c->fields_csv, fields_csv, sizeof(c->fields_csv) - 1);
+    return 0;
+}
+
+// Register an INDEX on one or more columns
+int32_t __orm_index(const char* fields_csv) {
+    if (g_current_model < 0) return -1;
+    ModelDef* m = &g_models[g_current_model];
+    if (m->index_count >= 16) return -1;
+    ConstraintDef* c = &m->indexes[m->index_count++];
+    memset(c, 0, sizeof(ConstraintDef));
+    if (fields_csv) strncpy(c->fields_csv, fields_csv, sizeof(c->fields_csv) - 1);
+    return 0;
+}
+
+// ============================================================
 // SQL Generation from Models
 // ============================================================
 
@@ -410,10 +444,36 @@ char* __orm_create_table_sql(const char* table_name) {
         }
     }
 
+    // Append UNIQUE constraints from Meta
+    for (int i = 0; i < model->unique_count; i++) {
+        // Convert comma-separated field names to SQL: UNIQUE (field1, field2)
+        char fields_copy[256];
+        strncpy(fields_copy, model->unique_constraints[i].fields_csv, sizeof(fields_copy) - 1);
+        fields_copy[sizeof(fields_copy) - 1] = '\0';
+        // Replace commas with ", " for pretty output
+        pos += sprintf(sql + pos, ",\n  UNIQUE (%s)", fields_copy);
+    }
+
     pos += sprintf(sql + pos, "\n)");
     if (g_orm_dialect == 1) {
         pos += sprintf(sql + pos, " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
     }
+
+    // Append CREATE INDEX statements from Meta
+    for (int i = 0; i < model->index_count; i++) {
+        char fields_copy[256];
+        strncpy(fields_copy, model->indexes[i].fields_csv, sizeof(fields_copy) - 1);
+        fields_copy[sizeof(fields_copy) - 1] = '\0';
+        // Generate index name: idx_tablename_field1_field2
+        char idx_name[256];
+        snprintf(idx_name, sizeof(idx_name), "idx_%s_%s", model->name, fields_copy);
+        // Replace commas with underscores in index name
+        for (char* p = idx_name; *p; p++) {
+            if (*p == ',') *p = '_';
+        }
+        pos += sprintf(sql + pos, ";\nCREATE INDEX IF NOT EXISTS %s ON %s (%s)", idx_name, model->name, fields_copy);
+    }
+
     sql[pos] = '\0';
     return sql;
 }

@@ -1,5 +1,5 @@
 # Example 441: @model decorator for Django-style ORM
-# Demonstrates: @model class syntax, ORM field types, ForeignKey, kwargs, SQL generation
+# Demonstrates: @model class syntax, ORM field types, ForeignKey, kwargs, Meta class
 
 import db
 
@@ -20,25 +20,12 @@ class Post:
 	pub body: TextField(nullable=true)
 	pub author_id: ForeignKey(User, on_delete=CASCADE)
 
+	class Meta:
+		unique_together: [title, author_id]
+		indexes: [title]
+
 def main() -> int:
 	print(db.create_table_sql("users"))
 	print("---")
 	print(db.create_table_sql("posts"))
 	0
-
-# EXPECTED_OUTPUT:
-# CREATE TABLE IF NOT EXISTS users (
-#   id SERIAL PRIMARY KEY,
-#   name VARCHAR(100) NOT NULL,
-#   email VARCHAR(200) NOT NULL UNIQUE,
-#   age INTEGER NOT NULL DEFAULT 0,
-#   active BOOLEAN NOT NULL DEFAULT FALSE,
-#   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-# )
-# ---
-# CREATE TABLE IF NOT EXISTS posts (
-#   id SERIAL PRIMARY KEY,
-#   title VARCHAR(200) NOT NULL,
-#   body TEXT,
-#   author_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE
-# )

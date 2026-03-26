@@ -2,6 +2,7 @@ package lower
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
@@ -610,6 +611,26 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 					hir.ConstStr{Text: mf.OnDelete},
 					hir.ConstInt{Text: boolToInt(mf.Nullable)},
 				},
+				Type: "i32",
+			})
+		}
+	}
+
+	// 3. Emit Meta constraint registration
+	if cls.Meta != nil {
+		// unique_together constraints
+		for _, uc := range cls.Meta.UniqueConstraints {
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_unique_constraint",
+				Args: []hir.Value{hir.ConstStr{Text: strings.Join(uc, ",")}},
+				Type: "i32",
+			})
+		}
+		// indexes
+		for _, idx := range cls.Meta.Indexes {
+			entry.Stmts = append(entry.Stmts, &hir.Call{
+				Fn:   "__orm_index",
+				Args: []hir.Value{hir.ConstStr{Text: strings.Join(idx, ",")}},
 				Type: "i32",
 			})
 		}

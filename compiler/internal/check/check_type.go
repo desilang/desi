@@ -477,8 +477,66 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		}
 	}
 
+	// For @model classes: extract Meta class options
+	if cls.IsModel {
+		for _, nested := range d.Nested {
+			if nested.Name.Name == "Meta" {
+				meta := &types.OrmMeta{}
+				for _, f := range nested.Fields {
+					switch f.Name.Name {
+					case "unique_together":
+						// [field1, field2] → UniqueConstraints entry
+						if f.Type != nil && len(f.Type.Params) > 0 {
+							var fields []string
+							for _, p := range f.Type.Params {
+								if p.Name != "" {
+									fields = append(fields, p.Name)
+								}
+							}
+							if len(fields) > 0 {
+								meta.UniqueConstraints = append(meta.UniqueConstraints, fields)
+							}
+						}
+					case "indexes":
+						// [field1, field2] → Indexes entry
+						if f.Type != nil && len(f.Type.Params) > 0 {
+							var fields []string
+							for _, p := range f.Type.Params {
+								if p.Name != "" {
+									fields = append(fields, p.Name)
+								}
+							}
+							if len(fields) > 0 {
+								meta.Indexes = append(meta.Indexes, fields)
+							}
+						}
+					case "ordering":
+						// [-created_at, name] → Ordering list
+						if f.Type != nil && len(f.Type.Params) > 0 {
+							for _, p := range f.Type.Params {
+								if p.Name != "" {
+									meta.Ordering = append(meta.Ordering, p.Name)
+								}
+							}
+						}
+					case "abstract":
+						// abstract: true
+						if f.Type != nil && f.Type.Name == "true" {
+							meta.Abstract = true
+						}
+					}
+				}
+				cls.Meta = meta
+				break
+			}
+		}
+	}
+
 	// Check nested classes EARLY (before method bodies need them)
 	for _, nested := range d.Nested {
+		if cls.IsModel && nested.Name.Name == "Meta" {
+			continue // Skip Meta class — already processed above
+		}
 		c.checkClass(nested)
 	}
 
