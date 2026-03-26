@@ -254,6 +254,15 @@ type Class struct {
 	IsModel         bool             // true if class has @model decorator
 	TableName       string           // SQL table name from @model("tablename")
 	ModelFields     []OrmField       // ORM field descriptors (populated by type checker)
+	Meta            *OrmMeta         // Meta class options (unique constraints, indexes, etc.)
+}
+
+// OrmMeta represents Django-style Meta class options for @model classes
+type OrmMeta struct {
+	UniqueConstraints [][]string // unique_together: [name, email] → [["name","email"]]
+	Indexes           [][]string // indexes: [email] → [["email"]]
+	Ordering          []string   // ordering: [-created_at, name] → ["-created_at", "name"]
+	Abstract          bool       // abstract: true → no table generation
 }
 
 // OrmFieldKind identifies the ORM field type
