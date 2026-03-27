@@ -279,6 +279,53 @@ def main() -> int:
     0
 ```
 
+## Model.objects — QuerySet Manager
+
+Every `@model` class gets an auto-generated `objects` manager for Django-style CRUD:
+
+```desi
+# Create
+User.objects.create(name="Ali", age="25", email="ali@example.com")
+
+# Read
+User.objects.all()                    # SELECT * FROM users
+User.objects.filter(age__gt="18")     # SELECT * WHERE age > 18
+User.objects.get(id="1")              # SELECT * WHERE id=1 LIMIT 1
+User.objects.first()                  # SELECT * LIMIT 1
+User.objects.last()                   # SELECT * ORDER BY id DESC LIMIT 1
+
+# Update / Delete
+User.objects.update(status="active")  # UPDATE users SET status='active'
+User.objects.delete()                 # DELETE FROM users
+
+# Aggregations
+User.objects.count()                  # SELECT COUNT(*)
+User.objects.exists()                 # Returns 1 if any rows exist
+
+# Ordering
+User.objects.order_by("-created_at")  # ORDER BY created_at DESC
+
+# Exclude
+User.objects.exclude(status="banned") # WHERE NOT (status = 'banned')
+```
+
+### Django-Style Lookups
+
+Filter and exclude support double-underscore lookups:
+
+| Lookup | SQL | Example |
+|--------|-----|---------|
+| `exact` (default) | `=` | `name="Ali"` |
+| `__gt` | `>` | `age__gt="18"` |
+| `__gte` | `>=` | `age__gte="21"` |
+| `__lt` | `<` | `age__lt="65"` |
+| `__lte` | `<=` | `age__lte="30"` |
+| `__contains` | `LIKE '%val%'` | `name__contains="li"` |
+| `__startswith` | `LIKE 'val%'` | `name__startswith="A"` |
+| `__endswith` | `LIKE '%val'` | `name__endswith="i"` |
+| `__isnull` | `IS NULL` | `email__isnull="true"` |
+| `__in` | `IN (...)` | `status__in="1,2,3"` |
+
 ## See Also
 
 - [Database & ORM](database.md) — CRUD operations, query builder, transactions
