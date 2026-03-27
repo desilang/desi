@@ -815,6 +815,18 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.info.Types[call] = types.Str
 			return types.Str
 		}
+
+		// Special case: F("col") — Django-style F expression for field references
+		// Returns str type (F expression is a column reference string at runtime)
+		if id.Name == "F" {
+			if len(call.Args) != 1 {
+				c.add(diagAt("DTE0046", call.Span, "F() takes exactly 1 argument (column name)"))
+				return nil
+			}
+			c.typ(call.Args[0])
+			c.info.Types[call] = types.Str
+			return types.Str
+		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc

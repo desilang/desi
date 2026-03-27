@@ -952,6 +952,14 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			// Unary plus: +x -> x (no-op for primitives)
 			return ls.lowerExpr(x.X)
 		} else if x.Op == "~" {
+			// ~Q(...) negation: emit __q_not(q)
+			if ls.isQExpression(x.X) {
+				qVal := ls.lowerExpr(x.X)
+				dst := ls.b.FreshTemp("q_not")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__q_not", Args: []hir.Value{qVal}, Type: "ptr"})
+				return dst
+			}
+
 			// Bitwise NOT: ~x -> x ^ -1
 			val := ls.lowerExpr(x.X)
 			dst := ls.b.FreshTemp("not")
@@ -1984,6 +1992,60 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				}
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: fn, Args: []hir.Value{lhs, rhs}, Type: "ptr"})
 				return dst
+			}
+		}
+
+		// F expression arithmetic: F("price") * 1.1 → __f_mul(f_ref, "1.1")
+		// Only triggers when at least one side is an actual F() call or F binary op
+		if (x.Op == "+" || x.Op == "-" || x.Op == "*" || x.Op == "/") && ls.info != nil {
+			if isFExpression(x.Lhs) || isFExpression(x.Rhs) {
+				lhsType := ls.info.Types[x.Lhs]
+				rhsType := ls.info.Types[x.Rhs]
+				isLStr := types.Equal(lhsType, types.Str)
+				isRStr := types.Equal(rhsType, types.Str)
+				isLNum := types.Equal(lhsType, types.Int) || types.Equal(lhsType, types.Float)
+				isRNum := types.Equal(rhsType, types.Int) || types.Equal(rhsType, types.Float)
+
+				if (isLStr && (isRNum || isRStr)) || (isRStr && isLNum) {
+					lhs := ls.lowerExpr(x.Lhs)
+					rhs := ls.lowerExpr(x.Rhs)
+
+					// Convert numeric values to string representation
+					if isRNum {
+						tmp := ls.b.FreshTemp("num_str")
+						if types.Equal(rhsType, types.Float) {
+							ls.b.Emit(&hir.Call{Dst: tmp, Fn: "float_to_str", Args: []hir.Value{rhs}, Type: "ptr"})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: tmp, Fn: "int_to_str", Args: []hir.Value{rhs}, Type: "ptr"})
+						}
+						rhs = tmp
+					}
+					if isLNum {
+						tmp := ls.b.FreshTemp("num_str")
+						if types.Equal(lhsType, types.Float) {
+							ls.b.Emit(&hir.Call{Dst: tmp, Fn: "float_to_str", Args: []hir.Value{lhs}, Type: "ptr"})
+						} else {
+							ls.b.Emit(&hir.Call{Dst: tmp, Fn: "int_to_str", Args: []hir.Value{lhs}, Type: "ptr"})
+						}
+						lhs = tmp
+					}
+
+					var fn string
+					switch x.Op {
+					case "+":
+						fn = "__f_add"
+					case "-":
+						fn = "__f_sub"
+					case "*":
+						fn = "__f_mul"
+					case "/":
+						fn = "__f_div"
+					}
+
+					dst := ls.b.FreshTemp("f_arith")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: fn, Args: []hir.Value{lhs, rhs}, Type: "ptr"})
+					return dst
+				}
 			}
 		}
 

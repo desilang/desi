@@ -2653,6 +2653,24 @@ handlePrint:
 	}
 
 	// ============================================================
+	// F() — Django-style F expression for field references
+	// F("price") → __f_ref("price")
+	// ============================================================
+	if id, ok := x.Callee.(*ast.Ident); ok && id.Name == "F" && ls.info != nil {
+		if len(x.Args) == 1 {
+			colVal := ls.lowerExpr(x.Args[0])
+			dst := ls.b.FreshTemp("f_ref")
+			ls.b.Emit(&hir.Call{
+				Dst:  dst,
+				Fn:   "__f_ref",
+				Args: []hir.Value{colVal},
+				Type: "ptr",
+			})
+			return dst
+		}
+	}
+
+	// ============================================================
 	// Model.objects Manager with Method Chaining Support
 	// Handles both direct calls:   User.objects.filter(name="Ali")
 	// and chained calls:           User.objects.filter(age__gt="18").order_by("-name").first()
@@ -3603,6 +3621,26 @@ func (ls *lowerState) isQExpression(expr ast.Expr) bool {
 	if bin, ok := expr.(*ast.BinaryExpr); ok {
 		if bin.Op == "|" || bin.Op == "&" {
 			return ls.isQExpression(bin.Lhs) && ls.isQExpression(bin.Rhs)
+		}
+	}
+	// ~Q(...) unary negation
+	if unary, ok := expr.(*ast.UnaryExpr); ok && unary.Op == "~" {
+		return ls.isQExpression(unary.X)
+	}
+	return false
+}
+
+// isFExpression checks if an AST expression is an F() call or F binary expression.
+// Used to disambiguate F("price") * 2 from normal str + int concatenation.
+func isFExpression(expr ast.Expr) bool {
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "F" {
+			return true
+		}
+	}
+	if bin, ok := expr.(*ast.BinaryExpr); ok {
+		if bin.Op == "+" || bin.Op == "-" || bin.Op == "*" || bin.Op == "/" {
+			return isFExpression(bin.Lhs) || isFExpression(bin.Rhs)
 		}
 	}
 	return false
