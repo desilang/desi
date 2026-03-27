@@ -326,6 +326,38 @@ Filter and exclude support double-underscore lookups:
 | `__isnull` | `IS NULL` | `email__isnull="true"` |
 | `__in` | `IN (...)` | `status__in="1,2,3"` |
 
+### Method Chaining
+
+Chain methods for complex queries:
+
+```desi
+# Filter + order + limit
+User.objects.filter(age__gt="18").order_by("-name").first()
+
+# Filter + exclude + count
+User.objects.filter(status="active").exclude(role="admin").count()
+
+# All + order + first
+User.objects.all().order_by("created_at").first()
+```
+
+### Q Objects — Complex Lookups
+
+Use `Q()` for OR conditions and complex boolean logic:
+
+```desi
+# OR: status is active OR age > 21
+User.objects.filter(Q(status="active") | Q(age__gt="21"))
+
+# AND: status is active AND name is Ali
+User.objects.filter(Q(status="active") & Q(name="Ali"))
+
+# Complex: age > 18 OR (age < 10 AND status is active)
+User.objects.filter(Q(age__gt="18") | Q(age__lt="10") & Q(status="active"))
+```
+
+Operator precedence: `&` (AND) binds tighter than `|` (OR), matching Python/Django behavior.
+
 ## See Also
 
 - [Database & ORM](database.md) — CRUD operations, query builder, transactions
