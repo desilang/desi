@@ -221,6 +221,13 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
+		// Q object operators: Q(...) | Q(...) and Q(...) & Q(...)
+		// Q returns str, so str | str and str & str are valid Q combinations
+		if (op == "|" || op == "&") && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
+			c.info.Types[x] = types.Str
+			return types.Str
+		}
+
 		// Any other combination is invalid for now.
 		c.add(diagAt("DTE0004", x.Span, "invalid operands for '"+op+"'"))
 		return nil

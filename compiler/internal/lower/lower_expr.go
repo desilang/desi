@@ -1972,6 +1972,21 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Q object operators: Q(...) | Q(...) → __q_or, Q(...) & Q(...) → __q_and
+		if (x.Op == "|" || x.Op == "&") && ls.info != nil {
+			if ls.isQExpression(x.Lhs) && ls.isQExpression(x.Rhs) {
+				lhs := ls.lowerExpr(x.Lhs)
+				rhs := ls.lowerExpr(x.Rhs)
+				dst := ls.b.FreshTemp("q_combine")
+				fn := "__q_or"
+				if x.Op == "&" {
+					fn = "__q_and"
+				}
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: fn, Args: []hir.Value{lhs, rhs}, Type: "ptr"})
+				return dst
+			}
+		}
+
 		// Check for decimal arithmetic first
 		if ls.info != nil {
 			lhsType := ls.info.Types[x.Lhs]

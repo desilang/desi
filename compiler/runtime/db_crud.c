@@ -340,3 +340,73 @@ int32_t __qs_do_insert(void) {
     return __db_execute_stmt(sql);
 }
 
+// ============================================================
+// Q Objects — Django-style complex lookups
+// Q(status="active") | Q(is_admin=true)
+// ============================================================
+
+// Create a Q condition string from a lookup+value pair
+// Returns heap-allocated string like "status = 'active'"
+const char* __q_new(const char* lookup, const char* val) {
+    char col[128], op[16], parsed_val[512];
+    parse_lookup(lookup, val, col, op, parsed_val);
+
+    char* result = (char*)malloc(1024);
+    if (!result) return "";
+
+    // For LIKE/IN/IS operators, val is already formatted by parse_lookup
+    if (strcmp(op, "LIKE") == 0 || strcmp(op, "IN") == 0 ||
+        strcmp(op, "IS") == 0 || strcmp(op, "IS NOT") == 0) {
+        snprintf(result, 1024, "%s %s %s", col, op, parsed_val);
+    } else {
+        snprintf(result, 1024, "%s %s '%s'", col, op, parsed_val);
+    }
+    return result;
+}
+
+// Combine two Q expressions with OR
+// Returns heap-allocated string like "(cond1) OR (cond2)"
+const char* __q_or(const char* q1, const char* q2) {
+    if (!q1 || !q2) return q1 ? q1 : q2;
+    size_t len = strlen(q1) + strlen(q2) + 16;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "(%s) OR (%s)", q1, q2);
+    return result;
+}
+
+// Combine two Q expressions with AND
+// Returns heap-allocated string like "(cond1) AND (cond2)"
+const char* __q_and(const char* q1, const char* q2) {
+    if (!q1 || !q2) return q1 ? q1 : q2;
+    size_t len = strlen(q1) + strlen(q2) + 16;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "(%s) AND (%s)", q1, q2);
+    return result;
+}
+
+// Negate a Q expression
+// Returns heap-allocated string like "NOT (cond)"
+const char* __q_not(const char* q) {
+    if (!q) return "";
+    size_t len = strlen(q) + 8;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "NOT (%s)", q);
+    return result;
+}
+
+// Apply a Q expression string directly to the QuerySet WHERE clause
+int32_t __qs_filter_q(const char* q_expr) {
+    if (!q_expr || q_expr[0] == '\0') return 0;
+
+    if (qs_where[0] == '\0') {
+        strncpy(qs_where, q_expr, sizeof(qs_where) - 1);
+    } else {
+        char tmp[2048];
+        snprintf(tmp, sizeof(tmp), "%s AND (%s)", qs_where, q_expr);
+        strncpy(qs_where, tmp, sizeof(qs_where) - 1);
+    }
+    return 0;
+}
