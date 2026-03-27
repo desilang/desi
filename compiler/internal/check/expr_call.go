@@ -54,25 +54,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
-		// Early intercept: Model.objects.method() → User.objects.filter(name="Ali")
-		// Detect nested FieldExpr: fe.X is FieldExpr(.objects, Ident(ClassName))
-		if innerFe, ok := fe.X.(*ast.FieldExpr); ok && innerFe.Name.Name == "objects" {
-			if id, ok := innerFe.X.(*ast.Ident); ok {
-				sym := c.scope.Lookup(id.Name)
-				if sym != nil && (sym.Kind == SymType || sym.Kind == SymFunc) {
-					if classType, ok := sym.Type.(*types.Class); ok && classType.IsModel {
-						// This is a Model.objects.method() call — accept any kwargs
-						for _, a := range argsNodes {
-							c.typ(a.Expr)
-						}
-						// Store type info for lowerer to detect the pattern
-						c.info.Types[innerFe.X] = classType
-						c.info.Types[innerFe] = classType
-						c.info.Types[call] = types.Int
-						return types.Int
-					}
-				}
+		// Early intercept: Model.objects.method() with chaining support
+		// Detects both direct: User.objects.filter(name="Ali")
+		// and chained:        User.objects.filter(...).order_by(...).first()
+		if c.isModelObjectsChain(fe.X) {
+			// This is a Model.objects chain — accept any kwargs
+			for _, a := range argsNodes {
+				c.typ(a.Expr)
 			}
+			c.info.Types[call] = types.Int
+			return types.Int
 		}
 
 		// First, check if the qualifier is a stdlib module name that requires import
@@ -813,6 +804,17 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			c.info.Types[call] = resultType
 			return resultType
 		}
+
+		// Special case: Q(field="val") — Django-style Q object for complex lookups
+		// Returns str type (Q expression is a string pointer at runtime)
+		if id.Name == "Q" {
+			// Type-check all kwargs
+			for _, a := range callArgs(call) {
+				c.typ(a.Expr)
+			}
+			c.info.Types[call] = types.Str
+			return types.Str
+		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
 		isCallableSym := sym != nil && sym.Kind == SymFunc
@@ -1444,3 +1446,43 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 }
 
 /* ----------------------------- named args core ---------------------------- */
+
+// isModelObjectsChain recursively checks if an expression is part of a
+// Model.objects chain. Returns true if the root resolves to a @model class.
+//
+// Handles:
+//   - Direct:  FieldExpr(.objects, Ident(User))
+//   - Chained: CallExpr(.filter, FieldExpr(.objects, User))  — inner call result
+func (c *checker) isModelObjectsChain(expr ast.Expr) bool {
+	// Case 1: FieldExpr(.objects, Ident(ClassName))
+	if fe, ok := expr.(*ast.FieldExpr); ok && fe.Name.Name == "objects" {
+		if id, ok := fe.X.(*ast.Ident); ok {
+			sym := c.scope.Lookup(id.Name)
+			if sym != nil && (sym.Kind == SymType || sym.Kind == SymFunc) {
+				if classType, ok := sym.Type.(*types.Class); ok && classType.IsModel {
+					// Store type info for lowerer
+					c.info.Types[fe.X] = classType
+					c.info.Types[fe] = classType
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// Case 2: CallExpr — chained method (e.g., User.objects.filter(...))
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if fe, ok := call.Callee.(*ast.FieldExpr); ok {
+			if c.isModelObjectsChain(fe.X) {
+				// Type-check args of intermediate call
+				for _, a := range callArgs(call) {
+					c.typ(a.Expr)
+				}
+				c.info.Types[call] = types.Int
+				return true
+			}
+		}
+	}
+
+	return false
+}
