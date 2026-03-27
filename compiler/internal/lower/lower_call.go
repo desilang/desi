@@ -2613,6 +2613,189 @@ handlePrint:
 		}
 	}
 
+	// ============================================================
+	// Model.objects Manager: User.objects.filter(name="Ali")
+	// Detect FieldExpr chain: CallExpr.Callee = FieldExpr(.method, FieldExpr(.objects, Ident(Class)))
+	// ============================================================
+	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
+		if innerFe, ok := fe.X.(*ast.FieldExpr); ok && innerFe.Name.Name == "objects" {
+			// Check if innerFe.X resolves to a @model class
+			if innerRecvT := ls.info.Types[innerFe.X]; innerRecvT != nil {
+				if cls, ok := innerRecvT.(*types.Class); ok && cls.IsModel {
+					tableName := cls.TableName
+					methodName := fe.Name.Name
+
+					// Always emit __qs_reset first to bind the table
+					resetDst := ls.b.FreshTemp("qs_reset")
+					ls.b.Emit(&hir.Call{
+						Dst:  resetDst,
+						Fn:   "__qs_reset",
+						Args: []hir.Value{hir.ConstStr{Text: tableName}},
+						Type: "i32",
+					})
+
+					switch methodName {
+					case "all":
+						// User.objects.all() → __qs_reset + __qs_fetch
+						dst := ls.b.FreshTemp("qs_all")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "filter":
+						// User.objects.filter(name="Ali", age__gt="21")
+						// Emit __qs_filter(lookup, val) for each kwarg
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								lookup := an.Name.Name
+								valHIR := ls.lowerExpr(an.Expr)
+								filterDst := ls.b.FreshTemp("qs_filter")
+								ls.b.Emit(&hir.Call{
+									Dst:  filterDst,
+									Fn:   "__qs_filter",
+									Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
+									Type: "i32",
+								})
+							}
+						}
+						// Execute the query
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "exclude":
+						// User.objects.exclude(status="banned")
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								lookup := an.Name.Name
+								valHIR := ls.lowerExpr(an.Expr)
+								exclDst := ls.b.FreshTemp("qs_exclude")
+								ls.b.Emit(&hir.Call{
+									Dst:  exclDst,
+									Fn:   "__qs_exclude",
+									Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
+									Type: "i32",
+								})
+							}
+						}
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "get":
+						// User.objects.get(id="1") → filter + limit 1
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								lookup := an.Name.Name
+								valHIR := ls.lowerExpr(an.Expr)
+								filterDst := ls.b.FreshTemp("qs_filter")
+								ls.b.Emit(&hir.Call{
+									Dst:  filterDst,
+									Fn:   "__qs_filter",
+									Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
+									Type: "i32",
+								})
+							}
+						}
+						limDst := ls.b.FreshTemp("qs_limit")
+						ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "create":
+						// User.objects.create(name="Ali", age="25")
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								key := an.Name.Name
+								valHIR := ls.lowerExpr(an.Expr)
+								setDst := ls.b.FreshTemp("qs_set")
+								ls.b.Emit(&hir.Call{
+									Dst:  setDst,
+									Fn:   "__qs_set_field",
+									Args: []hir.Value{hir.ConstStr{Text: key}, valHIR},
+									Type: "i32",
+								})
+							}
+						}
+						dst := ls.b.FreshTemp("qs_insert")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_do_insert", Args: nil, Type: "i32"})
+						return dst
+
+					case "update":
+						// User.objects.update(status="active") — updates ALL rows
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								col := an.Name.Name
+								valHIR := ls.lowerExpr(an.Expr)
+								updDst := ls.b.FreshTemp("qs_update")
+								ls.b.Emit(&hir.Call{
+									Dst:  updDst,
+									Fn:   "__qs_update",
+									Args: []hir.Value{hir.ConstStr{Text: col}, valHIR},
+									Type: "i32",
+								})
+							}
+						}
+						return resetDst // return the reset result (int)
+
+					case "delete":
+						// User.objects.delete() — deletes ALL rows (dangerous!)
+						dst := ls.b.FreshTemp("qs_delete")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_delete", Args: nil, Type: "i32"})
+						return dst
+
+					case "count":
+						// User.objects.count()
+						dst := ls.b.FreshTemp("qs_count")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_count", Args: nil, Type: "i32"})
+						return dst
+
+					case "exists":
+						// User.objects.exists()
+						dst := ls.b.FreshTemp("qs_exists")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_exists", Args: nil, Type: "i32"})
+						return dst
+
+					case "first":
+						// User.objects.first() → limit 1 + fetch
+						limDst := ls.b.FreshTemp("qs_limit")
+						ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "last":
+						// User.objects.last() → order by id DESC + limit 1 + fetch
+						ordDst := ls.b.FreshTemp("qs_order")
+						ls.b.Emit(&hir.Call{Dst: ordDst, Fn: "__qs_order_by", Args: []hir.Value{hir.ConstStr{Text: "-id"}}, Type: "i32"})
+						limDst := ls.b.FreshTemp("qs_limit")
+						ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "order_by":
+						// User.objects.order_by("-created_at") — single positional arg
+						if len(x.Args) >= 1 {
+							colHIR := ls.lowerExpr(x.Args[0])
+							ordDst := ls.b.FreshTemp("qs_order")
+							ls.b.Emit(&hir.Call{Dst: ordDst, Fn: "__qs_order_by", Args: []hir.Value{colHIR}, Type: "i32"})
+						}
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+
+					case "values":
+						// User.objects.values() → just fetch (returns row count)
+						dst := ls.b.FreshTemp("qs_fetch")
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+						return dst
+					}
+				}
+			}
+		}
+	}
+
 	// 2. M14 Stage 1: Method Calls (obj.method())
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
 		// Check if this is a nested class constructor call (e.g. Container.Box())

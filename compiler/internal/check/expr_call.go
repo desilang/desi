@@ -54,6 +54,27 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 	// --- Case 1: module-qualified call: mod.fn(...) or Class.method() or Outer.Inner()
 	if fe, ok := call.Callee.(*ast.FieldExpr); ok {
+		// Early intercept: Model.objects.method() → User.objects.filter(name="Ali")
+		// Detect nested FieldExpr: fe.X is FieldExpr(.objects, Ident(ClassName))
+		if innerFe, ok := fe.X.(*ast.FieldExpr); ok && innerFe.Name.Name == "objects" {
+			if id, ok := innerFe.X.(*ast.Ident); ok {
+				sym := c.scope.Lookup(id.Name)
+				if sym != nil && (sym.Kind == SymType || sym.Kind == SymFunc) {
+					if classType, ok := sym.Type.(*types.Class); ok && classType.IsModel {
+						// This is a Model.objects.method() call — accept any kwargs
+						for _, a := range argsNodes {
+							c.typ(a.Expr)
+						}
+						// Store type info for lowerer to detect the pattern
+						c.info.Types[innerFe.X] = classType
+						c.info.Types[innerFe] = classType
+						c.info.Types[call] = types.Int
+						return types.Int
+					}
+				}
+			}
+		}
+
 		// First, check if the qualifier is a stdlib module name that requires import
 		if id, ok := fe.X.(*ast.Ident); ok {
 			// Check if this looks like a stdlib module call but isn't imported

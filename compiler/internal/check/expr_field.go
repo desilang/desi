@@ -34,6 +34,13 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 					c.info.Types[x] = classMethod
 					return classMethod
 				}
+				// @model classes: ClassName.objects → return class type as manager
+				// This enables User.objects.filter(), User.objects.create(), etc.
+				if classType.IsModel && methodName == "objects" {
+					c.info.Types[x] = classType
+					c.info.Types[x.X] = classType
+					return classType
+				}
 				// Check for nested class access: Outer.Inner
 				if classType.Decl != nil {
 					for _, nested := range classType.Decl.Nested {
@@ -727,6 +734,19 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 				return method
 			}
 			curr = curr.Base
+		}
+
+		// @model classes: recognize QuerySet methods from .objects manager
+		// User.objects returns class type → User.objects.filter() looks up "filter" on class
+		if cls.IsModel {
+			switch name {
+			case "all", "filter", "exclude", "get", "create", "update", "delete",
+				"count", "exists", "first", "last", "order_by", "values":
+				// All QuerySet methods return int (row count or status)
+				qsMethod := types.FuncOf(nil, types.Int, true) // variadic for kwargs
+				c.info.Types[x] = qsMethod
+				return qsMethod
+			}
 		}
 
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined field or method '"+name+"' on class '"+cls.Name+"'"))
