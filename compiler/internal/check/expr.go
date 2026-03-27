@@ -460,6 +460,11 @@ func (c *checker) typ(e ast.Expr) types.T {
 				c.info.Types[e] = t
 				return t
 			}
+			// ~Q(...) negation — Q returns str, ~str produces NOT(str)
+			if types.Equal(t, types.Str) {
+				c.info.Types[e] = types.Str
+				return types.Str
+			}
 		case "&":
 			// Address-of operator - returns a pointer type (represented as CPtr)
 			// Only valid in unsafe blocks (checked at statement level)

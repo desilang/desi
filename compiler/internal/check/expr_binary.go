@@ -5,6 +5,19 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// isFCall checks if an expression is an F() call or contains one in a binary expression.
+func isFCall(expr ast.Expr) bool {
+	if call, ok := expr.(*ast.CallExpr); ok {
+		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "F" {
+			return true
+		}
+	}
+	if bin, ok := expr.(*ast.BinaryExpr); ok {
+		return isFCall(bin.Lhs) || isFCall(bin.Rhs)
+	}
+	return false
+}
+
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 	op := x.Op
 
@@ -226,6 +239,21 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 		if (op == "|" || op == "&") && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 			c.info.Types[x] = types.Str
 			return types.Str
+		}
+
+		// F expression arithmetic: F("price") * 1.1, F("qty") + F("price")
+		// Only when at least one side is an F() call
+		if op == "-" || op == "*" || op == "/" {
+			if isFCall(x.Lhs) || isFCall(x.Rhs) {
+				isLStr := types.Equal(lt, types.Str)
+				isRStr := types.Equal(rt, types.Str)
+				isLNum := types.Equal(lt, types.Int) || types.Equal(lt, types.Float)
+				isRNum := types.Equal(rt, types.Int) || types.Equal(rt, types.Float)
+				if (isLStr && (isRNum || isRStr)) || (isRStr && isLNum) {
+					c.info.Types[x] = types.Str
+					return types.Str
+				}
+			}
 		}
 
 		// Any other combination is invalid for now.

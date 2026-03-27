@@ -410,3 +410,48 @@ int32_t __qs_filter_q(const char* q_expr) {
     }
     return 0;
 }
+
+// ============================================================
+// F Expressions — Django-style field references
+// F("price") * 1.1 → "price * 1.1"
+// ============================================================
+
+const char* __f_ref(const char* col_name) {
+    size_t len = strlen(col_name) + 1;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    strncpy(result, col_name, len);
+    return result;
+}
+
+const char* __f_add(const char* f_expr, const char* val) {
+    size_t len = strlen(f_expr) + strlen(val) + 8;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "%s + %s", f_expr, val);
+    return result;
+}
+
+const char* __f_sub(const char* f_expr, const char* val) {
+    size_t len = strlen(f_expr) + strlen(val) + 8;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "%s - %s", f_expr, val);
+    return result;
+}
+
+const char* __f_mul(const char* f_expr, const char* val) {
+    size_t len = strlen(f_expr) + strlen(val) + 8;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "%s * %s", f_expr, val);
+    return result;
+}
+
+const char* __f_div(const char* f_expr, const char* val) {
+    size_t len = strlen(f_expr) + strlen(val) + 8;
+    char* result = (char*)malloc(len);
+    if (!result) return "";
+    snprintf(result, len, "%s / %s", f_expr, val);
+    return result;
+}
