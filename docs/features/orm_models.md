@@ -2,7 +2,7 @@
 
 **Status**: ✅ Implemented  
 **Since**: v0.10  
-**Related**: [Keyword Arguments](kwargs.md), [Classes](classes.md)
+**Related**: [Keyword Arguments](kwargs.md), [Classes](classes.md), [Macros](macros.md)
 
 ---
 
@@ -78,7 +78,7 @@ type TypeNameKwArg struct {
 
 #### `collectClass()` — Decorator Detection
 
-Detects `@model("tablename")` on class declarations. Sets `cls.IsModel = true` and `cls.TableName`.
+Detects `@model("tablename")` on class declarations via the macro registry. Sets `cls.MacroDecorator = "model"` and `cls.TableName`.
 
 #### `checkClass()` — Field Resolution
 
@@ -96,7 +96,7 @@ Auto-PK: if no field has `PrimaryKey = true`, auto-inserts `{Name: "id", Kind: O
 ```go
 // ForeignKey(User, on_delete=CASCADE) → resolves class name to table
 for _, node := range c.info.Types {
-    if cls, ok := node.(*types.Class); ok && cls.IsModel && cls.Name == param.Name {
+    if cls, ok := node.(*types.Class); ok && cls.MacroDecorator != "" && cls.Name == param.Name {
         refTable = cls.TableName      // "User" → "users"
         for _, mf := range cls.ModelFields {
             if mf.PrimaryKey { refColumn = mf.Name; break }
@@ -110,9 +110,10 @@ for _, node := range c.info.Types {
 ```go
 type Class struct {
     // ... existing fields ...
-    IsModel     bool        // @model decorator present
-    TableName   string      // "users", "posts"
-    ModelFields []*OrmField // field descriptors
+    MacroDecorator string    // "model", "store", etc. (set by macro registry)
+    IsModel        bool      // backward compat (set by OnCollect)
+    TableName      string    // "users", "posts"
+    ModelFields    []*OrmField // field descriptors
 }
 
 type OrmField struct {
@@ -239,6 +240,8 @@ bash test_examples.sh
 ## Future Work
 
 - [x] Meta class (unique_together, indexes, ordering, abstract)
+- [x] Generic macro system — `@model` defined in `stdlib/macros/orm.desi`
+- [x] Custom macros — users can define `@store`, `@cache`, etc.
 - [ ] Auto table creation (`db.create_tables()`)
 - [ ] GeneratedField, CompositePK, choices
 - [ ] Assignment syntax: `pub name = CharField(100)` alternative

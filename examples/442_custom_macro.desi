@@ -1,0 +1,54 @@
+# Example 442: Custom macro — @store with renamed property
+# Demonstrates: user-defined @macro class, custom property name,
+#               custom method names, reusing existing C runtime
+#
+# This test proves the compiler is 100% generic — it doesn't know
+# "objects" or "model" or "Q". Everything comes from the macro definition.
+#
+# EXPECTED_OUTPUT:
+# CREATE TABLE IF NOT EXISTS products (
+#   id SERIAL PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   price INTEGER NOT NULL
+# )
+
+import db
+
+# ── Define a custom macro ──
+# This is the SAME as @model but uses a different property name: "catalog"
+# The compiler recognizes Product.catalog.find() because this macro
+# registers "catalog" as an injected property with "find" as a method.
+
+@macro(target="class")
+class store:
+    const property_name: str = "catalog"
+    const chainable: list = ["find", "sort_by"]
+    const terminal: list = ["fetch", "add", "remove", "tally"]
+    const builtins: dict = {"QQ": "str"}
+    const operators: dict = {"QQ|QQ": "__q_or"}
+    const runtime: dict = {
+        "reset":    "__qs_reset",
+        "find":     "__qs_filter",
+        "sort_by":  "__qs_order_by",
+        "fetch":    "__qs_fetch",
+        "add":      "__qs_do_insert",
+        "remove":   "__qs_delete",
+        "tally":    "__qs_count",
+        "set_field": "__qs_set_field"
+    }
+    const require_fields: bool = true
+    const auto_pk: bool = true
+
+# ── Use the custom macro ──
+# @store works just like @model — the compiler doesn't know the difference.
+# It just reads the macro registry.
+
+@store("products")
+class Product:
+    pub name: CharField(100)
+    pub price: IntField()
+
+def main() -> int:
+    db.use_postgres()
+    print(db.create_table_sql("products"))
+    0

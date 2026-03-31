@@ -7,6 +7,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -3374,19 +3375,22 @@ func isPrimitiveType(t types.T) bool {
 //
 // The caller (emitQsTerminal) emits the final/terminal operation.
 func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, bool) {
-	// Case 1: receiver is FieldExpr(.objects, Ident(ClassName)) — direct User.objects.method()
-	if fe, ok := receiver.(*ast.FieldExpr); ok && fe.Name.Name == "objects" {
+	// Case 1: receiver is FieldExpr(.propertyName, Ident(ClassName)) — direct Class.property.method()
+	if fe, ok := receiver.(*ast.FieldExpr); ok {
 		if recvT := ls.info.Types[fe.X]; recvT != nil {
-			if cls, ok := recvT.(*types.Class); ok && cls.IsModel {
-				// Emit __qs_reset to bind the table
-				resetDst := ls.b.FreshTemp("qs_reset")
-				ls.b.Emit(&hir.Call{
-					Dst:  resetDst,
-					Fn:   "__qs_reset",
-					Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
-					Type: "i32",
-				})
-				return cls.TableName, true
+			if cls, ok := recvT.(*types.Class); ok && cls.MacroDecorator != "" {
+				// Check if the field name is a macro-injected property
+				if _, _, ok := macro.Registry.LookupProperty(cls, fe.Name.Name); ok {
+					// Emit __qs_reset to bind the table
+					resetDst := ls.b.FreshTemp("qs_reset")
+					ls.b.Emit(&hir.Call{
+						Dst:  resetDst,
+						Fn:   "__qs_reset",
+						Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
+						Type: "i32",
+					})
+					return cls.TableName, true
+				}
 			}
 		}
 		return "", false
@@ -3608,42 +3612,16 @@ func (ls *lowerState) emitQsTerminal(methodName string, call *ast.CallExpr, tabl
 	return nil
 }
 
-// isQExpression checks if an AST expression produces a Q object value.
-// This includes Q(...) calls and Q(...) | Q(...) / Q(...) & Q(...) binary ops.
+// isQExpression delegates to macro.IsQExpression.
+// Checks if an AST expression produces a Q object value.
 func (ls *lowerState) isQExpression(expr ast.Expr) bool {
-	// Q() call
-	if call, ok := expr.(*ast.CallExpr); ok {
-		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "Q" {
-			return true
-		}
-	}
-	// Q | Q or Q & Q binary expression
-	if bin, ok := expr.(*ast.BinaryExpr); ok {
-		if bin.Op == "|" || bin.Op == "&" {
-			return ls.isQExpression(bin.Lhs) && ls.isQExpression(bin.Rhs)
-		}
-	}
-	// ~Q(...) unary negation
-	if unary, ok := expr.(*ast.UnaryExpr); ok && unary.Op == "~" {
-		return ls.isQExpression(unary.X)
-	}
-	return false
+	return macro.IsQExpression(expr, ls.info)
 }
 
-// isFExpression checks if an AST expression is an F() call or F binary expression.
-// Used to disambiguate F("price") * 2 from normal str + int concatenation.
+// isFExpression delegates to macro.IsFExpression.
+// Checks if an AST expression is an F() call or F binary expression.
 func isFExpression(expr ast.Expr) bool {
-	if call, ok := expr.(*ast.CallExpr); ok {
-		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "F" {
-			return true
-		}
-	}
-	if bin, ok := expr.(*ast.BinaryExpr); ok {
-		if bin.Op == "+" || bin.Op == "-" || bin.Op == "*" || bin.Op == "/" {
-			return isFExpression(bin.Lhs) || isFExpression(bin.Rhs)
-		}
-	}
-	return false
+	return macro.IsFExpression(expr, nil)
 }
 
 // emitQsFilterArgs emits filter arguments for a call, handling both

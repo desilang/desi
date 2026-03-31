@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -805,27 +806,15 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			return resultType
 		}
 
-		// Special case: Q(field="val") — Django-style Q object for complex lookups
-		// Returns str type (Q expression is a string pointer at runtime)
-		if id.Name == "Q" {
-			// Type-check all kwargs
+		// Macro builtin functions: Q(...), F(...), Count(...), etc.
+		// Resolved generically from the macro registry — no hardcoded names.
+		if builtin := macro.Registry.LookupBuiltin(id.Name); builtin != nil {
+			// Type-check all args (both positional and kwargs)
 			for _, a := range callArgs(call) {
 				c.typ(a.Expr)
 			}
-			c.info.Types[call] = types.Str
-			return types.Str
-		}
-
-		// Special case: F("col") — Django-style F expression for field references
-		// Returns str type (F expression is a column reference string at runtime)
-		if id.Name == "F" {
-			if len(call.Args) != 1 {
-				c.add(diagAt("DTE0046", call.Span, "F() takes exactly 1 argument (column name)"))
-				return nil
-			}
-			c.typ(call.Args[0])
-			c.info.Types[call] = types.Str
-			return types.Str
+			c.info.Types[call] = builtin.RetType
+			return builtin.RetType
 		}
 		set := c.info.Funcs[id.Name]
 		sym := c.scope.Lookup(id.Name)
@@ -1460,22 +1449,28 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 /* ----------------------------- named args core ---------------------------- */
 
 // isModelObjectsChain recursively checks if an expression is part of a
-// Model.objects chain. Returns true if the root resolves to a @model class.
+// macro-decorated class's property chain. Returns true if the root resolves
+// to a class with a macro decorator and an injected property.
+//
+// 100% generic — property name comes from the macro registry.
 //
 // Handles:
 //   - Direct:  FieldExpr(.objects, Ident(User))
 //   - Chained: CallExpr(.filter, FieldExpr(.objects, User))  — inner call result
 func (c *checker) isModelObjectsChain(expr ast.Expr) bool {
-	// Case 1: FieldExpr(.objects, Ident(ClassName))
-	if fe, ok := expr.(*ast.FieldExpr); ok && fe.Name.Name == "objects" {
+	// Case 1: FieldExpr(.propertyName, Ident(ClassName))
+	if fe, ok := expr.(*ast.FieldExpr); ok {
 		if id, ok := fe.X.(*ast.Ident); ok {
 			sym := c.scope.Lookup(id.Name)
 			if sym != nil && (sym.Kind == SymType || sym.Kind == SymFunc) {
-				if classType, ok := sym.Type.(*types.Class); ok && classType.IsModel {
-					// Store type info for lowerer
-					c.info.Types[fe.X] = classType
-					c.info.Types[fe] = classType
-					return true
+				if classType, ok := sym.Type.(*types.Class); ok && classType.MacroDecorator != "" {
+					// Check if the field name is an injected property
+					if _, _, ok := macro.Registry.LookupProperty(classType, fe.Name.Name); ok {
+						// Store type info for lowerer
+						c.info.Types[fe.X] = classType
+						c.info.Types[fe] = classType
+						return true
+					}
 				}
 			}
 		}

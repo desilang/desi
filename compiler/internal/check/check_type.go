@@ -6,6 +6,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -95,6 +96,13 @@ func (c *checker) collectTypeAlias(d *ast.TypeAliasDecl) {
 }
 
 func (c *checker) collectClass(d *ast.ClassDecl) {
+	// Skip @macro class definitions — they're configuration, not runtime classes.
+	for _, dec := range d.Decorators {
+		if dec.Name.Name == "macro" {
+			return
+		}
+	}
+
 	// Create Class type
 	cls := &types.Class{
 		Name:          d.Name.Name,
@@ -113,18 +121,20 @@ func (c *checker) collectClass(d *ast.ClassDecl) {
 		Decl:          d,
 	}
 
-	// Check for @model("tablename") decorator
+	// Check for macro-registered decorators (Tier 2: @model, etc.)
+	// Built-in decorators (Tier 1: @ffi_struct, @packed, etc.) are handled above.
 	for _, dec := range d.Decorators {
-		if dec.Name.Name == "model" {
-			cls.IsModel = true
-			if len(dec.Args) > 0 {
-				if sl, ok := dec.Args[0].(*ast.StrLit); ok {
-					cls.TableName = sl.Value
+		if macro.IsBuiltinDecorator(dec.Name.Name) {
+			continue // Tier 1: handled by existing hardcoded logic
+		}
+		if proto := macro.Registry.Lookup(dec.Name.Name); proto != nil {
+			if proto.OnCollect != nil {
+				ctx := &macro.MacroContext{
+					Class:     cls,
+					Decorator: dec,
+					ClassDecl: d,
 				}
-			}
-			// Default table name to lowercase class name if not specified
-			if cls.TableName == "" {
-				cls.TableName = strings.ToLower(d.Name.Name) + "s"
+				proto.OnCollect(ctx)
 			}
 		}
 	}
@@ -337,6 +347,15 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 		return
 	}
 
+	// Skip @macro class definitions — they're pure configuration consumed
+	// by the macro loader, not runtime classes. Checking them would reject
+	// dict/list literals used in macro configuration constants.
+	for _, dec := range d.Decorators {
+		if dec.Name.Name == "macro" {
+			return
+		}
+	}
+
 	// Add type parameters to scope
 	c.scope = NewScope(c.scope)
 	defer func() { c.scope = c.scope.parent }()
@@ -434,7 +453,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	for _, field := range d.Fields {
 		var fieldType types.T
 
-		if cls.IsModel && field.Type != nil {
+		if cls.MacroDecorator != "" && field.Type != nil {
 			// Check if field type is an ORM field descriptor
 			ormField, desiType := c.resolveOrmField(field.Name.Name, field.Type)
 			if ormField != nil {
@@ -456,7 +475,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	}
 
 	// For @model classes: if no field has PrimaryKey, auto-add id: AutoField
-	if cls.IsModel {
+	if cls.MacroDecorator != "" {
 		hasPK := false
 		for _, mf := range cls.ModelFields {
 			if mf.PrimaryKey || mf.Kind == types.OrmAuto || mf.Kind == types.OrmBigAuto {
@@ -478,7 +497,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	}
 
 	// For @model classes: extract Meta class options
-	if cls.IsModel {
+	if cls.MacroDecorator != "" {
 		for _, nested := range d.Nested {
 			if nested.Name.Name == "Meta" {
 				meta := &types.OrmMeta{}
@@ -542,7 +561,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 	}
 
 	// If CompositePK is set, remove the auto-inserted id field
-	if cls.IsModel && cls.Meta != nil && len(cls.Meta.CompositePK) > 0 {
+	if cls.MacroDecorator != "" && cls.Meta != nil && len(cls.Meta.CompositePK) > 0 {
 		var filteredFields []types.OrmField
 		for _, mf := range cls.ModelFields {
 			if mf.Name == "id" && mf.Kind == types.OrmAuto {
@@ -563,7 +582,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 
 	// Check nested classes EARLY (before method bodies need them)
 	for _, nested := range d.Nested {
-		if cls.IsModel && nested.Name.Name == "Meta" {
+		if cls.MacroDecorator != "" && nested.Name.Name == "Meta" {
 			continue // Skip Meta class — already processed above
 		}
 		c.checkClass(nested)
@@ -1080,7 +1099,7 @@ func (c *checker) resolveOrmField(fieldName string, tn *ast.TypeName) (*types.Or
 				refTable := param.Name
 				refColumn := "id" // default PK column
 				for _, node := range c.info.Types {
-					if cls, ok := node.(*types.Class); ok && cls.IsModel && cls.Name == param.Name {
+					if cls, ok := node.(*types.Class); ok && cls.MacroDecorator != "" && cls.Name == param.Name {
 						refTable = cls.TableName
 						// Auto-resolve PK column from the referenced model's fields
 						for _, mf := range cls.ModelFields {

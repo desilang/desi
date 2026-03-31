@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/hir"
 	"github.com/desilang/desi/compiler/internal/lower"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/resolve"
@@ -63,6 +65,19 @@ func init() {
 	// Use embedded stdlib from the binary
 	embedStdlib := resolve.NewEmbedFSLoader(lib.StdlibFS)
 	loader := resolve.NewFSLoaderMultiWithStdlib(userRoots, embedStdlib)
+
+	// ── Macro Loading (before type checking) ──
+	// 1. Load builtin macros from embedded stdlib (compiler/lib/macros/*.desi)
+	loadEmbeddedMacros()
+	// 2. Load macros from desi.mod [macros].paths if available
+	if _, mp, ok := project.FindRoot(filepath.Dir(file)); ok {
+		manifest, mdiags := project.Load(mp)
+		if len(mdiags) == 0 {
+			loadProjectMacros(manifest, filepath.Dir(mp))
+		}
+	}
+	// 3. Load macros from the entry module itself (user may define @macro classes inline)
+	macro.LoadMacrosFromModule(mod)
 
 	// Run full type checker (M14: needed for struct/trait info)
 	res := check.CheckWithLoader(mod, loader)
@@ -518,4 +533,72 @@ func buildImportRoots(entryFile string, userRoots string) []string {
 	}
 
 	return roots
+}
+
+// ── Macro Loading Helpers ──
+
+// macrosLoaded tracks whether embedded macros have been loaded (idempotent).
+var macrosLoaded bool
+
+// loadEmbeddedMacros scans the embedded stdlib filesystem for @macro class
+// definitions in macros/*.desi and registers them in the macro registry.
+// This is idempotent — called at most once per process.
+func loadEmbeddedMacros() {
+	if macrosLoaded {
+		return
+	}
+	macrosLoaded = true
+
+	// Walk the embedded filesystem for macros/*.desi files
+	_ = fs.WalkDir(lib.StdlibFS, ".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil || d.IsDir() {
+			return nil
+		}
+		// Only look at macros/ subdirectory
+		if !strings.HasPrefix(path, "macros/") || !strings.HasSuffix(path, ".desi") {
+			return nil
+		}
+		data, err := fs.ReadFile(lib.StdlibFS, path)
+		if err != nil {
+			return nil
+		}
+		mod, pdiags := parse.ParseFile(path, data)
+		if len(pdiags) > 0 || mod == nil {
+			return nil // skip files with parse errors
+		}
+		macro.LoadMacrosFromModule(mod)
+		return nil
+	})
+}
+
+// loadProjectMacros scans directories listed in desi.mod for @macro class
+// definitions and registers them in the macro registry.
+func loadProjectMacros(m project.Manifest, projectDir string) {
+	// Future: add [macros] section to Manifest and read m.Macros.Paths here.
+	// For now, check for a macros/ directory in the project root.
+	macroDir := filepath.Join(projectDir, "macros")
+	if st, err := os.Stat(macroDir); err != nil || !st.IsDir() {
+		return
+	}
+
+	entries, err := os.ReadDir(macroDir)
+	if err != nil {
+		return
+	}
+
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".desi") {
+			continue
+		}
+		path := filepath.Join(macroDir, e.Name())
+		data, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		mod, pdiags := parse.ParseFile(path, data)
+		if len(pdiags) > 0 || mod == nil {
+			continue
+		}
+		macro.LoadMacrosFromModule(mod)
+	}
 }

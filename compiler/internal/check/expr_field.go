@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -34,12 +35,14 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 					c.info.Types[x] = classMethod
 					return classMethod
 				}
-				// @model classes: ClassName.objects → return class type as manager
-				// This enables User.objects.filter(), User.objects.create(), etc.
-				if classType.IsModel && methodName == "objects" {
-					c.info.Types[x] = classType
-					c.info.Types[x.X] = classType
-					return classType
+				// Macro-injected properties: ClassName.objects → return class type as manager
+				// This is 100% generic — property names come from macro definitions.
+				if classType.MacroDecorator != "" {
+					if _, _, ok := macro.Registry.LookupProperty(classType, methodName); ok {
+						c.info.Types[x] = classType
+						c.info.Types[x.X] = classType
+						return classType
+					}
 				}
 				// Check for nested class access: Outer.Inner
 				if classType.Decl != nil {
@@ -736,14 +739,13 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 			curr = curr.Base
 		}
 
-		// @model classes: recognize QuerySet methods from .objects manager
-		// User.objects returns class type → User.objects.filter() looks up "filter" on class
-		if cls.IsModel {
-			switch name {
-			case "all", "filter", "exclude", "get", "create", "update", "delete",
-				"count", "exists", "first", "last", "order_by", "values":
-				// All QuerySet methods return int (row count or status)
-				qsMethod := types.FuncOf(nil, types.Int, true) // variadic for kwargs
+		// Macro-decorated classes: recognize injected methods from macro properties
+		// e.g., User.objects.filter() → "filter" is looked up via macro registry
+		if cls.MacroDecorator != "" {
+			if _, method, ok := macro.Registry.LookupMethodOnClass(cls, name); ok {
+				// Return variadic func type returning int (row count/status)
+				_ = method // method spec available for future type refinement
+				qsMethod := types.FuncOf(nil, types.Int, true)
 				c.info.Types[x] = qsMethod
 				return qsMethod
 			}

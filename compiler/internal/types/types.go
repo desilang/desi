@@ -250,6 +250,8 @@ type Class struct {
 	IsAbstract      bool             // true if class has any abstract methods
 	AbstractMethods map[string]bool  // set of abstract method names
 	Decl            *ast.ClassDecl   // Backlink to AST for monomorphization
+	// Macro decorator support (generic — works for @model, @snodel, any macro)
+	MacroDecorator  string           // name of macro protocol applied (e.g., "model", "snodel")
 	// ORM model support (@model decorator)
 	IsModel         bool             // true if class has @model decorator
 	TableName       string           // SQL table name from @model("tablename")
