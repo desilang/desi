@@ -2,20 +2,14 @@ package check
 
 import (
 	"github.com/desilang/desi/compiler/internal/ast"
+	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// isFCall checks if an expression is an F() call or contains one in a binary expression.
+// isFCall delegates to macro.IsFCall for backward compatibility.
+// Checks if an expression is an F() call or contains one in a binary expression.
 func isFCall(expr ast.Expr) bool {
-	if call, ok := expr.(*ast.CallExpr); ok {
-		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "F" {
-			return true
-		}
-	}
-	if bin, ok := expr.(*ast.BinaryExpr); ok {
-		return isFCall(bin.Lhs) || isFCall(bin.Rhs)
-	}
-	return false
+	return macro.IsFCall(expr)
 }
 
 func (c *checker) typBinary(x *ast.BinaryExpr) types.T {

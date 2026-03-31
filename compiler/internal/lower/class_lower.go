@@ -469,7 +469,7 @@ func LowerModelInit(cd *ast.ClassDecl, info *check.Info) *hir.Func {
 	if t := info.Types[cd]; t != nil {
 		cls, _ = t.(*types.Class)
 	}
-	if cls == nil || !cls.IsModel {
+	if cls == nil || cls.MacroDecorator == "" {
 		return nil
 	}
 

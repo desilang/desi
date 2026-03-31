@@ -6,6 +6,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
+	_ "github.com/desilang/desi/compiler/internal/macro" // ensure ORM protocol registers via init()
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
@@ -299,7 +300,7 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 	for _, d := range mod.Decls {
 		if cd, ok := d.(*ast.ClassDecl); ok {
 			if t := info.Types[cd]; t != nil {
-				if cls, ok := t.(*types.Class); ok && cls.IsModel {
+				if cls, ok := t.(*types.Class); ok && cls.MacroDecorator != "" {
 					modelInitNames = append(modelInitNames, fmt.Sprintf("__orm_init_%s", cd.Name.Name))
 				}
 			}
