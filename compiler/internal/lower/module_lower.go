@@ -15,6 +15,7 @@ type LowerModuleOptions struct {
 	SkipBuiltinEnums bool   // Don't generate Option/Result constructors
 	IsImportedModule bool   // Force-mangle all non-extern function definitions
 	DbEngine         string // "postgres" or "mysql" — auto-injects dialect call in __top__
+	DbDebugQueries   bool   // if true, inject __db_set_debug_queries(1) in __top__
 }
 
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
@@ -326,6 +327,20 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 					initStmts = append(initStmts, &hir.Call{
 						Fn:   "__db_set_dialect",
 						Args: []hir.Value{hir.ConstInt{Text: dialect}},
+						Type: "i32",
+					})
+					initStmts = append(initStmts, &hir.Call{
+						Fn:   "__crud_set_dialect",
+						Args: []hir.Value{hir.ConstInt{Text: dialect}},
+						Type: "i32",
+					})
+				}
+
+				// Debug queries: emit __db_set_debug_queries(1) from desi.mod
+				if opts.DbDebugQueries {
+					initStmts = append(initStmts, &hir.Call{
+						Fn:   "__db_set_debug_queries",
+						Args: []hir.Value{hir.ConstInt{Text: "1"}},
 						Type: "i32",
 					})
 				}

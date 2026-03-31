@@ -112,6 +112,7 @@ func init() {
 		manifest, mdiags := project.Load(mp)
 		if len(mdiags) == 0 && manifest.Database.Engine != "" {
 			lowerOpts.DbEngine = manifest.Database.Engine
+			lowerOpts.DbDebugQueries = manifest.Database.DebugQueries
 		}
 	}
 

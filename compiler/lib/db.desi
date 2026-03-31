@@ -23,6 +23,12 @@
 pub def __db_set_dialect(dialect: int) -> int
 
 @extern("C")
+pub def __db_set_debug_queries(enabled: int) -> int
+
+@extern("C")
+pub def __crud_set_dialect(dialect: int) -> int
+
+@extern("C")
 pub def __db_select(table: str) -> int
 
 @extern("C")

@@ -515,6 +515,214 @@ int32_t __pg_query(const char* sql) {
 int32_t __pg_execute(const char* sql) { return __pg_query(sql); }
 
 // ============================================================
+// Parameterized Query — PG Extended Query Protocol
+// Uses Parse → Bind → Describe → Execute → Sync
+// Parameters are sent as separate text values, never inlined.
+// ============================================================
+
+int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
+    if (!g_pg_connected || g_pg_fd < 0) {
+        snprintf(g_pg_error, sizeof(g_pg_error), "Not connected");
+        return -1;
+    }
+
+    pg_free_results();
+    g_pg_error[0] = '\0';
+
+    pg_log("query_params: %s  (nparams=%d)", sql, nparams);
+    for (int i = 0; i < nparams; i++) {
+        pg_log("  param[%d] = '%s'", i, params[i] ? params[i] : "NULL");
+    }
+
+    // We'll build all messages into one buffer for a single send.
+    // This avoids multiple round-trips.
+    char buf[65536];
+    int pos = 0;
+
+    // ---- 1. Parse message ('P') ----
+    // Format: 'P' + int32(len) + cstring(stmt_name) + cstring(query) + int16(num_param_types) + [int32(type_oid)...]
+    {
+        int sql_len = strlen(sql);
+        // stmt_name = "" (unnamed), query = sql, 0 param types (let server infer)
+        int body_len = 4 + 1 + (sql_len + 1) + 2;  // len + "" + query + int16(0)
+        buf[pos++] = 'P';
+        pg_write_i32(buf + pos, body_len); pos += 4;
+        buf[pos++] = '\0';  // unnamed statement
+        memcpy(buf + pos, sql, sql_len + 1); pos += sql_len + 1;
+        buf[pos++] = 0; buf[pos++] = 0;  // int16(0) = no type OIDs
+    }
+
+    // ---- 2. Bind message ('B') ----
+    // Format: 'B' + int32(len) + cstring(portal) + cstring(stmt) + int16(num_format_codes) + [int16(fc)...]
+    //         + int16(num_params) + [int32(param_len) + bytes(param_val)]...
+    //         + int16(num_result_format_codes) + [int16(rfc)...]
+    {
+        // Calculate body size
+        int body = 4;  // len field
+        body += 1;     // portal = ""
+        body += 1;     // stmt = ""
+        body += 2;     // int16(1) = one format code
+        body += 2;     // int16(0) = text format
+        body += 2;     // int16(nparams)
+
+        for (int i = 0; i < nparams; i++) {
+            body += 4;  // int32(param_len)
+            if (params[i]) {
+                body += strlen(params[i]);
+            }
+        }
+        body += 2;  // int16(1) = one result format code
+        body += 2;  // int16(0) = text format
+
+        buf[pos++] = 'B';
+        pg_write_i32(buf + pos, body); pos += 4;
+        buf[pos++] = '\0';  // portal = ""
+        buf[pos++] = '\0';  // stmt = ""
+
+        // Format codes: 1 code, 0 = text (applies to all params)
+        buf[pos++] = 0; buf[pos++] = 1;  // int16(1)
+        buf[pos++] = 0; buf[pos++] = 0;  // int16(0) = text
+
+        // Parameters
+        buf[pos++] = (nparams >> 8) & 0xFF;
+        buf[pos++] = nparams & 0xFF;
+
+        for (int i = 0; i < nparams; i++) {
+            if (params[i] == NULL) {
+                // NULL parameter: length = -1
+                pg_write_i32(buf + pos, -1); pos += 4;
+            } else {
+                int plen = strlen(params[i]);
+                pg_write_i32(buf + pos, plen); pos += 4;
+                memcpy(buf + pos, params[i], plen); pos += plen;
+            }
+        }
+
+        // Result format: 1 code, 0 = text
+        buf[pos++] = 0; buf[pos++] = 1;  // int16(1)
+        buf[pos++] = 0; buf[pos++] = 0;  // int16(0) = text
+    }
+
+    // ---- 3. Describe message ('D') ----
+    // Describe the portal to get RowDescription
+    {
+        buf[pos++] = 'D';
+        pg_write_i32(buf + pos, 4 + 1 + 1); pos += 4;  // len = 6
+        buf[pos++] = 'P';    // describe portal (not statement)
+        buf[pos++] = '\0';   // unnamed portal
+    }
+
+    // ---- 4. Execute message ('E') ----
+    {
+        buf[pos++] = 'E';
+        pg_write_i32(buf + pos, 4 + 1 + 4); pos += 4;  // len = 9
+        buf[pos++] = '\0';                                // unnamed portal
+        pg_write_i32(buf + pos, 0); pos += 4;            // max rows = 0 (all)
+    }
+
+    // ---- 5. Sync message ('S') ----
+    {
+        buf[pos++] = 'S';
+        pg_write_i32(buf + pos, 4); pos += 4;
+    }
+
+    // Send all messages in one write
+    if (pg_send_raw(buf, pos) < 0) {
+        snprintf(g_pg_error, sizeof(g_pg_error), "Failed to send extended query");
+        return -1;
+    }
+
+    // ---- Read responses ----
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    int rows_affected = 0;
+
+    while (1) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) {
+            snprintf(g_pg_error, sizeof(g_pg_error), "Failed to read extended query response");
+            return -1;
+        }
+
+        switch (mtype) {
+            case '1': // ParseComplete
+                pg_log("ParseComplete");
+                break;
+            case '2': // BindComplete
+                pg_log("BindComplete");
+                break;
+            case 'n': // NoData (for queries that don't return rows)
+                pg_log("NoData");
+                break;
+            case 'T': { // RowDescription
+                int16_t nc = pg_read_i16(payload);
+                g_pg_ncols = nc;
+                pg_log("RowDescription: %d columns", nc);
+                char* p = payload + 2;
+                for (int i = 0; i < nc && i < PG_MAX_COLS; i++) {
+                    strncpy(g_pg_colnames[i], p, 127);
+                    g_pg_colnames[i][127] = '\0';
+                    pg_log("  col %d: %s", i, g_pg_colnames[i]);
+                    p += strlen(p) + 1;
+                    p += 18; // tableOID(4)+colAttr(2)+typeOID(4)+typeSize(2)+typeMod(4)+fmtCode(2)
+                }
+                break;
+            }
+            case 'D': { // DataRow
+                int16_t nc = pg_read_i16(payload);
+                int row_base = g_pg_nrows * g_pg_ncols;
+                pg_ensure_cells(row_base + g_pg_ncols);
+                char* p = payload + 2;
+                for (int i = 0; i < nc && i < g_pg_ncols; i++) {
+                    int32_t clen = pg_read_i32(p); p += 4;
+                    if (clen == -1) {
+                        g_pg_cells[row_base + i] = strdup("");
+                    } else {
+                        g_pg_cells[row_base + i] = malloc(clen + 1);
+                        memcpy(g_pg_cells[row_base + i], p, clen);
+                        g_pg_cells[row_base + i][clen] = '\0';
+                        p += clen;
+                    }
+                }
+                g_pg_nrows++;
+                break;
+            }
+            case 'C': { // CommandComplete
+                char* tag = payload;
+                pg_log("CommandComplete: %s", tag);
+                if (strncmp(tag,"INSERT",6)==0 || strncmp(tag,"UPDATE",6)==0 || strncmp(tag,"DELETE",6)==0) {
+                    char* sp = strrchr(tag, ' ');
+                    if (sp) rows_affected = atoi(sp+1);
+                } else if (strncmp(tag,"SELECT",6)==0) {
+                    rows_affected = g_pg_nrows;
+                } else if (strncmp(tag,"CREATE",6)==0 || strncmp(tag,"DROP",4)==0 || strncmp(tag,"ALTER",5)==0) {
+                    rows_affected = 0;
+                }
+                break;
+            }
+            case 'E': { // Error
+                char* p = payload;
+                while (p < payload + plen && *p) {
+                    char f = *p++;
+                    if (f == '\0') break;
+                    if (f == 'M') { snprintf(g_pg_error, sizeof(g_pg_error), "%s", p); break; }
+                    p += strlen(p) + 1;
+                }
+                pg_log("error: %s", g_pg_error);
+                break;
+            }
+            case 'N': break; // Notice
+            case 'Z': { // ReadyForQuery
+                pg_log("ReadyForQuery rows=%d", g_pg_nrows);
+                if (g_pg_error[0]) return -1;
+                return rows_affected;
+            }
+            default: break;
+        }
+    }
+}
+
+// ============================================================
 // Result Access
 // ============================================================
 

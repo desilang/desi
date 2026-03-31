@@ -57,20 +57,21 @@ type Extern struct {
 }
 
 type Database struct {
-	Engine      string // "postgres" or "mysql" (required)
-	SchemaOnly  bool   // if true, no connection fields needed
-	Host        string // DB hostname or IP address
-	Port        string // DB port (auto-defaults: 5432/postgres, 3306/mysql)
-	Name        string // database name
-	User        string // DB username
-	Password    string // DB password
-	SslMode     string // TLS mode: "disable", "require", "verify-ca", "verify-full"
-	Charset     string // character encoding: "utf8mb4", "UTF8"
-	Timezone    string // connection timezone: "UTC", "America/Chicago"
-	Prefix      string // table name prefix for multi-tenancy: "app1_"
-	MaxConns    string // max open connections (future use)
-	ConnTimeout string // connection timeout in seconds (future use)
-	Options     string // extra DSN/connection string parameters
+	Engine       string // "postgres" or "mysql" (required)
+	SchemaOnly   bool   // if true, no connection fields needed
+	DebugQueries bool   // if true, print SQL + params to stderr
+	Host         string // DB hostname or IP address
+	Port         string // DB port (auto-defaults: 5432/postgres, 3306/mysql)
+	Name         string // database name
+	User         string // DB username
+	Password     string // DB password
+	SslMode      string // TLS mode: "disable", "require", "verify-ca", "verify-full"
+	Charset      string // character encoding: "utf8mb4", "UTF8"
+	Timezone     string // connection timezone: "UTC", "America/Chicago"
+	Prefix       string // table name prefix for multi-tenancy: "app1_"
+	MaxConns     string // max open connections (future use)
+	ConnTimeout  string // connection timeout in seconds (future use)
+	Options      string // extra DSN/connection string parameters
 }
 
 // EntryPath resolves the absolute entry file (relative to manifest dir).
@@ -383,6 +384,8 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 				m.Database.Engine = parseString(val)
 			case "schema_only":
 				m.Database.SchemaOnly = parseString(val) == "true"
+			case "debug_queries":
+				m.Database.DebugQueries = parseString(val) == "true"
 			case "host":
 				m.Database.Host = parseString(val)
 			case "port":
