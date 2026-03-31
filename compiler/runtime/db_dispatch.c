@@ -27,6 +27,7 @@ extern int32_t __pg_close(void);
 extern int32_t __pg_is_connected(void);
 extern char*   __pg_last_error(void);
 extern int32_t __pg_query(const char*);
+extern int32_t __pg_query_params(const char*, const char**, int);
 extern int32_t __pg_execute(const char*);
 extern int32_t __pg_row_count(void);
 extern int32_t __pg_col_count(void);
@@ -43,6 +44,7 @@ extern int32_t __my_close(void);
 extern int32_t __my_is_connected(void);
 extern char*   __my_last_error(void);
 extern int32_t __my_query(const char*);
+extern int32_t __my_query_params(const char*, const char**, int);
 extern int32_t __my_execute(const char*);
 extern int32_t __my_row_count(void);
 extern int32_t __my_col_count(void);
@@ -52,6 +54,9 @@ extern char*   __my_get_field(int32_t, const char*);
 extern int32_t __my_set_debug(int32_t);
 extern int32_t __my_dump_results(void);
 extern char*   __my_connection_info(void);
+
+// ---- Forward declarations to CRUD layer ----
+extern int32_t __crud_set_dialect(int32_t);
 
 // ============================================================
 // Unified connect: first arg is driver name
@@ -66,12 +71,14 @@ int32_t __db_connect(const char* driver, const char* host, int32_t port,
     if (strcmp(driver, "postgres") == 0 || strcmp(driver, "pg") == 0 ||
         strcmp(driver, "postgresql") == 0) {
         g_active_driver = DRIVER_PG;
+        __crud_set_dialect(0);  // PG placeholders: $1, $2
         return __pg_connect(host, port, dbname, user, password);
     }
 
     if (strcmp(driver, "mysql") == 0 || strcmp(driver, "my") == 0 ||
         strcmp(driver, "mariadb") == 0) {
         g_active_driver = DRIVER_MYSQL;
+        __crud_set_dialect(1);  // MySQL placeholders: ?
         return __my_connect(host, port, dbname, user, password);
     }
 
@@ -119,6 +126,27 @@ int32_t __db_execute_stmt(const char* sql) {
     switch (g_active_driver) {
         case DRIVER_PG:    return __pg_execute(sql);
         case DRIVER_MYSQL: return __my_execute(sql);
+        default: return -1;
+    }
+}
+
+// ============================================================
+// Parameterized query dispatch
+// ============================================================
+
+int32_t __db_query_params(const char* sql, const char** params, int nparams) {
+    switch (g_active_driver) {
+        case DRIVER_PG:    return __pg_query_params(sql, params, nparams);
+        case DRIVER_MYSQL: return __my_query_params(sql, params, nparams);
+        default: return -1;
+    }
+}
+
+int32_t __db_execute_params(const char* sql, const char** params, int nparams) {
+    // For execute (INSERT/UPDATE/DELETE), use same parameterized path
+    switch (g_active_driver) {
+        case DRIVER_PG:    return __pg_query_params(sql, params, nparams);
+        case DRIVER_MYSQL: return __my_query_params(sql, params, nparams);
         default: return -1;
     }
 }

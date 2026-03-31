@@ -714,6 +714,105 @@ int32_t __my_query(const char* sql) {
 int32_t __my_execute(const char* sql) { return __my_query(sql); }
 
 // ============================================================
+// Parameterized Query — Client-side escaping for MySQL
+//
+// MySQL's COM_STMT_PREPARE (binary protocol) is complex to implement
+// in a raw wire protocol client. Instead, we use client-side escaping
+// (equivalent to mysql_real_escape_string) and send via COM_QUERY.
+//
+// This provides the SAME SQL injection protection:
+//   - Single quotes are doubled: ' → ''
+//   - Backslashes are escaped: \ → \\
+//   - The escaped value is wrapped in single quotes
+//
+// The escaped SQL is then sent via the normal COM_QUERY path.
+// ============================================================
+
+// Escape a string value for safe MySQL interpolation
+// Returns heap-allocated escaped string (caller must free)
+static char* my_escape_value(const char* val) {
+    if (!val) return strdup("NULL");
+
+    int vlen = strlen(val);
+    // Worst case: every char doubles + 2 quotes + null
+    char* out = malloc(vlen * 2 + 3);
+    if (!out) return strdup("''");
+
+    int pos = 0;
+    out[pos++] = '\'';
+    for (int i = 0; i < vlen; i++) {
+        switch (val[i]) {
+            case '\'':
+                out[pos++] = '\''; out[pos++] = '\'';  // '' escaping
+                break;
+            case '\\':
+                out[pos++] = '\\'; out[pos++] = '\\';  // \\ escaping
+                break;
+            case '\0':
+                out[pos++] = '\\'; out[pos++] = '0';
+                break;
+            case '\n':
+                out[pos++] = '\\'; out[pos++] = 'n';
+                break;
+            case '\r':
+                out[pos++] = '\\'; out[pos++] = 'r';
+                break;
+            case '\x1a':  // Ctrl-Z (EOF on Windows)
+                out[pos++] = '\\'; out[pos++] = 'Z';
+                break;
+            default:
+                out[pos++] = val[i];
+                break;
+        }
+    }
+    out[pos++] = '\'';
+    out[pos] = '\0';
+    return out;
+}
+
+// Replace ? placeholders in SQL with escaped values
+// Returns heap-allocated SQL string (caller must free)
+static char* my_interpolate_params(const char* sql, const char** params, int nparams) {
+    // Estimate output size
+    int sql_len = strlen(sql);
+    int total = sql_len;
+    for (int i = 0; i < nparams; i++) {
+        total += params[i] ? strlen(params[i]) * 2 + 3 : 4;  // escaped value or NULL
+    }
+
+    char* out = malloc(total + 1);
+    if (!out) return strdup(sql);
+
+    int opos = 0;
+    int pidx = 0;
+
+    for (int i = 0; i < sql_len; i++) {
+        if (sql[i] == '?' && pidx < nparams) {
+            // Replace ? with escaped value
+            char* escaped = my_escape_value(params[pidx]);
+            int elen = strlen(escaped);
+            memcpy(out + opos, escaped, elen);
+            opos += elen;
+            free(escaped);
+            pidx++;
+        } else {
+            out[opos++] = sql[i];
+        }
+    }
+    out[opos] = '\0';
+    return out;
+}
+
+int32_t __my_query_params(const char* sql, const char** params, int nparams) {
+    // Build escaped SQL and send via normal COM_QUERY
+    char* safe_sql = my_interpolate_params(sql, params, nparams);
+    my_log("query_params: %s", safe_sql);
+    int32_t result = __my_query(safe_sql);
+    free(safe_sql);
+    return result;
+}
+
+// ============================================================
 // Result Access
 // ============================================================
 
