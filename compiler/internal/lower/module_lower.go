@@ -2,20 +2,23 @@ package lower
 
 import (
 	"fmt"
+	"sort"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/hir"
 	_ "github.com/desilang/desi/compiler/internal/macro" // ensure ORM protocol registers via init()
+	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
 // LowerModuleOptions controls module lowering behavior.
 type LowerModuleOptions struct {
-	SkipBuiltinEnums bool   // Don't generate Option/Result constructors
-	IsImportedModule bool   // Force-mangle all non-extern function definitions
-	DbEngine         string // "postgres" or "mysql" — auto-injects dialect call in __top__
-	DbDebugQueries   bool   // if true, inject __db_set_debug_queries(1) in __top__
+	SkipBuiltinEnums bool                       // Don't generate Option/Result constructors
+	IsImportedModule bool                       // Force-mangle all non-extern function definitions
+	DbEngine         string                     // "postgres" or "mysql" — auto-injects dialect call in __top__
+	DbDebugQueries   bool                       // if true, inject __db_set_debug_queries(1) in __top__
+	NamedDatabases   map[string]project.Database // [database.name] sections from desi.mod
 }
 
 // LowerModuleFromSource lowers all top-level function declarations in 'mod'.
@@ -343,6 +346,37 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 						Args: []hir.Value{hir.ConstInt{Text: "1"}},
 						Type: "i32",
 					})
+				}
+
+				// Register named database connections from [database.name] sections
+				if len(opts.NamedDatabases) > 0 {
+					// Sort names for deterministic emit order
+					var dbNames []string
+					for name := range opts.NamedDatabases {
+						dbNames = append(dbNames, name)
+					}
+					sort.Strings(dbNames)
+
+					for _, name := range dbNames {
+						db := opts.NamedDatabases[name]
+						if db.Engine == "" || db.SchemaOnly {
+							continue
+						}
+						// __db_register_conn(name, driver, host, port, dbname, user, password)
+						initStmts = append(initStmts, &hir.Call{
+							Fn: "__db_register_conn",
+							Args: []hir.Value{
+								hir.ConstStr{Text: name},
+								hir.ConstStr{Text: db.Engine},
+								hir.ConstStr{Text: db.Host},
+								hir.ConstInt{Text: db.Port},
+								hir.ConstStr{Text: db.Name},
+								hir.ConstStr{Text: db.User},
+								hir.ConstStr{Text: db.Password},
+							},
+							Type: "i32",
+						})
+					}
 				}
 
 				for _, initName := range modelInitNames {

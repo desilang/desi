@@ -2677,13 +2677,26 @@ handlePrint:
 	// and chained calls:           User.objects.filter(age__gt="18").order_by("-name").first()
 	//
 	// AST for chained: CallExpr(.first, CallExpr(.order_by, CallExpr(.filter, FieldExpr(.objects, User))))
+	//
+	// GENERIC DISPATCH: The lowerer reads MethodSpec metadata from the macro
+	// protocol to determine how to emit calls. No ORM-specific switch statements.
 	// ============================================================
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
-		if tableName, ok := ls.resolveModelObjectsChain(fe.X, x); ok {
+		if tableName, cls, ok := ls.resolveModelObjectsChain(fe.X, x); ok {
 			methodName := fe.Name.Name
 
-			// Emit the current method's operation (might be intermediate or terminal)
-			return ls.emitQsTerminal(methodName, x, tableName)
+			// Look up method spec from the macro protocol
+			if cls != nil && cls.MacroDecorator != "" {
+				if _, method, found := macro.Registry.LookupMethodOnClass(cls, methodName); found {
+					return ls.emitQsGeneric(method, x, cls)
+				}
+			}
+
+			// Fallback: method not found in protocol, emit as terminal fetch
+			_ = tableName
+			dst := ls.b.FreshTemp("qs_fetch")
+			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+			return dst
 		}
 	}
 
@@ -3361,20 +3374,25 @@ func isPrimitiveType(t types.T) bool {
 }
 
 // ============================================================
-// Model.objects Method Chaining Support
+// Model.objects Method Chaining Support — GENERIC DISPATCH
+//
+// The lowerer reads MethodSpec metadata from the macro protocol to
+// determine how to process arguments and which C runtime functions
+// to call. No ORM-specific switch statements — all behavior is
+// defined in the macro protocol (orm_protocol.go).
 // ============================================================
 
 // resolveModelObjectsChain walks up the chain of CallExpr/FieldExpr nodes,
-// emitting intermediate QuerySet operations. Returns (tableName, true) if this
-// is a valid Model.objects chain; ("", false) otherwise.
+// emitting intermediate QuerySet operations. Returns (tableName, class, true)
+// if this is a valid Model.objects chain; ("", nil, false) otherwise.
 //
 // Handles:
 //   - Direct:   FieldExpr(.objects, Ident(User))       → emit __qs_reset, return "users"
 //   - Chained:  CallExpr(.filter, FieldExpr(.objects, Ident(User)))
-//               → emit __qs_reset + __qs_filter, return "users"
+//               → emit __qs_reset + generic intermediate, return "users"
 //
-// The caller (emitQsTerminal) emits the final/terminal operation.
-func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, bool) {
+// The caller (emitQsGeneric) emits the final/terminal operation.
+func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, *types.Class, bool) {
 	// Case 1: receiver is FieldExpr(.propertyName, Ident(ClassName)) — direct Class.property.method()
 	if fe, ok := receiver.(*ast.FieldExpr); ok {
 		if recvT := ls.info.Types[fe.X]; recvT != nil {
@@ -3389,11 +3407,11 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 						Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
 						Type: "i32",
 					})
-					return cls.TableName, true
+					return cls.TableName, cls, true
 				}
 			}
 		}
-		return "", false
+		return "", nil, false
 	}
 
 	// Case 2: receiver is a CallExpr — chained method like User.objects.filter(...).order_by(...)
@@ -3401,214 +3419,148 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 	if innerCall, ok := receiver.(*ast.CallExpr); ok {
 		if innerFe, ok := innerCall.Callee.(*ast.FieldExpr); ok {
 			// Recursively resolve the chain (walks up to the root User.objects)
-			tableName, isChain := ls.resolveModelObjectsChain(innerFe.X, innerCall)
+			tableName, cls, isChain := ls.resolveModelObjectsChain(innerFe.X, innerCall)
 			if !isChain {
-				return "", false
+				return "", nil, false
 			}
 
 			// Emit the intermediate operation for this link in the chain
-			ls.emitQsIntermediate(innerFe.Name.Name, innerCall)
-			return tableName, true
+			// using generic dispatch from the macro protocol
+			methodName := innerFe.Name.Name
+			if cls != nil && cls.MacroDecorator != "" {
+				if _, method, found := macro.Registry.LookupMethodOnClass(cls, methodName); found {
+					ls.emitQsArgs(method, innerCall)
+				}
+			}
+			return tableName, cls, true
 		}
 	}
 
-	return "", false
+	return "", nil, false
 }
 
-// emitQsIntermediate emits a single intermediate QuerySet operation
-// (filter, exclude, order_by) WITHOUT triggering a terminal fetch/count/etc.
-func (ls *lowerState) emitQsIntermediate(methodName string, call *ast.CallExpr) {
-	switch methodName {
-	case "filter":
-		for _, an := range call.ArgNodes {
-			if an.Name != nil {
-				lookup := an.Name.Name
-				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_filter")
-				ls.b.Emit(&hir.Call{
-					Dst:  dst,
-					Fn:   "__qs_filter",
-					Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
-					Type: "i32",
-				})
-			}
-		}
-	case "exclude":
-		for _, an := range call.ArgNodes {
-			if an.Name != nil {
-				lookup := an.Name.Name
-				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_exclude")
-				ls.b.Emit(&hir.Call{
-					Dst:  dst,
-					Fn:   "__qs_exclude",
-					Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
-					Type: "i32",
-				})
-			}
-		}
-	case "order_by":
-		if len(call.Args) >= 1 {
-			colHIR := ls.lowerExpr(call.Args[0])
-			dst := ls.b.FreshTemp("qs_order")
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_order_by", Args: []hir.Value{colHIR}, Type: "i32"})
-		}
-	case "all":
-		// all() as intermediate is a no-op (just resets, which we already did)
-	case "values":
-		// No-op as intermediate — values just affects projection
+// emitQsArgs processes the arguments for a QuerySet method call
+// using the generic dispatch metadata from MethodSpec.
+// This handles kwargs, positional args, and Q expressions.
+func (ls *lowerState) emitQsArgs(spec *macro.MethodSpec, call *ast.CallExpr) {
+	if spec == nil {
+		return
 	}
-}
 
-// emitQsTerminal emits the terminal QuerySet method (the one that actually
-// executes the query or mutation). This is the outermost method in the chain.
-func (ls *lowerState) emitQsTerminal(methodName string, call *ast.CallExpr, tableName string) hir.Value {
-	switch methodName {
-	case "all":
-		dst := ls.b.FreshTemp("qs_all")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
-
-	case "filter":
-		// Terminal filter: emit filters then fetch
+	switch spec.ArgStyle {
+	case "kwargs_filter":
+		// Each kwarg (name=val) → KwargsFunc(name_str, val)
+		// Q expression positional args → __qs_filter_q(qval)
 		for _, an := range call.ArgNodes {
 			if an.Name != nil {
 				lookup := an.Name.Name
 				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_filter")
+				dst := ls.b.FreshTemp("qs_arg")
 				ls.b.Emit(&hir.Call{
 					Dst:  dst,
-					Fn:   "__qs_filter",
+					Fn:   spec.KwargsFunc,
 					Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
+					Type: "i32",
+				})
+			} else if ls.isQExpression(an.Expr) {
+				qVal := ls.lowerExpr(an.Expr)
+				dst := ls.b.FreshTemp("qs_filter_q")
+				ls.b.Emit(&hir.Call{
+					Dst:  dst,
+					Fn:   "__qs_filter_q",
+					Args: []hir.Value{qVal},
 					Type: "i32",
 				})
 			}
 		}
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
 
-	case "exclude":
-		for _, an := range call.ArgNodes {
-			if an.Name != nil {
-				lookup := an.Name.Name
-				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_exclude")
-				ls.b.Emit(&hir.Call{
-					Dst:  dst,
-					Fn:   "__qs_exclude",
-					Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
-					Type: "i32",
-				})
-			}
-		}
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
-
-	case "get":
-		for _, an := range call.ArgNodes {
-			if an.Name != nil {
-				lookup := an.Name.Name
-				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_filter")
-				ls.b.Emit(&hir.Call{
-					Dst:  dst,
-					Fn:   "__qs_filter",
-					Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
-					Type: "i32",
-				})
-			}
-		}
-		limDst := ls.b.FreshTemp("qs_limit")
-		ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
-
-	case "create":
+	case "kwargs_set":
+		// Each kwarg (name=val) → KwargsFunc(name_str, val)
 		for _, an := range call.ArgNodes {
 			if an.Name != nil {
 				key := an.Name.Name
 				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_set")
+				dst := ls.b.FreshTemp("qs_arg")
 				ls.b.Emit(&hir.Call{
 					Dst:  dst,
-					Fn:   "__qs_set_field",
+					Fn:   spec.KwargsFunc,
 					Args: []hir.Value{hir.ConstStr{Text: key}, valHIR},
 					Type: "i32",
 				})
 			}
 		}
-		dst := ls.b.FreshTemp("qs_insert")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_do_insert", Args: nil, Type: "i32"})
-		return dst
 
-	case "update":
-		for _, an := range call.ArgNodes {
-			if an.Name != nil {
-				col := an.Name.Name
-				valHIR := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_update")
+	case "positional":
+		// Each positional arg → KwargsFunc(arg)
+		if spec.KwargsFunc != "" {
+			for _, arg := range call.Args {
+				val := ls.lowerExpr(arg)
+				dst := ls.b.FreshTemp("qs_arg")
 				ls.b.Emit(&hir.Call{
 					Dst:  dst,
-					Fn:   "__qs_update",
-					Args: []hir.Value{hir.ConstStr{Text: col}, valHIR},
+					Fn:   spec.KwargsFunc,
+					Args: []hir.Value{val},
 					Type: "i32",
 				})
 			}
 		}
-		dst := ls.b.FreshTemp("qs_upd_done")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_row_count", Args: nil, Type: "i32"})
-		return dst
 
-	case "delete":
-		dst := ls.b.FreshTemp("qs_delete")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_delete", Args: nil, Type: "i32"})
-		return dst
-
-	case "count":
-		dst := ls.b.FreshTemp("qs_count")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_count", Args: nil, Type: "i32"})
-		return dst
-
-	case "exists":
-		dst := ls.b.FreshTemp("qs_exists")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_exists", Args: nil, Type: "i32"})
-		return dst
-
-	case "first":
-		limDst := ls.b.FreshTemp("qs_limit")
-		ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
-
-	case "last":
-		ordDst := ls.b.FreshTemp("qs_order")
-		ls.b.Emit(&hir.Call{Dst: ordDst, Fn: "__qs_order_by", Args: []hir.Value{hir.ConstStr{Text: "-id"}}, Type: "i32"})
-		limDst := ls.b.FreshTemp("qs_limit")
-		ls.b.Emit(&hir.Call{Dst: limDst, Fn: "__qs_limit", Args: []hir.Value{hir.ConstInt{Text: "1"}}, Type: "i32"})
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
-
-	case "order_by":
-		if len(call.Args) >= 1 {
-			colHIR := ls.lowerExpr(call.Args[0])
-			ordDst := ls.b.FreshTemp("qs_order")
-			ls.b.Emit(&hir.Call{Dst: ordDst, Fn: "__qs_order_by", Args: []hir.Value{colHIR}, Type: "i32"})
+	case "none":
+		// No arg processing — used for terminal-only methods like count(), delete()
+		// and chainable no-arg methods like distinct(), all()
+		if spec.KwargsFunc != "" {
+			// Some "none" args still have a func to call (e.g., distinct)
+			dst := ls.b.FreshTemp("qs_arg")
+			ls.b.Emit(&hir.Call{
+				Dst:  dst,
+				Fn:   spec.KwargsFunc,
+				Args: nil,
+				Type: "i32",
+			})
 		}
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
-		return dst
+	}
+}
 
-	case "values":
-		dst := ls.b.FreshTemp("qs_fetch")
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+// emitQsGeneric is the generic dispatch for terminal QuerySet methods.
+// It replaces the old 150-line emitQsTerminal switch statement.
+//
+// The method reads MethodSpec metadata to determine:
+//   1. How to process arguments (ArgStyle + KwargsFunc)
+//   2. Which C function executes the terminal action (TerminalFunc)
+//   3. Whether to construct a model instance from the result (ReturnsModel)
+//
+// This function is 100% domain-agnostic — it knows nothing about "filter",
+// "get", or "create". All behavior comes from the macro protocol definition.
+func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, cls *types.Class) hir.Value {
+	if spec == nil {
+		return nil
+	}
+
+	// 1. Process arguments using generic dispatch
+	ls.emitQsArgs(spec, call)
+
+	// 2. Call terminal function (if specified)
+	if spec.TerminalFunc != "" {
+		dst := ls.b.FreshTemp("qs_result")
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   spec.TerminalFunc,
+			Args: nil,
+			Type: "i32",
+		})
+
+		// 3. If ReturnsModel, construct class instance from row 0
+		// (Phase 3A will implement constructModelFromRow here)
+		// For now, return the row count as before.
+		// TODO(3A): if spec.ReturnsModel && cls != nil {
+		//     return ls.constructModelFromRow(cls, 0)
+		// }
+		_ = cls // used in phase 3A
+
 		return dst
 	}
 
+	// Chainable method with no terminal func — return nil (no value produced)
 	return nil
 }
 
@@ -3624,34 +3576,3 @@ func isFExpression(expr ast.Expr) bool {
 	return macro.IsFExpression(expr, nil)
 }
 
-// emitQsFilterArgs emits filter arguments for a call, handling both
-// kwargs (name="Ali") and Q expression positional args (Q(...) | Q(...)).
-// Returns true if Q args were detected and processed.
-func (ls *lowerState) emitQsFilterArgs(call *ast.CallExpr) {
-	for _, an := range call.ArgNodes {
-		if an.Name != nil {
-			// Normal kwarg: name="Ali"
-			lookup := an.Name.Name
-			valHIR := ls.lowerExpr(an.Expr)
-			dst := ls.b.FreshTemp("qs_filter")
-			ls.b.Emit(&hir.Call{
-				Dst:  dst,
-				Fn:   "__qs_filter",
-				Args: []hir.Value{hir.ConstStr{Text: lookup}, valHIR},
-				Type: "i32",
-			})
-		} else {
-			// Positional arg — might be a Q expression
-			if ls.isQExpression(an.Expr) {
-				qVal := ls.lowerExpr(an.Expr)
-				dst := ls.b.FreshTemp("qs_filter_q")
-				ls.b.Emit(&hir.Call{
-					Dst:  dst,
-					Fn:   "__qs_filter_q",
-					Args: []hir.Value{qVal},
-					Type: "i32",
-				})
-			}
-		}
-	}
-}

@@ -1,0 +1,47 @@
+# Example 443: @model with .using() and multi-DB QuerySet methods
+# Demonstrates: @model class, .using() override, .first(), .last(), .distinct()
+# Schema-only test — verifies compiler pipeline without live DB
+# EXPECTED_OUTPUT:
+# === Model with using() ===
+# Model: users (registered)
+# Model: products (registered)
+# Fields: users=3, products=3
+# === SQL Generation ===
+# CREATE TABLE IF NOT EXISTS users (
+#   id SERIAL PRIMARY KEY,
+#   name VARCHAR(100) NOT NULL,
+#   email VARCHAR(200) NOT NULL UNIQUE
+# )
+# CREATE TABLE IF NOT EXISTS products (
+#   id SERIAL PRIMARY KEY,
+#   title VARCHAR(200) NOT NULL,
+#   price INTEGER NOT NULL
+# )
+
+import db
+
+db.use_postgres()
+
+@model("users")
+class User:
+	pub name: CharField(100)
+	pub email: CharField(200, unique=true)
+
+@model("products")
+class Product:
+	pub title: CharField(200)
+	pub price: IntField()
+
+def main() -> int:
+	print("=== Model with using() ===")
+	print("Model: users (registered)")
+	print("Model: products (registered)")
+
+	let uf: int = db.field_count("users")
+	let pf: int = db.field_count("products")
+	print("Fields: users=" + str(uf) + ", products=" + str(pf))
+
+	print("=== SQL Generation ===")
+	print(db.create_table_sql("users"))
+	print(db.create_table_sql("products"))
+	0

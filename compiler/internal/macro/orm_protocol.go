@@ -25,27 +25,33 @@ func ormProtocolFallback() *MacroProtocol {
 	propName := "objects"
 
 	methods := map[string]MethodSpec{
-		"all":            {Name: "all", IsChainable: true},
-		"filter":         {Name: "filter", IsChainable: true},
-		"exclude":        {Name: "exclude", IsChainable: true},
-		"get":            {Name: "get", IsTerminal: true},
-		"create":         {Name: "create", IsTerminal: true},
-		"update":         {Name: "update", IsTerminal: true},
-		"delete":         {Name: "delete", IsTerminal: true},
-		"count":          {Name: "count", RetType: types.Int, IsTerminal: true},
-		"exists":         {Name: "exists", RetType: types.Bool, IsTerminal: true},
-		"first":          {Name: "first", IsTerminal: true},
-		"last":           {Name: "last", IsTerminal: true},
-		"order_by":       {Name: "order_by", IsChainable: true},
-		"values":         {Name: "values", IsChainable: true},
-		"distinct":       {Name: "distinct", IsChainable: true},
-		"limit":          {Name: "limit", IsChainable: true},
-		"offset":         {Name: "offset", IsChainable: true},
-		"select_related": {Name: "select_related", IsChainable: true},
-		"aggregate":      {Name: "aggregate", IsTerminal: true},
-		"annotate":       {Name: "annotate", IsChainable: true},
-		"bulk_create":    {Name: "bulk_create", IsTerminal: true},
-		"bulk_update":    {Name: "bulk_update", IsTerminal: true},
+		// Terminal methods — execute queries
+		"all":       {Name: "all", ArgStyle: "none", TerminalFunc: "__qs_all", IsTerminal: true},
+		"get":       {Name: "get", ArgStyle: "kwargs_filter", KwargsFunc: "__qs_filter", TerminalFunc: "__qs_first", IsTerminal: true, ReturnsModel: true},
+		"first":     {Name: "first", ArgStyle: "none", TerminalFunc: "__qs_first", IsTerminal: true, ReturnsModel: true},
+		"last":      {Name: "last", ArgStyle: "none", TerminalFunc: "__qs_last", IsTerminal: true, ReturnsModel: true},
+		"count":     {Name: "count", RetType: types.Int, ArgStyle: "none", TerminalFunc: "__qs_count", IsTerminal: true},
+		"exists":    {Name: "exists", RetType: types.Bool, ArgStyle: "none", TerminalFunc: "__qs_exists", IsTerminal: true},
+		"delete":    {Name: "delete", ArgStyle: "none", TerminalFunc: "__qs_delete", IsTerminal: true},
+		"create":    {Name: "create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_do_insert", IsTerminal: true},
+		"update":    {Name: "update", ArgStyle: "kwargs_set", KwargsFunc: "__qs_update", TerminalFunc: "__qs_row_count", IsTerminal: true},
+		"aggregate": {Name: "aggregate", ArgStyle: "none", TerminalFunc: "__qs_fetch", IsTerminal: true},
+
+		// Chainable methods — build query, don't execute
+		"filter":         {Name: "filter", ArgStyle: "kwargs_filter", KwargsFunc: "__qs_filter", IsChainable: true},
+		"exclude":        {Name: "exclude", ArgStyle: "kwargs_filter", KwargsFunc: "__qs_exclude", IsChainable: true},
+		"order_by":       {Name: "order_by", ArgStyle: "positional", KwargsFunc: "__qs_order_by", IsChainable: true},
+		"limit":          {Name: "limit", ArgStyle: "positional", KwargsFunc: "__qs_limit", IsChainable: true},
+		"offset":         {Name: "offset", ArgStyle: "positional", KwargsFunc: "__qs_offset", IsChainable: true},
+		"distinct":       {Name: "distinct", ArgStyle: "none", KwargsFunc: "__qs_distinct", IsChainable: true},
+		"values":         {Name: "values", ArgStyle: "none", IsChainable: true},
+		"select_related": {Name: "select_related", ArgStyle: "positional", IsChainable: true},
+		"annotate":       {Name: "annotate", ArgStyle: "none", IsChainable: true},
+		"using":          {Name: "using", ArgStyle: "positional", KwargsFunc: "__db_using", IsChainable: true},
+
+		// Bulk operations
+		"bulk_create": {Name: "bulk_create", ArgStyle: "none", TerminalFunc: "__qs_bulk_create", IsTerminal: true},
+		"bulk_update": {Name: "bulk_update", ArgStyle: "none", TerminalFunc: "__qs_bulk_update", IsTerminal: true},
 	}
 
 	runtimeFuncs := map[string]string{
@@ -65,6 +71,7 @@ func ormProtocolFallback() *MacroProtocol {
 		"filter_q":  "__qs_filter_q",
 		"row_count": "__qs_row_count",
 		"distinct":  "__qs_distinct",
+		"using":     "__db_using",
 	}
 
 	return &MacroProtocol{
