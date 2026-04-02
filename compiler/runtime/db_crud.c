@@ -738,3 +738,39 @@ const char* __f_div(const char* f_expr, const char* val) {
     snprintf(result, len, "%s / %s", f_expr, val);
     return result;
 }
+
+// ============================================================
+// Type Converters — DB string → Desi types
+//
+// Database values are always returned as strings.
+// These converters are called by compiler-generated code when
+// constructing a model instance from a query result row.
+// ============================================================
+
+// Convert DB string to int64 (Desi int)
+int64_t __db_str_to_int(const char* s) {
+    if (!s || s[0] == '\0') return 0;
+    return (int64_t)atoll(s);
+}
+
+// Convert DB string to double (Desi float)
+double __db_str_to_float(const char* s) {
+    if (!s || s[0] == '\0') return 0.0;
+    return atof(s);
+}
+
+// Convert DB string to bool (Desi bool)
+// Handles: "t", "true", "1", "yes" → 1; everything else → 0
+int32_t __db_str_to_bool(const char* s) {
+    if (!s || s[0] == '\0') return 0;
+    if (s[0] == 't' || s[0] == 'T' ||
+        s[0] == '1' ||
+        s[0] == 'y' || s[0] == 'Y') return 1;
+    return 0;
+}
+
+// Convert DB string to Desi string (just returns the same ptr; caller owns it)
+const char* __db_str_to_str(const char* s) {
+    if (!s) return "";
+    return s;
+}

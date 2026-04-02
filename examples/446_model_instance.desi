@@ -1,0 +1,64 @@
+# Example 446: Model Instance Construction from DB Rows
+# Demonstrates: @model class, type converters, constructModelFromRow pipeline
+# Schema-only test — verifies compiler generates correct model construction code
+# EXPECTED_OUTPUT:
+# === Model Instance Pipeline ===
+# User model: 3 fields
+# Product model: 3 fields
+# === Type Converters ===
+# str_to_int("42") = 42
+# str_to_int("") = 0
+# str_to_float("3.14") = 3.14
+# str_to_bool("true") = 1
+# str_to_bool("false") = 0
+
+import db
+
+@extern("C")
+def __db_str_to_int(s: str) -> int
+
+@extern("C")
+def __db_str_to_float(s: str) -> float
+
+@extern("C")
+def __db_str_to_bool(s: str) -> int
+
+db.use_postgres()
+
+@model("users")
+class User:
+	pub name: CharField(100)
+	pub email: CharField(200, unique=true)
+
+@model("products")
+class Product:
+	pub title: CharField(200)
+	pub price: IntField()
+
+def main() -> int:
+	print("=== Model Instance Pipeline ===")
+	let uf: int = db.field_count("users")
+	print("User model: " + str(uf) + " fields")
+	let pf: int = db.field_count("products")
+	print("Product model: " + str(pf) + " fields")
+
+	print("=== Type Converters ===")
+
+	unsafe:
+		# Test int converter
+		let i1: int = __db_str_to_int("42")
+		print("str_to_int(\"42\") = " + str(i1))
+		let i2: int = __db_str_to_int("")
+		print("str_to_int(\"\") = " + str(i2))
+
+		# Test float converter
+		let f1: float = __db_str_to_float("3.14")
+		print("str_to_float(\"3.14\") = " + str(f1))
+
+		# Test bool converter
+		let b1: int = __db_str_to_bool("true")
+		print("str_to_bool(\"true\") = " + str(b1))
+		let b2: int = __db_str_to_bool("false")
+		print("str_to_bool(\"false\") = " + str(b2))
+
+	0

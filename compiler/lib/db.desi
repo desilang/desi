@@ -745,6 +745,23 @@ pub def __qs_distinct() -> int
 pub def __db_using(db_name: str) -> int
 
 # ============================================================
+# Type Converters — DB string → Desi types (db_crud.c)
+# Used by compiler-generated constructModelFromRow
+# ============================================================
+
+@extern("C")
+pub def __db_str_to_int(s: str) -> int
+
+@extern("C")
+pub def __db_str_to_float(s: str) -> float
+
+@extern("C")
+pub def __db_str_to_bool(s: str) -> int
+
+@extern("C")
+pub def __db_str_to_str(s: str) -> str
+
+# ============================================================
 # Connection Pool C bindings (db_pool.c)
 # ============================================================
 
