@@ -3550,18 +3550,131 @@ func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, 
 		})
 
 		// 3. If ReturnsModel, construct class instance from row 0
-		// (Phase 3A will implement constructModelFromRow here)
-		// For now, return the row count as before.
-		// TODO(3A): if spec.ReturnsModel && cls != nil {
-		//     return ls.constructModelFromRow(cls, 0)
-		// }
-		_ = cls // used in phase 3A
+		if spec.ReturnsModel && cls != nil && len(cls.Fields) > 0 {
+			return ls.constructModelFromRow(cls, dst)
+		}
 
 		return dst
 	}
 
 	// Chainable method with no terminal func — return nil (no value produced)
 	return nil
+}
+
+// constructModelFromRow generates HIR to construct a model class instance
+// from the current database result set (row 0).
+//
+// Generated pseudocode:
+//
+//	if rowCount > 0:
+//	    inst = malloc(sizeof(Class))
+//	    for each field in cls.Fields:
+//	        raw_str = __db_get_field_by(0, field_name)
+//	        typed_val = __db_str_to_<type>(raw_str)
+//	        store typed_val at inst + field_offset
+//	    return inst
+//	else:
+//	    return null
+//
+// The caller is responsible for null-checking the returned pointer.
+func (ls *lowerState) constructModelFromRow(cls *types.Class, rowCountVar hir.Value) hir.Value {
+	// Calculate class instance size
+	classSize := getClassSize(cls.Fields)
+
+	// Allocate instance on heap
+	inst := ls.b.FreshTemp("model_inst")
+	ls.b.Emit(&hir.Call{
+		Dst:  inst,
+		Fn:   "malloc",
+		Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", classSize), Type: "i32"}},
+		Type: "ptr",
+	})
+
+	// Populate each field from the DB result
+	offset := 0
+	for _, field := range cls.Fields {
+		fieldSize := getSize(field.Type)
+		fieldAlign := getAlign(field.Type)
+
+		// Align offset
+		if fieldAlign > 0 && offset%fieldAlign != 0 {
+			offset += fieldAlign - (offset % fieldAlign)
+		}
+
+		// Read raw string value from DB: __db_get_field_by(0, "field_name")
+		rawStr := ls.b.FreshTemp("db_raw")
+		ls.b.Emit(&hir.Call{
+			Dst:  rawStr,
+			Fn:   "__db_get_field_by",
+			Args: []hir.Value{hir.ConstInt{Text: "0"}, hir.ConstStr{Text: field.Name}},
+			Type: "ptr",
+		})
+
+		// Convert raw string to the field's type
+		typedVal := ls.emitTypeConverter(rawStr, field.Type)
+
+		// GEP to field offset
+		fieldPtr := ls.b.FreshTemp("field_ptr")
+		ls.b.Emit(&hir.GetElementPtr{
+			Type:    "i8",
+			Base:    inst,
+			Indices: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", offset)}},
+			Dst:     fieldPtr,
+		})
+
+		// Store converted value
+		ls.b.Emit(&hir.Store{Dst: fieldPtr, Val: typedVal})
+
+		offset += fieldSize
+	}
+
+	return inst
+}
+
+// emitTypeConverter generates HIR to convert a raw DB string (ptr) to the
+// appropriate Desi type. Returns the converted value.
+//
+// Mapping:
+//
+//	int, i32, i64, etc. → __db_str_to_int(raw)
+//	float, f64, etc.    → __db_str_to_float(raw)
+//	bool                → __db_str_to_bool(raw)
+//	str, ptr            → __db_str_to_str(raw)  (identity)
+func (ls *lowerState) emitTypeConverter(rawStr hir.Value, fieldType types.T) hir.Value {
+	llvmType := lowerType(fieldType)
+	var converterFn string
+	var retType string
+
+	switch llvmType {
+	case "i64":
+		converterFn = "__db_str_to_int"
+		retType = "i64"
+	case "i32":
+		converterFn = "__db_str_to_int"
+		retType = "i64" // returns i64, we truncate if needed
+	case "double":
+		converterFn = "__db_str_to_float"
+		retType = "double"
+	case "float":
+		converterFn = "__db_str_to_float"
+		retType = "double"
+	case "i1":
+		converterFn = "__db_str_to_bool"
+		retType = "i32"
+	default:
+		// str, ptr, or any reference type — identity
+		converterFn = "__db_str_to_str"
+		retType = "ptr"
+	}
+
+	dst := ls.b.FreshTemp("db_conv")
+	ls.b.Emit(&hir.Call{
+		Dst:  dst,
+		Fn:   converterFn,
+		Args: []hir.Value{rawStr},
+		Type: retType,
+	})
+	return dst
 }
 
 // isQExpression delegates to macro.IsQExpression.
