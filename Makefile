@@ -8,6 +8,7 @@ GO ?= go
 BUILD_DIR = build
 BIN_DIR = bin
 RUNTIME_SRC = compiler/runtime
+RUNTIME_DB  = compiler/runtime/db
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
 
@@ -29,7 +30,9 @@ endif
 
 # Auto-discover all .c files in runtime (excluding decimal subdirectory and desi_host)
 RUNTIME_SRCS = $(filter-out $(RUNTIME_SRC)/desi_host.c,$(wildcard $(RUNTIME_SRC)/*.c))
+RUNTIME_DB_SRCS = $(wildcard $(RUNTIME_DB)/*.c)
 RUNTIME_OBJS = $(patsubst $(RUNTIME_SRC)/%.c,$(BUILD_DIR)/%.o,$(RUNTIME_SRCS))
+RUNTIME_DB_OBJS = $(patsubst $(RUNTIME_DB)/%.c,$(BUILD_DIR)/%.o,$(RUNTIME_DB_SRCS))
 
 LIB_DESI = $(BUILD_DIR)/libdesi.a
 
@@ -60,13 +63,17 @@ $(DECIMAL_LIB):
 # Runtime Library (includes decimal support)
 runtime: decimal-lib $(LIB_DESI)
 
-$(LIB_DESI): $(RUNTIME_OBJS) $(BUILD_DIR)/desi_decimal.o
+$(LIB_DESI): $(RUNTIME_OBJS) $(RUNTIME_DB_OBJS) $(BUILD_DIR)/desi_decimal.o
 	@echo "==> Merging runtime + libmpdec into $@"
 	cp $(DECIMAL_LIB) $@
 	$(AR) rcs $@ $^
 
 $(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
 	@echo "==> Compiling $<..."
+	$(CC) $(OPENSSL_CFLAGS) -c $< -o $@
+
+$(BUILD_DIR)/%.o: $(RUNTIME_DB)/%.c
+	@echo "==> Compiling db/$<..."
 	$(CC) $(OPENSSL_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB)

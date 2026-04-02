@@ -24,7 +24,7 @@
 #include <errno.h>
 
 // Forward declare list types
-#include "list.h"
+#include "../list.h"
 
 // ============================================================
 // Connection
