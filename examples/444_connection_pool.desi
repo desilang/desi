@@ -1,0 +1,21 @@
+# Example 444: Connection Pool API
+# Demonstrates: pool stats (without live connection)
+# Schema-only test — verifies pool C runtime links correctly
+# EXPECTED_OUTPUT:
+# === Connection Pool API ===
+# Pool size (before init): 0
+# Pool available (before init): 0
+
+import db
+
+def main() -> int:
+	print("=== Connection Pool API ===")
+
+	# Pool stats before initialization — should be 0
+	let size: int = db.pool_size()
+	print("Pool size (before init): " + str(size))
+
+	let avail: int = db.pool_available()
+	print("Pool available (before init): " + str(avail))
+
+	0

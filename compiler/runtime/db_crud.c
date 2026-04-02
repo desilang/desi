@@ -61,6 +61,7 @@ static char   qs_where[4096] = "";
 static char   qs_order[256] = "";
 static int    qs_limit = 0;
 static int    qs_offset = 0;
+static int    qs_distinct = 0;
 static int    qs_row_count = 0;
 
 // Parameter accumulator — values are stored here, SQL has placeholders
@@ -129,6 +130,7 @@ int32_t __qs_reset(const char* table) {
     qs_order[0] = '\0';
     qs_limit = 0;
     qs_offset = 0;
+    qs_distinct = 0;
     qs_row_count = 0;
     qs_insert_count = 0;
     qs_insert_param_start = 0;
@@ -340,7 +342,12 @@ int32_t __qs_offset(int32_t n) {
 // Build SELECT SQL and execute with parameters
 int32_t __qs_fetch(void) {
     char sql[4096];
-    int pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s", qs_table);
+    int pos;
+    if (qs_distinct) {
+        pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT * FROM %s", qs_table);
+    } else {
+        pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s", qs_table);
+    }
     if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
     if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
     if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
@@ -354,6 +361,51 @@ int32_t __qs_fetch(void) {
         qs_row_count = __db_query_exec(sql);
     }
     return qs_row_count;
+}
+
+// ============================================================
+// Terminal convenience functions
+// These are called by the generic lowerer dispatch.
+// ============================================================
+
+// __qs_all — alias for fetch
+int32_t __qs_all(void) {
+    return __qs_fetch();
+}
+
+// __qs_first — LIMIT 1 + fetch
+int32_t __qs_first(void) {
+    qs_limit = 1;
+    return __qs_fetch();
+}
+
+// __qs_last — ORDER BY id DESC + LIMIT 1 + fetch
+int32_t __qs_last(void) {
+    // Only override order if none set
+    if (qs_order[0] == '\0') {
+        snprintf(qs_order, sizeof(qs_order), "id DESC");
+    } else {
+        // Reverse existing order: append DESC logic
+        // For simplicity, prepend "id DESC, " to existing
+        char tmp[256];
+        snprintf(tmp, sizeof(tmp), "id DESC, %s", qs_order);
+        strncpy(qs_order, tmp, sizeof(qs_order) - 1);
+    }
+    qs_limit = 1;
+    return __qs_fetch();
+}
+
+// __qs_distinct — set flag for SELECT DISTINCT
+int32_t __qs_distinct(void) {
+    qs_distinct = 1;
+    return 0;
+}
+
+// __db_using — switch active database connection for this QuerySet
+// Called by .using("analytics") in the chain.
+extern int32_t __db_use_conn(const char* name);
+int32_t __db_using(const char* db_name) {
+    return __db_use_conn(db_name);
 }
 
 int32_t __qs_row_count(void) {

@@ -114,6 +114,10 @@ func init() {
 			lowerOpts.DbEngine = manifest.Database.Engine
 			lowerOpts.DbDebugQueries = manifest.Database.DebugQueries
 		}
+		// Pass named [database.name] sections to the lowerer
+		if len(mdiags) == 0 && len(manifest.Databases) > 0 {
+			lowerOpts.NamedDatabases = manifest.Databases
+		}
 	}
 
 	// Lower the entry module to HIR

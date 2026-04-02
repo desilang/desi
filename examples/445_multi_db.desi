@@ -1,0 +1,28 @@
+# Example 445: Multi-DB Named Connections API
+# Demonstrates: connection registry stats (without live connection)
+# Schema-only test — verifies multi-DB C runtime links correctly
+# EXPECTED_OUTPUT:
+# === Multi-DB Connections ===
+# Connection count: 0
+# Current connection: none
+# Connection names: (none)
+
+import db
+
+def main() -> int:
+	print("=== Multi-DB Connections ===")
+
+	# Connection stats before any registration
+	let count: int = db.conn_count()
+	print("Connection count: " + str(count))
+
+	let current: str = db.current_conn()
+	print("Current connection: " + current)
+
+	let conns: str = db.list_conns()
+	if conns == "":
+		print("Connection names: (none)")
+	else:
+		print("Connection names: " + conns)
+
+	0

@@ -56,25 +56,46 @@ static void my_write_u16(unsigned char* buf, uint16_t val) {
 }
 
 // ============================================================
-// Connection State
+// Connection State — struct-based for connection pooling
 // ============================================================
 
 #define MY_MAX_COLS 64
 #define MY_MAX_ROWS 4096
 #define MY_BUF_SIZE 65536
 
-static int g_my_fd = -1;
-static int g_my_connected = 0;
-static int g_my_debug = 0;
-static char g_my_error[512] = "";
-static uint8_t g_my_seq = 0; // packet sequence number
+// MYConn holds all state for a single MySQL connection.
+// For connection pooling, each pool slot gets its own MYConn*.
+typedef struct {
+    // Connection
+    int fd;
+    int connected;
+    char error[512];
+    uint8_t seq;  // packet sequence number
 
-// Result set
-static int g_my_ncols = 0;
-static char g_my_colnames[MY_MAX_COLS][128];
-static int g_my_nrows = 0;
-static char** g_my_cells = NULL;
-static int g_my_cells_cap = 0;
+    // Result set
+    int ncols;
+    char colnames[MY_MAX_COLS][128];
+    int nrows;
+    char** cells;
+    int cells_cap;
+} MYConn;
+
+// The active connection — backward compatible with existing code.
+// Connection pooling will swap this pointer.
+static MYConn* g_my = NULL;
+static int g_my_debug = 0;
+
+// Ensure g_my is allocated (lazy init)
+static void my_ensure_conn(void) {
+    if (!g_my) {
+        g_my = (MYConn*)calloc(1, sizeof(MYConn));
+        g_my->fd = -1;
+    }
+}
+
+// Pool accessors — used by db_pool.c to swap the active connection
+void* __my_get_conn_ptr(void) { return (void*)g_my; }
+void  __my_set_conn_ptr(void* conn) { g_my = (MYConn*)conn; }
 
 static void my_log(const char* fmt, ...) {
     if (!g_my_debug) return;
@@ -96,10 +117,10 @@ int32_t __my_set_debug(int32_t enabled) {
 // ============================================================
 
 static int my_send_raw(const unsigned char* data, int len) {
-    if (g_my_fd < 0) return -1;
+    if (g_my->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)write(g_my_fd, data + total, len - total);
+        int n = (int)write(g_my->fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -107,10 +128,10 @@ static int my_send_raw(const unsigned char* data, int len) {
 }
 
 static int my_recv_raw(unsigned char* buf, int len) {
-    if (g_my_fd < 0) return -1;
+    if (g_my->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)read(g_my_fd, buf + total, len - total);
+        int n = (int)read(g_my->fd, buf + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -122,7 +143,7 @@ static int my_read_packet(unsigned char* payload, int* out_len) {
     unsigned char header[4];
     if (my_recv_raw(header, 4) < 0) return -1;
     uint32_t plen = my_read_u24(header);
-    g_my_seq = header[3];
+    g_my->seq = header[3];
     if (plen > 0 && plen < MY_BUF_SIZE) {
         if (my_recv_raw(payload, plen) < 0) return -1;
     } else if (plen >= MY_BUF_SIZE) {
@@ -136,17 +157,17 @@ static int my_read_packet(unsigned char* payload, int* out_len) {
         plen = 0;
     }
     *out_len = (int)plen;
-    my_log("recv packet seq=%d len=%d type=0x%02x", g_my_seq, plen, plen > 0 ? payload[0] : 0);
+    my_log("recv packet seq=%d len=%d type=0x%02x", g_my->seq, plen, plen > 0 ? payload[0] : 0);
     return 0;
 }
 
 static int my_send_packet(const unsigned char* payload, int len) {
     unsigned char header[4];
     my_write_u24(header, len);
-    header[3] = ++g_my_seq;
+    header[3] = ++g_my->seq;
     if (my_send_raw(header, 4) < 0) return -1;
     if (my_send_raw(payload, len) < 0) return -1;
-    my_log("sent packet seq=%d len=%d", g_my_seq, len);
+    my_log("sent packet seq=%d len=%d", g_my->seq, len);
     return 0;
 }
 
@@ -220,24 +241,24 @@ static void my_native_auth(const char* password, const unsigned char* scramble, 
 // ============================================================
 
 static void my_free_results(void) {
-    if (g_my_cells) {
-        for (int i = 0; i < g_my_nrows * g_my_ncols; i++) {
-            if (g_my_cells[i]) free(g_my_cells[i]);
+    if (g_my->cells) {
+        for (int i = 0; i < g_my->nrows * g_my->ncols; i++) {
+            if (g_my->cells[i]) free(g_my->cells[i]);
         }
-        free(g_my_cells);
-        g_my_cells = NULL;
+        free(g_my->cells);
+        g_my->cells = NULL;
     }
-    g_my_nrows = 0;
-    g_my_ncols = 0;
-    g_my_cells_cap = 0;
+    g_my->nrows = 0;
+    g_my->ncols = 0;
+    g_my->cells_cap = 0;
 }
 
 static void my_ensure_cells(int needed) {
-    if (needed <= g_my_cells_cap) return;
+    if (needed <= g_my->cells_cap) return;
     int newcap = needed * 2;
-    g_my_cells = realloc(g_my_cells, newcap * sizeof(char*));
-    for (int i = g_my_cells_cap; i < newcap; i++) g_my_cells[i] = NULL;
-    g_my_cells_cap = newcap;
+    g_my->cells = realloc(g_my->cells, newcap * sizeof(char*));
+    for (int i = g_my->cells_cap; i < newcap; i++) g_my->cells[i] = NULL;
+    g_my->cells_cap = newcap;
 }
 
 // ============================================================
@@ -274,6 +295,7 @@ extern int32_t __orm_set_dialect(int32_t dialect);
 
 int32_t __my_connect(const char* host, int32_t port, const char* dbname,
                      const char* user, const char* password) {
+    my_ensure_conn();
     // Set dialect to MySQL (1)
     __db_set_dialect(1);
     __orm_set_dialect(1);
@@ -285,10 +307,10 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     if (!password) password = "";
 
     my_free_results();
-    g_my_fd = -1;
-    g_my_connected = 0;
-    g_my_error[0] = '\0';
-    g_my_seq = 0;
+    g_my->fd = -1;
+    g_my->connected = 0;
+    g_my->error[0] = '\0';
+    g_my->seq = 0;
 
     my_log("connecting to %s:%d db=%s user=%s", host, port, dbname, user);
 
@@ -301,41 +323,41 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0) {
         struct hostent* he = gethostbyname(host);
         if (!he) {
-            snprintf(g_my_error, sizeof(g_my_error), "Cannot resolve host: %s", host);
+            snprintf(g_my->error, sizeof(g_my->error), "Cannot resolve host: %s", host);
             return -1;
         }
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
     }
 
-    g_my_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (g_my_fd < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Socket failed: %s", strerror(errno));
+    g_my->fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (g_my->fd < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Socket failed: %s", strerror(errno));
         return -1;
     }
 
-    if (connect(g_my_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Connect failed: %s", strerror(errno));
-        close(g_my_fd); g_my_fd = -1;
+    if (connect(g_my->fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Connect failed: %s", strerror(errno));
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
-    my_log("TCP connected fd=%d", g_my_fd);
+    my_log("TCP connected fd=%d", g_my->fd);
 
     // Read server greeting (Initial Handshake Packet)
     unsigned char greeting[MY_BUF_SIZE];
     int glen;
     if (my_read_packet(greeting, &glen) < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Failed to read greeting");
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to read greeting");
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
     // Check for error packet
     if (greeting[0] == 0xFF) {
         uint16_t errcode = my_read_u16(greeting + 1);
-        snprintf(g_my_error, sizeof(g_my_error), "Server error %d: %.*s",
+        snprintf(g_my->error, sizeof(g_my->error), "Server error %d: %.*s",
             errcode, glen - 9, (char*)(greeting + 9));
-        close(g_my_fd); g_my_fd = -1;
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -452,8 +474,8 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
 
     // Send handshake response
     if (my_send_packet(response, rpos) < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Failed to send auth response");
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to send auth response");
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -461,14 +483,14 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     unsigned char auth_result[MY_BUF_SIZE];
     int arlen;
     if (my_read_packet(auth_result, &arlen) < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Failed to read auth result");
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to read auth result");
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
     if (auth_result[0] == 0x00) {
         // OK packet — authenticated
-        g_my_connected = 1;
+        g_my->connected = 1;
         my_log("authenticated OK");
         return 0;
     } else if (auth_result[0] == 0x01) {
@@ -479,31 +501,31 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
             unsigned char ok[MY_BUF_SIZE];
             int oklen;
             if (my_read_packet(ok, &oklen) < 0 || ok[0] != 0x00) {
-                snprintf(g_my_error, sizeof(g_my_error), "Auth confirm failed");
-                close(g_my_fd); g_my_fd = -1;
+                snprintf(g_my->error, sizeof(g_my->error), "Auth confirm failed");
+                close(g_my->fd); g_my->fd = -1;
                 return -1;
             }
-            g_my_connected = 1;
+            g_my->connected = 1;
             my_log("caching_sha2 fast auth OK");
             return 0;
         } else if (arlen >= 2 && auth_result[1] == 0x04) {
             // Full auth needed — send plaintext password over non-TLS
             // This requires a secure connection (TLS); skip for now
-            snprintf(g_my_error, sizeof(g_my_error),
+            snprintf(g_my->error, sizeof(g_my->error),
                 "caching_sha2_password full auth requires TLS. "
                 "Set 'default_authentication_plugin=mysql_native_password' in my.cnf "
                 "or create user with mysql_native_password");
-            close(g_my_fd); g_my_fd = -1;
+            close(g_my->fd); g_my->fd = -1;
             return -1;
         }
         // Auth method switch
         if (auth_result[0] == 0xFE) {
-            snprintf(g_my_error, sizeof(g_my_error), "Auth method switch not yet supported");
-            close(g_my_fd); g_my_fd = -1;
+            snprintf(g_my->error, sizeof(g_my->error), "Auth method switch not yet supported");
+            close(g_my->fd); g_my->fd = -1;
             return -1;
         }
-        snprintf(g_my_error, sizeof(g_my_error), "Unexpected auth response: 0x%02x", auth_result[0]);
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Unexpected auth response: 0x%02x", auth_result[0]);
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     } else if (auth_result[0] == 0xFE) {
         // Auth switch request  
@@ -521,26 +543,26 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
             unsigned char auth_resp[20];
             my_native_auth(password, new_scramble, ns_len, auth_resp);
             if (my_send_packet(auth_resp, 20) < 0) {
-                snprintf(g_my_error, sizeof(g_my_error), "Failed to send switched auth");
-                close(g_my_fd); g_my_fd = -1;
+                snprintf(g_my->error, sizeof(g_my->error), "Failed to send switched auth");
+                close(g_my->fd); g_my->fd = -1;
                 return -1;
             }
             // Read OK/ERR
             unsigned char ok[MY_BUF_SIZE];
             int oklen;
             if (my_read_packet(ok, &oklen) < 0) {
-                snprintf(g_my_error, sizeof(g_my_error), "Auth switch response failed");
-                close(g_my_fd); g_my_fd = -1;
+                snprintf(g_my->error, sizeof(g_my->error), "Auth switch response failed");
+                close(g_my->fd); g_my->fd = -1;
                 return -1;
             }
             if (ok[0] == 0x00) {
-                g_my_connected = 1;
+                g_my->connected = 1;
                 my_log("auth switch OK");
                 return 0;
             }
         }
-        snprintf(g_my_error, sizeof(g_my_error), "Auth switch to %s failed", new_plugin);
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Auth switch to %s failed", new_plugin);
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     } else if (auth_result[0] == 0xFF) {
         // Error packet
@@ -549,46 +571,47 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
         char* msg = (char*)(auth_result + 9);
         int msg_len = arlen - 9;
         if (msg_len < 0) msg_len = 0;
-        snprintf(g_my_error, sizeof(g_my_error), "Auth error %d: %.*s", errcode, msg_len, msg);
-        close(g_my_fd); g_my_fd = -1;
+        snprintf(g_my->error, sizeof(g_my->error), "Auth error %d: %.*s", errcode, msg_len, msg);
+        close(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
-    snprintf(g_my_error, sizeof(g_my_error), "Unknown auth response: 0x%02x", auth_result[0]);
-    close(g_my_fd); g_my_fd = -1;
+    snprintf(g_my->error, sizeof(g_my->error), "Unknown auth response: 0x%02x", auth_result[0]);
+    close(g_my->fd); g_my->fd = -1;
     return -1;
 }
 
 int32_t __my_close(void) {
-    if (g_my_fd >= 0) {
+    if (!g_my) return 0;
+    if (g_my->fd >= 0) {
         // COM_QUIT
         unsigned char quit[1] = {0x01};
-        g_my_seq = 0xFF; // reset seq so send_packet uses 0
+        g_my->seq = 0xFF; // reset seq so send_packet uses 0
         my_send_packet(quit, 1);
-        close(g_my_fd);
-        g_my_fd = -1;
+        close(g_my->fd);
+        g_my->fd = -1;
     }
-    g_my_connected = 0;
+    g_my->connected = 0;
     my_log("connection closed");
     return 0;
 }
 
-int32_t __my_is_connected(void) { return g_my_connected; }
+int32_t __my_is_connected(void) { return g_my ? g_my->connected : 0; }
 
-char* __my_last_error(void) { return strdup(g_my_error); }
+char* __my_last_error(void) { return g_my ? strdup(g_my->error) : strdup(""); }
 
 // ============================================================
 // Query
 // ============================================================
 
 int32_t __my_query(const char* sql) {
-    if (!g_my_connected || g_my_fd < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Not connected");
+    if (!g_my || !g_my->connected || g_my->fd < 0) {
+        if (g_my) snprintf(g_my->error, sizeof(g_my->error), "Not connected");
         return -1;
     }
 
     my_free_results();
-    g_my_error[0] = '\0';
+    g_my->error[0] = '\0';
 
     my_log("query: %s", sql);
 
@@ -597,10 +620,10 @@ int32_t __my_query(const char* sql) {
     unsigned char* msg = malloc(1 + sql_len);
     msg[0] = 0x03; // COM_QUERY
     memcpy(msg + 1, sql, sql_len);
-    g_my_seq = 0xFF; // reset so send_packet increments to 0
+    g_my->seq = 0xFF; // reset so send_packet increments to 0
     if (my_send_packet(msg, 1 + sql_len) < 0) {
         free(msg);
-        snprintf(g_my_error, sizeof(g_my_error), "Failed to send query");
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to send query");
         return -1;
     }
     free(msg);
@@ -609,7 +632,7 @@ int32_t __my_query(const char* sql) {
     unsigned char pkt[MY_BUF_SIZE];
     int plen;
     if (my_read_packet(pkt, &plen) < 0) {
-        snprintf(g_my_error, sizeof(g_my_error), "Failed to read query response");
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to read query response");
         return -1;
     }
 
@@ -628,19 +651,19 @@ int32_t __my_query(const char* sql) {
         char* errmsg = (char*)(pkt + 9);
         int elen = plen - 9;
         if (elen < 0) elen = 0;
-        snprintf(g_my_error, sizeof(g_my_error), "MySQL error %d: %.*s", errcode, elen, errmsg);
-        my_log("error: %s", g_my_error);
+        snprintf(g_my->error, sizeof(g_my->error), "MySQL error %d: %.*s", errcode, elen, errmsg);
+        my_log("error: %s", g_my->error);
         return -1;
     }
 
     // Result Set: first packet is column count
     int br;
     uint64_t ncols = my_read_lenenc(pkt, &br);
-    g_my_ncols = (int)ncols;
-    my_log("result set: %d columns", g_my_ncols);
+    g_my->ncols = (int)ncols;
+    my_log("result set: %d columns", g_my->ncols);
 
     // Read column definitions
-    for (int i = 0; i < g_my_ncols && i < MY_MAX_COLS; i++) {
+    for (int i = 0; i < g_my->ncols && i < MY_MAX_COLS; i++) {
         if (my_read_packet(pkt, &plen) < 0) return -1;
         unsigned char* cp = pkt;
         // Skip: catalog, schema, table, org_table
@@ -653,9 +676,9 @@ int32_t __my_query(const char* sql) {
         cp += br;
         int nlen = (int)name_len;
         if (nlen > 127) nlen = 127;
-        memcpy(g_my_colnames[i], cp, nlen);
-        g_my_colnames[i][nlen] = '\0';
-        my_log("  col %d: %s", i, g_my_colnames[i]);
+        memcpy(g_my->colnames[i], cp, nlen);
+        g_my->colnames[i][nlen] = '\0';
+        my_log("  col %d: %s", i, g_my->colnames[i]);
     }
 
     // Check for deprecation marker (EOF for protocol < 4.1) or skip
@@ -677,38 +700,38 @@ int32_t __my_query(const char* sql) {
     process_row:
         if (pkt[0] == 0xFE && plen <= 5) {
             // EOF packet — end of rows
-            my_log("EOF rows=%d", g_my_nrows);
+            my_log("EOF rows=%d", g_my->nrows);
             break;
         }
         if (pkt[0] == 0xFF) {
             // Error
-            snprintf(g_my_error, sizeof(g_my_error), "Error during row fetch");
+            snprintf(g_my->error, sizeof(g_my->error), "Error during row fetch");
             return -1;
         }
 
         // Row data: sequence of length-encoded strings
-        int row_base = g_my_nrows * g_my_ncols;
-        my_ensure_cells(row_base + g_my_ncols);
+        int row_base = g_my->nrows * g_my->ncols;
+        my_ensure_cells(row_base + g_my->ncols);
         unsigned char* rp = pkt;
-        for (int i = 0; i < g_my_ncols; i++) {
+        for (int i = 0; i < g_my->ncols; i++) {
             if (*rp == 0xFB) {
                 // NULL
-                g_my_cells[row_base + i] = strdup("");
+                g_my->cells[row_base + i] = strdup("");
                 rp++;
             } else {
                 uint64_t vlen = my_read_lenenc(rp, &br);
                 rp += br;
                 int vl = (int)vlen;
-                g_my_cells[row_base + i] = malloc(vl + 1);
-                memcpy(g_my_cells[row_base + i], rp, vl);
-                g_my_cells[row_base + i][vl] = '\0';
+                g_my->cells[row_base + i] = malloc(vl + 1);
+                memcpy(g_my->cells[row_base + i], rp, vl);
+                g_my->cells[row_base + i][vl] = '\0';
                 rp += vl;
             }
         }
-        g_my_nrows++;
+        g_my->nrows++;
     }
 
-    return g_my_nrows;
+    return g_my->nrows;
 }
 
 int32_t __my_execute(const char* sql) { return __my_query(sql); }
@@ -816,25 +839,25 @@ int32_t __my_query_params(const char* sql, const char** params, int nparams) {
 // Result Access
 // ============================================================
 
-int32_t __my_row_count(void) { return g_my_nrows; }
-int32_t __my_col_count(void) { return g_my_ncols; }
+int32_t __my_row_count(void) { return g_my ? g_my->nrows : 0; }
+int32_t __my_col_count(void) { return g_my ? g_my->ncols : 0; }
 
 char* __my_col_name(int32_t idx) {
-    if (idx < 0 || idx >= g_my_ncols) return strdup("");
-    return strdup(g_my_colnames[idx]);
+    if (!g_my || idx < 0 || idx >= g_my->ncols) return strdup("");
+    return strdup(g_my->colnames[idx]);
 }
 
 char* __my_get_value(int32_t row, int32_t col) {
-    if (row < 0 || row >= g_my_nrows || col < 0 || col >= g_my_ncols) return strdup("");
-    if (!g_my_cells) return strdup("");
-    char* v = g_my_cells[row * g_my_ncols + col];
+    if (!g_my || row < 0 || row >= g_my->nrows || col < 0 || col >= g_my->ncols) return strdup("");
+    if (!g_my->cells) return strdup("");
+    char* v = g_my->cells[row * g_my->ncols + col];
     return strdup(v ? v : "");
 }
 
 char* __my_get_field(int32_t row, const char* name) {
-    if (!name) return strdup("");
-    for (int i = 0; i < g_my_ncols; i++) {
-        if (strcmp(g_my_colnames[i], name) == 0)
+    if (!g_my || !name) return strdup("");
+    for (int i = 0; i < g_my->ncols; i++) {
+        if (strcmp(g_my->colnames[i], name) == 0)
             return __my_get_value(row, i);
     }
     return strdup("");
@@ -845,21 +868,22 @@ char* __my_get_field(int32_t row, const char* name) {
 // ============================================================
 
 int32_t __my_dump_results(void) {
-    fprintf(stderr, "=== MySQL Result: %d rows x %d cols ===\n", g_my_nrows, g_my_ncols);
-    for (int c = 0; c < g_my_ncols; c++) {
+    if (!g_my) { fprintf(stderr, "=== MySQL: no connection ===\n"); return 0; }
+    fprintf(stderr, "=== MySQL Result: %d rows x %d cols ===\n", g_my->nrows, g_my->ncols);
+    for (int c = 0; c < g_my->ncols; c++) {
         if (c > 0) fprintf(stderr, " | ");
-        fprintf(stderr, "%-15s", g_my_colnames[c]);
+        fprintf(stderr, "%-15s", g_my->colnames[c]);
     }
     fprintf(stderr, "\n");
-    for (int c = 0; c < g_my_ncols; c++) {
+    for (int c = 0; c < g_my->ncols; c++) {
         if (c > 0) fprintf(stderr, "-+-");
         fprintf(stderr, "---------------");
     }
     fprintf(stderr, "\n");
-    for (int r = 0; r < g_my_nrows; r++) {
-        for (int c = 0; c < g_my_ncols; c++) {
+    for (int r = 0; r < g_my->nrows; r++) {
+        for (int c = 0; c < g_my->ncols; c++) {
             if (c > 0) fprintf(stderr, " | ");
-            char* v = g_my_cells ? g_my_cells[r * g_my_ncols + c] : NULL;
+            char* v = g_my->cells ? g_my->cells[r * g_my->ncols + c] : NULL;
             fprintf(stderr, "%-15s", v ? v : "(null)");
         }
         fprintf(stderr, "\n");
@@ -869,8 +893,9 @@ int32_t __my_dump_results(void) {
 }
 
 char* __my_connection_info(void) {
+    if (!g_my) return strdup("not initialized");
     char buf[512];
     snprintf(buf, sizeof(buf), "fd=%d connected=%d error=%s",
-        g_my_fd, g_my_connected, g_my_error);
+        g_my->fd, g_my->connected, g_my->error);
     return strdup(buf);
 }

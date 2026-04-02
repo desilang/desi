@@ -725,4 +725,128 @@ pub def create(**fields: str) -> int:
 		__qs_set_field(key, value)
 	return __qs_do_insert()
 
+# ============================================================
+# Terminal QuerySet C bindings (db_crud.c)
+# ============================================================
 
+@extern("C")
+pub def __qs_all() -> int
+
+@extern("C")
+pub def __qs_first() -> int
+
+@extern("C")
+pub def __qs_last() -> int
+
+@extern("C")
+pub def __qs_distinct() -> int
+
+@extern("C")
+pub def __db_using(db_name: str) -> int
+
+# ============================================================
+# Connection Pool C bindings (db_pool.c)
+# ============================================================
+
+@extern("C")
+pub def __db_pool_init(driver: str, host: str, port: int, dbname: str, user: str, password: str, pool_size: int) -> int
+
+@extern("C")
+pub def __db_pool_acquire() -> int
+
+@extern("C")
+pub def __db_pool_release() -> int
+
+@extern("C")
+pub def __db_pool_close() -> int
+
+@extern("C")
+pub def __db_pool_size() -> int
+
+@extern("C")
+pub def __db_pool_available() -> int
+
+# ============================================================
+# Public API — Connection Pool
+# ============================================================
+
+pub def pool_init(driver: str, host: str, port: int, dbname: str, user: str, password: str, pool_size: int) -> int:
+	"""Initialize a connection pool. Creates pool_size connections."""
+	return __db_pool_init(driver, host, port, dbname, user, password, pool_size)
+
+pub def pool_acquire() -> int:
+	"""Acquire a connection from the pool. Blocks until one is available (30s timeout)."""
+	return __db_pool_acquire()
+
+pub def pool_release() -> int:
+	"""Release the active connection back to the pool."""
+	return __db_pool_release()
+
+pub def pool_close() -> int:
+	"""Close all connections in the pool."""
+	return __db_pool_close()
+
+pub def pool_size() -> int:
+	"""Get total pool size."""
+	return __db_pool_size()
+
+pub def pool_available() -> int:
+	"""Get number of available (free) connections in pool."""
+	return __db_pool_available()
+
+# ============================================================
+# Named Connection C bindings (db_connections.c)
+# ============================================================
+
+@extern("C")
+pub def __db_register_conn(name: str, driver: str, host: str, port: int, dbname: str, user: str, password: str) -> int
+
+@extern("C")
+pub def __db_use_conn(name: str) -> int
+
+@extern("C")
+pub def __db_close_conn(name: str) -> int
+
+@extern("C")
+pub def __db_close_all_conns() -> int
+
+@extern("C")
+pub def __db_current_conn() -> str
+
+@extern("C")
+pub def __db_conn_count() -> int
+
+@extern("C")
+pub def __db_list_conns() -> str
+
+# ============================================================
+# Public API — Named Connections (Multi-DB)
+# ============================================================
+
+pub def register_conn(name: str, driver: str, host: str, port: int, dbname: str, user: str, password: str) -> int:
+	"""Register a named database connection. First connection auto-activates."""
+	return __db_register_conn(name, driver, host, port, dbname, user, password)
+
+pub def use(name: str) -> int:
+	"""Switch the active database connection by name."""
+	return __db_use_conn(name)
+
+pub def close_conn(name: str) -> int:
+	"""Close a named connection."""
+	return __db_close_conn(name)
+
+pub def close_all() -> int:
+	"""Close all named connections."""
+	return __db_close_all_conns()
+
+pub def current_conn() -> str:
+	"""Get the name of the currently active connection."""
+	return __db_current_conn()
+
+pub def conn_count() -> int:
+	"""Get the number of registered connections."""
+	return __db_conn_count()
+
+pub def list_conns() -> str:
+	"""List all registered connection names (comma-separated)."""
+	return __db_list_conns()

@@ -99,6 +99,35 @@ type MethodSpec struct {
 	ParamTypes  []types.T
 	IsChainable bool    // true if method returns the manager (for chaining)
 	IsTerminal  bool    // true if method triggers query execution
+
+	// Generic dispatch metadata — drives the lowerer WITHOUT hardcoded switch.
+	// The lowerer reads these fields and emits calls generically.
+	//
+	// ArgStyle controls how call arguments are translated to C runtime calls:
+	//   "kwargs_filter" — each kwarg (name=val) emits KwargsFunc(name_str, val)
+	//                     Q expression positional args emit __qs_filter_q(qval)
+	//   "kwargs_set"    — each kwarg (name=val) emits KwargsFunc(name_str, val)
+	//   "positional"    — each positional arg emits KwargsFunc(arg)
+	//   "none"          — no arg processing
+	ArgStyle     string
+
+	// KwargsFunc is the C runtime function called per argument.
+	// For "kwargs_filter"/"kwargs_set": called as Fn(key_str, val) for each kwarg.
+	// For "positional": called as Fn(arg) for each positional arg.
+	KwargsFunc   string
+
+	// TerminalFunc is the C runtime function that executes the terminal action.
+	// Called after all args are processed. E.g. "__qs_fetch", "__qs_first", "__qs_count".
+	// If empty, no terminal call (intermediate chainable method).
+	TerminalFunc string
+
+	// ReturnsModel indicates that this method returns a model class instance
+	// constructed from the first row of the result set. The lowerer will:
+	//   1. Call TerminalFunc to execute the query
+	//   2. Check row count; if 0, return null (None)
+	//   3. If rows exist, allocate a class instance and populate fields
+	//      from __db_get_field_by(0, "field_name") for each class field
+	ReturnsModel bool
 }
 
 // ValidationRules defines compile-time validation for macro-decorated classes.

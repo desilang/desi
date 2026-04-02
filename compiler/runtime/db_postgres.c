@@ -40,27 +40,47 @@ static int16_t pg_read_i16(const char* buf) {
 }
 
 // ============================================================
-// Connection State — simple globals (no large struct)
+// Connection State — struct-based for connection pooling
 // ============================================================
 
 #define PG_MAX_COLS 64
 #define PG_MAX_ROWS 4096
 #define PG_BUF_SIZE 65536
 
-// Connection
-static int g_pg_fd = -1;
-static int g_pg_connected = 0;
-static int g_pg_debug = 0;
-static char g_pg_error[512] = "";
-static char g_pg_user[128] = "";
-static char g_pg_password[256] = "";
+// PGConn holds all state for a single PostgreSQL connection.
+// For connection pooling, each pool slot gets its own PGConn*.
+typedef struct {
+    // Connection
+    int fd;
+    int connected;
+    char error[512];
+    char user[128];
+    char password[256];
 
-// Result set
-static int g_pg_ncols = 0;
-static char g_pg_colnames[PG_MAX_COLS][128];
-static int g_pg_nrows = 0;
-static char** g_pg_cells = NULL; // flat array: [row * ncols + col]
-static int g_pg_cells_cap = 0;
+    // Result set
+    int ncols;
+    char colnames[PG_MAX_COLS][128];
+    int nrows;
+    char** cells;   // flat array: [row * ncols + col]
+    int cells_cap;
+} PGConn;
+
+// The active connection — backward compatible with existing code.
+// Connection pooling will swap this pointer.
+static PGConn* g_pg = NULL;
+static int g_pg_debug = 0;
+
+// Ensure g_pg is allocated (lazy init)
+static void pg_ensure_conn(void) {
+    if (!g_pg) {
+        g_pg = (PGConn*)calloc(1, sizeof(PGConn));
+        g_pg->fd = -1;
+    }
+}
+
+// Pool accessors — used by db_pool.c to swap the active connection
+void* __pg_get_conn_ptr(void) { return (void*)g_pg; }
+void  __pg_set_conn_ptr(void* conn) { g_pg = (PGConn*)conn; }
 
 // Debug log
 static void pg_log(const char* fmt, ...) {
@@ -87,10 +107,10 @@ int32_t __pg_set_debug(int32_t enabled) {
 // ============================================================
 
 static int pg_send_raw(const char* data, int len) {
-    if (g_pg_fd < 0) return -1;
+    if (g_pg->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)write(g_pg_fd, data + total, len - total);
+        int n = (int)write(g_pg->fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -98,10 +118,10 @@ static int pg_send_raw(const char* data, int len) {
 }
 
 static int pg_recv_raw(char* buf, int len) {
-    if (g_pg_fd < 0) return -1;
+    if (g_pg->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)read(g_pg_fd, buf + total, len - total);
+        int n = (int)read(g_pg->fd, buf + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -213,24 +233,24 @@ static void pg_md5_auth(const char* user, const char* pass, const char salt[4], 
 // ============================================================
 
 static void pg_free_results(void) {
-    if (g_pg_cells) {
-        for (int i = 0; i < g_pg_nrows * g_pg_ncols; i++) {
-            if (g_pg_cells[i]) free(g_pg_cells[i]);
+    if (g_pg->cells) {
+        for (int i = 0; i < g_pg->nrows * g_pg->ncols; i++) {
+            if (g_pg->cells[i]) free(g_pg->cells[i]);
         }
-        free(g_pg_cells);
-        g_pg_cells = NULL;
+        free(g_pg->cells);
+        g_pg->cells = NULL;
     }
-    g_pg_nrows = 0;
-    g_pg_ncols = 0;
-    g_pg_cells_cap = 0;
+    g_pg->nrows = 0;
+    g_pg->ncols = 0;
+    g_pg->cells_cap = 0;
 }
 
 static void pg_ensure_cells(int needed) {
-    if (needed <= g_pg_cells_cap) return;
+    if (needed <= g_pg->cells_cap) return;
     int newcap = needed * 2;
-    g_pg_cells = realloc(g_pg_cells, newcap * sizeof(char*));
-    for (int i = g_pg_cells_cap; i < newcap; i++) g_pg_cells[i] = NULL;
-    g_pg_cells_cap = newcap;
+    g_pg->cells = realloc(g_pg->cells, newcap * sizeof(char*));
+    for (int i = g_pg->cells_cap; i < newcap; i++) g_pg->cells[i] = NULL;
+    g_pg->cells_cap = newcap;
 }
 
 // ============================================================
@@ -243,6 +263,7 @@ extern int32_t __orm_set_dialect(int32_t dialect);
 
 int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
                      const char* user, const char* password) {
+    pg_ensure_conn();
     // Set dialect to Postgres (0) — done here in C because
     // Desi module wrappers must only make a single extern call.
     __db_set_dialect(0);
@@ -253,14 +274,14 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
     if (!user) user = "postgres";
     if (!password) password = "";
 
-    strncpy(g_pg_user, user, sizeof(g_pg_user)-1);
-    strncpy(g_pg_password, password, sizeof(g_pg_password)-1);
+    strncpy(g_pg->user, user, sizeof(g_pg->user)-1);
+    strncpy(g_pg->password, password, sizeof(g_pg->password)-1);
 
     // Reset
     pg_free_results();
-    g_pg_fd = -1;
-    g_pg_connected = 0;
-    g_pg_error[0] = '\0';
+    g_pg->fd = -1;
+    g_pg->connected = 0;
+    g_pg->error[0] = '\0';
 
     pg_log("connecting to %s:%d db=%s user=%s", host, port, dbname, user);
 
@@ -273,25 +294,25 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
     if (inet_pton(AF_INET, host, &addr.sin_addr) <= 0) {
         struct hostent* he = gethostbyname(host);
         if (!he) {
-            snprintf(g_pg_error, sizeof(g_pg_error), "Cannot resolve host: %s", host);
+            snprintf(g_pg->error, sizeof(g_pg->error), "Cannot resolve host: %s", host);
             return -1;
         }
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
     }
 
-    g_pg_fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (g_pg_fd < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Socket failed: %s", strerror(errno));
+    g_pg->fd = socket(AF_INET, SOCK_STREAM, 0);
+    if (g_pg->fd < 0) {
+        snprintf(g_pg->error, sizeof(g_pg->error), "Socket failed: %s", strerror(errno));
         return -1;
     }
 
-    if (connect(g_pg_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Connect failed: %s", strerror(errno));
-        close(g_pg_fd); g_pg_fd = -1;
+    if (connect(g_pg->fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+        snprintf(g_pg->error, sizeof(g_pg->error), "Connect failed: %s", strerror(errno));
+        close(g_pg->fd); g_pg->fd = -1;
         return -1;
     }
 
-    pg_log("TCP connected fd=%d", g_pg_fd);
+    pg_log("TCP connected fd=%d", g_pg->fd);
 
     // StartupMessage
     char startup[512];
@@ -307,8 +328,8 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
     pg_write_i32(startup, pos);
 
     if (pg_send_raw(startup, pos) < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Failed to send startup");
-        close(g_pg_fd); g_pg_fd = -1;
+        snprintf(g_pg->error, sizeof(g_pg->error), "Failed to send startup");
+        close(g_pg->fd); g_pg->fd = -1;
         return -1;
     }
 
@@ -321,8 +342,8 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
 
     while (1) {
         if (pg_read_msg(&mtype, payload, &plen) < 0) {
-            snprintf(g_pg_error, sizeof(g_pg_error), "Failed to read auth response");
-            close(g_pg_fd); g_pg_fd = -1;
+            snprintf(g_pg->error, sizeof(g_pg->error), "Failed to read auth response");
+            close(g_pg->fd); g_pg->fd = -1;
             return -1;
         }
 
@@ -355,9 +376,9 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
                 pg_send_raw(msg, mp);
                 pg_log("sent MD5 password");
             } else {
-                snprintf(g_pg_error, sizeof(g_pg_error),
+                snprintf(g_pg->error, sizeof(g_pg->error),
                     "Unsupported auth method: %d", atype);
-                close(g_pg_fd); g_pg_fd = -1;
+                close(g_pg->fd); g_pg->fd = -1;
                 return -1;
             }
         } else if (mtype == 'E') {
@@ -365,17 +386,17 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
             while (p < payload + plen && *p) {
                 char f = *p++;
                 if (f == '\0') break;
-                if (f == 'M') { snprintf(g_pg_error, sizeof(g_pg_error), "%s", p); break; }
+                if (f == 'M') { snprintf(g_pg->error, sizeof(g_pg->error), "%s", p); break; }
                 p += strlen(p) + 1;
             }
-            pg_log("auth error: %s", g_pg_error);
-            close(g_pg_fd); g_pg_fd = -1;
+            pg_log("auth error: %s", g_pg->error);
+            close(g_pg->fd); g_pg->fd = -1;
             return -1;
         } else if (mtype == 'K' || mtype == 'S') {
             // BackendKeyData / ParameterStatus — skip
             continue;
         } else if (mtype == 'Z') {
-            g_pg_connected = 1;
+            g_pg->connected = 1;
             pg_log("ReadyForQuery — connected!");
             return 0;
         }
@@ -383,24 +404,25 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
 }
 
 int32_t __pg_close(void) {
-    if (g_pg_fd >= 0) {
+    if (!g_pg) return 0;
+    if (g_pg->fd >= 0) {
         char msg[5] = {'X', 0, 0, 0, 4};
         pg_write_i32(msg+1, 4);
         pg_send_raw(msg, 5);
-        close(g_pg_fd);
-        g_pg_fd = -1;
+        close(g_pg->fd);
+        g_pg->fd = -1;
     }
-    g_pg_connected = 0;
+    g_pg->connected = 0;
     pg_log("connection closed");
     return 0;
 }
 
 int32_t __pg_is_connected(void) {
-    return g_pg_connected;
+    return g_pg ? g_pg->connected : 0;
 }
 
 char* __pg_last_error(void) {
-    return strdup(g_pg_error);
+    return g_pg ? strdup(g_pg->error) : strdup("");
 }
 
 // ============================================================
@@ -408,13 +430,13 @@ char* __pg_last_error(void) {
 // ============================================================
 
 int32_t __pg_query(const char* sql) {
-    if (!g_pg_connected || g_pg_fd < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Not connected");
+    if (!g_pg || !g_pg->connected || g_pg->fd < 0) {
+        if (g_pg) snprintf(g_pg->error, sizeof(g_pg->error), "Not connected");
         return -1;
     }
 
     pg_free_results();
-    g_pg_error[0] = '\0';
+    g_pg->error[0] = '\0';
 
     pg_log("query: %s", sql);
 
@@ -427,7 +449,7 @@ int32_t __pg_query(const char* sql) {
     memcpy(msg+5, sql, sql_len+1);
     if (pg_send_raw(msg, msg_len) < 0) {
         free(msg);
-        snprintf(g_pg_error, sizeof(g_pg_error), "Failed to send query");
+        snprintf(g_pg->error, sizeof(g_pg->error), "Failed to send query");
         return -1;
     }
     free(msg);
@@ -439,20 +461,20 @@ int32_t __pg_query(const char* sql) {
 
     while (1) {
         if (pg_read_msg(&mtype, payload, &plen) < 0) {
-            snprintf(g_pg_error, sizeof(g_pg_error), "Failed to read response");
+            snprintf(g_pg->error, sizeof(g_pg->error), "Failed to read response");
             return -1;
         }
 
         switch (mtype) {
             case 'T': { // RowDescription
                 int16_t nc = pg_read_i16(payload);
-                g_pg_ncols = nc;
+                g_pg->ncols = nc;
                 pg_log("RowDescription: %d columns", nc);
                 char* p = payload + 2;
                 for (int i = 0; i < nc && i < PG_MAX_COLS; i++) {
-                    strncpy(g_pg_colnames[i], p, 127);
-                    g_pg_colnames[i][127] = '\0';
-                    pg_log("  col %d: %s", i, g_pg_colnames[i]);
+                    strncpy(g_pg->colnames[i], p, 127);
+                    g_pg->colnames[i][127] = '\0';
+                    pg_log("  col %d: %s", i, g_pg->colnames[i]);
                     p += strlen(p) + 1;
                     p += 18; // tableOID(4)+colAttr(2)+typeOID(4)+typeSize(2)+typeMod(4)+fmtCode(2)
                 }
@@ -460,21 +482,21 @@ int32_t __pg_query(const char* sql) {
             }
             case 'D': { // DataRow
                 int16_t nc = pg_read_i16(payload);
-                int row_base = g_pg_nrows * g_pg_ncols;
-                pg_ensure_cells(row_base + g_pg_ncols);
+                int row_base = g_pg->nrows * g_pg->ncols;
+                pg_ensure_cells(row_base + g_pg->ncols);
                 char* p = payload + 2;
-                for (int i = 0; i < nc && i < g_pg_ncols; i++) {
+                for (int i = 0; i < nc && i < g_pg->ncols; i++) {
                     int32_t clen = pg_read_i32(p); p += 4;
                     if (clen == -1) {
-                        g_pg_cells[row_base + i] = strdup("");
+                        g_pg->cells[row_base + i] = strdup("");
                     } else {
-                        g_pg_cells[row_base + i] = malloc(clen + 1);
-                        memcpy(g_pg_cells[row_base + i], p, clen);
-                        g_pg_cells[row_base + i][clen] = '\0';
+                        g_pg->cells[row_base + i] = malloc(clen + 1);
+                        memcpy(g_pg->cells[row_base + i], p, clen);
+                        g_pg->cells[row_base + i][clen] = '\0';
                         p += clen;
                     }
                 }
-                g_pg_nrows++;
+                g_pg->nrows++;
                 break;
             }
             case 'C': { // CommandComplete
@@ -484,7 +506,7 @@ int32_t __pg_query(const char* sql) {
                     char* sp = strrchr(tag, ' ');
                     if (sp) rows_affected = atoi(sp+1);
                 } else if (strncmp(tag,"SELECT",6)==0) {
-                    rows_affected = g_pg_nrows;
+                    rows_affected = g_pg->nrows;
                 } else if (strncmp(tag,"CREATE",6)==0 || strncmp(tag,"DROP",4)==0 || strncmp(tag,"ALTER",5)==0) {
                     rows_affected = 0;
                 }
@@ -495,16 +517,16 @@ int32_t __pg_query(const char* sql) {
                 while (p < payload+plen && *p) {
                     char f = *p++;
                     if (f=='\0') break;
-                    if (f=='M') { snprintf(g_pg_error, sizeof(g_pg_error), "%s", p); break; }
+                    if (f=='M') { snprintf(g_pg->error, sizeof(g_pg->error), "%s", p); break; }
                     p += strlen(p)+1;
                 }
-                pg_log("error: %s", g_pg_error);
+                pg_log("error: %s", g_pg->error);
                 break;
             }
             case 'N': break; // Notice
             case 'Z': { // ReadyForQuery
-                pg_log("ReadyForQuery rows=%d", g_pg_nrows);
-                if (g_pg_error[0]) return -1;
+                pg_log("ReadyForQuery rows=%d", g_pg->nrows);
+                if (g_pg->error[0]) return -1;
                 return rows_affected;
             }
             default: break;
@@ -521,13 +543,13 @@ int32_t __pg_execute(const char* sql) { return __pg_query(sql); }
 // ============================================================
 
 int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
-    if (!g_pg_connected || g_pg_fd < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Not connected");
+    if (!g_pg || !g_pg->connected || g_pg->fd < 0) {
+        if (g_pg) snprintf(g_pg->error, sizeof(g_pg->error), "Not connected");
         return -1;
     }
 
     pg_free_results();
-    g_pg_error[0] = '\0';
+    g_pg->error[0] = '\0';
 
     pg_log("query_params: %s  (nparams=%d)", sql, nparams);
     for (int i = 0; i < nparams; i++) {
@@ -628,7 +650,7 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
 
     // Send all messages in one write
     if (pg_send_raw(buf, pos) < 0) {
-        snprintf(g_pg_error, sizeof(g_pg_error), "Failed to send extended query");
+        snprintf(g_pg->error, sizeof(g_pg->error), "Failed to send extended query");
         return -1;
     }
 
@@ -640,7 +662,7 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
 
     while (1) {
         if (pg_read_msg(&mtype, payload, &plen) < 0) {
-            snprintf(g_pg_error, sizeof(g_pg_error), "Failed to read extended query response");
+            snprintf(g_pg->error, sizeof(g_pg->error), "Failed to read extended query response");
             return -1;
         }
 
@@ -656,13 +678,13 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
                 break;
             case 'T': { // RowDescription
                 int16_t nc = pg_read_i16(payload);
-                g_pg_ncols = nc;
+                g_pg->ncols = nc;
                 pg_log("RowDescription: %d columns", nc);
                 char* p = payload + 2;
                 for (int i = 0; i < nc && i < PG_MAX_COLS; i++) {
-                    strncpy(g_pg_colnames[i], p, 127);
-                    g_pg_colnames[i][127] = '\0';
-                    pg_log("  col %d: %s", i, g_pg_colnames[i]);
+                    strncpy(g_pg->colnames[i], p, 127);
+                    g_pg->colnames[i][127] = '\0';
+                    pg_log("  col %d: %s", i, g_pg->colnames[i]);
                     p += strlen(p) + 1;
                     p += 18; // tableOID(4)+colAttr(2)+typeOID(4)+typeSize(2)+typeMod(4)+fmtCode(2)
                 }
@@ -670,21 +692,21 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
             }
             case 'D': { // DataRow
                 int16_t nc = pg_read_i16(payload);
-                int row_base = g_pg_nrows * g_pg_ncols;
-                pg_ensure_cells(row_base + g_pg_ncols);
+                int row_base = g_pg->nrows * g_pg->ncols;
+                pg_ensure_cells(row_base + g_pg->ncols);
                 char* p = payload + 2;
-                for (int i = 0; i < nc && i < g_pg_ncols; i++) {
+                for (int i = 0; i < nc && i < g_pg->ncols; i++) {
                     int32_t clen = pg_read_i32(p); p += 4;
                     if (clen == -1) {
-                        g_pg_cells[row_base + i] = strdup("");
+                        g_pg->cells[row_base + i] = strdup("");
                     } else {
-                        g_pg_cells[row_base + i] = malloc(clen + 1);
-                        memcpy(g_pg_cells[row_base + i], p, clen);
-                        g_pg_cells[row_base + i][clen] = '\0';
+                        g_pg->cells[row_base + i] = malloc(clen + 1);
+                        memcpy(g_pg->cells[row_base + i], p, clen);
+                        g_pg->cells[row_base + i][clen] = '\0';
                         p += clen;
                     }
                 }
-                g_pg_nrows++;
+                g_pg->nrows++;
                 break;
             }
             case 'C': { // CommandComplete
@@ -694,7 +716,7 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
                     char* sp = strrchr(tag, ' ');
                     if (sp) rows_affected = atoi(sp+1);
                 } else if (strncmp(tag,"SELECT",6)==0) {
-                    rows_affected = g_pg_nrows;
+                    rows_affected = g_pg->nrows;
                 } else if (strncmp(tag,"CREATE",6)==0 || strncmp(tag,"DROP",4)==0 || strncmp(tag,"ALTER",5)==0) {
                     rows_affected = 0;
                 }
@@ -705,16 +727,16 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
                 while (p < payload + plen && *p) {
                     char f = *p++;
                     if (f == '\0') break;
-                    if (f == 'M') { snprintf(g_pg_error, sizeof(g_pg_error), "%s", p); break; }
+                    if (f == 'M') { snprintf(g_pg->error, sizeof(g_pg->error), "%s", p); break; }
                     p += strlen(p) + 1;
                 }
-                pg_log("error: %s", g_pg_error);
+                pg_log("error: %s", g_pg->error);
                 break;
             }
             case 'N': break; // Notice
             case 'Z': { // ReadyForQuery
-                pg_log("ReadyForQuery rows=%d", g_pg_nrows);
-                if (g_pg_error[0]) return -1;
+                pg_log("ReadyForQuery rows=%d", g_pg->nrows);
+                if (g_pg->error[0]) return -1;
                 return rows_affected;
             }
             default: break;
@@ -726,25 +748,25 @@ int32_t __pg_query_params(const char* sql, const char** params, int nparams) {
 // Result Access
 // ============================================================
 
-int32_t __pg_row_count(void) { return g_pg_nrows; }
-int32_t __pg_col_count(void) { return g_pg_ncols; }
+int32_t __pg_row_count(void) { return g_pg ? g_pg->nrows : 0; }
+int32_t __pg_col_count(void) { return g_pg ? g_pg->ncols : 0; }
 
 char* __pg_col_name(int32_t idx) {
-    if (idx < 0 || idx >= g_pg_ncols) return strdup("");
-    return strdup(g_pg_colnames[idx]);
+    if (!g_pg || idx < 0 || idx >= g_pg->ncols) return strdup("");
+    return strdup(g_pg->colnames[idx]);
 }
 
 char* __pg_get_value(int32_t row, int32_t col) {
-    if (row < 0 || row >= g_pg_nrows || col < 0 || col >= g_pg_ncols) return strdup("");
-    if (!g_pg_cells) return strdup("");
-    char* v = g_pg_cells[row * g_pg_ncols + col];
+    if (!g_pg || row < 0 || row >= g_pg->nrows || col < 0 || col >= g_pg->ncols) return strdup("");
+    if (!g_pg->cells) return strdup("");
+    char* v = g_pg->cells[row * g_pg->ncols + col];
     return strdup(v ? v : "");
 }
 
 char* __pg_get_field(int32_t row, const char* name) {
-    if (!name) return strdup("");
-    for (int i = 0; i < g_pg_ncols; i++) {
-        if (strcmp(g_pg_colnames[i], name) == 0)
+    if (!g_pg || !name) return strdup("");
+    for (int i = 0; i < g_pg->ncols; i++) {
+        if (strcmp(g_pg->colnames[i], name) == 0)
             return __pg_get_value(row, i);
     }
     return strdup("");
@@ -756,23 +778,24 @@ char* __pg_get_field(int32_t row, const char* name) {
 
 // Print full result set to stderr
 int32_t __pg_dump_results(void) {
-    fprintf(stderr, "=== PG Result: %d rows x %d cols ===\n", g_pg_nrows, g_pg_ncols);
+    if (!g_pg) { fprintf(stderr, "=== PG: no connection ===\n"); return 0; }
+    fprintf(stderr, "=== PG Result: %d rows x %d cols ===\n", g_pg->nrows, g_pg->ncols);
     // Header
-    for (int c = 0; c < g_pg_ncols; c++) {
+    for (int c = 0; c < g_pg->ncols; c++) {
         if (c > 0) fprintf(stderr, " | ");
-        fprintf(stderr, "%-15s", g_pg_colnames[c]);
+        fprintf(stderr, "%-15s", g_pg->colnames[c]);
     }
     fprintf(stderr, "\n");
-    for (int c = 0; c < g_pg_ncols; c++) {
+    for (int c = 0; c < g_pg->ncols; c++) {
         if (c > 0) fprintf(stderr, "-+-");
         fprintf(stderr, "---------------");
     }
     fprintf(stderr, "\n");
     // Rows
-    for (int r = 0; r < g_pg_nrows; r++) {
-        for (int c = 0; c < g_pg_ncols; c++) {
+    for (int r = 0; r < g_pg->nrows; r++) {
+        for (int c = 0; c < g_pg->ncols; c++) {
             if (c > 0) fprintf(stderr, " | ");
-            char* v = g_pg_cells ? g_pg_cells[r * g_pg_ncols + c] : NULL;
+            char* v = g_pg->cells ? g_pg->cells[r * g_pg->ncols + c] : NULL;
             fprintf(stderr, "%-15s", v ? v : "(null)");
         }
         fprintf(stderr, "\n");
@@ -783,8 +806,9 @@ int32_t __pg_dump_results(void) {
 
 // Get connection info as string
 char* __pg_connection_info(void) {
+    if (!g_pg) return strdup("not initialized");
     char buf[512];
     snprintf(buf, sizeof(buf), "fd=%d connected=%d user=%s error=%s",
-        g_pg_fd, g_pg_connected, g_pg_user, g_pg_error);
+        g_pg->fd, g_pg->connected, g_pg->user, g_pg->error);
     return strdup(buf);
 }

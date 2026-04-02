@@ -18,8 +18,9 @@ type Manifest struct {
 	Target      Target
 	Diagnostics Diagnostics
 	FFI         FFI
-	Database    Database
-	path        string // absolute path to manifest
+	Database    Database            // [database] → the "default" connection
+	Databases   map[string]Database // [database.name] → named connections
+	path        string              // absolute path to manifest
 }
 
 type Package struct {
@@ -69,8 +70,8 @@ type Database struct {
 	Charset      string // character encoding: "utf8mb4", "UTF8"
 	Timezone     string // connection timezone: "UTC", "America/Chicago"
 	Prefix       string // table name prefix for multi-tenancy: "app1_"
-	MaxConns     string // max open connections (future use)
-	ConnTimeout  string // connection timeout in seconds (future use)
+	MaxConns     string // max pool connections (default: "1" = no pool)
+	ConnTimeout  string // connection timeout in seconds (default: "30")
 	Options      string // extra DSN/connection string parameters
 }
 
@@ -204,51 +205,66 @@ func Load(path string) (Manifest, []diag.Diagnostic) {
 			diags = append(diags, simpleDiag("project.bad_diag_type", "DPM0002", path, "diagnostics.max_errors must be a string containing an integer"))
 		}
 	}
-	// Validate [database] section
-	if m.Database.Engine != "" {
-		switch strings.ToLower(m.Database.Engine) {
-		case "postgres", "mysql":
-			m.Database.Engine = strings.ToLower(m.Database.Engine)
-		default:
-			diags = append(diags, simpleDiag("project.bad_db_engine", "DPM0007", path,
-				fmt.Sprintf("invalid database.engine %q (expected postgres|mysql)", m.Database.Engine)))
-		}
-		// If not schema_only, require connection fields
-		if !m.Database.SchemaOnly {
-			if m.Database.Host == "" {
-				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
-					"database.host required (or set schema_only = true)"))
-			}
-			if m.Database.Name == "" {
-				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
-					"database.name required (or set schema_only = true)"))
-			}
-			if m.Database.User == "" {
-				diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
-					"database.user required (or set schema_only = true)"))
-			}
-		}
-		// Auto-default port based on engine
-		if m.Database.Port == "" {
-			switch m.Database.Engine {
-			case "postgres":
-				m.Database.Port = "5432"
-			case "mysql":
-				m.Database.Port = "3306"
-			}
-		}
-		// Validate ssl_mode if provided
-		if m.Database.SslMode != "" {
-			switch strings.ToLower(m.Database.SslMode) {
-			case "disable", "require", "verify-ca", "verify-full", "prefer", "allow":
-				m.Database.SslMode = strings.ToLower(m.Database.SslMode)
-			default:
-				diags = append(diags, simpleDiag("project.bad_db_ssl", "DPM0009", path,
-					fmt.Sprintf("invalid database.ssl_mode %q (expected disable|require|verify-ca|verify-full)", m.Database.SslMode)))
-			}
-		}
+	// Validate [database] section (default)
+	diags = append(diags, validateDatabase(&m.Database, "database", path)...)
+	// Validate named [database.name] sections
+	for name := range m.Databases {
+		entry := m.Databases[name]
+		diags = append(diags, validateDatabase(&entry, "database."+name, path)...)
+		m.Databases[name] = entry
 	}
 	return m, diags
+}
+
+// validateDatabase validates a single Database entry and applies defaults.
+// secName is used for diagnostic messages (e.g., "database" or "database.analytics").
+func validateDatabase(db *Database, secName, path string) []diag.Diagnostic {
+	var diags []diag.Diagnostic
+	if db.Engine == "" {
+		return nil // no database configured in this section
+	}
+	switch strings.ToLower(db.Engine) {
+	case "postgres", "mysql":
+		db.Engine = strings.ToLower(db.Engine)
+	default:
+		diags = append(diags, simpleDiag("project.bad_db_engine", "DPM0007", path,
+			fmt.Sprintf("invalid %s.engine %q (expected postgres|mysql)", secName, db.Engine)))
+	}
+	// If not schema_only, require connection fields
+	if !db.SchemaOnly {
+		if db.Host == "" {
+			diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+				fmt.Sprintf("%s.host required (or set schema_only = true)", secName)))
+		}
+		if db.Name == "" {
+			diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+				fmt.Sprintf("%s.name required (or set schema_only = true)", secName)))
+		}
+		if db.User == "" {
+			diags = append(diags, simpleDiag("project.missing_db_field", "DPM0008", path,
+				fmt.Sprintf("%s.user required (or set schema_only = true)", secName)))
+		}
+	}
+	// Auto-default port based on engine
+	if db.Port == "" {
+		switch db.Engine {
+		case "postgres":
+			db.Port = "5432"
+		case "mysql":
+			db.Port = "3306"
+		}
+	}
+	// Validate ssl_mode if provided
+	if db.SslMode != "" {
+		switch strings.ToLower(db.SslMode) {
+		case "disable", "require", "verify-ca", "verify-full", "prefer", "allow":
+			db.SslMode = strings.ToLower(db.SslMode)
+		default:
+			diags = append(diags, simpleDiag("project.bad_db_ssl", "DPM0009", path,
+				fmt.Sprintf("invalid %s.ssl_mode %q (expected disable|require|verify-ca|verify-full)", secName, db.SslMode)))
+		}
+	}
+	return diags
 }
 
 // ---- Minimal DML (Desi Manifest Language) parser ----
@@ -256,7 +272,8 @@ func Load(path string) (Manifest, []diag.Diagnostic) {
 // Only string/boolean/array-of-strings are materialized; other types are reported as invalid type.
 
 type dmlState struct {
-	section string // e.g., "package", "build", "target", "diagnostics", "ffi", "ffi.extern"
+	section string // e.g., "package", "build", "target", "diagnostics", "ffi", "ffi.extern", "database", "database.analytics"
+	dbName  string // non-empty when inside a [database.name] sub-section
 	line    int
 }
 
@@ -287,8 +304,27 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 			switch body {
 			case "package", "build", "target", "diagnostics", "ffi", "database":
 				s.section = body
+				s.dbName = "" // reset named DB context
 			default:
-				diags = append(diags, simpleDiag("project.unknown_section", "DPM0001", "", fmt.Sprintf("unknown section: %s", body)))
+				// Check for [database.name] sub-sections
+				if strings.HasPrefix(body, "database.") {
+					dbName := strings.TrimPrefix(body, "database.")
+					if dbName != "" {
+						s.section = "database"
+						s.dbName = dbName
+						// Initialize map and entry if needed
+						if m.Databases == nil {
+							m.Databases = make(map[string]Database)
+						}
+						if _, exists := m.Databases[dbName]; !exists {
+							m.Databases[dbName] = Database{}
+						}
+					} else {
+						diags = append(diags, simpleDiag("project.unknown_section", "DPM0001", "", fmt.Sprintf("unknown section: %s", body)))
+					}
+				} else {
+					diags = append(diags, simpleDiag("project.unknown_section", "DPM0001", "", fmt.Sprintf("unknown section: %s", body)))
+				}
 			}
 			continue
 		}
@@ -379,39 +415,53 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 				m.FFI.Externs = append(m.FFI.Externs, ex)
 			}
 		case "database":
+			// Route key-value to either m.Database (default) or m.Databases[name]
+			setDBField := func(setter func(db *Database)) {
+				if s.dbName == "" {
+					setter(&m.Database)
+				} else {
+					entry := m.Databases[s.dbName]
+					setter(&entry)
+					m.Databases[s.dbName] = entry
+				}
+			}
 			switch key {
 			case "engine":
-				m.Database.Engine = parseString(val)
+				setDBField(func(db *Database) { db.Engine = parseString(val) })
 			case "schema_only":
-				m.Database.SchemaOnly = parseString(val) == "true"
+				setDBField(func(db *Database) { db.SchemaOnly = parseString(val) == "true" })
 			case "debug_queries":
-				m.Database.DebugQueries = parseString(val) == "true"
+				setDBField(func(db *Database) { db.DebugQueries = parseString(val) == "true" })
 			case "host":
-				m.Database.Host = parseString(val)
+				setDBField(func(db *Database) { db.Host = parseString(val) })
 			case "port":
-				m.Database.Port = parseString(val)
+				setDBField(func(db *Database) { db.Port = parseString(val) })
 			case "name":
-				m.Database.Name = parseString(val)
+				setDBField(func(db *Database) { db.Name = parseString(val) })
 			case "user":
-				m.Database.User = parseString(val)
+				setDBField(func(db *Database) { db.User = parseString(val) })
 			case "password":
-				m.Database.Password = parseString(val)
+				setDBField(func(db *Database) { db.Password = parseString(val) })
 			case "ssl_mode":
-				m.Database.SslMode = parseString(val)
+				setDBField(func(db *Database) { db.SslMode = parseString(val) })
 			case "charset":
-				m.Database.Charset = parseString(val)
+				setDBField(func(db *Database) { db.Charset = parseString(val) })
 			case "timezone":
-				m.Database.Timezone = parseString(val)
+				setDBField(func(db *Database) { db.Timezone = parseString(val) })
 			case "prefix":
-				m.Database.Prefix = parseString(val)
+				setDBField(func(db *Database) { db.Prefix = parseString(val) })
 			case "max_conns":
-				m.Database.MaxConns = parseString(val)
+				setDBField(func(db *Database) { db.MaxConns = parseString(val) })
 			case "conn_timeout":
-				m.Database.ConnTimeout = parseString(val)
+				setDBField(func(db *Database) { db.ConnTimeout = parseString(val) })
 			case "options":
-				m.Database.Options = parseString(val)
+				setDBField(func(db *Database) { db.Options = parseString(val) })
 			default:
-				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: database.%s", key)))
+				secName := "database"
+				if s.dbName != "" {
+					secName = "database." + s.dbName
+				}
+				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: %s.%s", secName, key)))
 			}
 		default:
 			// outside any known section
