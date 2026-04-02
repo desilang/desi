@@ -743,8 +743,13 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		// e.g., User.objects.filter() → "filter" is looked up via macro registry
 		if cls.MacroDecorator != "" {
 			if _, method, ok := macro.Registry.LookupMethodOnClass(cls, name); ok {
-				// Return variadic func type returning int (row count/status)
-				_ = method // method spec available for future type refinement
+				if method.ReturnsModel {
+					// Model-returning methods (.get, .first, .last) return the class type
+					qsMethod := types.FuncOf(nil, cls, true)
+					c.info.Types[x] = qsMethod
+					return qsMethod
+				}
+				// Non-model methods return int (row count/status)
 				qsMethod := types.FuncOf(nil, types.Int, true)
 				c.info.Types[x] = qsMethod
 				return qsMethod
