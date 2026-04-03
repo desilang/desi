@@ -30,9 +30,9 @@ echo "==> Compiling LLVM IR to object file..."
 llc build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
-# Detect if the source uses HTTP module (needs OpenSSL)
+# Detect if the source uses HTTP or DB module (needs OpenSSL)
 EXTRA_LINK_FLAGS=""
-if grep -q "^import http" "$INPUT" 2>/dev/null; then
+if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
     # Add OpenSSL linker flags
     if [ -d "/opt/homebrew/lib" ]; then
         EXTRA_LINK_FLAGS="-L/opt/homebrew/lib -lssl -lcrypto"

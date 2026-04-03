@@ -17,6 +17,18 @@
 #include <netdb.h>
 #include <errno.h>
 
+// Optional TLS/SSL support (compile-time detection)
+#ifdef __has_include
+  #if __has_include(<openssl/ssl.h>)
+    #define PG_HAS_SSL 1
+    #include <openssl/ssl.h>
+    #include <openssl/err.h>
+  #endif
+#endif
+#ifndef PG_HAS_SSL
+  #define PG_HAS_SSL 0
+#endif
+
 // ============================================================
 // Byte order helpers (prefixed to avoid conflicts)
 // ============================================================
@@ -56,6 +68,13 @@ typedef struct {
     char error[512];
     char user[128];
     char password[256];
+
+    // TLS/SSL
+#if PG_HAS_SSL
+    SSL_CTX* ssl_ctx;
+    SSL* ssl;
+#endif
+    int use_ssl;  // 1 if SSL is active
 
     // Result set
     int ncols;
@@ -110,7 +129,13 @@ static int pg_send_raw(const char* data, int len) {
     if (g_pg->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)write(g_pg->fd, data + total, len - total);
+        int n;
+#if PG_HAS_SSL
+        if (g_pg->use_ssl && g_pg->ssl)
+            n = SSL_write(g_pg->ssl, data + total, len - total);
+        else
+#endif
+            n = (int)write(g_pg->fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -121,7 +146,13 @@ static int pg_recv_raw(char* buf, int len) {
     if (g_pg->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)read(g_pg->fd, buf + total, len - total);
+        int n;
+#if PG_HAS_SSL
+        if (g_pg->use_ssl && g_pg->ssl)
+            n = SSL_read(g_pg->ssl, buf + total, len - total);
+        else
+#endif
+            n = (int)read(g_pg->fd, buf + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -229,6 +260,363 @@ static void pg_md5_auth(const char* user, const char* pass, const char salt[4], 
 }
 
 // ============================================================
+// SHA-256 (inline, for SCRAM-SHA-256)
+// ============================================================
+
+#define PG_ROTR32(x,n) (((x)>>(n))|((x)<<(32-(n))))
+#define PG_CH(x,y,z) (((x)&(y))^((~(x))&(z)))
+#define PG_MAJ(x,y,z) (((x)&(y))^((x)&(z))^((y)&(z)))
+#define PG_SIG0(x) (PG_ROTR32(x,2)^PG_ROTR32(x,13)^PG_ROTR32(x,22))
+#define PG_SIG1(x) (PG_ROTR32(x,6)^PG_ROTR32(x,11)^PG_ROTR32(x,25))
+#define PG_SG0(x) (PG_ROTR32(x,7)^PG_ROTR32(x,18)^((x)>>3))
+#define PG_SG1(x) (PG_ROTR32(x,17)^PG_ROTR32(x,19)^((x)>>10))
+
+static const uint32_t pg_sha256_K[64] = {
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+static void pg_sha256_block(uint32_t st[8], const unsigned char blk[64]) {
+    uint32_t W[64], a,b,c,d,e,f,g,h;
+    for (int i=0;i<16;i++)
+        W[i]=((uint32_t)blk[i*4]<<24)|((uint32_t)blk[i*4+1]<<16)|((uint32_t)blk[i*4+2]<<8)|(uint32_t)blk[i*4+3];
+    for (int i=16;i<64;i++)
+        W[i]=PG_SG1(W[i-2])+W[i-7]+PG_SG0(W[i-15])+W[i-16];
+    a=st[0];b=st[1];c=st[2];d=st[3];e=st[4];f=st[5];g=st[6];h=st[7];
+    for (int i=0;i<64;i++) {
+        uint32_t t1=h+PG_SIG1(e)+PG_CH(e,f,g)+pg_sha256_K[i]+W[i];
+        uint32_t t2=PG_SIG0(a)+PG_MAJ(a,b,c);
+        h=g;g=f;f=e;e=d+t1;d=c;c=b;b=a;a=t1+t2;
+    }
+    st[0]+=a;st[1]+=b;st[2]+=c;st[3]+=d;st[4]+=e;st[5]+=f;st[6]+=g;st[7]+=h;
+}
+
+// SHA-256: produces 32-byte digest
+static void pg_sha256(const unsigned char* data, size_t len, unsigned char out[32]) {
+    uint32_t st[8]={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+    unsigned char buf[64];
+    size_t i;
+    for (i=0;i+64<=len;i+=64) pg_sha256_block(st,(const unsigned char*)(data+i));
+    size_t rem=len-i;
+    memset(buf,0,64);
+    memcpy(buf,data+i,rem);
+    buf[rem]=0x80;
+    if (rem>=56) { pg_sha256_block(st,buf); memset(buf,0,64); }
+    uint64_t bits=len*8;
+    for (int j=0;j<8;j++) buf[63-j]=(bits>>(j*8))&0xFF;
+    pg_sha256_block(st,buf);
+    for (int j=0;j<8;j++) {
+        out[j*4]=(st[j]>>24)&0xFF; out[j*4+1]=(st[j]>>16)&0xFF;
+        out[j*4+2]=(st[j]>>8)&0xFF; out[j*4+3]=st[j]&0xFF;
+    }
+}
+
+// HMAC-SHA-256
+static void pg_hmac_sha256(const unsigned char* key, size_t klen,
+                           const unsigned char* data, size_t dlen,
+                           unsigned char out[32]) {
+    unsigned char kpad[64];
+    memset(kpad, 0, 64);
+    if (klen > 64) {
+        pg_sha256(key, klen, kpad); // hash long keys
+    } else {
+        memcpy(kpad, key, klen);
+    }
+
+    unsigned char ipad[64], opad[64];
+    for (int i=0;i<64;i++) { ipad[i]=kpad[i]^0x36; opad[i]=kpad[i]^0x5c; }
+
+    // inner hash = SHA256(ipad || data)
+    unsigned char* inner = malloc(64+dlen);
+    memcpy(inner, ipad, 64);
+    memcpy(inner+64, data, dlen);
+    unsigned char ihash[32];
+    pg_sha256(inner, 64+dlen, ihash);
+    free(inner);
+
+    // outer hash = SHA256(opad || inner_hash)
+    unsigned char outer[96];
+    memcpy(outer, opad, 64);
+    memcpy(outer+64, ihash, 32);
+    pg_sha256(outer, 96, out);
+}
+
+// PBKDF2-HMAC-SHA-256 (RFC 2898) — produces 32 bytes
+static void pg_pbkdf2_sha256(const char* password, size_t plen,
+                             const unsigned char* salt, size_t slen,
+                             int iterations, unsigned char out[32]) {
+    // U1 = HMAC(password, salt || INT(1))
+    unsigned char* salti = malloc(slen + 4);
+    memcpy(salti, salt, slen);
+    salti[slen]=0; salti[slen+1]=0; salti[slen+2]=0; salti[slen+3]=1; // BE int32(1)
+
+    unsigned char U[32], T[32];
+    pg_hmac_sha256((const unsigned char*)password, plen, salti, slen+4, U);
+    free(salti);
+    memcpy(T, U, 32);
+
+    for (int i=1; i<iterations; i++) {
+        unsigned char Unew[32];
+        pg_hmac_sha256((const unsigned char*)password, plen, U, 32, Unew);
+        memcpy(U, Unew, 32);
+        for (int j=0;j<32;j++) T[j]^=U[j];
+    }
+    memcpy(out, T, 32);
+}
+
+// ============================================================
+// Base64 encode/decode (for SCRAM)
+// ============================================================
+
+static const char pg_b64_chars[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static int pg_b64_encode(const unsigned char* in, size_t len, char* out) {
+    int o=0;
+    for (size_t i=0; i<len; i+=3) {
+        uint32_t val = (uint32_t)in[i]<<16;
+        if (i+1<len) val |= (uint32_t)in[i+1]<<8;
+        if (i+2<len) val |= (uint32_t)in[i+2];
+        out[o++]=pg_b64_chars[(val>>18)&63];
+        out[o++]=pg_b64_chars[(val>>12)&63];
+        out[o++]=(i+1<len) ? pg_b64_chars[(val>>6)&63] : '=';
+        out[o++]=(i+2<len) ? pg_b64_chars[val&63] : '=';
+    }
+    out[o]='\0';
+    return o;
+}
+
+static int pg_b64_decode(const char* in, unsigned char* out) {
+    static int tab_init=0;
+    static unsigned char tab[256];
+    if (!tab_init) {
+        memset(tab,64,256);
+        for (int i=0;i<64;i++) tab[(unsigned char)pg_b64_chars[i]]=i;
+        tab_init=1;
+    }
+    int o=0, len=strlen(in);
+    for (int i=0;i<len;i+=4) {
+        uint32_t v=0; int pad=0;
+        for (int j=0;j<4;j++) {
+            if (i+j<len && in[i+j]!='=') v=(v<<6)|tab[(unsigned char)in[i+j]];
+            else { v<<=6; pad++; }
+        }
+        out[o++]=(v>>16)&0xFF;
+        if (pad<2) out[o++]=(v>>8)&0xFF;
+        if (pad<1) out[o++]=v&0xFF;
+    }
+    return o;
+}
+
+// ============================================================
+// SCRAM-SHA-256 Authentication (RFC 5802 + PG wire)
+// ============================================================
+
+// XOR two 32-byte buffers
+static void pg_xor32(unsigned char* out, const unsigned char* a, const unsigned char* b) {
+    for (int i=0;i<32;i++) out[i]=a[i]^b[i];
+}
+
+// Perform the full SCRAM-SHA-256 exchange.
+// Called when auth type == 10 (SASL).
+// Returns 0 on success, -1 on failure.
+static int pg_scram_auth(const char* user, const char* password) {
+    // ---- Step 1: Send SASLInitialResponse ----
+    // Generate client nonce (24 random bytes, base64-encoded)
+    unsigned char nonce_raw[24];
+    // Simple nonce — use /dev/urandom if available, else fallback
+    FILE* urand = fopen("/dev/urandom", "rb");
+    if (urand) {
+        fread(nonce_raw, 1, 24, urand);
+        fclose(urand);
+    } else {
+        // Fallback: use time + pid (less secure but functional)
+        for (int i=0;i<24;i++) nonce_raw[i]=(unsigned char)(rand()^(i*17));
+    }
+    char client_nonce[48];
+    pg_b64_encode(nonce_raw, 24, client_nonce);
+
+    // client-first-message-bare = "n=,r=<nonce>" (no username per PG spec)
+    char cfm_bare[256];
+    snprintf(cfm_bare, sizeof(cfm_bare), "n=,r=%s", client_nonce);
+
+    // client-first-message = "n,," + cfm_bare (GS2 header for no channel binding)
+    char cfm[300];
+    snprintf(cfm, sizeof(cfm), "n,,%s", cfm_bare);
+
+    // Build SASLInitialResponse: 'p' + len + "SCRAM-SHA-256\0" + int32(cfm_len) + cfm
+    {
+        const char* mech = "SCRAM-SHA-256";
+        int mech_len = strlen(mech);
+        int cfm_len = strlen(cfm);
+        int body_len = 4 + (mech_len+1) + 4 + cfm_len;
+        char msg[512]; int mp = 0;
+        msg[mp++] = 'p';
+        pg_write_i32(msg+mp, body_len); mp += 4;
+        memcpy(msg+mp, mech, mech_len+1); mp += mech_len+1;
+        pg_write_i32(msg+mp, cfm_len); mp += 4;
+        memcpy(msg+mp, cfm, cfm_len); mp += cfm_len;
+        if (pg_send_raw(msg, mp) < 0) return -1;
+        pg_log("SCRAM: sent SASLInitialResponse");
+    }
+
+    // ---- Step 2: Read AuthenticationSASLContinue (type 11) ----
+    char mtype; char payload[PG_BUF_SIZE]; int plen;
+    if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+    if (mtype != 'R') return -1;
+    int32_t atype2 = pg_read_i32(payload);
+    if (atype2 != 11) {
+        snprintf(g_pg->error, sizeof(g_pg->error), "Expected SASLContinue(11), got %d", atype2);
+        return -1;
+    }
+
+    // server-first-message is payload+4
+    char sfm[2048];
+    int sfm_len = plen - 4;
+    memcpy(sfm, payload+4, sfm_len);
+    sfm[sfm_len] = '\0';
+    pg_log("SCRAM: server-first-message = %s", sfm);
+
+    // Parse server-first-message: r=<nonce>,s=<salt_b64>,i=<iterations>
+    char* server_nonce = NULL;
+    char* salt_b64 = NULL;
+    int iterations = 4096;
+    {
+        char* p = sfm;
+        while (*p) {
+            if (p[0]=='r' && p[1]=='=') { server_nonce = p+2; }
+            else if (p[0]=='s' && p[1]=='=') { salt_b64 = p+2; }
+            else if (p[0]=='i' && p[1]=='=') { iterations = atoi(p+2); }
+            // Advance to next ','
+            while (*p && *p!=',') p++;
+            if (*p==',') { *p='\0'; p++; }
+        }
+    }
+    if (!server_nonce || !salt_b64) {
+        snprintf(g_pg->error, sizeof(g_pg->error), "SCRAM: invalid server-first-message");
+        return -1;
+    }
+
+    // Decode salt
+    unsigned char salt[256];
+    int salt_len = pg_b64_decode(salt_b64, salt);
+
+    // Derive SaltedPassword = PBKDF2(password, salt, iterations)
+    unsigned char salted_password[32];
+    pg_pbkdf2_sha256(password, strlen(password), salt, salt_len, iterations, salted_password);
+
+    // ClientKey = HMAC(SaltedPassword, "Client Key")
+    unsigned char client_key[32];
+    pg_hmac_sha256(salted_password, 32, (const unsigned char*)"Client Key", 10, client_key);
+
+    // StoredKey = SHA256(ClientKey)
+    unsigned char stored_key[32];
+    pg_sha256(client_key, 32, stored_key);
+
+    // ServerKey = HMAC(SaltedPassword, "Server Key")
+    unsigned char server_key[32];
+    pg_hmac_sha256(salted_password, 32, (const unsigned char*)"Server Key", 10, server_key);
+
+    // ---- Step 3: Send SASLResponse (client-final-message) ----
+    // channel-binding = "c=biws" (base64 of "n,,")
+    // client-final-message-without-proof = "c=biws,r=<server_nonce>"
+    char cfm_wo_proof[512];
+    snprintf(cfm_wo_proof, sizeof(cfm_wo_proof), "c=biws,r=%s", server_nonce);
+
+    // AuthMessage = client-first-message-bare + "," + server-first-message + "," + cfm_wo_proof
+    // Reconstruct server-first-message (we null-terminated commas, need original)
+    // Re-read sfm from payload
+    memcpy(sfm, payload+4, sfm_len);
+    sfm[sfm_len] = '\0';
+
+    char auth_message[4096];
+    snprintf(auth_message, sizeof(auth_message), "%s,%s,%s", cfm_bare, sfm, cfm_wo_proof);
+
+    // ClientSignature = HMAC(StoredKey, AuthMessage)
+    unsigned char client_sig[32];
+    pg_hmac_sha256(stored_key, 32, (const unsigned char*)auth_message, strlen(auth_message), client_sig);
+
+    // ClientProof = ClientKey XOR ClientSignature
+    unsigned char client_proof[32];
+    pg_xor32(client_proof, client_key, client_sig);
+
+    // Encode proof as base64
+    char proof_b64[64];
+    pg_b64_encode(client_proof, 32, proof_b64);
+
+    // client-final-message = cfm_wo_proof + ",p=" + proof_b64
+    char cfm_final[1024];
+    snprintf(cfm_final, sizeof(cfm_final), "%s,p=%s", cfm_wo_proof, proof_b64);
+
+    // ServerSignature = HMAC(ServerKey, AuthMessage) — for verification
+    unsigned char expected_server_sig[32];
+    pg_hmac_sha256(server_key, 32, (const unsigned char*)auth_message, strlen(auth_message), expected_server_sig);
+
+    // Send SASLResponse: 'p' + len + cfm_final
+    {
+        int cfm_final_len = strlen(cfm_final);
+        int body_len = 4 + cfm_final_len;
+        char msg[1536]; int mp = 0;
+        msg[mp++] = 'p';
+        pg_write_i32(msg+mp, body_len); mp += 4;
+        memcpy(msg+mp, cfm_final, cfm_final_len); mp += cfm_final_len;
+        if (pg_send_raw(msg, mp) < 0) return -1;
+        pg_log("SCRAM: sent SASLResponse (client-final-message)");
+    }
+
+    // ---- Step 4: Read AuthenticationSASLFinal (type 12) ----
+    if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+    if (mtype != 'R') {
+        if (mtype == 'E') {
+            char* p = payload;
+            while (p < payload+plen && *p) {
+                char f = *p++;
+                if (f=='\0') break;
+                if (f=='M') { snprintf(g_pg->error, sizeof(g_pg->error), "%s", p); break; }
+                p += strlen(p)+1;
+            }
+        }
+        return -1;
+    }
+    int32_t atype3 = pg_read_i32(payload);
+    if (atype3 == 12) {
+        // Verify server signature
+        char* sv_str = payload + 4;
+        if (sv_str[0]=='v' && sv_str[1]=='=') {
+            unsigned char got_sig[32];
+            pg_b64_decode(sv_str+2, got_sig);
+            if (memcmp(got_sig, expected_server_sig, 32) != 0) {
+                snprintf(g_pg->error, sizeof(g_pg->error), "SCRAM: server signature mismatch");
+                return -1;
+            }
+            pg_log("SCRAM: server signature verified");
+        }
+    } else if (atype3 != 0) {
+        snprintf(g_pg->error, sizeof(g_pg->error), "SCRAM: unexpected auth type %d", atype3);
+        return -1;
+    }
+
+    // Read AuthenticationOk (type 0) if we got SASLFinal
+    if (atype3 == 12) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+        if (mtype == 'R') {
+            int32_t ok = pg_read_i32(payload);
+            if (ok != 0) {
+                snprintf(g_pg->error, sizeof(g_pg->error), "SCRAM: auth not OK after final, got %d", ok);
+                return -1;
+            }
+        }
+    }
+    pg_log("SCRAM: authentication successful");
+    return 0;
+}
+
+// ============================================================
 // Result set management
 // ============================================================
 
@@ -314,6 +702,52 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
 
     pg_log("TCP connected fd=%d", g_pg->fd);
 
+    // ---- SSL/TLS Negotiation ----
+    // Try SSL upgrade before sending StartupMessage.
+    // Send SSLRequest (int32 len=8, int32 magic=80877103).
+    // Server replies: 'S' = SSL ok, 'N' = no SSL.
+    g_pg->use_ssl = 0;
+#if PG_HAS_SSL
+    {
+        char ssl_req[8];
+        pg_write_i32(ssl_req, 8);         // message length
+        pg_write_i32(ssl_req+4, 80877103); // SSL request code
+        // Use raw write since SSL isn't active yet
+        int wr = (int)write(g_pg->fd, ssl_req, 8);
+        if (wr == 8) {
+            char ssl_resp;
+            int rd = (int)read(g_pg->fd, &ssl_resp, 1);
+            if (rd == 1 && ssl_resp == 'S') {
+                // Server accepted SSL — perform TLS handshake
+                SSL_library_init();
+                SSL_load_error_strings();
+                g_pg->ssl_ctx = SSL_CTX_new(TLS_client_method());
+                if (g_pg->ssl_ctx) {
+                    g_pg->ssl = SSL_new(g_pg->ssl_ctx);
+                    SSL_set_fd(g_pg->ssl, g_pg->fd);
+                    if (SSL_connect(g_pg->ssl) == 1) {
+                        g_pg->use_ssl = 1;
+                        pg_log("SSL/TLS connection established (%s)", SSL_get_version(g_pg->ssl));
+                    } else {
+                        pg_log("SSL_connect failed, falling back to plaintext");
+                        SSL_free(g_pg->ssl); g_pg->ssl = NULL;
+                        SSL_CTX_free(g_pg->ssl_ctx); g_pg->ssl_ctx = NULL;
+                        // Reconnect for plaintext (server closed the SSL attempt)
+                        close(g_pg->fd);
+                        g_pg->fd = socket(AF_INET, SOCK_STREAM, 0);
+                        if (g_pg->fd < 0 || connect(g_pg->fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
+                            snprintf(g_pg->error, sizeof(g_pg->error), "SSL fallback reconnect failed");
+                            return -1;
+                        }
+                    }
+                }
+            } else {
+                pg_log("Server declined SSL (response='%c'), continuing plaintext", ssl_resp);
+            }
+        }
+    }
+#endif
+
     // StartupMessage
     char startup[512];
     int pos = 4; // skip length
@@ -375,6 +809,17 @@ int32_t __pg_connect(const char* host, int32_t port, const char* dbname,
                 memcpy(msg+mp, md5res, rl+1); mp+=rl+1;
                 pg_send_raw(msg, mp);
                 pg_log("sent MD5 password");
+            } else if (atype == 10) {
+                // SASL (SCRAM-SHA-256) — PG 14+ default
+                pg_log("auth SASL/SCRAM-SHA-256 requested");
+                if (pg_scram_auth(user, password) < 0) {
+                    if (!g_pg->error[0])
+                        snprintf(g_pg->error, sizeof(g_pg->error), "SCRAM-SHA-256 authentication failed");
+                    close(g_pg->fd); g_pg->fd = -1;
+                    return -1;
+                }
+                // SCRAM consumed its own auth messages; continue to ReadyForQuery
+                continue;
             } else {
                 snprintf(g_pg->error, sizeof(g_pg->error),
                     "Unsupported auth method: %d", atype);
@@ -409,6 +854,11 @@ int32_t __pg_close(void) {
         char msg[5] = {'X', 0, 0, 0, 4};
         pg_write_i32(msg+1, 4);
         pg_send_raw(msg, 5);
+#if PG_HAS_SSL
+        if (g_pg->ssl) { SSL_shutdown(g_pg->ssl); SSL_free(g_pg->ssl); g_pg->ssl = NULL; }
+        if (g_pg->ssl_ctx) { SSL_CTX_free(g_pg->ssl_ctx); g_pg->ssl_ctx = NULL; }
+#endif
+        g_pg->use_ssl = 0;
         close(g_pg->fd);
         g_pg->fd = -1;
     }
