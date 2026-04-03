@@ -204,6 +204,20 @@ func parseMacroClass(cd *ast.ClassDecl, info *macroDecInfo) (*MacroProtocol, err
 			ctx.Class.TableName = strings.ToLower(ctx.ClassDecl.Name.Name) + "s"
 		}
 
+		// Extract db connections from decorator kwarg: @model(db=["analytics", "replica"])
+		if dbExpr, ok := ctx.Decorator.KwArgs["db"]; ok {
+			if ll, ok := dbExpr.(*ast.ListLit); ok {
+				for _, elem := range ll.Elems {
+					if sl, ok := elem.(*ast.StrLit); ok {
+						ctx.Class.ModelDB = append(ctx.Class.ModelDB, sl.Value)
+					}
+				}
+			} else if sl, ok := dbExpr.(*ast.StrLit); ok {
+				// Also accept single string: @model(db="analytics")
+				ctx.Class.ModelDB = append(ctx.Class.ModelDB, sl.Value)
+			}
+		}
+
 		return nil
 	}
 
