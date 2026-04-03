@@ -732,6 +732,67 @@ pub def create(**fields: str) -> int:
 	return __qs_do_insert()
 
 # ============================================================
+# Public API — Values (dict/list access to results)
+# ============================================================
+
+pub def values(row: int) -> str:
+	"""Get a row as a JSON-like dict string: {"col": "val", ...}.
+	Call after fetch_all(). Django equivalent: .values()"""
+	return __qs_values(row)
+
+pub def values_list(row: int) -> str:
+	"""Get a row as comma-separated values.
+	Call after fetch_all(). Django equivalent: .values_list()"""
+	return __qs_values_list(row)
+
+pub def values_flat(row: int, col_name: str) -> str:
+	"""Get a single column value from a row.
+	Django equivalent: .values_list('name', flat=True)"""
+	return __qs_values_flat(row, col_name)
+
+# ============================================================
+# Public API — Bulk Insert
+# ============================================================
+
+pub def bulk_begin(ncols: int) -> int:
+	"""Start a bulk INSERT. Specify expected number of columns.
+	Usage: db.objects("users"); db.bulk_begin(3)"""
+	return __qs_bulk_begin(ncols)
+
+pub def bulk_col(col_name: str) -> int:
+	"""Add a column name for bulk INSERT."""
+	return __qs_bulk_col(col_name)
+
+pub def bulk_row_csv(csv_values: str) -> int:
+	"""Add a row as comma-separated values for bulk INSERT."""
+	return __qs_bulk_row_csv(csv_values)
+
+pub def bulk_row1(v1: str) -> int:
+	"""Add a single-column row for bulk INSERT."""
+	return __qs_bulk_row1(v1)
+
+pub def bulk_row2(v1: str, v2: str) -> int:
+	"""Add a 2-column row for bulk INSERT."""
+	return __qs_bulk_row2(v1, v2)
+
+pub def bulk_row3(v1: str, v2: str, v3: str) -> int:
+	"""Add a 3-column row for bulk INSERT."""
+	return __qs_bulk_row3(v1, v2, v3)
+
+pub def bulk_row4(v1: str, v2: str, v3: str, v4: str) -> int:
+	"""Add a 4-column row for bulk INSERT."""
+	return __qs_bulk_row4(v1, v2, v3, v4)
+
+pub def bulk_row5(v1: str, v2: str, v3: str, v4: str, v5: str) -> int:
+	"""Add a 5-column row for bulk INSERT."""
+	return __qs_bulk_row5(v1, v2, v3, v4, v5)
+
+pub def bulk_execute() -> int:
+	"""Execute the bulk INSERT. Returns affected row count.
+	Django equivalent: Model.objects.bulk_create([...])"""
+	return __qs_bulk_execute()
+
+# ============================================================
 # Terminal QuerySet C bindings (db_crud.c)
 # ============================================================
 
@@ -752,6 +813,50 @@ pub def __qs_select_related(field_name: str) -> int
 
 @extern("C")
 pub def __db_using(db_name: str) -> int
+
+# ============================================================
+# Values C bindings (db_crud.c)
+# ============================================================
+
+@extern("C")
+pub def __qs_values(row: int) -> str
+
+@extern("C")
+pub def __qs_values_list(row: int) -> str
+
+@extern("C")
+pub def __qs_values_flat(row: int, col_name: str) -> str
+
+# ============================================================
+# Bulk Insert C bindings (db_crud.c)
+# ============================================================
+
+@extern("C")
+pub def __qs_bulk_begin(ncols: int) -> int
+
+@extern("C")
+pub def __qs_bulk_col(col_name: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row_csv(csv_values: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row1(v1: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row2(v1: str, v2: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row3(v1: str, v2: str, v3: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row4(v1: str, v2: str, v3: str, v4: str) -> int
+
+@extern("C")
+pub def __qs_bulk_row5(v1: str, v2: str, v3: str, v4: str, v5: str) -> int
+
+@extern("C")
+pub def __qs_bulk_execute() -> int
 
 # ============================================================
 # Type Converters — DB string → Desi types (db_crud.c)
