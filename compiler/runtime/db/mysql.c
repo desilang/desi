@@ -21,6 +21,18 @@
 #include <netdb.h>
 #include <errno.h>
 
+// Optional TLS/SSL support (compile-time detection)
+#ifdef __has_include
+  #if __has_include(<openssl/ssl.h>)
+    #define MY_HAS_SSL 1
+    #include <openssl/ssl.h>
+    #include <openssl/err.h>
+  #endif
+#endif
+#ifndef MY_HAS_SSL
+  #define MY_HAS_SSL 0
+#endif
+
 // ============================================================
 // Byte helpers (MySQL = little-endian)
 // ============================================================
@@ -72,6 +84,13 @@ typedef struct {
     char error[512];
     uint8_t seq;  // packet sequence number
 
+    // TLS/SSL
+#if MY_HAS_SSL
+    SSL_CTX* ssl_ctx;
+    SSL* ssl;
+#endif
+    int use_ssl;  // 1 if SSL is active
+
     // Result set
     int ncols;
     char colnames[MY_MAX_COLS][128];
@@ -120,7 +139,13 @@ static int my_send_raw(const unsigned char* data, int len) {
     if (g_my->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)write(g_my->fd, data + total, len - total);
+        int n;
+#if MY_HAS_SSL
+        if (g_my->use_ssl && g_my->ssl)
+            n = SSL_write(g_my->ssl, data + total, len - total);
+        else
+#endif
+            n = (int)write(g_my->fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -131,7 +156,13 @@ static int my_recv_raw(unsigned char* buf, int len) {
     if (g_my->fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = (int)read(g_my->fd, buf + total, len - total);
+        int n;
+#if MY_HAS_SSL
+        if (g_my->use_ssl && g_my->ssl)
+            n = SSL_read(g_my->ssl, buf + total, len - total);
+        else
+#endif
+            n = (int)read(g_my->fd, buf + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -419,6 +450,54 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     const char* auth_plugin = (const char*)p;
     my_log("auth plugin: %s", auth_plugin);
 
+    // ---- SSL/TLS Negotiation ----
+    // If server supports CLIENT_SSL (0x00000800), try to upgrade.
+    g_my->use_ssl = 0;
+#if MY_HAS_SSL
+    if (server_caps & 0x00000800) { // CLIENT_SSL
+        // Send SSL Request packet: abbreviated handshake with CLIENT_SSL flag
+        unsigned char ssl_req[MY_BUF_SIZE];
+        int spos = 0;
+        uint32_t ssl_caps =
+            0x00000001 | // LONG_PASSWORD
+            0x00000200 | // PROTOCOL_41
+            0x00008000 | // SECURE_CONNECTION
+            0x00000800 | // CLIENT_SSL
+            0x00080000 | // PLUGIN_AUTH
+            0x00040000;  // MULTI_STATEMENTS
+        my_write_u32(ssl_req + spos, ssl_caps); spos += 4;
+        my_write_u32(ssl_req + spos, 16777216); spos += 4; // max packet size
+        ssl_req[spos++] = 45; // charset = utf8mb4
+        memset(ssl_req + spos, 0, 23); spos += 23; // reserved
+
+        if (my_send_packet(ssl_req, spos) < 0) {
+            my_log("Failed to send SSL request, continuing plaintext");
+            goto skip_ssl;
+        }
+
+        // Perform TLS handshake
+        SSL_library_init();
+        SSL_load_error_strings();
+        g_my->ssl_ctx = SSL_CTX_new(TLS_client_method());
+        if (g_my->ssl_ctx) {
+            g_my->ssl = SSL_new(g_my->ssl_ctx);
+            SSL_set_fd(g_my->ssl, g_my->fd);
+            if (SSL_connect(g_my->ssl) == 1) {
+                g_my->use_ssl = 1;
+                my_log("SSL/TLS connection established (%s)", SSL_get_version(g_my->ssl));
+            } else {
+                my_log("SSL_connect failed, aborting");
+                SSL_free(g_my->ssl); g_my->ssl = NULL;
+                SSL_CTX_free(g_my->ssl_ctx); g_my->ssl_ctx = NULL;
+                snprintf(g_my->error, sizeof(g_my->error), "MySQL SSL handshake failed");
+                close(g_my->fd); g_my->fd = -1;
+                return -1;
+            }
+        }
+    }
+skip_ssl:
+#endif
+
     // Build Handshake Response packet
     unsigned char response[MY_BUF_SIZE];
     int rpos = 0;
@@ -436,6 +515,9 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     if (dbname[0] == '\0') {
         client_caps &= ~0x00000008;
         client_caps &= ~0x00200000;
+    }
+    if (g_my->use_ssl) {
+        client_caps |= 0x00000800; // CLIENT_SSL
     }
 
     my_write_u32(response + rpos, client_caps); rpos += 4;
@@ -509,14 +591,45 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
             my_log("caching_sha2 fast auth OK");
             return 0;
         } else if (arlen >= 2 && auth_result[1] == 0x04) {
-            // Full auth needed — send plaintext password over non-TLS
-            // This requires a secure connection (TLS); skip for now
-            snprintf(g_my->error, sizeof(g_my->error),
-                "caching_sha2_password full auth requires TLS. "
-                "Set 'default_authentication_plugin=mysql_native_password' in my.cnf "
-                "or create user with mysql_native_password");
-            close(g_my->fd); g_my->fd = -1;
-            return -1;
+            // Full auth needed — send plaintext password over TLS
+            // MySQL 8.4+ requires this (mysql_native_password removed)
+            if (g_my->use_ssl) {
+                // Send plaintext password (null-terminated) over encrypted channel
+                int pwlen = strlen(password);
+                unsigned char* pw_pkt = malloc(pwlen + 1);
+                memcpy(pw_pkt, password, pwlen);
+                pw_pkt[pwlen] = '\0';
+                if (my_send_packet(pw_pkt, pwlen + 1) < 0) {
+                    free(pw_pkt);
+                    snprintf(g_my->error, sizeof(g_my->error), "Failed to send full auth password");
+                    close(g_my->fd); g_my->fd = -1;
+                    return -1;
+                }
+                free(pw_pkt);
+
+                // Read OK/ERR
+                unsigned char ok2[MY_BUF_SIZE];
+                int ok2len;
+                if (my_read_packet(ok2, &ok2len) < 0 || ok2[0] != 0x00) {
+                    if (ok2[0] == 0xFF) {
+                        uint16_t ec = my_read_u16(ok2 + 1);
+                        snprintf(g_my->error, sizeof(g_my->error), "Auth error %d: %.*s", ec, ok2len - 9, (char*)(ok2 + 9));
+                    } else {
+                        snprintf(g_my->error, sizeof(g_my->error), "caching_sha2 full auth failed");
+                    }
+                    close(g_my->fd); g_my->fd = -1;
+                    return -1;
+                }
+                g_my->connected = 1;
+                my_log("caching_sha2 full auth over TLS OK");
+                return 0;
+            } else {
+                snprintf(g_my->error, sizeof(g_my->error),
+                    "caching_sha2_password full auth requires TLS (no SSL available). "
+                    "Rebuild Desi with OpenSSL support or use mysql_native_password.");
+                close(g_my->fd); g_my->fd = -1;
+                return -1;
+            }
         }
         // Auth method switch
         if (auth_result[0] == 0xFE) {
@@ -588,6 +701,11 @@ int32_t __my_close(void) {
         unsigned char quit[1] = {0x01};
         g_my->seq = 0xFF; // reset seq so send_packet uses 0
         my_send_packet(quit, 1);
+#if MY_HAS_SSL
+        if (g_my->ssl) { SSL_shutdown(g_my->ssl); SSL_free(g_my->ssl); g_my->ssl = NULL; }
+        if (g_my->ssl_ctx) { SSL_CTX_free(g_my->ssl_ctx); g_my->ssl_ctx = NULL; }
+#endif
+        g_my->use_ssl = 0;
         close(g_my->fd);
         g_my->fd = -1;
     }
