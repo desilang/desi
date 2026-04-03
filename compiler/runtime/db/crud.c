@@ -30,6 +30,16 @@ extern int32_t __db_execute_params(const char* sql, const char** params, int npa
 extern char*   __db_get_value_at(int32_t row, int32_t col);
 extern int32_t __db_is_connected(void);
 
+// ---- External: ORM field registry (for select_related FK lookup) ----
+extern int32_t __orm_field_count(const char* table_name);
+extern const char* __orm_field_name(const char* table_name, int32_t field_index);
+
+// FK metadata lookup — find ref_table and ref_field for a FK field
+// Returns 1 if found, 0 if not a FK
+int32_t __orm_fk_info(const char* table_name, const char* field_name,
+                      char* ref_table_out, int ref_table_size,
+                      char* ref_field_out, int ref_field_size);
+
 // ============================================================
 // Dialect & Debug Flags
 // ============================================================
@@ -74,6 +84,11 @@ static char   qs_insert_keys[QS_MAX_FIELDS][128];
 // INSERT values are stored in qs_params (starting at qs_insert_param_start)
 static int    qs_insert_count = 0;
 static int    qs_insert_param_start = 0;
+
+// select_related — FK field names to LEFT JOIN
+#define QS_MAX_RELATED 8
+static char   qs_related[QS_MAX_RELATED][128];
+static int    qs_related_count = 0;
 
 // Helper: write a placeholder for the current dialect
 static int write_placeholder(char* buf, int buf_size, int param_index) {
@@ -134,6 +149,7 @@ int32_t __qs_reset(const char* table) {
     qs_row_count = 0;
     qs_insert_count = 0;
     qs_insert_param_start = 0;
+    qs_related_count = 0;
     free_params();
     return 0;
 }
@@ -341,13 +357,55 @@ int32_t __qs_offset(int32_t n) {
 
 // Build SELECT SQL and execute with parameters
 int32_t __qs_fetch(void) {
-    char sql[4096];
+    char sql[8192];
     int pos;
-    if (qs_distinct) {
-        pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT * FROM %s", qs_table);
+
+    // Build column list and JOIN clauses for select_related
+    if (qs_related_count > 0) {
+        // Build: SELECT t.*, r1.col1 AS r1__col1, r1.col2 AS r1__col2, ...
+        pos = snprintf(sql, sizeof(sql), "SELECT %s%s.*",
+            qs_distinct ? "DISTINCT " : "", qs_table);
+
+        // For each related FK, add aliased columns from the related table
+        for (int r = 0; r < qs_related_count; r++) {
+            char ref_table[128] = "", ref_field[64] = "";
+            if (__orm_fk_info(qs_table, qs_related[r], ref_table, sizeof(ref_table),
+                             ref_field, sizeof(ref_field))) {
+                // Add all fields from the related table with aliases
+                int fcount = __orm_field_count(ref_table);
+                for (int f = 0; f < fcount; f++) {
+                    const char* fname = __orm_field_name(ref_table, f);
+                    // Alias: relatedtable__fieldname (Django convention)
+                    pos += snprintf(sql + pos, sizeof(sql) - pos,
+                        ", %s_rel%d.%s AS %s__%s",
+                        qs_related[r], r, fname, qs_related[r], fname);
+                }
+            }
+        }
+
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " FROM %s", qs_table);
+
+        // Add LEFT JOINs
+        for (int r = 0; r < qs_related_count; r++) {
+            char ref_table[128] = "", ref_field[64] = "";
+            if (__orm_fk_info(qs_table, qs_related[r], ref_table, sizeof(ref_table),
+                             ref_field, sizeof(ref_field))) {
+                pos += snprintf(sql + pos, sizeof(sql) - pos,
+                    " LEFT JOIN %s AS %s_rel%d ON %s.%s = %s_rel%d.%s",
+                    ref_table, qs_related[r], r,
+                    qs_table, qs_related[r],
+                    qs_related[r], r, ref_field);
+            }
+        }
     } else {
-        pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s", qs_table);
+        // Simple SELECT * (no joins)
+        if (qs_distinct) {
+            pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT * FROM %s", qs_table);
+        } else {
+            pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s", qs_table);
+        }
     }
+
     if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
     if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
     if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
@@ -398,6 +456,17 @@ int32_t __qs_last(void) {
 // __qs_distinct — set flag for SELECT DISTINCT
 int32_t __qs_distinct(void) {
     qs_distinct = 1;
+    return 0;
+}
+
+// __qs_select_related — register FK field for LEFT JOIN
+// Django equivalent: Post.objects.select_related("author")
+// The field_name should match the FK column name (e.g., "author_id")
+int32_t __qs_select_related(const char* field_name) {
+    if (qs_related_count >= QS_MAX_RELATED || !field_name) return -1;
+    strncpy(qs_related[qs_related_count], field_name, 127);
+    qs_related[qs_related_count][127] = '\0';
+    qs_related_count++;
     return 0;
 }
 

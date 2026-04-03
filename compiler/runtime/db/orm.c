@@ -632,3 +632,24 @@ const char* __orm_field_name(const char* table_name, int32_t field_index) {
     }
     return "";
 }
+
+// Get FK metadata for a field — used by select_related
+// Returns 1 if found (field is a FK), 0 otherwise
+int32_t __orm_fk_info(const char* table_name, const char* field_name,
+                      char* ref_table_out, int ref_table_size,
+                      char* ref_field_out, int ref_field_size) {
+    if (!table_name || !field_name) return 0;
+
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) != 0) continue;
+        for (int j = 0; j < g_models[i].field_count; j++) {
+            FieldDef* f = &g_models[i].fields[j];
+            if (f->type == FIELD_FOREIGN_KEY && strcmp(f->name, field_name) == 0) {
+                if (ref_table_out) strncpy(ref_table_out, f->ref_table, ref_table_size - 1);
+                if (ref_field_out) strncpy(ref_field_out, f->ref_field, ref_field_size - 1);
+                return 1;
+            }
+        }
+    }
+    return 0;
+}

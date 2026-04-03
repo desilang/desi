@@ -624,6 +624,12 @@ pub def set_offset(n: int) -> int:
 	"""Offset results for ORM queryset (for pagination)."""
 	return __qs_offset(n)
 
+pub def select_related(field_name: str) -> int:
+	"""Eagerly load a FK-related object via LEFT JOIN (like Django's select_related).
+	Call after db.objects(). Related fields accessible as 'fk_field__column'.
+	Usage: db.objects("posts"); db.select_related("author_id"); db.fetch_all()"""
+	return __qs_select_related(field_name)
+
 pub def fetch_all() -> int:
 	"""Execute SELECT and return row count (like Django's .all())."""
 	return __qs_fetch()
@@ -740,6 +746,9 @@ pub def __qs_last() -> int
 
 @extern("C")
 pub def __qs_distinct() -> int
+
+@extern("C")
+pub def __qs_select_related(field_name: str) -> int
 
 @extern("C")
 pub def __db_using(db_name: str) -> int
