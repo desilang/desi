@@ -3578,8 +3578,31 @@ func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, 
 //
 // The caller is responsible for null-checking the returned pointer.
 func (ls *lowerState) constructModelFromRow(cls *types.Class, rowCountVar hir.Value) hir.Value {
+	// Check if query returned any rows
+	rowCount := ls.b.FreshTemp("db_rows")
+	ls.b.Emit(&hir.Call{
+		Dst:  rowCount,
+		Fn:   "__db_row_count",
+		Args: nil,
+		Type: "i32",
+	})
+
+	// Compare: rowCount > 0
+	hasRows := ls.b.FreshTemp("has_rows")
+	ls.b.Emit(&hir.BinaryOp{
+		Dst: hasRows, Op: ">",
+		LHS: rowCount, RHS: hir.ConstInt{Text: "0"},
+		Type: "i1",
+	})
+
 	// Calculate class instance size
 	classSize := getClassSize(cls.Fields)
+
+	// Create the build block — only runs when rows > 0
+	buildBlk := ls.b.NewBlock("model_build")
+	oldCur := ls.b.Block()
+
+	ls.b.SetBlock(buildBlk)
 
 	// Allocate instance on heap
 	inst := ls.b.FreshTemp("model_inst")
@@ -3628,7 +3651,22 @@ func (ls *lowerState) constructModelFromRow(cls *types.Class, rowCountVar hir.Va
 		offset += fieldSize
 	}
 
-	return inst
+	ls.b.SetBlock(oldCur)
+
+	// Emit: if hasRows then buildBlk (builds instance) else skip
+	ls.b.Emit(&hir.If{Cond: hasRows, Then: buildBlk, Else: nil})
+
+	// Select: result = hasRows ? inst : null
+	result := ls.b.FreshTemp("model_result")
+	ls.b.Emit(&hir.Select{
+		Dst:  result,
+		Cond: hasRows,
+		Then: inst,
+		Else: hir.ConstInt{Text: "0", Type: "ptr"},
+		Type: "ptr",
+	})
+
+	return result
 }
 
 // emitTypeConverter generates HIR to convert a raw DB string (ptr) to the
