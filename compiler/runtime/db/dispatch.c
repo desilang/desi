@@ -222,3 +222,23 @@ char* __db_driver(void) {
         default: return strdup("none");
     }
 }
+
+
+// ============================================================
+// Connection health check — ping with auto-reconnect awareness
+// ============================================================
+
+int32_t __db_ping(void) {
+    // Send a lightweight query to check if the connection is alive.
+    // PG: "SELECT 1", MySQL: "SELECT 1"
+    // Returns 0 if healthy, -1 if dead.
+    switch (g_active_driver) {
+        case DRIVER_PG:
+            if (!__pg_is_connected()) return -1;
+            return __pg_query("SELECT 1") >= 0 ? 0 : -1;
+        case DRIVER_MYSQL:
+            if (!__my_is_connected()) return -1;
+            return __my_query("SELECT 1") >= 0 ? 0 : -1;
+        default: return -1;
+    }
+}

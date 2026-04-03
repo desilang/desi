@@ -867,3 +867,38 @@ pub def conn_count() -> int:
 pub def list_conns() -> str:
 	"""List all registered connection names (comma-separated)."""
 	return __db_list_conns()
+
+# ============================================================
+# Connection URL / DSN C binding (db_connections.c)
+# ============================================================
+
+@extern("C")
+pub def __db_connect_url(url: str, name: str) -> int
+
+# ============================================================
+# Connection Health Check C binding (db_dispatch.c)
+# ============================================================
+
+@extern("C")
+pub def __db_ping() -> int
+
+# ============================================================
+# Public API — Connection URL + Health Check
+# ============================================================
+
+pub def connect_url(url: str) -> int:
+	"""Connect using a URL/DSN string.
+	Supports: postgres://user:pass@host:port/dbname
+	          mysql://user:pass@host:port/dbname
+	          postgresql://... and mariadb://...
+	Returns 0 on success, -1 on error."""
+	return __db_connect_url(url, "default")
+
+pub def connect_url_named(url: str, name: str) -> int:
+	"""Connect using a URL with a named connection.
+	Usage: db.connect_url_named("postgres://...", "analytics")"""
+	return __db_connect_url(url, name)
+
+pub def ping() -> int:
+	"""Check if the database connection is alive. Returns 0 if healthy, -1 if dead."""
+	return __db_ping()
