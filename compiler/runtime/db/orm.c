@@ -601,6 +601,30 @@ char* __orm_add_column_sql(const char* table_name, const char* col_name) {
     return sql;
 }
 
+// Get the expected SQL type for a model field (for migration diffing)
+char* __orm_column_type_sql(const char* table_name, const char* col_name) {
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            model = &g_models[i];
+            break;
+        }
+    }
+    if (!model) return strdup("");
+
+    FieldDef* field = NULL;
+    for (int i = 0; i < model->field_count; i++) {
+        if (strcmp(model->fields[i].name, col_name) == 0) {
+            field = &model->fields[i];
+            break;
+        }
+    }
+    if (!field) return strdup("");
+
+    // Return the SQL type (same function used by CREATE TABLE)
+    return strdup(sql_type(field, g_orm_dialect));
+}
+
 // Get model count
 int32_t __orm_model_count(void) {
     return g_model_count;

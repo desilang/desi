@@ -157,6 +157,119 @@ static int column_exists(const char* table_name, const char* col_name) {
 }
 
 // ============================================================
+// Schema introspection — type diffing helpers
+// ============================================================
+
+// Get the actual SQL type of a column from information_schema
+static char* get_column_type(const char* table_name, const char* col_name) {
+    char* drv = __db_driver();
+    int is_pg = (strcmp(drv, "postgres") == 0);
+    free(drv);
+
+    char sql[512];
+    if (is_pg) {
+        snprintf(sql, sizeof(sql),
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = '%s' AND column_name = '%s'",
+            table_name, col_name);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_type FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = '%s' AND column_name = '%s'",
+            table_name, col_name);
+    }
+
+    int rows = __db_query_exec(sql);
+    if (rows > 0) {
+        return __db_get_value_at(0, 0);
+    }
+    return strdup("");
+}
+
+// Get all column names in a table
+static int get_table_columns(const char* table_name) {
+    char* drv = __db_driver();
+    int is_pg = (strcmp(drv, "postgres") == 0);
+    free(drv);
+
+    char sql[512];
+    if (is_pg) {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = '%s' ORDER BY ordinal_position",
+            table_name);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = '%s' ORDER BY ordinal_position",
+            table_name);
+    }
+
+    return __db_query_exec(sql);
+}
+
+// Case-insensitive string comparison helper
+static int strcasecmp_local(const char* a, const char* b) {
+    while (*a && *b) {
+        char ca = *a >= 'A' && *a <= 'Z' ? *a + 32 : *a;
+        char cb = *b >= 'A' && *b <= 'Z' ? *b + 32 : *b;
+        if (ca != cb) return ca - cb;
+        a++; b++;
+    }
+    return *a - *b;
+}
+
+// Normalize SQL type names for comparison
+// e.g., "character varying" == "VARCHAR", "integer" == "INT"
+static int types_match(const char* db_type, const char* model_type) {
+    if (!db_type || !model_type) return 1; // assume match on missing
+
+    // Exact match (case-insensitive)
+    if (strcasecmp_local(db_type, model_type) == 0) return 1;
+
+    // PG returns lowercased long-form names from information_schema
+    // Normalize common PG data_type values
+    if (strcasecmp_local(db_type, "integer") == 0 &&
+        strcasecmp_local(model_type, "INTEGER") == 0) return 1;
+    if (strcasecmp_local(db_type, "bigint") == 0 &&
+        strcasecmp_local(model_type, "BIGINT") == 0) return 1;
+    if (strcasecmp_local(db_type, "character varying") == 0 &&
+        strncasecmp(model_type, "VARCHAR", 7) == 0) return 1;
+    if (strcasecmp_local(db_type, "text") == 0 &&
+        strcasecmp_local(model_type, "TEXT") == 0) return 1;
+    if (strcasecmp_local(db_type, "boolean") == 0 &&
+        strcasecmp_local(model_type, "BOOLEAN") == 0) return 1;
+    if (strcasecmp_local(db_type, "double precision") == 0 &&
+        strcasecmp_local(model_type, "DOUBLE PRECISION") == 0) return 1;
+    if (strcasecmp_local(db_type, "timestamp with time zone") == 0 &&
+        strcasecmp_local(model_type, "TIMESTAMPTZ") == 0) return 1;
+    if (strcasecmp_local(db_type, "jsonb") == 0 &&
+        strcasecmp_local(model_type, "JSONB") == 0) return 1;
+    if (strcasecmp_local(db_type, "json") == 0 &&
+        strcasecmp_local(model_type, "JSON") == 0) return 1;
+    if (strcasecmp_local(db_type, "uuid") == 0 &&
+        strcasecmp_local(model_type, "UUID") == 0) return 1;
+    if (strcasecmp_local(db_type, "real") == 0 &&
+        strcasecmp_local(model_type, "REAL") == 0) return 1;
+    if (strcasecmp_local(db_type, "numeric") == 0 &&
+        strncasecmp(model_type, "DECIMAL", 7) == 0) return 1;
+    if (strcasecmp_local(db_type, "date") == 0 &&
+        strcasecmp_local(model_type, "DATE") == 0) return 1;
+
+    // MySQL returns types like "int", "varchar(255)", "tinyint(1)"
+    if (strcasecmp_local(db_type, "int") == 0 &&
+        strcasecmp_local(model_type, "INTEGER") == 0) return 1;
+    if (strcasecmp_local(db_type, "tinyint(1)") == 0 &&
+        strcasecmp_local(model_type, "TINYINT(1)") == 0) return 1;
+
+    return 0;
+}
+
+// Get expected SQL type for a model field (for comparison)
+// Extern from orm.c
+extern char* __orm_column_type_sql(const char* table_name, const char* col_name);
+
+// ============================================================
 // Migrate
 // ============================================================
 
@@ -191,7 +304,7 @@ int32_t __db_migrate(void) {
             }
             if (create_sql) free(create_sql);
         } else {
-            // Table exists — check for missing columns
+            // Table exists — diff columns
             int field_count = __orm_field_count(tname);
             for (int f = 0; f < field_count; f++) {
                 const char* fname = __orm_field_name(tname, f);
@@ -203,18 +316,9 @@ int32_t __db_migrate(void) {
                     if (alter_sql && alter_sql[0] != '\0') {
                         int result = __db_execute_stmt(alter_sql);
                         if (result >= 0 || result == 0) {
-                            char* drv = __db_driver();
-                            int is_pg = (strcmp(drv, "postgres") == 0);
-                            free(drv);
-
                             char rollback[512];
-                            if (is_pg) {
-                                snprintf(rollback, sizeof(rollback),
-                                    "ALTER TABLE %s DROP COLUMN %s", tname, fname);
-                            } else {
-                                snprintf(rollback, sizeof(rollback),
-                                    "ALTER TABLE %s DROP COLUMN %s", tname, fname);
-                            }
+                            snprintf(rollback, sizeof(rollback),
+                                "ALTER TABLE %s DROP COLUMN %s", tname, fname);
                             migrate_record(version, tname, "add_column", alter_sql, rollback);
                             applied++;
                             fprintf(stderr, "[migrate] ALTER TABLE %s ADD COLUMN %s ✓\n", tname, fname);
@@ -223,6 +327,102 @@ int32_t __db_migrate(void) {
                         }
                     }
                     if (alter_sql) free(alter_sql);
+                } else {
+                    // Column exists — check if type changed (schema diff)
+                    char* old_type = get_column_type(tname, fname);
+                    char* new_type = __orm_column_type_sql(tname, fname);
+                    if (old_type && new_type && old_type[0] && new_type[0]) {
+                        if (!types_match(old_type, new_type)) {
+                            // Type changed — ALTER TABLE ALTER COLUMN TYPE
+                            char alter_sql[1024];
+                            char rollback[1024];
+                            char* drv = __db_driver();
+                            int is_pg = (strcmp(drv, "postgres") == 0);
+                            free(drv);
+
+                            if (is_pg) {
+                                snprintf(alter_sql, sizeof(alter_sql),
+                                    "ALTER TABLE %s ALTER COLUMN %s TYPE %s USING %s::%s",
+                                    tname, fname, new_type, fname, new_type);
+                                snprintf(rollback, sizeof(rollback),
+                                    "ALTER TABLE %s ALTER COLUMN %s TYPE %s USING %s::%s",
+                                    tname, fname, old_type, fname, old_type);
+                            } else {
+                                snprintf(alter_sql, sizeof(alter_sql),
+                                    "ALTER TABLE %s MODIFY COLUMN %s %s",
+                                    tname, fname, new_type);
+                                snprintf(rollback, sizeof(rollback),
+                                    "ALTER TABLE %s MODIFY COLUMN %s %s",
+                                    tname, fname, old_type);
+                            }
+
+                            int result = __db_execute_stmt(alter_sql);
+                            if (result >= 0) {
+                                migrate_record(version, tname, "alter_type", alter_sql, rollback);
+                                applied++;
+                                fprintf(stderr, "[migrate] ALTER TABLE %s ALTER %s: %s → %s ✓\n",
+                                    tname, fname, old_type, new_type);
+                            } else {
+                                fprintf(stderr, "[migrate] ALTER TABLE %s ALTER %s FAILED\n", tname, fname);
+                            }
+                        }
+                    }
+                    if (old_type) free(old_type);
+                    if (new_type) free(new_type);
+                }
+            }
+
+            // Check for orphaned columns (in DB but not in model)
+            // Query all columns in the actual table
+            int db_cols = get_table_columns(tname);
+            if (db_cols > 0) {
+                int col_count = __db_row_count();
+                // Collect column names first (before executing ALTER)
+                char* col_names[64];
+                int nc = col_count < 64 ? col_count : 64;
+                for (int c = 0; c < nc; c++) {
+                    col_names[c] = __db_get_value_at(c, 0);
+                }
+
+                for (int c = 0; c < nc; c++) {
+                    char* db_col = col_names[c];
+                    if (!db_col || db_col[0] == '\0') continue;
+
+                    // Check if this column exists in the model
+                    int found = 0;
+                    for (int f = 0; f < field_count; f++) {
+                        const char* mf = __orm_field_name(tname, f);
+                        if (mf && strcmp(mf, db_col) == 0) {
+                            found = 1;
+                            break;
+                        }
+                    }
+
+                    if (!found) {
+                        // Orphaned column — DROP it
+                        char alter_sql[512];
+                        snprintf(alter_sql, sizeof(alter_sql),
+                            "ALTER TABLE %s DROP COLUMN %s", tname, db_col);
+
+                        // For rollback: we'd need to re-add with original type,
+                        // but we use ADD COLUMN ... NULL as a safe default
+                        char* old_type_for_rb = get_column_type(tname, db_col);
+                        char rollback[512];
+                        snprintf(rollback, sizeof(rollback),
+                            "ALTER TABLE %s ADD COLUMN %s %s",
+                            tname, db_col, old_type_for_rb ? old_type_for_rb : "TEXT");
+                        if (old_type_for_rb) free(old_type_for_rb);
+
+                        int result = __db_execute_stmt(alter_sql);
+                        if (result >= 0) {
+                            migrate_record(version, tname, "drop_column", alter_sql, rollback);
+                            applied++;
+                            fprintf(stderr, "[migrate] ALTER TABLE %s DROP COLUMN %s ✓\n", tname, db_col);
+                        } else {
+                            fprintf(stderr, "[migrate] ALTER TABLE %s DROP COLUMN %s FAILED\n", tname, db_col);
+                        }
+                    }
+                    free(db_col);
                 }
             }
         }
