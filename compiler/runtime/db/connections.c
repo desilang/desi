@@ -302,3 +302,148 @@ char* __db_list_conns(void) {
     }
     return strdup(buf);
 }
+
+// ============================================================
+// URL/DSN Parsing — db.connect_url("postgres://user:pass@host:port/db")
+// ============================================================
+
+// Decode a single %XX escape or return char as-is
+static int url_decode_char(const char* s) {
+    if (s[0] == '%' && s[1] && s[2]) {
+        char hex[3] = {s[1], s[2], '\0'};
+        return (int)strtol(hex, NULL, 16);
+    }
+    return -1;
+}
+
+// URL-decode a string in-place (modifies dst, reads from src, up to len)
+static void url_decode(char* dst, const char* src, int len) {
+    int di = 0;
+    for (int i = 0; i < len; i++) {
+        if (src[i] == '%' && i + 2 < len) {
+            int ch = url_decode_char(src + i);
+            if (ch >= 0) {
+                dst[di++] = (char)ch;
+                i += 2;
+                continue;
+            }
+        }
+        dst[di++] = src[i];
+    }
+    dst[di] = '\0';
+}
+
+// Parse a connection URL and connect.
+//
+// Supported formats:
+//   postgres://user:password@host:port/dbname
+//   postgresql://user:password@host:port/dbname
+//   mysql://user:password@host:port/dbname
+//
+// Optional fields:
+//   postgres://host/dbname               (user=postgres, no password, default port)
+//   postgres://user@host/dbname          (no password)
+//   postgres://user:pass@host/dbname     (default port)
+//
+// The 'name' parameter assigns a connection name (or "default" if NULL/empty).
+//
+int32_t __db_connect_url(const char* url, const char* name) {
+    if (!url) return -1;
+
+    // Default connection name
+    if (!name || name[0] == '\0') name = "default";
+
+    // Parse scheme
+    const char* p = url;
+    const char* driver_str = NULL;
+    if (strncmp(p, "postgres://", 11) == 0) {
+        driver_str = "postgres"; p += 11;
+    } else if (strncmp(p, "postgresql://", 13) == 0) {
+        driver_str = "postgres"; p += 13;
+    } else if (strncmp(p, "mysql://", 8) == 0) {
+        driver_str = "mysql"; p += 8;
+    } else if (strncmp(p, "mariadb://", 10) == 0) {
+        driver_str = "mysql"; p += 10;
+    } else {
+        fprintf(stderr, "[conn] error: unsupported URL scheme in '%s'\n", url);
+        return -1;
+    }
+
+    // After scheme, remainder is: [user[:password]@]host[:port]/dbname[?params]
+    char user[128] = "";
+    char password[256] = "";
+    char host[256] = "127.0.0.1";
+    int32_t port = 0;
+    char dbname[128] = "";
+
+    // Check for @ to split userinfo from hostinfo
+    const char* at = strchr(p, '@');
+    const char* hoststart;
+
+    if (at) {
+        // Parse userinfo: user[:password]
+        int userinfo_len = (int)(at - p);
+        char userinfo[512];
+        if (userinfo_len >= (int)sizeof(userinfo)) userinfo_len = sizeof(userinfo) - 1;
+        memcpy(userinfo, p, userinfo_len);
+        userinfo[userinfo_len] = '\0';
+
+        char* colon = strchr(userinfo, ':');
+        if (colon) {
+            url_decode(user, userinfo, (int)(colon - userinfo));
+            url_decode(password, colon + 1, (int)(userinfo_len - (colon - userinfo) - 1));
+        } else {
+            url_decode(user, userinfo, userinfo_len);
+        }
+        hoststart = at + 1;
+    } else {
+        hoststart = p;
+    }
+
+    // Parse host[:port]/dbname
+    // Find the / that separates host:port from dbname
+    const char* slash = strchr(hoststart, '/');
+    const char* hostend = slash ? slash : hoststart + strlen(hoststart);
+
+    // Check for :port
+    // Be careful with IPv6 — but we only support IPv4 for now
+    const char* colon = strchr(hoststart, ':');
+    if (colon && colon < hostend) {
+        int hlen = (int)(colon - hoststart);
+        if (hlen > 0 && hlen < (int)sizeof(host)) {
+            memcpy(host, hoststart, hlen);
+            host[hlen] = '\0';
+        }
+        port = atoi(colon + 1);
+    } else {
+        int hlen = (int)(hostend - hoststart);
+        if (hlen > 0 && hlen < (int)sizeof(host)) {
+            memcpy(host, hoststart, hlen);
+            host[hlen] = '\0';
+        }
+    }
+
+    // Parse dbname (after /)
+    if (slash && slash[1]) {
+        // Strip query params if present
+        const char* q = strchr(slash + 1, '?');
+        int dlen = q ? (int)(q - slash - 1) : (int)strlen(slash + 1);
+        if (dlen > 0 && dlen < (int)sizeof(dbname)) {
+            url_decode(dbname, slash + 1, dlen);
+        }
+    }
+
+    // Set defaults based on driver
+    if (port <= 0) {
+        port = (strcmp(driver_str, "postgres") == 0) ? 5432 : 3306;
+    }
+    if (user[0] == '\0') {
+        strcpy(user, (strcmp(driver_str, "postgres") == 0) ? "postgres" : "root");
+    }
+    if (dbname[0] == '\0') {
+        strcpy(dbname, (strcmp(driver_str, "postgres") == 0) ? "postgres" : "");
+    }
+
+    // Register the connection
+    return __db_register_conn(name, driver_str, host, port, dbname, user, password);
+}
