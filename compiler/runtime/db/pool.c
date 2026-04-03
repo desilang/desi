@@ -301,3 +301,8 @@ int32_t __db_pool_available(void) {
 int32_t __db_pool_active_slot(void) {
     return g_pool_active_slot;
 }
+
+// Is the pool initialized? Used by dispatch for auto-acquire/release.
+int32_t __db_pool_initialized(void) {
+    return g_pool_initialized;
+}

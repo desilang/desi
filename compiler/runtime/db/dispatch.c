@@ -58,6 +58,40 @@ extern char*   __my_connection_info(void);
 // ---- Forward declarations to CRUD layer ----
 extern int32_t __crud_set_dialect(int32_t);
 
+// ---- Forward declarations to Pool layer ----
+extern int32_t __db_pool_initialized(void);
+extern int32_t __db_pool_acquire(void);
+extern int32_t __db_pool_release(void);
+extern int32_t __db_pool_active_slot(void);
+
+// ============================================================
+// Pool auto-management helpers
+//
+// Strategy:
+//   - SELECT queries: auto-acquire, keep conn (results need reading)
+//   - DML (INSERT/UPDATE/DELETE): auto-acquire, auto-release after
+//   - Next query auto-releases previous SELECT's connection first
+// ============================================================
+
+static int g_pool_auto_acquired = 0;  // 1 if we auto-acquired (vs manual)
+
+// Auto-acquire from pool if active and no slot held
+static int pool_auto_acquire(void) {
+    if (!__db_pool_initialized()) return 0;  // no pool, no-op
+    if (__db_pool_active_slot() >= 0) return 0;  // already acquired
+    if (__db_pool_acquire() < 0) return -1;  // acquire failed
+    g_pool_auto_acquired = 1;
+    return 0;
+}
+
+// Auto-release back to pool (only if we auto-acquired)
+static void pool_auto_release(void) {
+    if (g_pool_auto_acquired && __db_pool_active_slot() >= 0) {
+        __db_pool_release();
+        g_pool_auto_acquired = 0;
+    }
+}
+
 // ============================================================
 // Unified connect: first arg is driver name
 // ============================================================
@@ -115,19 +149,31 @@ char* __db_last_error(void) {
 }
 
 int32_t __db_query_exec(const char* sql) {
+    // Auto-release previous SELECT's connection, then acquire fresh
+    pool_auto_release();
+    if (pool_auto_acquire() < 0) return -1;
+    int32_t r;
     switch (g_active_driver) {
-        case DRIVER_PG:    return __pg_query(sql);
-        case DRIVER_MYSQL: return __my_query(sql);
+        case DRIVER_PG:    r = __pg_query(sql); break;
+        case DRIVER_MYSQL: r = __my_query(sql); break;
         default: return -1;
     }
+    // Keep connection acquired — caller needs to read result rows
+    return r;
 }
 
 int32_t __db_execute_stmt(const char* sql) {
+    pool_auto_release();
+    if (pool_auto_acquire() < 0) return -1;
+    int32_t r;
     switch (g_active_driver) {
-        case DRIVER_PG:    return __pg_execute(sql);
-        case DRIVER_MYSQL: return __my_execute(sql);
+        case DRIVER_PG:    r = __pg_execute(sql); break;
+        case DRIVER_MYSQL: r = __my_execute(sql); break;
         default: return -1;
     }
+    // DML has no result set to read — release immediately
+    pool_auto_release();
+    return r;
 }
 
 // ============================================================
@@ -135,20 +181,30 @@ int32_t __db_execute_stmt(const char* sql) {
 // ============================================================
 
 int32_t __db_query_params(const char* sql, const char** params, int nparams) {
+    pool_auto_release();
+    if (pool_auto_acquire() < 0) return -1;
+    int32_t r;
     switch (g_active_driver) {
-        case DRIVER_PG:    return __pg_query_params(sql, params, nparams);
-        case DRIVER_MYSQL: return __my_query_params(sql, params, nparams);
+        case DRIVER_PG:    r = __pg_query_params(sql, params, nparams); break;
+        case DRIVER_MYSQL: r = __my_query_params(sql, params, nparams); break;
         default: return -1;
     }
+    // Keep for SELECT result reading; DML callers should use execute_params
+    return r;
 }
 
 int32_t __db_execute_params(const char* sql, const char** params, int nparams) {
+    pool_auto_release();
+    if (pool_auto_acquire() < 0) return -1;
+    int32_t r;
     // For execute (INSERT/UPDATE/DELETE), use same parameterized path
     switch (g_active_driver) {
-        case DRIVER_PG:    return __pg_query_params(sql, params, nparams);
-        case DRIVER_MYSQL: return __my_query_params(sql, params, nparams);
+        case DRIVER_PG:    r = __pg_query_params(sql, params, nparams); break;
+        case DRIVER_MYSQL: r = __my_query_params(sql, params, nparams); break;
         default: return -1;
     }
+    pool_auto_release();
+    return r;
 }
 
 int32_t __db_row_count(void) {
