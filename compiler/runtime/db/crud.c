@@ -843,3 +843,233 @@ const char* __db_str_to_str(const char* s) {
     if (!s) return "";
     return s;
 }
+
+// ============================================================
+// values() — return results as JSON-like dict strings
+//
+// After db.fetch_all(), call db.values(row) to get a row as
+// {"col1": "val1", "col2": "val2", ...}
+//
+// Django equivalent: Model.objects.values()
+// ============================================================
+
+extern int32_t __db_col_count(void);
+extern char*   __db_col_name_at(int32_t idx);
+extern char*   __db_get_field_by(int32_t row, const char* name);
+
+char* __qs_values(int32_t row) {
+    int ncols = __db_col_count();
+    if (ncols <= 0 || row < 0) return strdup("{}");
+
+    char* buf = malloc(8192);
+    int pos = 0;
+    pos += snprintf(buf + pos, 8192 - pos, "{");
+
+    for (int c = 0; c < ncols; c++) {
+        char* name = __db_col_name_at(c);
+        char* val = __db_get_value_at(row, c);
+        if (c > 0) pos += snprintf(buf + pos, 8192 - pos, ", ");
+        pos += snprintf(buf + pos, 8192 - pos, "\"%s\": \"%s\"",
+            name ? name : "", val ? val : "");
+        if (name) free(name);
+        if (val) free(val);
+    }
+    pos += snprintf(buf + pos, 8192 - pos, "}");
+    return buf;
+}
+
+// values_list() — return a row as a comma-separated value string
+// Django equivalent: Model.objects.values_list()
+char* __qs_values_list(int32_t row) {
+    int ncols = __db_col_count();
+    if (ncols <= 0 || row < 0) return strdup("");
+
+    char* buf = malloc(8192);
+    int pos = 0;
+
+    for (int c = 0; c < ncols; c++) {
+        char* val = __db_get_value_at(row, c);
+        if (c > 0) pos += snprintf(buf + pos, 8192 - pos, ",");
+        pos += snprintf(buf + pos, 8192 - pos, "%s", val ? val : "");
+        if (val) free(val);
+    }
+    return buf;
+}
+
+// values_flat() — return a single column value for a row
+// Django equivalent: Model.objects.values_list("name", flat=True)
+char* __qs_values_flat(int32_t row, const char* col_name) {
+    char* val = __db_get_field_by(row, col_name);
+    return val ? val : strdup("");
+}
+
+// ============================================================
+// bulk_create() — multi-row INSERT in a single statement
+//
+// Usage:
+//   db.objects("users")
+//   db.bulk_begin(3)   # 3 columns
+//   db.bulk_col("name"); db.bulk_col("age"); db.bulk_col("email")
+//   db.bulk_row("Alice", "30", "a@test.com")
+//   db.bulk_row("Bob", "25", "b@test.com")
+//   db.bulk_execute()
+//
+// Generates:
+//   INSERT INTO users (name, age, email) VALUES ($1,$2,$3), ($4,$5,$6)
+//
+// Django equivalent: Model.objects.bulk_create([...])
+// ============================================================
+
+#define BULK_MAX_COLS 32
+#define BULK_MAX_ROWS 1000
+#define BULK_MAX_PARAMS (BULK_MAX_COLS * BULK_MAX_ROWS)
+
+static char   bulk_cols[BULK_MAX_COLS][128];
+static int    bulk_col_count = 0;
+static const char* bulk_params[BULK_MAX_PARAMS];
+static int    bulk_param_count = 0;
+static int    bulk_row_count = 0;
+
+int32_t __qs_bulk_begin(int32_t ncols) {
+    if (ncols <= 0 || ncols > BULK_MAX_COLS) return -1;
+    bulk_col_count = 0;
+    bulk_param_count = 0;
+    bulk_row_count = 0;
+    // Pre-set expected column count (cols added via bulk_col)
+    (void)ncols; // hint only, actual count from bulk_col calls
+    return 0;
+}
+
+int32_t __qs_bulk_col(const char* col_name) {
+    if (bulk_col_count >= BULK_MAX_COLS || !col_name) return -1;
+    strncpy(bulk_cols[bulk_col_count], col_name, 127);
+    bulk_cols[bulk_col_count][127] = '\0';
+    bulk_col_count++;
+    return 0;
+}
+
+// Add a row of values — must provide exactly bulk_col_count values as CSV
+int32_t __qs_bulk_row_csv(const char* csv_values) {
+    if (!csv_values || bulk_col_count == 0) return -1;
+    if (bulk_row_count >= BULK_MAX_ROWS) return -1;
+
+    // Split CSV and add each as a param
+    char buf[4096];
+    strncpy(buf, csv_values, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char* saveptr = NULL;
+    char* token = strtok_r(buf, ",", &saveptr);
+    int col_idx = 0;
+    while (token && col_idx < bulk_col_count) {
+        // Trim whitespace
+        while (*token == ' ') token++;
+        char* end = token + strlen(token) - 1;
+        while (end > token && *end == ' ') { *end = '\0'; end--; }
+
+        if (bulk_param_count >= BULK_MAX_PARAMS) return -1;
+        bulk_params[bulk_param_count++] = strdup(token);
+        col_idx++;
+        token = strtok_r(NULL, ",", &saveptr);
+    }
+    bulk_row_count++;
+    return 0;
+}
+
+// Add a row with individual values (up to 8 columns for convenience)
+int32_t __qs_bulk_row1(const char* v1) {
+    if (bulk_param_count >= BULK_MAX_PARAMS) return -1;
+    bulk_params[bulk_param_count++] = strdup(v1);
+    bulk_row_count++;
+    return 0;
+}
+
+int32_t __qs_bulk_row2(const char* v1, const char* v2) {
+    if (bulk_param_count + 2 > BULK_MAX_PARAMS) return -1;
+    bulk_params[bulk_param_count++] = strdup(v1);
+    bulk_params[bulk_param_count++] = strdup(v2);
+    bulk_row_count++;
+    return 0;
+}
+
+int32_t __qs_bulk_row3(const char* v1, const char* v2, const char* v3) {
+    if (bulk_param_count + 3 > BULK_MAX_PARAMS) return -1;
+    bulk_params[bulk_param_count++] = strdup(v1);
+    bulk_params[bulk_param_count++] = strdup(v2);
+    bulk_params[bulk_param_count++] = strdup(v3);
+    bulk_row_count++;
+    return 0;
+}
+
+int32_t __qs_bulk_row4(const char* v1, const char* v2, const char* v3, const char* v4) {
+    if (bulk_param_count + 4 > BULK_MAX_PARAMS) return -1;
+    bulk_params[bulk_param_count++] = strdup(v1);
+    bulk_params[bulk_param_count++] = strdup(v2);
+    bulk_params[bulk_param_count++] = strdup(v3);
+    bulk_params[bulk_param_count++] = strdup(v4);
+    bulk_row_count++;
+    return 0;
+}
+
+int32_t __qs_bulk_row5(const char* v1, const char* v2, const char* v3, const char* v4, const char* v5) {
+    if (bulk_param_count + 5 > BULK_MAX_PARAMS) return -1;
+    bulk_params[bulk_param_count++] = strdup(v1);
+    bulk_params[bulk_param_count++] = strdup(v2);
+    bulk_params[bulk_param_count++] = strdup(v3);
+    bulk_params[bulk_param_count++] = strdup(v4);
+    bulk_params[bulk_param_count++] = strdup(v5);
+    bulk_row_count++;
+    return 0;
+}
+
+// Execute the bulk INSERT
+int32_t __qs_bulk_execute(void) {
+    if (bulk_col_count == 0 || bulk_row_count == 0 || qs_table[0] == '\0') return -1;
+
+    char sql[65536];
+    int pos = snprintf(sql, sizeof(sql), "INSERT INTO %s (", qs_table);
+
+    // Column list
+    for (int c = 0; c < bulk_col_count; c++) {
+        if (c > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", bulk_cols[c]);
+    }
+    pos += snprintf(sql + pos, sizeof(sql) - pos, ") VALUES ");
+
+    // Value rows with placeholders
+    int param_idx = 1;
+    for (int r = 0; r < bulk_row_count; r++) {
+        if (r > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "(");
+        for (int c = 0; c < bulk_col_count; c++) {
+            if (c > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+            char ph[16];
+            if (g_crud_dialect == DIALECT_MYSQL) {
+                snprintf(ph, sizeof(ph), "?");
+            } else {
+                snprintf(ph, sizeof(ph), "$%d", param_idx);
+            }
+            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", ph);
+            param_idx++;
+        }
+        pos += snprintf(sql + pos, sizeof(sql) - pos, ")");
+    }
+
+    if (g_debug_queries) {
+        fprintf(stderr, "[db] BULK INSERT: %s\n", sql);
+        fprintf(stderr, "[db] PARAMS: %d values across %d rows\n", bulk_param_count, bulk_row_count);
+    }
+
+    int32_t result = __db_execute_params(sql, bulk_params, bulk_param_count);
+
+    // Free param copies
+    for (int i = 0; i < bulk_param_count; i++) {
+        if (bulk_params[i]) free((void*)bulk_params[i]);
+        bulk_params[i] = NULL;
+    }
+    bulk_col_count = 0;
+    bulk_param_count = 0;
+    bulk_row_count = 0;
+
+    return result;
+}
