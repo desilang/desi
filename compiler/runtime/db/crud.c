@@ -90,6 +90,18 @@ static int    qs_insert_param_start = 0;
 static char   qs_related[QS_MAX_RELATED][128];
 static int    qs_related_count = 0;
 
+// annotate + GROUP BY
+#define QS_MAX_ANNOTATIONS 8
+typedef struct {
+    char alias[128];    // output alias, e.g. "total"
+    char func[16];      // aggregate function: SUM, COUNT, AVG, MIN, MAX
+    char col[128];      // column name, e.g. "amount"
+} Annotation;
+
+static Annotation qs_annotations[QS_MAX_ANNOTATIONS];
+static int    qs_annotation_count = 0;
+static char   qs_group_by[512] = "";
+
 // Helper: write a placeholder for the current dialect
 static int write_placeholder(char* buf, int buf_size, int param_index) {
     if (g_crud_dialect == DIALECT_MYSQL) {
@@ -150,6 +162,8 @@ int32_t __qs_reset(const char* table) {
     qs_insert_count = 0;
     qs_insert_param_start = 0;
     qs_related_count = 0;
+    qs_annotation_count = 0;
+    qs_group_by[0] = '\0';
     free_params();
     return 0;
 }
@@ -361,7 +375,26 @@ int32_t __qs_fetch(void) {
     int pos;
 
     // Build column list and JOIN clauses for select_related
-    if (qs_related_count > 0) {
+    if (qs_annotation_count > 0) {
+        // Annotated query: SELECT group_cols, AGG(col) AS alias, ...
+        pos = snprintf(sql, sizeof(sql), "SELECT %s",
+            qs_distinct ? "DISTINCT " : "");
+
+        // If GROUP BY is set, include those columns first
+        if (qs_group_by[0]) {
+            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", qs_group_by);
+        } else {
+            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s.*", qs_table);
+        }
+
+        // Add annotations: SUM(col) AS alias
+        for (int a = 0; a < qs_annotation_count; a++) {
+            pos += snprintf(sql + pos, sizeof(sql) - pos, ", %s(%s) AS %s",
+                qs_annotations[a].func, qs_annotations[a].col, qs_annotations[a].alias);
+        }
+
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " FROM %s", qs_table);
+    } else if (qs_related_count > 0) {
         // Build: SELECT t.*, r1.col1 AS r1__col1, r1.col2 AS r1__col2, ...
         pos = snprintf(sql, sizeof(sql), "SELECT %s%s.*",
             qs_distinct ? "DISTINCT " : "", qs_table);
@@ -371,11 +404,9 @@ int32_t __qs_fetch(void) {
             char ref_table[128] = "", ref_field[64] = "";
             if (__orm_fk_info(qs_table, qs_related[r], ref_table, sizeof(ref_table),
                              ref_field, sizeof(ref_field))) {
-                // Add all fields from the related table with aliases
                 int fcount = __orm_field_count(ref_table);
                 for (int f = 0; f < fcount; f++) {
                     const char* fname = __orm_field_name(ref_table, f);
-                    // Alias: relatedtable__fieldname (Django convention)
                     pos += snprintf(sql + pos, sizeof(sql) - pos,
                         ", %s_rel%d.%s AS %s__%s",
                         qs_related[r], r, fname, qs_related[r], fname);
@@ -407,6 +438,7 @@ int32_t __qs_fetch(void) {
     }
 
     if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    if (qs_group_by[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " GROUP BY %s", qs_group_by);
     if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
     if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
     if (qs_offset > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " OFFSET %d", qs_offset);
@@ -467,6 +499,27 @@ int32_t __qs_select_related(const char* field_name) {
     strncpy(qs_related[qs_related_count], field_name, 127);
     qs_related[qs_related_count][127] = '\0';
     qs_related_count++;
+    return 0;
+}
+
+// __qs_annotate — add an aggregate annotation
+// Django equivalent: .annotate(total=Sum("amount"))
+// func: "SUM", "COUNT", "AVG", "MIN", "MAX"
+int32_t __qs_annotate(const char* alias, const char* func, const char* col) {
+    if (qs_annotation_count >= QS_MAX_ANNOTATIONS || !alias || !func || !col) return -1;
+    Annotation* a = &qs_annotations[qs_annotation_count++];
+    strncpy(a->alias, alias, sizeof(a->alias) - 1);
+    strncpy(a->func, func, sizeof(a->func) - 1);
+    strncpy(a->col, col, sizeof(a->col) - 1);
+    return 0;
+}
+
+// __qs_group_by — set GROUP BY columns
+// cols: comma-separated column names, e.g. "customer_id" or "customer_id, status"
+int32_t __qs_group_by(const char* cols) {
+    if (!cols) return -1;
+    strncpy(qs_group_by, cols, sizeof(qs_group_by) - 1);
+    qs_group_by[sizeof(qs_group_by) - 1] = '\0';
     return 0;
 }
 

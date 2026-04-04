@@ -630,6 +630,19 @@ pub def select_related(field_name: str) -> int:
 	Usage: db.objects("posts"); db.select_related("author_id"); db.fetch_all()"""
 	return __qs_select_related(field_name)
 
+pub def annotate(alias: str, func: str, col: str) -> int:
+	"""Add an aggregate annotation to the query.
+	func: SUM, COUNT, AVG, MIN, MAX
+	Usage: db.objects("orders"); db.annotate("total", "SUM", "amount")
+	Django equivalent: .annotate(total=Sum("amount"))"""
+	return __qs_annotate(alias, func, col)
+
+pub def group_by(cols: str) -> int:
+	"""Set GROUP BY columns (comma-separated).
+	Usage: db.objects("orders"); db.group_by("customer_id")
+	Often used with annotate() for grouped aggregations."""
+	return __qs_group_by(cols)
+
 pub def fetch_all() -> int:
 	"""Execute SELECT and return row count (like Django's .all())."""
 	return __qs_fetch()
@@ -810,6 +823,12 @@ pub def __qs_distinct() -> int
 
 @extern("C")
 pub def __qs_select_related(field_name: str) -> int
+
+@extern("C")
+pub def __qs_annotate(alias: str, func: str, col: str) -> int
+
+@extern("C")
+pub def __qs_group_by(cols: str) -> int
 
 @extern("C")
 pub def __db_using(db_name: str) -> int
