@@ -3407,6 +3407,16 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 						Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
 						Type: "i32",
 					})
+					// If model has db=[...] routing, switch to the named connection
+					if len(cls.ModelDB) > 0 {
+						useDst := ls.b.FreshTemp("db_use")
+						ls.b.Emit(&hir.Call{
+							Dst:  useDst,
+							Fn:   "__db_use_conn",
+							Args: []hir.Value{hir.ConstStr{Text: cls.ModelDB[0]}},
+							Type: "i32",
+						})
+					}
 					return cls.TableName, cls, true
 				}
 			}

@@ -255,6 +255,7 @@ type Class struct {
 	// ORM model support (@model decorator)
 	IsModel         bool             // true if class has @model decorator
 	TableName       string           // SQL table name from @model("tablename")
+	ModelDB         []string         // named DB connections from @model(db=["analytics"])
 	ModelFields     []OrmField       // ORM field descriptors (populated by type checker)
 	Meta            *OrmMeta         // Meta class options (unique constraints, indexes, etc.)
 }
