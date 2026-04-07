@@ -1046,3 +1046,76 @@ pub def connect_url_named(url: str, name: str) -> int:
 pub def ping() -> int:
 	"""Check if the database connection is alive. Returns 0 if healthy, -1 if dead."""
 	return __db_ping()
+
+# ============================================================
+# PG COPY Protocol — High-Speed Bulk Import (C bindings)
+# ============================================================
+
+@extern("C")
+pub def __pg_copy_begin(table_name: str, columns: str) -> int
+
+@extern("C")
+pub def __pg_copy_row(row: str) -> int
+
+@extern("C")
+pub def __pg_copy_end() -> int
+
+# ============================================================
+# PG LISTEN/NOTIFY — Async Event Pub/Sub (C bindings)
+# ============================================================
+
+@extern("C")
+pub def __pg_listen(channel: str) -> int
+
+@extern("C")
+pub def __pg_unlisten(channel: str) -> int
+
+@extern("C")
+pub def __pg_notify(channel: str, payload: str) -> int
+
+@extern("C")
+pub def __pg_poll_notify() -> str
+
+# ============================================================
+# Public API — PG COPY (Bulk Import)
+# ============================================================
+
+pub def copy_begin(table_name: str, columns: str) -> int:
+	"""Begin PG COPY IN mode for high-speed bulk import (~10x faster than INSERT).
+	columns: comma-separated column names, or empty for all columns.
+	Usage: db.copy_begin("users", "name,email,age")"""
+	return __pg_copy_begin(table_name, columns)
+
+pub def copy_row(row: str) -> int:
+	"""Send a tab-separated row during COPY IN.
+	Row must end with newline.
+	Usage: db.copy_row("Alice\talice@example.com\t30\n")"""
+	return __pg_copy_row(row)
+
+pub def copy_end() -> int:
+	"""End COPY IN mode. Returns count of rows copied."""
+	return __pg_copy_end()
+
+# ============================================================
+# Public API — PG LISTEN/NOTIFY (Event Pub/Sub)
+# ============================================================
+
+pub def listen(channel: str) -> int:
+	"""Subscribe to a PG notification channel.
+	Usage: db.listen("new_orders")"""
+	return __pg_listen(channel)
+
+pub def unlisten(channel: str) -> int:
+	"""Unsubscribe from a PG notification channel."""
+	return __pg_unlisten(channel)
+
+pub def notify(channel: str, payload: str) -> int:
+	"""Send a notification on a channel with optional payload.
+	Usage: db.notify("new_orders", "{\"order_id\": 42}")"""
+	return __pg_notify(channel, payload)
+
+pub def poll_notify() -> str:
+	"""Poll for pending notifications (non-blocking).
+	Returns: "channel\\tpayload\\tpid" or empty string if nothing.
+	Usage: let msg = db.poll_notify()"""
+	return __pg_poll_notify()
