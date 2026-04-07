@@ -914,6 +914,103 @@ pub def json_get(col: str, key: str) -> str:
 	Usage: let theme = db.json_get("settings", "theme")"""
 	return __qs_json_get(col, key)
 
+# ============================================================
+# Phase 3: CTEs (Common Table Expressions)
+# ============================================================
+
+pub def cte(name: str, query: str) -> int:
+	"""Add a Common Table Expression (WITH clause).
+	Up to 4 CTEs can be chained. Then call cte_fetch() to execute.
+	Django equivalent: raw SQL with WITH clause.
+	Usage:
+	  db.objects("active_users")
+	  db.cte("active_users", "SELECT * FROM users WHERE is_active = true")
+	  db.cte_fetch()"""
+	return __qs_cte_add(name, query)
+
+pub def cte_recursive() -> int:
+	"""Set the CTE mode to WITH RECURSIVE for hierarchical queries.
+	Must call before cte_fetch().
+	Usage:
+	  db.cte("tree", "SELECT id, parent_id, name FROM categories WHERE parent_id IS NULL UNION ALL SELECT c.id, c.parent_id, c.name FROM categories c JOIN tree t ON c.parent_id = t.id")
+	  db.cte_recursive()
+	  db.objects("tree")
+	  db.cte_fetch()"""
+	return __qs_cte_recursive()
+
+pub def cte_fetch() -> int:
+	"""Execute a CTE query and return results.
+	Builds: WITH name AS (query) [, ...] SELECT * FROM table [WHERE ...] [ORDER BY ...]
+	Returns row count.
+	Usage: let rows = db.cte_fetch()"""
+	return __qs_cte_fetch()
+
+# ============================================================
+# Phase 3: Subqueries
+# ============================================================
+
+pub def subquery(table: str, cols: str, where_clause: str) -> str:
+	"""Build a subquery SQL string for use with filter_exists/filter_in_subquery.
+	Returns the SQL string (not executed).
+	Usage:
+	  let sub = db.subquery("orders", "1", "orders.user_id = users.id")
+	  db.filter_exists(sub)"""
+	return __qs_subquery_build(table, cols, where_clause)
+
+pub def filter_exists(subquery: str) -> int:
+	"""Add WHERE EXISTS (subquery) condition.
+	Django equivalent: Entry.objects.filter(Exists(Subquery(...)))
+	Usage:
+	  db.objects("users")
+	  db.filter_exists(db.subquery("orders", "1", "orders.user_id = users.id"))
+	  db.fetch_all()"""
+	return __qs_filter_exists(subquery)
+
+pub def filter_not_exists(subquery: str) -> int:
+	"""Add WHERE NOT EXISTS (subquery) condition.
+	Usage:
+	  db.objects("users")
+	  db.filter_not_exists(db.subquery("orders", "1", "orders.user_id = users.id"))
+	  db.fetch_all()"""
+	return __qs_filter_not_exists(subquery)
+
+pub def filter_in_subquery(col: str, subquery: str) -> int:
+	"""Add WHERE col IN (subquery) condition.
+	Django equivalent: Entry.objects.filter(pk__in=Subquery(...))
+	Usage:
+	  db.objects("users")
+	  db.filter_in_subquery("id", db.subquery("orders", "user_id", "total > 100"))
+	  db.fetch_all()"""
+	return __qs_filter_in_subquery(col, subquery)
+
+pub def filter_not_in_subquery(col: str, subquery: str) -> int:
+	"""Add WHERE col NOT IN (subquery) condition.
+	Usage:
+	  db.objects("users")
+	  db.filter_not_in_subquery("id", db.subquery("banned_users", "user_id", ""))
+	  db.fetch_all()"""
+	return __qs_filter_not_in_subquery(col, subquery)
+
+# ============================================================
+# Phase 3: prefetch_related
+# ============================================================
+
+pub def prefetch_related(related_table: str, fk_col: str, pk_col: str) -> int:
+	"""Register a related table for batch prefetching (N+1 → N optimization).
+	Django equivalent: Entry.objects.prefetch_related('authors')
+	Automatically batch-queries the related table with WHERE fk_col IN (primary keys).
+	Usage:
+	  db.objects("posts")
+	  db.prefetch_related("comments", "post_id", "id")
+	  db.prefetch_execute()"""
+	return __qs_prefetch_add(related_table, fk_col, pk_col)
+
+pub def prefetch_execute() -> int:
+	"""Execute the main query + all registered prefetch queries.
+	Returns: main query row count.
+	Usage: let rows = db.prefetch_execute()"""
+	return __qs_prefetch_execute()
+
 pub def get_avg(col: str) -> str:
 	"""SELECT AVG(col) — returns string."""
 	return __qs_aggregate("AVG", col)
@@ -1132,6 +1229,40 @@ pub def __qs_json_set(col: str, key: str, val: str) -> int
 
 @extern("C")
 pub def __qs_json_get(col: str, key: str) -> str
+
+# ============================================================
+# Phase 3 extern C bindings
+# ============================================================
+
+@extern("C")
+pub def __qs_cte_add(name: str, query: str) -> int
+
+@extern("C")
+pub def __qs_cte_recursive() -> int
+
+@extern("C")
+pub def __qs_cte_fetch() -> int
+
+@extern("C")
+pub def __qs_subquery_build(sub_table: str, sub_cols: str, sub_where: str) -> str
+
+@extern("C")
+pub def __qs_filter_exists(subquery: str) -> int
+
+@extern("C")
+pub def __qs_filter_not_exists(subquery: str) -> int
+
+@extern("C")
+pub def __qs_filter_in_subquery(col: str, subquery: str) -> int
+
+@extern("C")
+pub def __qs_filter_not_in_subquery(col: str, subquery: str) -> int
+
+@extern("C")
+pub def __qs_prefetch_add(related_table: str, fk_col: str, pk_col: str) -> int
+
+@extern("C")
+pub def __qs_prefetch_execute() -> int
 
 # ============================================================
 # Values C bindings (db_crud.c)

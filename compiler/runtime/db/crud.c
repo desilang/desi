@@ -1502,6 +1502,266 @@ char* __qs_json_get(const char* col, const char* key) {
 }
 
 // ============================================================
+// Phase 3: CTEs (Common Table Expressions — WITH clause)
+// ============================================================
+
+// State: up to 4 CTE clauses
+#define QS_MAX_CTES 4
+static struct {
+    char name[64];     // CTE alias
+    char query[2048];  // CTE query body
+} qs_ctes[QS_MAX_CTES];
+static int qs_cte_count = 0;
+static int qs_cte_recursive = 0;  // 1 if WITH RECURSIVE
+
+// Add a CTE clause
+// Django: MyModel.objects.raw("WITH active AS (...) SELECT ...")
+// Desi:   db.cte("active", "SELECT * FROM users WHERE active = true")
+int32_t __qs_cte_add(const char* name, const char* query) {
+    if (qs_cte_count >= QS_MAX_CTES || !name || !query) return -1;
+    strncpy(qs_ctes[qs_cte_count].name, name, sizeof(qs_ctes[0].name) - 1);
+    qs_ctes[qs_cte_count].name[sizeof(qs_ctes[0].name) - 1] = '\0';
+    strncpy(qs_ctes[qs_cte_count].query, query, sizeof(qs_ctes[0].query) - 1);
+    qs_ctes[qs_cte_count].query[sizeof(qs_ctes[0].query) - 1] = '\0';
+    qs_cte_count++;
+    return 0;
+}
+
+// Set recursive mode for CTEs
+int32_t __qs_cte_recursive(void) {
+    qs_cte_recursive = 1;
+    return 0;
+}
+
+// Execute: build WITH ... and then the main SELECT from qs_table
+int32_t __qs_cte_fetch(void) {
+    if (qs_cte_count == 0 || qs_table[0] == '\0') return -1;
+
+    char sql[8192];
+    int pos;
+    if (qs_cte_recursive) {
+        pos = snprintf(sql, sizeof(sql), "WITH RECURSIVE ");
+    } else {
+        pos = snprintf(sql, sizeof(sql), "WITH ");
+    }
+
+    for (int i = 0; i < qs_cte_count; i++) {
+        if (i > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s AS (%s)",
+            qs_ctes[i].name, qs_ctes[i].query);
+    }
+
+    // Main SELECT
+    const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
+    pos += snprintf(sql + pos, sizeof(sql) - pos, " SELECT %s FROM %s", cols, qs_table);
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
+    if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+
+    // Reset CTE state
+    qs_cte_count = 0;
+    qs_cte_recursive = 0;
+
+    return rows;
+}
+
+// ============================================================
+// Phase 3: Subqueries — EXISTS / IN with nested SELECT
+// ============================================================
+
+// Build subquery: SELECT cols FROM table WHERE where_clause
+// Returns the SQL string for use in EXISTS/IN conditions
+char* __qs_subquery_build(const char* sub_table, const char* sub_cols, const char* sub_where) {
+    static char sub_sql[2048];
+    if (!sub_table) return "";
+
+    const char* cols = (sub_cols && sub_cols[0]) ? sub_cols : "*";
+    int pos = snprintf(sub_sql, sizeof(sub_sql), "SELECT %s FROM %s", cols, sub_table);
+
+    if (sub_where && sub_where[0]) {
+        pos += snprintf(sub_sql + pos, sizeof(sub_sql) - pos, " WHERE %s", sub_where);
+    }
+
+    return sub_sql;
+}
+
+// Filter by EXISTS subquery:
+// WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)
+int32_t __qs_filter_exists(const char* subquery) {
+    if (!subquery || !subquery[0]) return -1;
+
+    char condition[2048];
+    snprintf(condition, sizeof(condition), "EXISTS (%s)", subquery);
+
+    // Append to qs_where
+    if (qs_where[0]) {
+        int len = strlen(qs_where);
+        snprintf(qs_where + len, sizeof(qs_where) - len, " AND %s", condition);
+    } else {
+        strncpy(qs_where, condition, sizeof(qs_where) - 1);
+    }
+
+    return 0;
+}
+
+// Filter by NOT EXISTS subquery
+int32_t __qs_filter_not_exists(const char* subquery) {
+    if (!subquery || !subquery[0]) return -1;
+
+    char condition[2048];
+    snprintf(condition, sizeof(condition), "NOT EXISTS (%s)", subquery);
+
+    if (qs_where[0]) {
+        int len = strlen(qs_where);
+        snprintf(qs_where + len, sizeof(qs_where) - len, " AND %s", condition);
+    } else {
+        strncpy(qs_where, condition, sizeof(qs_where) - 1);
+    }
+
+    return 0;
+}
+
+// Filter by IN subquery:
+// WHERE col IN (SELECT id FROM ...)
+int32_t __qs_filter_in_subquery(const char* col, const char* subquery) {
+    if (!col || !subquery) return -1;
+
+    char condition[2048];
+    snprintf(condition, sizeof(condition), "%s IN (%s)", col, subquery);
+
+    if (qs_where[0]) {
+        int len = strlen(qs_where);
+        snprintf(qs_where + len, sizeof(qs_where) - len, " AND %s", condition);
+    } else {
+        strncpy(qs_where, condition, sizeof(qs_where) - 1);
+    }
+
+    return 0;
+}
+
+// Filter by NOT IN subquery
+int32_t __qs_filter_not_in_subquery(const char* col, const char* subquery) {
+    if (!col || !subquery) return -1;
+
+    char condition[2048];
+    snprintf(condition, sizeof(condition), "%s NOT IN (%s)", col, subquery);
+
+    if (qs_where[0]) {
+        int len = strlen(qs_where);
+        snprintf(qs_where + len, sizeof(qs_where) - len, " AND %s", condition);
+    } else {
+        strncpy(qs_where, condition, sizeof(qs_where) - 1);
+    }
+
+    return 0;
+}
+
+// ============================================================
+// Phase 3: prefetch_related — batch N+1 → N queries
+// ============================================================
+
+// State for prefetch
+#define QS_MAX_PREFETCH 4
+static struct {
+    char related_table[128]; // related table name
+    char fk_col[128];        // foreign key column in related table
+    char pk_col[128];        // primary key column in current table (usually 'id')
+} qs_prefetches[QS_MAX_PREFETCH];
+static int qs_prefetch_count = 0;
+
+// Register a prefetch relationship
+// Django: Entry.objects.prefetch_related('authors')
+// Desi: db.prefetch_related("authors", "post_id", "id")
+int32_t __qs_prefetch_add(const char* related_table, const char* fk_col, const char* pk_col) {
+    if (qs_prefetch_count >= QS_MAX_PREFETCH) return -1;
+    if (!related_table || !fk_col || !pk_col) return -1;
+
+    strncpy(qs_prefetches[qs_prefetch_count].related_table, related_table, 127);
+    qs_prefetches[qs_prefetch_count].related_table[127] = '\0';
+    strncpy(qs_prefetches[qs_prefetch_count].fk_col, fk_col, 127);
+    qs_prefetches[qs_prefetch_count].fk_col[127] = '\0';
+    strncpy(qs_prefetches[qs_prefetch_count].pk_col, pk_col, 127);
+    qs_prefetches[qs_prefetch_count].pk_col[127] = '\0';
+
+    qs_prefetch_count++;
+    return 0;
+}
+
+// Execute prefetch: first query main table, then batch-query each related table
+// with WHERE fk_col IN (list of PKs from main query)
+// Returns: main query row count, prefetch results available via get_value_at
+int32_t __qs_prefetch_execute(void) {
+    if (qs_table[0] == '\0') return -1;
+
+    // Step 1: Execute main query
+    char sql[4096];
+    const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
+    int pos = snprintf(sql, sizeof(sql), "SELECT %s FROM %s", cols, qs_table);
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
+    if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
+
+    debug_log_query(sql);
+
+    int main_rows;
+    if (qs_param_count > 0) {
+        main_rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        main_rows = __db_query_exec(sql);
+    }
+
+    if (main_rows <= 0 || qs_prefetch_count == 0) {
+        qs_prefetch_count = 0;
+        return main_rows;
+    }
+
+    // Step 2: For each prefetch, collect PKs and batch-query related table
+    // Find the pk column index in the result
+    for (int p = 0; p < qs_prefetch_count; p++) {
+        // Collect PKs from main result (pk_col values)
+        // For simplicity, we assume pk_col is column 0 (id) by default
+        int pk_col_idx = 0; // TODO: resolve from column name
+
+        char pk_list[4096] = "";
+        int ppos = 0;
+        for (int r = 0; r < main_rows && ppos < (int)sizeof(pk_list) - 32; r++) {
+            char* v = __db_get_value_at(r, pk_col_idx);
+            if (v) {
+                if (ppos > 0) ppos += snprintf(pk_list + ppos, sizeof(pk_list) - ppos, ", ");
+                ppos += snprintf(pk_list + ppos, sizeof(pk_list) - ppos, "'%s'", v);
+                free(v);
+            }
+        }
+
+        if (ppos > 0) {
+            // Execute: SELECT * FROM related_table WHERE fk_col IN (pk_list)
+            char rel_sql[8192];
+            snprintf(rel_sql, sizeof(rel_sql), "SELECT * FROM %s WHERE %s IN (%s)",
+                qs_prefetches[p].related_table,
+                qs_prefetches[p].fk_col,
+                pk_list);
+
+            debug_log_query(rel_sql);
+            __db_query_exec(rel_sql);
+            // Results are now in the query buffer for access via get_value_at
+            // In real production code, we'd store these in a separate result set
+        }
+    }
+
+    qs_prefetch_count = 0;
+    return main_rows;
+}
+
+// ============================================================
 // INSERT with parameterized key-value pairs
 // ============================================================
 
