@@ -697,6 +697,116 @@ pub def delete() -> int:
 	"""DELETE matching rows (like Django's QuerySet.delete())."""
 	return __qs_delete()
 
+# ============================================================
+# Phase 1: latest / earliest
+# ============================================================
+
+pub def latest(field: str) -> int:
+	"""Get the most recent row ordered by the given field.
+	Django equivalent: Entry.objects.latest('pub_date')
+	If field is empty, defaults to 'id'.
+	Usage: db.objects("entries"); db.latest("pub_date")"""
+	return __qs_latest(field)
+
+pub def earliest(field: str) -> int:
+	"""Get the oldest row ordered by the given field.
+	Django equivalent: Entry.objects.earliest('pub_date')
+	If field is empty, defaults to 'id'.
+	Usage: db.objects("entries"); db.earliest("created_at")"""
+	return __qs_earliest(field)
+
+# ============================================================
+# Phase 1: only / defer (column selection)
+# ============================================================
+
+pub def only(cols: str) -> int:
+	"""Restrict SELECT to specific columns only. Comma-separated.
+	Django equivalent: Entry.objects.only('id', 'name', 'email')
+	Usage: db.objects("users"); db.only("id, name, email"); db.fetch_all()"""
+	return __qs_only(cols)
+
+pub def defer_fields(cols: str) -> int:
+	"""Select all columns EXCEPT the listed ones. Comma-separated.
+	Django equivalent: Entry.objects.defer('body', 'metadata')
+	Queries the live schema to build the exclusion list.
+	Usage: db.objects("posts"); db.defer_fields("body, metadata"); db.fetch_all()"""
+	return __qs_defer(cols)
+
+# ============================================================
+# Phase 1: get_or_create
+# ============================================================
+
+pub def get_or_create() -> int:
+	"""Get existing row or create it. Returns 1 if created, 0 if found.
+	Django equivalent: obj, created = Entry.objects.get_or_create(name="Alice")
+	Use set_field() to accumulate fields before calling.
+	Usage:
+	  db.objects("users")
+	  db.set_field("name", "Alice")
+	  db.set_field("email", "alice@example.com")
+	  let created = db.get_or_create()"""
+	return __qs_get_or_create()
+
+# ============================================================
+# Phase 1: EXPLAIN (query plan inspection)
+# ============================================================
+
+pub def explain() -> int:
+	"""Run EXPLAIN ANALYZE on the current queryset.
+	PG: EXPLAIN ANALYZE, MySQL: EXPLAIN.
+	Returns row count; result set contains the query plan.
+	Django equivalent: queryset.explain()
+	Usage: db.objects("users"); db.filter_by("age__gt", "18"); db.explain()"""
+	return __qs_explain()
+
+# ============================================================
+# Phase 1: Schema Inspection
+# ============================================================
+
+pub def describe_tables() -> int:
+	"""List all tables in the current database.
+	Returns row count; result set has table_name column.
+	Usage: let n = db.describe_tables()  # then db.get_value(i, 0)"""
+	return __db_describe_tables()
+
+pub def describe_columns(table_name: str) -> int:
+	"""List columns for a table with type info.
+	Returns row count; result set has: column_name, data_type, is_nullable, column_default.
+	Usage: let n = db.describe_columns("users")"""
+	return __db_describe_columns(table_name)
+
+pub def describe_indexes(table_name: str) -> int:
+	"""List indexes for a table.
+	PG: returns indexname, indexdef from pg_indexes.
+	MySQL: runs SHOW INDEX FROM table.
+	Usage: let n = db.describe_indexes("users")"""
+	return __db_describe_indexes(table_name)
+
+# ============================================================
+# Phase 1: Advisory Locks (distributed locking)
+# ============================================================
+
+pub def advisory_lock(key: int) -> int:
+	"""Acquire a session-level advisory lock (blocking).
+	PG: pg_advisory_lock(key), MySQL: GET_LOCK(key, -1).
+	Returns 0 on success, -1 on error.
+	Usage: db.advisory_lock(42)"""
+	return __db_advisory_lock(key)
+
+pub def advisory_unlock(key: int) -> int:
+	"""Release a session-level advisory lock.
+	PG: pg_advisory_unlock(key), MySQL: RELEASE_LOCK(key).
+	Returns 0 on success, -1 on error.
+	Usage: db.advisory_unlock(42)"""
+	return __db_advisory_unlock(key)
+
+pub def advisory_try_lock(key: int) -> int:
+	"""Try to acquire an advisory lock (non-blocking).
+	Returns 1 if acquired, 0 if already held by another session.
+	PG: pg_try_advisory_lock(key), MySQL: GET_LOCK(key, 0).
+	Usage: if db.advisory_try_lock(42) == 1: ..."""
+	return __db_advisory_try_lock(key)
+
 pub def get_avg(col: str) -> str:
 	"""SELECT AVG(col) — returns string."""
 	return __qs_aggregate("AVG", col)
@@ -843,6 +953,47 @@ pub def __db_using(db_name: str) -> int
 
 @extern("C")
 pub def __qs_raw(sql: str) -> int
+
+# ============================================================
+# Phase 1: latest/earliest, only/defer, get_or_create, explain,
+#           schema inspection, advisory locks (C bindings)
+# ============================================================
+
+@extern("C")
+pub def __qs_latest(field: str) -> int
+
+@extern("C")
+pub def __qs_earliest(field: str) -> int
+
+@extern("C")
+pub def __qs_only(cols: str) -> int
+
+@extern("C")
+pub def __qs_defer(cols: str) -> int
+
+@extern("C")
+pub def __qs_get_or_create() -> int
+
+@extern("C")
+pub def __qs_explain() -> int
+
+@extern("C")
+pub def __db_describe_tables() -> int
+
+@extern("C")
+pub def __db_describe_columns(table_name: str) -> int
+
+@extern("C")
+pub def __db_describe_indexes(table_name: str) -> int
+
+@extern("C")
+pub def __db_advisory_lock(key: int) -> int
+
+@extern("C")
+pub def __db_advisory_unlock(key: int) -> int
+
+@extern("C")
+pub def __db_advisory_try_lock(key: int) -> int
 
 # ============================================================
 # Values C bindings (db_crud.c)
