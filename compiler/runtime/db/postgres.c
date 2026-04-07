@@ -1262,3 +1262,303 @@ char* __pg_connection_info(void) {
         g_pg->fd, g_pg->connected, g_pg->user, g_pg->error);
     return strdup(buf);
 }
+
+// ============================================================
+// COPY Protocol — High-Speed Bulk Import
+// ============================================================
+//
+// PG COPY protocol flow:
+//   1. Send Query("COPY table FROM STDIN ...") → server responds with CopyInResponse ('G')
+//   2. Send CopyData ('d') messages — one per row, tab-separated text
+//   3. Send CopyDone ('c') to finalize
+//   4. Server responds with CommandComplete ('C')
+//
+// This is ~10x faster than INSERT for bulk loads.
+
+// Begin COPY IN mode: sends COPY command, waits for CopyInResponse
+int32_t __pg_copy_begin(const char* table_name, const char* columns) {
+    if (!g_pg || !g_pg->connected) return -1;
+    if (!table_name) return -1;
+
+    char sql[1024];
+    if (columns && columns[0]) {
+        snprintf(sql, sizeof(sql), "COPY %s (%s) FROM STDIN WITH (FORMAT text)", table_name, columns);
+    } else {
+        snprintf(sql, sizeof(sql), "COPY %s FROM STDIN WITH (FORMAT text)", table_name);
+    }
+
+    pg_log("COPY begin: %s", sql);
+
+    // Send as a Query message: 'Q' + len + sql\0
+    int sql_len = strlen(sql);
+    int msg_len = 4 + sql_len + 1;
+    char* msg = malloc(1 + msg_len);
+    msg[0] = 'Q';
+    pg_write_i32(msg + 1, msg_len);
+    memcpy(msg + 5, sql, sql_len + 1);
+    int rc = pg_send_raw(msg, 1 + msg_len);
+    free(msg);
+    if (rc < 0) return -1;
+
+    // Read response — expect CopyInResponse ('G')
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+
+    if (mtype == 'G') {
+        // CopyInResponse — we're in COPY IN mode
+        pg_log("COPY IN mode active");
+        return 0;
+    } else if (mtype == 'E') {
+        // Error
+        char* p = payload;
+        while (p < payload + plen && *p) {
+            char f = *p++;
+            if (f == '\0') break;
+            if (f == 'M') {
+                snprintf(g_pg->error, sizeof(g_pg->error), "COPY error: %s", p);
+                break;
+            }
+            p += strlen(p) + 1;
+        }
+        // Drain ReadyForQuery
+        pg_read_msg(&mtype, payload, &plen);
+        return -1;
+    }
+
+    snprintf(g_pg->error, sizeof(g_pg->error), "COPY: unexpected response '%c'", mtype);
+    return -1;
+}
+
+// Send a row of tab-separated data during COPY IN
+// row: tab-separated string (e.g., "1\tAlice\t30\n")
+int32_t __pg_copy_row(const char* row) {
+    if (!g_pg || !g_pg->connected || !row) return -1;
+
+    int row_len = strlen(row);
+
+    // CopyData message: 'd' + int32(len) + data
+    int msg_len = 4 + row_len;
+    char* msg = malloc(1 + msg_len);
+    msg[0] = 'd';
+    pg_write_i32(msg + 1, msg_len);
+    memcpy(msg + 5, row, row_len);
+    int rc = pg_send_raw(msg, 1 + msg_len);
+    free(msg);
+    return rc;
+}
+
+// End COPY IN mode — sends CopyDone, reads CommandComplete
+int32_t __pg_copy_end(void) {
+    if (!g_pg || !g_pg->connected) return -1;
+
+    // CopyDone message: 'c' + int32(4)
+    char done[5];
+    done[0] = 'c';
+    pg_write_i32(done + 1, 4);
+    if (pg_send_raw(done, 5) < 0) return -1;
+
+    pg_log("COPY done sent");
+
+    // Read responses until ReadyForQuery
+    int rows_copied = 0;
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+
+    while (1) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+
+        if (mtype == 'C') {
+            // CommandComplete — e.g., "COPY 1000"
+            payload[plen] = '\0';
+            pg_log("COPY complete: %s", payload);
+            // Parse row count from "COPY <N>"
+            if (strncmp(payload, "COPY ", 5) == 0) {
+                rows_copied = atoi(payload + 5);
+            }
+        } else if (mtype == 'Z') {
+            // ReadyForQuery — done
+            break;
+        } else if (mtype == 'E') {
+            // Error during COPY
+            char* p = payload;
+            while (p < payload + plen && *p) {
+                char f = *p++;
+                if (f == '\0') break;
+                if (f == 'M') {
+                    snprintf(g_pg->error, sizeof(g_pg->error), "COPY error: %s", p);
+                    break;
+                }
+                p += strlen(p) + 1;
+            }
+            // Keep reading until ReadyForQuery
+            continue;
+        }
+    }
+
+    return rows_copied;
+}
+
+// ============================================================
+// LISTEN / NOTIFY — Async Event Pub/Sub
+// ============================================================
+//
+// PG LISTEN/NOTIFY protocol:
+//   - LISTEN channel_name: subscribes to notifications
+//   - NOTIFY channel_name, 'payload': sends notification to all listeners
+//   - Notifications arrive as async messages (type 'A') anytime
+
+// Subscribe to a notification channel
+int32_t __pg_listen(const char* channel) {
+    if (!g_pg || !g_pg->connected || !channel) return -1;
+
+    char sql[256];
+    snprintf(sql, sizeof(sql), "LISTEN %s", channel);
+
+    // Send Query
+    int sql_len = strlen(sql);
+    int msg_len = 4 + sql_len + 1;
+    char* msg = malloc(1 + msg_len);
+    msg[0] = 'Q';
+    pg_write_i32(msg + 1, msg_len);
+    memcpy(msg + 5, sql, sql_len + 1);
+    int rc = pg_send_raw(msg, 1 + msg_len);
+    free(msg);
+    if (rc < 0) return -1;
+
+    // Read until ReadyForQuery
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    while (1) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+        if (mtype == 'Z') break;
+        if (mtype == 'E') {
+            char* p = payload;
+            while (p < payload + plen && *p) {
+                char f = *p++;
+                if (f == '\0') break;
+                if (f == 'M') {
+                    snprintf(g_pg->error, sizeof(g_pg->error), "LISTEN error: %s", p);
+                    break;
+                }
+                p += strlen(p) + 1;
+            }
+            return -1;
+        }
+    }
+
+    pg_log("LISTEN %s OK", channel);
+    return 0;
+}
+
+// Unsubscribe from a notification channel
+int32_t __pg_unlisten(const char* channel) {
+    if (!g_pg || !g_pg->connected || !channel) return -1;
+
+    char sql[256];
+    snprintf(sql, sizeof(sql), "UNLISTEN %s", channel);
+
+    int sql_len = strlen(sql);
+    int msg_len = 4 + sql_len + 1;
+    char* msg = malloc(1 + msg_len);
+    msg[0] = 'Q';
+    pg_write_i32(msg + 1, msg_len);
+    memcpy(msg + 5, sql, sql_len + 1);
+    int rc = pg_send_raw(msg, 1 + msg_len);
+    free(msg);
+    if (rc < 0) return -1;
+
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    while (1) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+        if (mtype == 'Z') break;
+    }
+
+    pg_log("UNLISTEN %s OK", channel);
+    return 0;
+}
+
+// Send a notification on a channel with payload
+int32_t __pg_notify(const char* channel, const char* payload_str) {
+    if (!g_pg || !g_pg->connected || !channel) return -1;
+
+    char sql[1024];
+    if (payload_str && payload_str[0]) {
+        snprintf(sql, sizeof(sql), "NOTIFY %s, '%s'", channel, payload_str);
+    } else {
+        snprintf(sql, sizeof(sql), "NOTIFY %s", channel);
+    }
+
+    int sql_len = strlen(sql);
+    int msg_len = 4 + sql_len + 1;
+    char* msg = malloc(1 + msg_len);
+    msg[0] = 'Q';
+    pg_write_i32(msg + 1, msg_len);
+    memcpy(msg + 5, sql, sql_len + 1);
+    int rc = pg_send_raw(msg, 1 + msg_len);
+    free(msg);
+    if (rc < 0) return -1;
+
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    while (1) {
+        if (pg_read_msg(&mtype, payload, &plen) < 0) return -1;
+        if (mtype == 'Z') break;
+    }
+
+    pg_log("NOTIFY %s OK", channel);
+    return 0;
+}
+
+// Poll for pending notifications — non-blocking
+// Returns: channel\tpayload\tpid  (tab-separated) or "" if nothing
+// The caller should handle "" as "no notification available"
+//
+// This works by checking if any pending 'A' (NotificationResponse)
+// messages arrived during previous query responses.
+// For real-time use, call after a simple query like "SELECT 1"
+// to trigger reading the notification off the wire.
+char* __pg_poll_notify(void) {
+    if (!g_pg || !g_pg->connected) return strdup("");
+
+    // Send a trivial query to flush any pending notifications
+    const char* sql = "";
+    int sql_len = 0;
+
+    // Instead of sending an empty query, we use a Sync message approach:
+    // Check if data is available on the socket using select()
+    fd_set rfds;
+    struct timeval tv;
+    FD_ZERO(&rfds);
+    FD_SET(g_pg->fd, &rfds);
+    tv.tv_sec = 0;
+    tv.tv_usec = 0; // non-blocking
+
+    int ready = select(g_pg->fd + 1, &rfds, NULL, NULL, &tv);
+    if (ready <= 0) return strdup(""); // nothing pending
+
+    // Data available — read message
+    char mtype;
+    char payload[PG_BUF_SIZE];
+    int plen;
+    if (pg_read_msg(&mtype, payload, &plen) < 0) return strdup("");
+
+    if (mtype == 'A') {
+        // NotificationResponse: int32 pid + str channel + str payload
+        int pid = pg_read_i32(payload);
+        char* channel = payload + 4;
+        char* notif_payload = channel + strlen(channel) + 1;
+        char result[2048];
+        snprintf(result, sizeof(result), "%s\t%s\t%d", channel, notif_payload, pid);
+        pg_log("NOTIFY received: channel=%s payload=%s pid=%d", channel, notif_payload, pid);
+        return strdup(result);
+    }
+
+    return strdup("");
+}
