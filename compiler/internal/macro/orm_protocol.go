@@ -37,6 +37,12 @@ func ormProtocolFallback() *MacroProtocol {
 		"update":    {Name: "update", ArgStyle: "kwargs_set", KwargsFunc: "__qs_update", TerminalFunc: "__qs_row_count", IsTerminal: true},
 		"aggregate": {Name: "aggregate", ArgStyle: "none", TerminalFunc: "__qs_fetch", IsTerminal: true},
 
+		// Phase 1 terminal methods
+		"latest":        {Name: "latest", ArgStyle: "positional", TerminalFunc: "__qs_latest", IsTerminal: true, ReturnsModel: true},
+		"earliest":      {Name: "earliest", ArgStyle: "positional", TerminalFunc: "__qs_earliest", IsTerminal: true, ReturnsModel: true},
+		"get_or_create": {Name: "get_or_create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_get_or_create", IsTerminal: true},
+		"explain":       {Name: "explain", ArgStyle: "none", TerminalFunc: "__qs_explain", IsTerminal: true},
+
 		// Chainable methods — build query, don't execute
 		"filter":         {Name: "filter", ArgStyle: "kwargs_filter", KwargsFunc: "__qs_filter", IsChainable: true},
 		"exclude":        {Name: "exclude", ArgStyle: "kwargs_filter", KwargsFunc: "__qs_exclude", IsChainable: true},
@@ -48,6 +54,10 @@ func ormProtocolFallback() *MacroProtocol {
 		"select_related": {Name: "select_related", ArgStyle: "positional", IsChainable: true},
 		"annotate":       {Name: "annotate", ArgStyle: "none", IsChainable: true},
 		"using":          {Name: "using", ArgStyle: "positional", KwargsFunc: "__db_using", IsChainable: true},
+
+		// Phase 1 chainable methods
+		"only":         {Name: "only", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
+		"defer_fields": {Name: "defer_fields", ArgStyle: "positional", KwargsFunc: "__qs_defer", IsChainable: true},
 
 		// Bulk operations
 		"bulk_create": {Name: "bulk_create", ArgStyle: "none", TerminalFunc: "__qs_bulk_create", IsTerminal: true},
@@ -72,6 +82,12 @@ func ormProtocolFallback() *MacroProtocol {
 		"row_count": "__qs_row_count",
 		"distinct":  "__qs_distinct",
 		"using":     "__db_using",
+		"latest":    "__qs_latest",
+		"earliest":  "__qs_earliest",
+		"only":      "__qs_only",
+		"defer":     "__qs_defer",
+		"explain":   "__qs_explain",
+		"get_or_create": "__qs_get_or_create",
 	}
 
 	return &MacroProtocol{

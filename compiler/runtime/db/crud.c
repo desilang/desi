@@ -73,6 +73,7 @@ static int    qs_limit = 0;
 static int    qs_offset = 0;
 static int    qs_distinct = 0;
 static int    qs_row_count = 0;
+static char   qs_columns[1024] = "";  // only() column list, empty = *
 
 // Parameter accumulator — values are stored here, SQL has placeholders
 static const char* qs_params[QS_MAX_PARAMS];
@@ -101,6 +102,9 @@ typedef struct {
 static Annotation qs_annotations[QS_MAX_ANNOTATIONS];
 static int    qs_annotation_count = 0;
 static char   qs_group_by[512] = "";
+
+// Forward declarations for functions used before their definition
+int32_t __qs_do_insert(void);
 
 // Helper: write a placeholder for the current dialect
 static int write_placeholder(char* buf, int buf_size, int param_index) {
@@ -164,6 +168,7 @@ int32_t __qs_reset(const char* table) {
     qs_related_count = 0;
     qs_annotation_count = 0;
     qs_group_by[0] = '\0';
+    qs_columns[0] = '\0';
     free_params();
     return 0;
 }
@@ -489,11 +494,12 @@ int32_t __qs_fetch(void) {
             }
         }
     } else {
-        // Simple SELECT * (no joins)
+        // Simple SELECT (no joins)
+        const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
         if (qs_distinct) {
-            pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT * FROM %s", qs_table);
+            pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT %s FROM %s", cols, qs_table);
         } else {
-            pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s", qs_table);
+            pos = snprintf(sql, sizeof(sql), "SELECT %s FROM %s", cols, qs_table);
         }
     }
 
@@ -701,6 +707,306 @@ int32_t __qs_raw(const char* sql) {
     } else {
         return __db_execute_stmt(sql);
     }
+}
+
+// ============================================================
+// Phase 1: latest / earliest (user-specified field)
+// ============================================================
+
+// Django: Entry.objects.latest('pub_date')
+// If field is empty, falls back to 'id'
+int32_t __qs_latest(const char* field) {
+    const char* f = (field && field[0]) ? field : "id";
+    snprintf(qs_order, sizeof(qs_order), "%s DESC", f);
+    qs_limit = 1;
+    return __qs_fetch();
+}
+
+// Django: Entry.objects.earliest('pub_date')
+int32_t __qs_earliest(const char* field) {
+    const char* f = (field && field[0]) ? field : "id";
+    snprintf(qs_order, sizeof(qs_order), "%s ASC", f);
+    qs_limit = 1;
+    return __qs_fetch();
+}
+
+// ============================================================
+// Phase 1: only() — restrict SELECT columns
+// ============================================================
+
+// Django: Entry.objects.only('id', 'name', 'email')
+// Takes comma-separated column names
+int32_t __qs_only(const char* cols) {
+    if (!cols || cols[0] == '\0') return -1;
+    strncpy(qs_columns, cols, sizeof(qs_columns) - 1);
+    qs_columns[sizeof(qs_columns) - 1] = '\0';
+    return 0;
+}
+
+// Django: Entry.objects.defer('body', 'metadata')
+// Defer is the inverse of only — select all columns EXCEPT the listed ones.
+// Queries information_schema to get the full column list, then excludes deferred cols.
+int32_t __qs_defer(const char* cols) {
+    if (!cols || cols[0] == '\0' || qs_table[0] == '\0') return -1;
+
+    // Step 1: Query all columns for this table
+    char sql[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = '%s' "
+            "ORDER BY ordinal_position", qs_table);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = '%s' "
+            "ORDER BY ordinal_position", qs_table);
+    }
+
+    int nrows = __db_query_exec(sql);
+    if (nrows <= 0) return -1;
+
+    // Step 2: Build comma-separated deferred set for fast lookup
+    // Parse deferred cols into an array
+    char deferred[32][128];
+    int defer_count = 0;
+    {
+        char buf[1024];
+        strncpy(buf, cols, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        char* tok = strtok(buf, ",");
+        while (tok && defer_count < 32) {
+            // Trim whitespace
+            while (*tok == ' ') tok++;
+            char* end = tok + strlen(tok) - 1;
+            while (end > tok && *end == ' ') { *end = '\0'; end--; }
+            strncpy(deferred[defer_count], tok, 127);
+            deferred[defer_count][127] = '\0';
+            defer_count++;
+            tok = strtok(NULL, ",");
+        }
+    }
+
+    // Step 3: Build SELECT list excluding deferred columns
+    qs_columns[0] = '\0';
+    int cpos = 0;
+    int included = 0;
+    for (int r = 0; r < nrows; r++) {
+        char* col_name = __db_get_value_at(r, 0);
+        if (!col_name) continue;
+
+        // Check if this column is in the deferred list
+        int is_deferred = 0;
+        for (int d = 0; d < defer_count; d++) {
+            if (strcmp(col_name, deferred[d]) == 0) {
+                is_deferred = 1;
+                break;
+            }
+        }
+
+        if (!is_deferred) {
+            if (included > 0) {
+                cpos += snprintf(qs_columns + cpos, sizeof(qs_columns) - cpos, ", ");
+            }
+            cpos += snprintf(qs_columns + cpos, sizeof(qs_columns) - cpos, "%s", col_name);
+            included++;
+        }
+        free(col_name);
+    }
+
+    return 0;
+}
+
+// ============================================================
+// Phase 1: get_or_create()
+// ============================================================
+
+// Django: obj, created = Entry.objects.get_or_create(name="Alice")
+// Returns: 1 if created (INSERT), 0 if already existed (SELECT)
+// After call, the result set contains the row.
+int32_t __qs_get_or_create(void) {
+    if (qs_insert_count == 0 || qs_table[0] == '\0') return -1;
+
+    // Step 1: Try to SELECT with the insert fields as WHERE conditions
+    char where[4096] = "";
+    int wpos = 0;
+    for (int i = 0; i < qs_insert_count; i++) {
+        if (i > 0) wpos += snprintf(where + wpos, sizeof(where) - wpos, " AND ");
+        int param_idx = qs_insert_param_start + i + 1;
+        char ph[16];
+        write_placeholder(ph, sizeof(ph), param_idx);
+        wpos += snprintf(where + wpos, sizeof(where) - wpos, "%s = %s",
+            qs_insert_keys[i], ph);
+    }
+
+    char sql[4096];
+    snprintf(sql, sizeof(sql), "SELECT * FROM %s WHERE %s LIMIT 1", qs_table, where);
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+
+    if (rows > 0) {
+        // Already exists — return 0 (not created)
+        return 0;
+    }
+
+    // Step 2: INSERT and return the new row
+    int rc = __qs_do_insert();
+    if (rc >= 0) {
+        return 1; // created
+    }
+    return -1; // error
+}
+
+// ============================================================
+// Phase 1: EXPLAIN — query plan inspection
+// ============================================================
+
+// Runs EXPLAIN ANALYZE on the current queryset and returns row count
+// The result set contains the query plan as text rows
+int32_t __qs_explain(void) {
+    // Build the SELECT query the same way __qs_fetch does
+    char inner_sql[8192];
+    int pos;
+
+    const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
+    if (qs_distinct) {
+        pos = snprintf(inner_sql, sizeof(inner_sql), "SELECT DISTINCT %s FROM %s", cols, qs_table);
+    } else {
+        pos = snprintf(inner_sql, sizeof(inner_sql), "SELECT %s FROM %s", cols, qs_table);
+    }
+    if (qs_where[0]) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " WHERE %s", qs_where);
+    if (qs_group_by[0]) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " GROUP BY %s", qs_group_by);
+    if (qs_order[0]) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " ORDER BY %s", qs_order);
+    if (qs_limit > 0) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " LIMIT %d", qs_limit);
+    if (qs_offset > 0) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " OFFSET %d", qs_offset);
+
+    // Wrap with EXPLAIN ANALYZE (PG) or EXPLAIN (MySQL)
+    char sql[8192 + 64];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql), "EXPLAIN %s", inner_sql);
+    } else {
+        snprintf(sql, sizeof(sql), "EXPLAIN ANALYZE %s", inner_sql);
+    }
+
+    debug_log_query(sql);
+
+    if (qs_param_count > 0) {
+        return __db_query_params(sql, qs_params, qs_param_count);
+    }
+    return __db_query_exec(sql);
+}
+
+// ============================================================
+// Phase 1: Schema Inspection
+// ============================================================
+
+// List all tables in the current database
+// Returns row count; result set has table names
+int32_t __db_describe_tables(void) {
+    const char* sql;
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        sql = "SELECT table_name FROM information_schema.tables "
+              "WHERE table_schema = DATABASE() ORDER BY table_name";
+    } else {
+        sql = "SELECT table_name FROM information_schema.tables "
+              "WHERE table_schema = 'public' ORDER BY table_name";
+    }
+    debug_log_query(sql);
+    return __db_query_exec(sql);
+}
+
+// List columns for a given table
+// Returns row count; result set has column_name, data_type, is_nullable, column_default
+int32_t __db_describe_columns(const char* table_name) {
+    if (!table_name || table_name[0] == '\0') return -1;
+
+    char sql[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name, data_type, is_nullable, column_default "
+            "FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = '%s' "
+            "ORDER BY ordinal_position", table_name);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT column_name, data_type, is_nullable, column_default "
+            "FROM information_schema.columns "
+            "WHERE table_schema = 'public' AND table_name = '%s' "
+            "ORDER BY ordinal_position", table_name);
+    }
+    debug_log_query(sql);
+    return __db_query_exec(sql);
+}
+
+// List indexes for a given table (PG-specific via pg_indexes, MySQL via SHOW INDEX)
+int32_t __db_describe_indexes(const char* table_name) {
+    if (!table_name || table_name[0] == '\0') return -1;
+
+    char sql[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql), "SHOW INDEX FROM %s", table_name);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT indexname, indexdef FROM pg_indexes "
+            "WHERE tablename = '%s'", table_name);
+    }
+    debug_log_query(sql);
+    return __db_query_exec(sql);
+}
+
+// ============================================================
+// Phase 1: Advisory Locks (PG)
+// ============================================================
+
+// Acquire a session-level advisory lock (blocking)
+// Django: from django.contrib.postgres.locks import advisory_lock
+int32_t __db_advisory_lock(int64_t key) {
+    char sql[128];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql), "SELECT GET_LOCK('%lld', -1)", (long long)key);
+    } else {
+        snprintf(sql, sizeof(sql), "SELECT pg_advisory_lock(%lld)", (long long)key);
+    }
+    debug_log_query(sql);
+    return __db_query_exec(sql) >= 0 ? 0 : -1;
+}
+
+// Release a session-level advisory lock
+int32_t __db_advisory_unlock(int64_t key) {
+    char sql[128];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql), "SELECT RELEASE_LOCK('%lld')", (long long)key);
+    } else {
+        snprintf(sql, sizeof(sql), "SELECT pg_advisory_unlock(%lld)", (long long)key);
+    }
+    debug_log_query(sql);
+    return __db_query_exec(sql) >= 0 ? 0 : -1;
+}
+
+// Try to acquire (non-blocking) — returns 1 if acquired, 0 if not
+int32_t __db_advisory_try_lock(int64_t key) {
+    char sql[128];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql), "SELECT GET_LOCK('%lld', 0)", (long long)key);
+    } else {
+        snprintf(sql, sizeof(sql), "SELECT pg_try_advisory_lock(%lld)", (long long)key);
+    }
+    debug_log_query(sql);
+    int rows = __db_query_exec(sql);
+    if (rows > 0) {
+        char* v = __db_get_value_at(0, 0);
+        int result = (v && (v[0] == 't' || v[0] == '1')) ? 1 : 0;
+        free(v);
+        return result;
+    }
+    return 0;
 }
 
 // ============================================================
