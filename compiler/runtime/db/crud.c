@@ -106,6 +106,9 @@ static char   qs_group_by[512] = "";
 // Forward declarations for functions used before their definition
 int32_t __qs_do_insert(void);
 
+// Phase 2 state (declared here so __qs_reset can access them)
+static char qs_upsert_col[128];
+static char qs_window_expr[512];
 // Helper: write a placeholder for the current dialect
 static int write_placeholder(char* buf, int buf_size, int param_index) {
     if (g_crud_dialect == DIALECT_MYSQL) {
@@ -169,6 +172,8 @@ int32_t __qs_reset(const char* table) {
     qs_annotation_count = 0;
     qs_group_by[0] = '\0';
     qs_columns[0] = '\0';
+    qs_upsert_col[0] = '\0';
+    qs_window_expr[0] = '\0';
     free_params();
     return 0;
 }
@@ -273,10 +278,153 @@ static void parse_lookup(const char* lookup, const char* val,
         strcpy(op_out, "BETWEEN");
         // val should be "low,high" — we'll handle this specially in the filter
         *is_in_out = 2; // signal: range mode
+    // ---- Phase 2: Date lookups ----
+    } else if (strcmp(suffix, "year") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            // MySQL: YEAR(col) = ?
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "YEAR(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            // PG: EXTRACT(YEAR FROM col) = ?
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(YEAR FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "month") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "MONTH(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(MONTH FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "day") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "DAY(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(DAY FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "hour") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "HOUR(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(HOUR FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "minute") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "MINUTE(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(MINUTE FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "second") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "SECOND(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(SECOND FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "week") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "WEEK(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(WEEK FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    } else if (strcmp(suffix, "quarter") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "QUARTER(%s)", col_out);
+            strncpy(col_out, tmp, 127);
+        } else {
+            char tmp[128];
+            snprintf(tmp, sizeof(tmp), "EXTRACT(QUARTER FROM %s)", col_out);
+            strncpy(col_out, tmp, 127);
+        }
+        strcpy(op_out, "=");
+    // ---- Phase 2: JSON field lookups ----
+    // data__key → PG: data->>'key' = $1, MySQL: JSON_UNQUOTE(JSON_EXTRACT(data,'$.key')) = ?
+    // Detect: suffix doesn't match any known operator — check if parent col is a JSON field
+    // For now, treat any unknown double-underscore as a JSON path access
+    // The user can also use the explicit json_* lookups below
+    } else if (strncmp(suffix, "json_", 5) == 0) {
+        // Explicit JSON lookups: data__json_has → data ? 'key' (PG) / JSON_CONTAINS_PATH (MySQL)
+        char* json_op = suffix + 5;
+        if (strcmp(json_op, "has") == 0) {
+            // test if key exists: PG: col ? val, MySQL: JSON_CONTAINS_PATH(col, 'one', '$.val')
+            if (g_crud_dialect == DIALECT_MYSQL) {
+                char tmp[256];
+                snprintf(tmp, sizeof(tmp), "JSON_CONTAINS_PATH(%s, 'one', '$.\"%s\"')", col_out, val);
+                strncpy(col_out, tmp, 127);
+                strcpy(op_out, "=");
+                strcpy(val_out, "1"); // JSON_CONTAINS_PATH returns 1/0
+            } else {
+                strcpy(op_out, "?");
+            }
+        } else if (strcmp(json_op, "contains") == 0) {
+            // PG: col @> '{"key":"val"}', MySQL: JSON_CONTAINS(col, '{"key":"val"}')
+            if (g_crud_dialect == DIALECT_MYSQL) {
+                char tmp[256];
+                snprintf(tmp, sizeof(tmp), "JSON_CONTAINS(%s, ?)", col_out);
+                strncpy(col_out, tmp, 127);
+                strcpy(op_out, "=");
+                strcpy(val_out, "1");
+            } else {
+                strcpy(op_out, "@>");
+            }
+        }
     } else {
-        // Unknown suffix — treat as exact match on full name
-        *dunder = '_';
-        *(dunder + 1) = '_';
+        // Check for nested JSON path: data__settings__theme
+        // This would have been split at the first __ so suffix = "settings__theme"
+        // We treat any unknown suffix that looks like a field name as JSON key access
+        char* nested = strstr(suffix, "__");
+        if (nested) {
+            // Nested: data__settings__theme → PG: data->'settings'->>'theme'
+            // For simplicity, handle first level only in v0.1.0
+            *nested = '\0';
+            char* key2 = nested + 2;
+            if (g_crud_dialect == DIALECT_MYSQL) {
+                char tmp[256];
+                snprintf(tmp, sizeof(tmp), "JSON_UNQUOTE(JSON_EXTRACT(%s, '$.%s.%s'))", col_out, suffix, key2);
+                strncpy(col_out, tmp, 127);
+            } else {
+                char tmp[256];
+                snprintf(tmp, sizeof(tmp), "%s->'%s'->>'%s'", col_out, suffix, key2);
+                strncpy(col_out, tmp, 127);
+            }
+            strcpy(op_out, "=");
+        } else {
+            // Unknown suffix — restore original (treat as exact match on full name)
+            *dunder = '_';
+            *(dunder + 1) = '_';
+        }
     }
 }
 
@@ -1007,6 +1155,350 @@ int32_t __db_advisory_try_lock(int64_t key) {
         return result;
     }
     return 0;
+}
+
+// ============================================================
+// Phase 2: UPSERT — INSERT ... ON CONFLICT DO UPDATE
+// ============================================================
+
+
+// Set the conflict column for upsert operations
+// Django: Model.objects.update_or_create(defaults={...}, **lookup)
+int32_t __qs_on_conflict(const char* conflict_col) {
+    if (!conflict_col || conflict_col[0] == '\0') return -1;
+    strncpy(qs_upsert_col, conflict_col, sizeof(qs_upsert_col) - 1);
+    qs_upsert_col[sizeof(qs_upsert_col) - 1] = '\0';
+    return 0;
+}
+
+// Execute UPSERT with accumulated fields
+// PG: INSERT INTO t (cols) VALUES (vals) ON CONFLICT (conflict_col) DO UPDATE SET col=EXCLUDED.col, ...
+// MySQL: INSERT INTO t (cols) VALUES (vals) ON DUPLICATE KEY UPDATE col=VALUES(col), ...
+int32_t __qs_do_upsert(void) {
+    if (qs_insert_count == 0 || qs_table[0] == '\0' || qs_upsert_col[0] == '\0') return -1;
+
+    char sql[8192];
+    int pos = snprintf(sql, sizeof(sql), "INSERT INTO %s (", qs_table);
+
+    // Build column list
+    for (int i = 0; i < qs_insert_count; i++) {
+        if (i > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", qs_insert_keys[i]);
+    }
+    pos += snprintf(sql + pos, sizeof(sql) - pos, ") VALUES (");
+
+    // Build placeholder list
+    for (int i = 0; i < qs_insert_count; i++) {
+        if (i > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        char ph[16];
+        write_placeholder(ph, sizeof(ph), qs_insert_param_start + i + 1);
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", ph);
+    }
+    pos += snprintf(sql + pos, sizeof(sql) - pos, ")");
+
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL: ON DUPLICATE KEY UPDATE col=VALUES(col), ...
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " ON DUPLICATE KEY UPDATE ");
+        int first_update = 1;
+        for (int i = 0; i < qs_insert_count; i++) {
+            if (strcmp(qs_insert_keys[i], qs_upsert_col) == 0) continue; // skip conflict col
+            if (!first_update) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s = VALUES(%s)",
+                qs_insert_keys[i], qs_insert_keys[i]);
+            first_update = 0;
+        }
+    } else {
+        // PG: ON CONFLICT (col) DO UPDATE SET col = EXCLUDED.col, ...
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " ON CONFLICT (%s) DO UPDATE SET ", qs_upsert_col);
+        int first_update = 1;
+        for (int i = 0; i < qs_insert_count; i++) {
+            if (strcmp(qs_insert_keys[i], qs_upsert_col) == 0) continue;
+            if (!first_update) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s = EXCLUDED.%s",
+                qs_insert_keys[i], qs_insert_keys[i]);
+            first_update = 0;
+        }
+    }
+
+    debug_log_query(sql);
+
+    int32_t result;
+    if (qs_param_count > 0) {
+        result = __db_execute_params(sql, qs_params, qs_param_count);
+    } else {
+        result = __db_execute_stmt(sql);
+    }
+
+    qs_insert_count = 0;
+    qs_insert_param_start = 0;
+    qs_upsert_col[0] = '\0';
+    return result;
+}
+
+// ============================================================
+// Phase 2: update_or_create
+// ============================================================
+
+// Django: Model.objects.update_or_create(defaults={"email": "new"}, name="Alice")
+// Returns: 1 if created, 0 if updated, -1 on error
+// Uses set_field for all fields + filter for lookup conditions
+int32_t __qs_update_or_create(void) {
+    if (qs_insert_count == 0 || qs_table[0] == '\0') return -1;
+
+    // Step 1: Try to SELECT with WHERE
+    char sql[4096];
+    int pos;
+
+    if (qs_where[0]) {
+        pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s WHERE %s LIMIT 1", qs_table, qs_where);
+    } else {
+        // Use all accumulated fields as WHERE
+        char where[4096] = "";
+        int wpos = 0;
+        for (int i = 0; i < qs_insert_count; i++) {
+            if (i > 0) wpos += snprintf(where + wpos, sizeof(where) - wpos, " AND ");
+            int param_idx = qs_insert_param_start + i + 1;
+            char ph[16];
+            write_placeholder(ph, sizeof(ph), param_idx);
+            wpos += snprintf(where + wpos, sizeof(where) - wpos, "%s = %s",
+                qs_insert_keys[i], ph);
+        }
+        pos = snprintf(sql, sizeof(sql), "SELECT * FROM %s WHERE %s LIMIT 1", qs_table, where);
+    }
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+
+    if (rows > 0) {
+        // Update existing row
+        for (int i = 0; i < qs_insert_count; i++) {
+            __qs_update(qs_insert_keys[i], qs_params[qs_insert_param_start + i]);
+        }
+        qs_insert_count = 0;
+        qs_insert_param_start = 0;
+        return 0; // updated
+    }
+
+    // Insert new row
+    int rc = __qs_do_insert();
+    if (rc >= 0) return 1; // created
+    return -1; // error
+}
+
+// ============================================================
+// Phase 2: Window Functions
+// ============================================================
+
+
+// Add a window function expression to the SELECT
+// Django: from django.db.models import Window, F
+//         qs.annotate(row_num=Window(expression=RowNumber(), partition_by=[F('dept')], order_by=F('salary').desc()))
+// Desi:   db.window("ROW_NUMBER()", "PARTITION BY dept ORDER BY salary DESC", "row_num")
+int32_t __qs_window(const char* func, const char* over_clause, const char* alias) {
+    if (!func || !over_clause || !alias) return -1;
+
+    // Build: func OVER (over_clause) AS alias
+    // Store as an annotation-like expression in qs_columns
+    char expr[512];
+    snprintf(expr, sizeof(expr), "%s OVER (%s) AS %s", func, over_clause, alias);
+
+    // Append to qs_columns (if already has content, add comma)
+    if (qs_columns[0] != '\0') {
+        int len = strlen(qs_columns);
+        snprintf(qs_columns + len, sizeof(qs_columns) - len, ", %s", expr);
+    } else {
+        // Start with *, then add window expression
+        snprintf(qs_columns, sizeof(qs_columns), "*, %s", expr);
+    }
+
+    return 0;
+}
+
+// ============================================================
+// Phase 2: Server-Side Cursor
+// ============================================================
+
+// State for cursor
+static char qs_cursor_name[64] = "";
+static int  qs_cursor_open = 0;
+
+// Declare a server-side cursor for the current queryset
+// PG: DECLARE cursor_name CURSOR FOR SELECT ...
+// Returns 0 on success, -1 on error
+int32_t __qs_cursor_declare(const char* cursor_name) {
+    if (!cursor_name || cursor_name[0] == '\0') return -1;
+    strncpy(qs_cursor_name, cursor_name, sizeof(qs_cursor_name) - 1);
+    qs_cursor_name[sizeof(qs_cursor_name) - 1] = '\0';
+
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL server-side cursors are not supported in wire protocol level
+        // Use LIMIT/OFFSET pagination instead — qs_cursor_name is used as a marker
+        qs_cursor_open = 1;
+        return 0;
+    }
+
+    // PG: Build SELECT then wrap with DECLARE CURSOR
+    char inner_sql[4096];
+    int pos;
+    const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
+    pos = snprintf(inner_sql, sizeof(inner_sql), "SELECT %s FROM %s", cols, qs_table);
+    if (qs_where[0]) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " WHERE %s", qs_where);
+    if (qs_order[0]) pos += snprintf(inner_sql + pos, sizeof(inner_sql) - pos, " ORDER BY %s", qs_order);
+
+    char sql[4096 + 128];
+    snprintf(sql, sizeof(sql), "DECLARE %s CURSOR FOR %s", cursor_name, inner_sql);
+
+    debug_log_query(sql);
+
+    // Must be in a transaction for PG cursors
+    int rc;
+    if (qs_param_count > 0) {
+        rc = __db_execute_params(sql, qs_params, qs_param_count);
+    } else {
+        rc = __db_execute_stmt(sql);
+    }
+
+    if (rc >= 0) qs_cursor_open = 1;
+    return rc >= 0 ? 0 : -1;
+}
+
+// Fetch N rows from cursor
+// PG: FETCH n FROM cursor_name
+// MySQL: re-execute with LIMIT n OFFSET cursor_pos
+int32_t __qs_cursor_fetch(int32_t batch_size) {
+    if (!qs_cursor_open || qs_cursor_name[0] == '\0') return -1;
+
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL: use LIMIT/OFFSET pagination
+        static int mysql_cursor_offset = 0;
+        const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
+        char sql[4096];
+        int pos = snprintf(sql, sizeof(sql), "SELECT %s FROM %s", cols, qs_table);
+        if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+        if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d OFFSET %d", batch_size, mysql_cursor_offset);
+
+        debug_log_query(sql);
+
+        int rows;
+        if (qs_param_count > 0) {
+            rows = __db_query_params(sql, qs_params, qs_param_count);
+        } else {
+            rows = __db_query_exec(sql);
+        }
+        mysql_cursor_offset += batch_size;
+        if (rows == 0) {
+            // No more rows — close cursor
+            qs_cursor_open = 0;
+            mysql_cursor_offset = 0;
+        }
+        return rows;
+    }
+
+    // PG: FETCH n FROM cursor_name
+    char sql[128];
+    snprintf(sql, sizeof(sql), "FETCH %d FROM %s", batch_size, qs_cursor_name);
+    debug_log_query(sql);
+    int rows = __db_query_exec(sql);
+    if (rows == 0) qs_cursor_open = 0;
+    return rows;
+}
+
+// Close cursor
+int32_t __qs_cursor_close(void) {
+    if (!qs_cursor_open) return 0;
+
+    if (g_crud_dialect != DIALECT_MYSQL) {
+        char sql[128];
+        snprintf(sql, sizeof(sql), "CLOSE %s", qs_cursor_name);
+        debug_log_query(sql);
+        __db_execute_stmt(sql);
+    }
+
+    qs_cursor_open = 0;
+    qs_cursor_name[0] = '\0';
+    return 0;
+}
+
+// ============================================================
+// Phase 2: JSON Field Helpers
+// ============================================================
+
+// Update a JSON key within a column
+// PG: UPDATE t SET col = jsonb_set(col, '{key}', '"val"')
+// MySQL: UPDATE t SET col = JSON_SET(col, '$.key', 'val')
+int32_t __qs_json_set(const char* col, const char* key, const char* val) {
+    if (!col || !key || !val || qs_table[0] == '\0') return -1;
+
+    char sql[1024];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql),
+            "UPDATE %s SET %s = JSON_SET(COALESCE(%s, '{}'), '$.%s', '%s')",
+            qs_table, col, col, key, val);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "UPDATE %s SET %s = jsonb_set(COALESCE(%s, '{}')::jsonb, '{%s}', '\"%s\"')",
+            qs_table, col, col, key, val);
+    }
+
+    // Apply WHERE if set
+    if (qs_where[0]) {
+        int pos = strlen(sql);
+        snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    }
+
+    debug_log_query(sql);
+
+    if (qs_param_count > 0) {
+        return __db_execute_params(sql, qs_params, qs_param_count);
+    }
+    return __db_execute_stmt(sql);
+}
+
+// Extract a value from a JSON field
+// PG: SELECT col->>'key' FROM t WHERE ...
+// MySQL: SELECT JSON_UNQUOTE(JSON_EXTRACT(col, '$.key')) FROM t WHERE ...
+char* __qs_json_get(const char* col, const char* key) {
+    if (!col || !key || qs_table[0] == '\0') return "";
+
+    char sql[1024];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql),
+            "SELECT JSON_UNQUOTE(JSON_EXTRACT(%s, '$.%s')) FROM %s",
+            col, key, qs_table);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "SELECT %s->>'%s' FROM %s",
+            col, key, qs_table);
+    }
+
+    if (qs_where[0]) {
+        int pos = strlen(sql);
+        snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    }
+
+    int pos_sql = strlen(sql);
+    snprintf(sql + pos_sql, sizeof(sql) - pos_sql, " LIMIT 1");
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+
+    if (rows > 0) {
+        return __db_get_value_at(0, 0);
+    }
+    return "";
 }
 
 // ============================================================
