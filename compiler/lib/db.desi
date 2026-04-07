@@ -807,6 +807,113 @@ pub def advisory_try_lock(key: int) -> int:
 	Usage: if db.advisory_try_lock(42) == 1: ..."""
 	return __db_advisory_try_lock(key)
 
+# ============================================================
+# Phase 2: UPSERT (ON CONFLICT)
+# ============================================================
+
+pub def on_conflict(col: str) -> int:
+	"""Set the conflict column for upsert operations.
+	Must be called before do_upsert().
+	Django equivalent: Model.objects.update_or_create(defaults={...}, pk=1)
+	Usage:
+	  db.objects("users")
+	  db.on_conflict("email")
+	  db.set_field("name", "Alice")
+	  db.set_field("email", "alice@example.com")
+	  db.do_upsert()"""
+	return __qs_on_conflict(col)
+
+pub def do_upsert() -> int:
+	"""Execute an INSERT ... ON CONFLICT DO UPDATE (PG) / INSERT ... ON DUPLICATE KEY UPDATE (MySQL).
+	Must call on_conflict() and set_field() first.
+	Returns affected row count, or -1 on error.
+	Usage: db.objects("users"); db.on_conflict("email"); db.set_field("name","Ali"); db.do_upsert()"""
+	return __qs_do_upsert()
+
+# ============================================================
+# Phase 2: update_or_create
+# ============================================================
+
+pub def update_or_create() -> int:
+	"""Get existing row and update it, or create a new one.
+	Django equivalent: obj, created = Model.objects.update_or_create(defaults={"email":"new"}, name="Alice")
+	Use filter() for lookup and set_field() for all values before calling.
+	Returns: 1 if created, 0 if updated, -1 on error.
+	Usage:
+	  db.objects("users")
+	  db.filter("name", "=", "Alice")
+	  db.set_field("name", "Alice")
+	  db.set_field("email", "alice@new.com")
+	  let result = db.update_or_create()"""
+	return __qs_update_or_create()
+
+# ============================================================
+# Phase 2: Window Functions
+# ============================================================
+
+pub def window(func: str, over_clause: str, alias: str) -> int:
+	"""Add a window function to the SELECT clause.
+	Django equivalent: Window(expression=RowNumber(), partition_by=[F('dept')], order_by=F('salary').desc())
+	Generates: func OVER (over_clause) AS alias
+	Usage:
+	  db.objects("employees")
+	  db.window("ROW_NUMBER()", "PARTITION BY dept ORDER BY salary DESC", "row_num")
+	  db.fetch_all()"""
+	return __qs_window(func, over_clause, alias)
+
+# ============================================================
+# Phase 2: Server-Side Cursor
+# ============================================================
+
+pub def cursor_declare(name: str) -> int:
+	"""Declare a server-side cursor for the current queryset.
+	PG: DECLARE name CURSOR FOR SELECT ...
+	MySQL: uses LIMIT/OFFSET pagination internally.
+	Must be inside a transaction (PG requirement).
+	Usage:
+	  db.begin()
+	  db.objects("logs")
+	  db.cursor_declare("log_cursor")
+	  while db.cursor_fetch(100) > 0:
+	    # process batch
+	    pass
+	  db.cursor_close()
+	  db.commit()"""
+	return __qs_cursor_declare(name)
+
+pub def cursor_fetch(batch_size: int) -> int:
+	"""Fetch next batch of rows from a declared cursor.
+	PG: FETCH n FROM cursor_name
+	MySQL: re-executes with LIMIT n OFFSET (auto-incremented)
+	Returns row count (0 when no more rows).
+	Usage: let rows = db.cursor_fetch(100)"""
+	return __qs_cursor_fetch(batch_size)
+
+pub def cursor_close() -> int:
+	"""Close an open cursor and release resources.
+	PG: CLOSE cursor_name
+	MySQL: resets internal offset.
+	Usage: db.cursor_close()"""
+	return __qs_cursor_close()
+
+# ============================================================
+# Phase 2: JSON field helpers
+# ============================================================
+
+pub def json_set(col: str, key: str, val: str) -> int:
+	"""Set a JSON field value.
+	PG: jsonb_set(col, '{key}', '"val"')
+	MySQL: JSON_SET(col, '$.key', 'val')
+	Usage: db.objects("users"); db.json_set("settings", "theme", "dark")"""
+	return __qs_json_set(col, key, val)
+
+pub def json_get(col: str, key: str) -> str:
+	"""Extract a value from a JSON field.
+	PG: col->>'key'
+	MySQL: JSON_UNQUOTE(JSON_EXTRACT(col, '$.key'))
+	Usage: let theme = db.json_get("settings", "theme")"""
+	return __qs_json_get(col, key)
+
 pub def get_avg(col: str) -> str:
 	"""SELECT AVG(col) — returns string."""
 	return __qs_aggregate("AVG", col)
@@ -994,6 +1101,37 @@ pub def __db_advisory_unlock(key: int) -> int
 
 @extern("C")
 pub def __db_advisory_try_lock(key: int) -> int
+
+# ============================================================
+# Phase 2 extern C bindings
+# ============================================================
+
+@extern("C")
+pub def __qs_on_conflict(conflict_col: str) -> int
+
+@extern("C")
+pub def __qs_do_upsert() -> int
+
+@extern("C")
+pub def __qs_update_or_create() -> int
+
+@extern("C")
+pub def __qs_window(func: str, over_clause: str, alias: str) -> int
+
+@extern("C")
+pub def __qs_cursor_declare(cursor_name: str) -> int
+
+@extern("C")
+pub def __qs_cursor_fetch(batch_size: int) -> int
+
+@extern("C")
+pub def __qs_cursor_close() -> int
+
+@extern("C")
+pub def __qs_json_set(col: str, key: str, val: str) -> int
+
+@extern("C")
+pub def __qs_json_get(col: str, key: str) -> str
 
 # ============================================================
 # Values C bindings (db_crud.c)

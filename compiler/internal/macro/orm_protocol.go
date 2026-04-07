@@ -59,6 +59,9 @@ func ormProtocolFallback() *MacroProtocol {
 		"only":         {Name: "only", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
 		"defer_fields": {Name: "defer_fields", ArgStyle: "positional", KwargsFunc: "__qs_defer", IsChainable: true},
 
+		// Phase 2 terminal methods
+		"update_or_create": {Name: "update_or_create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_update_or_create", IsTerminal: true},
+
 		// Bulk operations
 		"bulk_create": {Name: "bulk_create", ArgStyle: "none", TerminalFunc: "__qs_bulk_create", IsTerminal: true},
 		"bulk_update": {Name: "bulk_update", ArgStyle: "none", TerminalFunc: "__qs_bulk_update", IsTerminal: true},
@@ -87,7 +90,16 @@ func ormProtocolFallback() *MacroProtocol {
 		"only":      "__qs_only",
 		"defer":     "__qs_defer",
 		"explain":   "__qs_explain",
-		"get_or_create": "__qs_get_or_create",
+		"get_or_create":    "__qs_get_or_create",
+		"update_or_create": "__qs_update_or_create",
+		"on_conflict":      "__qs_on_conflict",
+		"upsert":           "__qs_do_upsert",
+		"window":           "__qs_window",
+		"cursor_declare":   "__qs_cursor_declare",
+		"cursor_fetch":     "__qs_cursor_fetch",
+		"cursor_close":     "__qs_cursor_close",
+		"json_set":         "__qs_json_set",
+		"json_get":         "__qs_json_get",
 	}
 
 	return &MacroProtocol{
