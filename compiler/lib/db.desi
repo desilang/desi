@@ -643,6 +643,14 @@ pub def group_by(cols: str) -> int:
 	Often used with annotate() for grouped aggregations."""
 	return __qs_group_by(cols)
 
+pub def raw(sql: str) -> int:
+	"""Execute raw SQL query directly.
+	For SELECT: populates result set, returns row count.
+	For DML (INSERT/UPDATE/DELETE): returns affected rows.
+	Usage: db.raw("SELECT * FROM users WHERE age > 21")
+	Django equivalent: Model.objects.raw("SELECT ...")"""
+	return __qs_raw(sql)
+
 pub def fetch_all() -> int:
 	"""Execute SELECT and return row count (like Django's .all())."""
 	return __qs_fetch()
@@ -832,6 +840,9 @@ pub def __qs_group_by(cols: str) -> int
 
 @extern("C")
 pub def __db_using(db_name: str) -> int
+
+@extern("C")
+pub def __qs_raw(sql: str) -> int
 
 # ============================================================
 # Values C bindings (db_crud.c)

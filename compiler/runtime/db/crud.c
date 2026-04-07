@@ -210,17 +210,48 @@ static void parse_lookup(const char* lookup, const char* val,
         strcpy(op_out, ">");
     } else if (strcmp(suffix, "gte") == 0) {
         strcpy(op_out, ">=");
+    } else if (strcmp(suffix, "ne") == 0) {
+        strcpy(op_out, "!=");
     } else if (strcmp(suffix, "exact") == 0) {
         strcpy(op_out, "=");
+    } else if (strcmp(suffix, "iexact") == 0) {
+        // Case-insensitive exact: PG uses ILIKE, MySQL uses = (already case-insensitive)
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            strcpy(op_out, "=");
+        } else {
+            strcpy(op_out, "ILIKE");
+        }
     } else if (strcmp(suffix, "contains") == 0) {
         strcpy(op_out, "LIKE");
         // Modify the VALUE (not the SQL) to add wildcards
         snprintf(val_out, 512, "%%%s%%", val);
+    } else if (strcmp(suffix, "icontains") == 0) {
+        // Case-insensitive LIKE
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            strcpy(op_out, "LIKE");  // MySQL LIKE is case-insensitive by default
+        } else {
+            strcpy(op_out, "ILIKE"); // PG has ILIKE
+        }
+        snprintf(val_out, 512, "%%%s%%", val);
     } else if (strcmp(suffix, "startswith") == 0) {
         strcpy(op_out, "LIKE");
         snprintf(val_out, 512, "%s%%", val);
+    } else if (strcmp(suffix, "istartswith") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            strcpy(op_out, "LIKE");
+        } else {
+            strcpy(op_out, "ILIKE");
+        }
+        snprintf(val_out, 512, "%s%%", val);
     } else if (strcmp(suffix, "endswith") == 0) {
         strcpy(op_out, "LIKE");
+        snprintf(val_out, 512, "%%%s", val);
+    } else if (strcmp(suffix, "iendswith") == 0) {
+        if (g_crud_dialect == DIALECT_MYSQL) {
+            strcpy(op_out, "LIKE");
+        } else {
+            strcpy(op_out, "ILIKE");
+        }
         snprintf(val_out, 512, "%%%s", val);
     } else if (strcmp(suffix, "isnull") == 0) {
         if (strcmp(val, "true") == 0) {
@@ -233,6 +264,10 @@ static void parse_lookup(const char* lookup, const char* val,
     } else if (strcmp(suffix, "in") == 0) {
         strcpy(op_out, "IN");
         *is_in_out = 1;
+    } else if (strcmp(suffix, "range") == 0) {
+        strcpy(op_out, "BETWEEN");
+        // val should be "low,high" — we'll handle this specially in the filter
+        *is_in_out = 2; // signal: range mode
     } else {
         // Unknown suffix — treat as exact match on full name
         *dunder = '_';
@@ -288,7 +323,32 @@ int32_t __qs_filter(const char* lookup, const char* val) {
     if (strcmp(op, "IS") == 0 || strcmp(op, "IS NOT") == 0) {
         // IS NULL / IS NOT NULL — no parameter needed
         snprintf(condition, sizeof(condition), "%s %s %s", col, op, parsed_val);
-    } else if (is_in) {
+    } else if (is_in == 2) {
+        // BETWEEN — split "low,high" into two params
+        char buf[512];
+        strncpy(buf, val, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        char* comma = strchr(buf, ',');
+        if (comma) {
+            *comma = '\0';
+            char* low = buf;
+            char* high = comma + 1;
+            while (*low == ' ') low++;
+            while (*high == ' ') high++;
+            int p1 = add_param_copy(low);
+            int p2 = add_param_copy(high);
+            char ph1[16], ph2[16];
+            write_placeholder(ph1, sizeof(ph1), p1);
+            write_placeholder(ph2, sizeof(ph2), p2);
+            snprintf(condition, sizeof(condition), "%s BETWEEN %s AND %s", col, ph1, ph2);
+        } else {
+            // Malformed range, fallback to exact match
+            int param_idx = add_param_copy(parsed_val);
+            char ph[16];
+            write_placeholder(ph, sizeof(ph), param_idx);
+            snprintf(condition, sizeof(condition), "%s = %s", col, ph);
+        }
+    } else if (is_in == 1) {
         // IN operator — expand to multiple placeholders
         char in_clause[512];
         emit_in_placeholders(val, in_clause, sizeof(in_clause));
@@ -615,6 +675,32 @@ char* __qs_aggregate(const char* func, const char* col) {
         return __db_get_value_at(0, 0);
     }
     return strdup("0");
+}
+
+// ============================================================
+// Raw SQL — execute arbitrary SQL
+// ============================================================
+
+// Execute raw SQL query (Django .raw() equivalent)
+// For SELECT: populates result set, returns row count
+// For DML: executes statement, returns affected rows
+int32_t __qs_raw(const char* sql) {
+    if (!sql || sql[0] == '\0') return -1;
+
+    debug_log_query(sql);
+
+    // Detect if it's a SELECT query
+    const char* s = sql;
+    while (*s == ' ' || *s == '\t' || *s == '\n') s++;
+
+    if (strncasecmp(s, "SELECT", 6) == 0 ||
+        strncasecmp(s, "WITH", 4) == 0 ||
+        strncasecmp(s, "SHOW", 4) == 0 ||
+        strncasecmp(s, "EXPLAIN", 7) == 0) {
+        return __db_query_exec(sql);
+    } else {
+        return __db_execute_stmt(sql);
+    }
 }
 
 // ============================================================
