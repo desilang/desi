@@ -100,6 +100,16 @@ func ormProtocolFallback() *MacroProtocol {
 		"cursor_close":     "__qs_cursor_close",
 		"json_set":         "__qs_json_set",
 		"json_get":         "__qs_json_get",
+		"cte_add":              "__qs_cte_add",
+		"cte_recursive":        "__qs_cte_recursive",
+		"cte_fetch":            "__qs_cte_fetch",
+		"subquery_build":       "__qs_subquery_build",
+		"filter_exists":        "__qs_filter_exists",
+		"filter_not_exists":    "__qs_filter_not_exists",
+		"filter_in_subquery":   "__qs_filter_in_subquery",
+		"filter_not_in_subquery": "__qs_filter_not_in_subquery",
+		"prefetch_add":         "__qs_prefetch_add",
+		"prefetch_execute":     "__qs_prefetch_execute",
 	}
 
 	return &MacroProtocol{
