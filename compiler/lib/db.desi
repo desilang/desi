@@ -1011,6 +1011,106 @@ pub def prefetch_execute() -> int:
 	Usage: let rows = db.prefetch_execute()"""
 	return __qs_prefetch_execute()
 
+# ============================================================
+# Phase 4: JSON_TABLE — extract relational data from JSON
+# ============================================================
+
+pub def json_table(json_col: str, json_path: str, columns_def: str, alias: str) -> int:
+	"""Transform a JSON column into relational rows using JSON_TABLE.
+	PG 17: json_table(col, '$.path' COLUMNS (...))
+	MySQL 8: JSON_TABLE(col, '$.path' COLUMNS (...))
+	
+	Parameters:
+	  json_col: the JSON column name
+	  json_path: the JSON path expression (e.g., '$.items[*]')
+	  columns_def: column definitions (e.g., "name TEXT PATH '$.name', qty INT PATH '$.qty'")
+	  alias: table alias for the result
+	
+	Usage:
+	  db.objects("orders")
+	  let rows = db.json_table("data", "$.items[*]",
+	    "name TEXT PATH '$.name', qty INT PATH '$.qty'", "jt")"""
+	return __qs_json_table(json_col, json_path, columns_def, alias)
+
+# ============================================================
+# Phase 4: Full-Text Search
+# ============================================================
+
+pub def fts_filter(col: str, query: str, config: str) -> int:
+	"""Add a full-text search filter to the WHERE clause.
+	PG: to_tsvector(config, col) @@ to_tsquery(config, query)
+	MySQL: MATCH(col) AGAINST (query IN BOOLEAN MODE)
+	
+	Parameters:
+	  col: column to search
+	  query: search terms (PG tsquery syntax or MySQL boolean syntax)
+	  config: language config (PG: 'english', 'simple', etc.; MySQL: ignored)
+	
+	Usage:
+	  db.objects("articles")
+	  db.fts_filter("body", "machine & learning", "english")
+	  db.fetch_all()"""
+	return __qs_fts_filter(col, query, config)
+
+pub def fts_rank(col: str, query: str, config: str, alias: str) -> int:
+	"""Add a full-text search relevance ranking column to SELECT.
+	PG: ts_rank(to_tsvector(config, col), to_tsquery(config, query)) AS alias
+	MySQL: MATCH(col) AGAINST (query) AS alias
+	
+	Combine with fts_filter() + order_by() for ranked search results.
+	
+	Usage:
+	  db.objects("articles")
+	  db.fts_filter("body", "deep learning", "english")
+	  db.fts_rank("body", "deep learning", "english", "relevance")
+	  db.order_by("-relevance")
+	  db.fetch_all()"""
+	return __qs_fts_rank(col, query, config, alias)
+
+pub def fts_create_index(table: str, col: str, idx_name: str, config: str) -> int:
+	"""Create a full-text search index on a column.
+	PG: CREATE INDEX idx ON table USING gin(to_tsvector(config, col))
+	MySQL: ALTER TABLE table ADD FULLTEXT INDEX idx(col)
+	
+	Usage:
+	  db.fts_create_index("articles", "body", "idx_articles_body_fts", "english")"""
+	return __qs_fts_create_index(table, col, idx_name, config)
+
+# ============================================================
+# Phase 4: Vector Similarity Search
+# ============================================================
+
+pub def vector_search(col: str, vector_str: str, metric: str, k: int) -> int:
+	"""Configure nearest-neighbor vector similarity search.
+	PG (pgvector): ORDER BY embedding <=> '[0.1,0.2,...]' LIMIT k
+	MySQL 9 (VECTOR): ORDER BY DISTANCE(embedding, TO_VECTOR('[...]'), 'COSINE') LIMIT k
+	
+	Parameters:
+	  col: vector column name
+	  vector_str: query vector as string "[0.1, 0.2, 0.3, ...]"
+	  metric: distance metric — "cosine" | "l2" | "ip" (inner product)
+	  k: number of nearest neighbors to return
+	
+	Sets ORDER BY distance + LIMIT k. Call fetch_all() after.
+	
+	Usage:
+	  db.objects("documents")
+	  db.vector_search("embedding", "[0.1, 0.2, 0.3]", "cosine", 10)
+	  db.fetch_all()  # returns 10 most similar documents"""
+	return __qs_vector_search(col, vector_str, metric, k)
+
+pub def vector_create_index(table: str, col: str, idx_name: str, metric: str) -> int:
+	"""Create a vector similarity index.
+	PG (pgvector): CREATE INDEX idx ON table USING hnsw (col vector_cosine_ops)
+	MySQL 9: ALTER TABLE table ADD VECTOR INDEX idx(col) DISTANCE = 'COSINE'
+	
+	Parameters:
+	  metric: "cosine" | "l2" | "ip" (determines operator class)
+	
+	Usage:
+	  db.vector_create_index("documents", "embedding", "idx_docs_embedding", "cosine")"""
+	return __qs_vector_create_index(table, col, idx_name, metric)
+
 pub def get_avg(col: str) -> str:
 	"""SELECT AVG(col) — returns string."""
 	return __qs_aggregate("AVG", col)
@@ -1263,6 +1363,28 @@ pub def __qs_prefetch_add(related_table: str, fk_col: str, pk_col: str) -> int
 
 @extern("C")
 pub def __qs_prefetch_execute() -> int
+
+# ============================================================
+# Phase 4 extern C bindings
+# ============================================================
+
+@extern("C")
+pub def __qs_json_table(json_col: str, json_path: str, columns_def: str, alias: str) -> int
+
+@extern("C")
+pub def __qs_fts_filter(col: str, query: str, config: str) -> int
+
+@extern("C")
+pub def __qs_fts_rank(col: str, query: str, config: str, alias: str) -> int
+
+@extern("C")
+pub def __qs_fts_create_index(table: str, col: str, idx_name: str, config: str) -> int
+
+@extern("C")
+pub def __qs_vector_search(col: str, vector_str: str, metric: str, k: int) -> int
+
+@extern("C")
+pub def __qs_vector_create_index(table: str, col: str, idx_name: str, metric: str) -> int
 
 # ============================================================
 # Values C bindings (db_crud.c)

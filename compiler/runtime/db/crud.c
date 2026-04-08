@@ -1762,6 +1762,219 @@ int32_t __qs_prefetch_execute(void) {
 }
 
 // ============================================================
+// Phase 4: JSON_TABLE — extract relational data from JSON
+// ============================================================
+
+// JSON_TABLE: transform JSON column into rows
+// PG 17: SELECT * FROM json_table(col, '$.items[*]' COLUMNS (name TEXT PATH '$.name', qty INT PATH '$.qty'))
+// MySQL 8.0.4+: SELECT * FROM table, JSON_TABLE(col, '$.items[*]' COLUMNS (...)) AS jt
+//
+// This function builds and executes a JSON_TABLE query
+// json_col: the JSON column name
+// json_path: the JSON path expression (e.g., '$.items[*]')
+// columns_def: column definitions (e.g., "name TEXT PATH '$.name', qty INT PATH '$.qty'")
+// alias: table alias for JSON_TABLE result
+int32_t __qs_json_table(const char* json_col, const char* json_path,
+                         const char* columns_def, const char* alias) {
+    if (!json_col || !json_path || !columns_def || !alias || qs_table[0] == '\0') return -1;
+
+    char sql[8192];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL: SELECT jt.* FROM table t, JSON_TABLE(t.col, '$.path' COLUMNS (defs)) AS jt
+        snprintf(sql, sizeof(sql),
+            "SELECT %s.* FROM %s, JSON_TABLE(%s, '%s' COLUMNS (%s)) AS %s",
+            alias, qs_table, json_col, json_path, columns_def, alias);
+    } else {
+        // PG 17: SELECT * FROM table, json_table(col, '$.path' COLUMNS (defs)) AS jt
+        // PG uses lowercase json_table (SQL/JSON standard function)
+        snprintf(sql, sizeof(sql),
+            "SELECT %s.* FROM %s, json_table(%s, '%s' COLUMNS (%s)) AS %s",
+            alias, qs_table, json_col, json_path, columns_def, alias);
+    }
+
+    // Apply WHERE if set (on main table)
+    if (qs_where[0]) {
+        int pos = strlen(sql);
+        snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    }
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+    return rows;
+}
+
+// ============================================================
+// Phase 4: Full-Text Search
+// ============================================================
+
+// Full-text search query
+// PG: WHERE to_tsvector('english', col) @@ to_tsquery('english', query)
+// MySQL: WHERE MATCH(col) AGAINST (query IN BOOLEAN MODE)
+//
+// config: language/config name (PG: 'english', MySQL: ignored)
+int32_t __qs_fts_filter(const char* col, const char* query, const char* config) {
+    if (!col || !query) return -1;
+
+    char condition[1024];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL: MATCH(col) AGAINST ('query' IN BOOLEAN MODE)
+        snprintf(condition, sizeof(condition),
+            "MATCH(%s) AGAINST ('%s' IN BOOLEAN MODE)", col, query);
+    } else {
+        // PG: to_tsvector(config, col) @@ to_tsquery(config, query)
+        const char* cfg = (config && config[0]) ? config : "english";
+        snprintf(condition, sizeof(condition),
+            "to_tsvector('%s', %s) @@ to_tsquery('%s', '%s')", cfg, col, cfg, query);
+    }
+
+    // Append to WHERE
+    if (qs_where[0]) {
+        int len = strlen(qs_where);
+        snprintf(qs_where + len, sizeof(qs_where) - len, " AND %s", condition);
+    } else {
+        strncpy(qs_where, condition, sizeof(qs_where) - 1);
+    }
+
+    return 0;
+}
+
+// Full-text search with ranking/relevance score
+// PG: ts_rank(to_tsvector('english', col), to_tsquery('english', query)) AS rank
+// MySQL: MATCH(col) AGAINST ('query') AS rank
+int32_t __qs_fts_rank(const char* col, const char* query, const char* config,
+                       const char* alias) {
+    if (!col || !query || !alias) return -1;
+
+    char expr[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(expr, sizeof(expr),
+            "MATCH(%s) AGAINST ('%s') AS %s", col, query, alias);
+    } else {
+        const char* cfg = (config && config[0]) ? config : "english";
+        snprintf(expr, sizeof(expr),
+            "ts_rank(to_tsvector('%s', %s), to_tsquery('%s', '%s')) AS %s",
+            cfg, col, cfg, query, alias);
+    }
+
+    // Add to qs_columns
+    if (qs_columns[0] != '\0') {
+        int len = strlen(qs_columns);
+        snprintf(qs_columns + len, sizeof(qs_columns) - len, ", %s", expr);
+    } else {
+        snprintf(qs_columns, sizeof(qs_columns), "*, %s", expr);
+    }
+
+    return 0;
+}
+
+// Create a full-text search index on a column
+// PG: CREATE INDEX idx ON table USING gin(to_tsvector('english', col))
+// MySQL: ALTER TABLE table ADD FULLTEXT INDEX idx(col)
+int32_t __qs_fts_create_index(const char* table, const char* col, const char* idx_name,
+                               const char* config) {
+    if (!table || !col || !idx_name) return -1;
+
+    char sql[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(sql, sizeof(sql),
+            "ALTER TABLE %s ADD FULLTEXT INDEX %s(%s)", table, idx_name, col);
+    } else {
+        const char* cfg = (config && config[0]) ? config : "english";
+        snprintf(sql, sizeof(sql),
+            "CREATE INDEX %s ON %s USING gin(to_tsvector('%s', %s))",
+            idx_name, table, cfg, col);
+    }
+
+    debug_log_query(sql);
+    return __db_execute_stmt(sql);
+}
+
+// ============================================================
+// Phase 4: Vector Similarity Search
+// ============================================================
+
+// Vector similarity search (cosine / L2 / inner product)
+// PG (pgvector): ORDER BY embedding <=> '[0.1,0.2,...]' LIMIT k
+// MySQL 9 (VECTOR): ORDER BY DISTANCE(embedding, TO_VECTOR('[0.1,0.2,...]'), 'COSINE') LIMIT k
+//
+// col: vector column name
+// vector_str: vector as string "[0.1, 0.2, 0.3, ...]"
+// metric: "cosine" | "l2" | "ip" (inner product)
+// k: number of nearest neighbors
+int32_t __qs_vector_search(const char* col, const char* vector_str,
+                            const char* metric, int32_t k) {
+    if (!col || !vector_str || qs_table[0] == '\0') return -1;
+
+    char order_expr[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        // MySQL 9 VECTOR type with DISTANCE function
+        const char* dist_metric = "COSINE";
+        if (metric) {
+            if (strcmp(metric, "l2") == 0) dist_metric = "L2";
+            else if (strcmp(metric, "ip") == 0) dist_metric = "DOT";
+        }
+        snprintf(order_expr, sizeof(order_expr),
+            "DISTANCE(%s, TO_VECTOR('%s'), '%s')", col, vector_str, dist_metric);
+    } else {
+        // PG pgvector: operator depends on metric
+        // cosine: <=>  l2: <->  ip: <#>
+        const char* op = "<=>";
+        if (metric) {
+            if (strcmp(metric, "l2") == 0) op = "<->";
+            else if (strcmp(metric, "ip") == 0) op = "<#>";
+        }
+        snprintf(order_expr, sizeof(order_expr),
+            "%s %s '%s'", col, op, vector_str);
+    }
+
+    // Set ORDER BY and LIMIT
+    strncpy(qs_order, order_expr, sizeof(qs_order) - 1);
+    qs_order[sizeof(qs_order) - 1] = '\0';
+    qs_limit = k;
+
+    return 0;
+}
+
+// Create a vector index (HNSW or IVFFlat for PG, VECTOR INDEX for MySQL)
+// PG: CREATE INDEX idx ON table USING hnsw (col vector_cosine_ops)
+// MySQL: ALTER TABLE table ADD VECTOR INDEX idx(col) [DISTANCE = 'COSINE']
+int32_t __qs_vector_create_index(const char* table, const char* col,
+                                  const char* idx_name, const char* metric) {
+    if (!table || !col || !idx_name) return -1;
+
+    char sql[512];
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        const char* dist = "COSINE";
+        if (metric) {
+            if (strcmp(metric, "l2") == 0) dist = "L2";
+            else if (strcmp(metric, "ip") == 0) dist = "DOT";
+        }
+        snprintf(sql, sizeof(sql),
+            "ALTER TABLE %s ADD VECTOR INDEX %s(%s) DISTANCE = '%s'",
+            table, idx_name, col, dist);
+    } else {
+        // PG pgvector: use hnsw index with ops class
+        const char* ops = "vector_cosine_ops";
+        if (metric) {
+            if (strcmp(metric, "l2") == 0) ops = "vector_l2_ops";
+            else if (strcmp(metric, "ip") == 0) ops = "vector_ip_ops";
+        }
+        snprintf(sql, sizeof(sql),
+            "CREATE INDEX %s ON %s USING hnsw (%s %s)",
+            idx_name, table, col, ops);
+    }
+
+    debug_log_query(sql);
+    return __db_execute_stmt(sql);
+}
+
+// ============================================================
 // INSERT with parameterized key-value pairs
 // ============================================================
 
