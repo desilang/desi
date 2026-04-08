@@ -358,6 +358,208 @@ User.objects.filter(Q(age__gt="18") | Q(age__lt="10") & Q(status="active"))
 
 Operator precedence: `&` (AND) binds tighter than `|` (OR), matching Python/Django behavior.
 
+## Advanced QuerySet Methods
+
+### UPSERT (ON CONFLICT)
+
+Insert-or-update with conflict resolution:
+
+```desi
+# Set the conflict detection column, then insert fields
+db.objects("users")
+db.on_conflict("email")                 # conflict column
+db.set_field("name", "Alice")
+db.set_field("email", "alice@example.com")
+db.do_upsert()
+# PG:    INSERT INTO users (name,email) VALUES ($1,$2) ON CONFLICT (email) DO UPDATE SET name=$1,email=$2
+# MySQL: INSERT INTO users (name,email) VALUES (?,?) ON DUPLICATE KEY UPDATE name=VALUES(name),email=VALUES(email)
+```
+
+### update_or_create
+
+Find-and-update or create a new row — Django's `update_or_create()`:
+
+```desi
+db.objects("users")
+db.filter("name", "=", "Alice")        # lookup fields
+db.set_field("name", "Alice")          # all fields for insert/update
+db.set_field("email", "alice@new.com")
+let result = db.update_or_create()
+# Returns: 1 (created), 0 (updated), -1 (error)
+```
+
+### JSON Field Helpers
+
+Read and write individual keys inside JSON/JSONB columns:
+
+```desi
+# Set a key inside a JSON column
+db.objects("users")
+db.filter("id", "=", "42")
+db.json_set("settings", "theme", "dark")
+# PG:    UPDATE users SET settings = jsonb_set(settings, '{theme}', '"dark"') WHERE id = $1
+# MySQL: UPDATE users SET settings = JSON_SET(settings, '$.theme', 'dark') WHERE id = ?
+
+# Get a key from a JSON column
+db.objects("users")
+db.filter("id", "=", "42")
+let theme = db.json_get("settings", "theme")
+# PG:    SELECT settings->>'theme' FROM users WHERE id = $1 LIMIT 1
+# MySQL: SELECT JSON_UNQUOTE(JSON_EXTRACT(settings, '$.theme')) FROM users WHERE id = ? LIMIT 1
+```
+
+### Window Functions
+
+Add window function expressions to your SELECT:
+
+```desi
+db.objects("employees")
+db.window("ROW_NUMBER()", "PARTITION BY dept ORDER BY salary DESC", "row_num")
+db.fetch_all()
+# SELECT *, ROW_NUMBER() OVER (PARTITION BY dept ORDER BY salary DESC) AS row_num FROM employees
+```
+
+Supported functions: `ROW_NUMBER()`, `RANK()`, `DENSE_RANK()`, `LAG()`, `LEAD()`, `SUM()`, `AVG()`, etc.
+
+### Server-Side Cursors
+
+Process large result sets in batches without loading everything into memory:
+
+```desi
+db.begin()                            # PG requires cursors inside transactions
+db.objects("audit_logs")
+db.cursor_declare("log_cursor")
+while db.cursor_fetch(100) > 0:       # fetch 100 rows at a time
+    # process batch...
+    pass
+db.cursor_close()
+db.commit()
+# PG:    DECLARE log_cursor CURSOR FOR SELECT * FROM audit_logs
+#        FETCH 100 FROM log_cursor
+# MySQL: SELECT * FROM audit_logs LIMIT 100 OFFSET 0 (auto-paginated)
+```
+
+### CTEs (Common Table Expressions)
+
+Build `WITH` clauses for complex queries:
+
+```desi
+# Simple CTE
+db.objects("active_users")
+db.cte("active_users", "SELECT * FROM users WHERE is_active = true")
+let rows = db.cte_fetch()
+# WITH active_users AS (SELECT * FROM users WHERE is_active = true) SELECT * FROM active_users
+
+# Recursive CTE (hierarchical data)
+db.cte("tree", "SELECT id, parent_id, name FROM categories WHERE parent_id IS NULL " +
+    "UNION ALL SELECT c.id, c.parent_id, c.name FROM categories c JOIN tree t ON c.parent_id = t.id")
+db.cte_recursive()
+db.objects("tree")
+let rows = db.cte_fetch()
+# WITH RECURSIVE tree AS (...) SELECT * FROM tree
+```
+
+### Subqueries
+
+Use `EXISTS`, `NOT EXISTS`, `IN`, and `NOT IN` with nested queries:
+
+```desi
+# EXISTS: find users who have orders
+db.objects("users")
+let sub = db.subquery("orders", "1", "orders.user_id = users.id")
+db.filter_exists(sub)
+db.fetch_all()
+# SELECT * FROM users WHERE EXISTS (SELECT 1 FROM orders WHERE orders.user_id = users.id)
+
+# IN: find users with high-value orders
+db.objects("users")
+db.filter_in_subquery("id", db.subquery("orders", "user_id", "total > 100"))
+db.fetch_all()
+# SELECT * FROM users WHERE id IN (SELECT user_id FROM orders WHERE total > 100)
+
+# NOT EXISTS / NOT IN also available:
+db.filter_not_exists(sub)
+db.filter_not_in_subquery("id", db.subquery("banned_users", "user_id", ""))
+```
+
+### prefetch_related (N+1 Optimization)
+
+Batch-fetch related rows to avoid N+1 query problems:
+
+```desi
+db.objects("posts")
+db.prefetch_related("comments", "post_id", "id")  # related_table, fk_col, pk_col
+let rows = db.prefetch_execute()
+# 1. SELECT * FROM posts
+# 2. SELECT * FROM comments WHERE post_id IN ('1','2','3',...)  (batch query)
+```
+
+### JSON_TABLE (PG 17 / MySQL 8)
+
+Transform JSON columns into relational rows:
+
+```desi
+db.objects("orders")
+let rows = db.json_table("data", "$.items[*]",
+    "name TEXT PATH '$.name', qty INT PATH '$.qty'", "jt")
+# PG:    SELECT jt.* FROM orders, json_table(data, '$.items[*]' COLUMNS (name TEXT PATH '$.name', qty INT PATH '$.qty')) AS jt
+# MySQL: SELECT jt.* FROM orders, JSON_TABLE(data, '$.items[*]' COLUMNS (name TEXT PATH '$.name', qty INT PATH '$.qty')) AS jt
+```
+
+### Full-Text Search
+
+Search text columns using native database full-text capabilities:
+
+```desi
+# Filter by full-text search
+db.objects("articles")
+db.fts_filter("body", "machine & learning", "english")
+db.fetch_all()
+# PG:    WHERE to_tsvector('english', body) @@ to_tsquery('english', 'machine & learning')
+# MySQL: WHERE MATCH(body) AGAINST ('machine & learning' IN BOOLEAN MODE)
+
+# Ranked search results
+db.objects("articles")
+db.fts_filter("body", "deep learning", "english")
+db.fts_rank("body", "deep learning", "english", "relevance")
+db.order_by("-relevance")
+db.fetch_all()
+# PG:    SELECT *, ts_rank(to_tsvector('english', body), to_tsquery('english', 'deep learning')) AS relevance ... ORDER BY relevance DESC
+
+# Create a full-text index
+db.fts_create_index("articles", "body", "idx_articles_body_fts", "english")
+# PG:    CREATE INDEX idx_articles_body_fts ON articles USING gin(to_tsvector('english', body))
+# MySQL: ALTER TABLE articles ADD FULLTEXT INDEX idx_articles_body_fts(body)
+```
+
+### Vector Similarity Search (pgvector / MySQL 9)
+
+Find nearest neighbors using vector embeddings:
+
+```desi
+# Search for the 10 most similar documents
+db.objects("documents")
+db.vector_search("embedding", "[0.1, 0.2, 0.3]", "cosine", 10)
+db.fetch_all()
+# PG:    SELECT * FROM documents ORDER BY embedding <=> '[0.1, 0.2, 0.3]' LIMIT 10
+# MySQL: SELECT * FROM documents ORDER BY DISTANCE(embedding, TO_VECTOR('[0.1, 0.2, 0.3]'), 'COSINE') LIMIT 10
+```
+
+**Distance metrics:**
+
+| Metric | PG Operator | MySQL | Use Case |
+|--------|-------------|-------|----------|
+| `"cosine"` | `<=>` | `COSINE` | Normalized embeddings (most common) |
+| `"l2"` | `<->` | `L2` | Euclidean distance |
+| `"ip"` | `<#>` | `DOT` | Inner product |
+
+```desi
+# Create a vector index for fast similarity search
+db.vector_create_index("documents", "embedding", "idx_docs_embedding", "cosine")
+# PG:    CREATE INDEX idx_docs_embedding ON documents USING hnsw (embedding vector_cosine_ops)
+# MySQL: ALTER TABLE documents ADD VECTOR INDEX idx_docs_embedding(embedding) DISTANCE = 'COSINE'
+```
+
 ## See Also
 
 - [Database & ORM](database.md) — CRUD operations, query builder, transactions
