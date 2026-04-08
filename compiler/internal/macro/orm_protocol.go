@@ -110,6 +110,12 @@ func ormProtocolFallback() *MacroProtocol {
 		"filter_not_in_subquery": "__qs_filter_not_in_subquery",
 		"prefetch_add":         "__qs_prefetch_add",
 		"prefetch_execute":     "__qs_prefetch_execute",
+		"json_table":           "__qs_json_table",
+		"fts_filter":           "__qs_fts_filter",
+		"fts_rank":             "__qs_fts_rank",
+		"fts_create_index":     "__qs_fts_create_index",
+		"vector_search":        "__qs_vector_search",
+		"vector_create_index":  "__qs_vector_create_index",
 	}
 
 	return &MacroProtocol{
