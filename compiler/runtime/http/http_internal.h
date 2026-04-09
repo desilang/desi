@@ -10,6 +10,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <stdint.h>
+#include <time.h>
 
 /* ---- Platform socket abstraction ---- */
 

@@ -2033,46 +2033,6 @@ int32_t __qs_do_insert(void) {
     return result;
 }
 
-// Legacy fixed-arg create functions (kept for backward compat, now use params)
-int32_t __qs_create1(const char* k1, const char* v1) {
-    __qs_set_field(k1, v1);
-    return __qs_do_insert();
-}
-
-int32_t __qs_create2(const char* k1, const char* v1, const char* k2, const char* v2) {
-    __qs_set_field(k1, v1);
-    __qs_set_field(k2, v2);
-    return __qs_do_insert();
-}
-
-int32_t __qs_create3(const char* k1, const char* v1, const char* k2, const char* v2,
-                     const char* k3, const char* v3) {
-    __qs_set_field(k1, v1);
-    __qs_set_field(k2, v2);
-    __qs_set_field(k3, v3);
-    return __qs_do_insert();
-}
-
-int32_t __qs_create4(const char* k1, const char* v1, const char* k2, const char* v2,
-                     const char* k3, const char* v3, const char* k4, const char* v4) {
-    __qs_set_field(k1, v1);
-    __qs_set_field(k2, v2);
-    __qs_set_field(k3, v3);
-    __qs_set_field(k4, v4);
-    return __qs_do_insert();
-}
-
-int32_t __qs_create5(const char* k1, const char* v1, const char* k2, const char* v2,
-                     const char* k3, const char* v3, const char* k4, const char* v4,
-                     const char* k5, const char* v5) {
-    __qs_set_field(k1, v1);
-    __qs_set_field(k2, v2);
-    __qs_set_field(k3, v3);
-    __qs_set_field(k4, v4);
-    __qs_set_field(k5, v5);
-    return __qs_do_insert();
-}
-
 // Get by ID (parameterized)
 int32_t __qs_get_by_id(int32_t id_val) {
     char id_str[32];
