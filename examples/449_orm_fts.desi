@@ -1,0 +1,46 @@
+# Example 449: ORM Phase 4 — Full-text search
+# Demonstrates: @model + FTS index creation, filtered search, ranked results
+# EXPECTED_OUTPUT:
+# === Phase 4: Full-Text Search ===
+# Created articles
+# FTS index created
+# FTS search rows: 2
+# === Done ===
+import db
+
+db.use_postgres()
+
+@model("articles_p4")
+class Article:
+	pub title: CharField(200)
+	pub body: TextField()
+
+def main() -> int:
+	print("=== Phase 4: Full-Text Search ===")
+	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+
+	# Create table
+	db.execute("DROP TABLE IF EXISTS articles_p4")
+	db.execute("CREATE TABLE articles_p4 (id SERIAL PRIMARY KEY, title VARCHAR(200), body TEXT)")
+
+	# Django-style .create()
+	Article.objects.create(title="Intro to Machine Learning", body="Machine learning is a subset of artificial intelligence that focuses on building systems that learn from data")
+	Article.objects.create(title="Deep Learning Basics", body="Deep learning uses neural networks with many layers to learn representations of data with multiple levels of abstraction")
+	Article.objects.create(title="Cooking Recipes", body="This article covers the best Italian pasta recipes for a weeknight dinner")
+	Article.objects.create(title="Advanced ML Techniques", body="Advanced machine learning techniques include ensemble methods and transfer learning from pretrained models")
+	print("Created articles")
+
+	# --- FTS: create index ---
+	let idx = db.fts_create_index("articles_p4", "body", "idx_articles_body", "english")
+	print("FTS index created")
+
+	# --- FTS: filter by search terms ---
+	db.objects("articles_p4")
+	db.fts_filter("body", "machine & learning", "english")
+	let fts_rows = db.fetch_all()
+	print(f"FTS search rows: {str(fts_rows)}")
+
+	db.execute("DROP TABLE articles_p4")
+	db.close()
+	print("=== Done ===")
+	0

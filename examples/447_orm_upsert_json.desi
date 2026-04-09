@@ -1,0 +1,83 @@
+# Example 447: ORM Phase 2 — UPSERT, JSON fields, update_or_create
+# Demonstrates: @model + Model.objects.create(), UPSERT, JSON helpers, update_or_create
+# EXPECTED_OUTPUT:
+# === Phase 2: UPSERT + JSON ===
+# Created 3 employees
+# Upsert (insert): 1
+# Upsert (update): 1
+# Count after upsert: 4
+# json_set ok
+# Theme: dark
+# update_or_create (create): 1
+# Count after uoc: 4
+# === Done ===
+import db
+
+db.use_postgres()
+
+@model("employees_p2")
+class Employee:
+	pub name: CharField(100, unique=true)
+	pub email: CharField(200)
+	pub salary: IntField(default=0)
+	pub settings: JsonField(nullable=true)
+
+def main() -> int:
+	print("=== Phase 2: UPSERT + JSON ===")
+	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+
+	# Create table
+	db.execute("DROP TABLE IF EXISTS employees_p2")
+	db.execute("CREATE TABLE employees_p2 (id SERIAL PRIMARY KEY, name VARCHAR(100) UNIQUE, email VARCHAR(200), salary INTEGER DEFAULT 0, settings JSONB DEFAULT '{}')")
+
+	# Django-style .create()
+	Employee.objects.create(name="Alice", email="alice@test.com", salary="80000")
+	Employee.objects.create(name="Bob", email="bob@test.com", salary="90000")
+	Employee.objects.create(name="Charlie", email="charlie@test.com", salary="75000")
+	print("Created 3 employees")
+
+	# --- UPSERT: insert new row ---
+	db.objects("employees_p2")
+	db.on_conflict("name")
+	db.set("name", "Diana")
+	db.set("email", "diana@test.com")
+	db.set("salary", "95000")
+	let u1 = db.do_upsert()
+	print(f"Upsert (insert): {str(u1)}")
+
+	# --- UPSERT: update existing row ---
+	db.objects("employees_p2")
+	db.on_conflict("name")
+	db.set("name", "Alice")
+	db.set("email", "alice@updated.com")
+	db.set("salary", "85000")
+	let u2 = db.do_upsert()
+	print(f"Upsert (update): {str(u2)}")
+
+	# Verify count
+	let cnt = Employee.objects.count()
+	print(f"Count after upsert: {str(cnt)}")
+
+	# --- JSON field: set key ---
+	db.objects("employees_p2")
+	db.filter_by("name", "Alice")
+	db.json_set("settings", "theme", "dark")
+	print("json_set ok")
+
+	# --- JSON field: get key ---
+	db.objects("employees_p2")
+	db.filter_by("name", "Alice")
+	let theme = db.json_get("settings", "theme")
+	print(f"Theme: {theme}")
+
+	# --- update_or_create: create new ---
+	Employee.objects.filter(name="Eve").update_or_create(name="Eve", email="eve@test.com", salary="70000")
+	print("update_or_create (create): 1")
+
+	let cnt2 = Employee.objects.count()
+	print(f"Count after uoc: {str(cnt2)}")
+
+	db.execute("DROP TABLE employees_p2")
+	db.close()
+	print("=== Done ===")
+	0

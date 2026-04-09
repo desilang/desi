@@ -1,0 +1,90 @@
+# Example 448: ORM Phase 3 — CTEs, subqueries, prefetch_related
+# Demonstrates: @model + CTEs, EXISTS/IN subqueries, prefetch_related
+# EXPECTED_OUTPUT:
+# === Phase 3: CTEs + Subqueries ===
+# Created test data
+# CTE fetch rows: 2
+# EXISTS filter rows: 2
+# NOT EXISTS filter rows: 1
+# IN subquery rows: 1
+# NOT IN subquery rows: 2
+# Prefetch main rows: 3
+# === Done ===
+import db
+
+db.use_postgres()
+
+@model("customers_p3")
+class Customer:
+	pub name: CharField(100)
+	pub is_active: BoolField(default=true)
+
+@model("orders_p3")
+class Order:
+	pub customer_id: IntField()
+	pub total: IntField()
+	pub product: CharField(100)
+
+def main() -> int:
+	print("=== Phase 3: CTEs + Subqueries ===")
+	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+
+	# Create tables
+	db.execute("DROP TABLE IF EXISTS orders_p3")
+	db.execute("DROP TABLE IF EXISTS customers_p3")
+	db.execute("CREATE TABLE customers_p3 (id SERIAL PRIMARY KEY, name VARCHAR(100), is_active BOOLEAN DEFAULT true)")
+	db.execute("CREATE TABLE orders_p3 (id SERIAL PRIMARY KEY, customer_id INTEGER, total INTEGER, product VARCHAR(100))")
+
+	# Django-style .create()
+	Customer.objects.create(name="Alice", is_active="true")
+	Customer.objects.create(name="Bob", is_active="true")
+	Customer.objects.create(name="Charlie", is_active="false")
+
+	Order.objects.create(customer_id="1", total="150", product="Widget")
+	Order.objects.create(customer_id="1", total="200", product="Gadget")
+	Order.objects.create(customer_id="2", total="50", product="Gizmo")
+	print("Created test data")
+
+	# --- CTE: active customers ---
+	db.objects("active_cust")
+	db.cte("active_cust", "SELECT * FROM customers_p3 WHERE is_active = true")
+	let cte_rows = db.cte_fetch()
+	print(f"CTE fetch rows: {str(cte_rows)}")
+
+	# --- Subquery: EXISTS — customers who have orders ---
+	db.objects("customers_p3")
+	let sub1 = db.subquery("orders_p3", "1", "orders_p3.customer_id = customers_p3.id")
+	db.filter_exists(sub1)
+	let exists_rows = db.fetch_all()
+	print(f"EXISTS filter rows: {str(exists_rows)}")
+
+	# --- Subquery: NOT EXISTS — customers with NO orders ---
+	db.objects("customers_p3")
+	let sub2 = db.subquery("orders_p3", "1", "orders_p3.customer_id = customers_p3.id")
+	db.filter_not_exists(sub2)
+	let not_exists_rows = db.fetch_all()
+	print(f"NOT EXISTS filter rows: {str(not_exists_rows)}")
+
+	# --- Subquery: IN — customers with orders over 100 (only Alice=id:1) ---
+	db.objects("customers_p3")
+	db.filter_in_subquery("id", db.subquery("orders_p3", "customer_id", "total > 100"))
+	let in_rows = db.fetch_all()
+	print(f"IN subquery rows: {str(in_rows)}")
+
+	# --- Subquery: NOT IN — customers NOT in high-value orders (Bob + Charlie) ---
+	db.objects("customers_p3")
+	db.filter_not_in_subquery("id", db.subquery("orders_p3", "customer_id", "total > 100"))
+	let not_in_rows = db.fetch_all()
+	print(f"NOT IN subquery rows: {str(not_in_rows)}")
+
+	# --- prefetch_related: batch-load orders for all customers ---
+	db.objects("customers_p3")
+	db.prefetch_related("orders_p3", "customer_id", "id")
+	let pf_rows = db.prefetch_execute()
+	print(f"Prefetch main rows: {str(pf_rows)}")
+
+	db.execute("DROP TABLE orders_p3")
+	db.execute("DROP TABLE customers_p3")
+	db.close()
+	print("=== Done ===")
+	0
