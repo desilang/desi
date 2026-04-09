@@ -1,0 +1,33 @@
+# Test os module — new utilities
+import os
+
+def main() -> int:
+	# home_dir
+	let home = os.home_dir()
+	let has_home = len(home) > 0
+	print(f"has_home: {str(has_home)}")
+
+	# temp_dir
+	let tmp = os.temp_dir()
+	let has_tmp = len(tmp) > 0
+	print(f"has_tmp: {str(has_tmp)}")
+
+	# which
+	let ls_path = os.which("ls")
+	let has_ls = len(ls_path) > 0
+	print(f"has_ls: {str(has_ls)}")
+
+	# which — non-existent
+	let nope = os.which("this_does_not_exist_12345")
+	let no_cmd = len(nope) == 0
+	print(f"no_cmd: {str(no_cmd)}")
+
+	print("os extras ok")
+	0
+
+# EXPECTED_OUTPUT:
+# has_home: true
+# has_tmp: true
+# has_ls: true
+# no_cmd: true
+# os extras ok

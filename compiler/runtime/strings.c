@@ -537,3 +537,263 @@ DesiList* __strings_splitlines(const char* s) {
     }
     return result;
 }
+
+// ============================================================
+// Case Convention Converters (highly requested)
+// ============================================================
+
+// camelCase: "hello_world" or "hello-world" or "Hello World" -> "helloWorld"
+char* __strings_camel_case(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return strdup("");
+    int j = 0;
+    int capitalize_next = 0;
+    int first = 1;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '_' || c == '-' || isspace(c)) {
+            capitalize_next = 1;
+        } else if (capitalize_next && !first) {
+            result[j++] = (char)toupper(c);
+            capitalize_next = 0;
+        } else {
+            result[j++] = first ? (char)tolower(c) : s[i];
+            capitalize_next = 0;
+            first = 0;
+        }
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// PascalCase: "hello_world" -> "HelloWorld"
+char* __strings_pascal_case(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return strdup("");
+    int j = 0;
+    int capitalize_next = 1;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '_' || c == '-' || isspace(c)) {
+            capitalize_next = 1;
+        } else if (capitalize_next) {
+            result[j++] = (char)toupper(c);
+            capitalize_next = 0;
+        } else {
+            result[j++] = s[i];
+        }
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// snake_case: "helloWorld" or "Hello World" or "hello-world" -> "hello_world"
+char* __strings_snake_case(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    // Worst case: every char gets a _ prefix
+    char* result = (char*)malloc(len * 2 + 1);
+    if (!result) return strdup("");
+    int j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '-' || isspace(c)) {
+            if (j > 0 && result[j-1] != '_') result[j++] = '_';
+        } else if (isupper(c)) {
+            if (j > 0 && result[j-1] != '_') result[j++] = '_';
+            result[j++] = (char)tolower(c);
+        } else {
+            result[j++] = c;
+        }
+    }
+    // Remove leading underscore
+    if (j > 0 && result[0] == '_') {
+        memmove(result, result + 1, j);
+        j--;
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// kebab-case: "helloWorld" or "hello_world" -> "hello-world"
+char* __strings_kebab_case(const char* s) {
+    if (!s) return strdup("");
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len * 2 + 1);
+    if (!result) return strdup("");
+    int j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == '_' || isspace(c)) {
+            if (j > 0 && result[j-1] != '-') result[j++] = '-';
+        } else if (isupper(c)) {
+            if (j > 0 && result[j-1] != '-') result[j++] = '-';
+            result[j++] = (char)tolower(c);
+        } else {
+            result[j++] = c;
+        }
+    }
+    if (j > 0 && result[0] == '-') {
+        memmove(result, result + 1, j);
+        j--;
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// SCREAMING_SNAKE_CASE: "helloWorld" -> "HELLO_WORLD"
+char* __strings_screaming_snake(const char* s) {
+    char* snake = __strings_snake_case(s);
+    if (!snake) return strdup("");
+    char* result = __strings_upper(snake);
+    free(snake);
+    return result;
+}
+
+// ============================================================
+// Text Utilities (language gaps)
+// ============================================================
+
+// Word wrap: break long text at word boundaries
+char* __strings_word_wrap(const char* s, int width) {
+    if (!s || width <= 0) return strdup(s ? s : "");
+    size_t len = strlen(s);
+    // Worst case: newline every `width` chars
+    char* result = (char*)malloc(len + len / width + 2);
+    if (!result) return strdup(s);
+    
+    int col = 0;
+    int j = 0;
+    int last_space_src = -1;
+    int last_space_dst = -1;
+    
+    for (size_t i = 0; i < len; i++) {
+        if (s[i] == '\n') {
+            result[j++] = '\n';
+            col = 0;
+            last_space_src = -1;
+            last_space_dst = -1;
+            continue;
+        }
+        if (s[i] == ' ') {
+            last_space_src = (int)i;
+            last_space_dst = j;
+        }
+        result[j++] = s[i];
+        col++;
+        if (col >= width && last_space_dst >= 0) {
+            result[last_space_dst] = '\n';
+            col = j - last_space_dst - 1;
+            last_space_src = -1;
+            last_space_dst = -1;
+        }
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// Check if string is numeric (int or float)
+int __strings_is_numeric(const char* s) {
+    if (!s || *s == '\0') return 0;
+    const char* p = s;
+    if (*p == '+' || *p == '-') p++;
+    if (*p == '\0') return 0;
+    int has_dot = 0;
+    int has_digit = 0;
+    while (*p) {
+        if (*p == '.') {
+            if (has_dot) return 0;
+            has_dot = 1;
+        } else if (isdigit((unsigned char)*p)) {
+            has_digit = 1;
+        } else {
+            return 0;
+        }
+        p++;
+    }
+    return has_digit;
+}
+
+// Dedent: remove common leading whitespace from multiline strings
+char* __strings_dedent(const char* s) {
+    if (!s) return strdup("");
+    
+    // Find minimum indentation (ignoring empty lines)
+    int min_indent = 9999;
+    const char* line = s;
+    while (*line) {
+        // Skip empty/whitespace-only lines for min calculation
+        const char* end = line;
+        while (*end && *end != '\n') end++;
+        
+        int indent = 0;
+        const char* p = line;
+        while (p < end && (*p == ' ' || *p == '\t')) {
+            indent += (*p == '\t') ? 4 : 1;
+            p++;
+        }
+        if (p < end) { // non-empty line
+            if (indent < min_indent) min_indent = indent;
+        }
+        
+        line = *end ? end + 1 : end;
+    }
+    
+    if (min_indent <= 0 || min_indent == 9999) return strdup(s);
+    
+    // Build result with indentation removed
+    size_t len = strlen(s);
+    char* result = (char*)malloc(len + 1);
+    if (!result) return strdup(s);
+    
+    int j = 0;
+    line = s;
+    while (*line) {
+        int removed = 0;
+        while (*line && *line != '\n' && removed < min_indent) {
+            if (*line == '\t') removed += 4;
+            else if (*line == ' ') removed += 1;
+            else break;
+            line++;
+        }
+        while (*line && *line != '\n') {
+            result[j++] = *line++;
+        }
+        if (*line == '\n') result[j++] = *line++;
+    }
+    result[j] = '\0';
+    return result;
+}
+
+// Abbreviate: "Hello World" with max=8 -> "Hello..."
+// Unlike truncate, this breaks at word boundaries
+char* __strings_abbreviate(const char* s, int max_len) {
+    if (!s) return strdup("");
+    size_t slen = strlen(s);
+    if ((int)slen <= max_len) return strdup(s);
+    if (max_len <= 3) {
+        char* r = (char*)malloc(max_len + 1);
+        if (!r) return strdup("");
+        for (int i = 0; i < max_len; i++) r[i] = '.';
+        r[max_len] = '\0';
+        return r;
+    }
+    int limit = max_len - 3;
+    // Find last space before limit
+    int break_at = limit;
+    for (int i = limit; i >= 0; i--) {
+        if (s[i] == ' ') { break_at = i; break; }
+    }
+    char* result = (char*)malloc(break_at + 4);
+    if (!result) return strdup("");
+    memcpy(result, s, break_at);
+    result[break_at] = '.';
+    result[break_at+1] = '.';
+    result[break_at+2] = '.';
+    result[break_at+3] = '\0';
+    return result;
+}
