@@ -65,8 +65,9 @@ runtime: decimal-lib $(LIB_DESI)
 
 $(LIB_DESI): $(RUNTIME_OBJS) $(RUNTIME_DB_OBJS) $(BUILD_DIR)/desi_decimal.o
 	@echo "==> Merging runtime + libmpdec into $@"
-	cp $(DECIMAL_LIB) $@
-	$(AR) rcs $@ $^
+	@mkdir -p $(BUILD_DIR)/mpdec_objs
+	@cd $(BUILD_DIR)/mpdec_objs && $(AR) x ../../$(DECIMAL_LIB)
+	$(AR) rcs $@ $^ $(BUILD_DIR)/mpdec_objs/*.o
 
 $(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
 	@echo "==> Compiling $<..."

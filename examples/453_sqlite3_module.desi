@@ -1,0 +1,59 @@
+# Test sqlite3 module — embedded database
+# SKIPPED: requires -lsqlite3 system library
+import sqlite3
+
+def main() -> int:
+	# Open in-memory database
+	let rc = sqlite3.connect(":memory:")
+	if rc != 0:
+		print(f"open failed: {sqlite3.last_error()}")
+		return 1
+
+	# Create table
+	sqlite3.execute("CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, age INTEGER)")
+
+	# Insert data
+	sqlite3.execute("INSERT INTO users (name, age) VALUES ('Alice', 30)")
+	sqlite3.execute("INSERT INTO users (name, age) VALUES ('Bob', 25)")
+	sqlite3.execute("INSERT INTO users (name, age) VALUES ('Charlie', 35)")
+	print(f"inserted: {str(sqlite3.changes())}")
+
+	# Query
+	let count = sqlite3.query("SELECT * FROM users ORDER BY name")
+	print(f"rows: {str(count)}")
+	print(f"cols: {str(sqlite3.col_count())}")
+
+	# Iterate results
+	while sqlite3.fetch_next():
+		let name = sqlite3.get("name")
+		let age = sqlite3.get("age")
+		print(f"{name}: {age}")
+
+	# Transaction
+	sqlite3.begin()
+	sqlite3.execute("INSERT INTO users (name, age) VALUES ('Diana', 28)")
+	sqlite3.commit()
+
+	let total = sqlite3.query("SELECT COUNT(*) as cnt FROM users")
+	sqlite3.fetch_next()
+	let cnt_val = sqlite3.get("cnt")
+	print(f"total: {cnt_val}")
+
+	# Last insert id
+	sqlite3.execute("INSERT INTO users (name, age) VALUES ('Eve', 22)")
+	print(f"last_id: {str(sqlite3.last_insert_id())}")
+
+	sqlite3.disconnect()
+	print("sqlite3 module ok")
+	0
+
+# EXPECTED_OUTPUT:
+# inserted: 1
+# rows: 3
+# cols: 3
+# Alice: 30
+# Bob: 25
+# Charlie: 35
+# total: 4
+# last_id: 5
+# sqlite3 module ok
