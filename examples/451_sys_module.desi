@@ -1,0 +1,35 @@
+# Test sys module — version, platform, limits
+import sys
+
+def main() -> int:
+	# Version
+	let v = sys.version()
+	print(f"version: {v}")
+	print(f"major: {str(sys.version_major())}")
+	print(f"minor: {str(sys.version_minor())}")
+	print(f"patch: {str(sys.version_patch())}")
+
+	# Pointer size (8 on 64-bit)
+	let ptr_size = sys.sizeof_ptr()
+	print(f"ptr_size: {str(ptr_size)}")
+
+	# Byte order
+	let bo = sys.byteorder()
+	print(f"byteorder: {bo}")
+
+	# Recursion limit
+	let rl = sys.recursion_limit()
+	print(f"recursion_limit: {str(rl)}")
+
+	print("sys module ok")
+	0
+
+# EXPECTED_OUTPUT:
+# version: 0.1.0
+# major: 0
+# minor: 1
+# patch: 0
+# ptr_size: 8
+# byteorder: little
+# recursion_limit: 1000
+# sys module ok

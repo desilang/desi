@@ -1,0 +1,86 @@
+# sys module — system information and runtime metadata
+#
+# Provides version info, platform details, runtime limits, and byte order.
+# This mirrors Python's sys module for system introspection.
+#
+# Usage:
+#   import sys
+#   print(sys.version())              # "0.1.0"
+#   print(sys.byteorder())           # "little"
+#   print(str(sys.sizeof_ptr()))     # "8"
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __sys_version() -> str
+
+@extern("C")
+def __sys_version_major() -> int
+
+@extern("C")
+def __sys_version_minor() -> int
+
+@extern("C")
+def __sys_version_patch() -> int
+
+@extern("C")
+def __sys_maxsize() -> int
+
+@extern("C")
+def __sys_sizeof_ptr() -> int
+
+@extern("C")
+def __sys_byteorder() -> str
+
+@extern("C")
+def __sys_recursion_limit() -> int
+
+@extern("C")
+def __sys_call_depth() -> int
+
+# --- Public API ---
+
+## Get the Desi version string (e.g. "0.1.0").
+pub def version() -> str:
+	unsafe:
+		return __sys_version()
+
+## Get the major version number.
+pub def version_major() -> int:
+	unsafe:
+		return __sys_version_major()
+
+## Get the minor version number.
+pub def version_minor() -> int:
+	unsafe:
+		return __sys_version_minor()
+
+## Get the patch version number.
+pub def version_patch() -> int:
+	unsafe:
+		return __sys_version_patch()
+
+## Get the maximum integer value (INT64_MAX).
+pub def maxsize() -> int:
+	unsafe:
+		return __sys_maxsize()
+
+## Get the pointer size in bytes (4 or 8).
+pub def sizeof_ptr() -> int:
+	unsafe:
+		return __sys_sizeof_ptr()
+
+## Get byte order: "little" or "big".
+pub def byteorder() -> str:
+	unsafe:
+		return __sys_byteorder()
+
+## Get the current recursion limit.
+pub def recursion_limit() -> int:
+	unsafe:
+		return __sys_recursion_limit()
+
+## Get the current call stack depth.
+pub def call_depth() -> int:
+	unsafe:
+		return __sys_call_depth()

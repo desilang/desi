@@ -1,0 +1,20 @@
+# Test io module — stdout functions
+# Note: io.input() and eprint/ewrite test interactively — not testable here.
+import io
+
+def main() -> int:
+	# flush stdout
+	io.flush()
+	print("io.flush ok")
+
+	# has_input returns true when stdin is connected
+	let hi = io.has_input()
+	print(f"has_input: {str(hi)}")
+
+	print("io module ok")
+	0
+
+# EXPECTED_OUTPUT:
+# io.flush ok
+# has_input: 1
+# io module ok

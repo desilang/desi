@@ -1,0 +1,59 @@
+# Test crypto module — hashing, tokens, password hashing
+import crypto
+
+def main() -> int:
+	# SHA-256
+	let h1 = crypto.sha256("hello")
+	print(f"sha256: {h1}")
+
+	# SHA-512
+	let h2 = crypto.sha512("hello")
+	let h2_len = len(h2)
+	print(f"sha512_len: {str(h2_len)}")
+
+	# MD5
+	let h3 = crypto.md5("hello")
+	print(f"md5: {h3}")
+
+	# HMAC-SHA-256
+	let h4 = crypto.hmac_sha256("secret", "message")
+	let h4_len = len(h4)
+	print(f"hmac_len: {str(h4_len)}")
+
+	# Constant-time comparison
+	let eq1 = crypto.constant_time_equal("abc", "abc")
+	let eq2 = crypto.constant_time_equal("abc", "def")
+	print(f"equal_same: {str(eq1)}")
+	print(f"equal_diff: {str(eq2)}")
+
+	# Token generation
+	let tok = crypto.token_hex(16)
+	let tok_len = len(tok)
+	print(f"token_len: {str(tok_len)}")
+
+	# Password hashing
+	let stored = crypto.hash_password("secret123")
+	let has_dollar = "$" in stored
+	print(f"has_salt_sep: {str(has_dollar)}")
+
+	# Password verification
+	let ok = crypto.verify_password("secret123", stored)
+	let bad = crypto.verify_password("wrong", stored)
+	print(f"verify_correct: {str(ok)}")
+	print(f"verify_wrong: {str(bad)}")
+
+	print("crypto module ok")
+	0
+
+# EXPECTED_OUTPUT:
+# sha256: 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+# sha512_len: 128
+# md5: 5d41402abc4b2a76b9719d911017c592
+# hmac_len: 64
+# equal_same: true
+# equal_diff: false
+# token_len: 32
+# has_salt_sep: true
+# verify_correct: true
+# verify_wrong: false
+# crypto module ok

@@ -1,11 +1,92 @@
-# Minimal OpenSSL-style FFI surface for demos (Tier-0 ABI).
-# Use usize for 64-bit codes; cptr[int] for opaque buffers.
+# crypto module — cryptographic utilities
+#
+# Provides hashing, HMAC, constant-time comparison, token generation,
+# and password hashing. Zero external dependencies — all implementations
+# are self-contained in the Desi runtime.
+#
+# Usage:
+#   import crypto
+#   let hash = crypto.sha256("hello")
+#   let token = crypto.token_hex(32)
+#   let stored = crypto.hash_password("secret123")
+#   let ok = crypto.verify_password("secret123", stored)
 
-@extern("C","crypto")
-pub def SHA256(data: cptr[int], n: usize, out: cptr[int]) -> cptr[int]
+import hash
 
-@extern("C","crypto")
-pub def ERR_get_error() -> usize
+# --- C runtime bindings ---
 
-@extern("C","crypto")
-pub def ERR_error_string(code: usize, buf: cptr[int]) -> cptr[int]
+@extern("C")
+def __crypto_constant_time_equal(a: str, b: str) -> int
+
+@extern("C")
+def __crypto_token_hex(nbytes: int) -> str
+
+@extern("C")
+def __crypto_random_bytes_hex(nbytes: int) -> str
+
+@extern("C")
+def __crypto_hash_password(password: str) -> str
+
+@extern("C")
+def __crypto_verify_password(password: str, stored: str) -> int
+
+# --- Public API: Hashing (delegated to hash module) ---
+
+## SHA-256 hash of input string, returns hex digest.
+pub def sha256(data: str) -> str:
+	return hash.sha256(data)
+
+## SHA-512 hash of input string, returns hex digest.
+pub def sha512(data: str) -> str:
+	return hash.sha512(data)
+
+## MD5 hash of input string, returns hex digest.
+## WARNING: MD5 is cryptographically broken. Use SHA-256 for new code.
+pub def md5(data: str) -> str:
+	return hash.md5(data)
+
+## SHA-1 hash of input string, returns hex digest.
+## WARNING: SHA-1 is deprecated. Use SHA-256 for new code.
+pub def sha1(data: str) -> str:
+	return hash.sha1(data)
+
+# --- Public API: HMAC ---
+
+## HMAC-SHA-256: keyed message authentication code.
+pub def hmac_sha256(key: str, message: str) -> str:
+	return hash.hmac_sha256(key, message)
+
+# --- Public API: Comparison ---
+
+## Constant-time string comparison (prevents timing attacks).
+## Returns true if strings are equal, false otherwise.
+pub def constant_time_equal(a: str, b: str) -> bool:
+	unsafe:
+		return __crypto_constant_time_equal(a, b) == 1
+
+# --- Public API: Tokens ---
+
+## Generate a random hex token of given byte length.
+## token_hex(16) returns a 32-character hex string.
+pub def token_hex(nbytes: int) -> str:
+	unsafe:
+		return __crypto_token_hex(nbytes)
+
+## Generate random bytes as a hex string.
+pub def random_bytes_hex(nbytes: int) -> str:
+	unsafe:
+		return __crypto_random_bytes_hex(nbytes)
+
+# --- Public API: Password Hashing ---
+
+## Hash a password with automatic salt. Returns "salt$hash" format.
+## Uses SHA-256 internally. Suitable for storing user passwords.
+pub def hash_password(password: str) -> str:
+	unsafe:
+		return __crypto_hash_password(password)
+
+## Verify a password against a stored "salt$hash" string.
+## Uses constant-time comparison internally.
+pub def verify_password(password: str, stored: str) -> bool:
+	unsafe:
+		return __crypto_verify_password(password, stored) == 1

@@ -1,11 +1,154 @@
-# Minimal sqlite3 FFI surface for demos (Tier-0 ABI).
-# Types are conservative: cptr[int] is used for opaque C pointers (pointee ignored at ABI).
+# sqlite3 module — embedded SQLite3 database
+#
+# Provides a simple, zero-configuration embedded SQL database.
+# Perfect for local storage, caching, and small applications.
+# Uses embedded SQLite3 amalgamation — zero external dependencies.
+#
+# Usage:
+#   import sqlite3
+#
+#   sqlite3.connect("myapp.db")
+#   sqlite3.execute("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)")
+#   sqlite3.execute("INSERT INTO users (name) VALUES ('Alice')")
+#
+#   let count = sqlite3.query("SELECT * FROM users")
+#   while sqlite3.fetch_next():
+#       print(sqlite3.get("name"))
+#
+#   sqlite3.disconnect()
 
-@extern("C","sqlite3")
-pub def db_open(path: str) -> cptr[int]
+# --- C runtime bindings ---
 
-@extern("C","sqlite3")
-pub def db_exec(db: cptr[int], sql: str) -> int
+@extern("C")
+def __sqlite3_open(path: str) -> int
 
-@extern("C","sqlite3")
-pub def db_errmsg(err: cptr[int]) -> str
+@extern("C")
+def __sqlite3_close() -> int
+
+@extern("C")
+def __sqlite3_execute(sql: str) -> int
+
+@extern("C")
+def __sqlite3_query(sql: str) -> int
+
+@extern("C")
+def __sqlite3_row_count() -> int
+
+@extern("C")
+def __sqlite3_col_count() -> int
+
+@extern("C")
+def __sqlite3_col_name(idx: int) -> str
+
+@extern("C")
+def __sqlite3_fetch_next() -> int
+
+@extern("C")
+def __sqlite3_get_field(col: int) -> str
+
+@extern("C")
+def __sqlite3_get_field_by_name(name: str) -> str
+
+@extern("C")
+def __sqlite3_last_insert_id() -> int
+
+@extern("C")
+def __sqlite3_changes() -> int
+
+@extern("C")
+def __sqlite3_last_error() -> str
+
+@extern("C")
+def __sqlite3_begin() -> int
+
+@extern("C")
+def __sqlite3_commit() -> int
+
+@extern("C")
+def __sqlite3_rollback() -> int
+
+# --- Public API ---
+
+## Connect to a SQLite database file. Creates if it doesn't exist.
+## Use ":memory:" for an in-memory database.
+## Returns 0 on success, -1 on error.
+pub def connect(path: str) -> int:
+	unsafe:
+		return __sqlite3_open(path)
+
+## Disconnect from the database.
+pub def disconnect() -> int:
+	unsafe:
+		return __sqlite3_close()
+
+## Execute a non-query SQL statement (CREATE, INSERT, UPDATE, DELETE).
+## Returns 0 on success, -1 on error.
+pub def execute(sql: str) -> int:
+	unsafe:
+		return __sqlite3_execute(sql)
+
+## Execute a SELECT query and store results.
+## Returns the number of rows, or -1 on error.
+pub def query(sql: str) -> int:
+	unsafe:
+		return __sqlite3_query(sql)
+
+## Get the number of rows in the last query result.
+pub def row_count() -> int:
+	unsafe:
+		return __sqlite3_row_count()
+
+## Get the number of columns in the last query result.
+pub def col_count() -> int:
+	unsafe:
+		return __sqlite3_col_count()
+
+## Get a column name by index.
+pub def col_name(idx: int) -> str:
+	unsafe:
+		return __sqlite3_col_name(idx)
+
+## Advance to the next row.  Returns true if a row was fetched.
+pub def fetch_next() -> bool:
+	unsafe:
+		return __sqlite3_fetch_next() == 1
+
+## Get a field value by column index from the current row.
+pub def get_field(col: int) -> str:
+	unsafe:
+		return __sqlite3_get_field(col)
+
+## Get a field value by column name from the current row.
+pub def get(name: str) -> str:
+	unsafe:
+		return __sqlite3_get_field_by_name(name)
+
+## Get the rowid of the last INSERT.
+pub def last_insert_id() -> int:
+	unsafe:
+		return __sqlite3_last_insert_id()
+
+## Get the number of rows changed by the last INSERT/UPDATE/DELETE.
+pub def changes() -> int:
+	unsafe:
+		return __sqlite3_changes()
+
+## Get the last error message.
+pub def last_error() -> str:
+	unsafe:
+		return __sqlite3_last_error()
+
+## Begin a transaction.
+pub def begin() -> int:
+	unsafe:
+		return __sqlite3_begin()
+
+## Commit a transaction.
+pub def commit() -> int:
+	unsafe:
+		return __sqlite3_commit()
+
+## Rollback a transaction.
+pub def rollback() -> int:
+	unsafe:
+		return __sqlite3_rollback()

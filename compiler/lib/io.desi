@@ -1,6 +1,63 @@
-# IO module - print function
+# io module — input/output utilities
+#
+# Read from stdin, write to stderr, and flush output streams.
+# print() is a builtin and does not need importing.
+#
+# Usage:
+#   import io
+#   let name = io.input("Enter name: ")
+#   io.eprint("Error: something broke")
+#   io.flush()
 
-# Variadic print function - takes any number of arguments
-# Compiler magic handles the actual implementation
-pub def print(*args: Any) -> none:
-    0
+# --- C runtime bindings ---
+
+@extern("C")
+def __io_input(prompt: str) -> str
+
+@extern("C")
+def __io_read_all() -> str
+
+@extern("C")
+def __io_eprint(msg: str) -> none
+
+@extern("C")
+def __io_ewrite(msg: str) -> none
+
+@extern("C")
+def __io_flush() -> none
+
+@extern("C")
+def __io_has_input() -> int
+
+# --- Public API ---
+
+## Read a line from stdin with optional prompt (like Python's input()).
+## Displays the prompt, waits for user input, returns the line without newline.
+pub def input(prompt: str) -> str:
+	unsafe:
+		return __io_input(prompt)
+
+## Read all of stdin until EOF as a single string.
+pub def read_all() -> str:
+	unsafe:
+		return __io_read_all()
+
+## Print a message to stderr (with newline).
+pub def eprint(msg: str) -> none:
+	unsafe:
+		__io_eprint(msg)
+
+## Write to stderr without newline.
+pub def ewrite(msg: str) -> none:
+	unsafe:
+		__io_ewrite(msg)
+
+## Flush stdout.
+pub def flush() -> none:
+	unsafe:
+		__io_flush()
+
+## Check if stdin has data available.
+pub def has_input() -> int:
+	unsafe:
+		return __io_has_input()
