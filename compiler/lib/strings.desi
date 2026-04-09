@@ -331,3 +331,83 @@ pub def join(sep: str, parts: list[str]) -> str:
 pub def splitlines(s: str) -> list[str]:
 	unsafe:
 		return __strings_splitlines(s)
+
+# --- C runtime bindings: Case Convention Converters ---
+
+@extern("C")
+def __strings_camel_case(s: str) -> str
+
+@extern("C")
+def __strings_pascal_case(s: str) -> str
+
+@extern("C")
+def __strings_snake_case(s: str) -> str
+
+@extern("C")
+def __strings_kebab_case(s: str) -> str
+
+@extern("C")
+def __strings_screaming_snake(s: str) -> str
+
+@extern("C")
+def __strings_word_wrap(s: str, width: int) -> str
+
+@extern("C")
+def __strings_is_numeric(s: str) -> bool
+
+@extern("C")
+def __strings_dedent(s: str) -> str
+
+@extern("C")
+def __strings_abbreviate(s: str, max_len: int) -> str
+
+# --- Public API: Case Convention Converters ---
+# Every programmer rewrites these. Now built-in.
+
+## Convert to camelCase: "hello_world" → "helloWorld".
+pub def camel_case(s: str) -> str:
+	unsafe:
+		return __strings_camel_case(s)
+
+## Convert to PascalCase: "hello_world" → "HelloWorld".
+pub def pascal_case(s: str) -> str:
+	unsafe:
+		return __strings_pascal_case(s)
+
+## Convert to snake_case: "helloWorld" → "hello_world".
+pub def snake_case(s: str) -> str:
+	unsafe:
+		return __strings_snake_case(s)
+
+## Convert to kebab-case: "helloWorld" → "hello-world".
+pub def kebab_case(s: str) -> str:
+	unsafe:
+		return __strings_kebab_case(s)
+
+## Convert to SCREAMING_SNAKE_CASE: "helloWorld" → "HELLO_WORLD".
+pub def screaming_snake(s: str) -> str:
+	unsafe:
+		return __strings_screaming_snake(s)
+
+# --- Public API: Text Utilities ---
+
+## Word wrap text at word boundaries to given width.
+pub def word_wrap(s: str, width: int) -> str:
+	unsafe:
+		return __strings_word_wrap(s, width)
+
+## Check if string represents a number (int or float).
+pub def is_numeric(s: str) -> bool:
+	unsafe:
+		return __strings_is_numeric(s)
+
+## Remove common leading whitespace from multiline text.
+## Like Python's textwrap.dedent().
+pub def dedent(s: str) -> str:
+	unsafe:
+		return __strings_dedent(s)
+
+## Abbreviate at word boundary: "Hello World" → "Hello..." (max n chars).
+pub def abbreviate(s: str, max_len: int) -> str:
+	unsafe:
+		return __strings_abbreviate(s, max_len)

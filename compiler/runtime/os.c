@@ -240,3 +240,85 @@ DesiList* __os_listdir(const char* path) {
     closedir(dir);
     return result;
 }
+
+// ============================================================
+// Path Utilities (highly requested, cross-platform)
+// ============================================================
+
+// Get user's home directory
+char* __os_home_dir(void) {
+#ifdef _WIN32
+    const char* home = getenv("USERPROFILE");
+    if (!home) {
+        const char* drive = getenv("HOMEDRIVE");
+        const char* path = getenv("HOMEPATH");
+        if (drive && path) {
+            char* result = (char*)malloc(strlen(drive) + strlen(path) + 1);
+            if (result) { strcpy(result, drive); strcat(result, path); return result; }
+        }
+    }
+#else
+    const char* home = getenv("HOME");
+#endif
+    return home ? strdup(home) : strdup("");
+}
+
+// Get system temp directory
+char* __os_temp_dir(void) {
+#ifdef _WIN32
+    const char* tmp = getenv("TEMP");
+    if (!tmp) tmp = getenv("TMP");
+    if (!tmp) tmp = "C:\\Temp";
+    return strdup(tmp);
+#else
+    const char* tmp = getenv("TMPDIR");
+    if (!tmp) tmp = "/tmp";
+    return strdup(tmp);
+#endif
+}
+
+// Find executable in PATH (like `which` command)
+char* __os_which(const char* name) {
+    if (!name || !*name) return strdup("");
+    const char* path_env = getenv("PATH");
+    if (!path_env) return strdup("");
+    
+    char* path_copy = strdup(path_env);
+    if (!path_copy) return strdup("");
+    
+#ifdef _WIN32
+    const char* sep = ";";
+#else
+    const char* sep = ":";
+#endif
+    
+    char* saveptr = NULL;
+    char* dir = strtok_r(path_copy, sep, &saveptr);
+    while (dir) {
+        size_t dlen = strlen(dir);
+        size_t nlen = strlen(name);
+        char* full = (char*)malloc(dlen + nlen + 2);
+        if (full) {
+            sprintf(full, "%s/%s", dir, name);
+            if (access(full, X_OK) == 0) {
+                free(path_copy);
+                return full;
+            }
+            free(full);
+        }
+        dir = strtok_r(NULL, sep, &saveptr);
+    }
+    free(path_copy);
+    return strdup("");
+}
+
+// Sleep for given milliseconds
+void __os_sleep_ms(int ms) {
+    if (ms <= 0) return;
+#ifdef _WIN32
+    extern void Sleep(unsigned long dwMilliseconds);
+    Sleep((unsigned long)ms);
+#else
+    usleep((useconds_t)ms * 1000);
+#endif
+}

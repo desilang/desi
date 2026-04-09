@@ -210,3 +210,38 @@ pub def listdir(path: str) -> list[str]:
 	unsafe:
 		return __os_listdir(path)
 
+# --- C runtime bindings: New utilities ---
+
+@extern("C")
+pub def __os_home_dir() -> str
+
+@extern("C")
+pub def __os_temp_dir() -> str
+
+@extern("C")
+pub def __os_which(name: str) -> str
+
+@extern("C")
+pub def __os_sleep_ms(ms: int) -> none
+
+# --- Public API: Utilities ---
+
+## Get the user's home directory.
+pub def home_dir() -> str:
+	unsafe:
+		return __os_home_dir()
+
+## Get the system temp directory (/tmp on UNIX, %TEMP% on Windows).
+pub def temp_dir() -> str:
+	unsafe:
+		return __os_temp_dir()
+
+## Find an executable in PATH (like `which`). Returns empty string if not found.
+pub def which(name: str) -> str:
+	unsafe:
+		return __os_which(name)
+
+## Sleep for given number of milliseconds.
+pub def sleep_ms(ms: int) -> none:
+	unsafe:
+		__os_sleep_ms(ms)

@@ -1,0 +1,39 @@
+# Test strings module — case converters and text utilities
+import strings
+
+def main() -> int:
+	# Case convention converters
+	print(strings.camel_case("hello_world"))
+	print(strings.pascal_case("hello_world"))
+	print(strings.snake_case("helloWorld"))
+	print(strings.kebab_case("helloWorld"))
+	print(strings.screaming_snake("helloWorld"))
+
+	# is_numeric
+	let n1 = strings.is_numeric("42")
+	let n2 = strings.is_numeric("3.14")
+	let n3 = strings.is_numeric("abc")
+	let n4 = strings.is_numeric("-5")
+	print(f"42: {str(n1)}")
+	print(f"3.14: {str(n2)}")
+	print(f"abc: {str(n3)}")
+	print(f"-5: {str(n4)}")
+
+	# abbreviate
+	print(strings.abbreviate("Hello World Foo Bar", 12))
+
+	print("strings extras ok")
+	0
+
+# EXPECTED_OUTPUT:
+# helloWorld
+# HelloWorld
+# hello_world
+# hello-world
+# HELLO_WORLD
+# 42: true
+# 3.14: true
+# abc: false
+# -5: true
+# Hello...
+# strings extras ok
