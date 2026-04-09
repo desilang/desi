@@ -1,6 +1,6 @@
 # OS Module
 
-The `os` module provides operating system functions for environment variables, process control, platform detection, and system commands.
+The `os` module provides operating system functions for environment variables, process control, platform detection, file I/O, and system commands.
 
 ## Import
 
@@ -26,6 +26,8 @@ import os
 | `arch()` | `str` | CPU architecture: `"arm64"`, `"x86_64"` |
 | `hostname()` | `str` | System hostname |
 | `cpu_count()` | `int` | Number of CPU cores |
+| `home_dir()` | `str` | User's home directory (cross-platform) |
+| `temp_dir()` | `str` | System temp directory (`/tmp`, `%TEMP%`) |
 
 ### Process
 
@@ -33,6 +35,7 @@ import os
 |----------|---------|-------------|
 | `getpid()` | `int` | Current process ID |
 | `exit(code)` | `none` | Exit with status code |
+| `sleep_ms(ms)` | `none` | Sleep for given milliseconds |
 
 ### Directory
 
@@ -46,6 +49,7 @@ import os
 | Function | Returns | Description |
 |----------|---------|-------------|
 | `system(cmd)` | `int` | Run shell command, returns exit code |
+| `which(name)` | `str` | Find executable in PATH (empty if not found) |
 
 ## Usage Examples
 
@@ -57,6 +61,15 @@ def main() -> int:
     print(f"Running on {os.name()} ({os.arch()})")
     print(f"Hostname: {os.hostname()}")
     print(f"CPUs: {os.cpu_count()}")
+
+    # Home and temp directories
+    print(f"Home: {os.home_dir()}")
+    print(f"Temp: {os.temp_dir()}")
+
+    # Find executables
+    let python = os.which("python3")
+    if len(python) > 0:
+        print(f"Python at: {python}")
 
     # Environment
     os.setenv("MY_APP_PORT", "8080")
@@ -157,12 +170,17 @@ import os
 def main() -> int:
     # Platform detection
     print(f"Running on {os.name()} ({os.arch()})")
-    print(f"CPUs: {os.cpu_count()}")
+    print(f"Home: {os.home_dir()}")
+    print(f"Temp: {os.temp_dir()}")
 
     # File I/O
     os.write_file("/tmp/hello.txt", "Hello from Desi!")
     let content = os.read_file("/tmp/hello.txt")
     print(content)
+
+    # Find executables
+    let ls = os.which("ls")
+    print(f"ls found at: {ls}")
 
     # Directory listing
     let files = os.listdir(".")
@@ -177,5 +195,5 @@ def main() -> int:
 
 - [Strings Module](strings.md) — String manipulation
 - [Path Module](path.md) — Path manipulation
+- [IO Module](io.md) — Input/output
 - [Log Module](log.md) — Structured logging
-

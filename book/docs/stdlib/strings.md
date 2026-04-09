@@ -1,6 +1,6 @@
 # Strings Module
 
-The `strings` module provides 35 utility functions for string manipulation, matching and exceeding Python's string methods.
+The `strings` module provides 44 utility functions for string manipulation — from basic case conversion to case convention converters, text processing, and character checks.
 
 ## Import
 
@@ -19,6 +19,33 @@ import strings
 | `capitalize(s)` | First letter upper, rest lower | `"hELLO"` → `"Hello"` |
 | `title(s)` | First letter of each word upper | `"hello world"` → `"Hello World"` |
 | `swapcase(s)` | Swap upper↔lower | `"Hello"` → `"hELLO"` |
+
+### Case Convention Converters
+
+Convert between naming conventions — no more rewriting these in every project.
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `camel_case(s)` | camelCase | `"hello_world"` → `"helloWorld"` |
+| `pascal_case(s)` | PascalCase | `"hello_world"` → `"HelloWorld"` |
+| `snake_case(s)` | snake_case | `"helloWorld"` → `"hello_world"` |
+| `kebab_case(s)` | kebab-case | `"helloWorld"` → `"hello-world"` |
+| `screaming_snake(s)` | SCREAMING_SNAKE | `"helloWorld"` → `"HELLO_WORLD"` |
+
+```desi
+import strings
+
+# Convert between API response keys and code conventions
+let api_key = "firstName"
+print(strings.snake_case(api_key))      # "first_name"
+print(strings.kebab_case(api_key))      # "first-name"
+print(strings.screaming_snake(api_key)) # "FIRST_NAME"
+
+# Reverse: code to API
+let code_name = "user_email_address"
+print(strings.camel_case(code_name))    # "userEmailAddress"
+print(strings.pascal_case(code_name))   # "UserEmailAddress"
+```
 
 ### Search
 
@@ -62,13 +89,27 @@ import strings
 | `is_lower(s)` | `bool` | True if all alpha chars are lowercase |
 | `is_ascii(s)` | `bool` | True if all chars are ASCII (0-127) |
 | `is_printable(s)` | `bool` | True if all chars are printable |
+| `is_numeric(s)` | `bool` | True if string is a valid number (int or float) |
 
-### Desi Extras (Beyond Python)
+### Text Utilities
+
+Functions that save time in every project:
 
 | Function | Returns | Description |
 |----------|---------|-------------|
-| `truncate(s, max, suffix)` | `str` | `"Hello World"` → `"Hello..."` (max 8 chars) |
-| `slugify(s)` | `str` | `"Hello World!"` → `"hello-world"` |
+| `truncate(s, max, suffix)` | `str` | Truncate with suffix: `"Hello World"` → `"Hello..."` |
+| `slugify(s)` | `str` | URL-friendly slug: `"Hello World!"` → `"hello-world"` |
+| `word_wrap(s, width)` | `str` | Wrap text at word boundaries |
+| `dedent(s)` | `str` | Remove common leading whitespace (like Python's `textwrap.dedent`) |
+| `abbreviate(s, max)` | `str` | Abbreviate at word boundary: `"Hello World"` → `"Hello..."` |
+
+### Split & Join
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `split(s, sep)` | `list[str]` | Split string by separator |
+| `join(sep, parts)` | `str` | Join list of strings with separator |
+| `splitlines(s)` | `list[str]` | Split by newlines (handles `\n`, `\r\n`, `\r`) |
 
 ## Usage Examples
 
@@ -83,10 +124,6 @@ def main() -> int:
     print(strings.upper(clean))       # "JOHN DOE"
     print(strings.swapcase("Hello"))  # "hELLO"
 
-    # Search
-    print(strings.last_index_of("abcabc", "abc"))  # 3
-    print(strings.contains(clean, "Doe"))           # true
-
     # Python 3.9+ style
     print(strings.removeprefix("test_file", "test_"))  # "file"
     print(strings.removesuffix("app.desi", ".desi"))   # "app"
@@ -94,16 +131,34 @@ def main() -> int:
     # Padding and formatting
     print(strings.pad_left("42", 5, "0"))    # "00042"
     print(strings.center("hi", 9, "*"))      # "***hi****"
-    print(strings.zfill("-42", 6))           # "-00042"
 
     # Desi extras
     print(strings.slugify("Hello World!"))   # "hello-world"
-    print(strings.truncate("Long text here", 8, "..."))  # "Long..."
+    print(strings.word_wrap("A very long sentence that should be wrapped at forty chars", 40))
+
+    # Numeric validation
+    print(strings.is_numeric("3.14"))   # true
+    print(strings.is_numeric("abc"))    # false
+    print(strings.is_numeric("-42"))    # true
     0
 ```
 
+### Case Convention Pipeline
+
+```desi
+import strings
+
+# API to code conversion pipeline
+let api_fields = ["firstName", "lastName", "emailAddress"]
+for field in api_fields:
+    let db_col = strings.snake_case(field)
+    let env_var = strings.screaming_snake(field)
+    let css_class = strings.kebab_case(field)
+    print(f"{field} → db: {db_col}, env: {env_var}, css: {css_class}")
+```
+
 > [!NOTE]
-> `split()` and `join()` are available as **string methods**, not module functions:
+> `split()` and `join()` are also available as **string methods**:
 > ```desi
 > let parts = "a,b,c".split(",")   # ["a", "b", "c"]
 > let joined = ",".join(parts)     # "a,b,c"
