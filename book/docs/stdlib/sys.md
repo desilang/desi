@@ -1,54 +1,54 @@
 # sys Module
 
-The `sys` module provides access to system streams (stdout, stderr).
+The `sys` module provides access to system internals: version info, memory layout, recursion limits, and runtime introspection.
 
-## Quick Start
+## Import
+
+```desi
+import sys
+```
+
+## API Reference
+
+| Function | Returns | Description |
+|----------|---------|-------------|
+| `version()` | `str` | Desi version string (e.g. `"0.1.0"`) |
+| `maxsize()` | `int` | Maximum integer value for the platform |
+| `byteorder()` | `str` | `"little"` or `"big"` endian |
+| `sizeof_ptr()` | `int` | Size of a pointer in bytes (4 or 8) |
+| `recursion_limit()` | `int` | Current max recursion depth |
+| `call_depth()` | `int` | Current call stack depth |
+
+## Usage Examples
+
+### Version and Platform Info
 
 ```desi
 import sys
 
-print("Error message", file=sys.stderr)
-print("Normal output")  # goes to stdout by default
+def main() -> int:
+    print(f"Desi v{sys.version()}")
+    print(f"Pointer size: {str(sys.sizeof_ptr())} bytes")
+    print(f"Byte order: {sys.byteorder()}")
+    print(f"Max int: {str(sys.maxsize())}")
+    0
 ```
 
-## Streams
-
-| Symbol | Type | Description |
-|--------|------|-------------|
-| `sys.stdout` | `ptr` | Standard output stream |
-| `sys.stderr` | `ptr` | Standard error stream |
-
-## Usage
-
-### Printing to stderr
+### Recursion Monitoring
 
 ```desi
 import sys
 
-print("Error: something went wrong", file=sys.stderr)
+def fibonacci(n: int) -> int:
+    let depth = sys.call_depth()
+    if depth > sys.recursion_limit() - 10:
+        print("Warning: approaching recursion limit!")
+    if n <= 1:
+        return n
+    return fibonacci(n - 1) + fibonacci(n - 2)
 ```
-
-### Separating Output
-
-Use stderr for error/diagnostic output and stdout for normal output:
-
-```desi
-import sys
-
-def process(data: str):
-    if len(data) == 0:
-        print("Warning: empty input", file=sys.stderr)
-        return
-    print(f"Processing: {data}")
-```
-
-## Future Additions
-
-The sys module will be expanded to include:
-- `sys.argv` - Command line arguments
-- `sys.exit(code)` - Exit with status code
-- `sys.stdin` - Standard input stream
 
 ## See Also
 
-- [Error Handling](../language/error-handling.md) - For handling errors
+- [OS Module](os.md) — Operating system functions
+- [IO Module](io.md) — Input/output

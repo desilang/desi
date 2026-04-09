@@ -117,17 +117,44 @@ nav:
     - Keywords: reference/keywords.md
     - desic doc: reference/desic-doc.md
   - Standard Library:
-    - HTTP: stdlib/http.md
-    - JSON: stdlib/json.md
+    - Strings: stdlib/strings.md
+    - OS: stdlib/os.md
+    - IO: stdlib/io.md
+    - Path: stdlib/path.md
+    - File System: stdlib/fs.md
+    - System: stdlib/sys.md
     - Math: stdlib/math.md
+    - Random: stdlib/random.md
+    - Time: stdlib/time.md
+    - DateTime: stdlib/datetime.md
+    - JSON: stdlib/json.md
+    - TOML: stdlib/toml.md
+    - CSV: stdlib/csv.md
+    - HTTP: stdlib/http.md
+    - Net: stdlib/net.md
     - Logging: stdlib/log.md
+    - Formatting: stdlib/fmt.md
+    - Regex: stdlib/re.md
+    - Template: stdlib/template.md
+    - Crypto: stdlib/crypto.md
+    - Hash: stdlib/hash.md
+    - Base64: stdlib/base64.md
+    - Encoding: stdlib/encoding.md
+    - UUID: stdlib/uuid.md
+    - Validate: stdlib/validate.md
+    - Color: stdlib/color.md
+    - Compress: stdlib/compress.md
+    - Args: stdlib/args.md
+    - Env: stdlib/env.md
+    - Sync: stdlib/sync.md
     - Database: stdlib/db.md
     - ORM Models: stdlib/models.md
     - PostgreSQL: stdlib/postgres.md
     - MySQL: stdlib/mysql.md
-    - Sync: stdlib/sync.md
-    - System: stdlib/sys.md
-    - Time: stdlib/time.md
+    - SQLite3: stdlib/sqlite3.md
+    - Redis: stdlib/redis.md
+    - Migrations: stdlib/migrations.md
+    - Contributing: stdlib/contributing.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md
     - Async & Await: concurrency/async.md
