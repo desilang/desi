@@ -253,7 +253,7 @@ func main() {
 		goto END
 	}
 
-	term.Println("desic: Try -diag, -version, -demo-tokens, -demo-layout, -tokens <file>, -ast <file>, `emit-ir <file>`, or `check <file>`.")
+	printUsage()
 	exitCode = 0
 
 END:

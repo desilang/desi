@@ -12,6 +12,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/term"
+	"github.com/desilang/desi/compiler/internal/version"
 )
 
 func exit(code int) {
@@ -32,9 +33,48 @@ func init() {
 		exit(buildCmd(os.Args[2:]))
 	case "test":
 		exit(testCmd(os.Args[2:]))
+	case "version":
+		term.Println("desic", version.Version)
+		exit(0)
+	case "help":
+		printUsage()
+		exit(0)
 	default:
 		return
 	}
+}
+
+func printUsage() {
+	term.Println("Desi Compiler v" + version.Version)
+	term.Println("")
+	term.Println("Usage: desic <command> [arguments]")
+	term.Println("")
+	term.Println("Commands:")
+	term.Println("  init [name]              Create a new Desi project")
+	term.Println("  build [file] [-o name]   Build executable (uses desi.mod if no file given)")
+	term.Println("  run [file] [-- args]     Build and run (uses desi.mod if no file given)")
+	term.Println("  test [files] [-v]        Run test files (*_test.desi)")
+	term.Println("  check <file>             Type-check a file")
+	term.Println("  fmt [-w] <file|dir>      Format source code")
+	term.Println("  doc [--all] <file>       Generate documentation")
+	term.Println("  watch [file]             Watch and re-check on change")
+	term.Println("  emit-ir <file>           Emit LLVM IR to stdout")
+	term.Println("  version                  Print version")
+	term.Println("  help                     Show this help")
+	term.Println("")
+	term.Println("Flags:")
+	term.Println("  -O2                      Optimize output")
+	term.Println("  -I <roots>               Import roots (colon-separated)")
+	term.Println("  --error-format <fmt>     Error format: human|json")
+	term.Println("  --color <mode>           Color: auto|always|never")
+	term.Println("")
+	term.Println("Examples:")
+	term.Println("  desic init myapp         Create project in ./myapp")
+	term.Println("  desic run                Run project (uses desi.mod)")
+	term.Println("  desic run hello.desi     Run a single file")
+	term.Println("  desic build -o myapp     Build with custom output name")
+	term.Println("  desic test               Run all *_test.desi files")
+	term.Println("  desic fmt -w src/        Format all files in src/")
 }
 
 // --------------------- init ---------------------
@@ -371,6 +411,8 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	if runtimeLib != "" {
 		clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
 	}
+	// Suppress noisy linker warnings (macOS version mismatch etc.)
+	clangArgs = append(clangArgs, "-w")
 	// Dead code elimination
 	if runtime.GOOS == "darwin" {
 		clangArgs = append(clangArgs, "-Wl,-dead_strip")
@@ -578,6 +620,8 @@ func runSingleTest(testFile string, verbose bool) int {
 	exePath := filepath.Join(tmpDir, "test_runner")
 	clangArgs := []string{"-o", exePath, objPath}
 
+	// Suppress noisy linker warnings
+	clangArgs = append(clangArgs, "-w")
 	// Dead-code elimination
 	if runtime.GOOS == "darwin" {
 		clangArgs = append(clangArgs, "-Wl,-dead_strip")
