@@ -10,8 +10,9 @@ Create a new file called `hello.desi`:
 
 ```desi
 # hello.desi
-def main():
+def main() -> int:
     print("Namaste, World!")
+    0
 ```
 
 ### Understanding the Code
@@ -28,24 +29,25 @@ def main():    # (1)!
 
 ---
 
-## Compile and Run
+## Run It
 
-Compile your program:
-
-```bash
-./bin/desic hello.desi
-```
-
-This creates an executable at `./build/output/test_exec`. Run it:
+The simplest way — build and run in one step:
 
 ```bash
-./build/output/test_exec
+desic run hello.desi
 ```
 
 Output:
 
 ```
 Namaste, World!
+```
+
+Or build an executable you can distribute:
+
+```bash
+desic build hello.desi -o hello
+./build/output/hello
 ```
 
 🎉 Congratulations! You've just run your first Desi program!
@@ -62,29 +64,28 @@ Let's create something more substantial - a greeting program:
 def greet(name: str) -> str:
     return "Namaste, " + name + "!"
 
-def main():
+def main() -> int:
     let message = greet("Desi Developer")
     print(message)
     
-    # Let's also print some numbers
+    # String interpolation with f-strings
     let x = 10
     let y = 20
-    print("Sum:")
-    print(x + y)
+    print(f"Sum: {x + y}")
+    0
 ```
 
-Compile and run:
+Run it:
 
 ```bash
-./bin/desic greet.desi && ./build/output/test_exec
+desic run greet.desi
 ```
 
 Output:
 
 ```
 Namaste, Desi Developer!
-Sum:
-30
+Sum: 30
 ```
 
 ---
@@ -134,29 +135,43 @@ def add(a: int, b: int) -> int:
 
 ---
 
-### Return Type (Optional)
+### Return Types
 
 ```desi
-# ✅ Simple - no return needed for most programs
-def main():
-    print("Hello")
-
-# ✅ Also valid - return int if you need an exit code
+# Return int for exit codes
 def main() -> int:
     print("Hello")
     0  # Exit code 0 = success
 ```
 
-### Type Mismatch
+### String Interpolation
 
 ```desi
-# ❌ Wrong - can't add str and int
-let result = "Count: " + 42
+let name = "world"
+let count = 42
+print(f"Hello {name}, count is {count}")
+```
 
-# ✅ Correct - use string interpolation (coming soon)
-# Or print separately:
-print("Count:")
-print(42)
+---
+
+## Creating a Project
+
+For larger programs, use `desic init` to create a project with a `desi.mod` manifest:
+
+```bash
+desic init myapp
+cd myapp
+desic run          # runs src/main.desi
+desic build        # builds to build/output/myapp
+```
+
+This creates:
+```
+myapp/
+├── desi.mod          # Project manifest
+├── src/
+│   └── main.desi     # Entry point
+└── tests/            # Test files
 ```
 
 ---
@@ -165,6 +180,6 @@ print(42)
 
 Now that you can write basic programs, continue with:
 
-- [Editor Setup](editor-setup.md) - Configure your editor for Desi
+- [IDE Setup](ide-setup.md) - Configure your editor for Desi
 - [Introduction Tutorial](../tutorials/intro.md) - Learn Desi in depth
 - [Variables & Types](../tutorials/variables.md) - All about types

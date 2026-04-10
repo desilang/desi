@@ -43,6 +43,9 @@ DESIREPL = $(BIN_DIR)/desirepl
 DESILSP = $(BIN_DIR)/desilsp
 
 .PHONY: all clean runtime compiler tools directories decimal-lib
+# Go binaries are PHONY because go build has its own cache;
+# it only recompiles when source changes (fast no-op otherwise).
+.PHONY: $(DESIC) $(DESIFMT) $(DESIREPL) $(DESILSP)
 
 all: directories runtime compiler tools
 

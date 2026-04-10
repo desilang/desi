@@ -25,11 +25,11 @@ Clone the repository and build:
 git clone https://github.com/desilang/desi.git
 cd desi
 
-# Build the compiler
+# Build the compiler and runtime
 make
 
 # Verify installation
-./bin/desic -version
+./bin/desic version
 ```
 
 ### Verify LLVM
@@ -69,9 +69,18 @@ After cloning, the Desi project has this structure:
 ```
 desi/
 ├── bin/              # Compiled binaries
-│   └── desic         # The Desi compiler
+│   ├── desic         # The Desi compiler
+│   ├── desifmt       # Code formatter
+│   ├── desirepl      # Interactive REPL
+│   └── desilsp       # Language server (for editors)
 ├── compiler/         # Compiler source code
-├── runtime/          # Runtime library
+│   ├── cmd/          # CLI tools
+│   ├── internal/     # Compiler internals
+│   ├── lib/          # Standard library (.desi files)
+│   └── runtime/      # C runtime library
+├── build/            # Build artifacts
+│   ├── libdesi.a     # Static runtime library
+│   └── output/       # Compiled executables
 ├── examples/         # Example programs
 ├── book/             # This documentation
 └── docs/             # Internal documentation
@@ -84,16 +93,23 @@ desi/
 Create a simple test file:
 
 ```desi
-# test.desi
-def main():
+# hello.desi
+def main() -> int:
     print("Desi is working!")
+    0
 ```
 
-Compile and run:
+Run it directly:
 
 ```bash
-./bin/desic test.desi
-./build/output/test_exec
+desic run hello.desi
+```
+
+Or build an executable:
+
+```bash
+desic build hello.desi -o hello
+./build/output/hello
 ```
 
 You should see:
@@ -104,24 +120,55 @@ Desi is working!
 
 ---
 
-## Build Options
+## The `desic` CLI
 
-The `desic` compiler supports several options:
+The Desi compiler provides subcommands for the full development workflow:
 
-| Option | Description |
-|--------|-------------|
-| `-emit-ir` | Output LLVM IR instead of compiling |
-| `-ast` | Print the AST |
-| `-tokens` | Print tokens |
-| `-check` | Type-check only |
-| `-version` | Show version |
+### Core Commands
 
-Example:
+| Command | Description |
+|---------|-------------|
+| `desic init [name]` | Create a new Desi project with `desi.mod` |
+| `desic build [file]` | Build an executable |
+| `desic run [file]` | Build and run immediately |
+| `desic test [files]` | Run test files (`*_test.desi`) |
+| `desic check <file>` | Type-check without compiling |
+
+### Tool Commands
+
+| Command | Description |
+|---------|-------------|
+| `desic fmt [-w] <file\|dir>` | Format source code |
+| `desic doc [--all] <file>` | Generate documentation |
+| `desic watch [file]` | Watch and re-check on save |
+| `desic emit-ir <file>` | Emit LLVM IR to stdout |
+| `desic version` | Print compiler version |
+| `desic help` | Show all commands |
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-O2` | Optimize output |
+| `-o <name>` | Set output executable name |
+| `-I <roots>` | Import roots (colon-separated) |
+| `--error-format <fmt>` | Error format: `human` or `json` |
+| `--color <mode>` | Color output: `auto`, `always`, or `never` |
+
+### Project Mode vs File Mode
+
+When you run `desic build` or `desic run` **without** a file argument, it uses the `desi.mod` manifest:
 
 ```bash
-# View the generated LLVM IR
-./bin/desic -emit-ir test.desi
+# File mode — compile a single file
+desic run hello.desi
+
+# Project mode — uses desi.mod entry point
+cd myproject/
+desic run
 ```
+
+See [First Program](first-program.md) for a complete project walkthrough.
 
 ---
 
@@ -144,7 +191,7 @@ If linking fails:
 1. Ensure Clang is installed
 2. Check that the runtime library is built:
    ```bash
-   make -C runtime
+   make
    ```
 
 ---
