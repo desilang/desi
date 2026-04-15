@@ -1119,9 +1119,28 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Err block: early return with the receiver (Err/Nothing)
 		ls.b.SetBlock(errBlock)
-		// Run defers and drops before early return
-		ls.emitAllDefersAndDrops()
-		ls.b.Emit(&hir.Ret{Val: inner})
+		if ls.inTryBlock && ls.exceptBlock != nil {
+			// Inside try block: store error value and jump to except handler
+			// Extract error payload from Err variant (at offset 8, same as Ok payload)
+			errPayloadPtrSlot := ls.b.FreshTemp("err_payload_ptr_slot")
+			ls.b.Emit(&hir.GetElementPtr{
+				Type:    "i8",
+				Base:    inner,
+				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
+				Dst:     errPayloadPtrSlot,
+			})
+			errPayloadPtr := ls.b.FreshTemp("err_payload_ptr")
+			ls.b.Emit(&hir.Load{Type: "ptr", Src: errPayloadPtrSlot, Dst: errPayloadPtr})
+			// Store error value for except handler to read
+			if ls.tryErrSlot != nil {
+				ls.b.Emit(&hir.Store{Dst: ls.tryErrSlot, Val: errPayloadPtr})
+			}
+			ls.b.Emit(&hir.Jump{Target: ls.exceptBlock})
+		} else {
+			// Normal ? behavior: run defers and drops, then early return
+			ls.emitAllDefersAndDrops()
+			ls.b.Emit(&hir.Ret{Val: inner})
+		}
 
 		// Switch back to main block and emit conditional
 		ls.b.SetBlock(curBlock)

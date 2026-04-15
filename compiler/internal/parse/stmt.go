@@ -77,6 +77,10 @@ func (p *Parser) parseStmt() ast.Stmt {
 		return p.parseSelect()
 	case token.KW_assert:
 		return p.parseAssert()
+	case token.KW_try:
+		return p.parseTry()
+	case token.KW_raise:
+		return p.parseRaise()
 	default:
 		// Parse the leading expression of a simple statement.
 		e := p.parseExpr()

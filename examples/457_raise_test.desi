@@ -1,0 +1,22 @@
+# Test try/except with raise
+def main():
+    # Test 1: raise inside try should be caught by except
+    # NOTE: raise currently calls __desi_panic which exits,
+    # so it won't actually reach the except handler yet.
+    # This tests that the syntax is properly parsed and IR is valid.
+    
+    # Test 2: basic try/except with finally
+    try:
+        print("in try")
+    except e:
+        print("caught: " + e)
+    finally:
+        print("finally")
+    
+    # Test 3: standalone raise (panic exits process)
+    raise "fatal error"
+
+# EXPECTED_OUTPUT:
+# in try
+# finally
+# panic: fatal error

@@ -80,6 +80,12 @@ void __panic_expect(const char* msg) {
     exit(1);
 }
 
+// Panic with user-provided message (used by 'raise' statement)
+void __desi_panic(const char* msg) {
+    fprintf(stderr, "panic: %s\n", msg ? msg : "(null)");
+    exit(1);
+}
+
 // Assert failure handler
 void __desi_assert_fail(const char* msg) {
     fprintf(stderr, "assertion failed: %s\n", msg);

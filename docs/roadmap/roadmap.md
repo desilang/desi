@@ -413,6 +413,42 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 ---
 
+### M15 — Error Handling: try/except/finally/raise (🔧 In Progress)
+
+**What shipped (Phase 1 — syntax + lowerer scaffolding, ✅)**
+
+* **AST nodes**: `TryStmt` (Body, Except, Finally, ExceptVar, ExceptType) and `RaiseStmt` (Value).
+* **Parser**: `parseTry()` / `parseRaise()` with Python-style syntax:
+  * `try:` body, `except [Type] [as var]:` handler, `finally:` block.
+* **Type checker**: recursive checking of try/except/finally blocks; except variable bound as `str`.
+* **Lowerer**: `TryStmt` creates except/continuation/finally blocks with scope management.
+  * `TryExpr` (`?` operator) is **context-aware** — inside a try block, Err redirects to the except handler instead of early return.
+  * `RaiseStmt` calls `__desi_panic(msg)` + `ret` (exits process).
+* **HIR**: `Jump` instruction for unconditional block transfers.
+* **LLVM backend**: `Jump` handler emits `br label %target`.
+* **Runtime**: `__desi_panic(const char* msg)` in `builtins.c`.
+
+**Phase 2 — Catchable exceptions (Planned)**
+
+* **Mechanism**: `setjmp`/`longjmp` for non-local jumps.
+  * `try:` → `setjmp(buf)` saves execution state (~5-10ns overhead per try entry).
+  * `raise Exc(msg)` → stores error, `longjmp(buf, 1)` unwinds to handler.
+  * `except Exc as e:` → checks error type tag, binds variable.
+  * **No overhead outside try blocks.** Normal code pays zero cost.
+* **Exception hierarchy** (10 built-in types):
+  * `Exception` (base), `ValueError`, `KeyError`, `IndexError`,
+    `ZeroDivisionError`, `IOError`, `RuntimeError`, `OverflowError`,
+    `TimeoutError`, `ConnectionError`.
+* **Runtime**: new `runtime/exception.c` with `__desi_raise`, `__desi_try_push/pop`,
+  `__desi_get_exception`, `ExceptionFrame` stack.
+* Wire `__panic_divzero` → `__desi_raise(ZeroDivisionError)` to make it catchable.
+
+> **Upgrade path (v0.2.0+):** replace `setjmp/longjmp` with **LLVM zero-cost exceptions**
+> (`invoke`/`landingpad`). This gives zero overhead on the happy path at the cost of
+> ~1-5μs on throw. The user-facing syntax stays the same — only the backend changes.
+
+---
+
 ## Cross-cutting practices
 
 * **Testing:** unit tests per package; golden tests for diagnostics & formatter; integration smoke tests for codegen.

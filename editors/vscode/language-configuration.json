@@ -62,6 +62,6 @@
     ],
     "indentationRules": {
         "increaseIndentPattern": "^.*:\\s*$",
-        "decreaseIndentPattern": "^\\s*(pass|return|break|continue)\\b"
+        "decreaseIndentPattern": "^\\s*(pass|return|break|continue|elif|else)\\b"
     }
 }
