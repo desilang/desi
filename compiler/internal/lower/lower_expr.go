@@ -1119,9 +1119,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Err block: early return with the receiver (Err/Nothing)
 		ls.b.SetBlock(errBlock)
-		if ls.inTryBlock && ls.exceptBlock != nil {
-			// Inside try block: store error value and jump to except handler
-			// Extract error payload from Err variant (at offset 8, same as Ok payload)
+		if ls.inTryBlock {
+			// Inside try block: extract error payload and call __desi_raise
+			// which will longjmp to the setjmp point and branch to except handler
 			errPayloadPtrSlot := ls.b.FreshTemp("err_payload_ptr_slot")
 			ls.b.Emit(&hir.GetElementPtr{
 				Type:    "i8",
@@ -1131,11 +1131,18 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			})
 			errPayloadPtr := ls.b.FreshTemp("err_payload_ptr")
 			ls.b.Emit(&hir.Load{Type: "ptr", Src: errPayloadPtrSlot, Dst: errPayloadPtr})
-			// Store error value for except handler to read
-			if ls.tryErrSlot != nil {
-				ls.b.Emit(&hir.Store{Dst: ls.tryErrSlot, Val: errPayloadPtr})
-			}
-			ls.b.Emit(&hir.Jump{Target: ls.exceptBlock})
+			// Raise as base Exception (tag 0) — the ? operator doesn't know
+			// the specific exception type, just the error message string
+			ls.b.Emit(&hir.Call{
+				Fn: "__desi_raise",
+				Args: []hir.Value{
+					hir.ConstInt{Text: "0", Type: "i32"},
+					errPayloadPtr,
+					hir.ConstStr{Text: "Exception"},
+				},
+				Type: "void",
+			})
+			ls.b.Emit(&hir.Ret{Val: nil}) // unreachable after longjmp
 		} else {
 			// Normal ? behavior: run defers and drops, then early return
 			ls.emitAllDefersAndDrops()

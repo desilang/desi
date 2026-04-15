@@ -1,22 +1,35 @@
-# Test try/except with raise
-def main():
-    # Test 1: raise inside try should be caught by except
-    # NOTE: raise currently calls __desi_panic which exits,
-    # so it won't actually reach the except handler yet.
-    # This tests that the syntax is properly parsed and IR is valid.
-    
-    # Test 2: basic try/except with finally
-    try:
-        print("in try")
-    except e:
-        print("caught: " + e)
-    finally:
-        print("finally")
-    
-    # Test 3: standalone raise (panic exits process)
-    raise "fatal error"
+def main() -> int:
+	# Test 1: basic raise string + except
+	try:
+		raise "oops"
+	except e:
+		print("caught: " + e)
+
+	# Test 2: typed exception
+	try:
+		raise ValueError("bad input")
+	except ValueError as e:
+		print("caught ValueError: " + e)
+
+	# Test 3: unmatched type falls through to base
+	try:
+		raise KeyError("missing key")
+	except e:
+		print("caught base: " + e)
+
+	# Test 4: finally always runs
+	try:
+		print("in try body")
+	finally:
+		print("finally ran")
+
+	print("all tests passed")
+	return 0
 
 # EXPECTED_OUTPUT:
-# in try
-# finally
-# panic: fatal error
+# caught: oops
+# caught ValueError: bad input
+# caught base: missing key
+# in try body
+# finally ran
+# all tests passed

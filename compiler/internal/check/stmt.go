@@ -902,10 +902,19 @@ func (c *checker) checkStmt(s ast.Stmt) {
 			if st.ExceptVar != nil {
 				// Bind error variable in a nested scope
 				c.scope = NewScope(c.scope)
+
+				// Validate exception type if present
+				if st.ExceptType != nil {
+					if !isExceptionTypeName(st.ExceptType.Name) {
+						c.add(diagAt("DTE0004", st.ExceptType.Span,
+							"unknown exception type '"+st.ExceptType.Name+"'"))
+					}
+				}
+
 				sym := &Symbol{
 					Name: st.ExceptVar.Name,
 					Kind: SymVar,
-					Type: types.Str, // error type defaults to str for now
+					Type: types.Str, // exception message is always str
 					Node: st,
 				}
 				_ = c.scope.Define(sym)
@@ -923,7 +932,32 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 
 	case *ast.RaiseStmt:
-		// Type check the error expression
+		// raise "msg" → str expression
+		// raise ValueError("msg") → treated as exception constructor call
+		if call, ok := st.Value.(*ast.CallExpr); ok {
+			if ident, ok := call.Callee.(*ast.Ident); ok {
+				if isExceptionTypeName(ident.Name) {
+					// Valid exception constructor — check args
+					if len(call.Args) == 1 {
+						argT := c.typ(call.Args[0])
+						if argT != nil && !types.Assignable(types.Str, argT) {
+							c.add(diagAt("DTE0004", call.Args[0].SpanOf(),
+								"exception message must be str, got "+argT.String()))
+						}
+					} else if len(call.Args) == 0 {
+						// raise ValueError() — empty message is ok
+					} else {
+						c.add(diagAt("DTE0004", call.SpanOf(),
+							"exception constructor takes 0 or 1 arguments"))
+					}
+					// Mark the call expression type so lowerer doesn't try to find a function
+					c.info.Types[call] = types.Str
+					c.info.Types[ident] = types.Str
+					return // skip normal type checking
+				}
+			}
+		}
+		// Default: type check the error expression (should be str)
 		_ = c.typ(st.Value)
 	}
 
@@ -1142,6 +1176,24 @@ func (c *checker) isNonEscapingType(t types.T) bool {
 	}
 	switch t.(type) {
 	case *types.MutexGuard, *types.ReadGuard, *types.WriteGuard:
+		return true
+	}
+	return false
+}
+
+// isExceptionTypeName returns true if name is a recognized Desi exception type.
+func isExceptionTypeName(name string) bool {
+	switch name {
+	case "Exception",
+		"ValueError",
+		"KeyError",
+		"IndexError",
+		"ZeroDivisionError",
+		"IOError",
+		"RuntimeError",
+		"OverflowError",
+		"TimeoutError",
+		"ConnectionError":
 		return true
 	}
 	return false

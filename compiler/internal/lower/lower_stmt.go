@@ -1922,12 +1922,24 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 	case *ast.TryStmt:
-		// try/except/finally lowering:
-		// 1. Allocate error slot for except handler
-		// 2. Set inTryBlock so ? operator redirects to except handler
-		// 3. Lower try body
-		// 4. Lower except handler
-		// 5. Lower finally body (always runs)
+		// try/except/finally lowering with setjmp/longjmp:
+		//
+		//   ExceptionFrame frame
+		//   __desi_try_push(&frame)
+		//   result = setjmp(frame.buf)
+		//   if result == 0:
+		//       // try body
+		//       __desi_try_pop()
+		//       goto finally/cont
+		//   else:
+		//       // exception was raised via longjmp
+		//       exc = __desi_get_exception()
+		//       if except_matches_type(exc):
+		//           // except body
+		//           goto finally/cont
+		//       else:
+		//           // re-raise (propagate to parent handler)
+		//           __desi_reraise()
 
 		// Save previous try state (for nested try blocks)
 		prevInTry := ls.inTryBlock
@@ -1935,29 +1947,62 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		prevErrSlot := ls.tryErrSlot
 
 		// Create blocks
+		tryBodyBlk := ls.b.NewBlock("try_body")
 		var exceptBlk *hir.Block
 		contBlk := ls.b.NewBlock("try_cont")
 
-		// Allocate error slot if there's an except clause
-		var errSlot hir.Value
 		if s.Except != nil {
 			exceptBlk = ls.b.NewBlock("except")
-
-			// Allocate a slot to hold the error value (ptr)
-			errSlotTemp := ls.b.FreshTemp("try_err_slot")
-			ls.b.Emit(&hir.Alloca{Type: "ptr", Count: 1, Dst: errSlotTemp})
-			errSlot = errSlotTemp
-
-			// Set try state so ? operator redirects here
-			ls.inTryBlock = true
-			ls.exceptBlock = exceptBlk
-			ls.tryErrSlot = errSlot
 		}
 
-		// Lower try body
-		curBlock := ls.b.Block()
-		wasTerminated := ls.terminated
+		// 1. Allocate ExceptionFrame on the stack
+		//    struct DesiExceptionFrame { jmp_buf buf; DesiExceptionFrame* prev; }
+		//    On ARM64 macOS, jmp_buf is typically ~192 bytes (48 x i32 or 24 x i64)
+		//    We over-allocate to be safe: 256 bytes total for the frame
+		frameSlot := ls.b.FreshTemp("exc_frame")
+		ls.b.Emit(&hir.Alloca{Type: "i8", Count: 256, Dst: frameSlot})
+
+		// 2. Call __desi_try_push(&frame)
+		ls.b.Emit(&hir.Call{
+			Fn:   "__desi_try_push",
+			Args: []hir.Value{frameSlot},
+			Type: "void",
+		})
+
+		// 3. Call setjmp(frame) — returns 0 on initial call, non-0 on longjmp
+		sjResult := ls.b.FreshTemp("setjmp_result")
+		ls.b.Emit(&hir.Call{
+			Dst:  sjResult,
+			Fn:   "setjmp",
+			Args: []hir.Value{frameSlot},
+			Type: "i32",
+		})
+
+		// 4. Branch: setjmp == 0 → try body, else → except handler
+		isNormal := ls.b.FreshTemp("is_normal")
+		ls.b.Emit(&hir.BinaryOp{
+			Op:   "==",
+			LHS:  sjResult,
+			RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+			Dst:  isNormal,
+			Type: "i1",
+		})
+
+		if exceptBlk != nil {
+			ls.b.Emit(&hir.If{Cond: isNormal, Then: tryBodyBlk, Else: exceptBlk})
+		} else {
+			// No except clause — if exception happens, it propagates
+			ls.b.Emit(&hir.If{Cond: isNormal, Then: tryBodyBlk, Else: contBlk})
+		}
+
+		// === Try body block ===
+		ls.b.SetBlock(tryBodyBlk)
 		ls.terminated = false
+
+		// Set try state so raise/? inside body will use longjmp
+		ls.inTryBlock = true
+		ls.exceptBlock = exceptBlk
+		ls.tryErrSlot = nil // not used for setjmp path
 
 		ls.push()
 		if s.Body != nil {
@@ -1966,32 +2011,91 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		scTry := ls.pop()
 		if !ls.terminated {
 			ls.emitScopeDrops(scTry)
-			// Try body completed normally → jump to continuation
+			// Normal completion: pop the handler frame and jump to cont
+			ls.b.Emit(&hir.Call{
+				Fn:   "__desi_try_pop",
+				Args: nil,
+				Type: "void",
+			})
 			ls.b.Emit(&hir.Jump{Target: contBlk})
 		}
-		tryTerminated := ls.terminated
 
 		// Restore try state
 		ls.inTryBlock = prevInTry
 		ls.exceptBlock = prevExceptBlock
 		ls.tryErrSlot = prevErrSlot
 
-		// Lower except handler
+		// === Except handler block ===
 		if s.Except != nil && exceptBlk != nil {
 			ls.b.SetBlock(exceptBlk)
 			ls.terminated = false
 
 			ls.push()
 
+			// Check if except type matches (if typed except)
+			var matchCheckDone *hir.Block
+			if s.ExceptType != nil {
+				// Typed except: except ValueError as e:
+				// Get exception tag and compare to expected type tag
+				excTag := ls.b.FreshTemp("exc_tag")
+				ls.b.Emit(&hir.Call{
+					Dst:  excTag,
+					Fn:   "__desi_exception_tag",
+					Args: nil,
+					Type: "i32",
+				})
+
+				// Map type name to tag
+				expectedTag := exceptionTypeTag(s.ExceptType.Name)
+				matches := ls.b.FreshTemp("exc_matches")
+				ls.b.Emit(&hir.Call{
+					Dst:  matches,
+					Fn:   "__desi_exception_matches",
+					Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", expectedTag), Type: "i32"}},
+					Type: "i32",
+				})
+
+				// Convert i32 to i1 for branch
+				matchBool := ls.b.FreshTemp("exc_match_bool")
+				ls.b.Emit(&hir.BinaryOp{
+					Op:   "!=",
+					LHS:  matches,
+					RHS:  hir.ConstInt{Text: "0", Type: "i32"},
+					Dst:  matchBool,
+					Type: "i1",
+				})
+
+				handleBlk := ls.b.NewBlock("except_handle")
+				reraiseBlk := ls.b.NewBlock("except_reraise")
+				ls.b.Emit(&hir.If{Cond: matchBool, Then: handleBlk, Else: reraiseBlk})
+
+				// Re-raise block: type didn't match, propagate exception
+				ls.b.SetBlock(reraiseBlk)
+				ls.b.Emit(&hir.Call{
+					Fn:   "__desi_reraise",
+					Args: nil,
+					Type: "void",
+				})
+				ls.b.Emit(&hir.Ret{Val: nil})
+
+				// Handle block: type matched, run except body
+				ls.b.SetBlock(handleBlk)
+			}
+
 			// Bind error variable if present
 			if s.ExceptVar != nil {
-				// Load error value from slot
-				errVal := ls.b.FreshTemp("err_val")
-				ls.b.Emit(&hir.Load{Type: "ptr", Src: errSlot, Dst: errVal})
+				// Get exception message string
+				errMsg := ls.b.FreshTemp("exc_msg")
+				ls.b.Emit(&hir.Call{
+					Dst:  errMsg,
+					Fn:   "__desi_exception_message",
+					Args: nil,
+					Type: "ptr",
+				})
 
 				// Bind to variable name
 				ls.cur().locals = append(ls.cur().locals, s.ExceptVar.Name)
-				ls.b.Emit(&hir.Let{Name: s.ExceptVar.Name, Init: errVal, Type: nil})
+				ls.b.Emit(&hir.Let{Name: s.ExceptVar.Name, Init: errMsg, Type: nil})
 			}
 
 			ls.lowerBlock(s.Except)
@@ -2000,13 +2104,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.emitScopeDrops(scExcept)
 				ls.b.Emit(&hir.Jump{Target: contBlk})
 			}
+			_ = matchCheckDone
 		}
 
-		// Continue in the continuation block
+		// === Continuation block ===
 		ls.b.SetBlock(contBlk)
-		_ = curBlock
-		_ = wasTerminated
-		_ = tryTerminated
 		ls.terminated = false
 
 		// Lower finally body (always runs after try or except)
@@ -2020,20 +2122,94 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 
 	case *ast.RaiseStmt:
-		// raise expr → call __desi_panic(str_value) which prints and exits
-		// In a future version, this will construct Err(expr) and return.
-		val := ls.lowerExpr(s.Value)
+		// raise ExcType("msg") → __desi_raise(tag, msg, type_name)
+		// raise "msg"          → __desi_raise(0, msg, "Exception")
+
+		// Determine exception type tag and name from the raise expression
+		excTag := 0 // default: Exception
+		excName := "Exception"
+		var val hir.Value
+
+		if call, ok := s.Value.(*ast.CallExpr); ok {
+			// raise ValueError("msg") — extract type name from callee
+			// Do NOT lower the whole CallExpr (it would emit a declare for ValueError as a function).
+			// Instead, extract the type name and lower only the message argument.
+			if ident, ok := call.Callee.(*ast.Ident); ok {
+				if isExceptionTypeName(ident.Name) {
+					excTag = exceptionTypeTag(ident.Name)
+					excName = ident.Name
+					if len(call.Args) > 0 {
+						val = ls.lowerExpr(call.Args[0])
+					} else {
+						val = hir.ConstStr{Text: excName}
+					}
+				} else {
+					// Unknown callee — lower the whole expression (user-defined exception?)
+					val = ls.lowerExpr(s.Value)
+				}
+			} else {
+				val = ls.lowerExpr(s.Value)
+			}
+		} else {
+			// raise "msg" — plain string
+			val = ls.lowerExpr(s.Value)
+		}
+
 		ls.b.Emit(&hir.Call{
-			Fn:   "__desi_panic",
-			Args: []hir.Value{val},
+			Fn: "__desi_raise",
+			Args: []hir.Value{
+				hir.ConstInt{Text: fmt.Sprintf("%d", excTag), Type: "i32"},
+				val,
+				hir.ConstStr{Text: excName},
+			},
 			Type: "void",
 		})
-		// __desi_panic never returns (it calls exit(1)), but LLVM requires
-		// every basic block to have a terminator instruction
+		// __desi_raise never returns (it calls longjmp or exit)
 		ls.b.Emit(&hir.Ret{Val: nil})
 		ls.terminated = true
 
 	default:
 		// other statements ignored for this phase
+	}
+}
+
+// exceptionTypeTag maps a Desi exception type name to its integer tag.
+// Tags must match the DESI_EXC_* constants in runtime/exception.h.
+func exceptionTypeTag(name string) int {
+	switch name {
+	case "Exception":
+		return 0
+	case "ValueError":
+		return 1
+	case "KeyError":
+		return 2
+	case "IndexError":
+		return 3
+	case "ZeroDivisionError":
+		return 4
+	case "IOError":
+		return 5
+	case "RuntimeError":
+		return 6
+	case "OverflowError":
+		return 7
+	case "TimeoutError":
+		return 8
+	case "ConnectionError":
+		return 9
+	default:
+		return 0 // Unknown → treat as base Exception
+	}
+}
+
+// isExceptionTypeName returns true if the given name is a known Desi exception type.
+func isExceptionTypeName(name string) bool {
+	switch name {
+	case "Exception", "ValueError", "KeyError", "IndexError",
+		"ZeroDivisionError", "IOError", "RuntimeError",
+		"OverflowError", "TimeoutError", "ConnectionError":
+		return true
+	default:
+		return false
 	}
 }
