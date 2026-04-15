@@ -142,6 +142,31 @@ func (m *Module) emitCall(c *hir.Call) {
 	case "taskgroup_is_cancelled":
 		m.ensureDecl("declare i1 @taskgroup_is_cancelled(ptr)")
 		m.definedFunctions["taskgroup_is_cancelled"] = true
+	// Exception handling runtime
+	case "setjmp":
+		m.ensureDecl("declare i32 @setjmp(ptr)")
+		m.definedFunctions["setjmp"] = true
+	case "__desi_try_push":
+		m.ensureDecl("declare void @__desi_try_push(ptr)")
+		m.definedFunctions["__desi_try_push"] = true
+	case "__desi_try_pop":
+		m.ensureDecl("declare void @__desi_try_pop()")
+		m.definedFunctions["__desi_try_pop"] = true
+	case "__desi_raise":
+		m.ensureDecl("declare void @__desi_raise(i32, ptr, ptr)")
+		m.definedFunctions["__desi_raise"] = true
+	case "__desi_reraise":
+		m.ensureDecl("declare void @__desi_reraise()")
+		m.definedFunctions["__desi_reraise"] = true
+	case "__desi_exception_tag":
+		m.ensureDecl("declare i32 @__desi_exception_tag()")
+		m.definedFunctions["__desi_exception_tag"] = true
+	case "__desi_exception_message":
+		m.ensureDecl("declare ptr @__desi_exception_message()")
+		m.definedFunctions["__desi_exception_message"] = true
+	case "__desi_exception_matches":
+		m.ensureDecl("declare i32 @__desi_exception_matches(i32)")
+		m.definedFunctions["__desi_exception_matches"] = true
 	}
 
 	// JSON parse: __json_parse(text) -> ptr

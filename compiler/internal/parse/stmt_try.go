@@ -30,6 +30,7 @@ func (p *Parser) parseTry() ast.Stmt {
 	body := p.parseBlock()
 
 	var exceptVar *ast.Ident
+	var exceptType *ast.Ident
 	var exceptBody *ast.Block
 	var finallyBody *ast.Block
 
@@ -40,10 +41,31 @@ func (p *Parser) parseTry() ast.Stmt {
 	if p.cur.Tok == token.KW_except {
 		p.next() // consume 'except'
 
-		// Optional error binding: except e:
+		// Three forms:
+		// 1. except:                    → bare except (catch all)
+		// 2. except e:                  → bind error as 'e'
+		// 3. except ValueError as e:    → typed catch with binding
 		if p.cur.Tok == token.IDENT {
-			exceptVar = &ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
-			p.next()
+			// Peek ahead: if next is 'as', this is a typed except
+			// e.g., except ValueError as e:
+			first := p.cur
+			if p.peek.Tok == token.KW_as {
+				// Typed except: except Type as var:
+				exceptType = &ast.Ident{Name: first.Lexeme, Span: spanPos(p.file, first)}
+				p.next() // consume type name
+				p.next() // consume 'as'
+				if p.cur.Tok == token.IDENT {
+					exceptVar = &ast.Ident{Name: p.cur.Lexeme, Span: spanPos(p.file, p.cur)}
+					p.next() // consume var name
+				} else {
+					p.errExpected(spanPos(p.file, p.cur), "variable name after 'as'")
+					return nil
+				}
+			} else {
+				// Simple binding: except e:
+				exceptVar = &ast.Ident{Name: first.Lexeme, Span: spanPos(p.file, first)}
+				p.next()
+			}
 		}
 
 		if !p.expect(token.COLON, ":") {
@@ -87,11 +109,12 @@ func (p *Parser) parseTry() ast.Stmt {
 	}
 
 	return &ast.TryStmt{
-		Body:      body,
-		ExceptVar: exceptVar,
-		Except:    exceptBody,
-		Finally:   finallyBody,
-		Span:      ast.JoinSpan(start, end),
+		Body:       body,
+		ExceptVar:  exceptVar,
+		ExceptType: exceptType,
+		Except:     exceptBody,
+		Finally:    finallyBody,
+		Span:       ast.JoinSpan(start, end),
 	}
 }
 

@@ -1,0 +1,37 @@
+# Test: typed except clauses
+# Tests exception type matching with the 10-type hierarchy
+
+def main() -> int:
+    # Test 1: Typed except catches matching exception
+    try:
+        raise ValueError("bad value")
+    except ValueError as e:
+        print("ValueError caught: " + e)
+
+    # Test 2: Typed except with ZeroDivisionError
+    try:
+        raise ZeroDivisionError("cannot divide by zero")
+    except ZeroDivisionError as e:
+        print("ZeroDivision caught: " + e)
+
+    # Test 3: Exception catches all types (base class)
+    try:
+        raise KeyError("key not found")
+    except Exception as e:
+        print("Exception caught: " + e)
+
+    # Test 4: try body completes normally with typed except
+    try:
+        print("normal execution")
+    except ValueError as e:
+        print("should not reach")
+
+    print("all tests passed")
+    return 0
+
+# EXPECTED_OUTPUT:
+# ValueError caught: bad value
+# ZeroDivision caught: cannot divide by zero
+# Exception caught: key not found
+# normal execution
+# all tests passed

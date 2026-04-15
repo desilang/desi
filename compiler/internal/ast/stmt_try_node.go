@@ -11,11 +11,12 @@ import "github.com/desilang/desi/compiler/internal/diag"
 //	finally:
 //	    cleanup
 type TryStmt struct {
-	Body      *Block    // try body (always present)
-	ExceptVar *Ident    // optional error binding in except clause (nil for bare except)
-	Except    *Block    // except handler body (nil if no except clause)
-	Finally   *Block    // finally body (nil if no finally clause)
-	Span      diag.Span
+	Body       *Block    // try body (always present)
+	ExceptVar  *Ident    // optional error binding in except clause (nil for bare except)
+	ExceptType *Ident    // optional exception type in except clause (nil = catch all)
+	Except     *Block    // except handler body (nil if no except clause)
+	Finally    *Block    // finally body (nil if no finally clause)
+	Span       diag.Span
 }
 
 func (*TryStmt) isStmt()             {}
