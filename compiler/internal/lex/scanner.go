@@ -1030,6 +1030,14 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_spawn, true
 	case "assert":
 		return token.KW_assert, true
+	case "try":
+		return token.KW_try, true
+	case "except":
+		return token.KW_except, true
+	case "finally":
+		return token.KW_finally, true
+	case "raise":
+		return token.KW_raise, true
 	default:
 		return token.ILLEGAL, false
 	}

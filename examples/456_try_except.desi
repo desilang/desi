@@ -1,0 +1,27 @@
+# Try/Except error handling example
+# Demonstrates try, except, finally, and raise
+
+def main():
+    # Basic try/except (no error path, so except is skipped)
+    try:
+        print("trying something")
+        print("no error occurred")
+    except e:
+        print("caught: " + e)
+
+    # Try with finally
+    try:
+        print("with finally")
+    except e:
+        print("error: " + e)
+    finally:
+        print("finally runs always")
+
+    print("done")
+
+# EXPECTED_OUTPUT:
+# trying something
+# no error occurred
+# with finally
+# finally runs always
+# done

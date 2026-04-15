@@ -226,6 +226,13 @@ type If struct {
 
 func (*If) isStmt() {}
 
+// Jump: unconditional branch to a target block
+type Jump struct {
+	Target *Block
+}
+
+func (*Jump) isStmt() {}
+
 type While struct {
 	Cond      Value  // Final condition value (temp holding boolean result)
 	CondBlock *Block // Block that evaluates Cond (for re-evaluation in loop header)

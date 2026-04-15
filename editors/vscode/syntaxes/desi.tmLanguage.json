@@ -54,6 +54,18 @@
                     ]
                 },
                 {
+                    "comment": "Rust-style raw strings: r\"...\", r#\"...\"#, r##\"...\"##, etc.",
+                    "begin": "r(#+)\"",
+                    "end": "\"\\1",
+                    "name": "string.quoted.raw.desi"
+                },
+                {
+                    "comment": "Simple raw string: r\"...\"",
+                    "begin": "r\"",
+                    "end": "\"",
+                    "name": "string.quoted.raw.desi"
+                },
+                {
                     "begin": "\"",
                     "end": "\"",
                     "name": "string.quoted.double.desi"
@@ -68,7 +80,7 @@
         "keywords": {
             "patterns": [
                 {
-                    "match": "\\b(def|class|struct|enum|trait|impl|if|elif|else|for|while|match|case|return|break|continue|pass|let|mut|pub|async|await|spawn|using|defer|unsafe|import|from|as|in|is|not|and|or|type)\\b",
+                    "match": "\\b(def|class|struct|enum|trait|impl|if|elif|else|for|while|match|select|return|break|continue|pass|let|mut|pub|async|await|spawn|using|defer|unsafe|import|from|as|in|is|not|and|or|type|ref|inout|const|static|lambda|assert|try|except|finally|raise)\\b",
                     "name": "keyword.control.desi"
                 },
                 {
@@ -76,17 +88,17 @@
                     "name": "constant.language.desi"
                 },
                 {
-                    "match": "\\b(Some|Nothing|Ok|Err|Option|Result)\\b",
+                    "match": "\\b(Some|Nothing|Ok|Err|Option|Result|Channel|Mutex|TaskGroup|Decimal|File|Type)\\b",
                     "name": "support.type.desi"
                 }
             ]
         },
         "operators": {
-            "match": "(\\+|-|\\*|/|%|==|!=|<=|>=|<|>|=|:=|->|\\|>|\\?|&|\\|)",
+            "match": "(\\*\\*|=>|:=|::|<<|>>|\\|>|->|==|!=|<=|>=|\\+=|-=|\\*=|/=|%=|\\*\\*=|\\^=|&=|\\|=|<<=|>>=|\\+|-|\\*|/|%|<|>|=|~|\\?|&|\\||\\^)",
             "name": "keyword.operator.desi"
         },
         "numbers": {
-            "match": "\\b(0x[0-9a-fA-F]+|0b[01]+|0o[0-7]+|[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)\\b",
+            "match": "\\b(0x[0-9a-fA-F_]+|0b[01_]+|0o[0-7_]+|[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9_]+)?[dD]?)\\b",
             "name": "constant.numeric.desi"
         },
         "functions": {
@@ -98,11 +110,11 @@
             }
         },
         "types": {
-            "match": "\\b(int|float|bool|str|none|list|dict|set|tuple|Any|i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|usize|isize|char|ptr|cptr|Rc|Arc|future)\\b",
+            "match": "\\b(int|float|bool|str|string|none|list|dict|set|tuple|Any|i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|f32|f64|usize|isize|char|ptr|cptr|Rc|Arc|future)\\b",
             "name": "support.type.primitive.desi"
         },
         "decorators": {
-            "match": "@[a-zA-Z_][a-zA-Z0-9_]*",
+            "match": "@[a-zA-Z_][a-zA-Z0-9_]*(\\([^)]*\\))?",
             "name": "entity.name.function.decorator.desi"
         }
     }

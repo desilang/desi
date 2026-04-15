@@ -1921,6 +1921,118 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.lowerBlock(s.Body)
 		}
 
+	case *ast.TryStmt:
+		// try/except/finally lowering:
+		// 1. Allocate error slot for except handler
+		// 2. Set inTryBlock so ? operator redirects to except handler
+		// 3. Lower try body
+		// 4. Lower except handler
+		// 5. Lower finally body (always runs)
+
+		// Save previous try state (for nested try blocks)
+		prevInTry := ls.inTryBlock
+		prevExceptBlock := ls.exceptBlock
+		prevErrSlot := ls.tryErrSlot
+
+		// Create blocks
+		var exceptBlk *hir.Block
+		contBlk := ls.b.NewBlock("try_cont")
+
+		// Allocate error slot if there's an except clause
+		var errSlot hir.Value
+		if s.Except != nil {
+			exceptBlk = ls.b.NewBlock("except")
+
+			// Allocate a slot to hold the error value (ptr)
+			errSlotTemp := ls.b.FreshTemp("try_err_slot")
+			ls.b.Emit(&hir.Alloca{Type: "ptr", Count: 1, Dst: errSlotTemp})
+			errSlot = errSlotTemp
+
+			// Set try state so ? operator redirects here
+			ls.inTryBlock = true
+			ls.exceptBlock = exceptBlk
+			ls.tryErrSlot = errSlot
+		}
+
+		// Lower try body
+		curBlock := ls.b.Block()
+		wasTerminated := ls.terminated
+		ls.terminated = false
+
+		ls.push()
+		if s.Body != nil {
+			ls.lowerBlock(s.Body)
+		}
+		scTry := ls.pop()
+		if !ls.terminated {
+			ls.emitScopeDrops(scTry)
+			// Try body completed normally → jump to continuation
+			ls.b.Emit(&hir.Jump{Target: contBlk})
+		}
+		tryTerminated := ls.terminated
+
+		// Restore try state
+		ls.inTryBlock = prevInTry
+		ls.exceptBlock = prevExceptBlock
+		ls.tryErrSlot = prevErrSlot
+
+		// Lower except handler
+		if s.Except != nil && exceptBlk != nil {
+			ls.b.SetBlock(exceptBlk)
+			ls.terminated = false
+
+			ls.push()
+
+			// Bind error variable if present
+			if s.ExceptVar != nil {
+				// Load error value from slot
+				errVal := ls.b.FreshTemp("err_val")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: errSlot, Dst: errVal})
+
+				// Bind to variable name
+				ls.cur().locals = append(ls.cur().locals, s.ExceptVar.Name)
+				ls.b.Emit(&hir.Let{Name: s.ExceptVar.Name, Init: errVal, Type: nil})
+			}
+
+			ls.lowerBlock(s.Except)
+			scExcept := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scExcept)
+				ls.b.Emit(&hir.Jump{Target: contBlk})
+			}
+		}
+
+		// Continue in the continuation block
+		ls.b.SetBlock(contBlk)
+		_ = curBlock
+		_ = wasTerminated
+		_ = tryTerminated
+		ls.terminated = false
+
+		// Lower finally body (always runs after try or except)
+		if s.Finally != nil {
+			ls.push()
+			ls.lowerBlock(s.Finally)
+			scFinally := ls.pop()
+			if !ls.terminated {
+				ls.emitScopeDrops(scFinally)
+			}
+		}
+
+	case *ast.RaiseStmt:
+		// raise expr → call __desi_panic(str_value) which prints and exits
+		// In a future version, this will construct Err(expr) and return.
+		val := ls.lowerExpr(s.Value)
+		ls.b.Emit(&hir.Call{
+			Fn:   "__desi_panic",
+			Args: []hir.Value{val},
+			Type: "void",
+		})
+		// __desi_panic never returns (it calls exit(1)), but LLVM requires
+		// every basic block to have a terminator instruction
+		ls.b.Emit(&hir.Ret{Val: nil})
+		ls.terminated = true
+
 	default:
 		// other statements ignored for this phase
 	}

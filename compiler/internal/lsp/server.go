@@ -707,6 +707,56 @@ func (s *Server) getSemanticTokens(doc *Document) []int {
 			data = append(data, length, SemanticTokenTypeEnum, 1)
 			prevLine = line
 			prevChar = char
+
+		case *ast.TraitDecl:
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeInterface, 1)
+			prevLine = line
+			prevChar = char
+
+		case *ast.ImplDecl:
+			if d.ForType != nil {
+				span := d.ForType.Span
+				line := span.Start.Line - 1
+				char := span.Start.Col - 1
+				length := len(d.ForType.Name)
+
+				data = append(data, line-prevLine)
+				if line == prevLine {
+					data = append(data, char-prevChar)
+				} else {
+					data = append(data, char)
+				}
+				data = append(data, length, SemanticTokenTypeType, 1)
+				prevLine = line
+				prevChar = char
+			}
+
+		case *ast.TypeAliasDecl:
+			span := d.Name.Span
+			line := span.Start.Line - 1
+			char := span.Start.Col - 1
+			length := len(d.Name.Name)
+
+			data = append(data, line-prevLine)
+			if line == prevLine {
+				data = append(data, char-prevChar)
+			} else {
+				data = append(data, char)
+			}
+			data = append(data, length, SemanticTokenTypeType, 1)
+			prevLine = line
+			prevChar = char
 		}
 	}
 
@@ -791,6 +841,24 @@ func (s *Server) handleWorkspaceSymbol(req *Request) {
 			case *ast.EnumDecl:
 				name = d.Name.Name
 				kind = SymbolKindEnum
+				span = d.Name.Span
+			case *ast.TraitDecl:
+				name = d.Name.Name
+				kind = SymbolKindInterface
+				span = d.Name.Span
+			case *ast.ImplDecl:
+				if d.Trait != nil && d.ForType != nil {
+					name = d.Trait.Name + " for " + d.ForType.Name
+				} else if d.ForType != nil {
+					name = "impl " + d.ForType.Name
+				} else {
+					continue
+				}
+				kind = SymbolKindNamespace
+				span = d.Span
+			case *ast.TypeAliasDecl:
+				name = d.Name.Name
+				kind = SymbolKindVariable // TypeParameter not available, Variable works for type aliases
 				span = d.Name.Span
 			default:
 				continue
@@ -1072,6 +1140,33 @@ func (s *Server) getDocumentSymbols(doc *Document) []DocumentSymbol {
 				Range:          diagSpanToRange(d.Span),
 				SelectionRange: diagSpanToRange(d.Name.Span),
 			})
+		case *ast.TraitDecl:
+			symbols = append(symbols, DocumentSymbol{
+				Name:           d.Name.Name,
+				Kind:           SymbolKindInterface,
+				Range:          diagSpanToRange(d.Span),
+				SelectionRange: diagSpanToRange(d.Name.Span),
+			})
+		case *ast.ImplDecl:
+			implName := "impl"
+			if d.Trait != nil && d.ForType != nil {
+				implName = d.Trait.Name + " for " + d.ForType.Name
+			} else if d.ForType != nil {
+				implName = "impl " + d.ForType.Name
+			}
+			symbols = append(symbols, DocumentSymbol{
+				Name:           implName,
+				Kind:           SymbolKindNamespace,
+				Range:          diagSpanToRange(d.Span),
+				SelectionRange: diagSpanToRange(d.Span),
+			})
+		case *ast.TypeAliasDecl:
+			symbols = append(symbols, DocumentSymbol{
+				Name:           d.Name.Name,
+				Kind:           SymbolKindVariable,
+				Range:          diagSpanToRange(d.Span),
+				SelectionRange: diagSpanToRange(d.Name.Span),
+			})
 		}
 	}
 	return symbols
@@ -1081,17 +1176,20 @@ func (s *Server) getDocumentSymbols(doc *Document) []DocumentSymbol {
 func (s *Server) getCompletions(doc *Document, pos Position) []CompletionItem {
 	var items []CompletionItem
 
-	// Add Desi keywords
+	// Add Desi keywords (canonical set from token/keywords.go)
 	keywords := []string{
-		"def", "class", "struct", "enum", "trait", "impl",
-		"if", "elif", "else", "for", "while", "match",
+		"def", "class", "struct", "enum", "trait", "impl", "type",
+		"if", "elif", "else", "for", "while", "match", "select",
 		"return", "break", "continue", "pass",
-		"let", "mut", "pub", "async", "await",
+		"let", "mut", "const", "static", "pub",
+		"async", "await", "spawn",
 		"import", "from", "as",
 		"true", "false", "none",
 		"and", "or", "not", "in", "is",
-		"try", "except", "finally", "raise",
 		"using", "defer", "unsafe",
+		"lambda", "assert",
+		"ref", "inout",
+		"try", "except", "finally", "raise",
 	}
 	for _, kw := range keywords {
 		items = append(items, CompletionItem{

@@ -837,6 +837,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// lifetime.end calls. The merge block is a new block with its own lifetime tracking.
 				lifetimesClosed = true
 
+			case *hir.Jump:
+				// Unconditional branch to target block
+				targetLabel := blockLabels[x.Target]
+				wprintf(&m.funcs, "  br label %%%s\n", targetLabel)
+				lifetimesClosed = true
+
 			case *hir.While:
 				// Emit proper LLVM loop structure:
 				// entry:

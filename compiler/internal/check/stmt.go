@@ -891,6 +891,40 @@ func (c *checker) checkStmt(s ast.Stmt) {
 
 			c.checkBlock(st.Body)
 		}
+
+	case *ast.TryStmt:
+		// Type check try body
+		if st.Body != nil {
+			c.checkBlock(st.Body)
+		}
+		// Type check except clause
+		if st.Except != nil {
+			if st.ExceptVar != nil {
+				// Bind error variable in a nested scope
+				c.scope = NewScope(c.scope)
+				sym := &Symbol{
+					Name: st.ExceptVar.Name,
+					Kind: SymVar,
+					Type: types.Str, // error type defaults to str for now
+					Node: st,
+				}
+				_ = c.scope.Define(sym)
+				c.info.Idents[st.ExceptVar] = sym
+				c.info.Types[st.ExceptVar] = types.Str
+				c.checkBlock(st.Except)
+				c.scope = c.scope.parent
+			} else {
+				c.checkBlock(st.Except)
+			}
+		}
+		// Type check finally clause
+		if st.Finally != nil {
+			c.checkBlock(st.Finally)
+		}
+
+	case *ast.RaiseStmt:
+		// Type check the error expression
+		_ = c.typ(st.Value)
 	}
 
 }

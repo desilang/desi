@@ -368,6 +368,12 @@ type lowerState struct {
 
 	// TaskGroup wrapper functions: wrapperName -> emitted (to avoid duplicates)
 	emittedWrappers map[string]bool
+
+	// try/except block context: when inside a try block, the ? operator
+	// redirects Err to the except handler instead of doing early return
+	inTryBlock  bool       // true when lowering inside a try body
+	exceptBlock *hir.Block // the except handler block to jump to on Err
+	tryErrSlot  hir.Value  // alloca'd slot to store the error value for except
 }
 
 type scope struct {
