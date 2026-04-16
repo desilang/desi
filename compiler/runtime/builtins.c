@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "list.h"
+#include "exception.h"
 
 // ==================== Type[T] Runtime Support ====================
 // DesiTypeInfo represents runtime type information for Type[T]
@@ -49,41 +50,39 @@ bool __desi_type_equal(DesiTypeInfo* a, DesiTypeInfo* b) {
 
 
 // Panic function for integer division by zero
-// Future: When hot-reload is implemented, this becomes process-local
-// and supervisors can restart the process gracefully
+// Raises ZeroDivisionError — catchable via try/except
 void __panic_divzero(void) {
-    fprintf(stderr, "panic: integer division by zero\n");
-    exit(1);
+    __desi_raise(DESI_EXC_ZERO_DIVISION, "integer division by zero", "ZeroDivisionError");
 }
 
 // Panic function for unwrapping None (Option.Nothing)
+// Raises RuntimeError — catchable via try/except
 void __panic_unwrap_none(void) {
-    fprintf(stderr, "panic: called unwrap() on a None value\n");
-    exit(1);
+    __desi_raise(DESI_EXC_RUNTIME_ERROR, "called unwrap() on a None value", "RuntimeError");
 }
 
 // Panic function for unwrapping Err (Result.Err)
+// Raises RuntimeError — catchable via try/except
 void __panic_unwrap_err(void) {
-    fprintf(stderr, "panic: called unwrap() on an Err value\n");
-    exit(1);
+    __desi_raise(DESI_EXC_RUNTIME_ERROR, "called unwrap() on an Err value", "RuntimeError");
 }
 
 // Panic function for unwrap_err on Ok (Result.Ok)
+// Raises RuntimeError — catchable via try/except
 void __panic_unwrap_ok(void) {
-    fprintf(stderr, "panic: called unwrap_err() on an Ok value\n");
-    exit(1);
+    __desi_raise(DESI_EXC_RUNTIME_ERROR, "called unwrap_err() on an Ok value", "RuntimeError");
 }
 
 // Panic function for expect() with custom message
+// Raises RuntimeError — catchable via try/except
 void __panic_expect(const char* msg) {
-    fprintf(stderr, "panic: %s\n", msg);
-    exit(1);
+    __desi_raise(DESI_EXC_RUNTIME_ERROR, msg ? msg : "expect() failed", "RuntimeError");
 }
 
-// Panic with user-provided message (used by 'raise' statement)
+// Panic with user-provided message (legacy 'raise' fallback)
+// Raises base Exception — catchable via try/except
 void __desi_panic(const char* msg) {
-    fprintf(stderr, "panic: %s\n", msg ? msg : "(null)");
-    exit(1);
+    __desi_raise(DESI_EXC_EXCEPTION, msg ? msg : "(null)", "Exception");
 }
 
 // Assert failure handler
