@@ -262,6 +262,16 @@ static int types_match(const char* db_type, const char* model_type) {
     if (strcasecmp_local(db_type, "tinyint(1)") == 0 &&
         strcasecmp_local(model_type, "TINYINT(1)") == 0) return 1;
 
+    // Auto-increment PK types: PG SERIAL → integer, MySQL AUTO_INCREMENT → int
+    // The ORM model reports "SERIAL PRIMARY KEY" or "INT AUTO_INCREMENT PRIMARY KEY"
+    // but information_schema just shows "integer" or "int".
+    if (strcasecmp_local(db_type, "integer") == 0 &&
+        strncasecmp(model_type, "SERIAL", 6) == 0) return 1;
+    if (strcasecmp_local(db_type, "int") == 0 &&
+        strncasecmp(model_type, "INT AUTO_INCREMENT", 18) == 0) return 1;
+    if (strcasecmp_local(db_type, "bigint") == 0 &&
+        strncasecmp(model_type, "BIGSERIAL", 9) == 0) return 1;
+
     return 0;
 }
 

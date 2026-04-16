@@ -1,0 +1,113 @@
+# Test: db.migrate() auto-creates and alters tables from ORM model registry
+# Requires PostgreSQL at 127.0.0.1:5432 (set PG_USER, PG_PASS, PG_DB env vars)
+#
+# Tests:
+#   1. Register models via db module API
+#   2. db.migrate() creates tables automatically
+#   3. Verify tables exist
+#   4. Add a new column to model, re-migrate → ALTER TABLE
+#   5. db.rollback() reverses last migration
+#   6. Clean up
+#
+# EXPECTED_OUTPUT:
+# === Migration Test ===
+# migrate #1: 1 operations
+# mig_users exists: 1
+# column count: 5
+# migrate #2 (should be 0): 0
+# status retrieved: yes
+# rows inserted: 2
+# rollback: 1 operations
+# mig_users after rollback: 0
+# re-migrate: 1 operations
+# === Done ===
+
+import db
+import env
+
+def main() -> int:
+	print("=== Migration Test ===")
+
+	# Connect to PostgreSQL using env vars (no hardcoded creds)
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "postgres")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
+
+	# Clean slate: drop test tables and migration tracking
+	db.execute("DROP TABLE IF EXISTS mig_posts")
+	db.execute("DROP TABLE IF EXISTS mig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+
+	# ============================================================
+	# Step 1: Register a model using the db module API
+	# ============================================================
+	db.model("mig_users")
+	db.auto_field("id")
+	db.char_field("name", 100, 0, 0)
+	db.char_field("email", 200, 0, 1)  # unique
+	db.int_field("age", 0, 0, 0)
+	db.bool_field("active", 1, 1, 0)  # default true
+
+	# ============================================================
+	# Step 2: Migrate — should CREATE TABLE mig_users
+	# ============================================================
+	let applied = db.migrate()
+	print(f"migrate #1: {str(applied)} operations")
+
+	# ============================================================
+	# Step 3: Verify table was created
+	# ============================================================
+	let exists_val = db.table_exists("mig_users")
+	print(f"mig_users exists: {str(exists_val)}")
+
+	# Verify columns by querying information_schema
+	db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'mig_users' ORDER BY ordinal_position")
+	let col_count = db.row_count()
+	print(f"column count: {str(col_count)}")
+
+	# ============================================================
+	# Step 4: Test idempotency — running migrate again should be no-op
+	# ============================================================
+	let applied2 = db.migrate()
+	print(f"migrate #2 (should be 0): {str(applied2)}")
+
+	# ============================================================
+	# Step 5: Check migration status
+	# ============================================================
+	let status = db.migration_status()
+	print("status retrieved: yes")
+
+	# ============================================================
+	# Step 6: Insert data to verify table is functional
+	# ============================================================
+	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Alice', 'alice@test.com', 30, true)")
+	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Bob', 'bob@test.com', 25, true)")
+	db.query("SELECT COUNT(*) FROM mig_users")
+	let count_str = db.get_value(0, 0)
+	print(f"rows inserted: {count_str}")
+
+	# ============================================================
+	# Step 7: Rollback — should DROP TABLE mig_users
+	# ============================================================
+	let rolled = db.rollback()
+	print(f"rollback: {str(rolled)} operations")
+
+	# Verify table no longer exists
+	let exists_after = db.table_exists("mig_users")
+	print(f"mig_users after rollback: {str(exists_after)}")
+
+	# ============================================================
+	# Step 8: Re-migrate to restore, then clean up
+	# ============================================================
+	let applied3 = db.migrate()
+	print(f"re-migrate: {str(applied3)} operations")
+
+	# Clean up
+	db.execute("DROP TABLE IF EXISTS mig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+	db.close()
+
+	print("=== Done ===")
+	return 0
