@@ -1,0 +1,23 @@
+# Migration: 0001_initial
+# Generated: 2026-04-16T10:45:07
+# Depends: none
+#
+# Operations:
+#   create_table(mig_users)
+
+import db
+
+def forward():
+	# create_table: mig_users
+	db.execute("""CREATE TABLE IF NOT EXISTS mig_users (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  email VARCHAR(200) NOT NULL UNIQUE,
+  age INTEGER NOT NULL,
+  active BOOLEAN NOT NULL DEFAULT TRUE
+)""")
+
+def rollback():
+	# undo create_table: mig_users
+	db.execute("DROP TABLE IF EXISTS mig_users")
+

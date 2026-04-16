@@ -7,7 +7,7 @@ import (
 )
 
 // ORM protocol fallback — registers @model via Go init() if the loader
-// hasn't already loaded it from stdlib/macros/orm.desi.
+// hasn't already loaded it from compiler/lib/macros/orm.desi.
 //
 // This ensures backward compatibility during the transition from Go-based
 // to Desi-based macro definitions. Once the loader pipeline is fully wired,
