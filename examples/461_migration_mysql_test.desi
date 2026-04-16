@@ -11,16 +11,23 @@
 #   7. Re-migrate from file
 #
 # EXPECTED_OUTPUT:
+# [makemigrations] Created my_migrations/0001_initial.desi (1 operation(s))
 # === MySQL Migration Test ===
 # makemigrations: 1
+# [migrate] Applied 0001_initial.desi ✓
+# [migrate] Applied 1 migration(s)
 # migrate #1: 1 applied
 # mig_users exists: 1
 # column count: 5
+# [migrate] No pending migrations
 # migrate #2 (should be 0): 0
 # status retrieved: yes
 # rows inserted: 2
+# [rollback] Rolled back 0001_initial.desi (1 operation(s)) ✓
 # rollback: 1 operations
 # mig_users after rollback: 0
+# [migrate] Applied 0001_initial.desi ✓
+# [migrate] Applied 1 migration(s)
 # re-migrate: 1 applied
 # === Done ===
 
