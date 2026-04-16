@@ -118,6 +118,42 @@ Each type has an integer tag (0–9) used at runtime for fast matching.
 
 ---
 
+## Catchable Runtime Panics
+
+Runtime errors that previously terminated the process are now **catchable exceptions**. This means your program can recover gracefully from these errors using `try`/`except`:
+
+| Runtime Error | Exception Type | Message |
+|---------------|---------------|---------|
+| Division by zero (`1 / 0`) | `ZeroDivisionError` | `integer division by zero` |
+| `unwrap()` on `Option.Nothing` | `RuntimeError` | `called unwrap() on a None value` |
+| `unwrap()` on `Result.Err` | `RuntimeError` | `called unwrap() on an Err value` |
+| `unwrap_err()` on `Result.Ok` | `RuntimeError` | `called unwrap_err() on an Ok value` |
+| `expect()` failure | `RuntimeError` | *(custom message)* |
+| Maximum recursion depth exceeded | `RuntimeError` | `maximum recursion depth exceeded (N) in 'func'` |
+
+### Example: Catching Division by Zero
+
+```desi
+try:
+    let x = 1 / 0
+except ZeroDivisionError as e:
+    print("caught: " + e)   # "caught: integer division by zero"
+```
+
+### Example: Safe Unwrap
+
+```desi
+let opt: Option<int> = Option.Nothing
+try:
+    let v = opt.unwrap()
+except RuntimeError as e:
+    print("caught: " + e)   # "caught: called unwrap() on a None value"
+```
+
+> **Note:** `assert` failures remain **uncatchable** — they always terminate the process. Asserts indicate programming errors that should be fixed, not recovered from.
+
+---
+
 ## How try/except Interacts with `?`
 
 The `?` operator is **context-aware**. Its behavior changes depending on whether it's inside a `try` block:

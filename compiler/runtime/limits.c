@@ -8,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
+#include "exception.h"
 
 /* Platform-specific thread-local storage */
 #ifdef _WIN32
@@ -30,9 +32,11 @@ static int64_t __max_recursion = 1000;
 void __desi_call_enter(const char* func_name) {
     __call_depth++;
     if (__call_depth > __max_recursion) {
-        fprintf(stderr, "Desi panic: maximum recursion depth exceeded (%lld) in '%s'\n", 
-                (long long)__max_recursion, func_name ? func_name : "<unknown>");
-        exit(1);
+        // Build a descriptive message and raise RuntimeError
+        char msg[256];
+        snprintf(msg, sizeof(msg), "maximum recursion depth exceeded (%lld) in '%s'",
+                 (long long)__max_recursion, func_name ? func_name : "<unknown>");
+        __desi_raise(DESI_EXC_RUNTIME_ERROR, msg, "RuntimeError");
     }
 }
 

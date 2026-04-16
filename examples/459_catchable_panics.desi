@@ -1,0 +1,46 @@
+# Test: runtime panics are now catchable via try/except
+# Tests that division by zero, unwrap panics, and expect() are all
+# catchable exceptions instead of hard process exits.
+
+def main() -> int:
+	# Test 1: Division by zero is catchable as ZeroDivisionError
+	try:
+		let x = 1 / 0
+		print("should not reach")
+	except ZeroDivisionError as e:
+		print("caught divzero: " + e)
+
+	# Test 2: Unwrap on None is catchable as RuntimeError
+	let opt: Option<int> = Option.Nothing
+	try:
+		let v = opt.unwrap()
+		print("should not reach")
+	except RuntimeError as e:
+		print("caught unwrap none: " + e)
+
+	# Test 3: Unwrap on Err is catchable as RuntimeError
+	let res: Result<int, str> = Result.Err("nope")
+	try:
+		let v = res.unwrap()
+		print("should not reach")
+	except RuntimeError as e:
+		print("caught unwrap err: " + e)
+
+	# Test 4: Catch-all catches runtime panics too
+	try:
+		let x = 10 / 0
+		print("should not reach")
+	except e:
+		print("caught generic: " + e)
+
+	# Test 5: Execution continues after caught panic
+	print("program continues after caught panics")
+
+	return 0
+
+# EXPECTED_OUTPUT:
+# caught divzero: integer division by zero
+# caught unwrap none: called unwrap() on a None value
+# caught unwrap err: called unwrap() on an Err value
+# caught generic: integer division by zero
+# program continues after caught panics
