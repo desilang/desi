@@ -11,20 +11,31 @@
 #   7. db.migration_status() → shows applied/pending
 #
 # EXPECTED_OUTPUT:
+# [makemigrations] Created test_migrations/0001_initial.desi (1 operation(s))
 # === File-based Migration Test ===
 # makemigrations: 1 operations
 # file count: 1
 # has forward: yes
+#
 # has rollback: yes
+#
 # has db.execute: yes
+#
+# [migrate] Applied 0001_initial.desi ✓
+# [migrate] Applied 1 migration(s)
 # migrate: 1 applied
 # table exists: 1
+# [migrate] No pending migrations
 # re-migrate: 0
+# [rollback] Rolled back 0001_initial.desi (1 operation(s)) ✓
 # rollback: 1
 # table after rollback: 0
+# [migrate] Applied 0001_initial.desi ✓
+# [migrate] Applied 1 migration(s)
 # re-migrate from file: 1
 # table re-exists: 1
 # status has check: yes
+#
 # === Done ===
 
 import db
