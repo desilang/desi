@@ -1,0 +1,114 @@
+# Test: db.migrate() with MySQL backend
+# Requires MySQL at 127.0.0.1:3306 (set MYSQL_USER, MYSQL_PASS, MYSQL_DB env vars)
+#
+# Tests the same migration lifecycle as 460 but against MySQL:
+#   1. Register model, migrate → CREATE TABLE
+#   2. Verify table exists + column count
+#   3. Idempotent re-migrate → 0 ops
+#   4. Insert data to verify table works
+#   5. Rollback → DROP TABLE
+#   6. Re-migrate → CREATE TABLE again
+#
+# EXPECTED_OUTPUT:
+# === MySQL Migration Test ===
+# migrate #1: 1 operations
+# mig_users exists: 1
+# column count: 5
+# migrate #2 (should be 0): 0
+# status retrieved: yes
+# rows inserted: 2
+# rollback: 1 operations
+# mig_users after rollback: 0
+# re-migrate: 1 operations
+# === Done ===
+
+import db
+import env
+
+def main() -> int:
+	print("=== MySQL Migration Test ===")
+
+	# Connect to MySQL using env vars (no hardcoded creds)
+	let host = env.get("MYSQL_HOST", "127.0.0.1")
+	let user = env.get("MYSQL_USER", "root")
+	let pass = env.get("MYSQL_PASS", "")
+	let dbname = env.get("MYSQL_DB", "mysql")
+	db.connect("mysql", host, 3306, dbname, user, pass)
+
+	# Clean slate
+	db.execute("DROP TABLE IF EXISTS mig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+
+	# Set dialect to MySQL
+	db.use_mysql()
+
+	# ============================================================
+	# Step 1: Register model
+	# ============================================================
+	db.model("mig_users")
+	db.auto_field("id")
+	db.char_field("name", 100, 0, 0)
+	db.char_field("email", 200, 0, 1)  # unique
+	db.int_field("age", 0, 0, 0)
+	db.bool_field("active", 1, 1, 0)  # default true
+
+	# ============================================================
+	# Step 2: Migrate — should CREATE TABLE
+	# ============================================================
+	let applied = db.migrate()
+	print(f"migrate #1: {str(applied)} operations")
+
+	# ============================================================
+	# Step 3: Verify table exists
+	# ============================================================
+	let exists_val = db.table_exists("mig_users")
+	print(f"mig_users exists: {str(exists_val)}")
+
+	# Verify columns
+	db.query("SELECT column_name FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mig_users' ORDER BY ordinal_position")
+	let col_count = db.row_count()
+	print(f"column count: {str(col_count)}")
+
+	# ============================================================
+	# Step 4: Idempotent re-migrate
+	# ============================================================
+	let applied2 = db.migrate()
+	print(f"migrate #2 (should be 0): {str(applied2)}")
+
+	# ============================================================
+	# Step 5: Migration status
+	# ============================================================
+	let status = db.migration_status()
+	print("status retrieved: yes")
+
+	# ============================================================
+	# Step 6: Insert data
+	# ============================================================
+	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Alice', 'alice@test.com', 30, 1)")
+	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Bob', 'bob@test.com', 25, 1)")
+	db.query("SELECT COUNT(*) FROM mig_users")
+	let count_str = db.get_value(0, 0)
+	print(f"rows inserted: {count_str}")
+
+	# ============================================================
+	# Step 7: Rollback
+	# ============================================================
+	let rolled = db.rollback()
+	print(f"rollback: {str(rolled)} operations")
+
+	let exists_after = db.table_exists("mig_users")
+	print(f"mig_users after rollback: {str(exists_after)}")
+
+	# ============================================================
+	# Step 8: Re-migrate
+	# ============================================================
+	let applied3 = db.migrate()
+	print(f"re-migrate: {str(applied3)} operations")
+
+	# Clean up
+	db.execute("DROP TABLE IF EXISTS mig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+	db.close()
+
+	print("=== Done ===")
+	return 0
