@@ -590,7 +590,7 @@ int32_t __db_makemigrations(const char* dir) {
     }
 
     if (op_count == 0) {
-        fprintf(stderr, "[makemigrations] No changes detected\n");
+        printf("[makemigrations] No changes detected\n");
         return 0;
     }
 
@@ -623,7 +623,7 @@ int32_t __db_makemigrations(const char* dir) {
     // ---- Write the .desi migration file ----
     FILE* f = fopen(filepath, "w");
     if (!f) {
-        fprintf(stderr, "[makemigrations] Failed to create %s\n", filepath);
+        printf("[makemigrations] Failed to create %s\n", filepath);
         return -1;
     }
 
@@ -709,7 +709,7 @@ int32_t __db_makemigrations(const char* dir) {
     fprintf(f, "\n");
     fclose(f);
 
-    fprintf(stderr, "[makemigrations] Created %s (%d operation(s))\n", filepath, op_count);
+    printf("[makemigrations] Created %s (%d operation(s))\n", filepath, op_count);
     return op_count;
 }
 
@@ -725,7 +725,7 @@ int32_t __db_migrate_files(const char* dir) {
     FileList files;
     int total = scan_migrations(dir, &files);
     if (total == 0) {
-        fprintf(stderr, "[migrate] No migration files found in %s/\n", dir);
+        printf("[migrate] No migration files found in %s/\n", dir);
         return 0;
     }
 
@@ -742,7 +742,7 @@ int32_t __db_migrate_files(const char* dir) {
         // Read and parse the file
         char* content = read_file(path);
         if (!content) {
-            fprintf(stderr, "[migrate] Failed to read %s\n", path);
+            printf("[migrate] Failed to read %s\n", path);
             continue;
         }
 
@@ -752,7 +752,7 @@ int32_t __db_migrate_files(const char* dir) {
         parse_section(content, "rollback", &rollback_stmts);
 
         if (forward_stmts.count == 0) {
-            fprintf(stderr, "[migrate] No forward SQL in %s — skipping\n", files.names[i]);
+            printf("[migrate] No forward SQL in %s — skipping\n", files.names[i]);
             free(content);
             continue;
         }
@@ -766,7 +766,7 @@ int32_t __db_migrate_files(const char* dir) {
         for (int s = 0; s < forward_stmts.count; s++) {
             int result = __db_execute_stmt(forward_stmts.stmts[s]);
             if (result < 0) {
-                fprintf(stderr, "[migrate] %s: statement %d FAILED\n", files.names[i], s + 1);
+                printf("[migrate] %s: statement %d FAILED\n", files.names[i], s + 1);
                 all_ok = 0;
                 break;
             }
@@ -786,16 +786,16 @@ int32_t __db_migrate_files(const char* dir) {
 
             record_migration(files.names[i], all_forward, all_rollback);
             applied++;
-            fprintf(stderr, "[migrate] Applied %s ✓\n", files.names[i]);
+            printf("[migrate] Applied %s ✓\n", files.names[i]);
         }
 
         free(content);
     }
 
     if (applied == 0) {
-        fprintf(stderr, "[migrate] No pending migrations\n");
+        printf("[migrate] No pending migrations\n");
     } else {
-        fprintf(stderr, "[migrate] Applied %d migration(s)\n", applied);
+        printf("[migrate] Applied %d migration(s)\n", applied);
     }
 
     return applied;
@@ -814,13 +814,13 @@ int32_t __db_rollback_file(const char* dir) {
     int rows = __db_query_exec(
         "SELECT filename FROM _desi_migrations ORDER BY id DESC LIMIT 1");
     if (rows <= 0) {
-        fprintf(stderr, "[rollback] No migrations to roll back\n");
+        printf("[rollback] No migrations to roll back\n");
         return 0;
     }
 
     char* filename = __db_get_value_at(0, 0);
     if (!filename || filename[0] == '\0') {
-        fprintf(stderr, "[rollback] No migration filename found\n");
+        printf("[rollback] No migration filename found\n");
         if (filename) free(filename);
         return 0;
     }
@@ -831,7 +831,7 @@ int32_t __db_rollback_file(const char* dir) {
 
     char* content = read_file(path);
     if (!content) {
-        fprintf(stderr, "[rollback] Failed to read %s\n", path);
+        printf("[rollback] Failed to read %s\n", path);
         free(filename);
         return -1;
     }
@@ -841,7 +841,7 @@ int32_t __db_rollback_file(const char* dir) {
     parse_section(content, "rollback", &rollback_stmts);
 
     if (rollback_stmts.count == 0) {
-        fprintf(stderr, "[rollback] No rollback SQL in %s\n", filename);
+        printf("[rollback] No rollback SQL in %s\n", filename);
         free(content);
         free(filename);
         return 0;
@@ -854,7 +854,7 @@ int32_t __db_rollback_file(const char* dir) {
         if (result >= 0) {
             rolled_back++;
         } else {
-            fprintf(stderr, "[rollback] Statement %d FAILED in %s\n", s + 1, filename);
+            printf("[rollback] Statement %d FAILED in %s\n", s + 1, filename);
         }
     }
 
@@ -866,7 +866,7 @@ int32_t __db_rollback_file(const char* dir) {
         "DELETE FROM _desi_migrations WHERE filename = '%s'", fn_esc);
     __db_execute_stmt(del);
 
-    fprintf(stderr, "[rollback] Rolled back %s (%d operation(s)) ✓\n", filename, rolled_back);
+    printf("[rollback] Rolled back %s (%d operation(s)) ✓\n", filename, rolled_back);
 
     free(content);
     free(filename);

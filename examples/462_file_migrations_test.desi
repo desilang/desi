@@ -11,8 +11,8 @@
 #   7. db.migration_status() → shows applied/pending
 #
 # EXPECTED_OUTPUT:
-# [makemigrations] Created test_migrations/0001_initial.desi (1 operation(s))
 # === File-based Migration Test ===
+# [makemigrations] Created test_migrations/0001_initial.desi (1 operation(s))
 # makemigrations: 1 operations
 # file count: 1
 # has forward: yes
