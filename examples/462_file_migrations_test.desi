@@ -1,0 +1,112 @@
+# Test: Django-style file-based migrations
+# Requires PostgreSQL at 127.0.0.1:5432 (set PG_USER, PG_PASS, PG_DB env vars)
+#
+# Tests the full migration lifecycle with .desi migration files:
+#   1. Register model → db.makemigrations() → generates .desi file
+#   2. Verify file was created with forward()/rollback() + db.execute() calls
+#   3. db.migrate() → applies pending migration files
+#   4. Verify table exists, idempotent re-run
+#   5. db.rollback() → reads rollback() from file, drops table
+#   6. Re-migrate from files
+#   7. db.migration_status() → shows applied/pending
+#
+# EXPECTED_OUTPUT:
+# === File-based Migration Test ===
+# makemigrations: 1 operations
+# file count: 1
+# has forward: yes
+# has rollback: yes
+# has db.execute: yes
+# migrate: 1 applied
+# table exists: 1
+# re-migrate: 0
+# rollback: 1
+# table after rollback: 0
+# re-migrate from file: 1
+# table re-exists: 1
+# status has check: yes
+# === Done ===
+
+import db
+import env
+import fs
+import os
+import strings
+
+def check(content: str, needle: str) -> str:
+	if strings.contains(content, needle):
+		return "yes"
+	return "no"
+
+def main() -> int:
+	print("=== File-based Migration Test ===")
+
+	# Connect to PostgreSQL using env vars
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "postgres")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
+
+	# Clean slate
+	db.execute("DROP TABLE IF EXISTS fmig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+
+	# Register a model
+	db.model("fmig_users")
+	db.auto_field("id")
+	db.char_field("name", 100, 0, 0)
+	db.int_field("age", 0, 0, 0)
+	db.bool_field("active", 1, 1, 0)
+
+	# Step 1: makemigrations — generate .desi file
+	let ops = db.makemigrations("test_migrations")
+	print("makemigrations: " + str(ops) + " operations")
+
+	# Step 2: verify file was created
+	let files = fs.list_dir("test_migrations")
+	print("file count: " + str(len(files)))
+
+	# Step 3: read file content and verify it's valid Desi migration format
+	let content = os.read_file("test_migrations/" + files[0])
+	print("has forward: " + check(content, "def forward"))
+	print("has rollback: " + check(content, "def rollback"))
+	print("has db.execute: " + check(content, "db.execute"))
+
+	# Step 4: apply migrations from files
+	let applied = db.migrate("test_migrations")
+	print("migrate: " + str(applied) + " applied")
+
+	# Step 5: verify table exists
+	let exists = db.table_exists("fmig_users")
+	print("table exists: " + str(exists))
+
+	# Step 6: idempotent — re-run should be 0
+	let applied2 = db.migrate("test_migrations")
+	print("re-migrate: " + str(applied2))
+
+	# Step 7: rollback
+	let rolled = db.rollback("test_migrations")
+	print("rollback: " + str(rolled))
+
+	# Verify table is gone
+	let exists2 = db.table_exists("fmig_users")
+	print("table after rollback: " + str(exists2))
+
+	# Step 8: re-migrate from the same file (should work)
+	let applied3 = db.migrate("test_migrations")
+	print("re-migrate from file: " + str(applied3))
+
+	let exists3 = db.table_exists("fmig_users")
+	print("table re-exists: " + str(exists3))
+
+	# Step 9: migration_status
+	let status = db.migration_status("test_migrations")
+	print("status has check: " + check(status, "✓"))
+
+	# Cleanup
+	db.execute("DROP TABLE IF EXISTS fmig_users")
+	db.execute("DROP TABLE IF EXISTS _desi_migrations")
+
+	print("=== Done ===")
+	return 0

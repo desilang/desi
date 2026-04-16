@@ -1,17 +1,19 @@
-# Test: db.migrate() auto-creates and alters tables from ORM model registry
+# Test: db.makemigrations() + db.migrate() file-based migration (PostgreSQL)
 # Requires PostgreSQL at 127.0.0.1:5432 (set PG_USER, PG_PASS, PG_DB env vars)
 #
 # Tests:
 #   1. Register models via db module API
-#   2. db.migrate() creates tables automatically
-#   3. Verify tables exist
-#   4. Add a new column to model, re-migrate → ALTER TABLE
-#   5. db.rollback() reverses last migration
-#   6. Clean up
+#   2. db.makemigrations() generates .desi migration file
+#   3. db.migrate() applies the migration file → CREATE TABLE
+#   4. Verify tables exist
+#   5. Idempotent re-migrate
+#   6. db.rollback() reverses last migration file
+#   7. Re-migrate from file
 #
 # EXPECTED_OUTPUT:
 # === Migration Test ===
-# migrate #1: 1 operations
+# makemigrations: 1
+# migrate #1: 1 applied
 # mig_users exists: 1
 # column count: 5
 # migrate #2 (should be 0): 0
@@ -19,11 +21,12 @@
 # rows inserted: 2
 # rollback: 1 operations
 # mig_users after rollback: 0
-# re-migrate: 1 operations
+# re-migrate: 1 applied
 # === Done ===
 
 import db
 import env
+import fs
 
 def main() -> int:
 	print("=== Migration Test ===")
@@ -40,6 +43,11 @@ def main() -> int:
 	db.execute("DROP TABLE IF EXISTS mig_users")
 	db.execute("DROP TABLE IF EXISTS _desi_migrations")
 
+	# Clean up old migration files
+	let old_files = fs.list_dir("pg_migrations")
+	for f in old_files:
+		db.execute("SELECT 1")  # no-op; can't remove files easily
+
 	# ============================================================
 	# Step 1: Register a model using the db module API
 	# ============================================================
@@ -51,13 +59,19 @@ def main() -> int:
 	db.bool_field("active", 1, 1, 0)  # default true
 
 	# ============================================================
-	# Step 2: Migrate — should CREATE TABLE mig_users
+	# Step 2: makemigrations — generate .desi migration file
 	# ============================================================
-	let applied = db.migrate()
-	print(f"migrate #1: {str(applied)} operations")
+	let ops = db.makemigrations("pg_migrations")
+	print(f"makemigrations: {str(ops)}")
 
 	# ============================================================
-	# Step 3: Verify table was created
+	# Step 3: Migrate — apply .desi migration file
+	# ============================================================
+	let applied = db.migrate("pg_migrations")
+	print(f"migrate #1: {str(applied)} applied")
+
+	# ============================================================
+	# Step 4: Verify table was created
 	# ============================================================
 	let exists_val = db.table_exists("mig_users")
 	print(f"mig_users exists: {str(exists_val)}")
@@ -68,19 +82,19 @@ def main() -> int:
 	print(f"column count: {str(col_count)}")
 
 	# ============================================================
-	# Step 4: Test idempotency — running migrate again should be no-op
+	# Step 5: Test idempotency — running migrate again should be no-op
 	# ============================================================
-	let applied2 = db.migrate()
+	let applied2 = db.migrate("pg_migrations")
 	print(f"migrate #2 (should be 0): {str(applied2)}")
 
 	# ============================================================
-	# Step 5: Check migration status
+	# Step 6: Check migration status
 	# ============================================================
-	let status = db.migration_status()
+	let status = db.migration_status("pg_migrations")
 	print("status retrieved: yes")
 
 	# ============================================================
-	# Step 6: Insert data to verify table is functional
+	# Step 7: Insert data to verify table is functional
 	# ============================================================
 	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Alice', 'alice@test.com', 30, true)")
 	db.execute("INSERT INTO mig_users (name, email, age, active) VALUES ('Bob', 'bob@test.com', 25, true)")
@@ -89,9 +103,9 @@ def main() -> int:
 	print(f"rows inserted: {count_str}")
 
 	# ============================================================
-	# Step 7: Rollback — should DROP TABLE mig_users
+	# Step 8: Rollback — reads rollback() from .desi file
 	# ============================================================
-	let rolled = db.rollback()
+	let rolled = db.rollback("pg_migrations")
 	print(f"rollback: {str(rolled)} operations")
 
 	# Verify table no longer exists
@@ -99,10 +113,10 @@ def main() -> int:
 	print(f"mig_users after rollback: {str(exists_after)}")
 
 	# ============================================================
-	# Step 8: Re-migrate to restore, then clean up
+	# Step 9: Re-migrate from file to restore
 	# ============================================================
-	let applied3 = db.migrate()
-	print(f"re-migrate: {str(applied3)} operations")
+	let applied3 = db.migrate("pg_migrations")
+	print(f"re-migrate: {str(applied3)} applied")
 
 	# Clean up
 	db.execute("DROP TABLE IF EXISTS mig_users")

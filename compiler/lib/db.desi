@@ -317,32 +317,49 @@ pub def field_count(table_name: str) -> int:
 # ============================================================
 
 @extern("C")
-pub def __db_migrate() -> int
+pub def __db_makemigrations(dir: str) -> int
 
 @extern("C")
-pub def __db_rollback() -> int
+pub def __db_migrate_files(dir: str) -> int
 
 @extern("C")
-pub def __db_migration_status() -> str
+pub def __db_rollback_file(dir: str) -> int
+
+@extern("C")
+pub def __db_migration_status_files(dir: str) -> str
 
 @extern("C")
 pub def __db_table_exists(table_name: str) -> int
 
 # ============================================================
-# Public API — Migrations
+# Public API — Migrations (Django-style, file-based)
 # ============================================================
 
-pub def migrate() -> int:
-	"""Apply pending migrations. Creates/alters tables to match registered models. Returns count of applied operations."""
-	return __db_migrate()
+pub def makemigrations(dir: str) -> int:
+	"""Generate .desi migration files by diffing ORM models against the live DB.
+	Like Django's 'python manage.py makemigrations'.
+	Returns count of operations written to the migration file, or 0 if no changes.
+	Usage: db.makemigrations("migrations/")"""
+	return __db_makemigrations(dir)
 
-pub def rollback() -> int:
-	"""Rollback last migration version. Returns count of rolled-back operations."""
-	return __db_rollback()
+pub def migrate(dir: str) -> int:
+	"""Apply pending .desi migration files from the given directory.
+	Like Django's 'python manage.py migrate'.
+	Returns count of applied migration files.
+	Usage: db.migrate("migrations/")"""
+	return __db_migrate_files(dir)
 
-pub def migration_status() -> str:
-	"""Get migration history as formatted string."""
-	return __db_migration_status()
+pub def rollback(dir: str) -> int:
+	"""Rollback the last applied migration file.
+	Reads the rollback() section from the .desi file and executes it.
+	Returns count of rolled-back operations.
+	Usage: db.rollback("migrations/")"""
+	return __db_rollback_file(dir)
+
+pub def migration_status(dir: str) -> str:
+	"""Show applied (✓) vs pending (○) migration files.
+	Usage: print(db.migration_status("migrations/"))"""
+	return __db_migration_status_files(dir)
 
 pub def table_exists(table_name: str) -> int:
 	"""Check if a table exists in the database. Returns 1 or 0."""
