@@ -11,8 +11,8 @@
 #   7. Re-migrate from file
 #
 # EXPECTED_OUTPUT:
-# [makemigrations] Created pg_migrations/0001_initial.desi (1 operation(s))
 # === Migration Test ===
+# [makemigrations] Created pg_migrations/0001_initial.desi (1 operation(s))
 # makemigrations: 1
 # [migrate] Applied 0001_initial.desi ✓
 # [migrate] Applied 1 migration(s)
