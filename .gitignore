@@ -37,3 +37,6 @@ test*.txt
 
 # VS Code extension builds
 **/*.vsix
+# Migration test artifacts
+*_migrations/
+examples/*_migrations/
