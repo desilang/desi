@@ -58,6 +58,9 @@ extern char*   __my_connection_info(void);
 // ---- Forward declarations to CRUD layer ----
 extern int32_t __crud_set_dialect(int32_t);
 
+// ---- Forward declarations to Migration layer ----
+extern void __migrate_reset_state(void);
+
 // ---- Forward declarations to Pool layer ----
 extern int32_t __db_pool_initialized(void);
 extern int32_t __db_pool_acquire(void);
@@ -102,6 +105,9 @@ int32_t __db_connect(const char* driver, const char* host, int32_t port,
         return -1;
     }
 
+    // Reset migration state on reconnect (driver cache, tracking table flag)
+    __migrate_reset_state();
+
     if (strcmp(driver, "postgres") == 0 || strcmp(driver, "pg") == 0 ||
         strcmp(driver, "postgresql") == 0) {
         g_active_driver = DRIVER_PG;
@@ -129,6 +135,8 @@ int32_t __db_close(void) {
         default: return -1;
     }
     g_active_driver = DRIVER_NONE;
+    // Reset migration state so next connection re-checks tracking table
+    __migrate_reset_state();
     return r;
 }
 

@@ -677,3 +677,88 @@ int32_t __orm_fk_info(const char* table_name, const char* field_name,
     }
     return 0;
 }
+
+// ============================================================
+// Field Spec DSL — Convert ORM fields to portable spec strings
+//
+// Used by makemigrations to emit db.op_* calls instead of raw SQL.
+// Format: "name:type[:modifier1[:modifier2[...]]]"
+//
+// Examples:
+//   "id:auto"
+//   "email:varchar(200):unique"
+//   "author_id:fk(users.id):cascade"
+//   "active:bool:default(TRUE)"
+//   "created_at:datetime:auto_now"
+// ============================================================
+
+char* __orm_field_spec(const char* table_name, int32_t field_index) {
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            model = &g_models[i];
+            break;
+        }
+    }
+    if (!model || field_index < 0 || field_index >= model->field_count)
+        return strdup("");
+
+    FieldDef* f = &model->fields[field_index];
+    char buf[512];
+    int pos = 0;
+
+    // name:type
+    pos += sprintf(buf + pos, "%s:", f->name);
+
+    switch (f->type) {
+        case FIELD_AUTO:     pos += sprintf(buf + pos, "auto"); break;
+        case FIELD_INT:      pos += sprintf(buf + pos, "int"); break;
+        case FIELD_BIGINT:   pos += sprintf(buf + pos, "bigint"); break;
+        case FIELD_VARCHAR:  pos += sprintf(buf + pos, "varchar(%d)", f->max_length); break;
+        case FIELD_TEXT:     pos += sprintf(buf + pos, "text"); break;
+        case FIELD_BOOL:     pos += sprintf(buf + pos, "bool"); break;
+        case FIELD_FLOAT:    pos += sprintf(buf + pos, "float"); break;
+        case FIELD_DOUBLE:   pos += sprintf(buf + pos, "double"); break;
+        case FIELD_DATETIME: pos += sprintf(buf + pos, "datetime"); break;
+        case FIELD_DATE:     pos += sprintf(buf + pos, "date"); break;
+        case FIELD_JSON:     pos += sprintf(buf + pos, "json"); break;
+        case FIELD_UUID:     pos += sprintf(buf + pos, "uuid"); break;
+        case FIELD_INET:     pos += sprintf(buf + pos, "inet"); break;
+        case FIELD_DECIMAL:  pos += sprintf(buf + pos, "decimal(%d,%d)", f->precision, f->scale); break;
+        case FIELD_ARRAY:    pos += sprintf(buf + pos, "array(%s)", f->custom_type); break;
+        case FIELD_CUSTOM:   pos += sprintf(buf + pos, "%s", f->custom_type); break;
+        case FIELD_FOREIGN_KEY:
+            pos += sprintf(buf + pos, "fk(%s.%s)", f->ref_table, f->ref_field);
+            break;
+        case FIELD_GENERATED:
+            pos += sprintf(buf + pos, "generated(%s,%s)", f->expression, f->gen_sql_type);
+            break;
+        default: pos += sprintf(buf + pos, "text"); break;
+    }
+
+    // Auto types are always PK NOT NULL — no modifiers needed
+    if (f->type == FIELD_AUTO) {
+        return strdup(buf);
+    }
+
+    // Modifiers
+    if (f->nullable)  pos += sprintf(buf + pos, ":nullable");
+    if (f->unique)    pos += sprintf(buf + pos, ":unique");
+    if (f->default_val[0])
+        pos += sprintf(buf + pos, ":default(%s)", f->default_val);
+    if (f->auto_now || f->auto_now_add)
+        pos += sprintf(buf + pos, ":auto_now");
+
+    // FK on_delete action
+    if (f->type == FIELD_FOREIGN_KEY && f->on_delete[0]) {
+        // Lowercase the on_delete for spec format
+        char lower[32] = {0};
+        for (int i = 0; f->on_delete[i] && i < 31; i++) {
+            lower[i] = (f->on_delete[i] >= 'A' && f->on_delete[i] <= 'Z')
+                ? f->on_delete[i] + 32 : f->on_delete[i];
+        }
+        pos += sprintf(buf + pos, ":%s", lower);
+    }
+
+    return strdup(buf);
+}

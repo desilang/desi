@@ -94,7 +94,62 @@ print(db.connection_info())
 print(db.driver())         # "postgres", "mysql", or "none"
 ```
 
+## ORM QuerySet (Django-style)
+
+```desi
+# Django-style filter with __ lookups
+db.find("users")
+db.filter("age__gte", "18")
+db.filter("name__contains", "alice")
+db.order_by("-created_at")
+db.limit(10)
+let rows = db.fetch()
+
+# Aggregation
+db.find("orders")
+db.annotate("total", "SUM", "amount")
+db.group_by("customer_id")
+let rows = db.fetch()
+
+# Insert
+db.find("users")
+db.set("name", "Alice")
+db.set("email", "alice@example.com")
+db.do_insert()
+
+# Bulk insert
+db.find("users")
+db.bulk_begin(2)
+db.bulk_col("name")
+db.bulk_col("email")
+db.bulk_row2("Alice", "alice@example.com")
+db.bulk_row2("Bob", "bob@example.com")
+db.bulk_execute()
+```
+
+### Supported Lookups
+
+`exact`, `iexact`, `contains`, `icontains`, `startswith`, `istartswith`, `endswith`, `iendswith`, `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `range`, `isnull`, `year`, `month`, `day`, `hour`, `minute`, `second`, `week`, `quarter`, `json_has`, `json_contains`
+
+## File-Based Migrations
+
+For real projects, generate version-controlled migration files with portable operations:
+
+```desi
+db.makemigrations("migrations")          # Generate from ORM diff
+db.migrate_dir("migrations")             # Apply pending
+db.rollback_dir("migrations")            # Undo last
+db.migration_status_dir("migrations")    # Show applied/pending
+
+# Multi-app: apply across apps in dependency order
+db.migrate_all(["accounts/migrations", "orders/migrations"])
+```
+
+See [Migrations](migrations.md) for the full guide.
+
 ## See Also
 
+- [Migrations](migrations.md) — File-based migrations, op-based DSL, multi-app support
+- [ORM Models](models.md) — `@model` decorator and field types
 - [PostgreSQL](postgres.md) — PG-specific types, auth, raw SQL examples
 - [MySQL](mysql.md) — MySQL-specific types, auth, raw SQL examples

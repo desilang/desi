@@ -1,0 +1,123 @@
+# Test: db.op_* migration operation DSL (Phase 2)
+# Requires PostgreSQL at 127.0.0.1:5432 (set PG_USER, PG_PASS, PG_DB env vars)
+#
+# Tests the portable migration operation DSL:
+#   1. Connect to database
+#   2. op_create_table with field specs → creates table with proper columns
+#   3. op_add_column → adds column to existing table
+#   4. op_rename_column → renames column
+#   5. op_alter_column → changes column type
+#   6. op_add_index → creates index
+#   7. op_drop_column → removes column
+#   8. op_drop_table → drops table
+#   9. op_run_sql → raw SQL pass-through
+#   10. Verify table gone after cleanup
+#
+# EXPECTED_OUTPUT:
+# === Migration Op DSL Test ===
+# op_create_table: ok
+# table exists: 1
+# op_add_column: ok
+# col_added: 1
+# op_rename_column: ok
+# op_alter_column: ok
+# op_add_index: ok
+# op_drop_column: ok
+# op_run_sql insert: ok
+# row_count: 1
+# op_drop_table: ok
+# table_after_drop: 0
+# === Done ===
+
+import db
+import env
+
+def main() -> int:
+	print("=== Migration Op DSL Test ===")
+
+	# Connect to PostgreSQL using env vars
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "postgres")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
+
+	# Clean slate
+	db.execute("DROP TABLE IF EXISTS op_test_users")
+
+	# Step 1: op_create_table — portable field specs
+	let r1 = db.op_create_table("op_test_users", "id:auto\nname:varchar(100)\nemail:varchar(200):unique\nactive:bool:default(TRUE)")
+	if r1 >= 0:
+		print("op_create_table: ok")
+	else:
+		print("op_create_table: FAIL " + str(r1))
+
+	# Verify table was created
+	let exists = db.table_exists("op_test_users")
+	print("table exists: " + str(exists))
+
+	# Step 2: op_add_column
+	let r2 = db.op_add_column("op_test_users", "bio:text:nullable")
+	if r2 >= 0:
+		print("op_add_column: ok")
+	else:
+		print("op_add_column: FAIL " + str(r2))
+
+	# Verify column was added
+	db.query("SELECT column_name FROM information_schema.columns WHERE table_name = 'op_test_users' AND column_name = 'bio'")
+	let col_added = db.row_count()
+	print("col_added: " + str(col_added))
+
+	# Step 3: op_rename_column
+	let r3 = db.op_rename_column("op_test_users", "bio", "biography")
+	if r3 >= 0:
+		print("op_rename_column: ok")
+	else:
+		print("op_rename_column: FAIL " + str(r3))
+
+	# Step 4: op_alter_column
+	let r4 = db.op_alter_column("op_test_users", "name", "VARCHAR(255)")
+	if r4 >= 0:
+		print("op_alter_column: ok")
+	else:
+		print("op_alter_column: FAIL " + str(r4))
+
+	# Step 5: op_add_index
+	let r5 = db.op_add_index("op_test_users", "email")
+	if r5 >= 0:
+		print("op_add_index: ok")
+	else:
+		print("op_add_index: FAIL " + str(r5))
+
+	# Step 6: op_drop_column
+	let r6 = db.op_drop_column("op_test_users", "biography")
+	if r6 >= 0:
+		print("op_drop_column: ok")
+	else:
+		print("op_drop_column: FAIL " + str(r6))
+
+	# Step 7: op_run_sql (raw SQL pass-through)
+	let r7 = db.op_run_sql("INSERT INTO op_test_users (name, email, active) VALUES ('test', 'test@test.com', true)")
+	if r7 >= 0:
+		print("op_run_sql insert: ok")
+	else:
+		print("op_run_sql: FAIL " + str(r7))
+
+	# Verify data was inserted
+	db.query("SELECT COUNT(*) FROM op_test_users")
+	let count = db.get_value(0, 0)
+	print("row_count: " + count)
+
+	# Step 8: op_drop_table
+	let r8 = db.op_drop_table("op_test_users")
+	if r8 >= 0:
+		print("op_drop_table: ok")
+	else:
+		print("op_drop_table: FAIL " + str(r8))
+
+	# Verify table is gone
+	let exists2 = db.table_exists("op_test_users")
+	print("table_after_drop: " + str(exists2))
+
+	print("=== Done ===")
+	return 0
