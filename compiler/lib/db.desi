@@ -331,6 +331,37 @@ pub def __db_migration_status_files(dir: str) -> str
 @extern("C")
 pub def __db_table_exists(table_name: str) -> int
 
+@extern("C")
+pub def __db_migrate_all(dirs_newline_separated: str) -> int
+
+# ============================================================
+# Migration Operation C bindings (db_migrate.c — Phase 2 DSL)
+# ============================================================
+
+@extern("C")
+pub def __db_op_create_table(table_name: str, fields: str) -> int
+
+@extern("C")
+pub def __db_op_drop_table(table_name: str) -> int
+
+@extern("C")
+pub def __db_op_add_column(table_name: str, field_spec: str) -> int
+
+@extern("C")
+pub def __db_op_drop_column(table_name: str, column: str) -> int
+
+@extern("C")
+pub def __db_op_alter_column(table_name: str, column: str, new_type: str) -> int
+
+@extern("C")
+pub def __db_op_rename_column(table_name: str, old_name: str, new_name: str) -> int
+
+@extern("C")
+pub def __db_op_add_index(table_name: str, columns: str) -> int
+
+@extern("C")
+pub def __db_op_run_sql(sql: str) -> int
+
 # ============================================================
 # Public API — Migrations (Django-style, file-based)
 # ============================================================
@@ -364,6 +395,75 @@ pub def migration_status(dir: str) -> str:
 pub def table_exists(table_name: str) -> int:
 	"""Check if a table exists in the database. Returns 1 or 0."""
 	return __db_table_exists(table_name)
+
+pub def migrate_all(dirs: list[str]) -> int:
+	"""Apply pending migrations across multiple app directories in dependency order.
+	Like Django's 'python manage.py migrate' for a multi-app project.
+	Dependencies between apps are resolved via '# Depends:' headers in migration files.
+	Returns total count of applied migrations across all apps.
+	Usage: db.migrate_all(["accounts/migrations", "orders/migrations"])"""
+	let joined = "\n".join(dirs)
+	return __db_migrate_all(joined)
+
+# ============================================================
+# Public API — Migration Operations DSL (Phase 2)
+#
+# Portable, database-agnostic migration operations.
+# These generate dialect-specific SQL at apply-time.
+#
+# Field Spec Format (colon-delimited):
+#   "name:type"                     → NOT NULL
+#   "name:type:nullable"            → NULL
+#   "name:type:unique"              → NOT NULL UNIQUE
+#   "name:type:default(val)"        → NOT NULL DEFAULT val
+#   "name:fk(table.field):cascade"  → FK with ON DELETE CASCADE
+#   "name:auto"                     → auto-increment PK
+#
+# Supported types: auto, bigauto, int, bigint, varchar(N), text,
+#   bool, float, double, datetime, date, json, uuid, inet,
+#   decimal(P,S), fk(table.field)
+# ============================================================
+
+pub def op_create_table(table_name: str, fields: str) -> int:
+	"""Create a table from field specs (newline-separated).
+	Generates database-specific CREATE TABLE SQL.
+	Usage: db.op_create_table("users", "id:auto\nname:varchar(100)\nemail:varchar(200):unique")"""
+	return __db_op_create_table(table_name, fields)
+
+pub def op_drop_table(table_name: str) -> int:
+	"""Drop a table. Generates DROP TABLE IF EXISTS.
+	Usage: db.op_drop_table("users")"""
+	return __db_op_drop_table(table_name)
+
+pub def op_add_column(table_name: str, field_spec: str) -> int:
+	"""Add a column using a field spec.
+	Usage: db.op_add_column("users", "age:int:nullable")"""
+	return __db_op_add_column(table_name, field_spec)
+
+pub def op_drop_column(table_name: str, column: str) -> int:
+	"""Drop a column from a table.
+	Usage: db.op_drop_column("users", "age")"""
+	return __db_op_drop_column(table_name, column)
+
+pub def op_alter_column(table_name: str, column: str, new_type: str) -> int:
+	"""Change a column's type. PG uses ALTER COLUMN TYPE, MySQL uses MODIFY COLUMN.
+	Usage: db.op_alter_column("users", "age", "BIGINT")"""
+	return __db_op_alter_column(table_name, column, new_type)
+
+pub def op_rename_column(table_name: str, old_name: str, new_name: str) -> int:
+	"""Rename a column.
+	Usage: db.op_rename_column("users", "name", "full_name")"""
+	return __db_op_rename_column(table_name, old_name, new_name)
+
+pub def op_add_index(table_name: str, columns: str) -> int:
+	"""Create an index on one or more columns (comma-separated).
+	Usage: db.op_add_index("users", "email,name")"""
+	return __db_op_add_index(table_name, columns)
+
+pub def op_run_sql(sql: str) -> int:
+	"""Execute raw SQL directly. Escape hatch for custom migrations.
+	Usage: db.op_run_sql("UPDATE users SET active = TRUE WHERE id > 100")"""
+	return __db_op_run_sql(sql)
 
 # ============================================================
 # Transaction C bindings (db_transaction.c)
