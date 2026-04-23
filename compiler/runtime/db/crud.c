@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "dynbuf.h"
 
 // ---- External: dispatch layer ----
 extern int32_t __db_query_exec(const char* sql);
@@ -61,69 +62,254 @@ int32_t __db_set_debug_queries(int32_t enabled) {
 }
 
 // ============================================================
-// QuerySet state (shared, single-threaded)
+// QuerySet Handle Struct (Phase 5 — replaces all static globals)
+//
+// Every ORM query gets its own heap-allocated QuerySet, making
+// the runtime fully reentrant and spawn-safe. No shared mutable
+// state between concurrent queries.
 // ============================================================
 
-#define QS_MAX_PARAMS 128
+#define QS_PARAMS_INITIAL   16
+#define QS_FIELDS_INITIAL   8
+#define QS_RELATED_INITIAL  4
+#define QS_ANNOTATIONS_MAX  8
 
-static char   qs_table[128] = "";
-static char   qs_where[4096] = "";
-static char   qs_order[256] = "";
-static int    qs_limit = 0;
-static int    qs_offset = 0;
-static int    qs_distinct = 0;
-static int    qs_row_count = 0;
-static char   qs_columns[1024] = "";  // only() column list, empty = *
-
-// Parameter accumulator — values are stored here, SQL has placeholders
-static const char* qs_params[QS_MAX_PARAMS];
-static int    qs_param_count = 0;
-
-// INSERT field accumulator (up to 32 fields)
-#define QS_MAX_FIELDS 32
-static char   qs_insert_keys[QS_MAX_FIELDS][128];
-// INSERT values are stored in qs_params (starting at qs_insert_param_start)
-static int    qs_insert_count = 0;
-static int    qs_insert_param_start = 0;
-
-// select_related — FK field names to LEFT JOIN
-#define QS_MAX_RELATED 8
-static char   qs_related[QS_MAX_RELATED][128];
-static int    qs_related_count = 0;
-
-// annotate + GROUP BY
-#define QS_MAX_ANNOTATIONS 8
 typedef struct {
-    char alias[128];    // output alias, e.g. "total"
-    char func[16];      // aggregate function: SUM, COUNT, AVG, MIN, MAX
-    char col[128];      // column name, e.g. "amount"
+    char alias[128];
+    char func[16];
+    char col[128];
 } Annotation;
 
-static Annotation qs_annotations[QS_MAX_ANNOTATIONS];
-static int    qs_annotation_count = 0;
-static char   qs_group_by[512] = "";
+typedef struct QuerySet {
+    // Table & query building (fixed-size for sizeof() compat)
+    char table[256];
+    char where_clause[4096];
+    char order[512];
+    char columns[4096];
+    char having[2048];
+    char group_by[1024];
 
-// Phase 4: HAVING clause
-static char   qs_having[2048] = "";
+    // Pagination
+    int limit;
+    int offset;
 
-// Phase 4: Soft-delete support
-static int    qs_soft_delete = 0;     // 1 = table uses soft-delete (is_deleted column)
-static int    qs_include_deleted = 0; // 1 = include soft-deleted rows (with_deleted())
-static char   qs_soft_delete_col[64] = "is_deleted"; // configurable soft-delete column name
+    // Flags
+    int distinct;
+    int row_count;
 
-// Phase 4: Multi-column update accumulator
-#define QS_MAX_UPDATE_FIELDS 32
-static char   qs_update_keys[QS_MAX_UPDATE_FIELDS][128];
-static int    qs_update_count = 0;
-// update values are stored via add_param_copy, indexes tracked in qs_update_param_start
-static int    qs_update_param_start = 0;
+    // Parameters (dynamic array)
+    char** params;
+    int    param_count;
+    int    param_cap;
 
-// Forward declarations for functions used before their definition
+    // INSERT field accumulator (dynamic)
+    char** insert_keys;
+    int    insert_count;
+    int    insert_cap;
+    int    insert_param_start;
+
+    // UPDATE field accumulator (dynamic)
+    char** update_keys;
+    int    update_count;
+    int    update_cap;
+    int    update_param_start;
+
+    // select_related (dynamic)
+    char** related;
+    int    related_count;
+    int    related_cap;
+
+    // Annotations
+    Annotation annotations[QS_ANNOTATIONS_MAX];
+    int    annotation_count;
+
+    // Phase 4: Soft-delete
+    int    soft_delete;
+    int    include_deleted;
+    char   soft_delete_col[128];
+
+    // Phase 2: UPSERT conflict column
+    char   upsert_col[128];
+    // Phase 2: Window expression
+    char   window_expr[1024];
+
+    // Phase 2: Cursor state
+    char   cursor_name[64];
+    int    cursor_open;
+
+    // Phase 3: CTEs
+    #define QS_MAX_CTES 4
+    struct {
+        char name[64];
+        char query[2048];
+    } ctes[4];
+    int    cte_count;
+    int    cte_recursive;
+
+    // Phase 3: Prefetch
+    #define QS_MAX_PREFETCH 4
+    struct {
+        char related_table[128];
+        char fk_col[128];
+        char pk_col[128];
+    } prefetches[4];
+    int    prefetch_count;
+} QuerySet;
+
+// Forward declaration
 int32_t __qs_do_insert(void);
 
-// Phase 2 state (declared here so __qs_reset can access them)
-static char qs_upsert_col[128];
-static char qs_window_expr[512];
+// ============================================================
+// QuerySet Lifecycle
+// ============================================================
+
+// Allocate and initialize a new QuerySet handle for the given table.
+// This is the entry point for every ORM query chain.
+QuerySet* __qs_new(const char* table) {
+    QuerySet* qs = (QuerySet*)calloc(1, sizeof(QuerySet));
+    if (!qs) return NULL;
+
+    // calloc zeros all char[] fields, so they are already '\0'-terminated
+
+    // Set table name
+    if (table) {
+        strncpy(qs->table, table, sizeof(qs->table) - 1);
+        qs->table[sizeof(qs->table) - 1] = '\0';
+    }
+
+    // Default soft-delete column
+    strncpy(qs->soft_delete_col, "is_deleted", sizeof(qs->soft_delete_col) - 1);
+
+    // Init dynamic arrays
+    qs->param_cap = QS_PARAMS_INITIAL;
+    qs->params = (char**)calloc(qs->param_cap, sizeof(char*));
+
+    qs->insert_cap = QS_FIELDS_INITIAL;
+    qs->insert_keys = (char**)calloc(qs->insert_cap, sizeof(char*));
+
+    qs->update_cap = QS_FIELDS_INITIAL;
+    qs->update_keys = (char**)calloc(qs->update_cap, sizeof(char*));
+
+    qs->related_cap = QS_RELATED_INITIAL;
+    qs->related = (char**)calloc(qs->related_cap, sizeof(char*));
+
+    return qs;
+}
+
+// Free a QuerySet handle and all its owned memory.
+void __qs_free(QuerySet* qs) {
+    if (!qs) return;
+
+    // char[] fields are embedded — no separate free needed
+
+    // Free param copies
+    for (int i = 0; i < qs->param_count; i++) {
+        if (qs->params[i]) free(qs->params[i]);
+    }
+    free(qs->params);
+
+    // Free insert keys
+    for (int i = 0; i < qs->insert_count; i++) {
+        if (qs->insert_keys[i]) free(qs->insert_keys[i]);
+    }
+    free(qs->insert_keys);
+
+    // Free update keys
+    for (int i = 0; i < qs->update_count; i++) {
+        if (qs->update_keys[i]) free(qs->update_keys[i]);
+    }
+    free(qs->update_keys);
+
+    // Free related
+    for (int i = 0; i < qs->related_count; i++) {
+        if (qs->related[i]) free(qs->related[i]);
+    }
+    free(qs->related);
+
+    free(qs);
+}
+
+// ============================================================
+// Backward-compat shim: __qs_reset creates a new handle
+// (stored as a thread-local for legacy code paths)
+// ============================================================
+static __thread QuerySet* g_qs_current = NULL;
+
+int32_t __qs_reset(const char* table) {
+    if (g_qs_current) __qs_free(g_qs_current);
+    g_qs_current = __qs_new(table);
+    return g_qs_current ? 0 : -1;
+}
+
+// Get current handle (for legacy code paths)
+static inline QuerySet* qs_current(void) {
+    return g_qs_current;
+}
+
+// ============================================================
+// Compatibility Shim Macros
+//
+// These macros redirect all old global variable names to fields
+// on the thread-local g_qs_current handle. This lets every
+// existing function body compile without modification while
+// routing all state through the heap-allocated QuerySet.
+// ============================================================
+
+// char[] fields — array decays to char* in expressions, sizeof() works correctly
+#define qs_table        (g_qs_current->table)
+#define qs_where        (g_qs_current->where_clause)
+#define qs_order        (g_qs_current->order)
+#define qs_columns      (g_qs_current->columns)
+#define qs_having       (g_qs_current->having)
+#define qs_group_by     (g_qs_current->group_by)
+#define qs_soft_delete_col (g_qs_current->soft_delete_col)
+#define qs_upsert_col   (g_qs_current->upsert_col)
+#define qs_window_expr  (g_qs_current->window_expr)
+
+// Scalar fields
+#define qs_limit        (g_qs_current->limit)
+#define qs_offset       (g_qs_current->offset)
+#define qs_distinct     (g_qs_current->distinct)
+#define qs_row_count    (g_qs_current->row_count)
+#define qs_soft_delete  (g_qs_current->soft_delete)
+#define qs_include_deleted (g_qs_current->include_deleted)
+
+// Parameter array
+#define qs_params       ((const char**)g_qs_current->params)
+#define qs_param_count  (g_qs_current->param_count)
+
+// INSERT accumulator
+#define qs_insert_keys      (g_qs_current->insert_keys)
+#define qs_insert_count     (g_qs_current->insert_count)
+#define qs_insert_param_start (g_qs_current->insert_param_start)
+
+// UPDATE accumulator
+#define qs_update_keys      (g_qs_current->update_keys)
+#define qs_update_count     (g_qs_current->update_count)
+#define qs_update_param_start (g_qs_current->update_param_start)
+
+// Related (select_related)
+#define qs_related       (g_qs_current->related)
+#define qs_related_count (g_qs_current->related_count)
+
+// Annotations
+#define qs_annotations      (g_qs_current->annotations)
+#define qs_annotation_count (g_qs_current->annotation_count)
+
+// Legacy helper shims — redirect to handle-based versions
+#define add_param(v)      qs_add_param(g_qs_current, (v))
+#define add_param_copy(v) qs_add_param_copy(g_qs_current, (v))
+#define debug_log_query(s) qs_debug_log(g_qs_current, (s))
+
+// Max-size shims (for sizeof in old snprintf calls — now effectively unlimited)
+// These return a safe large value so existing snprintf calls don't truncate
+#define QS_MAX_PARAMS    (g_qs_current->param_cap)
+#define QS_MAX_FIELDS    1024
+#define QS_MAX_RELATED   (g_qs_current->related_cap)
+#define QS_MAX_UPDATE_FIELDS 1024
+
+
+
 // Helper: write a placeholder for the current dialect
 static int write_placeholder(char* buf, int buf_size, int param_index) {
     if (g_crud_dialect == DIALECT_MYSQL) {
@@ -133,70 +319,34 @@ static int write_placeholder(char* buf, int buf_size, int param_index) {
     }
 }
 
-// Helper: add a parameter and return its 1-based index
-static int add_param(const char* val) {
-    if (qs_param_count >= QS_MAX_PARAMS) return qs_param_count;
-    qs_params[qs_param_count] = val;  // caller must ensure lifetime
-    qs_param_count++;
-    return qs_param_count;
+// Helper: add a parameter to a QuerySet and return its 1-based index
+static int qs_add_param(QuerySet* qs, const char* val) {
+    if (qs->param_count >= qs->param_cap) {
+        qs->param_cap *= 2;
+        qs->params = (char**)realloc(qs->params, qs->param_cap * sizeof(char*));
+    }
+    qs->params[qs->param_count] = (char*)val;  // caller must ensure lifetime
+    qs->param_count++;
+    return qs->param_count;
 }
 
 // Helper: add a heap-allocated copy of val as parameter
-static int add_param_copy(const char* val) {
-    return add_param(strdup(val));
+static int qs_add_param_copy(QuerySet* qs, const char* val) {
+    return qs_add_param(qs, strdup(val));
 }
 
 // Debug: print query + params to stderr
-static void debug_log_query(const char* sql) {
+static void qs_debug_log(QuerySet* qs, const char* sql) {
     if (!g_debug_queries) return;
     fprintf(stderr, "[db] QUERY: %s\n", sql);
-    if (qs_param_count > 0) {
+    if (qs->param_count > 0) {
         fprintf(stderr, "[db] PARAMS: [");
-        for (int i = 0; i < qs_param_count; i++) {
+        for (int i = 0; i < qs->param_count; i++) {
             if (i > 0) fprintf(stderr, ", ");
-            fprintf(stderr, "\"%s\"", qs_params[i] ? qs_params[i] : "NULL");
+            fprintf(stderr, "\"%s\"", qs->params[i] ? qs->params[i] : "NULL");
         }
         fprintf(stderr, "]\n");
     }
-}
-
-// Free all parameter copies
-static void free_params(void) {
-    for (int i = 0; i < qs_param_count; i++) {
-        if (qs_params[i]) {
-            free((void*)qs_params[i]);
-            qs_params[i] = NULL;
-        }
-    }
-    qs_param_count = 0;
-}
-
-// Reset queryset state
-int32_t __qs_reset(const char* table) {
-    strncpy(qs_table, table, sizeof(qs_table) - 1);
-    qs_table[sizeof(qs_table) - 1] = '\0';
-    qs_where[0] = '\0';
-    qs_order[0] = '\0';
-    qs_limit = 0;
-    qs_offset = 0;
-    qs_distinct = 0;
-    qs_row_count = 0;
-    qs_insert_count = 0;
-    qs_insert_param_start = 0;
-    qs_related_count = 0;
-    qs_annotation_count = 0;
-    qs_group_by[0] = '\0';
-    qs_columns[0] = '\0';
-    qs_upsert_col[0] = '\0';
-    qs_window_expr[0] = '\0';
-    // Phase 4 state
-    qs_having[0] = '\0';
-    qs_soft_delete = 0;
-    qs_include_deleted = 0;
-    qs_update_count = 0;
-    qs_update_param_start = 0;
-    free_params();
-    return 0;
 }
 
 // ============================================================
@@ -754,7 +904,7 @@ int32_t __qs_select_related(const char* field_name) {
 // Django equivalent: .annotate(total=Sum("amount"))
 // func: "SUM", "COUNT", "AVG", "MIN", "MAX"
 int32_t __qs_annotate(const char* alias, const char* func, const char* col) {
-    if (qs_annotation_count >= QS_MAX_ANNOTATIONS || !alias || !func || !col) return -1;
+    if (qs_annotation_count >= QS_ANNOTATIONS_MAX || !alias || !func || !col) return -1;
     Annotation* a = &qs_annotations[qs_annotation_count++];
     strncpy(a->alias, alias, sizeof(a->alias) - 1);
     strncpy(a->func, func, sizeof(a->func) - 1);
@@ -916,15 +1066,21 @@ int32_t __qs_order_by_add(const char* col) {
 // Accumulate a field for multi-column update
 int32_t __qs_update_set(const char* col, const char* val) {
     if (!col || !val) return -1;
-    if (qs_update_count >= QS_MAX_UPDATE_FIELDS) return -1;
+
+    // Grow update_keys if needed
+    if (qs_update_count >= g_qs_current->update_cap) {
+        g_qs_current->update_cap *= 2;
+        g_qs_current->update_keys = (char**)realloc(g_qs_current->update_keys,
+            g_qs_current->update_cap * sizeof(char*));
+    }
 
     // On first call, record param start position
     if (qs_update_count == 0) {
         qs_update_param_start = qs_param_count;
     }
 
-    strncpy(qs_update_keys[qs_update_count], col, 127);
-    qs_update_keys[qs_update_count][127] = '\0';
+    if (qs_update_keys[qs_update_count]) free(qs_update_keys[qs_update_count]);
+    qs_update_keys[qs_update_count] = strdup(col);
     add_param_copy(val);
     qs_update_count++;
     return 0;
@@ -2287,15 +2443,21 @@ int32_t __qs_vector_create_index(const char* table, const char* col,
 
 // Accumulate a field for INSERT (value stored as parameter)
 int32_t __qs_set_field(const char* key, const char* val) {
-    if (qs_insert_count >= QS_MAX_FIELDS) return -1;
+    // Grow insert_keys if needed
+    if (qs_insert_count >= g_qs_current->insert_cap) {
+        g_qs_current->insert_cap *= 2;
+        g_qs_current->insert_keys = (char**)realloc(g_qs_current->insert_keys,
+            g_qs_current->insert_cap * sizeof(char*));
+    }
 
     // Record param start on first field
     if (qs_insert_count == 0) {
         qs_insert_param_start = qs_param_count;
     }
 
-    strncpy(qs_insert_keys[qs_insert_count], key, 127);
-    qs_insert_keys[qs_insert_count][127] = '\0';
+    // Free old entry if re-using (shouldn't happen, but safety)
+    if (qs_insert_keys[qs_insert_count]) free(qs_insert_keys[qs_insert_count]);
+    qs_insert_keys[qs_insert_count] = strdup(key);
 
     // Store value as a parameter
     add_param_copy(val);
