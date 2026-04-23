@@ -246,9 +246,20 @@ db.migrate_all(["accounts/migrations", "orders/migrations"])
 
 See [Migrations](migrations.md) for the full guide.
 
+## Internals
+
+Under the hood, each query chain (`db.objects()` → `db.filter_by()` → `db.fetch_all()`) creates a **QuerySet handle** — a heap-allocated struct that holds all query state (table, WHERE clause, parameters, etc.). This means:
+
+- **Concurrent queries are safe** — each `spawn`-ed task gets its own isolated query state.
+- **No parameter limits** — parameters, INSERT fields, and UPDATE fields grow dynamically as needed.
+- **Automatic cleanup** — the handle is freed after the terminal call (`fetch_all`, `update_exec`, etc.).
+
+You don't need to manage handles manually — the runtime does it for you.
+
 ## See Also
 
 - [Migrations](migrations.md) — File-based migrations, op-based DSL, multi-app support
 - [ORM Models](models.md) — `@model` decorator and field types
 - [PostgreSQL](postgres.md) — PG-specific types, auth, raw SQL examples
 - [MySQL](mysql.md) — MySQL-specific types, auth, raw SQL examples
+
