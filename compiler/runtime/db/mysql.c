@@ -324,6 +324,40 @@ static uint64_t my_read_lenenc(const unsigned char* p, int* bytes_read) {
 extern int32_t __db_set_dialect(int32_t dialect);
 extern int32_t __orm_set_dialect(int32_t dialect);
 
+// Send COM_INIT_DB to select database after auth completes.
+// Uses the raw protocol command (0x02) rather than __my_query to avoid
+// circular dependency on connected state.
+static int my_use_database(const char* dbname) {
+    if (!dbname || dbname[0] == '\0') return 0; // no db requested
+
+    // COM_INIT_DB: command byte + database name
+    int dlen = strlen(dbname);
+    unsigned char pkt[MY_BUF_SIZE];
+    pkt[0] = 0x02; // COM_INIT_DB
+    memcpy(pkt + 1, dbname, dlen);
+
+    g_my->seq = 0xFF; // reset so send_packet uses seq 0
+    if (my_send_packet(pkt, 1 + dlen) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to send USE %s", dbname);
+        return -1;
+    }
+
+    unsigned char resp[MY_BUF_SIZE];
+    int rlen;
+    if (my_read_packet(resp, &rlen) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to read USE response");
+        return -1;
+    }
+    if (resp[0] == 0xFF) {
+        uint16_t ec = my_read_u16(resp + 1);
+        snprintf(g_my->error, sizeof(g_my->error), "USE %s failed (%d): %.*s",
+            dbname, ec, rlen - 9, (char*)(resp + 9));
+        return -1;
+    }
+    my_log("selected database: %s", dbname);
+    return 0;
+}
+
 int32_t __my_connect(const char* host, int32_t port, const char* dbname,
                      const char* user, const char* password) {
     my_ensure_conn();
@@ -574,7 +608,7 @@ skip_ssl:
         // OK packet — authenticated
         g_my->connected = 1;
         my_log("authenticated OK");
-        return 0;
+        goto auth_ok;
     } else if (auth_result[0] == 0x01) {
         // Auth switch or extra data (caching_sha2_password phase 2)
         // For caching_sha2_password: 0x01 0x03 = fast auth ok, 0x01 0x04 = need full auth
@@ -589,7 +623,7 @@ skip_ssl:
             }
             g_my->connected = 1;
             my_log("caching_sha2 fast auth OK");
-            return 0;
+            goto auth_ok;
         } else if (arlen >= 2 && auth_result[1] == 0x04) {
             // Full auth needed — send plaintext password over TLS
             // MySQL 8.4+ requires this (mysql_native_password removed)
@@ -622,7 +656,7 @@ skip_ssl:
                 }
                 g_my->connected = 1;
                 my_log("caching_sha2 full auth over TLS OK");
-                return 0;
+                goto auth_ok;
             } else {
                 snprintf(g_my->error, sizeof(g_my->error),
                     "caching_sha2_password full auth requires TLS (no SSL available). "
@@ -671,7 +705,7 @@ skip_ssl:
             if (ok[0] == 0x00) {
                 g_my->connected = 1;
                 my_log("auth switch OK");
-                return 0;
+                goto auth_ok;
             }
         }
         snprintf(g_my->error, sizeof(g_my->error), "Auth switch to %s failed", new_plugin);
@@ -692,6 +726,17 @@ skip_ssl:
     snprintf(g_my->error, sizeof(g_my->error), "Unknown auth response: 0x%02x", auth_result[0]);
     close(g_my->fd); g_my->fd = -1;
     return -1;
+
+auth_ok:
+    // Explicitly select database — CONNECT_WITH_DB in the handshake is
+    // unreliable across MySQL/MariaDB versions and auth-switch paths.
+    if (dbname && dbname[0] != '\0') {
+        if (my_use_database(dbname) < 0) {
+            my_log("warning: USE %s failed: %s", dbname, g_my->error);
+            // Non-fatal: connection is still valid, user can USE manually
+        }
+    }
+    return 0;
 }
 
 int32_t __my_close(void) {

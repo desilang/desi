@@ -103,6 +103,21 @@ static Annotation qs_annotations[QS_MAX_ANNOTATIONS];
 static int    qs_annotation_count = 0;
 static char   qs_group_by[512] = "";
 
+// Phase 4: HAVING clause
+static char   qs_having[2048] = "";
+
+// Phase 4: Soft-delete support
+static int    qs_soft_delete = 0;     // 1 = table uses soft-delete (is_deleted column)
+static int    qs_include_deleted = 0; // 1 = include soft-deleted rows (with_deleted())
+static char   qs_soft_delete_col[64] = "is_deleted"; // configurable soft-delete column name
+
+// Phase 4: Multi-column update accumulator
+#define QS_MAX_UPDATE_FIELDS 32
+static char   qs_update_keys[QS_MAX_UPDATE_FIELDS][128];
+static int    qs_update_count = 0;
+// update values are stored via add_param_copy, indexes tracked in qs_update_param_start
+static int    qs_update_param_start = 0;
+
 // Forward declarations for functions used before their definition
 int32_t __qs_do_insert(void);
 
@@ -174,6 +189,12 @@ int32_t __qs_reset(const char* table) {
     qs_columns[0] = '\0';
     qs_upsert_col[0] = '\0';
     qs_window_expr[0] = '\0';
+    // Phase 4 state
+    qs_having[0] = '\0';
+    qs_soft_delete = 0;
+    qs_include_deleted = 0;
+    qs_update_count = 0;
+    qs_update_param_start = 0;
     free_params();
     return 0;
 }
@@ -651,8 +672,21 @@ int32_t __qs_fetch(void) {
         }
     }
 
+    // Phase 4: auto-inject soft-delete filter (unless with_deleted() was called)
+    if (qs_soft_delete && !qs_include_deleted) {
+        if (qs_where[0] == '\0') {
+            snprintf(qs_where, sizeof(qs_where), "%s = FALSE", qs_soft_delete_col);
+        } else {
+            char tmp[4096];
+            snprintf(tmp, sizeof(tmp), "%s AND %s = FALSE", qs_where, qs_soft_delete_col);
+            strncpy(qs_where, tmp, sizeof(qs_where) - 1);
+        }
+    }
+
     if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
     if (qs_group_by[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " GROUP BY %s", qs_group_by);
+    // Phase 4: HAVING clause (after GROUP BY)
+    if (qs_having[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " HAVING %s", qs_having);
     if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
     if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
     if (qs_offset > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " OFFSET %d", qs_offset);
@@ -798,6 +832,279 @@ int32_t __qs_update(const char* col, const char* val) {
 int32_t __qs_delete(void) {
     char sql[4096];
     int pos = snprintf(sql, sizeof(sql), "DELETE FROM %s", qs_table);
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+
+    debug_log_query(sql);
+
+    if (qs_param_count > 0) {
+        return __db_execute_params(sql, qs_params, qs_param_count);
+    }
+    return __db_execute_stmt(sql);
+}
+
+// ============================================================
+// Phase 4: HAVING clause
+// ============================================================
+
+// Add HAVING condition — for use after GROUP BY + annotate
+// Appends raw SQL condition (no parameterization — use having_val for user input)
+// Django equivalent: .annotate(total=Sum("amount")).filter(total__gt=100)
+int32_t __qs_having(const char* condition) {
+    if (!condition || condition[0] == '\0') return -1;
+
+    if (qs_having[0] == '\0') {
+        strncpy(qs_having, condition, sizeof(qs_having) - 1);
+    } else {
+        char tmp[2048];
+        snprintf(tmp, sizeof(tmp), "%s AND %s", qs_having, condition);
+        strncpy(qs_having, tmp, sizeof(qs_having) - 1);
+    }
+    return 0;
+}
+
+// HAVING with a parameterized value: "COUNT(*) >" + "5" → "COUNT(*) > $N"
+int32_t __qs_having_val(const char* expr, const char* val) {
+    if (!expr || !val) return -1;
+
+    int param_idx = add_param_copy(val);
+    char ph[16];
+    write_placeholder(ph, sizeof(ph), param_idx);
+
+    char condition[1024];
+    snprintf(condition, sizeof(condition), "%s %s", expr, ph);
+
+    if (qs_having[0] == '\0') {
+        strncpy(qs_having, condition, sizeof(qs_having) - 1);
+    } else {
+        char tmp[2048];
+        snprintf(tmp, sizeof(tmp), "%s AND %s", qs_having, condition);
+        strncpy(qs_having, tmp, sizeof(qs_having) - 1);
+    }
+    return 0;
+}
+
+// ============================================================
+// Phase 4: Multi-column ORDER BY (append mode)
+// ============================================================
+
+// Append an additional ORDER BY column (vs. overwrite)
+// Allows: order_by_add("-salary"); order_by_add("name") → ORDER BY salary DESC, name ASC
+int32_t __qs_order_by_add(const char* col) {
+    if (!col || col[0] == '\0') return -1;
+
+    char clause[256];
+    if (col[0] == '-') {
+        snprintf(clause, sizeof(clause), "%s DESC", col + 1);
+    } else {
+        snprintf(clause, sizeof(clause), "%s ASC", col);
+    }
+
+    if (qs_order[0] == '\0') {
+        strncpy(qs_order, clause, sizeof(qs_order) - 1);
+    } else {
+        char tmp[256];
+        snprintf(tmp, sizeof(tmp), "%s, %s", qs_order, clause);
+        strncpy(qs_order, tmp, sizeof(qs_order) - 1);
+    }
+    return 0;
+}
+
+// ============================================================
+// Phase 4: Multi-column UPDATE (single SQL statement)
+// ============================================================
+
+// Accumulate a field for multi-column update
+int32_t __qs_update_set(const char* col, const char* val) {
+    if (!col || !val) return -1;
+    if (qs_update_count >= QS_MAX_UPDATE_FIELDS) return -1;
+
+    // On first call, record param start position
+    if (qs_update_count == 0) {
+        qs_update_param_start = qs_param_count;
+    }
+
+    strncpy(qs_update_keys[qs_update_count], col, 127);
+    qs_update_keys[qs_update_count][127] = '\0';
+    add_param_copy(val);
+    qs_update_count++;
+    return 0;
+}
+
+// Execute UPDATE with all accumulated fields in a single statement
+// Generates: UPDATE table SET col1=$1, col2=$2, ... WHERE ...
+int32_t __qs_update_multi(void) {
+    if (qs_update_count == 0 || qs_table[0] == '\0') return -1;
+
+    char sql[8192];
+    int pos = snprintf(sql, sizeof(sql), "UPDATE %s SET ", qs_table);
+
+    for (int i = 0; i < qs_update_count; i++) {
+        if (i > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        int param_idx = qs_update_param_start + i + 1; // 1-based
+        char ph[16];
+        write_placeholder(ph, sizeof(ph), param_idx);
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s = %s",
+            qs_update_keys[i], ph);
+    }
+
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+
+    debug_log_query(sql);
+
+    int32_t result;
+    if (qs_param_count > 0) {
+        // For MySQL (positional ? placeholders), we must reorder params so
+        // SET values appear first, then WHERE values.  PostgreSQL uses $N
+        // so the array order is irrelevant there.
+        if (g_crud_dialect == DIALECT_MYSQL && qs_update_param_start > 0) {
+            const char* reordered[QS_MAX_PARAMS];
+            int ri = 0;
+            // SET params first (indices qs_update_param_start .. qs_update_param_start + qs_update_count - 1)
+            for (int i = 0; i < qs_update_count; i++) {
+                reordered[ri++] = qs_params[qs_update_param_start + i];
+            }
+            // WHERE params next (indices 0 .. qs_update_param_start - 1)
+            for (int i = 0; i < qs_update_param_start; i++) {
+                reordered[ri++] = qs_params[i];
+            }
+            // Any remaining params after the update block
+            for (int i = qs_update_param_start + qs_update_count; i < qs_param_count; i++) {
+                reordered[ri++] = qs_params[i];
+            }
+            result = __db_execute_params(sql, reordered, ri);
+        } else {
+            result = __db_execute_params(sql, qs_params, qs_param_count);
+        }
+    } else {
+        result = __db_execute_stmt(sql);
+    }
+
+    // Reset update accumulator (but NOT the whole queryset)
+    qs_update_count = 0;
+    qs_update_param_start = 0;
+    return result;
+}
+
+// ============================================================
+// Phase 4: Pagination helpers
+// ============================================================
+
+// Set page + page_size → calculates LIMIT and OFFSET
+// page is 1-based. paginate(1, 25) → LIMIT 25 OFFSET 0
+// Django equivalent: Paginator(queryset, 25).page(1)
+int32_t __qs_paginate(int32_t page, int32_t page_size) {
+    if (page < 1) page = 1;
+    if (page_size < 1) page_size = 25; // sensible default
+    qs_limit = page_size;
+    qs_offset = (page - 1) * page_size;
+    return 0;
+}
+
+// Total count ignoring LIMIT/OFFSET — for building pagination metadata
+// Returns COUNT(*) with current WHERE but no LIMIT/OFFSET
+int32_t __qs_total_count(void) {
+    char sql[4096];
+    int pos = snprintf(sql, sizeof(sql), "SELECT COUNT(*) FROM %s", qs_table);
+
+    // Inject soft-delete filter if needed
+    char where_buf[4096];
+    where_buf[0] = '\0';
+    if (qs_where[0]) {
+        strncpy(where_buf, qs_where, sizeof(where_buf) - 1);
+    }
+    if (qs_soft_delete && !qs_include_deleted) {
+        if (where_buf[0] == '\0') {
+            snprintf(where_buf, sizeof(where_buf), "%s = FALSE", qs_soft_delete_col);
+        } else {
+            char tmp[4096];
+            snprintf(tmp, sizeof(tmp), "%s AND %s = FALSE", where_buf, qs_soft_delete_col);
+            strncpy(where_buf, tmp, sizeof(where_buf) - 1);
+        }
+    }
+
+    if (where_buf[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", where_buf);
+
+    debug_log_query(sql);
+
+    int rows;
+    if (qs_param_count > 0) {
+        rows = __db_query_params(sql, qs_params, qs_param_count);
+    } else {
+        rows = __db_query_exec(sql);
+    }
+    if (rows > 0) {
+        char* v = __db_get_value_at(0, 0);
+        int result = atoi(v);
+        free(v);
+        return result;
+    }
+    return 0;
+}
+
+// ============================================================
+// Phase 4: Soft Delete
+// ============================================================
+
+// Enable soft-delete mode for the current queryset
+// When enabled, all SELECT/COUNT queries automatically add WHERE is_deleted = FALSE
+// and soft_delete() marks rows instead of deleting them
+int32_t __qs_soft_delete_mode(const char* col_name) {
+    qs_soft_delete = 1;
+    if (col_name && col_name[0] != '\0') {
+        strncpy(qs_soft_delete_col, col_name, sizeof(qs_soft_delete_col) - 1);
+        qs_soft_delete_col[sizeof(qs_soft_delete_col) - 1] = '\0';
+    } else {
+        strncpy(qs_soft_delete_col, "is_deleted", sizeof(qs_soft_delete_col) - 1);
+    }
+    return 0;
+}
+
+// Include soft-deleted rows in queries (bypass the auto-filter)
+// Django equivalent: Model.all_objects.all() (custom manager)
+int32_t __qs_with_deleted(void) {
+    qs_include_deleted = 1;
+    return 0;
+}
+
+// Permanently delete matching rows (real DELETE, ignoring soft-delete)
+int32_t __qs_hard_delete(void) {
+    char sql[4096];
+    int pos = snprintf(sql, sizeof(sql), "DELETE FROM %s", qs_table);
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+
+    debug_log_query(sql);
+
+    if (qs_param_count > 0) {
+        return __db_execute_params(sql, qs_params, qs_param_count);
+    }
+    return __db_execute_stmt(sql);
+}
+
+// Restore soft-deleted rows: SET is_deleted = FALSE WHERE ...
+int32_t __qs_restore(void) {
+    if (!qs_soft_delete) return -1; // no-op if not in soft-delete mode
+
+    char sql[4096];
+    int pos = snprintf(sql, sizeof(sql), "UPDATE %s SET %s = FALSE",
+        qs_table, qs_soft_delete_col);
+    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+
+    debug_log_query(sql);
+
+    if (qs_param_count > 0) {
+        return __db_execute_params(sql, qs_params, qs_param_count);
+    }
+    return __db_execute_stmt(sql);
+}
+
+// Soft delete: UPDATE SET is_deleted = TRUE WHERE ...
+// Marks rows as deleted without removing them
+int32_t __qs_do_soft_delete(void) {
+    if (!qs_soft_delete) return __qs_delete(); // fallback to real delete
+
+    char sql[4096];
+    int pos = snprintf(sql, sizeof(sql), "UPDATE %s SET %s = TRUE",
+        qs_table, qs_soft_delete_col);
     if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
 
     debug_log_query(sql);

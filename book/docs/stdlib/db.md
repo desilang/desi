@@ -131,6 +131,105 @@ db.bulk_execute()
 
 `exact`, `iexact`, `contains`, `icontains`, `startswith`, `istartswith`, `endswith`, `iendswith`, `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `range`, `isnull`, `year`, `month`, `day`, `hour`, `minute`, `second`, `week`, `quarter`, `json_has`, `json_contains`
 
+### HAVING Clause
+
+Filter aggregate results after `group_by()` + `annotate()`:
+
+```desi
+db.objects("orders")
+db.group_by("customer_id")
+db.annotate("total", "SUM", "amount")
+db.having("SUM(amount) > 100")        # raw condition
+db.fetch_all()
+
+# Parameterized (safe for user input):
+db.objects("orders")
+db.group_by("customer_id")
+db.annotate("order_count", "COUNT", "*")
+db.having_val("COUNT(*) >", "5")       # value is $N-bound
+db.fetch_all()
+```
+
+### Multi-column Ordering
+
+Append multiple `ORDER BY` columns (unlike `sort_by()` which overwrites):
+
+```desi
+db.objects("employees")
+db.order_by_add("-salary")   # primary: salary DESC
+db.order_by_add("name")     # secondary: name ASC
+db.fetch_all()
+# → ORDER BY salary DESC, name ASC
+```
+
+### Multi-column Update
+
+Update multiple fields in a single SQL statement:
+
+```desi
+db.objects("users")
+db.filter_by("id", "1")
+db.update_set("name", "Alice")
+db.update_set("email", "alice@example.com")
+db.update_exec()
+# → UPDATE users SET name=$1, email=$2 WHERE id = $3
+```
+
+### Pagination
+
+Page-based helpers that calculate LIMIT/OFFSET:
+
+```desi
+db.objects("products")
+db.filter_by("category", "electronics")
+
+# Get total count (ignores LIMIT/OFFSET)
+let total = db.total_count()
+
+# Fetch page 2 (25 items per page)
+db.paginate(2, 25)    # → LIMIT 25 OFFSET 25
+db.fetch_all()
+
+print(f"Showing page 2 of {total} results")
+```
+
+### Soft Delete
+
+Mark rows as deleted without removing them from the database:
+
+```desi
+# Enable soft-delete mode (column defaults to "is_deleted")
+db.objects("users")
+db.soft_delete_mode("is_deleted")
+
+# All queries auto-filter: WHERE is_deleted = FALSE
+db.fetch_all()   # only active users
+
+# Soft-delete a row (UPDATE SET is_deleted = TRUE)
+db.objects("users")
+db.soft_delete_mode("is_deleted")
+db.filter_by("id", "42")
+db.soft_delete()
+
+# Include deleted rows (bypass auto-filter)
+db.objects("users")
+db.soft_delete_mode("is_deleted")
+db.with_deleted()
+db.fetch_all()   # all users, including deleted
+
+# Restore a soft-deleted row
+db.objects("users")
+db.soft_delete_mode("is_deleted")
+db.with_deleted()
+db.filter_by("id", "42")
+db.restore()     # SET is_deleted = FALSE
+
+# Permanently delete (real DELETE FROM, ignores soft-delete)
+db.objects("users")
+db.filter_by("id", "42")
+db.hard_delete()
+```
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:

@@ -1213,6 +1213,157 @@ pub def vector_create_index(table: str, col: str, idx_name: str, metric: str) ->
 	  db.vector_create_index("documents", "embedding", "idx_docs_embedding", "cosine")"""
 	return __qs_vector_create_index(table, col, idx_name, metric)
 
+# ============================================================
+# Phase 4: HAVING clause
+# ============================================================
+
+pub def having(condition: str) -> int:
+	"""Add a HAVING condition for aggregate filtering.
+	Use after group_by() + annotate() to filter grouped results.
+	Appends raw SQL condition (no parameterization — use having_val for user input).
+	Django equivalent: .annotate(total=Sum("amount")).filter(total__gt=100)
+	Usage:
+	  db.objects("orders")
+	  db.group_by("customer_id")
+	  db.annotate("total", "SUM", "amount")
+	  db.having("SUM(amount) > 100")
+	  db.fetch_all()"""
+	return __qs_having(condition)
+
+pub def having_val(expr: str, val: str) -> int:
+	"""Add a parameterized HAVING condition.
+	The value is bound as a SQL parameter ($N or ?) to prevent injection.
+	Usage:
+	  db.objects("orders")
+	  db.group_by("customer_id")
+	  db.annotate("order_count", "COUNT", "*")
+	  db.having_val("COUNT(*) >", "5")
+	  db.fetch_all()"""
+	return __qs_having_val(expr, val)
+
+# ============================================================
+# Phase 4: Multi-column ORDER BY
+# ============================================================
+
+pub def order_by_add(col: str) -> int:
+	"""Append an ORDER BY column (multi-column ordering).
+	Unlike sort_by() which overwrites, this appends to existing ordering.
+	Use '-col' for DESC, 'col' for ASC.
+	Usage:
+	  db.objects("employees")
+	  db.order_by_add("-salary")  # primary: salary DESC
+	  db.order_by_add("name")     # secondary: name ASC
+	  db.fetch_all()  # ORDER BY salary DESC, name ASC"""
+	return __qs_order_by_add(col)
+
+# ============================================================
+# Phase 4: Multi-column UPDATE
+# ============================================================
+
+pub def update_set(col: str, val: str) -> int:
+	"""Accumulate a column=value pair for multi-column update.
+	Call multiple times to set multiple fields, then execute with update_exec().
+	All values are parameterized for security.
+	Usage:
+	  db.objects("users")
+	  db.filter_by("id", "1")
+	  db.update_set("name", "Alice")
+	  db.update_set("email", "alice@example.com")
+	  db.update_exec()  # UPDATE users SET name=$1, email=$2 WHERE id=$3"""
+	return __qs_update_set(col, val)
+
+pub def update_exec() -> int:
+	"""Execute a multi-column UPDATE with all fields set via update_set().
+	Generates a single UPDATE statement with all accumulated columns.
+	Returns affected row count.
+	Django equivalent: queryset.update(name="Alice", email="alice@example.com")"""
+	return __qs_update_multi()
+
+# ============================================================
+# Phase 4: Pagination Helpers
+# ============================================================
+
+pub def paginate(page: int, page_size: int) -> int:
+	"""Set pagination: page (1-based) + page_size → LIMIT/OFFSET.
+	paginate(1, 25) → LIMIT 25 OFFSET 0
+	paginate(3, 10) → LIMIT 10 OFFSET 20
+	Django equivalent: Paginator(queryset, page_size).page(page)
+	Usage:
+	  db.objects("products")
+	  db.paginate(2, 25)  # page 2, 25 per page
+	  db.fetch_all()"""
+	return __qs_paginate(page, page_size)
+
+pub def total_count() -> int:
+	"""Get total row count ignoring LIMIT/OFFSET (for pagination metadata).
+	Use after filter() but before/after paginate().
+	Returns the total matching rows across all pages.
+	Usage:
+	  db.objects("products")
+	  db.filter_by("category", "electronics")
+	  let total = db.total_count()  # total matching rows
+	  db.paginate(1, 25)
+	  db.fetch_all()  # first page of results"""
+	return __qs_total_count()
+
+# ============================================================
+# Phase 4: Soft Delete
+# ============================================================
+
+pub def soft_delete_mode(col_name: str) -> int:
+	"""Enable soft-delete mode for the current queryset.
+	When enabled:
+	  - SELECT/COUNT auto-filter: WHERE is_deleted = FALSE
+	  - soft_delete() marks rows instead of removing them
+	col_name: the boolean column name (default: 'is_deleted')
+	Usage:
+	  db.objects("users")
+	  db.soft_delete_mode("is_deleted")
+	  db.fetch_all()  # automatically excludes deleted rows"""
+	return __qs_soft_delete_mode(col_name)
+
+pub def with_deleted() -> int:
+	"""Include soft-deleted rows in queries (bypass auto-filter).
+	Must call soft_delete_mode() first.
+	Django equivalent: Model.all_objects.all()
+	Usage:
+	  db.objects("users")
+	  db.soft_delete_mode("is_deleted")
+	  db.with_deleted()
+	  db.fetch_all()  # includes deleted rows"""
+	return __qs_with_deleted()
+
+pub def soft_delete() -> int:
+	"""Soft-delete matching rows (UPDATE SET is_deleted = TRUE).
+	Falls back to real DELETE if soft_delete_mode() was not called.
+	Usage:
+	  db.objects("users")
+	  db.soft_delete_mode("is_deleted")
+	  db.filter_by("id", "42")
+	  db.soft_delete()  # marks as deleted, doesn't remove"""
+	return __qs_do_soft_delete()
+
+pub def hard_delete() -> int:
+	"""Permanently delete matching rows (real DELETE FROM).
+	Ignores soft-delete mode — always performs actual deletion.
+	Usage:
+	  db.objects("users")
+	  db.filter_by("id", "42")
+	  db.hard_delete()  # DELETE FROM users WHERE ..."""
+	return __qs_hard_delete()
+
+pub def restore() -> int:
+	"""Restore soft-deleted rows (UPDATE SET is_deleted = FALSE).
+	Must be in soft_delete_mode(). Use with_deleted() + filter to target deleted rows.
+	Returns -1 if not in soft-delete mode.
+	Usage:
+	  db.objects("users")
+	  db.soft_delete_mode("is_deleted")
+	  db.with_deleted()
+	  db.filter_by("id", "42")
+	  db.restore()  # brings back the soft-deleted row"""
+	return __qs_restore()
+
 pub def get_avg(col: str) -> str:
 	"""SELECT AVG(col) — returns string."""
 	return __qs_aggregate("AVG", col)
@@ -1467,6 +1618,46 @@ pub def __qs_vector_search(col: str, vector_str: str, metric: str, k: int) -> in
 
 @extern("C")
 pub def __qs_vector_create_index(table: str, col: str, idx_name: str, metric: str) -> int
+
+# ============================================================
+# Phase 4 Query Engine extern C bindings (db_crud.c)
+# ============================================================
+
+@extern("C")
+pub def __qs_having(condition: str) -> int
+
+@extern("C")
+pub def __qs_having_val(expr: str, val: str) -> int
+
+@extern("C")
+pub def __qs_order_by_add(col: str) -> int
+
+@extern("C")
+pub def __qs_update_set(col: str, val: str) -> int
+
+@extern("C")
+pub def __qs_update_multi() -> int
+
+@extern("C")
+pub def __qs_paginate(page: int, page_size: int) -> int
+
+@extern("C")
+pub def __qs_total_count() -> int
+
+@extern("C")
+pub def __qs_soft_delete_mode(col_name: str) -> int
+
+@extern("C")
+pub def __qs_with_deleted() -> int
+
+@extern("C")
+pub def __qs_hard_delete() -> int
+
+@extern("C")
+pub def __qs_restore() -> int
+
+@extern("C")
+pub def __qs_do_soft_delete() -> int
 
 # ============================================================
 # Values C bindings (db_crud.c)

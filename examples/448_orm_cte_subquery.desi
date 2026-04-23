@@ -11,6 +11,7 @@
 # Prefetch main rows: 3
 # === Done ===
 import db
+import env
 
 db.use_postgres()
 
@@ -27,7 +28,11 @@ class Order:
 
 def main() -> int:
 	print("=== Phase 3: CTEs + Subqueries ===")
-	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "desiprogrammer")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
 
 	# Create tables
 	db.execute("DROP TABLE IF EXISTS orders_p3")
