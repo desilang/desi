@@ -12,6 +12,7 @@
 # Count after uoc: 4
 # === Done ===
 import db
+import env
 
 db.use_postgres()
 
@@ -24,7 +25,11 @@ class Employee:
 
 def main() -> int:
 	print("=== Phase 2: UPSERT + JSON ===")
-	db.connect("postgres", "127.0.0.1", 5432, "postgres", "desiprogrammer", "")
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "desiprogrammer")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
 
 	# Create table
 	db.execute("DROP TABLE IF EXISTS employees_p2")

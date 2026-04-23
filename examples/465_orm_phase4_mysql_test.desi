@@ -1,0 +1,196 @@
+# Example 465: Phase 4 — HAVING, multi-order, multi-update, pagination, soft-delete (MySQL)
+# Demonstrates all Phase 4 query engine features against MySQL
+# EXPECTED_OUTPUT:
+# === Phase 4: Query Engine (MySQL) ===
+# Created 6 orders
+# --- HAVING ---
+# having rows: 2
+# having_val rows: 3
+# --- Multi-column ORDER BY ---
+# order rows: 3
+# first: Bob
+# --- Multi-column UPDATE ---
+# Updated Bob
+# bob new salary: 95000
+# bob new dept: Engineering
+# --- Pagination ---
+# total: 6
+# page1 rows: 2
+# page2 rows: 2
+# page3 rows: 2
+# --- Soft Delete ---
+# before delete: 3
+# after soft_delete: 2
+# with_deleted: 3
+# after restore: 3
+# after hard_delete: 2
+# === Done ===
+import db
+import env
+
+db.use_mysql()
+
+def main() -> int:
+	print("=== Phase 4: Query Engine (MySQL) ===")
+
+	let host = env.get("MYSQL_HOST", "127.0.0.1")
+	let user = env.get("MYSQL_USER", "root")
+	let pass = env.get("MYSQL_PASS", "")
+	let dbname = env.get("MYSQL_DB", "desi_test")
+	db.connect("mysql", host, 3306, dbname, user, pass)
+
+	# Create tables
+	db.execute("DROP TABLE IF EXISTS ord_p4m")
+	db.execute("DROP TABLE IF EXISTS emp_p4m")
+	db.execute("CREATE TABLE emp_p4m (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100), dept VARCHAR(100), salary INT DEFAULT 0, is_deleted BOOLEAN DEFAULT false)")
+	db.execute("CREATE TABLE ord_p4m (id INT AUTO_INCREMENT PRIMARY KEY, customer VARCHAR(100), amount INT, product VARCHAR(100))")
+
+	# Seed order data
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Alice', 100, 'Widget')")
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Alice', 200, 'Gadget')")
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Bob', 50, 'Gizmo')")
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Bob', 30, 'Thing')")
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Charlie', 500, 'Mega')")
+	db.execute("INSERT INTO ord_p4m (customer, amount, product) VALUES ('Charlie', 10, 'Mini')")
+	print("Created 6 orders")
+
+	# ============================================================
+	# 1. HAVING clause
+	# ============================================================
+	print("--- HAVING ---")
+
+	# HAVING with raw condition: customers whose total > 200
+	db.objects("ord_p4m")
+	db.group_by("customer")
+	db.annotate("total", "SUM", "amount")
+	db.having("SUM(amount) > 200")
+	let h1 = db.fetch_all()
+	print(f"having rows: {str(h1)}")
+
+	# HAVING with parameterized value: customers with > 1 order
+	db.objects("ord_p4m")
+	db.group_by("customer")
+	db.annotate("cnt", "COUNT", "*")
+	db.having_val("COUNT(*) >", "1")
+	let h2 = db.fetch_all()
+	print(f"having_val rows: {str(h2)}")
+
+	# ============================================================
+	# 2. Multi-column ORDER BY
+	# ============================================================
+	print("--- Multi-column ORDER BY ---")
+
+	# Seed employees
+	db.execute("INSERT INTO emp_p4m (name, dept, salary, is_deleted) VALUES ('Alice', 'Engineering', 80000, false)")
+	db.execute("INSERT INTO emp_p4m (name, dept, salary, is_deleted) VALUES ('Bob', 'Engineering', 90000, false)")
+	db.execute("INSERT INTO emp_p4m (name, dept, salary, is_deleted) VALUES ('Charlie', 'Sales', 70000, false)")
+
+	db.objects("emp_p4m")
+	db.order_by_add("-salary")
+	db.order_by_add("name")
+	let o_rows = db.fetch_all()
+	print(f"order rows: {str(o_rows)}")
+	let first_name = db.get_field(0, "name")
+	print(f"first: {first_name}")
+
+	# ============================================================
+	# 3. Multi-column UPDATE
+	# ============================================================
+	print("--- Multi-column UPDATE ---")
+
+	db.objects("emp_p4m")
+	db.filter_by("name", "Bob")
+	db.update_set("salary", "95000")
+	db.update_set("dept", "Engineering")
+	db.update_exec()
+	print("Updated Bob")
+
+	# Verify
+	db.objects("emp_p4m")
+	db.filter_by("name", "Bob")
+	db.fetch_all()
+	let bob_salary = db.get_field(0, "salary")
+	let bob_dept = db.get_field(0, "dept")
+	print(f"bob new salary: {bob_salary}")
+	print(f"bob new dept: {bob_dept}")
+
+	# ============================================================
+	# 4. Pagination
+	# ============================================================
+	print("--- Pagination ---")
+
+	db.objects("ord_p4m")
+	let total = db.total_count()
+	print(f"total: {str(total)}")
+
+	db.objects("ord_p4m")
+	db.paginate(1, 2)
+	let p1 = db.fetch_all()
+	print(f"page1 rows: {str(p1)}")
+
+	db.objects("ord_p4m")
+	db.paginate(2, 2)
+	let p2 = db.fetch_all()
+	print(f"page2 rows: {str(p2)}")
+
+	db.objects("ord_p4m")
+	db.paginate(3, 2)
+	let p3 = db.fetch_all()
+	print(f"page3 rows: {str(p3)}")
+
+	# ============================================================
+	# 5. Soft Delete
+	# ============================================================
+	print("--- Soft Delete ---")
+
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	let before = db.fetch_all()
+	print(f"before delete: {str(before)}")
+
+	# Soft-delete Charlie
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	db.filter_by("name", "Charlie")
+	db.soft_delete()
+
+	# Count after soft delete (auto-filter)
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	let after = db.fetch_all()
+	print(f"after soft_delete: {str(after)}")
+
+	# with_deleted
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	db.with_deleted()
+	let all_rows = db.fetch_all()
+	print(f"with_deleted: {str(all_rows)}")
+
+	# restore Charlie
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	db.with_deleted()
+	db.filter_by("name", "Charlie")
+	db.restore()
+
+	db.objects("emp_p4m")
+	db.soft_delete_mode("is_deleted")
+	let restored = db.fetch_all()
+	print(f"after restore: {str(restored)}")
+
+	# hard_delete Alice (permanent)
+	db.objects("emp_p4m")
+	db.filter_by("name", "Alice")
+	db.hard_delete()
+
+	db.objects("emp_p4m")
+	let remaining = db.fetch_all()
+	print(f"after hard_delete: {str(remaining)}")
+
+	# Clean up
+	db.execute("DROP TABLE ord_p4m")
+	db.execute("DROP TABLE emp_p4m")
+	db.close()
+	print("=== Done ===")
+	0
