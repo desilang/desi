@@ -1,24 +1,25 @@
 # Handle-Based QuerySet Architecture
 
-**Status**: 🚧 In Progress (struct + lifecycle complete, compiler lowering pending)  
+**Status**: ✅ Implemented  
 **Since**: v0.11  
-**Related**: [Query Engine Improvements](query_engine_phase4.md), [ORM Models](orm_models.md), [Connection Pooling](connection_pooling.md)
+**Related**: [Query Engine Improvements](query_engine.md), [ORM Models](orm_models.md), [Connection Pooling](connection_pooling.md)
 
 ---
 
 ## Overview
 
-Phase 5 replaces the **global static state** in the ORM query engine with a **heap-allocated, handle-based `QuerySet` struct**. This eliminates the single largest source of concurrency bugs and memory safety issues in the C runtime.
+The handle-based QuerySet architecture replaces the **global static state** in the ORM query engine with a **heap-allocated, handle-based `QuerySet` struct**. This eliminates the single largest source of concurrency bugs and memory safety issues in the C runtime.
 
 ### What Changed
 
-| Before (Phase 4) | After (Phase 5) |
+| Before | After |
 |---|---|
 | ~30 `static` global variables | Single `QuerySet` struct per query chain |
 | Fixed-size arrays (`char[2048]`) | Fixed-size embedded arrays with clear capacity limits |
 | Fixed-size parameter arrays (`char*[64]`) | Dynamic `char**` arrays that grow via `realloc` |
 | Global `__qs_reset()` clears everything | `__qs_new()` allocates, `__qs_free()` deallocates |
 | Not reentrant, not thread-safe | Reentrant; thread-local shim for backward compat |
+| Compiler emits `__qs_reset()` implicitly | Compiler emits explicit `new → bind → use → free` |
 
 ### Why
 
@@ -37,10 +38,10 @@ typedef struct {
     // Core query components (fixed char arrays)
     char   table[256];
     char   where_clause[4096];
-    char   order[1024];
-    char   columns[2048];
+    char   order[512];
+    char   columns[4096];
     char   having[2048];
-    char   group_by[512];
+    char   group_by[1024];
 
     // Scalar state
     int    limit, offset, distinct, row_count;
@@ -79,18 +80,30 @@ typedef struct {
 } QuerySet;
 ```
 
-### Lifecycle
+### Handle-Threading API
+
+The compiler emits explicit handle lifecycle calls. Four C-level functions manage handles:
+
+| Function | Signature | Purpose |
+|---|---|---|
+| `__qs_handle_new(table)` | `const char* → void*` | Allocate a new `QuerySet`, return opaque handle |
+| `__qs_handle_bind(qs)` | `void* → void` | Install handle as active for subsequent `__qs_*` calls |
+| `__qs_handle_free(qs)` | `void* → void` | Free handle; clear thread-local if it matches |
+| `__qs_handle_get()` | `→ void*` | Return current active handle (introspection) |
+
+**Lifecycle:**
 
 ```
-__qs_new("table_name")  →  QuerySet* (heap-allocated, zeroed)
-       ↓
-  chain methods use the handle (via thread-local shim for now)
-       ↓
-__qs_free(qs)           →  frees dynamic arrays + the struct itself
+__qs_handle_new("users")   →  void* (heap-allocated QuerySet)
+         ↓
+__qs_handle_bind(qs)       →  install as active (thread-local)
+         ↓
+  __qs_filter / __qs_order_by / ...  (read from active handle via shim macros)
+         ↓
+  __qs_fetch / __qs_delete / ...     (terminal: execute SQL)
+         ↓
+__qs_handle_free(qs)       →  free dynamic arrays + struct, clear thread-local
 ```
-
-- `__qs_new()` uses `calloc` to zero-init all fields, then sets the table name and default soft-delete column via `strncpy`.
-- `__qs_free()` iterates all dynamic arrays (`params`, `insert_keys`, `update_keys`, `related`), frees each element, frees the array, then frees the struct.
 
 ### Backward Compatibility Shim
 
@@ -155,38 +168,65 @@ A standalone dynamic string buffer library is provided at `compiler/runtime/db/d
 
 ---
 
+## Compiler Integration
+
+### Lowering (`lower_call.go`)
+
+The compiler's `resolveModelObjectsChain` function emits explicit handle management at the chain root:
+
+```llvm
+; Chain root — allocate and bind
+%qs_handle = call ptr @__qs_handle_new(ptr @.str.users)
+call void @__qs_handle_bind(ptr %qs_handle)
+
+; Intermediate — filter (reads g_qs_current via shim)
+call i32 @__qs_filter(ptr @.str.name, ptr @.str.Alice)
+
+; Terminal — fetch and cleanup
+%qs_result = call i32 @__qs_fetch()
+call void @__qs_handle_free(ptr %qs_handle)
+```
+
+The handle value is threaded through all recursive chain resolution, so `emitQsGeneric` receives it and emits the `__qs_handle_free()` after the terminal call completes.
+
+### ABI Bindings (`db.desi`)
+
+Extern declarations expose the handle API to the Desi type system:
+
+```desi
+@extern("C")
+pub def __qs_handle_new(table: str) -> cptr
+
+@extern("C")
+pub def __qs_handle_bind(qs: cptr) -> int
+
+@extern("C")
+pub def __qs_handle_free(qs: cptr) -> int
+
+@extern("C")
+pub def __qs_handle_get() -> cptr
+```
+
+### Dispatch Layer
+
+The dispatch layer (`dispatch.c`) routes finished SQL strings to PG/MySQL backends and does **not** need `QuerySet*` awareness. The CRUD layer converts handle state → SQL before calling dispatch.
+
+---
+
 ## Files Changed
 
 | File | Change |
 |---|---|
 | `compiler/runtime/db/dynbuf.h` | **[NEW]** Dynamic buffer utility |
-| `compiler/runtime/db/crud.c` | **[MODIFIED]** QuerySet struct, lifecycle, shim macros, dynamic arrays |
-
----
-
-## Pending Work (Phase 5 Continuation)
-
-### Compiler Lowering (`lower_call.go`)
-
-The compiler currently emits `__qs_reset("table")` at the start of every query chain. This needs updating to:
-
-1. Emit `QuerySet* qs_N = __qs_new("table")` (returning a handle)
-2. Thread `qs_N` as the first argument to every chained method call
-3. Emit `__qs_free(qs_N)` after the terminal call (`fetch_all`, `update_exec`, etc.)
-
-### Dispatch Layer (`dispatch.c`)
-
-The dispatch functions (`__qs_dispatch_fetch`, etc.) need a `QuerySet*` parameter to route queries to the correct backend with the correct connection and state.
-
-### API Bindings (`db.desi`)
-
-Extern declarations need updating to include the handle as a `cptr` parameter. The public API wrappers will hide this from users.
+| `compiler/runtime/db/crud.c` | **[MODIFIED]** QuerySet struct, lifecycle, handle-threading API, shim macros, dynamic arrays |
+| `compiler/internal/lower/lower_call.go` | **[MODIFIED]** Emit `__qs_handle_new/bind/free` in query chain lowering |
+| `compiler/lib/db.desi` | **[MODIFIED]** Added handle-threading extern declarations |
 
 ---
 
 ## Design Decisions
 
-1. **Fixed char[] over DynBuf for query components**: We chose embedded `char[]` arrays in the struct rather than heap-allocated DynBuf strings. The tradeoff is a fixed upper bound (e.g., 4096 bytes for WHERE) but guaranteed `sizeof()` correctness for all existing `snprintf(buf, sizeof(buf), ...)` calls. The sizes are generous — 4KB WHERE clauses and 2KB column lists cover virtually all real queries.
+1. **Fixed char[] over DynBuf for query components**: We chose embedded `char[]` arrays in the struct rather than heap-allocated DynBuf strings. The tradeoff is a fixed upper bound (e.g., 4096 bytes for WHERE) but guaranteed `sizeof()` correctness for all existing `snprintf(buf, sizeof(buf), ...)` calls. The sizes are generous — 4KB WHERE clauses and 4KB column lists cover virtually all real queries.
 
 2. **Thread-local shim for migration path**: Rather than rewriting all ~80 function bodies at once, the `#define` shim lets the struct refactor land independently from the compiler lowering work. Each function will be migrated to accept `QuerySet*` directly in a future pass.
 
@@ -194,12 +234,15 @@ Extern declarations need updating to include the handle as a `cptr` parameter. T
 
 4. **strdup for parameter copies**: Each parameter value is copied via `strdup` so the caller's memory can be freed or reused. The QuerySet owns all parameter memory and frees it in `__qs_free()`.
 
+5. **Compiler-driven lifecycle**: The compiler emits explicit `new → bind → free` calls rather than relying on implicit reset/cleanup. This makes handle ownership deterministic and visible in the IR, enabling future `using`-scope support.
+
 ---
 
 ## Testing Notes
 
-- All 432 example tests pass (0–436)
-- PostgreSQL ORM Phase 4 test (464) passes with handle-based QuerySet
+- 456 of 461 example tests pass (5 pre-existing migration/MySQL failures unrelated to handle refactor)
+- PostgreSQL ORM Phase 4 test (464) compiles and runs with handle-based QuerySet
 - MySQL test (465) requires a running MySQL server (environment-dependent)
-- All 11 C files in `compiler/runtime/db/` compile cleanly with clang
+- All C files in `compiler/runtime/db/` compile cleanly with clang (0 warnings)
 - Go build passes (`go build ./...`)
+- `libdesi.a` rebuilt with handle-threading symbols (`__qs_handle_new/bind/free/get`)

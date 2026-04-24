@@ -2682,13 +2682,13 @@ handlePrint:
 	// protocol to determine how to emit calls. No ORM-specific switch statements.
 	// ============================================================
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
-		if tableName, cls, ok := ls.resolveModelObjectsChain(fe.X, x); ok {
+		if tableName, cls, qsHandle, ok := ls.resolveModelObjectsChain(fe.X, x); ok {
 			methodName := fe.Name.Name
 
 			// Look up method spec from the macro protocol
 			if cls != nil && cls.MacroDecorator != "" {
 				if _, method, found := macro.Registry.LookupMethodOnClass(cls, methodName); found {
-					return ls.emitQsGeneric(method, x, cls)
+					return ls.emitQsGeneric(method, x, cls, qsHandle)
 				}
 			}
 
@@ -2696,6 +2696,10 @@ handlePrint:
 			_ = tableName
 			dst := ls.b.FreshTemp("qs_fetch")
 			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__qs_fetch", Args: nil, Type: "i32"})
+			// Free the handle after terminal call
+			if qsHandle != nil {
+				ls.b.Emit(&hir.Call{Fn: "__qs_handle_free", Args: []hir.Value{qsHandle}})
+			}
 			return dst
 		}
 	}
@@ -3383,29 +3387,40 @@ func isPrimitiveType(t types.T) bool {
 // ============================================================
 
 // resolveModelObjectsChain walks up the chain of CallExpr/FieldExpr nodes,
-// emitting intermediate QuerySet operations. Returns (tableName, class, true)
-// if this is a valid Model.objects chain; ("", nil, false) otherwise.
+// emitting intermediate QuerySet operations. Returns (tableName, class, handle, true)
+// if this is a valid Model.objects chain; ("", nil, nil, false) otherwise.
+//
+// Handle lifecycle (Phase 5):
+//   At the chain root (User.objects), emits:
+//     %qs = call ptr @__qs_handle_new("users")   → allocate handle
+//     call void @__qs_handle_bind(ptr %qs)         → set as active
+//   The handle is returned so the terminal caller can free it.
 //
 // Handles:
-//   - Direct:   FieldExpr(.objects, Ident(User))       → emit __qs_reset, return "users"
+//   - Direct:   FieldExpr(.objects, Ident(User))       → emit handle_new + handle_bind
 //   - Chained:  CallExpr(.filter, FieldExpr(.objects, Ident(User)))
-//               → emit __qs_reset + generic intermediate, return "users"
+//               → emit handle_new + handle_bind + generic intermediate
 //
-// The caller (emitQsGeneric) emits the final/terminal operation.
-func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, *types.Class, bool) {
+// The caller (emitQsGeneric) emits the final/terminal operation and __qs_handle_free.
+func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, *types.Class, hir.Value, bool) {
 	// Case 1: receiver is FieldExpr(.propertyName, Ident(ClassName)) — direct Class.property.method()
 	if fe, ok := receiver.(*ast.FieldExpr); ok {
 		if recvT := ls.info.Types[fe.X]; recvT != nil {
 			if cls, ok := recvT.(*types.Class); ok && cls.MacroDecorator != "" {
 				// Check if the field name is a macro-injected property
 				if _, _, ok := macro.Registry.LookupProperty(cls, fe.Name.Name); ok {
-					// Emit __qs_reset to bind the table
-					resetDst := ls.b.FreshTemp("qs_reset")
+					// Phase 5: Allocate a new QuerySet handle
+					qsHandle := ls.b.FreshTemp("qs_handle")
 					ls.b.Emit(&hir.Call{
-						Dst:  resetDst,
-						Fn:   "__qs_reset",
+						Dst:  qsHandle,
+						Fn:   "__qs_handle_new",
 						Args: []hir.Value{hir.ConstStr{Text: cls.TableName}},
-						Type: "i32",
+						Type: "ptr",
+					})
+					// Bind as the active handle for subsequent __qs_* calls
+					ls.b.Emit(&hir.Call{
+						Fn:   "__qs_handle_bind",
+						Args: []hir.Value{qsHandle},
 					})
 					// If model has db=[...] routing, switch to the named connection
 					if len(cls.ModelDB) > 0 {
@@ -3417,11 +3432,11 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 							Type: "i32",
 						})
 					}
-					return cls.TableName, cls, true
+					return cls.TableName, cls, qsHandle, true
 				}
 			}
 		}
-		return "", nil, false
+		return "", nil, nil, false
 	}
 
 	// Case 2: receiver is a CallExpr — chained method like User.objects.filter(...).order_by(...)
@@ -3429,9 +3444,9 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 	if innerCall, ok := receiver.(*ast.CallExpr); ok {
 		if innerFe, ok := innerCall.Callee.(*ast.FieldExpr); ok {
 			// Recursively resolve the chain (walks up to the root User.objects)
-			tableName, cls, isChain := ls.resolveModelObjectsChain(innerFe.X, innerCall)
+			tableName, cls, qsHandle, isChain := ls.resolveModelObjectsChain(innerFe.X, innerCall)
 			if !isChain {
-				return "", nil, false
+				return "", nil, nil, false
 			}
 
 			// Emit the intermediate operation for this link in the chain
@@ -3442,11 +3457,11 @@ func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast
 					ls.emitQsArgs(method, innerCall)
 				}
 			}
-			return tableName, cls, true
+			return tableName, cls, qsHandle, true
 		}
 	}
 
-	return "", nil, false
+	return "", nil, nil, false
 }
 
 // emitQsArgs processes the arguments for a QuerySet method call
@@ -3539,9 +3554,13 @@ func (ls *lowerState) emitQsArgs(spec *macro.MethodSpec, call *ast.CallExpr) {
 //   2. Which C function executes the terminal action (TerminalFunc)
 //   3. Whether to construct a model instance from the result (ReturnsModel)
 //
+// Phase 5: After the terminal call completes and results are extracted,
+// the QuerySet handle is freed via __qs_handle_free. This ensures
+// deterministic cleanup regardless of how the result is used.
+//
 // This function is 100% domain-agnostic — it knows nothing about "filter",
 // "get", or "create". All behavior comes from the macro protocol definition.
-func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, cls *types.Class) hir.Value {
+func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, cls *types.Class, qsHandle hir.Value) hir.Value {
 	if spec == nil {
 		return nil
 	}
@@ -3560,11 +3579,19 @@ func (ls *lowerState) emitQsGeneric(spec *macro.MethodSpec, call *ast.CallExpr, 
 		})
 
 		// 3. If ReturnsModel, construct class instance from row 0
+		var result hir.Value
 		if spec.ReturnsModel && cls != nil && len(cls.Fields) > 0 {
-			return ls.constructModelFromRow(cls, dst)
+			result = ls.constructModelFromRow(cls, dst)
+		} else {
+			result = dst
 		}
 
-		return dst
+		// 4. Free the handle after result extraction (Phase 5)
+		if qsHandle != nil {
+			ls.b.Emit(&hir.Call{Fn: "__qs_handle_free", Args: []hir.Value{qsHandle}})
+		}
+
+		return result
 	}
 
 	// Chainable method with no terminal func — return nil (no value produced)
