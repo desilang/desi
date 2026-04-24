@@ -1,4 +1,4 @@
-# Phase 4: Query Engine Improvements
+# Query Engine Improvements
 
 **Status**: ✅ Implemented  
 **Since**: v0.10  
@@ -24,19 +24,19 @@ All features use parameterized queries and support both PostgreSQL and MySQL dia
 
 ### C Runtime (`compiler/runtime/db/crud.c`)
 
-New state variables added to the global QuerySet state:
+New state fields added to the QuerySet struct (originally global, now per-handle since the [handle-based refactor](queryset_handles.md)):
 
-| Variable | Type | Purpose |
+| Field | Type | Purpose |
 |---|---|---|
-| `qs_having[2048]` | `char[]` | Accumulated HAVING conditions |
-| `qs_soft_delete` | `int` | Soft-delete mode flag (0/1) |
-| `qs_include_deleted` | `int` | Include-deleted flag (0/1) |
-| `qs_soft_delete_col[64]` | `char[]` | Column name for soft-delete (default: `is_deleted`) |
-| `qs_update_keys[32][128]` | `char[][]` | Multi-update column names |
-| `qs_update_count` | `int` | Number of accumulated update fields |
-| `qs_update_param_start` | `int` | Param index where update values begin |
+| `having[2048]` | `char[]` | Accumulated HAVING conditions |
+| `soft_delete` | `int` | Soft-delete mode flag (0/1) |
+| `include_deleted` | `int` | Include-deleted flag (0/1) |
+| `soft_delete_col[128]` | `char[]` | Column name for soft-delete (default: `is_deleted`) |
+| `update_keys` | `char**` | Multi-update column names (dynamic) |
+| `update_count` | `int` | Number of accumulated update fields |
+| `update_param_start` | `int` | Param index where update values begin |
 
-All cleared by `__qs_reset()`.
+All cleared by `__qs_free()` (or `__qs_reset()` for legacy code paths).
 
 ### SQL Generation
 

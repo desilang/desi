@@ -248,13 +248,25 @@ See [Migrations](migrations.md) for the full guide.
 
 ## Internals
 
-Under the hood, each query chain (`db.objects()` → `db.filter_by()` → `db.fetch_all()`) creates a **QuerySet handle** — a heap-allocated struct that holds all query state (table, WHERE clause, parameters, etc.). This means:
+Under the hood, each query chain (`db.objects()` → `db.filter_by()` → `db.fetch_all()`) creates a **QuerySet handle** — a heap-allocated struct that holds all query state (table, WHERE clause, parameters, etc.).
 
-- **Concurrent queries are safe** — each `spawn`-ed task gets its own isolated query state.
+The compiler emits explicit lifecycle management for each chain:
+
+1. **Allocate** — `__qs_handle_new("table")` creates a fresh handle
+2. **Bind** — `__qs_handle_bind(qs)` installs it as active for the chain
+3. **Use** — intermediate calls (`filter`, `order_by`, etc.) operate on the active handle
+4. **Free** — `__qs_handle_free(qs)` deallocates after the terminal call
+
+This means:
+
+- **Concurrent queries are safe** — each `spawn`-ed task gets its own isolated query state via thread-local binding.
 - **No parameter limits** — parameters, INSERT fields, and UPDATE fields grow dynamically as needed.
 - **Automatic cleanup** — the handle is freed after the terminal call (`fetch_all`, `update_exec`, etc.).
+- **Deterministic lifetime** — the compiler controls handle allocation and deallocation, preventing leaks.
 
-You don't need to manage handles manually — the runtime does it for you.
+You don't need to manage handles manually — the compiler and runtime do it for you.
+
+See [QuerySet Handles](../features/queryset_handles.md) for the full architecture guide.
 
 ## See Also
 

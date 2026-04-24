@@ -230,11 +230,47 @@ void __qs_free(QuerySet* qs) {
 }
 
 // ============================================================
-// Backward-compat shim: __qs_reset creates a new handle
-// (stored as a thread-local for legacy code paths)
+// Handle-Threading API
+//
+// The compiler emits explicit handle management:
+//   %qs = call ptr @__qs_handle_new("users")   → allocate handle
+//   call void @__qs_handle_bind(ptr %qs)        → set as active
+//   call void @__qs_filter("name", "Alice")     → uses active handle
+//   call i32  @__qs_fetch()                     → uses active handle
+//   call void @__qs_handle_free(ptr %qs)        → deallocate
+//
+// This keeps all __qs_* function signatures unchanged while
+// making handle lifetime explicit at the IR level.
 // ============================================================
 static __thread QuerySet* g_qs_current = NULL;
 
+// Create a new handle and return it as an opaque pointer.
+// Does NOT install it as the active handle — call __qs_handle_bind for that.
+void* __qs_handle_new(const char* table) {
+    return (void*)__qs_new(table);
+}
+
+// Install a handle as the active QuerySet for subsequent __qs_* calls.
+void __qs_handle_bind(void* qs) {
+    g_qs_current = (QuerySet*)qs;
+}
+
+// Free a handle and clear it from the active slot if it's the current one.
+void __qs_handle_free(void* qs) {
+    if (!qs) return;
+    if (g_qs_current == (QuerySet*)qs) {
+        g_qs_current = NULL;
+    }
+    __qs_free((QuerySet*)qs);
+}
+
+// Get the current active handle (for advanced introspection).
+void* __qs_handle_get(void) {
+    return (void*)g_qs_current;
+}
+
+// Legacy shim: __qs_reset creates a new handle and installs it.
+// Used by the non-ORM db.objects() path and older code.
 int32_t __qs_reset(const char* table) {
     if (g_qs_current) __qs_free(g_qs_current);
     g_qs_current = __qs_new(table);

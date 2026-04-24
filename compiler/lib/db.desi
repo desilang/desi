@@ -643,6 +643,21 @@ pub def connection_info() -> str:
 # ORM CRUD C bindings (db_crud.c)
 # ============================================================
 
+# Handle-Threading API — used by compiler-generated code for
+# explicit QuerySet handle lifetime management.
+@extern("C")
+pub def __qs_handle_new(table: str) -> cptr
+
+@extern("C")
+pub def __qs_handle_bind(qs: cptr) -> int
+
+@extern("C")
+pub def __qs_handle_free(qs: cptr) -> int
+
+@extern("C")
+pub def __qs_handle_get() -> cptr
+
+# Legacy shim (used by db.objects() non-ORM path)
 @extern("C")
 pub def __qs_reset(table: str) -> int
 
