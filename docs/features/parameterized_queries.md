@@ -114,10 +114,10 @@ User.objects.filter(name="'; DROP TABLE users; --")
 
 | File | Role |
 |------|------|
-| `runtime/db_crud.c` | Parameter accumulator, placeholder generation, Q object params |
-| `runtime/db_dispatch.c` | `__db_query_params` / `__db_execute_params` dispatch |
-| `runtime/db_postgres.c` | `__pg_query_params` — PG Extended Query Protocol |
-| `runtime/db_mysql.c` | `__my_query_params` — client-side escaping |
+| `runtime/db/crud.c` | Parameter accumulator, placeholder generation, Q object params |
+| `runtime/db/dispatch.c` | `__db_query_params` / `__db_execute_params` dispatch |
+| `runtime/db/postgres.c` | `__pg_query_params` — PG Extended Query Protocol |
+| `runtime/db/mysql.c` | `__my_query_params` — client-side escaping |
 | `compiler/internal/project/manifest.go` | `Database.DebugQueries` config |
 | `compiler/internal/lower/module_lower.go` | `__db_set_debug_queries` injection |
 | `compiler/lib/db.desi` | Extern declarations for new C functions |

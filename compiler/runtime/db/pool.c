@@ -85,6 +85,16 @@ extern void  __pg_set_conn_ptr(void* conn);
 extern void* __my_get_conn_ptr(void);
 extern void  __my_set_conn_ptr(void* conn);
 
+// Reconnect functions (use stored params in conn struct)
+extern int32_t __pg_reconnect(void);
+extern int32_t __my_reconnect(void);
+
+// Lightweight ping (SELECT 1)
+extern int32_t __pg_query(const char*);
+extern int32_t __my_query(const char*);
+extern int32_t __pg_is_connected(void);
+extern int32_t __my_is_connected(void);
+
 // ============================================================
 // Pool Init — create N connections to the same database
 // ============================================================
@@ -165,6 +175,39 @@ int32_t __db_pool_init(const char* driver, const char* host, int32_t port,
 // Acquire — get a free connection from pool, set as active
 // ============================================================
 
+// Ping a pooled connection (must be set as active global ptr first).
+// Returns 0 if alive, -1 if dead.
+static int pool_ping_slot(void) {
+    if (g_pool_driver == POOL_DRIVER_PG) {
+        if (!__pg_is_connected()) return -1;
+        return __pg_query("SELECT 1") >= 0 ? 0 : -1;
+    } else {
+        if (!__my_is_connected()) return -1;
+        return __my_query("SELECT 1") >= 0 ? 0 : -1;
+    }
+}
+
+// Attempt to reconnect the active pooled connection.
+// On success, update the pool slot with the new conn pointer.
+static int pool_reconnect_slot(int slot) {
+    int32_t rc;
+    fprintf(stderr, "[pool] slot %d dead, attempting reconnect...\n", slot);
+    if (g_pool_driver == POOL_DRIVER_PG) {
+        rc = __pg_reconnect();
+        if (rc >= 0) {
+            g_pool_slots[slot].conn = __pg_get_conn_ptr();
+            fprintf(stderr, "[pool] slot %d reconnected\n", slot);
+        }
+    } else {
+        rc = __my_reconnect();
+        if (rc >= 0) {
+            g_pool_slots[slot].conn = __my_get_conn_ptr();
+            fprintf(stderr, "[pool] slot %d reconnected\n", slot);
+        }
+    }
+    return rc;
+}
+
 int32_t __db_pool_acquire(void) {
     if (!g_pool_initialized) {
         fprintf(stderr, "[pool] error: pool not initialized\n");
@@ -190,7 +233,22 @@ int32_t __db_pool_acquire(void) {
                 }
 
                 pthread_mutex_unlock(&g_pool_mutex);
-                return i;  // return slot index
+
+                // Health check: ping the connection before returning
+                if (pool_ping_slot() < 0) {
+                    // Dead connection — try to reconnect transparently
+                    if (pool_reconnect_slot(i) < 0) {
+                        // Reconnect failed — release slot and try next
+                        fprintf(stderr, "[pool] slot %d reconnect failed, skipping\n", i);
+                        pthread_mutex_lock(&g_pool_mutex);
+                        g_pool_slots[i].state = SLOT_FREE;
+                        g_pool_active_slot = -1;
+                        pthread_mutex_unlock(&g_pool_mutex);
+                        continue;
+                    }
+                }
+
+                return i;  // return healthy slot index
             }
         }
 

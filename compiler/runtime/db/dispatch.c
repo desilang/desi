@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "db_timeout.h"
 
 // Driver IDs
 #define DRIVER_NONE  0
@@ -37,6 +38,7 @@ extern char*   __pg_get_field(int32_t, const char*);
 extern int32_t __pg_set_debug(int32_t);
 extern int32_t __pg_dump_results(void);
 extern char*   __pg_connection_info(void);
+extern int32_t __pg_reconnect(void);
 
 // ---- Forward declarations to MySQL driver ----
 extern int32_t __my_connect(const char*, int32_t, const char*, const char*, const char*);
@@ -54,6 +56,7 @@ extern char*   __my_get_field(int32_t, const char*);
 extern int32_t __my_set_debug(int32_t);
 extern int32_t __my_dump_results(void);
 extern char*   __my_connection_info(void);
+extern int32_t __my_reconnect(void);
 
 // ---- Forward declarations to CRUD layer ----
 extern int32_t __crud_set_dialect(int32_t);
@@ -289,20 +292,56 @@ char* __db_driver(void) {
 
 
 // ============================================================
-// Connection health check — ping with auto-reconnect awareness
+// Connection health check — ping with auto-reconnect
+//
+// Strategy:
+//   1. Check if connected (fast path)
+//   2. Send SELECT 1 to verify the connection is truly alive
+//   3. If dead, attempt ONE transparent reconnect using stored params
+//   4. Re-ping after reconnect to confirm
 // ============================================================
 
 int32_t __db_ping(void) {
-    // Send a lightweight query to check if the connection is alive.
-    // PG: "SELECT 1", MySQL: "SELECT 1"
-    // Returns 0 if healthy, -1 if dead.
+    int32_t alive = 0;
     switch (g_active_driver) {
         case DRIVER_PG:
-            if (!__pg_is_connected()) return -1;
-            return __pg_query("SELECT 1") >= 0 ? 0 : -1;
+            if (__pg_is_connected() && __pg_query("SELECT 1") >= 0) return 0;
+            break;
         case DRIVER_MYSQL:
-            if (!__my_is_connected()) return -1;
-            return __my_query("SELECT 1") >= 0 ? 0 : -1;
+            if (__my_is_connected() && __my_query("SELECT 1") >= 0) return 0;
+            break;
         default: return -1;
     }
+
+    // Connection is dead — attempt transparent reconnect
+    fprintf(stderr, "[db] ping failed, attempting auto-reconnect...\n");
+    int32_t rc = -1;
+    switch (g_active_driver) {
+        case DRIVER_PG:    rc = __pg_reconnect(); break;
+        case DRIVER_MYSQL: rc = __my_reconnect(); break;
+        default: return -1;
+    }
+    if (rc < 0) {
+        fprintf(stderr, "[db] auto-reconnect failed\n");
+        return -1;
+    }
+    fprintf(stderr, "[db] auto-reconnect succeeded\n");
+    return 0;
+}
+
+// Reconnect dispatch — public API for explicit reconnect
+int32_t __db_reconnect(void) {
+    switch (g_active_driver) {
+        case DRIVER_PG:    return __pg_reconnect();
+        case DRIVER_MYSQL: return __my_reconnect();
+        default: return -1;
+    }
+}
+
+// ============================================================
+// Connection timeouts — configure connect and read timeouts
+// ============================================================
+
+int32_t __db_set_timeout(int32_t connect_ms, int32_t read_ms) {
+    return db_set_timeouts(connect_ms, read_ms);
 }
