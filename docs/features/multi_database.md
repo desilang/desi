@@ -178,7 +178,7 @@ If `.using("analytics")` targets a database that doesn't have the table:
 
 ## C Runtime Functions
 
-### Pool (`db_pool.c`)
+### Pool (`db/pool.c`)
 
 | Function | Purpose |
 |----------|---------|
@@ -189,7 +189,7 @@ If `.using("analytics")` targets a database that doesn't have the table:
 | `__db_pool_size()` | Get total pool size |
 | `__db_pool_available()` | Get free connection count |
 
-### Named Connections (`db_connections.c`)
+### Named Connections (`db/connections.c`)
 
 | Function | Purpose |
 |----------|---------|
@@ -201,7 +201,7 @@ If `.using("analytics")` targets a database that doesn't have the table:
 | `__db_conn_count()` | Count registered connections |
 | `__db_list_conns()` | List connection names (CSV) |
 
-### QuerySet Routing (`db_crud.c`)
+### QuerySet Routing (`db/crud.c`)
 
 | Function | Purpose |
 |----------|---------|

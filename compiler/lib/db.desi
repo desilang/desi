@@ -571,6 +571,9 @@ pub def __db_conn_info() -> str
 @extern("C")
 pub def __db_driver() -> str
 
+@extern("C")
+pub def __db_set_timeout(connect_ms: int, read_ms: int) -> int
+
 # ============================================================
 # Unified Public API
 # ============================================================
@@ -622,6 +625,14 @@ pub def get_field(row: int, col_name: str) -> str:
 pub def driver() -> str:
 	"""Get active driver name ('postgres', 'mysql', or 'none')."""
 	return __db_driver()
+
+pub def set_timeout(connect_ms: int, read_ms: int) -> int:
+	"""Set connection and read timeouts in milliseconds.
+	connect_ms: TCP connect timeout (default 5000ms).
+	read_ms: socket read timeout (default 30000ms).
+	Call before db.connect() to take effect.
+	Usage: db.set_timeout(3000, 10000)"""
+	return __db_set_timeout(connect_ms, read_ms)
 
 # ============================================================
 # Debug Helpers
@@ -1856,6 +1867,9 @@ pub def __db_connect_url(url: str, name: str) -> int
 @extern("C")
 pub def __db_ping() -> int
 
+@extern("C")
+pub def __db_reconnect() -> int
+
 # ============================================================
 # Public API — Connection URL + Health Check
 # ============================================================
@@ -1874,8 +1888,16 @@ pub def connect_url_named(url: str, name: str) -> int:
 	return __db_connect_url(url, name)
 
 pub def ping() -> int:
-	"""Check if the database connection is alive. Returns 0 if healthy, -1 if dead."""
+	"""Check if the database connection is alive.
+	If the connection is dead, automatically attempts ONE reconnect.
+	Returns 0 if healthy (or reconnected), -1 if dead."""
 	return __db_ping()
+
+pub def reconnect() -> int:
+	"""Explicitly reconnect to the database using stored connection params.
+	Use when you know the connection is dead and want to force a reconnect.
+	Returns 0 on success, -1 on failure."""
+	return __db_reconnect()
 
 # ============================================================
 # PG COPY Protocol — High-Speed Bulk Import (C bindings)

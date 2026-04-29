@@ -20,6 +20,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <errno.h>
+#include "db_timeout.h"
 
 // Optional TLS/SSL support (compile-time detection)
 #ifdef __has_include
@@ -72,7 +73,6 @@ static void my_write_u16(unsigned char* buf, uint16_t val) {
 // ============================================================
 
 #define MY_MAX_COLS 64
-#define MY_MAX_ROWS 4096
 #define MY_BUF_SIZE 65536
 
 // MYConn holds all state for a single MySQL connection.
@@ -83,6 +83,13 @@ typedef struct {
     int connected;
     char error[512];
     uint8_t seq;  // packet sequence number
+
+    // Stored connection params for reconnect
+    char host[256];
+    int  port;
+    char dbname[128];
+    char user[128];
+    char password[256];
 
     // TLS/SSL
 #if MY_HAS_SSL
@@ -377,6 +384,13 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     g_my->error[0] = '\0';
     g_my->seq = 0;
 
+    // Store connection params for reconnect
+    strncpy(g_my->host, host, sizeof(g_my->host)-1);
+    g_my->port = port;
+    strncpy(g_my->dbname, dbname, sizeof(g_my->dbname)-1);
+    strncpy(g_my->user, user, sizeof(g_my->user)-1);
+    strncpy(g_my->password, password, sizeof(g_my->password)-1);
+
     my_log("connecting to %s:%d db=%s user=%s", host, port, dbname, user);
 
     // TCP connect
@@ -400,11 +414,16 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
         return -1;
     }
 
-    if (connect(g_my->fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        snprintf(g_my->error, sizeof(g_my->error), "Connect failed: %s", strerror(errno));
+    if (db_connect_with_timeout(g_my->fd, (struct sockaddr*)&addr, sizeof(addr),
+                                g_db_connect_timeout_ms) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error),
+                 "Connect timed out after %dms: %s", g_db_connect_timeout_ms, strerror(errno));
         close(g_my->fd); g_my->fd = -1;
         return -1;
     }
+
+    // Apply read timeout so recv() doesn't block forever
+    db_set_read_timeout(g_my->fd, g_db_read_timeout_ms);
 
     my_log("TCP connected fd=%d", g_my->fd);
 
@@ -761,6 +780,21 @@ int32_t __my_close(void) {
 
 int32_t __my_is_connected(void) { return g_my ? g_my->connected : 0; }
 
+// Reconnect using stored connection params (called by pool/dispatch on ping failure)
+int32_t __my_reconnect(void) {
+    if (!g_my) return -1;
+    // Close existing dead connection gracefully
+    if (g_my->fd >= 0) {
+        close(g_my->fd);
+        g_my->fd = -1;
+    }
+    g_my->connected = 0;
+    my_log("reconnecting to %s:%d db=%s user=%s",
+           g_my->host, g_my->port, g_my->dbname, g_my->user);
+    return __my_connect(g_my->host, g_my->port, g_my->dbname,
+                        g_my->user, g_my->password);
+}
+
 char* __my_last_error(void) { return g_my ? strdup(g_my->error) : strdup(""); }
 
 // ============================================================
@@ -971,10 +1005,22 @@ static char* my_interpolate_params(const char* sql, const char** params, int npa
 
     int opos = 0;
     int pidx = 0;
+    int in_quote = 0;  // inside single-quoted string literal
 
     for (int i = 0; i < sql_len; i++) {
-        if (sql[i] == '?' && pidx < nparams) {
-            // Replace ? with escaped value
+        if (sql[i] == '\\' && in_quote && i + 1 < sql_len) {
+            // Backslash escape inside quotes — copy both chars verbatim
+            out[opos++] = sql[i];
+            out[opos++] = sql[++i];
+            continue;
+        }
+        if (sql[i] == '\'') {
+            in_quote = !in_quote;
+            out[opos++] = sql[i];
+            continue;
+        }
+        if (sql[i] == '?' && !in_quote && pidx < nparams) {
+            // Replace ? with escaped value (only outside quotes)
             char* escaped = my_escape_value(params[pidx]);
             int elen = strlen(escaped);
             memcpy(out + opos, escaped, elen);

@@ -91,11 +91,11 @@ db.pool_close()      # Close all connections and destroy pool
 
 ## Implementation
 
-The pool is implemented in `compiler/runtime/db_pool.c` with opaque `void*`
+The pool is implemented in `compiler/runtime/db/pool.c` with opaque `void*`
 connection handles. Each slot tracks:
 
 - `conn`: opaque pointer to the driver-specific connection
 - `in_use`: boolean flag (0 = free, 1 = acquired)
 
 The pool works with both PostgreSQL and MySQL drivers through the unified
-dispatch layer (`db_dispatch.c`).
+dispatch layer (`db/dispatch.c`).
