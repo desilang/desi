@@ -1162,6 +1162,129 @@ pub def reverse_count(source_table: str, fk_field: str, pk_value: str) -> int:
 	return __orm_reverse_count(source_table, fk_field, pk_value)
 
 # ============================================================
+# Migration Squashing
+# ============================================================
+
+pub def squash_migrations(dir: str, output_name: str) -> int:
+	"""Squash N migration files into 1 consolidated file.
+	Django equivalent: python manage.py squashmigrations
+	Usage: db.squash_migrations("migrations", "0001_squashed")"""
+	return __db_squash_migrations(dir, output_name)
+
+# ============================================================
+# Data Migrations
+# ============================================================
+
+pub def op_run_code(label: str) -> int:
+	"""Run a registered data migration callback by label.
+	Django equivalent: RunPython(forwards, reverse)
+	Usage:
+	  # In migration file:
+	  db.op_run_code("uppercase_names")"""
+	return __db_op_run_code(label)
+
+# ============================================================
+# Schema Diff / Dry Run
+# ============================================================
+
+pub def makemigrations_dryrun(dir: str) -> str:
+	"""Show what migrations WOULD generate without writing files.
+	Django equivalent: python manage.py makemigrations --dry-run
+	Usage: print(db.makemigrations_dryrun("migrations"))"""
+	return __db_makemigrations_dryrun(dir)
+
+# ============================================================
+# Inspect Database
+# ============================================================
+
+pub def inspectdb() -> str:
+	"""Reverse-engineer model definitions from an existing database.
+	Django equivalent: python manage.py inspectdb
+	Returns Desi code string with db.model/field calls.
+	Usage: print(db.inspectdb())"""
+	return __db_inspectdb()
+
+# ============================================================
+# Multi-Table Inheritance
+# ============================================================
+
+pub def multi_table_inherit(child_table: str, parent_table: str) -> int:
+	"""Inherit from parent via FK (multi-table inheritance).
+	Django equivalent: class Restaurant(Place): ...
+	Auto-adds {parent}_ptr_id FK with UNIQUE constraint.
+	Usage: db.multi_table_inherit("restaurants", "places")"""
+	return __orm_multi_table_inherit(child_table, parent_table)
+
+# ============================================================
+# Proxy Models
+# ============================================================
+
+pub def proxy_model(proxy_name: str, base_table: str) -> int:
+	"""Register a proxy model — same table, different name.
+	Django equivalent: class Meta: proxy = True
+	Useful for attaching different managers to the same table.
+	Usage: db.proxy_model("active_users", "users")"""
+	return __orm_proxy_model(proxy_name, base_table)
+
+pub def resolve_proxy(name: str) -> str:
+	"""Resolve a proxy model name to its base table.
+	Returns the base table name, or the input if not a proxy."""
+	return __orm_resolve_proxy(name)
+
+# ============================================================
+# Built-in Audit Trail
+# ============================================================
+
+pub def enable_audit(table_name: str) -> int:
+	"""Enable audit trail for a model — auto-creates {table}_history.
+	Django equivalent: django-simple-history HistoricalRecords()
+	Usage: db.enable_audit("users")"""
+	return __orm_enable_audit(table_name)
+
+pub def is_audited(table_name: str) -> int:
+	"""Check if audit trail is enabled for a table."""
+	return __orm_is_audited(table_name)
+
+pub def create_audit_table(table_name: str) -> str:
+	"""Generate CREATE TABLE SQL for the audit history table.
+	Usage: db.execute(db.create_audit_table("users"))"""
+	return __orm_create_audit_table_sql(table_name)
+
+pub def audit_record(table_name: str, action: str, record_id: str) -> int:
+	"""Log an action to the audit history table.
+	action: "INSERT", "UPDATE", or "DELETE"
+	Usage: db.audit_record("users", "UPDATE", "1")"""
+	return __orm_audit_record(table_name, action, record_id)
+
+pub def audit_log(table_name: str, record_id: str) -> int:
+	"""Query audit history for a specific record.
+	Django equivalent: user.history.all()
+	Returns row count. Newest entries first.
+	Usage: let n = db.audit_log("users", "1")"""
+	return __orm_audit_log(table_name, record_id)
+
+# ============================================================
+# Time-Travel Queries
+# ============================================================
+
+pub def as_of(table_name: str, record_id: str, timestamp: str) -> int:
+	"""Query historical state of a record at a given time.
+	Django equivalent: user.history.as_of(datetime(...))
+	Requires enable_audit() for the table.
+	Usage: db.as_of("users", "1", "2024-01-01 00:00:00")"""
+	return __orm_as_of(table_name, record_id, timestamp)
+
+# ============================================================
+# Runtime Field Validation
+# ============================================================
+
+pub def check_field(table_name: str, field_name: str) -> int:
+	"""Check if a field exists on a model. Returns 1 if valid, 0 if not.
+	Prints 'did you mean?' suggestion for typos.
+	Usage: db.check_field("users", "nmae")  # → WARNING: did you mean 'name'?"""
+	return __orm_check_field(table_name, field_name)
+
+# ============================================================
 # Additional Database Functions
 # ============================================================
 
@@ -2136,6 +2259,54 @@ pub def __orm_reverse_query(source_table: str, fk_field: str, pk_value: str) -> 
 
 @extern("C")
 pub def __orm_reverse_count(source_table: str, fk_field: str, pk_value: str) -> int
+
+# Migration squashing externs
+@extern("C")
+pub def __db_squash_migrations(dir: str, output_name: str) -> int
+
+@extern("C")
+pub def __db_op_run_code(label: str) -> int
+
+@extern("C")
+pub def __db_makemigrations_dryrun(dir: str) -> str
+
+@extern("C")
+pub def __db_inspectdb() -> str
+
+# Multi-table inheritance externs
+@extern("C")
+pub def __orm_multi_table_inherit(child_table: str, parent_table: str) -> int
+
+# Proxy model externs
+@extern("C")
+pub def __orm_proxy_model(proxy_name: str, base_table: str) -> int
+
+@extern("C")
+pub def __orm_resolve_proxy(name: str) -> str
+
+# Audit trail externs
+@extern("C")
+pub def __orm_enable_audit(table_name: str) -> int
+
+@extern("C")
+pub def __orm_is_audited(table_name: str) -> int
+
+@extern("C")
+pub def __orm_create_audit_table_sql(table_name: str) -> str
+
+@extern("C")
+pub def __orm_audit_record(table_name: str, action: str, record_id: str) -> int
+
+@extern("C")
+pub def __orm_audit_log(table_name: str, record_id: str) -> int
+
+# Time-travel externs
+@extern("C")
+pub def __orm_as_of(table_name: str, record_id: str, timestamp: str) -> int
+
+# Runtime field validation
+@extern("C")
+pub def __orm_check_field(table_name: str, field_name: str) -> int
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,
