@@ -37,7 +37,7 @@ func ormProtocolFallback() *MacroProtocol {
 		"update":    {Name: "update", ArgStyle: "kwargs_set", KwargsFunc: "__qs_update", TerminalFunc: "__qs_row_count", IsTerminal: true},
 		"aggregate": {Name: "aggregate", ArgStyle: "none", TerminalFunc: "__qs_fetch", IsTerminal: true},
 
-		// Phase 1 terminal methods
+		// Terminal methods (latest/earliest/get_or_create/explain)
 		"latest":        {Name: "latest", ArgStyle: "positional", TerminalFunc: "__qs_latest", IsTerminal: true, ReturnsModel: true},
 		"earliest":      {Name: "earliest", ArgStyle: "positional", TerminalFunc: "__qs_earliest", IsTerminal: true, ReturnsModel: true},
 		"get_or_create": {Name: "get_or_create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_get_or_create", IsTerminal: true},
@@ -55,12 +55,12 @@ func ormProtocolFallback() *MacroProtocol {
 		"annotate":       {Name: "annotate", ArgStyle: "none", IsChainable: true},
 		"using":          {Name: "using", ArgStyle: "positional", KwargsFunc: "__db_using", IsChainable: true},
 
-		// Phase 1 chainable methods
+		// Chainable methods (only/defer/select_for_update)
 		"only":              {Name: "only", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
 		"defer_fields":      {Name: "defer_fields", ArgStyle: "positional", KwargsFunc: "__qs_defer", IsChainable: true},
 		"select_for_update": {Name: "select_for_update", ArgStyle: "positional", KwargsFunc: "__qs_select_for_update", IsChainable: true},
 
-		// Phase 2 terminal methods
+		// Terminal methods (update_or_create/bulk)
 		"update_or_create": {Name: "update_or_create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_update_or_create", IsTerminal: true},
 
 		// Bulk operations

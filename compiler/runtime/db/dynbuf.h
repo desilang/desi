@@ -1,5 +1,5 @@
 /*
- * dynbuf.h — Dynamic string buffer for Desi ORM (Phase 5)
+ * dynbuf.h — Dynamic string buffer for Desi ORM
  *
  * Replaces all fixed-size char[] arrays in crud.c with safe,
  * auto-growing buffers. Eliminates buffer overflow risk entirely.

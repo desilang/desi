@@ -335,7 +335,7 @@ pub def __db_table_exists(table_name: str) -> int
 pub def __db_migrate_all(dirs_newline_separated: str) -> int
 
 # ============================================================
-# Migration Operation C bindings (db_migrate.c — Phase 2 DSL)
+# Migration Operation C bindings (db_migrate.c)
 # ============================================================
 
 @extern("C")
@@ -406,7 +406,7 @@ pub def migrate_all(dirs: list[str]) -> int:
 	return __db_migrate_all(joined)
 
 # ============================================================
-# Public API — Migration Operations DSL (Phase 2)
+# Public API — Migration Operations DSL
 #
 # Portable, database-agnostic migration operations.
 # These generate dialect-specific SQL at apply-time.
@@ -843,7 +843,7 @@ pub def delete() -> int:
 	return __qs_delete()
 
 # ============================================================
-# Phase 1: latest / earliest
+# latest / earliest
 # ============================================================
 
 pub def latest(field: str) -> int:
@@ -861,7 +861,7 @@ pub def earliest(field: str) -> int:
 	return __qs_earliest(field)
 
 # ============================================================
-# Phase 1: only / defer (column selection)
+# only / defer (column selection)
 # ============================================================
 
 pub def only(cols: str) -> int:
@@ -878,7 +878,7 @@ pub def defer_fields(cols: str) -> int:
 	return __qs_defer(cols)
 
 # ============================================================
-# Phase 1: get_or_create
+# get_or_create
 # ============================================================
 
 pub def get_or_create() -> int:
@@ -893,7 +893,7 @@ pub def get_or_create() -> int:
 	return __qs_get_or_create()
 
 # ============================================================
-# Phase 1: EXPLAIN (query plan inspection)
+# EXPLAIN (query plan inspection)
 # ============================================================
 
 pub def explain() -> int:
@@ -905,7 +905,7 @@ pub def explain() -> int:
 	return __qs_explain()
 
 # ============================================================
-# Phase 1: Schema Inspection
+# Schema Inspection
 # ============================================================
 
 pub def describe_tables() -> int:
@@ -928,7 +928,7 @@ pub def describe_indexes(table_name: str) -> int:
 	return __db_describe_indexes(table_name)
 
 # ============================================================
-# Phase 1: Advisory Locks (distributed locking)
+# Advisory Locks (distributed locking)
 # ============================================================
 
 pub def advisory_lock(key: int) -> int:
@@ -953,7 +953,7 @@ pub def advisory_try_lock(key: int) -> int:
 	return __db_advisory_try_lock(key)
 
 # ============================================================
-# Phase 2: UPSERT (ON CONFLICT)
+# UPSERT (ON CONFLICT)
 # ============================================================
 
 pub def on_conflict(col: str) -> int:
@@ -976,7 +976,7 @@ pub def do_upsert() -> int:
 	return __qs_do_upsert()
 
 # ============================================================
-# Phase 2: update_or_create
+# update_or_create
 # ============================================================
 
 pub def update_or_create() -> int:
@@ -993,7 +993,7 @@ pub def update_or_create() -> int:
 	return __qs_update_or_create()
 
 # ============================================================
-# Phase 2: Window Functions
+# Window Functions
 # ============================================================
 
 pub def window(func: str, over_clause: str, alias: str) -> int:
@@ -1007,7 +1007,7 @@ pub def window(func: str, over_clause: str, alias: str) -> int:
 	return __qs_window(func, over_clause, alias)
 
 # ============================================================
-# Phase 2: Server-Side Cursor
+# Server-Side Cursor
 # ============================================================
 
 pub def cursor_declare(name: str) -> int:
@@ -1042,7 +1042,7 @@ pub def cursor_close() -> int:
 	return __qs_cursor_close()
 
 # ============================================================
-# Phase 2: JSON field helpers
+# JSON field helpers
 # ============================================================
 
 pub def json_set(col: str, key: str, val: str) -> int:
@@ -1060,7 +1060,7 @@ pub def json_get(col: str, key: str) -> str:
 	return __qs_json_get(col, key)
 
 # ============================================================
-# Phase 3: CTEs (Common Table Expressions)
+# CTEs (Common Table Expressions)
 # ============================================================
 
 pub def cte(name: str, query: str) -> int:
@@ -1091,7 +1091,7 @@ pub def cte_fetch() -> int:
 	return __qs_cte_fetch()
 
 # ============================================================
-# Phase 3: Subqueries
+# Subqueries
 # ============================================================
 
 pub def subquery(table: str, cols: str, where_clause: str) -> str:
@@ -1137,7 +1137,7 @@ pub def filter_not_in_subquery(col: str, subquery: str) -> int:
 	return __qs_filter_not_in_subquery(col, subquery)
 
 # ============================================================
-# Phase 3: prefetch_related
+# prefetch_related
 # ============================================================
 
 pub def prefetch_related(related_table: str, fk_col: str, pk_col: str) -> int:
@@ -1157,7 +1157,7 @@ pub def prefetch_execute() -> int:
 	return __qs_prefetch_execute()
 
 # ============================================================
-# Phase 4: JSON_TABLE — extract relational data from JSON
+# JSON_TABLE — extract relational data from JSON
 # ============================================================
 
 pub def json_table(json_col: str, json_path: str, columns_def: str, alias: str) -> int:
@@ -1178,7 +1178,7 @@ pub def json_table(json_col: str, json_path: str, columns_def: str, alias: str) 
 	return __qs_json_table(json_col, json_path, columns_def, alias)
 
 # ============================================================
-# Phase 4: Full-Text Search
+# Full-Text Search
 # ============================================================
 
 pub def fts_filter(col: str, query: str, config: str) -> int:
@@ -1222,7 +1222,7 @@ pub def fts_create_index(table: str, col: str, idx_name: str, config: str) -> in
 	return __qs_fts_create_index(table, col, idx_name, config)
 
 # ============================================================
-# Phase 4: Vector Similarity Search
+# Vector Similarity Search
 # ============================================================
 
 pub def vector_search(col: str, vector_str: str, metric: str, k: int) -> int:
@@ -1257,7 +1257,7 @@ pub def vector_create_index(table: str, col: str, idx_name: str, metric: str) ->
 	return __qs_vector_create_index(table, col, idx_name, metric)
 
 # ============================================================
-# Phase 4: HAVING clause
+# HAVING clause
 # ============================================================
 
 pub def having(condition: str) -> int:
@@ -1285,7 +1285,7 @@ pub def having_val(expr: str, val: str) -> int:
 	return __qs_having_val(expr, val)
 
 # ============================================================
-# Phase 4: Multi-column ORDER BY
+# Multi-column ORDER BY
 # ============================================================
 
 pub def order_by_add(col: str) -> int:
@@ -1300,7 +1300,7 @@ pub def order_by_add(col: str) -> int:
 	return __qs_order_by_add(col)
 
 # ============================================================
-# Phase 4: Multi-column UPDATE
+# Multi-column UPDATE
 # ============================================================
 
 pub def update_set(col: str, val: str) -> int:
@@ -1323,7 +1323,7 @@ pub def update_exec() -> int:
 	return __qs_update_multi()
 
 # ============================================================
-# Phase 4: Pagination Helpers
+# Pagination Helpers
 # ============================================================
 
 pub def paginate(page: int, page_size: int) -> int:
@@ -1350,7 +1350,7 @@ pub def total_count() -> int:
 	return __qs_total_count()
 
 # ============================================================
-# Phase 4: Soft Delete
+# Soft Delete
 # ============================================================
 
 pub def soft_delete_mode(col_name: str) -> int:
@@ -1538,7 +1538,7 @@ pub def __db_using(db_name: str) -> int
 pub def __qs_raw(sql: str) -> int
 
 # ============================================================
-# Phase 1: latest/earliest, only/defer, get_or_create, explain,
+# latest/earliest, only/defer, get_or_create, explain,
 #           schema inspection, advisory locks (C bindings)
 # ============================================================
 
@@ -1579,7 +1579,7 @@ pub def __db_advisory_unlock(key: int) -> int
 pub def __db_advisory_try_lock(key: int) -> int
 
 # ============================================================
-# Phase 2 extern C bindings
+# Extern C bindings
 # ============================================================
 
 @extern("C")
@@ -1610,7 +1610,7 @@ pub def __qs_json_set(col: str, key: str, val: str) -> int
 pub def __qs_json_get(col: str, key: str) -> str
 
 # ============================================================
-# Phase 3 extern C bindings
+# Extern C bindings
 # ============================================================
 
 @extern("C")
@@ -1644,7 +1644,7 @@ pub def __qs_prefetch_add(related_table: str, fk_col: str, pk_col: str) -> int
 pub def __qs_prefetch_execute() -> int
 
 # ============================================================
-# Phase 4 extern C bindings
+# Extern C bindings
 # ============================================================
 
 @extern("C")
@@ -1666,7 +1666,7 @@ pub def __qs_vector_search(col: str, vector_str: str, metric: str, k: int) -> in
 pub def __qs_vector_create_index(table: str, col: str, idx_name: str, metric: str) -> int
 
 # ============================================================
-# Phase 4 Query Engine extern C bindings (db_crud.c)
+# Query Engine extern C bindings (db_crud.c)
 # ============================================================
 
 @extern("C")
