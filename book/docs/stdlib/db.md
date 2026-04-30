@@ -297,6 +297,41 @@ let n = db.fetch_all()
 
 Equivalent to Django's `values_list("id", "name", "email")` or `only("id", "name", "email")`.
 
+### Database Functions
+
+SQL expression builders for use in `annotate()`, `filter()`, and `order_by()`:
+
+```desi
+import db
+
+# String functions
+db.func_lower("name")      # → LOWER(name)
+db.func_upper("name")      # → UPPER(name)
+db.func_length("name")     # → LENGTH(name) / CHAR_LENGTH(name)
+db.func_concat("a, b")     # → CONCAT(a, b)
+
+# Type conversion
+db.func_cast("price", "INTEGER")  # → CAST(price AS INTEGER)
+db.func_coalesce("nickname, name, 'Anonymous'")  # → COALESCE(...)
+
+# Numeric
+db.func_abs("balance")     # → ABS(balance)
+db.func_greatest("a, b")   # → GREATEST(a, b)
+db.func_least("a, b")      # → LEAST(a, b)
+
+# Timestamps
+db.func_now()              # → NOW()
+```
+
+Use with `annotate()`:
+```desi
+db.objects("users")
+db.annotate("lname", "IDENTITY", db.func_lower("name"))
+db.fetch_all()
+```
+
+All functions are dialect-aware (PG vs MySQL).
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
