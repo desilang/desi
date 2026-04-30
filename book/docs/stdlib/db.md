@@ -332,6 +332,30 @@ db.fetch_all()
 
 All functions are dialect-aware (PG vs MySQL).
 
+### Case/When Conditional Expressions
+
+Build SQL `CASE` expressions incrementally:
+
+```desi
+import db
+
+# Categorize users by age
+db.case_when("age < 18", "'minor'")
+db.case_when("age >= 18 AND age < 65", "'adult'")
+db.case_when("age >= 65", "'senior'")
+db.case_else("'unknown'")
+let expr = db.case_end("age_group")
+
+# Use with annotate
+db.objects("users")
+db.annotate("age_group", "IDENTITY", expr)
+db.fetch_all()
+```
+
+Generates: `CASE WHEN age < 18 THEN 'minor' WHEN age >= 18 AND age < 65 THEN 'adult' WHEN age >= 65 THEN 'senior' ELSE 'unknown' END AS age_group`
+
+The builder is thread-safe and resets after `case_end()`.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:

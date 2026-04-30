@@ -959,6 +959,41 @@ pub def func_now() -> str:
 	return __db_func_now()
 
 # ============================================================
+# Case/When — conditional SQL expression builder
+#
+# Django equivalent: Case(When(status='urgent', then=1), default=3)
+# Generates: CASE WHEN status='urgent' THEN 1 ... ELSE 3 END
+# ============================================================
+
+pub def case_when(condition: str, result: str) -> int:
+	"""Add a WHEN clause to the CASE expression.
+	condition: SQL boolean expression, e.g. "status = 'urgent'"
+	result: value when true, e.g. "1" or "'high_priority'"
+	Usage:
+	  db.case_when("status = 'urgent'", "1")
+	  db.case_when("status = 'high'", "2")"""
+	return __db_case_when(condition, result)
+
+pub def case_else(default_val: str) -> int:
+	"""Set the ELSE (default) clause for the CASE expression.
+	default_val: value when no WHEN matches, e.g. "0" or "'unknown'"
+	Usage: db.case_else("3")"""
+	return __db_case_else(default_val)
+
+pub def case_end(alias: str) -> str:
+	"""Finalize and return the CASE expression as a SQL string.
+	alias: column alias (e.g. "priority"), or "" for no alias.
+	Resets the builder for reuse.
+	Usage:
+	  db.case_when("age < 18", "'minor'")
+	  db.case_when("age >= 18", "'adult'")
+	  db.case_else("'unknown'")
+	  let expr = db.case_end("age_group")
+	  # expr = "CASE WHEN age < 18 THEN 'minor' WHEN age >= 18 THEN 'adult' ELSE 'unknown' END AS age_group"
+	  db.annotate("age_group", "IDENTITY", expr)"""
+	return __db_case_end(alias)
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1639,6 +1674,16 @@ pub def __db_func_least(args: str) -> str
 
 @extern("C")
 pub def __db_func_now() -> str
+
+# Case/When externs
+@extern("C")
+pub def __db_case_when(condition: str, result: str) -> int
+
+@extern("C")
+pub def __db_case_else(default_val: str) -> int
+
+@extern("C")
+pub def __db_case_end(alias: str) -> str
 
 @extern("C")
 pub def __qs_annotate(alias: str, func: str, col: str) -> int
