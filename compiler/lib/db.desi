@@ -1050,6 +1050,40 @@ pub def instance_clear() -> int:
 	return 0
 
 # ============================================================
+# Field Validation
+#
+# Django equivalent: validators=[MinLengthValidator(2)]
+# Register validation constraints per (table, field),
+# then validate before save.
+# ============================================================
+
+pub def add_validator(table: str, field: str, min_len: int, max_len: int, min_val: int, max_val: int) -> int:
+	"""Register validation rules for a model field.
+	Use 0 for unused constraints.
+	Usage:
+	  db.add_validator("users", "name", 2, 100, 0, 0)     # name: 2-100 chars
+	  db.add_validator("users", "age", 0, 0, 0, 150)      # age: 0-150"""
+	return __orm_add_validator(table, field, min_len, max_len, min_val, max_val)
+
+pub def validate_instance() -> str:
+	"""Validate all fields of the hydrated instance.
+	Returns empty string on success, error message on failure.
+	Usage:
+	  db.hydrate("users", 0)
+	  db.instance_set("name", "")
+	  let err = db.validate_instance()
+	  if err != "":
+	    print("Validation error: " + err)"""
+	return __orm_validate_instance_str()
+
+pub def fire_signal(table: str, signal_type: int) -> int:
+	"""Fire a signal for a table.
+	signal_type: 0=pre_save, 1=post_save, 2=pre_delete, 3=post_delete
+	Returns 0 on success, -1 if a handler vetoes.
+	Usage: db.fire_signal("users", 0)  # pre_save"""
+	return __orm_fire_signal(table, signal_type)
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1771,6 +1805,16 @@ pub def __orm_instance_pk() -> int
 
 @extern("C")
 pub def __orm_instance_clear() -> int
+
+# Validation + Signal externs
+@extern("C")
+pub def __orm_add_validator(table: str, field: str, min_len: int, max_len: int, min_val: int, max_val: int) -> int
+
+@extern("C")
+pub def __orm_validate_instance_str() -> str
+
+@extern("C")
+pub def __orm_fire_signal(table: str, signal_type: int) -> int
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,

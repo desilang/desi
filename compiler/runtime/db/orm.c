@@ -981,3 +981,187 @@ void __orm_instance_clear(void) {
     g_instance_field_count = 0;
     g_instance_pk_value = 0;
 }
+
+// ============================================================
+// Signals — pre/post save/delete hooks
+//
+// Django equivalent:
+//   @receiver(pre_save, sender=User)
+//   def my_handler(sender, instance, **kwargs): ...
+//
+// In Desi, signals are C function pointer callbacks registered
+// per (table, event) pair. Up to 8 handlers per slot.
+// ============================================================
+
+typedef enum {
+    SIGNAL_PRE_SAVE,
+    SIGNAL_POST_SAVE,
+    SIGNAL_PRE_DELETE,
+    SIGNAL_POST_DELETE,
+    SIGNAL_COUNT
+} SignalType;
+
+// Signal callback: receives table name, returns 0 to proceed or -1 to abort
+typedef int32_t (*signal_fn)(const char* table);
+
+#define MAX_SIGNAL_HANDLERS 8
+#define MAX_SIGNAL_TABLES   16
+
+typedef struct {
+    char table[128];
+    signal_fn handlers[SIGNAL_COUNT][MAX_SIGNAL_HANDLERS];
+    int handler_count[SIGNAL_COUNT];
+} SignalSlot;
+
+static SignalSlot g_signals[MAX_SIGNAL_TABLES];
+static int g_signal_count = 0;
+
+// Find or create signal slot for a table
+static SignalSlot* signal_slot_for(const char* table) {
+    for (int i = 0; i < g_signal_count; i++) {
+        if (strcmp(g_signals[i].table, table) == 0) return &g_signals[i];
+    }
+    if (g_signal_count >= MAX_SIGNAL_TABLES) return NULL;
+    SignalSlot* s = &g_signals[g_signal_count++];
+    memset(s, 0, sizeof(SignalSlot));
+    strncpy(s->table, table, sizeof(s->table) - 1);
+    return s;
+}
+
+// __orm_connect_signal — register a signal handler
+// signal_type: 0=pre_save, 1=post_save, 2=pre_delete, 3=post_delete
+// Returns 0 on success, -1 on error
+int32_t __orm_connect_signal(const char* table, int32_t signal_type, signal_fn handler) {
+    if (!table || !handler || signal_type < 0 || signal_type >= SIGNAL_COUNT) return -1;
+    SignalSlot* s = signal_slot_for(table);
+    if (!s) return -1;
+    if (s->handler_count[signal_type] >= MAX_SIGNAL_HANDLERS) return -1;
+    s->handlers[signal_type][s->handler_count[signal_type]++] = handler;
+    return 0;
+}
+
+// Fire all handlers for a signal — returns -1 if any handler returns -1
+int32_t __orm_fire_signal(const char* table, int32_t signal_type) {
+    if (!table || signal_type < 0 || signal_type >= SIGNAL_COUNT) return 0;
+
+    for (int i = 0; i < g_signal_count; i++) {
+        if (strcmp(g_signals[i].table, table) != 0) continue;
+        for (int j = 0; j < g_signals[i].handler_count[signal_type]; j++) {
+            int32_t rc = g_signals[i].handlers[signal_type][j](table);
+            if (rc != 0) return -1;  // handler vetoed the operation
+        }
+    }
+    return 0;
+}
+
+// ============================================================
+// Field Validation
+//
+// Django equivalent:
+//   name = CharField(max_length=100, validators=[MinLengthValidator(2)])
+//
+// Validators are registered per (table, field) and checked
+// before save operations. Returns error messages on failure.
+// ============================================================
+
+typedef struct {
+    char table[128];
+    char field[64];
+    int has_min_length;
+    int min_length;
+    int has_max_length;
+    int max_length;
+    int has_min_value;
+    int64_t min_value;
+    int has_max_value;
+    int64_t max_value;
+    char regex_pattern[256];  // reserved for future regex support
+} FieldValidator;
+
+#define MAX_VALIDATORS 64
+static FieldValidator g_validators[MAX_VALIDATORS];
+static int g_validator_count = 0;
+
+// __orm_add_validator — register validation rules for a field
+int32_t __orm_add_validator(const char* table, const char* field,
+                            int32_t min_len, int32_t max_len,
+                            int64_t min_val, int64_t max_val) {
+    if (!table || !field || g_validator_count >= MAX_VALIDATORS) return -1;
+
+    FieldValidator* v = &g_validators[g_validator_count++];
+    memset(v, 0, sizeof(FieldValidator));
+    strncpy(v->table, table, sizeof(v->table) - 1);
+    strncpy(v->field, field, sizeof(v->field) - 1);
+
+    if (min_len > 0) { v->has_min_length = 1; v->min_length = min_len; }
+    if (max_len > 0) { v->has_max_length = 1; v->max_length = max_len; }
+    if (min_val != 0) { v->has_min_value = 1; v->min_value = min_val; }
+    if (max_val != 0) { v->has_max_value = 1; v->max_value = max_val; }
+
+    return 0;
+}
+
+// __orm_validate_field — validate a single field value
+// Returns 0 on success, writes error message to err_buf on failure
+int32_t __orm_validate_field(const char* table, const char* field,
+                              const char* value, char* err_buf, int err_size) {
+    if (!table || !field || !value) return 0;
+
+    for (int i = 0; i < g_validator_count; i++) {
+        FieldValidator* v = &g_validators[i];
+        if (strcmp(v->table, table) != 0 || strcmp(v->field, field) != 0) continue;
+
+        int slen = (int)strlen(value);
+
+        if (v->has_min_length && slen < v->min_length) {
+            snprintf(err_buf, err_size, "%s: value too short (min %d, got %d)",
+                     field, v->min_length, slen);
+            return -1;
+        }
+        if (v->has_max_length && slen > v->max_length) {
+            snprintf(err_buf, err_size, "%s: value too long (max %d, got %d)",
+                     field, v->max_length, slen);
+            return -1;
+        }
+        if (v->has_min_value) {
+            int64_t num = strtoll(value, NULL, 10);
+            if (num < v->min_value) {
+                snprintf(err_buf, err_size, "%s: value too small (min %lld, got %lld)",
+                         field, (long long)v->min_value, (long long)num);
+                return -1;
+            }
+        }
+        if (v->has_max_value) {
+            int64_t num = strtoll(value, NULL, 10);
+            if (num > v->max_value) {
+                snprintf(err_buf, err_size, "%s: value too large (max %lld, got %lld)",
+                         field, (long long)v->max_value, (long long)num);
+                return -1;
+            }
+        }
+    }
+    return 0;
+}
+
+// __orm_validate_instance — validate all fields of the current hydrated instance
+// Returns 0 if valid, -1 on first failure. Writes error to err_buf.
+int32_t __orm_validate_instance(char* err_buf, int err_size) {
+    if (g_instance_table[0] == '\0') return 0;
+
+    for (int i = 0; i < g_instance_field_count; i++) {
+        int32_t rc = __orm_validate_field(
+            g_instance_table, g_instance_fields[i],
+            g_instance_values[i], err_buf, err_size);
+        if (rc != 0) return -1;
+    }
+    return 0;
+}
+
+// __orm_validate_instance_str — Desi-friendly wrapper
+// Returns heap-allocated error string (empty = valid)
+char* __orm_validate_instance_str(void) {
+    char err[1024] = {0};
+    int32_t rc = __orm_validate_instance(err, sizeof(err));
+    if (rc != 0) return strdup(err);
+    return strdup("");
+}
