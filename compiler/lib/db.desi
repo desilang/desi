@@ -878,6 +878,35 @@ pub def defer_fields(cols: str) -> int:
 	return __qs_defer(cols)
 
 # ============================================================
+# in_bulk — fetch by PK list
+# ============================================================
+
+pub def in_bulk(id_list: str, field: str) -> int:
+	"""Fetch multiple rows by primary key list in a single query.
+	Django equivalent: User.objects.in_bulk([1, 2, 3])
+	id_list: comma-separated PKs, e.g. "1,2,3"
+	field: PK column name (default "id" if empty)
+	Returns row count.
+	Usage:
+	  db.objects("users")
+	  let n = db.in_bulk("1,2,3", "id")"""
+	return __qs_in_bulk(id_list, field)
+
+# ============================================================
+# values_list — column projection
+# ============================================================
+
+pub def values_list(cols: str) -> int:
+	"""Restrict SELECT to specific columns (like Django's values_list).
+	Django equivalent: User.objects.values_list("id", "name", flat=True)
+	cols: comma-separated column names, e.g. "id,name,email"
+	Usage:
+	  db.objects("users")
+	  db.values_list("id, name")
+	  db.fetch_all()"""
+	return __qs_only(cols)
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1524,6 +1553,9 @@ pub def __qs_select_related(field_name: str) -> int
 
 @extern("C")
 pub def __qs_select_for_update(mode: str) -> int
+
+@extern("C")
+pub def __qs_in_bulk(id_list: str, field: str) -> int
 
 @extern("C")
 pub def __qs_annotate(alias: str, func: str, col: str) -> int

@@ -267,6 +267,36 @@ db.commit()
 Modes: `""` (blocking), `"nowait"` (error if locked), `"skip_locked"` (skip locked rows).
 Works with both PostgreSQL and MySQL.
 
+### Bulk Fetch (in_bulk)
+
+Fetch multiple rows by primary key list in a single query:
+
+```desi
+import db
+
+db.objects("users")
+let n = db.in_bulk("1,5,10,42", "id")
+for i in range(n):
+    print(db.get_value(i, 0))  # prints each user's id
+```
+
+The second argument is the PK column name (defaults to `"id"` if empty).
+
+### Column Projection (values_list)
+
+Restrict SELECT to specific columns:
+
+```desi
+import db
+
+db.objects("users")
+db.values_list("id, name, email")
+let n = db.fetch_all()
+# Result set only contains id, name, email columns
+```
+
+Equivalent to Django's `values_list("id", "name", "email")` or `only("id", "name", "email")`.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:

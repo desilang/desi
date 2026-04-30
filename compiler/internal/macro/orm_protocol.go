@@ -66,6 +66,8 @@ func ormProtocolFallback() *MacroProtocol {
 		// Bulk operations
 		"bulk_create": {Name: "bulk_create", ArgStyle: "none", TerminalFunc: "__qs_bulk_create", IsTerminal: true},
 		"bulk_update": {Name: "bulk_update", ArgStyle: "none", TerminalFunc: "__qs_bulk_update", IsTerminal: true},
+		"in_bulk":     {Name: "in_bulk", ArgStyle: "positional", TerminalFunc: "__qs_in_bulk", IsTerminal: true},
+		"values_list": {Name: "values_list", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
 	}
 
 	runtimeFuncs := map[string]string{
@@ -92,6 +94,8 @@ func ormProtocolFallback() *MacroProtocol {
 		"defer":     "__qs_defer",
 		"explain":   "__qs_explain",
 		"select_for_update": "__qs_select_for_update",
+		"in_bulk":           "__qs_in_bulk",
+		"values_list":       "__qs_only",
 		"get_or_create":    "__qs_get_or_create",
 		"update_or_create": "__qs_update_or_create",
 		"on_conflict":      "__qs_on_conflict",
