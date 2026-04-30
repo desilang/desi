@@ -11,9 +11,9 @@
  *   __db_pool_release()   // returns connection to pool
  *   __db_pool_close()     // closes all connections
  *
- * Thread-safety: uses pthread_mutex for concurrent acquire/release.
- * Blocking: acquire() spins with usleep until a connection is free
- *           or the timeout (default 30s) is reached.
+ * Thread-safety: mutex + condition variable for concurrent acquire/release.
+ * Blocking: acquire() uses pthread_cond_timedwait — zero CPU while waiting,
+ *           instant wakeup when a slot is released. 30-second timeout.
  */
 
 #include <stdio.h>
@@ -22,14 +22,15 @@
 #include <stdint.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <time.h>
+#include <errno.h>
 
 // ============================================================
 // Pool Configuration
 // ============================================================
 
-#define POOL_MAX_SLOTS    32
-#define POOL_ACQUIRE_TIMEOUT_US  (30 * 1000000)  // 30 seconds
-#define POOL_SPIN_INTERVAL_US    1000             // 1ms between retries
+#define POOL_MAX_SLOTS           32
+#define POOL_ACQUIRE_TIMEOUT_SEC 30   // seconds
 
 // ============================================================
 // Pool Slot
@@ -61,6 +62,7 @@ static PoolDriver   g_pool_driver = POOL_DRIVER_NONE;
 static int          g_pool_initialized = 0;
 static int          g_pool_active_slot = -1;  // currently active slot index
 static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t  g_pool_cond  = PTHREAD_COND_INITIALIZER;
 
 // ============================================================
 // Driver-specific helpers (forward declarations)
@@ -208,60 +210,86 @@ static int pool_reconnect_slot(int slot) {
     return rc;
 }
 
+// Compute absolute deadline for pthread_cond_timedwait.
+static void pool_deadline(struct timespec *ts) {
+    clock_gettime(CLOCK_REALTIME, ts);
+    ts->tv_sec += POOL_ACQUIRE_TIMEOUT_SEC;
+}
+
+// Try to claim a free slot. Returns slot index or -1.
+// MUST be called with g_pool_mutex held. Unlocks mutex on success.
+static int pool_try_claim(void) {
+    for (int i = 0; i < g_pool_size; i++) {
+        if (g_pool_slots[i].state == SLOT_FREE) {
+            g_pool_slots[i].state = SLOT_IN_USE;
+            g_pool_active_slot = i;
+
+            // Swap the global driver pointer to this connection
+            if (g_pool_driver == POOL_DRIVER_PG) {
+                __pg_set_conn_ptr(g_pool_slots[i].conn);
+            } else {
+                __my_set_conn_ptr(g_pool_slots[i].conn);
+            }
+
+            pthread_mutex_unlock(&g_pool_mutex);
+
+            // Health check outside the lock (I/O is slow)
+            if (pool_ping_slot() < 0) {
+                if (pool_reconnect_slot(i) < 0) {
+                    // Reconnect failed — put slot back and let caller retry
+                    fprintf(stderr, "[pool] slot %d reconnect failed, skipping\n", i);
+                    pthread_mutex_lock(&g_pool_mutex);
+                    g_pool_slots[i].state = SLOT_FREE;
+                    g_pool_active_slot = -1;
+                    // Signal so other waiters can try this slot
+                    pthread_cond_signal(&g_pool_cond);
+                    return -1;  // caller retries with mutex held
+                }
+            }
+
+            return i;
+        }
+    }
+    return -1;
+}
+
 int32_t __db_pool_acquire(void) {
     if (!g_pool_initialized) {
         fprintf(stderr, "[pool] error: pool not initialized\n");
         return -1;
     }
 
-    int64_t waited_us = 0;
+    struct timespec deadline;
+    pool_deadline(&deadline);
 
-    while (waited_us < POOL_ACQUIRE_TIMEOUT_US) {
-        pthread_mutex_lock(&g_pool_mutex);
+    pthread_mutex_lock(&g_pool_mutex);
 
-        // Find a free slot
-        for (int i = 0; i < g_pool_size; i++) {
-            if (g_pool_slots[i].state == SLOT_FREE) {
-                g_pool_slots[i].state = SLOT_IN_USE;
-                g_pool_active_slot = i;
-
-                // Swap the global driver pointer to this connection
-                if (g_pool_driver == POOL_DRIVER_PG) {
-                    __pg_set_conn_ptr(g_pool_slots[i].conn);
-                } else {
-                    __my_set_conn_ptr(g_pool_slots[i].conn);
-                }
-
-                pthread_mutex_unlock(&g_pool_mutex);
-
-                // Health check: ping the connection before returning
-                if (pool_ping_slot() < 0) {
-                    // Dead connection — try to reconnect transparently
-                    if (pool_reconnect_slot(i) < 0) {
-                        // Reconnect failed — release slot and try next
-                        fprintf(stderr, "[pool] slot %d reconnect failed, skipping\n", i);
-                        pthread_mutex_lock(&g_pool_mutex);
-                        g_pool_slots[i].state = SLOT_FREE;
-                        g_pool_active_slot = -1;
-                        pthread_mutex_unlock(&g_pool_mutex);
-                        continue;
-                    }
-                }
-
-                return i;  // return healthy slot index
-            }
+    for (;;) {
+        // Pool may have been closed while we were waiting
+        if (!g_pool_initialized) {
+            pthread_mutex_unlock(&g_pool_mutex);
+            fprintf(stderr, "[pool] error: pool closed while waiting\n");
+            return -1;
         }
 
-        pthread_mutex_unlock(&g_pool_mutex);
+        // Scan for a free slot
+        int slot = pool_try_claim();  // unlocks mutex on success
+        if (slot >= 0) return slot;
 
-        // No free slot — wait and retry
-        usleep(POOL_SPIN_INTERVAL_US);
-        waited_us += POOL_SPIN_INTERVAL_US;
+        // pool_try_claim returns -1 with mutex held when:
+        //   (a) no free slot found, or
+        //   (b) a free slot was found but reconnect failed (slot re-freed)
+        // Either way, wait for a signal from release() or close().
+
+        int rc = pthread_cond_timedwait(&g_pool_cond, &g_pool_mutex, &deadline);
+        if (rc == ETIMEDOUT) {
+            pthread_mutex_unlock(&g_pool_mutex);
+            fprintf(stderr, "[pool] error: acquire timed out after %ds\n",
+                    POOL_ACQUIRE_TIMEOUT_SEC);
+            return -1;
+        }
+        // Spurious wakeup or signal — loop back and re-scan slots
     }
-
-    fprintf(stderr, "[pool] error: acquire timed out after %ds\n",
-            (int)(POOL_ACQUIRE_TIMEOUT_US / 1000000));
-    return -1;
 }
 
 // ============================================================
@@ -289,6 +317,9 @@ int32_t __db_pool_release(void) {
     }
 
     g_pool_active_slot = -1;
+
+    // Wake one thread waiting in acquire()
+    pthread_cond_signal(&g_pool_cond);
     pthread_mutex_unlock(&g_pool_mutex);
     return 0;
 }
@@ -332,6 +363,8 @@ int32_t __db_pool_close(void) {
     g_pool_initialized = 0;
     g_pool_active_slot = -1;
 
+    // Wake ALL threads waiting in acquire() so they see pool is closed
+    pthread_cond_broadcast(&g_pool_cond);
     pthread_mutex_unlock(&g_pool_mutex);
     return 0;
 }

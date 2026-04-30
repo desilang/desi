@@ -12,8 +12,9 @@ into `libdesi.a`.
 | `postgres.c` | PostgreSQL v3 wire protocol (connect, auth, query, extended query) |
 | `mysql.c` | MySQL wire protocol (connect, auth, COM_QUERY, result parsing) |
 | `dispatch.c` | Unified `__db_*` API that routes to PG or MySQL based on active driver |
-| `pool.c` | Connection pool with mutex-protected acquire/release |
-| `crud.c` | ORM QuerySet chain, parameter accumulation, SQL generation |
+| `pool.c` | Connection pool with cond-var blocking acquire/release |
+| `crud.c` | ORM QuerySet chain, parameter accumulation, DynBuf SQL generation |
+| `dynbuf.h` | Header-only growable buffer used by crud.c and migrate.c |
 | `connections.c` | Named connection registry for multi-database routing |
 | `db_timeout.c` | Shared timeout globals and `db_set_timeouts()` |
 | `db_timeout.h` | Timeout infrastructure: `poll()`-based connect, `SO_RCVTIMEO` for reads |
@@ -169,3 +170,84 @@ MySQL has no client-side prepared statement cache, so reconnect is simpler.
 3. Add routing in `dispatch.c` — extend the driver string check
 4. `#include "db_timeout.h"` for connect/read timeout support
 5. Run `make` — auto-discovered, no Makefile edits needed
+
+## Connection Pool
+
+### Architecture
+
+`pool.c` manages a fixed-size array of opaque connection handles
+(`PGConn*` or `MYConn*`). Each slot is either `SLOT_FREE` or
+`SLOT_IN_USE`. The pool is protected by a single mutex + condition
+variable pair.
+
+### Acquire / Release Flow
+
+```
+acquire()                         release()
+  ├── lock mutex                    ├── lock mutex
+  ├── scan for SLOT_FREE            ├── mark slot FREE
+  │   ├── found → claim it          ├── cond_signal (wake one waiter)
+  │   │   ├── unlock mutex          └── unlock mutex
+  │   │   ├── ping (outside lock)
+  │   │   ├── reconnect if dead
+  │   │   └── return slot
+  │   └── not found
+  │       └── cond_timedwait ←───── woken by signal
+  └── ETIMEDOUT → return -1
+```
+
+**Key design decisions:**
+
+- **Condition variable, not spin-wait.** `pthread_cond_timedwait` uses
+  zero CPU while waiting and wakes instantly when `release()` signals.
+  The old `usleep(1000)` spin burned 30,000 lock/unlock cycles during
+  a 30-second timeout.
+- **Ping outside the lock.** Health checks involve network I/O (SELECT 1
+  or COM_PING) which can take milliseconds. Holding the mutex during
+  ping would block all other threads. Instead, we claim the slot, unlock,
+  ping, and re-lock only if reconnect fails.
+- **Broadcast on close.** `pool_close()` sends `pthread_cond_broadcast`
+  so all waiting acquirers wake up, see `g_pool_initialized == 0`, and
+  return `-1` immediately.
+- **Hot-reload safe.** After `close()` + `init()`, the cond-var is
+  reusable (POSIX guarantees `PTHREAD_COND_INITIALIZER` state).
+
+### Gotchas
+
+- **Never hold the mutex while doing I/O.** The ping/reconnect path
+  intentionally unlocks before calling driver functions.
+- **Spurious wakeups.** `pthread_cond_timedwait` may return without a
+  signal (POSIX allows this). The loop re-scans slots on every wakeup.
+- **Thread-local active slot.** `g_pool_active_slot` is a per-process
+  variable, not thread-local. The pool currently assumes single-threaded
+  acquire/query/release cycles. For true multi-threaded pool usage,
+  this should be made `__thread`.
+
+## QuerySet Buffer Model
+
+### Handle-Based Design
+
+Each ORM query gets a heap-allocated `QuerySet` struct via `__qs_new()`.
+The struct is installed as the thread-local active handle via
+`__qs_handle_bind()` and freed after use via `__qs_handle_free()`.
+This makes the runtime fully reentrant — concurrent queries on different
+threads use different handles.
+
+### Dynamic vs Fixed Buffers
+
+| Buffer | Type | Size |
+|--------|------|------|
+| `params` | `char**` (realloc) | Unbounded |
+| `insert_keys` | `char**` (realloc) | Unbounded |
+| `update_keys` | `char**` (realloc) | Unbounded |
+| `related` | `char**` (realloc) | Unbounded |
+| `where_clause` | `char[4096]` | Fixed |
+| `columns` | `char[4096]` | Fixed |
+| `order` | `char[512]` | Fixed |
+| SQL assembly (`__qs_fetch`) | `DynBuf` | Unbounded |
+
+The parameter arrays grow dynamically via `realloc`. The WHERE clause
+and column list are still fixed-size embedded arrays for `sizeof()`
+compatibility with legacy shim macros. The final SQL assembly in
+`__qs_fetch()` uses `DynBuf` to support arbitrarily complex queries
+with many JOINs, annotations, and clauses.
