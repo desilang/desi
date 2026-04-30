@@ -56,8 +56,9 @@ func ormProtocolFallback() *MacroProtocol {
 		"using":          {Name: "using", ArgStyle: "positional", KwargsFunc: "__db_using", IsChainable: true},
 
 		// Phase 1 chainable methods
-		"only":         {Name: "only", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
-		"defer_fields": {Name: "defer_fields", ArgStyle: "positional", KwargsFunc: "__qs_defer", IsChainable: true},
+		"only":              {Name: "only", ArgStyle: "positional", KwargsFunc: "__qs_only", IsChainable: true},
+		"defer_fields":      {Name: "defer_fields", ArgStyle: "positional", KwargsFunc: "__qs_defer", IsChainable: true},
+		"select_for_update": {Name: "select_for_update", ArgStyle: "positional", KwargsFunc: "__qs_select_for_update", IsChainable: true},
 
 		// Phase 2 terminal methods
 		"update_or_create": {Name: "update_or_create", ArgStyle: "kwargs_set", KwargsFunc: "__qs_set_field", TerminalFunc: "__qs_update_or_create", IsTerminal: true},
@@ -90,6 +91,7 @@ func ormProtocolFallback() *MacroProtocol {
 		"only":      "__qs_only",
 		"defer":     "__qs_defer",
 		"explain":   "__qs_explain",
+		"select_for_update": "__qs_select_for_update",
 		"get_or_create":    "__qs_get_or_create",
 		"update_or_create": "__qs_update_or_create",
 		"on_conflict":      "__qs_on_conflict",
