@@ -62,7 +62,7 @@ int32_t __db_set_debug_queries(int32_t enabled) {
 }
 
 // ============================================================
-// QuerySet Handle Struct (Phase 5 — replaces all static globals)
+// QuerySet Handle Struct (replaces all static globals)
 //
 // Every ORM query gets its own heap-allocated QuerySet, making
 // the runtime fully reentrant and spawn-safe. No shared mutable
@@ -123,21 +123,21 @@ typedef struct QuerySet {
     Annotation annotations[QS_ANNOTATIONS_MAX];
     int    annotation_count;
 
-    // Phase 4: Soft-delete
+    // Soft-delete
     int    soft_delete;
     int    include_deleted;
     char   soft_delete_col[128];
 
-    // Phase 2: UPSERT conflict column
+    // UPSERT conflict column
     char   upsert_col[128];
-    // Phase 2: Window expression
+    // Window expression
     char   window_expr[1024];
 
-    // Phase 2: Cursor state
+    // Cursor state
     char   cursor_name[64];
     int    cursor_open;
 
-    // Phase 3: CTEs
+    // CTEs
     #define QS_MAX_CTES 4
     struct {
         char name[64];
@@ -146,7 +146,7 @@ typedef struct QuerySet {
     int    cte_count;
     int    cte_recursive;
 
-    // Phase 3: Prefetch
+    // Prefetch
     #define QS_MAX_PREFETCH 4
     struct {
         char related_table[128];
@@ -155,7 +155,7 @@ typedef struct QuerySet {
     } prefetches[4];
     int    prefetch_count;
 
-    // Phase 5: Row locking (FOR UPDATE)
+    // Row locking (FOR UPDATE)
     // 0 = none, 1 = FOR UPDATE, 2 = FOR UPDATE NOWAIT, 3 = FOR UPDATE SKIP LOCKED
     int    for_update;
 } QuerySet;
@@ -489,7 +489,7 @@ static void parse_lookup(const char* lookup, const char* val,
         strcpy(op_out, "BETWEEN");
         // val should be "low,high" — we'll handle this specially in the filter
         *is_in_out = 2; // signal: range mode
-    // ---- Phase 2: Date lookups ----
+    // ---- Date lookups ----
     } else if (strcmp(suffix, "year") == 0) {
         if (g_crud_dialect == DIALECT_MYSQL) {
             // MySQL: YEAR(col) = ?
@@ -580,7 +580,7 @@ static void parse_lookup(const char* lookup, const char* val,
             strncpy(col_out, tmp, 127);
         }
         strcpy(op_out, "=");
-    // ---- Phase 2: JSON field lookups ----
+    // ---- JSON field lookups ----
     // data__key → PG: data->>'key' = $1, MySQL: JSON_UNQUOTE(JSON_EXTRACT(data,'$.key')) = ?
     // Detect: suffix doesn't match any known operator — check if parent col is a JSON field
     // For now, treat any unknown double-underscore as a JSON path access
@@ -861,7 +861,7 @@ int32_t __qs_fetch(void) {
         }
     }
 
-    // Phase 4: auto-inject soft-delete filter (unless with_deleted() was called)
+    // auto-inject soft-delete filter (unless with_deleted() was called)
     if (qs_soft_delete && !qs_include_deleted) {
         if (qs_where[0] == '\0') {
             snprintf(qs_where, sizeof(qs_where), "%s = FALSE", qs_soft_delete_col);
@@ -874,13 +874,13 @@ int32_t __qs_fetch(void) {
 
     if (qs_where[0]) dynbuf_appendf(&sql, " WHERE %s", qs_where);
     if (qs_group_by[0]) dynbuf_appendf(&sql, " GROUP BY %s", qs_group_by);
-    // Phase 4: HAVING clause (after GROUP BY)
+    // HAVING clause (after GROUP BY)
     if (qs_having[0]) dynbuf_appendf(&sql, " HAVING %s", qs_having);
     if (qs_order[0]) dynbuf_appendf(&sql, " ORDER BY %s", qs_order);
     if (qs_limit > 0) dynbuf_appendf(&sql, " LIMIT %d", qs_limit);
     if (qs_offset > 0) dynbuf_appendf(&sql, " OFFSET %d", qs_offset);
 
-    // Phase 5: Row locking — FOR UPDATE must be last clause
+    // Row locking — FOR UPDATE must be last clause
     if (g_qs_current->for_update == 1) dynbuf_append(&sql, " FOR UPDATE");
     else if (g_qs_current->for_update == 2) dynbuf_append(&sql, " FOR UPDATE NOWAIT");
     else if (g_qs_current->for_update == 3) dynbuf_append(&sql, " FOR UPDATE SKIP LOCKED");
@@ -1061,7 +1061,7 @@ int32_t __qs_delete(void) {
 }
 
 // ============================================================
-// Phase 4: HAVING clause
+// HAVING clause
 // ============================================================
 
 // Add HAVING condition — for use after GROUP BY + annotate
@@ -1102,7 +1102,7 @@ int32_t __qs_having_val(const char* expr, const char* val) {
 }
 
 // ============================================================
-// Phase 4: Multi-column ORDER BY (append mode)
+// Multi-column ORDER BY (append mode)
 // ============================================================
 
 // Append an additional ORDER BY column (vs. overwrite)
@@ -1128,7 +1128,7 @@ int32_t __qs_order_by_add(const char* col) {
 }
 
 // ============================================================
-// Phase 4: Multi-column UPDATE (single SQL statement)
+// Multi-column UPDATE (single SQL statement)
 // ============================================================
 
 // Accumulate a field for multi-column update
@@ -1210,7 +1210,7 @@ int32_t __qs_update_multi(void) {
 }
 
 // ============================================================
-// Phase 4: Pagination helpers
+// Pagination helpers
 // ============================================================
 
 // Set page + page_size → calculates LIMIT and OFFSET
@@ -1266,7 +1266,7 @@ int32_t __qs_total_count(void) {
 }
 
 // ============================================================
-// Phase 4: Soft Delete
+// Soft Delete
 // ============================================================
 
 // Enable soft-delete mode for the current queryset
@@ -1389,7 +1389,7 @@ int32_t __qs_raw(const char* sql) {
 }
 
 // ============================================================
-// Phase 1: latest / earliest (user-specified field)
+// latest / earliest (user-specified field)
 // ============================================================
 
 // Django: Entry.objects.latest('pub_date')
@@ -1410,7 +1410,7 @@ int32_t __qs_earliest(const char* field) {
 }
 
 // ============================================================
-// Phase 1: only() — restrict SELECT columns
+// only() — restrict SELECT columns
 // ============================================================
 
 // Django: Entry.objects.only('id', 'name', 'email')
@@ -1497,7 +1497,7 @@ int32_t __qs_defer(const char* cols) {
 }
 
 // ============================================================
-// Phase 1: get_or_create()
+// get_or_create()
 // ============================================================
 
 // Django: obj, created = Entry.objects.get_or_create(name="Alice")
@@ -1544,7 +1544,7 @@ int32_t __qs_get_or_create(void) {
 }
 
 // ============================================================
-// Phase 1: EXPLAIN — query plan inspection
+// EXPLAIN — query plan inspection
 // ============================================================
 
 // Runs EXPLAIN ANALYZE on the current queryset and returns row count
@@ -1583,7 +1583,7 @@ int32_t __qs_explain(void) {
 }
 
 // ============================================================
-// Phase 1: Schema Inspection
+// Schema Inspection
 // ============================================================
 
 // List all tables in the current database
@@ -1641,7 +1641,7 @@ int32_t __db_describe_indexes(const char* table_name) {
 }
 
 // ============================================================
-// Phase 1: Advisory Locks (PG)
+// Advisory Locks (PG)
 // ============================================================
 
 // Acquire a session-level advisory lock (blocking)
@@ -1689,7 +1689,7 @@ int32_t __db_advisory_try_lock(int64_t key) {
 }
 
 // ============================================================
-// Phase 2: UPSERT — INSERT ... ON CONFLICT DO UPDATE
+// UPSERT — INSERT ... ON CONFLICT DO UPDATE
 // ============================================================
 
 
@@ -1767,7 +1767,7 @@ int32_t __qs_do_upsert(void) {
 }
 
 // ============================================================
-// Phase 2: update_or_create
+// update_or_create
 // ============================================================
 
 // Django: Model.objects.update_or_create(defaults={"email": "new"}, name="Alice")
@@ -1823,7 +1823,7 @@ int32_t __qs_update_or_create(void) {
 }
 
 // ============================================================
-// Phase 2: Window Functions
+// Window Functions
 // ============================================================
 
 
@@ -1852,7 +1852,7 @@ int32_t __qs_window(const char* func, const char* over_clause, const char* alias
 }
 
 // ============================================================
-// Phase 2: Server-Side Cursor
+// Server-Side Cursor
 // ============================================================
 
 // State for cursor
@@ -1958,7 +1958,7 @@ int32_t __qs_cursor_close(void) {
 }
 
 // ============================================================
-// Phase 2: JSON Field Helpers
+// JSON Field Helpers
 // ============================================================
 
 // Update a JSON key within a column
@@ -2033,7 +2033,7 @@ char* __qs_json_get(const char* col, const char* key) {
 }
 
 // ============================================================
-// Phase 3: CTEs (Common Table Expressions — WITH clause)
+// CTEs (Common Table Expressions — WITH clause)
 // ============================================================
 
 // State: up to 4 CTE clauses
@@ -2106,7 +2106,7 @@ int32_t __qs_cte_fetch(void) {
 }
 
 // ============================================================
-// Phase 3: Subqueries — EXISTS / IN with nested SELECT
+// Subqueries — EXISTS / IN with nested SELECT
 // ============================================================
 
 // Build subquery: SELECT cols FROM table WHERE where_clause
@@ -2197,7 +2197,7 @@ int32_t __qs_filter_not_in_subquery(const char* col, const char* subquery) {
 }
 
 // ============================================================
-// Phase 3: prefetch_related — batch N+1 → N queries
+// prefetch_related — batch N+1 → N queries
 // ============================================================
 
 // State for prefetch
@@ -2293,7 +2293,7 @@ int32_t __qs_prefetch_execute(void) {
 }
 
 // ============================================================
-// Phase 4: JSON_TABLE — extract relational data from JSON
+// JSON_TABLE — extract relational data from JSON
 // ============================================================
 
 // JSON_TABLE: transform JSON column into rows
@@ -2341,7 +2341,7 @@ int32_t __qs_json_table(const char* json_col, const char* json_path,
 }
 
 // ============================================================
-// Phase 4: Full-Text Search
+// Full-Text Search
 // ============================================================
 
 // Full-text search query
@@ -2427,7 +2427,7 @@ int32_t __qs_fts_create_index(const char* table, const char* col, const char* id
 }
 
 // ============================================================
-// Phase 4: Vector Similarity Search
+// Vector Similarity Search
 // ============================================================
 
 // Vector similarity search (cosine / L2 / inner product)

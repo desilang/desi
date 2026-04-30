@@ -8,7 +8,7 @@
 
 ## Overview
 
-Phase 4 adds five major query engine capabilities to the ORM QuerySet system:
+Five major query engine capabilities to the ORM QuerySet system:
 
 1. **HAVING clause** — aggregate filtering after GROUP BY
 2. **Multi-column ordering** — append-mode ORDER BY

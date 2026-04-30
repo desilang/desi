@@ -241,7 +241,7 @@ The dispatch layer (`dispatch.c`) routes finished SQL strings to PG/MySQL backen
 ## Testing Notes
 
 - 456 of 461 example tests pass (5 pre-existing migration/MySQL failures unrelated to handle refactor)
-- PostgreSQL ORM Phase 4 test (464) compiles and runs with handle-based QuerySet
+- PostgreSQL ORM test (464) compiles and runs with handle-based QuerySet
 - MySQL test (465) requires a running MySQL server (environment-dependent)
 - All C files in `compiler/runtime/db/` compile cleanly with clang (0 warnings)
 - Go build passes (`go build ./...`)

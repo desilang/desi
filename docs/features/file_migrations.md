@@ -1,6 +1,6 @@
 # File-Based Migration System — Internals
 
-**Status**: ✅ Implemented (Phase 1–3)  
+**Status**: ✅ Implemented  
 **Since**: v0.11  
 **Related**: [ORM Models](orm_models.md), [Multi-Database](multi_database.md)
 
@@ -62,10 +62,10 @@ migrate.c (2,400 LOC)
 │   ├── __db_migrate_all(dirs)    — cross-app migration with topo-sort
 │   └── __migrate_reset_state()   — reset cached driver state
 │
-├── Header Parser (Phase 3)
+├── Header Parser
 │   └── parse_header_field()      — extract "# Key: value" from migration content
 │
-└── Dependency Resolution (Phase 3)
+└── Dependency Resolution
     ├── MigNode / MigNodeList     — dependency graph data structures
     ├── find_node()               — lookup node by app_label + filename prefix
     ├── topo_visit()              — DFS topological sort with cycle detection
@@ -215,9 +215,9 @@ Auto-migration: if an existing table lacks the `app_label` column, `ensure_track
 
 ## Testing
 
-Phase 2 and Phase 3 were verified with standalone C unit tests:
-- Phase 2: 47/47 (field_spec_to_sql, op_*_sql, parse_section)
-- Phase 3: 37/37 (extract_app_label, parse_header_field, find_node, topo_sort, cycle_detection)
+Verified with standalone C unit tests:
+- Operations: 47/47 (field_spec_to_sql, op_*_sql, parse_section)
+- Dependencies: 37/37 (extract_app_label, parse_header_field, find_node, topo_sort, cycle_detection)
 
 Integration tests:
 - `examples/460_migration_test.desi` — inline migration
