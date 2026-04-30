@@ -1081,6 +1081,82 @@ char* __db_func_now(void) {
     return strdup("NOW()");
 }
 
+// ============================================================
+// Case/When — conditional SQL expression builder
+//
+// Django equivalent:
+//   Case(When(status='urgent', then=Value(1)),
+//        When(status='high', then=Value(2)),
+//        default=Value(3))
+//
+// Generates:
+//   CASE WHEN status='urgent' THEN 1 WHEN status='high' THEN 2 ELSE 3 END
+//
+// Usage pattern:
+//   db.case_when("status = 'urgent'", "1")
+//   db.case_when("status = 'high'", "2")
+//   db.case_else("3")
+//   let expr = db.case_end("priority")
+//   db.annotate("priority", "IDENTITY", expr)
+// ============================================================
+
+// Thread-local case builder state
+static __thread DynBuf g_case_buf;
+static __thread int    g_case_started;
+static __thread char   g_case_else[512];
+
+// case_when(condition, result) — add a WHEN clause
+// condition: SQL boolean expression, e.g. "status = 'urgent'"
+// result:    value when condition is true, e.g. "1" or "'high_priority'"
+int32_t __db_case_when(const char* condition, const char* result) {
+    if (!condition || !result) return -1;
+
+    if (!g_case_started) {
+        dynbuf_init(&g_case_buf, 256);
+        dynbuf_append(&g_case_buf, "CASE");
+        g_case_else[0] = '\0';
+        g_case_started = 1;
+    }
+
+    dynbuf_appendf(&g_case_buf, " WHEN %s THEN %s", condition, result);
+    return 0;
+}
+
+// case_else(default_val) — set the ELSE clause
+// default_val: value when no WHEN matches, e.g. "0" or "'unknown'"
+int32_t __db_case_else(const char* default_val) {
+    if (!default_val) return -1;
+    strncpy(g_case_else, default_val, sizeof(g_case_else) - 1);
+    g_case_else[sizeof(g_case_else) - 1] = '\0';
+    return 0;
+}
+
+// case_end(alias) — finalize and return the CASE expression
+// alias: column alias for the result, e.g. "priority"
+//        if empty, returns bare CASE expression without AS
+// Returns heap-allocated string, resets builder state.
+char* __db_case_end(const char* alias) {
+    if (!g_case_started) {
+        return strdup("NULL");  // no WHEN clauses → NULL
+    }
+
+    if (g_case_else[0] != '\0') {
+        dynbuf_appendf(&g_case_buf, " ELSE %s", g_case_else);
+    }
+    dynbuf_append(&g_case_buf, " END");
+
+    if (alias && alias[0] != '\0') {
+        dynbuf_appendf(&g_case_buf, " AS %s", alias);
+    }
+
+    char* result = strdup(g_case_buf.data);
+    dynbuf_free(&g_case_buf);
+    g_case_started = 0;
+    g_case_else[0] = '\0';
+
+    return result;
+}
+
 // __qs_annotate — add an aggregate annotation
 // Django equivalent: .annotate(total=Sum("amount"))
 // func: "SUM", "COUNT", "AVG", "MIN", "MAX"
