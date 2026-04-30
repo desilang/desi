@@ -968,6 +968,27 @@ int32_t __qs_select_related(const char* field_name) {
     return 0;
 }
 
+// __qs_in_bulk — fetch multiple rows by PK list in a single query
+// Django equivalent: User.objects.in_bulk([1, 2, 3])
+//
+// id_list: comma-separated PKs, e.g. "1,2,3"
+// field:   PK column name, e.g. "id" (default if empty)
+//
+// Builds: SELECT * FROM table WHERE field IN ($1, $2, $3)
+// Returns: row count, or -1 on error
+int32_t __qs_in_bulk(const char* id_list, const char* field) {
+    if (!id_list || id_list[0] == '\0') return 0;
+
+    const char* pk_col = (field && field[0] != '\0') ? field : "id";
+
+    // Build "field__in" lookup key and filter directly
+    char lookup[256];
+    snprintf(lookup, sizeof(lookup), "%s__in", pk_col);
+    __qs_filter(lookup, id_list);
+
+    return __qs_fetch();
+}
+
 // __qs_annotate — add an aggregate annotation
 // Django equivalent: .annotate(total=Sum("amount"))
 // func: "SUM", "COUNT", "AVG", "MIN", "MAX"
