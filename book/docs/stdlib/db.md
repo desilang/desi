@@ -529,6 +529,40 @@ db.func_ceil("price")                       # CEIL(price)
 db.func_floor("price")                      # FLOOR(price)
 ```
 
+### Custom Managers
+
+Reusable named query scopes:
+
+```desi
+# Register a manager with a pre-defined filter
+db.register_manager("users", "active", "is_active__exact=true")
+db.register_manager("posts", "published", "status__exact=published")
+
+# Use the manager — auto-applies filter
+db.use_manager("users", "active")
+let count = db.fetch_all()  # SELECT * FROM users WHERE is_active = true
+```
+
+### Reverse Relations
+
+Query from FK target back to source:
+
+```desi
+# Django equivalent: user.posts.all()
+let posts = db.reverse_query("posts", "author_id", "1")
+
+# Count reverse related objects
+let n = db.reverse_count("posts", "author_id", "1")
+```
+
+### Multi-Column Update
+
+```desi
+db.objects("users")
+db.filter_by("id", "1")
+db.update_pairs("name=Bob,age=30")   # UPDATE users SET name='Bob', age=30 WHERE id=1
+```
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
