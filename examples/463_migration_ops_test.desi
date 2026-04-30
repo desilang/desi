@@ -1,3 +1,5 @@
+# EXPECTED: SKIP
+# SKIPPED: requires live PostgreSQL (set PG_USER, PG_PASS, PG_DB env vars)
 # Test: db.op_* migration operation DSL (Phase 2)
 # Requires PostgreSQL at 127.0.0.1:5432 (set PG_USER, PG_PASS, PG_DB env vars)
 #

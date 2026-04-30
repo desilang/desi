@@ -791,32 +791,32 @@ int32_t __qs_offset(int32_t n) {
 
 // Build SELECT SQL and execute with parameters
 int32_t __qs_fetch(void) {
-    char sql[8192];
-    int pos;
+    DynBuf sql;
+    dynbuf_init(&sql, 512);
 
     // Build column list and JOIN clauses for select_related
     if (qs_annotation_count > 0) {
         // Annotated query: SELECT group_cols, AGG(col) AS alias, ...
-        pos = snprintf(sql, sizeof(sql), "SELECT %s",
+        dynbuf_appendf(&sql, "SELECT %s",
             qs_distinct ? "DISTINCT " : "");
 
         // If GROUP BY is set, include those columns first
         if (qs_group_by[0]) {
-            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s", qs_group_by);
+            dynbuf_append(&sql, qs_group_by);
         } else {
-            pos += snprintf(sql + pos, sizeof(sql) - pos, "%s.*", qs_table);
+            dynbuf_appendf(&sql, "%s.*", qs_table);
         }
 
         // Add annotations: SUM(col) AS alias
         for (int a = 0; a < qs_annotation_count; a++) {
-            pos += snprintf(sql + pos, sizeof(sql) - pos, ", %s(%s) AS %s",
+            dynbuf_appendf(&sql, ", %s(%s) AS %s",
                 qs_annotations[a].func, qs_annotations[a].col, qs_annotations[a].alias);
         }
 
-        pos += snprintf(sql + pos, sizeof(sql) - pos, " FROM %s", qs_table);
+        dynbuf_appendf(&sql, " FROM %s", qs_table);
     } else if (qs_related_count > 0) {
         // Build: SELECT t.*, r1.col1 AS r1__col1, r1.col2 AS r1__col2, ...
-        pos = snprintf(sql, sizeof(sql), "SELECT %s%s.*",
+        dynbuf_appendf(&sql, "SELECT %s%s.*",
             qs_distinct ? "DISTINCT " : "", qs_table);
 
         // For each related FK, add aliased columns from the related table
@@ -827,21 +827,20 @@ int32_t __qs_fetch(void) {
                 int fcount = __orm_field_count(ref_table);
                 for (int f = 0; f < fcount; f++) {
                     const char* fname = __orm_field_name(ref_table, f);
-                    pos += snprintf(sql + pos, sizeof(sql) - pos,
-                        ", %s_rel%d.%s AS %s__%s",
+                    dynbuf_appendf(&sql, ", %s_rel%d.%s AS %s__%s",
                         qs_related[r], r, fname, qs_related[r], fname);
                 }
             }
         }
 
-        pos += snprintf(sql + pos, sizeof(sql) - pos, " FROM %s", qs_table);
+        dynbuf_appendf(&sql, " FROM %s", qs_table);
 
         // Add LEFT JOINs
         for (int r = 0; r < qs_related_count; r++) {
             char ref_table[128] = "", ref_field[64] = "";
             if (__orm_fk_info(qs_table, qs_related[r], ref_table, sizeof(ref_table),
                              ref_field, sizeof(ref_field))) {
-                pos += snprintf(sql + pos, sizeof(sql) - pos,
+                dynbuf_appendf(&sql,
                     " LEFT JOIN %s AS %s_rel%d ON %s.%s = %s_rel%d.%s",
                     ref_table, qs_related[r], r,
                     qs_table, qs_related[r],
@@ -852,9 +851,9 @@ int32_t __qs_fetch(void) {
         // Simple SELECT (no joins)
         const char* cols = (qs_columns[0] != '\0') ? qs_columns : "*";
         if (qs_distinct) {
-            pos = snprintf(sql, sizeof(sql), "SELECT DISTINCT %s FROM %s", cols, qs_table);
+            dynbuf_appendf(&sql, "SELECT DISTINCT %s FROM %s", cols, qs_table);
         } else {
-            pos = snprintf(sql, sizeof(sql), "SELECT %s FROM %s", cols, qs_table);
+            dynbuf_appendf(&sql, "SELECT %s FROM %s", cols, qs_table);
         }
     }
 
@@ -869,21 +868,22 @@ int32_t __qs_fetch(void) {
         }
     }
 
-    if (qs_where[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
-    if (qs_group_by[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " GROUP BY %s", qs_group_by);
+    if (qs_where[0]) dynbuf_appendf(&sql, " WHERE %s", qs_where);
+    if (qs_group_by[0]) dynbuf_appendf(&sql, " GROUP BY %s", qs_group_by);
     // Phase 4: HAVING clause (after GROUP BY)
-    if (qs_having[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " HAVING %s", qs_having);
-    if (qs_order[0]) pos += snprintf(sql + pos, sizeof(sql) - pos, " ORDER BY %s", qs_order);
-    if (qs_limit > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " LIMIT %d", qs_limit);
-    if (qs_offset > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, " OFFSET %d", qs_offset);
+    if (qs_having[0]) dynbuf_appendf(&sql, " HAVING %s", qs_having);
+    if (qs_order[0]) dynbuf_appendf(&sql, " ORDER BY %s", qs_order);
+    if (qs_limit > 0) dynbuf_appendf(&sql, " LIMIT %d", qs_limit);
+    if (qs_offset > 0) dynbuf_appendf(&sql, " OFFSET %d", qs_offset);
 
-    debug_log_query(sql);
+    debug_log_query(sql.data);
 
     if (qs_param_count > 0) {
-        qs_row_count = __db_query_params(sql, qs_params, qs_param_count);
+        qs_row_count = __db_query_params(sql.data, qs_params, qs_param_count);
     } else {
-        qs_row_count = __db_query_exec(sql);
+        qs_row_count = __db_query_exec(sql.data);
     }
+    dynbuf_free(&sql);
     return qs_row_count;
 }
 

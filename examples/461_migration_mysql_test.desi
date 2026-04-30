@@ -1,3 +1,5 @@
+# EXPECTED: SKIP
+# SKIPPED: requires live MySQL (set MYSQL_USER, MYSQL_PASS, MYSQL_DB env vars)
 # Test: db.makemigrations() + db.migrate() file-based migration (MySQL)
 # Requires MySQL at 127.0.0.1:3306 (set MYSQL_USER, MYSQL_PASS, MYSQL_DB env vars)
 #
