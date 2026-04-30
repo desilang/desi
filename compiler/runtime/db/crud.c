@@ -154,6 +154,10 @@ typedef struct QuerySet {
         char pk_col[128];
     } prefetches[4];
     int    prefetch_count;
+
+    // Phase 5: Row locking (FOR UPDATE)
+    // 0 = none, 1 = FOR UPDATE, 2 = FOR UPDATE NOWAIT, 3 = FOR UPDATE SKIP LOCKED
+    int    for_update;
 } QuerySet;
 
 // Forward declaration
@@ -876,6 +880,11 @@ int32_t __qs_fetch(void) {
     if (qs_limit > 0) dynbuf_appendf(&sql, " LIMIT %d", qs_limit);
     if (qs_offset > 0) dynbuf_appendf(&sql, " OFFSET %d", qs_offset);
 
+    // Phase 5: Row locking — FOR UPDATE must be last clause
+    if (g_qs_current->for_update == 1) dynbuf_append(&sql, " FOR UPDATE");
+    else if (g_qs_current->for_update == 2) dynbuf_append(&sql, " FOR UPDATE NOWAIT");
+    else if (g_qs_current->for_update == 3) dynbuf_append(&sql, " FOR UPDATE SKIP LOCKED");
+
     debug_log_query(sql.data);
 
     if (qs_param_count > 0) {
@@ -922,6 +931,29 @@ int32_t __qs_last(void) {
 // __qs_distinct — set flag for SELECT DISTINCT
 int32_t __qs_distinct(void) {
     qs_distinct = 1;
+    return 0;
+}
+
+// __qs_select_for_update — enable row-level locking
+// Django equivalent: User.objects.filter(id=1).select_for_update()
+//
+// mode: "" or "default" → FOR UPDATE
+//       "nowait"         → FOR UPDATE NOWAIT (raises error if locked)
+//       "skip_locked"    → FOR UPDATE SKIP LOCKED (skips locked rows)
+//
+// Must be used within a transaction (db.begin/commit/rollback).
+// FOR UPDATE acquires an exclusive row lock until the transaction ends.
+int32_t __qs_select_for_update(const char* mode) {
+    if (!mode || mode[0] == '\0' || strcmp(mode, "default") == 0) {
+        g_qs_current->for_update = 1;  // FOR UPDATE
+    } else if (strcmp(mode, "nowait") == 0) {
+        g_qs_current->for_update = 2;  // FOR UPDATE NOWAIT
+    } else if (strcmp(mode, "skip_locked") == 0) {
+        g_qs_current->for_update = 3;  // FOR UPDATE SKIP LOCKED
+    } else {
+        fprintf(stderr, "[orm] warning: unknown for_update mode '%s', using FOR UPDATE\n", mode);
+        g_qs_current->for_update = 1;
+    }
     return 0;
 }
 

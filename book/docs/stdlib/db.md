@@ -230,6 +230,43 @@ db.filter_by("id", "42")
 db.hard_delete()
 ```
 
+### Row Locking (select_for_update)
+
+Lock rows for concurrent-safe reads within a transaction:
+
+```desi
+import db
+
+# Basic row lock — blocks until lock acquired
+db.begin()
+db.objects("accounts")
+db.filter_by("id", "1")
+db.select_for_update("")      # FOR UPDATE
+db.fetch_all()
+db.update("balance", "500")
+db.commit()
+
+# Non-blocking — error if row already locked
+db.begin()
+db.objects("accounts")
+db.filter_by("id", "1")
+db.select_for_update("nowait")    # FOR UPDATE NOWAIT
+db.fetch_all()
+db.commit()
+
+# Skip locked rows — useful for job queues
+db.begin()
+db.objects("jobs")
+db.filter_by("status", "pending")
+db.select_for_update("skip_locked")  # FOR UPDATE SKIP LOCKED
+db.limit(10)
+db.fetch_all()
+db.commit()
+```
+
+Modes: `""` (blocking), `"nowait"` (error if locked), `"skip_locked"` (skip locked rows).
+Works with both PostgreSQL and MySQL.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:

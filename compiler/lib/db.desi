@@ -758,6 +758,23 @@ pub def select_related(field_name: str) -> int:
 	Usage: db.objects("posts"); db.select_related("author_id"); db.fetch_all()"""
 	return __qs_select_related(field_name)
 
+pub def select_for_update(mode: str) -> int:
+	"""Acquire row-level locks on selected rows (like Django's select_for_update).
+	Must be used within a transaction (db.begin/commit/rollback).
+	mode: "" or "default" → FOR UPDATE (blocks until lock acquired)
+	      "nowait"         → FOR UPDATE NOWAIT (raises error if locked)
+	      "skip_locked"    → FOR UPDATE SKIP LOCKED (skips locked rows)
+	Both PG and MySQL support all three modes.
+	Usage:
+	  db.begin()
+	  db.objects("accounts")
+	  db.filter_by("id", "1")
+	  db.select_for_update("nowait")
+	  db.fetch_all()
+	  db.update("balance", "100")
+	  db.commit()"""
+	return __qs_select_for_update(mode)
+
 pub def annotate(alias: str, func: str, col: str) -> int:
 	"""Add an aggregate annotation to the query.
 	func: SUM, COUNT, AVG, MIN, MAX
@@ -1504,6 +1521,9 @@ pub def __qs_distinct() -> int
 
 @extern("C")
 pub def __qs_select_related(field_name: str) -> int
+
+@extern("C")
+pub def __qs_select_for_update(mode: str) -> int
 
 @extern("C")
 pub def __qs_annotate(alias: str, func: str, col: str) -> int
