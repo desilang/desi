@@ -356,6 +356,35 @@ Generates: `CASE WHEN age < 18 THEN 'minor' WHEN age >= 18 AND age < 65 THEN 'ad
 
 The builder is thread-safe and resets after `case_end()`.
 
+### Model Instance Hydration + Save
+
+After querying, load a result row into a model instance cache, modify fields, and persist:
+
+```desi
+import db
+
+# Fetch a user
+db.objects("users")
+db.filter("id", "1")
+db.fetch_all()
+
+# Hydrate row 0 into instance cache
+db.hydrate("users", 0)
+
+# Read fields
+let name = db.instance_get("name")
+let pk = db.instance_pk()  # > 0 for existing rows
+
+# Modify and save (UPDATE since PK > 0)
+db.instance_set("name", "Alice Updated")
+db.instance_save()  # Executes: UPDATE users SET name='Alice Updated' WHERE id=1
+
+# Clear when done
+db.instance_clear()
+```
+
+For new instances (PK == 0), `instance_save()` performs an INSERT instead.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
