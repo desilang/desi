@@ -989,6 +989,98 @@ int32_t __qs_in_bulk(const char* id_list, const char* field) {
     return __qs_fetch();
 }
 
+// ============================================================
+// Database Functions — SQL expression builders
+//
+// These return heap-allocated strings like "LOWER(name)" that
+// can be passed to annotate(), filter(), or order_by().
+// Django equivalents: Lower(), Upper(), Coalesce(), Cast(), etc.
+// ============================================================
+
+// Lower("name") → "LOWER(name)"
+char* __db_func_lower(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "LOWER(%s)", col);
+    return buf;
+}
+
+// Upper("name") → "UPPER(name)"
+char* __db_func_upper(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "UPPER(%s)", col);
+    return buf;
+}
+
+// Length("name") → "LENGTH(name)" (PG) / "CHAR_LENGTH(name)" (MySQL)
+char* __db_func_length(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 32);
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        sprintf(buf, "CHAR_LENGTH(%s)", col);
+    } else {
+        sprintf(buf, "LENGTH(%s)", col);
+    }
+    return buf;
+}
+
+// Coalesce("col1,col2,default") → "COALESCE(col1, col2, default)"
+// Takes comma-separated args
+char* __db_func_coalesce(const char* args) {
+    size_t len = strlen(args) + 32;
+    char* buf = (char*)malloc(len);
+    snprintf(buf, len, "COALESCE(%s)", args);
+    return buf;
+}
+
+// Cast("col", "INTEGER") → "CAST(col AS INTEGER)"
+char* __db_func_cast(const char* col, const char* type) {
+    size_t len = strlen(col) + strlen(type) + 32;
+    char* buf = (char*)malloc(len);
+    snprintf(buf, len, "CAST(%s AS %s)", col, type);
+    return buf;
+}
+
+// Concat("col1,col2") → "CONCAT(col1, col2)" (MySQL) / "col1 || col2" (PG)
+char* __db_func_concat(const char* args) {
+    size_t len = strlen(args) + 32;
+    char* buf = (char*)malloc(len);
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        snprintf(buf, len, "CONCAT(%s)", args);
+    } else {
+        // PG: replace commas with ||
+        // Simple approach: wrap in CONCAT() since PG supports it too (9.1+)
+        snprintf(buf, len, "CONCAT(%s)", args);
+    }
+    return buf;
+}
+
+// Abs("col") → "ABS(col)"
+char* __db_func_abs(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "ABS(%s)", col);
+    return buf;
+}
+
+// Greatest("a,b,c") → "GREATEST(a, b, c)"
+char* __db_func_greatest(const char* args) {
+    size_t len = strlen(args) + 32;
+    char* buf = (char*)malloc(len);
+    snprintf(buf, len, "GREATEST(%s)", args);
+    return buf;
+}
+
+// Least("a,b,c") → "LEAST(a, b, c)"
+char* __db_func_least(const char* args) {
+    size_t len = strlen(args) + 32;
+    char* buf = (char*)malloc(len);
+    snprintf(buf, len, "LEAST(%s)", args);
+    return buf;
+}
+
+// Now() → "NOW()" (PG/MySQL both support this)
+char* __db_func_now(void) {
+    return strdup("NOW()");
+}
+
 // __qs_annotate — add an aggregate annotation
 // Django equivalent: .annotate(total=Sum("amount"))
 // func: "SUM", "COUNT", "AVG", "MIN", "MAX"

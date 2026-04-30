@@ -907,6 +907,58 @@ pub def values_list(cols: str) -> int:
 	return __qs_only(cols)
 
 # ============================================================
+# Database Functions — SQL expression builders
+#
+# These return SQL expression strings (e.g. "LOWER(name)")
+# for use in annotate(), filter(), or order_by().
+# Django equivalents: Lower(), Upper(), Coalesce(), Cast(), etc.
+# ============================================================
+
+pub def func_lower(col: str) -> str:
+	"""LOWER(col) — convert to lowercase.
+	Usage: db.annotate("lname", "IDENTITY", db.func_lower("name"))"""
+	return __db_func_lower(col)
+
+pub def func_upper(col: str) -> str:
+	"""UPPER(col) — convert to uppercase."""
+	return __db_func_upper(col)
+
+pub def func_length(col: str) -> str:
+	"""LENGTH(col) / CHAR_LENGTH(col) — string length. Dialect-aware."""
+	return __db_func_length(col)
+
+pub def func_coalesce(args: str) -> str:
+	"""COALESCE(a, b, ...) — return first non-NULL. Comma-separated args.
+	Usage: db.func_coalesce("nickname, name, 'Anonymous'")"""
+	return __db_func_coalesce(args)
+
+pub def func_cast(col: str, cast_type: str) -> str:
+	"""CAST(col AS type) — type conversion.
+	Usage: db.func_cast("price", "INTEGER")"""
+	return __db_func_cast(col, cast_type)
+
+pub def func_concat(args: str) -> str:
+	"""CONCAT(a, b, ...) — string concatenation. Comma-separated args.
+	Works on both PG (CONCAT supported since 9.1) and MySQL."""
+	return __db_func_concat(args)
+
+pub def func_abs(col: str) -> str:
+	"""ABS(col) — absolute value."""
+	return __db_func_abs(col)
+
+pub def func_greatest(args: str) -> str:
+	"""GREATEST(a, b, ...) — return largest. Comma-separated args."""
+	return __db_func_greatest(args)
+
+pub def func_least(args: str) -> str:
+	"""LEAST(a, b, ...) — return smallest. Comma-separated args."""
+	return __db_func_least(args)
+
+pub def func_now() -> str:
+	"""NOW() — current timestamp. Works on both PG and MySQL."""
+	return __db_func_now()
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1556,6 +1608,37 @@ pub def __qs_select_for_update(mode: str) -> int
 
 @extern("C")
 pub def __qs_in_bulk(id_list: str, field: str) -> int
+
+# Database Function externs
+@extern("C")
+pub def __db_func_lower(col: str) -> str
+
+@extern("C")
+pub def __db_func_upper(col: str) -> str
+
+@extern("C")
+pub def __db_func_length(col: str) -> str
+
+@extern("C")
+pub def __db_func_coalesce(args: str) -> str
+
+@extern("C")
+pub def __db_func_cast(col: str, cast_type: str) -> str
+
+@extern("C")
+pub def __db_func_concat(args: str) -> str
+
+@extern("C")
+pub def __db_func_abs(col: str) -> str
+
+@extern("C")
+pub def __db_func_greatest(args: str) -> str
+
+@extern("C")
+pub def __db_func_least(args: str) -> str
+
+@extern("C")
+pub def __db_func_now() -> str
 
 @extern("C")
 pub def __qs_annotate(alias: str, func: str, col: str) -> int
