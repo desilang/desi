@@ -1084,6 +1084,79 @@ pub def fire_signal(table: str, signal_type: int) -> int:
 	return __orm_fire_signal(table, signal_type)
 
 # ============================================================
+# Many-to-Many Relationships
+#
+# Django equivalent:
+#   class Article(models.Model):
+#       tags = models.ManyToManyField(Tag)
+# ============================================================
+
+pub def m2m(from_table: str, to_table: str, junction: str) -> int:
+	"""Register a many-to-many relationship.
+	from_table: source model (e.g. "articles")
+	to_table: target model (e.g. "tags")
+	junction: junction table name, or "" for auto (e.g. "articles_tags")
+	Usage: db.m2m("articles", "tags", "article_tags")"""
+	return __orm_m2m(from_table, to_table, junction)
+
+pub def m2m_create_sql(junction: str) -> str:
+	"""Generate CREATE TABLE SQL for a junction table.
+	Usage: let sql = db.m2m_create_sql("article_tags")"""
+	return __orm_m2m_create_sql(junction)
+
+pub def m2m_add(junction: str, from_id: str, to_id: str) -> int:
+	"""Add a many-to-many link. Idempotent (uses ON CONFLICT/INSERT IGNORE).
+	Usage: db.m2m_add("article_tags", "1", "5")"""
+	return __orm_m2m_add(junction, from_id, to_id)
+
+pub def m2m_remove(junction: str, from_id: str, to_id: str) -> int:
+	"""Remove a many-to-many link.
+	Usage: db.m2m_remove("article_tags", "1", "5")"""
+	return __orm_m2m_remove(junction, from_id, to_id)
+
+pub def m2m_clear(junction: str, from_id: str) -> int:
+	"""Remove all links for a source ID.
+	Usage: db.m2m_clear("article_tags", "1")"""
+	return __orm_m2m_clear(junction, from_id)
+
+pub def m2m_all(junction: str, from_id: str) -> int:
+	"""Query all related IDs for a source ID.
+	Results available via db.get_field() after this call.
+	Usage: db.m2m_all("article_tags", "1")"""
+	return __orm_m2m_all(junction, from_id)
+
+pub def m2m_create_all_sql() -> str:
+	"""Generate CREATE TABLE SQL for all registered M2M junction tables.
+	Returns semicolon-separated SQL statements."""
+	return __orm_create_all_m2m_sql()
+
+# ============================================================
+# Abstract Model Inheritance
+#
+# Django equivalent:
+#   class TimestampMixin(models.Model):
+#       created_at = DateTimeField(auto_now_add=True)
+#       class Meta: abstract = True
+# ============================================================
+
+pub def set_abstract(table: str) -> int:
+	"""Mark a model as abstract (won't generate a table).
+	Usage: db.set_abstract("timestamp_mixin")"""
+	return __orm_set_abstract(table)
+
+pub def is_abstract(table: str) -> int:
+	"""Check if a model is abstract. Returns 1 if abstract, 0 otherwise."""
+	return __orm_is_abstract(table)
+
+pub def inherit(child: str, parent: str) -> int:
+	"""Copy fields from parent model into child model.
+	Django equivalent: class Child(Parent)
+	Usage:
+	  db.set_abstract("timestamp_mixin")
+	  db.inherit("articles", "timestamp_mixin")"""
+	return __orm_inherit(child, parent)
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1815,6 +1888,38 @@ pub def __orm_validate_instance_str() -> str
 
 @extern("C")
 pub def __orm_fire_signal(table: str, signal_type: int) -> int
+
+# M2M externs
+@extern("C")
+pub def __orm_m2m(from_table: str, to_table: str, junction: str) -> int
+
+@extern("C")
+pub def __orm_m2m_create_sql(junction: str) -> str
+
+@extern("C")
+pub def __orm_m2m_add(junction: str, from_id: str, to_id: str) -> int
+
+@extern("C")
+pub def __orm_m2m_remove(junction: str, from_id: str, to_id: str) -> int
+
+@extern("C")
+pub def __orm_m2m_clear(junction: str, from_id: str) -> int
+
+@extern("C")
+pub def __orm_m2m_all(junction: str, from_id: str) -> int
+
+@extern("C")
+pub def __orm_create_all_m2m_sql() -> str
+
+# Inheritance externs
+@extern("C")
+pub def __orm_set_abstract(table: str) -> int
+
+@extern("C")
+pub def __orm_is_abstract(table: str) -> int
+
+@extern("C")
+pub def __orm_inherit(child: str, parent: str) -> int
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,

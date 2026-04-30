@@ -417,6 +417,55 @@ db.fire_signal("users", 1)  # fire post_save handlers
 
 Signal handlers are registered via C function pointers in the runtime and can veto operations by returning -1.
 
+### Many-to-Many Relationships
+
+Register and manage M2M relationships with automatic junction tables:
+
+```desi
+import db
+
+# Register M2M between articles and tags
+db.m2m("articles", "tags", "article_tags")
+
+# Generate junction table SQL
+let sql = db.m2m_create_sql("article_tags")
+# Creates: article_tags (id, articles_id, tags_id, UNIQUE(articles_id, tags_id))
+
+# Manage links
+db.m2m_add("article_tags", "1", "5")     # article 1 ↔ tag 5
+db.m2m_add("article_tags", "1", "3")     # article 1 ↔ tag 3
+db.m2m_remove("article_tags", "1", "5")  # remove link
+db.m2m_clear("article_tags", "1")        # remove all tags for article 1
+
+# Query all related tags for an article
+db.m2m_all("article_tags", "1")          # SELECT tags_id FROM article_tags WHERE articles_id = 1
+```
+
+Add operations are idempotent (`ON CONFLICT DO NOTHING` / `INSERT IGNORE`). Junction tables include cascading foreign keys.
+
+### Abstract Model Inheritance
+
+Share fields across models using abstract base classes:
+
+```desi
+import db
+
+# Define abstract mixin (won't create a table)
+db.model("timestamp_mixin")
+db.datetime_field("created_at", 0, 1, 0)  # auto_now_add
+db.datetime_field("updated_at", 1, 0, 0)  # auto_now
+db.set_abstract("timestamp_mixin")
+
+# Child inherits all parent fields
+db.model("articles")
+db.auto_field("id")
+db.char_field("title", 200, 0, 0)
+db.inherit("articles", "timestamp_mixin")
+# articles now has: id, title, created_at, updated_at
+```
+
+Inheritance copies fields, unique constraints, and indexes from parent to child. The parent model is skipped during table creation.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:

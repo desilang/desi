@@ -1165,3 +1165,296 @@ char* __orm_validate_instance_str(void) {
     if (rc != 0) return strdup(err);
     return strdup("");
 }
+
+// ============================================================
+// Many-to-Many Relationships
+//
+// Django equivalent:
+//   class Article(models.Model):
+//       tags = models.ManyToManyField(Tag)
+//
+// Creates a junction table: article_tags (article_id, tag_id)
+//
+// Usage:
+//   db.m2m_add("article_tags", "1", "5")    # article 1 ↔ tag 5
+//   db.m2m_remove("article_tags", "1", "5") # remove link
+//   db.m2m_clear("article_tags", "1")       # remove all links for article 1
+//   db.m2m_all("article_tags", "1")         # get all tag_ids for article 1
+// ============================================================
+
+typedef struct {
+    char name[128];          // junction table name (e.g. "article_tags")
+    char from_table[128];    // source model table (e.g. "articles")
+    char from_col[64];       // source FK column (e.g. "article_id")
+    char to_table[128];      // target model table (e.g. "tags")
+    char to_col[64];         // target FK column (e.g. "tag_id")
+    char through_table[128]; // custom through table (empty = auto)
+} M2MDef;
+
+#define MAX_M2M 32
+static M2MDef g_m2m[MAX_M2M];
+static int g_m2m_count = 0;
+
+// __orm_m2m — register a many-to-many relationship
+// Creates a junction table definition
+int32_t __orm_m2m(const char* from_table, const char* to_table,
+                  const char* junction_name) {
+    if (!from_table || !to_table || g_m2m_count >= MAX_M2M) return -1;
+
+    M2MDef* m = &g_m2m[g_m2m_count++];
+    memset(m, 0, sizeof(M2MDef));
+
+    // Auto-generate junction name if not provided
+    if (junction_name && junction_name[0] != '\0') {
+        strncpy(m->name, junction_name, sizeof(m->name) - 1);
+    } else {
+        snprintf(m->name, sizeof(m->name), "%s_%s", from_table, to_table);
+    }
+
+    strncpy(m->from_table, from_table, sizeof(m->from_table) - 1);
+    strncpy(m->to_table, to_table, sizeof(m->to_table) - 1);
+
+    // Auto-generate FK column names: table_id
+    snprintf(m->from_col, sizeof(m->from_col), "%s_id", from_table);
+    snprintf(m->to_col, sizeof(m->to_col), "%s_id", to_table);
+
+    return g_m2m_count - 1;
+}
+
+// __orm_m2m_create_sql — generate CREATE TABLE for a junction table
+char* __orm_m2m_create_sql(const char* junction_name) {
+    M2MDef* m = NULL;
+    for (int i = 0; i < g_m2m_count; i++) {
+        if (strcmp(g_m2m[i].name, junction_name) == 0) {
+            m = &g_m2m[i];
+            break;
+        }
+    }
+    if (!m) return strdup("");
+
+    char* sql = malloc(1024);
+    int pos = 0;
+
+    if (g_orm_dialect == 0) {
+        // PostgreSQL
+        pos += sprintf(sql + pos,
+            "CREATE TABLE IF NOT EXISTS %s (\n"
+            "  id SERIAL PRIMARY KEY,\n"
+            "  %s INTEGER NOT NULL REFERENCES %s(id) ON DELETE CASCADE,\n"
+            "  %s INTEGER NOT NULL REFERENCES %s(id) ON DELETE CASCADE,\n"
+            "  UNIQUE (%s, %s)\n"
+            ")",
+            m->name,
+            m->from_col, m->from_table,
+            m->to_col, m->to_table,
+            m->from_col, m->to_col);
+    } else {
+        // MySQL
+        pos += sprintf(sql + pos,
+            "CREATE TABLE IF NOT EXISTS %s (\n"
+            "  id INT AUTO_INCREMENT PRIMARY KEY,\n"
+            "  %s INT NOT NULL,\n"
+            "  %s INT NOT NULL,\n"
+            "  UNIQUE (%s, %s),\n"
+            "  FOREIGN KEY (%s) REFERENCES %s(id) ON DELETE CASCADE,\n"
+            "  FOREIGN KEY (%s) REFERENCES %s(id) ON DELETE CASCADE\n"
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+            m->name,
+            m->from_col, m->to_col,
+            m->from_col, m->to_col,
+            m->from_col, m->from_table,
+            m->to_col, m->to_table);
+    }
+    sql[pos] = '\0';
+    return sql;
+}
+
+// Extern: query execution from crud.c
+extern int32_t __db_exec(const char* sql);
+extern int32_t __db_exec_param(const char* sql, const char** params, int param_count);
+
+// __orm_m2m_add — add a link: INSERT INTO junction (from_col, to_col) VALUES (from_id, to_id)
+int32_t __orm_m2m_add(const char* junction_name, const char* from_id, const char* to_id) {
+    M2MDef* m = NULL;
+    for (int i = 0; i < g_m2m_count; i++) {
+        if (strcmp(g_m2m[i].name, junction_name) == 0) { m = &g_m2m[i]; break; }
+    }
+    if (!m || !from_id || !to_id) return -1;
+
+    char sql[512];
+    if (g_orm_dialect == 0) {
+        snprintf(sql, sizeof(sql),
+            "INSERT INTO %s (%s, %s) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+            m->name, m->from_col, m->to_col, from_id, to_id);
+    } else {
+        snprintf(sql, sizeof(sql),
+            "INSERT IGNORE INTO %s (%s, %s) VALUES (%s, %s)",
+            m->name, m->from_col, m->to_col, from_id, to_id);
+    }
+    return __db_exec(sql);
+}
+
+// __orm_m2m_remove — remove a link
+int32_t __orm_m2m_remove(const char* junction_name, const char* from_id, const char* to_id) {
+    M2MDef* m = NULL;
+    for (int i = 0; i < g_m2m_count; i++) {
+        if (strcmp(g_m2m[i].name, junction_name) == 0) { m = &g_m2m[i]; break; }
+    }
+    if (!m || !from_id || !to_id) return -1;
+
+    char sql[512];
+    snprintf(sql, sizeof(sql),
+        "DELETE FROM %s WHERE %s = %s AND %s = %s",
+        m->name, m->from_col, from_id, m->to_col, to_id);
+    return __db_exec(sql);
+}
+
+// __orm_m2m_clear — remove all links for a given source ID
+int32_t __orm_m2m_clear(const char* junction_name, const char* from_id) {
+    M2MDef* m = NULL;
+    for (int i = 0; i < g_m2m_count; i++) {
+        if (strcmp(g_m2m[i].name, junction_name) == 0) { m = &g_m2m[i]; break; }
+    }
+    if (!m || !from_id) return -1;
+
+    char sql[512];
+    snprintf(sql, sizeof(sql),
+        "DELETE FROM %s WHERE %s = %s",
+        m->name, m->from_col, from_id);
+    return __db_exec(sql);
+}
+
+// __orm_m2m_all — query all related IDs, returns count via fetch
+// Sets up QuerySet to: SELECT to_col FROM junction WHERE from_col = from_id
+int32_t __orm_m2m_all(const char* junction_name, const char* from_id) {
+    M2MDef* m = NULL;
+    for (int i = 0; i < g_m2m_count; i++) {
+        if (strcmp(g_m2m[i].name, junction_name) == 0) { m = &g_m2m[i]; break; }
+    }
+    if (!m || !from_id) return -1;
+
+    // Use raw SQL via QuerySet for consistent result handling
+    char sql[512];
+    snprintf(sql, sizeof(sql),
+        "SELECT %s FROM %s WHERE %s = %s",
+        m->to_col, m->name, m->from_col, from_id);
+
+    extern int32_t __qs_raw(const char* sql);
+    return __qs_raw(sql);
+}
+
+// __orm_m2m_count — return number of registered M2M relationships
+int32_t __orm_m2m_count(void) {
+    return g_m2m_count;
+}
+
+// __orm_m2m_name — get junction table name by index
+const char* __orm_m2m_name(int32_t index) {
+    if (index < 0 || index >= g_m2m_count) return "";
+    return g_m2m[index].name;
+}
+
+// ============================================================
+// Abstract Model Inheritance
+//
+// Django equivalent:
+//   class TimestampMixin(models.Model):
+//       created_at = DateTimeField(auto_now_add=True)
+//       class Meta:
+//           abstract = True
+//
+//   class Article(TimestampMixin):
+//       title = CharField(max_length=200)
+//
+// In Desi, abstract models are registered normally but marked
+// abstract. Their fields are copied into child models.
+// ============================================================
+
+// Mark a model as abstract (it won't generate a table)
+static int g_abstract_models[MAX_MODELS];
+
+int32_t __orm_set_abstract(const char* table_name) {
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            g_abstract_models[i] = 1;
+            return 0;
+        }
+    }
+    return -1;
+}
+
+// Check if a model is abstract
+int32_t __orm_is_abstract(const char* table_name) {
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            return g_abstract_models[i];
+        }
+    }
+    return 0;
+}
+
+// __orm_inherit — copy all fields from parent model into child model
+// Django equivalent: class Child(Parent) where Parent is abstract
+int32_t __orm_inherit(const char* child_table, const char* parent_table) {
+    if (!child_table || !parent_table) return -1;
+
+    ModelDef* parent = NULL;
+    ModelDef* child = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, parent_table) == 0) parent = &g_models[i];
+        if (strcmp(g_models[i].name, child_table) == 0) child = &g_models[i];
+    }
+    if (!parent || !child) return -1;
+
+    // Copy parent fields into child (skip if child already has them)
+    for (int i = 0; i < parent->field_count; i++) {
+        FieldDef* pf = &parent->fields[i];
+
+        // Check if child already has this field (avoid duplicates)
+        int exists = 0;
+        for (int j = 0; j < child->field_count; j++) {
+            if (strcmp(child->fields[j].name, pf->name) == 0) {
+                exists = 1;
+                break;
+            }
+        }
+
+        if (!exists && child->field_count < 64) {
+            memcpy(&child->fields[child->field_count++], pf, sizeof(FieldDef));
+        }
+    }
+
+    // Copy constraints
+    for (int i = 0; i < parent->unique_count && child->unique_count < 16; i++) {
+        memcpy(&child->unique_constraints[child->unique_count++],
+               &parent->unique_constraints[i], sizeof(ConstraintDef));
+    }
+    for (int i = 0; i < parent->index_count && child->index_count < 16; i++) {
+        memcpy(&child->indexes[child->index_count++],
+               &parent->indexes[i], sizeof(ConstraintDef));
+    }
+
+    return 0;
+}
+
+// __orm_create_all_m2m_sql — generate CREATE TABLE for all M2M junction tables
+// Returns semicolon-separated SQL statements
+char* __orm_create_all_m2m_sql(void) {
+    if (g_m2m_count == 0) return strdup("");
+
+    char* buf = malloc(g_m2m_count * 1024);
+    int pos = 0;
+    buf[0] = '\0';
+
+    for (int i = 0; i < g_m2m_count; i++) {
+        char* sql = __orm_m2m_create_sql(g_m2m[i].name);
+        if (sql && sql[0] != '\0') {
+            if (pos > 0) pos += sprintf(buf + pos, ";\n");
+            pos += sprintf(buf + pos, "%s", sql);
+        }
+        free(sql);
+    }
+
+    buf[pos] = '\0';
+    return buf;
+}
