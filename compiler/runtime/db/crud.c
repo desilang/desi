@@ -1355,6 +1355,65 @@ int32_t __qs_delete(void) {
     return __db_execute_stmt(sql);
 }
 
+// __qs_update_multi — UPDATE multiple columns at once
+// Django equivalent: User.objects.filter(id=1).update(name="Bob", age=30)
+// fields: comma-separated "col=val" pairs, e.g. "name=Bob,age=30"
+int32_t __qs_update_pairs(const char* fields) {
+    if (!fields || fields[0] == '\0') return -1;
+
+    DynBuf sql;
+    dynbuf_init(&sql, 256);
+    dynbuf_appendf(&sql, "UPDATE %s SET ", qs_table);
+
+    // Parse "col1=val1,col2=val2" into parameterized SET clauses
+    char buf[4096];
+    strncpy(buf, fields, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    int first = 1;
+    char* saveptr = NULL;
+    char* tok = strtok_r(buf, ",", &saveptr);
+    while (tok) {
+        while (*tok == ' ') tok++;
+        char* eq = strchr(tok, '=');
+        if (!eq) { tok = strtok_r(NULL, ",", &saveptr); continue; }
+
+        *eq = '\0';
+        char* col = tok;
+        char* val = eq + 1;
+
+        // Trim
+        char* col_end = eq - 1;
+        while (col_end > col && *col_end == ' ') *col_end-- = '\0';
+        while (*val == ' ') val++;
+        char* val_end = val + strlen(val) - 1;
+        while (val_end > val && *val_end == ' ') *val_end-- = '\0';
+
+        int param_idx = add_param_copy(val);
+        char ph[16];
+        write_placeholder(ph, sizeof(ph), param_idx);
+
+        if (!first) dynbuf_append(&sql, ", ");
+        dynbuf_appendf(&sql, "%s = %s", col, ph);
+        first = 0;
+
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+
+    if (qs_where[0]) dynbuf_appendf(&sql, " WHERE %s", qs_where);
+
+    debug_log_query(sql.data);
+
+    int32_t result;
+    if (qs_param_count > 0) {
+        result = __db_execute_params(sql.data, qs_params, qs_param_count);
+    } else {
+        result = __db_execute_stmt(sql.data);
+    }
+    dynbuf_free(&sql);
+    return result;
+}
+
 // ============================================================
 // HAVING clause
 // ============================================================

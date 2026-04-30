@@ -1108,6 +1108,60 @@ pub def reverse() -> int:
 	return __qs_reverse()
 
 # ============================================================
+# Multi-Column Update
+# ============================================================
+
+pub def update_pairs(fields: str) -> int:
+	"""UPDATE multiple columns at once using a shorthand string.
+	Django equivalent: qs.update(name="Bob", age=30)
+	fields: comma-separated col=val pairs
+	Usage:
+	  db.objects("users")
+	  db.filter_by("id", "1")
+	  db.update_pairs("name=Bob,age=30")"""
+	return __qs_update_pairs(fields)
+
+# ============================================================
+# Custom Managers — reusable query scopes
+# ============================================================
+
+pub def register_manager(table: str, name: str, filter_expr: str) -> int:
+	"""Register a custom manager with a pre-defined filter.
+	Django equivalent: ActiveManager = Manager().filter(is_active=True)
+	filter_expr: "lookup=value" format using __ lookups
+	Usage:
+	  db.register_manager("users", "active", "is_active__exact=true")
+	  db.register_manager("posts", "published", "status__exact=published")"""
+	return __orm_register_manager(table, name, filter_expr)
+
+pub def use_manager(table: str, name: str) -> int:
+	"""Use a registered manager — sets up QuerySet with the manager's filter.
+	Django equivalent: User.active.all()
+	Usage:
+	  db.use_manager("users", "active")
+	  db.fetch_all()  # only active users"""
+	return __orm_use_manager(table, name)
+
+# ============================================================
+# Reverse Relations
+# ============================================================
+
+pub def reverse_query(source_table: str, fk_field: str, pk_value: str) -> int:
+	"""Query reverse related objects via a ForeignKey.
+	Django equivalent: user.posts.all()
+	Returns row count.
+	Usage:
+	  # Get all posts by author with id=1
+	  let count = db.reverse_query("posts", "author_id", "1")"""
+	return __orm_reverse_query(source_table, fk_field, pk_value)
+
+pub def reverse_count(source_table: str, fk_field: str, pk_value: str) -> int:
+	"""Count reverse related objects via a ForeignKey.
+	Django equivalent: user.posts.count()
+	Usage: let n = db.reverse_count("posts", "author_id", "1")"""
+	return __orm_reverse_count(source_table, fk_field, pk_value)
+
+# ============================================================
 # Additional Database Functions
 # ============================================================
 
@@ -2064,6 +2118,24 @@ pub def __db_func_right(col: str, n: int) -> str
 
 @extern("C")
 pub def __db_func_replace(col: str, old_str: str, new_str: str) -> str
+
+# Multi-column update extern
+@extern("C")
+pub def __qs_update_pairs(fields: str) -> int
+
+# Custom manager externs
+@extern("C")
+pub def __orm_register_manager(table: str, name: str, filter_expr: str) -> int
+
+@extern("C")
+pub def __orm_use_manager(table: str, name: str) -> int
+
+# Reverse relation externs
+@extern("C")
+pub def __orm_reverse_query(source_table: str, fk_field: str, pk_value: str) -> int
+
+@extern("C")
+pub def __orm_reverse_count(source_table: str, fk_field: str, pk_value: str) -> int
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,
