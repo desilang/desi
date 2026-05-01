@@ -1,5 +1,5 @@
 # Test TaskGroup.run() with worker functions
-# SKIPPED: Concurrent output order is non-deterministic
+# SKIP: Concurrent output order is non-deterministic
 import sync
 
 # Worker function that will be spawned

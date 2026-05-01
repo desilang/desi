@@ -1671,3 +1671,112 @@ char* __orm_create_all_m2m_sql(void) {
     buf[pos] = '\0';
     return buf;
 }
+
+// ============================================================
+// Custom Managers — reusable named query scopes
+//
+// Django equivalent:
+//   class ActiveUserManager(Manager):
+//       def get_queryset(self):
+//           return super().get_queryset().filter(is_active=True)
+//   User.active = ActiveUserManager()
+//
+// Desi:
+//   db.register_manager("users", "active", "is_active__exact=true")
+//   db.use_manager("users", "active")  # auto-applies filter
+// ============================================================
+
+#define MAX_MANAGERS 64
+typedef struct {
+    char table[64];
+    char name[64];
+    char filter_key[128];  // lookup, e.g. "is_active__exact"
+    char filter_val[256];  // value, e.g. "true"
+} ManagerDef;
+
+static ManagerDef g_managers[MAX_MANAGERS];
+static int g_manager_count = 0;
+
+// Register a manager with a predefined filter
+int32_t __orm_register_manager(const char* table, const char* name,
+                                const char* filter_expr) {
+    if (!table || !name || !filter_expr) return -1;
+    if (g_manager_count >= MAX_MANAGERS) return -1;
+
+    ManagerDef* m = &g_managers[g_manager_count++];
+    strncpy(m->table, table, sizeof(m->table) - 1);
+    strncpy(m->name, name, sizeof(m->name) - 1);
+
+    // Parse "key=value" format
+    char buf[384];
+    strncpy(buf, filter_expr, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char* eq = strchr(buf, '=');
+    if (eq) {
+        *eq = '\0';
+        strncpy(m->filter_key, buf, sizeof(m->filter_key) - 1);
+        strncpy(m->filter_val, eq + 1, sizeof(m->filter_val) - 1);
+    } else {
+        strncpy(m->filter_key, filter_expr, sizeof(m->filter_key) - 1);
+        m->filter_val[0] = '\0';
+    }
+
+    return 0;
+}
+
+// Use a registered manager — sets up QuerySet with pre-defined filter
+int32_t __orm_use_manager(const char* table, const char* name) {
+    if (!table || !name) return -1;
+
+    for (int i = 0; i < g_manager_count; i++) {
+        if (strcmp(g_managers[i].table, table) == 0 &&
+            strcmp(g_managers[i].name, name) == 0) {
+            extern int32_t __qs_reset(const char* table);
+            extern int32_t __qs_filter(const char* lookup, const char* val);
+            __qs_reset(table);
+            __qs_filter(g_managers[i].filter_key, g_managers[i].filter_val);
+            return 0;
+        }
+    }
+
+    return -1; // manager not found
+}
+
+// ============================================================
+// Reverse Relations — query from FK target back to FK source
+//
+// Django equivalent:
+//   user.posts.all()  →  Post.objects.filter(author_id=user.pk)
+//
+// Desi:
+//   db.reverse_query("posts", "author_id", "1")
+//   # Builds: SELECT * FROM posts WHERE author_id = 1
+// ============================================================
+
+int32_t __orm_reverse_query(const char* source_table, const char* fk_field,
+                             const char* pk_value) {
+    if (!source_table || !fk_field || !pk_value) return -1;
+
+    extern int32_t __qs_reset(const char* table);
+    extern int32_t __qs_filter(const char* lookup, const char* val);
+    extern int32_t __qs_fetch(void);
+
+    __qs_reset(source_table);
+    __qs_filter(fk_field, pk_value);
+    return __qs_fetch();
+}
+
+// __orm_reverse_count — count reverse related objects
+int32_t __orm_reverse_count(const char* source_table, const char* fk_field,
+                             const char* pk_value) {
+    if (!source_table || !fk_field || !pk_value) return -1;
+
+    extern int32_t __qs_reset(const char* table);
+    extern int32_t __qs_filter(const char* lookup, const char* val);
+    extern int32_t __qs_count(void);
+
+    __qs_reset(source_table);
+    __qs_filter(fk_field, pk_value);
+    return __qs_count();
+}
