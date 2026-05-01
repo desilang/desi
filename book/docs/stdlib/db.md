@@ -563,6 +563,130 @@ db.filter_by("id", "1")
 db.update_pairs("name=Bob,age=30")   # UPDATE users SET name='Bob', age=30 WHERE id=1
 ```
 
+### Multi-Table Inheritance
+
+Create parent-child table relationships where the child table references the parent via a OneToOne FK:
+
+```desi
+import db
+
+# Parent model
+db.model("places")
+db.auto_field("id")
+db.char_field("name", 100, 0, 0)
+db.char_field("address", 200, 0, 0)
+
+# Child model inherits from parent
+db.model("restaurants")
+db.auto_field("id")
+db.bool_field("serves_pizza", 0, 0)
+db.multi_table_inherit("restaurants", "places")
+# Auto-adds: places_ptr_id INTEGER NOT NULL UNIQUE REFERENCES places(id) ON DELETE CASCADE
+
+let sql1 = db.create_table_sql("places")
+let sql2 = db.create_table_sql("restaurants")
+db.execute(sql1)
+db.execute(sql2)
+```
+
+Django equivalent: `class Restaurant(Place): ...` — creates both tables with an automatic FK pointer.
+
+### Proxy Models
+
+Create an alias for an existing table — same data, different name. Useful for attaching different managers:
+
+```desi
+import db
+
+db.model("users")
+db.auto_field("id")
+db.char_field("name", 100, 0, 0)
+db.bool_field("is_active", 0, 0)
+
+# Register a proxy — no new table created
+db.proxy_model("active_users", "users")
+db.register_manager("active_users", "default", "is_active__exact=true")
+
+# Use the proxy with its manager
+db.use_manager("active_users", "default")
+let n = db.fetch_all()  # queries "users" table with is_active filter
+
+# Resolve proxy back to base table
+let base = db.resolve_proxy("active_users")  # → "users"
+```
+
+Django equivalent: `class Meta: proxy = True`.
+
+### Built-in Audit Trail
+
+Track all changes to a model automatically — no external packages needed:
+
+```desi
+import db
+
+# Enable auditing for a model
+db.enable_audit("users")
+
+# Create the history table
+let sql = db.create_audit_table("users")
+db.execute(sql)
+# Creates: users_history (history_id, action, record_id, changed_at, changed_by, + all model fields)
+
+# Log changes (called automatically by save/delete when auditing is enabled)
+db.audit_record("users", "INSERT", "1")
+db.audit_record("users", "UPDATE", "1")
+
+# Query history for a specific record
+let n = db.audit_log("users", "1")  # newest first
+for i in range(n):
+    let action = db.get_field(i, "action")
+    let when = db.get_field(i, "changed_at")
+    print(f"{action} at {when}")
+
+# Check if auditing is enabled
+if db.is_audited("users") == 1:
+    print("users table is audited")
+```
+
+Django equivalent: `django-simple-history` — but built-in with zero dependencies.
+
+### Time-Travel Queries
+
+Query the state of a record at a specific point in time (requires audit trail):
+
+```desi
+import db
+
+db.enable_audit("users")
+
+# What did user #1 look like on Jan 1, 2024?
+db.as_of("users", "1", "2024-01-01 00:00:00")
+let name = db.get_field(0, "name")
+print(f"Name on Jan 1: {name}")
+```
+
+Django equivalent: `user.history.as_of(datetime(2024, 1, 1))`.
+
+### Runtime Field Validation
+
+Check if a field name exists on a model with "did you mean?" suggestions for typos:
+
+```desi
+import db
+
+db.model("users")
+db.auto_field("id")
+db.char_field("name", 100, 0, 0)
+db.char_field("email", 255, 0, 0)
+
+# Validate field names at runtime
+let ok = db.check_field("users", "name")    # → 1 (valid)
+let bad = db.check_field("users", "nmae")   # → 0, prints: WARNING: did you mean 'name'?
+let unk = db.check_field("users", "xyz")    # → 0, prints: WARNING: unknown field 'xyz'
+```
+
+Useful for debugging and building safer query builders.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
@@ -576,6 +700,51 @@ db.migration_status_dir("migrations")    # Show applied/pending
 # Multi-app: apply across apps in dependency order
 db.migrate_all(["accounts/migrations", "orders/migrations"])
 ```
+
+### Migration Squashing
+
+Consolidate many migration files into one:
+
+```desi
+# Squash all migrations in a directory into a single file
+db.squash_migrations("migrations", "0001_squashed")
+```
+
+Django equivalent: `python manage.py squashmigrations`.
+
+### Data Migrations
+
+Run arbitrary code during migrations:
+
+```desi
+# Register a data migration callback, then run it
+db.op_run_code("uppercase_names")
+```
+
+Django equivalent: `RunPython(forwards, reverse)`.
+
+### Dry Run
+
+Preview what migrations would generate without writing files:
+
+```desi
+let preview = db.makemigrations_dryrun("migrations")
+print(preview)
+```
+
+Django equivalent: `python manage.py makemigrations --dry-run`.
+
+### Inspect Database
+
+Reverse-engineer model definitions from an existing database:
+
+```desi
+let code = db.inspectdb()
+print(code)
+# Outputs Desi code with db.model/field calls matching existing tables
+```
+
+Django equivalent: `python manage.py inspectdb`.
 
 See [Migrations](migrations.md) for the full guide.
 
