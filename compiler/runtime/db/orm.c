@@ -783,6 +783,8 @@ char* __orm_field_spec(const char* table_name, int32_t field_index) {
 static char g_instance_table[128];
 static char g_instance_fields[MAX_INSTANCE_FIELDS][64];
 static char g_instance_values[MAX_INSTANCE_FIELDS][4096];
+static char g_instance_original[MAX_INSTANCE_FIELDS][4096]; // snapshot for dirty tracking
+static int  g_instance_dirty[MAX_INSTANCE_FIELDS];           // 1 = field changed
 static int  g_instance_field_count = 0;
 static int  g_instance_pk_value = 0;  // 0 = new (INSERT), >0 = existing (UPDATE)
 
@@ -813,6 +815,7 @@ int32_t __orm_hydrate(const char* table_name, int32_t row) {
     g_instance_table[sizeof(g_instance_table) - 1] = '\0';
     g_instance_field_count = 0;
     g_instance_pk_value = 0;
+    memset(g_instance_dirty, 0, sizeof(g_instance_dirty));
 
     // Load each field from the result row
     for (int i = 0; i < model->field_count && i < MAX_INSTANCE_FIELDS; i++) {
@@ -824,10 +827,15 @@ int32_t __orm_hydrate(const char* table_name, int32_t row) {
         if (val) {
             strncpy(g_instance_values[i], val, 4095);
             g_instance_values[i][4095] = '\0';
+            // Snapshot original for dirty tracking
+            strncpy(g_instance_original[i], val, 4095);
+            g_instance_original[i][4095] = '\0';
             free(val);
         } else {
             g_instance_values[i][0] = '\0';
+            g_instance_original[i][0] = '\0';
         }
+        g_instance_dirty[i] = 0;
 
         // Track PK for save() INSERT vs UPDATE detection
         if (f->primary_key || f->type == FIELD_AUTO) {
@@ -860,6 +868,10 @@ int32_t __orm_instance_set(const char* field_name, const char* value) {
     // Update existing field
     for (int i = 0; i < g_instance_field_count; i++) {
         if (strcmp(g_instance_fields[i], field_name) == 0) {
+            // Mark dirty if value actually changed
+            if (strcmp(g_instance_values[i], value) != 0) {
+                g_instance_dirty[i] = 1;
+            }
             strncpy(g_instance_values[i], value, 4095);
             g_instance_values[i][4095] = '\0';
             return 0;
@@ -869,6 +881,7 @@ int32_t __orm_instance_set(const char* field_name, const char* value) {
     // Add new field if space available
     if (g_instance_field_count < MAX_INSTANCE_FIELDS) {
         int idx = g_instance_field_count++;
+        g_instance_dirty[idx] = 1; // new field is always dirty
         strncpy(g_instance_fields[idx], field_name, 63);
         g_instance_fields[idx][63] = '\0';
         strncpy(g_instance_values[idx], value, 4095);
@@ -897,6 +910,9 @@ extern int32_t __qs_filter(const char* key, const char* val);
 extern int32_t __qs_update(void);
 extern void    __qs_clear(void);
 
+// Forward declarations
+void __orm_instance_clear(void);
+
 // __orm_save — persist the hydrated instance to the database
 // If PK > 0: UPDATE table SET field1=val1, ... WHERE pk=pk_value
 // If PK == 0: INSERT into table (field1, ...) VALUES (val1, ...)
@@ -906,7 +922,7 @@ extern void    __qs_clear(void);
 int32_t __orm_save(void) {
     if (g_instance_table[0] == '\0' || g_instance_field_count == 0) return -1;
 
-    // Find the model to identify the PK field
+    // Find the model to identify PK + auto_now fields
     ModelDef* model = NULL;
     for (int i = 0; i < g_model_count; i++) {
         if (strcmp(g_models[i].name, g_instance_table) == 0) {
@@ -917,7 +933,7 @@ int32_t __orm_save(void) {
     if (!model) return -1;
 
     // Find PK field name
-    const char* pk_field = "id";  // default
+    const char* pk_field = "id";
     for (int i = 0; i < model->field_count; i++) {
         if (model->fields[i].primary_key || model->fields[i].type == FIELD_AUTO) {
             pk_field = model->fields[i].name;
@@ -925,15 +941,36 @@ int32_t __orm_save(void) {
         }
     }
 
+    // Auto-populate auto_now fields (update timestamps on every save)
+    for (int i = 0; i < model->field_count; i++) {
+        if (model->fields[i].auto_now) {
+            // Set the field to NOW() placeholder — the DB handles actual value
+            __orm_instance_set(model->fields[i].name, "NOW()");
+        }
+    }
+
+    // Fire pre_save signal
+    extern int32_t __orm_fire_signal(const char* table, int32_t signal_type);
+    int32_t sig_rc = __orm_fire_signal(g_instance_table, 0); // SIGNAL_PRE_SAVE
+    if (sig_rc != 0) return -1; // handler vetoed
+
     // Clear QuerySet and set table
     extern int32_t __qs_reset(const char* table);
     __qs_reset(g_instance_table);
 
+    int32_t result;
     if (g_instance_pk_value > 0) {
-        // UPDATE: set all non-PK fields, filter by PK
+        // UPDATE: only dirty fields (if dirty tracking enabled)
+        int any_dirty = 0;
+        for (int i = 0; i < g_instance_field_count; i++) {
+            if (g_instance_dirty[i]) { any_dirty = 1; break; }
+        }
+
         for (int i = 0; i < g_instance_field_count; i++) {
             if (strcmp(g_instance_fields[i], pk_field) == 0) continue;
-            // Skip auto fields
+            // If we have dirty tracking data and this field isn't dirty, skip
+            if (any_dirty && !g_instance_dirty[i]) continue;
+            // Skip auto/generated fields
             int skip = 0;
             for (int j = 0; j < model->field_count; j++) {
                 if (strcmp(model->fields[j].name, g_instance_fields[i]) == 0) {
@@ -948,12 +985,10 @@ int32_t __orm_save(void) {
             __qs_set_field(g_instance_fields[i], g_instance_values[i]);
         }
 
-        // Filter by PK
         char pk_str[32];
         snprintf(pk_str, sizeof(pk_str), "%d", g_instance_pk_value);
         __qs_filter(pk_field, pk_str);
-
-        return __qs_update();
+        result = __qs_update();
     } else {
         // INSERT: set all non-auto fields
         for (int i = 0; i < g_instance_field_count; i++) {
@@ -970,9 +1005,125 @@ int32_t __orm_save(void) {
             if (skip) continue;
             __qs_set_field(g_instance_fields[i], g_instance_values[i]);
         }
-
-        return __qs_save();
+        result = __qs_save();
     }
+
+    // Fire post_save signal
+    if (result == 0) {
+        __orm_fire_signal(g_instance_table, 1); // SIGNAL_POST_SAVE
+        // Reset dirty flags after successful save
+        memset(g_instance_dirty, 0, sizeof(g_instance_dirty));
+        // Update originals to current values
+        for (int i = 0; i < g_instance_field_count; i++) {
+            strncpy(g_instance_original[i], g_instance_values[i], 4095);
+            g_instance_original[i][4095] = '\0';
+        }
+    }
+
+    return result;
+}
+
+// __orm_instance_delete — delete the hydrated instance from the database
+// Django equivalent: user.delete()
+int32_t __orm_instance_delete(void) {
+    if (g_instance_table[0] == '\0' || g_instance_pk_value <= 0) return -1;
+
+    // Find model for PK field name
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, g_instance_table) == 0) {
+            model = &g_models[i]; break;
+        }
+    }
+    if (!model) return -1;
+
+    const char* pk_field = "id";
+    for (int i = 0; i < model->field_count; i++) {
+        if (model->fields[i].primary_key || model->fields[i].type == FIELD_AUTO) {
+            pk_field = model->fields[i].name; break;
+        }
+    }
+
+    // Fire pre_delete signal
+    extern int32_t __orm_fire_signal(const char* table, int32_t signal_type);
+    int32_t sig_rc = __orm_fire_signal(g_instance_table, 2); // SIGNAL_PRE_DELETE
+    if (sig_rc != 0) return -1;
+
+    extern int32_t __qs_reset(const char* table);
+    extern int32_t __qs_delete(void);
+    __qs_reset(g_instance_table);
+
+    char pk_str[32];
+    snprintf(pk_str, sizeof(pk_str), "%d", g_instance_pk_value);
+    __qs_filter(pk_field, pk_str);
+
+    int32_t result = __qs_delete();
+
+    if (result == 0) {
+        __orm_fire_signal(g_instance_table, 3); // SIGNAL_POST_DELETE
+        // Clear instance after successful delete
+        __orm_instance_clear();
+    }
+
+    return result;
+}
+
+// __orm_refresh_from_db — re-fetch the current instance from DB
+// Django equivalent: user.refresh_from_db()
+int32_t __orm_refresh_from_db(void) {
+    if (g_instance_table[0] == '\0' || g_instance_pk_value <= 0) return -1;
+
+    // Find PK field name
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, g_instance_table) == 0) {
+            model = &g_models[i]; break;
+        }
+    }
+    if (!model) return -1;
+
+    const char* pk_field = "id";
+    for (int i = 0; i < model->field_count; i++) {
+        if (model->fields[i].primary_key || model->fields[i].type == FIELD_AUTO) {
+            pk_field = model->fields[i].name; break;
+        }
+    }
+
+    // Query: SELECT * FROM table WHERE pk = pk_value
+    extern int32_t __qs_reset(const char* table);
+    extern int32_t __qs_fetch(void);
+    __qs_reset(g_instance_table);
+
+    char pk_str[32];
+    snprintf(pk_str, sizeof(pk_str), "%d", g_instance_pk_value);
+    __qs_filter(pk_field, pk_str);
+
+    int32_t rc = __qs_fetch();
+    if (rc <= 0) return -1;
+
+    // Re-hydrate from row 0
+    return __orm_hydrate(g_instance_table, 0);
+}
+
+// __orm_is_dirty — check if any field has been modified since hydration
+int32_t __orm_is_dirty(void) {
+    for (int i = 0; i < g_instance_field_count; i++) {
+        if (g_instance_dirty[i]) return 1;
+    }
+    return 0;
+}
+
+// __orm_dirty_fields — return comma-separated list of dirty field names
+char* __orm_dirty_fields(void) {
+    char buf[2048] = {0};
+    int pos = 0;
+    for (int i = 0; i < g_instance_field_count; i++) {
+        if (g_instance_dirty[i]) {
+            if (pos > 0) pos += sprintf(buf + pos, ",");
+            pos += sprintf(buf + pos, "%s", g_instance_fields[i]);
+        }
+    }
+    return strdup(buf);
 }
 
 // __orm_instance_clear — reset instance state
@@ -980,6 +1131,28 @@ void __orm_instance_clear(void) {
     g_instance_table[0] = '\0';
     g_instance_field_count = 0;
     g_instance_pk_value = 0;
+    memset(g_instance_dirty, 0, sizeof(g_instance_dirty));
+}
+
+// ============================================================
+// OneToOneField — ForeignKey with UNIQUE constraint
+// Django equivalent: OneToOneField(User, on_delete=CASCADE)
+// ============================================================
+
+int32_t __orm_one_to_one_field(const char* name, const char* ref_table,
+                                const char* ref_field, const char* on_delete,
+                                int32_t nullable) {
+    // Register as FK with unique=1
+    int32_t rc = __orm_foreign_key(name, ref_table, ref_field, on_delete, nullable);
+    if (rc != 0) return rc;
+    // Set unique on the just-added field
+    if (g_current_model >= 0) {
+        ModelDef* m = &g_models[g_current_model];
+        if (m->field_count > 0) {
+            m->fields[m->field_count - 1].unique = 1;
+        }
+    }
+    return 0;
 }
 
 // ============================================================
@@ -1353,6 +1526,46 @@ const char* __orm_m2m_name(int32_t index) {
     if (index < 0 || index >= g_m2m_count) return "";
     return g_m2m[index].name;
 }
+
+// __orm_m2m_set — replace all links atomically: clear + add each
+// Django equivalent: article.tags.set([1, 2, 3])
+// id_list: comma-separated IDs (e.g. "1,2,3")
+int32_t __orm_m2m_set(const char* junction_name, const char* from_id,
+                       const char* id_list) {
+    if (!junction_name || !from_id || !id_list) return -1;
+
+    // Step 1: clear all existing links
+    int32_t rc = __orm_m2m_clear(junction_name, from_id);
+    if (rc != 0) return rc;
+
+    // Step 2: add each ID from the comma-separated list
+    char buf[4096];
+    strncpy(buf, id_list, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char* tok = strtok(buf, ",");
+    while (tok) {
+        // Trim whitespace
+        while (*tok == ' ') tok++;
+        char* end = tok + strlen(tok) - 1;
+        while (end > tok && *end == ' ') *end-- = '\0';
+
+        if (*tok != '\0') {
+            rc = __orm_m2m_add(junction_name, from_id, tok);
+            if (rc != 0) return rc;
+        }
+        tok = strtok(NULL, ",");
+    }
+
+    return 0;
+}
+
+// ============================================================
+// QuerySet .reverse() — flip current ordering
+// Django equivalent: qs.reverse()
+// ============================================================
+
+extern int32_t __qs_reverse(void);
 
 // ============================================================
 // Abstract Model Inheritance

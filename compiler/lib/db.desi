@@ -1049,6 +1049,100 @@ pub def instance_clear() -> int:
 	__orm_instance_clear()
 	return 0
 
+pub def instance_delete() -> int:
+	"""Delete the current hydrated instance from the database.
+	Django equivalent: user.delete()
+	Fires pre_delete/post_delete signals.
+	Clears instance state after successful delete."""
+	return __orm_instance_delete()
+
+pub def refresh_from_db() -> int:
+	"""Re-fetch the current instance from the database.
+	Django equivalent: user.refresh_from_db()
+	Useful when another process may have modified the row."""
+	return __orm_refresh_from_db()
+
+pub def is_dirty() -> int:
+	"""Check if any field has been modified since hydration.
+	Returns 1 if dirty, 0 if clean.
+	Usage:
+	  db.hydrate("users", 0)
+	  db.instance_set("name", "Bob")
+	  if db.is_dirty() == 1:
+	    db.instance_save()"""
+	return __orm_is_dirty()
+
+pub def dirty_fields() -> str:
+	"""Return comma-separated list of dirty (modified) field names.
+	Returns "" if no fields are dirty.
+	Usage: let changed = db.dirty_fields()  # e.g. "name,email" """
+	return __orm_dirty_fields()
+
+pub def one_to_one_field(name: str, ref_table: str, ref_field: str, on_delete: str, nullable: int) -> int:
+	"""Register a OneToOneField (FK with UNIQUE constraint).
+	Django equivalent: OneToOneField(User, on_delete=CASCADE)
+	Usage: db.one_to_one_field("profile_id", "profiles", "id", "CASCADE", 0)"""
+	return __orm_one_to_one_field(name, ref_table, ref_field, on_delete, nullable)
+
+# ============================================================
+# M2M set() operation
+# ============================================================
+
+pub def m2m_set(junction: str, from_id: str, id_list: str) -> int:
+	"""Replace all M2M links atomically.
+	Django equivalent: article.tags.set([1, 2, 3])
+	id_list: comma-separated IDs
+	Usage: db.m2m_set("article_tags", "1", "3,5,7")"""
+	return __orm_m2m_set(junction, from_id, id_list)
+
+# ============================================================
+# QuerySet .reverse()
+# ============================================================
+
+pub def reverse() -> int:
+	"""Reverse the current ordering. Flips ASC↔DESC.
+	Django equivalent: qs.reverse()
+	Usage:
+	  db.order_by("name")  # ASC
+	  db.reverse()         # now DESC"""
+	return __qs_reverse()
+
+# ============================================================
+# Additional Database Functions
+# ============================================================
+
+pub def func_substr(col: str, start: int, length: int) -> str:
+	"""SUBSTR(col, start, length). PG: SUBSTR, MySQL: SUBSTRING."""
+	return __db_func_substr(col, start, length)
+
+pub def func_trim(col: str) -> str:
+	"""TRIM(col) — remove leading/trailing whitespace."""
+	return __db_func_trim(col)
+
+pub def func_round(col: str, decimals: int) -> str:
+	"""ROUND(col, decimals)."""
+	return __db_func_round(col, decimals)
+
+pub def func_ceil(col: str) -> str:
+	"""CEIL(col) — round up to nearest integer."""
+	return __db_func_ceil(col)
+
+pub def func_floor(col: str) -> str:
+	"""FLOOR(col) — round down to nearest integer."""
+	return __db_func_floor(col)
+
+pub def func_left(col: str, n: int) -> str:
+	"""LEFT(col, n) — first n characters."""
+	return __db_func_left(col, n)
+
+pub def func_right(col: str, n: int) -> str:
+	"""RIGHT(col, n) — last n characters."""
+	return __db_func_right(col, n)
+
+pub def func_replace(col: str, old_str: str, new_str: str) -> str:
+	"""REPLACE(col, old, new) — string replacement in SQL."""
+	return __db_func_replace(col, old_str, new_str)
+
 # ============================================================
 # Field Validation
 #
@@ -1920,6 +2014,56 @@ pub def __orm_is_abstract(table: str) -> int
 
 @extern("C")
 pub def __orm_inherit(child: str, parent: str) -> int
+
+# Instance lifecycle externs
+@extern("C")
+pub def __orm_instance_delete() -> int
+
+@extern("C")
+pub def __orm_refresh_from_db() -> int
+
+@extern("C")
+pub def __orm_is_dirty() -> int
+
+@extern("C")
+pub def __orm_dirty_fields() -> str
+
+# OneToOneField extern
+@extern("C")
+pub def __orm_one_to_one_field(name: str, ref_table: str, ref_field: str, on_delete: str, nullable: int) -> int
+
+# M2M set extern
+@extern("C")
+pub def __orm_m2m_set(junction: str, from_id: str, id_list: str) -> int
+
+# QuerySet reverse extern
+@extern("C")
+pub def __qs_reverse() -> int
+
+# Additional DB function externs
+@extern("C")
+pub def __db_func_substr(col: str, start: int, length: int) -> str
+
+@extern("C")
+pub def __db_func_trim(col: str) -> str
+
+@extern("C")
+pub def __db_func_round(col: str, decimals: int) -> str
+
+@extern("C")
+pub def __db_func_ceil(col: str) -> str
+
+@extern("C")
+pub def __db_func_floor(col: str) -> str
+
+@extern("C")
+pub def __db_func_left(col: str, n: int) -> str
+
+@extern("C")
+pub def __db_func_right(col: str, n: int) -> str
+
+@extern("C")
+pub def __db_func_replace(col: str, old_str: str, new_str: str) -> str
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,

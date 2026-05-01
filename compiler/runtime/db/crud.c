@@ -1081,6 +1081,112 @@ char* __db_func_now(void) {
     return strdup("NOW()");
 }
 
+// Substr("col", 1, 5) → "SUBSTR(col, 1, 5)" (PG) / "SUBSTRING(col, 1, 5)" (MySQL)
+char* __db_func_substr(const char* col, int32_t start, int32_t len) {
+    char* buf = (char*)malloc(strlen(col) + 64);
+    if (g_crud_dialect == DIALECT_MYSQL) {
+        sprintf(buf, "SUBSTRING(%s, %d, %d)", col, start, len);
+    } else {
+        sprintf(buf, "SUBSTR(%s, %d, %d)", col, start, len);
+    }
+    return buf;
+}
+
+// Trim("col") → "TRIM(col)"
+char* __db_func_trim(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "TRIM(%s)", col);
+    return buf;
+}
+
+// Round("col", 2) → "ROUND(col, 2)"
+char* __db_func_round(const char* col, int32_t decimals) {
+    char* buf = (char*)malloc(strlen(col) + 32);
+    sprintf(buf, "ROUND(%s, %d)", col, decimals);
+    return buf;
+}
+
+// Ceil("col") → "CEIL(col)"
+char* __db_func_ceil(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "CEIL(%s)", col);
+    return buf;
+}
+
+// Floor("col") → "FLOOR(col)"
+char* __db_func_floor(const char* col) {
+    char* buf = (char*)malloc(strlen(col) + 16);
+    sprintf(buf, "FLOOR(%s)", col);
+    return buf;
+}
+
+// Left("col", 5) → "LEFT(col, 5)"
+char* __db_func_left(const char* col, int32_t n) {
+    char* buf = (char*)malloc(strlen(col) + 32);
+    sprintf(buf, "LEFT(%s, %d)", col, n);
+    return buf;
+}
+
+// Right("col", 5) → "RIGHT(col, 5)"
+char* __db_func_right(const char* col, int32_t n) {
+    char* buf = (char*)malloc(strlen(col) + 32);
+    sprintf(buf, "RIGHT(%s, %d)", col, n);
+    return buf;
+}
+
+// Replace("col", "old", "new") → "REPLACE(col, 'old', 'new')"
+char* __db_func_replace(const char* col, const char* old_str, const char* new_str) {
+    size_t len = strlen(col) + strlen(old_str) + strlen(new_str) + 32;
+    char* buf = (char*)malloc(len);
+    snprintf(buf, len, "REPLACE(%s, '%s', '%s')", col, old_str, new_str);
+    return buf;
+}
+
+// ============================================================
+// QuerySet .reverse() — flip current ordering
+// Django equivalent: qs.reverse()
+// ============================================================
+
+int32_t __qs_reverse(void) {
+    if (qs_order[0] == '\0') return 0; // nothing to reverse
+
+    // Parse the current order and flip ASC↔DESC
+    char buf[1024];
+    strncpy(buf, qs_order, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char result[1024] = {0};
+    int pos = 0;
+
+    char* saveptr = NULL;
+    char* tok = strtok_r(buf, ",", &saveptr);
+    while (tok) {
+        while (*tok == ' ') tok++;
+        if (pos > 0) pos += sprintf(result + pos, ", ");
+
+        // Check if token ends with ASC or DESC
+        char* asc_pos = strstr(tok, " ASC");
+        char* desc_pos = strstr(tok, " DESC");
+
+        if (desc_pos && (!asc_pos || desc_pos > asc_pos)) {
+            *desc_pos = '\0';
+            pos += sprintf(result + pos, "%s ASC", tok);
+        } else if (asc_pos) {
+            *asc_pos = '\0';
+            pos += sprintf(result + pos, "%s DESC", tok);
+        } else {
+            // No explicit direction → assume ASC, flip to DESC
+            pos += sprintf(result + pos, "%s DESC", tok);
+        }
+
+        tok = strtok_r(NULL, ",", &saveptr);
+    }
+
+    strncpy(qs_order, result, sizeof(qs_order) - 1);
+    qs_order[sizeof(qs_order) - 1] = '\0';
+    return 0;
+}
+
 // ============================================================
 // Case/When — conditional SQL expression builder
 //

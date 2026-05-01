@@ -466,6 +466,69 @@ db.inherit("articles", "timestamp_mixin")
 
 Inheritance copies fields, unique constraints, and indexes from parent to child. The parent model is skipped during table creation.
 
+### Dirty Field Tracking
+
+Only update columns that actually changed:
+
+```desi
+import db
+
+db.hydrate("users", 0)            # load from query result
+db.instance_set("name", "Bob")    # mark "name" as dirty
+
+if db.is_dirty() == 1:
+    let changed = db.dirty_fields()  # "name"
+    db.instance_save()               # UPDATE users SET name='Bob' WHERE id=1
+    # Only the dirty field is included in the UPDATE
+```
+
+### Instance Delete & Refresh
+
+```desi
+# Delete the hydrated instance
+db.instance_delete()               # DELETE FROM users WHERE id=1
+                                    # Fires pre_delete/post_delete signals
+
+# Re-fetch a stale instance
+db.refresh_from_db()               # SELECT * FROM users WHERE id=1
+                                    # Reloads all fields, clears dirty flags
+```
+
+### OneToOneField
+
+ForeignKey with UNIQUE constraint:
+
+```desi
+db.model("user_profiles")
+db.auto_field("id")
+db.one_to_one_field("user_id", "users", "id", "CASCADE", 0)
+db.char_field("bio", 500, 0, 0)
+```
+
+### QuerySet Reverse
+
+```desi
+db.objects("users")
+db.order_by("name")    # name ASC
+db.reverse()           # name DESC (flips all ORDER BY directions)
+```
+
+### Additional Database Functions
+
+```desi
+# String functions
+db.func_substr("name", 1, 5)              # SUBSTR(name, 1, 5)
+db.func_trim("name")                       # TRIM(name)
+db.func_left("name", 3)                    # LEFT(name, 3)
+db.func_right("name", 3)                   # RIGHT(name, 3)
+db.func_replace("name", "old", "new")      # REPLACE(name, 'old', 'new')
+
+# Numeric functions
+db.func_round("price", 2)                  # ROUND(price, 2)
+db.func_ceil("price")                       # CEIL(price)
+db.func_floor("price")                      # FLOOR(price)
+```
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
