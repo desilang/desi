@@ -108,6 +108,8 @@ nav:
     - Arena Memory: language/arena.md
     - Pointers (cptr): language/ptr.md
     - JSON: language/json.md
+    - Safe FFI: language/safe-ffi.md
+    - Assert: language/assert.md
   - Generics:
     - Trait Bounds: generics/trait-bounds.md
     - Turbofish Syntax: generics/turbofish.md
@@ -115,6 +117,7 @@ nav:
     - Builtin Functions: reference/builtins.md
     - Operators: reference/operators.md
     - Keywords: reference/keywords.md
+    - desic CLI: reference/desic-cli.md
     - desic doc: reference/desic-doc.md
   - Standard Library:
     - Strings: stdlib/strings.md
@@ -130,7 +133,9 @@ nav:
     - JSON: stdlib/json.md
     - TOML: stdlib/toml.md
     - CSV: stdlib/csv.md
-    - HTTP: stdlib/http.md
+    - HTTP Client: stdlib/http.md
+    - HTTP Server: stdlib/http_server.md
+    - WebSocket: stdlib/websocket.md
     - Net: stdlib/net.md
     - Logging: stdlib/log.md
     - Formatting: stdlib/fmt.md
