@@ -385,6 +385,38 @@ db.instance_clear()
 
 For new instances (PK == 0), `instance_save()` performs an INSERT instead.
 
+### Field Validation
+
+Register constraints per (table, field) and validate before saving:
+
+```desi
+import db
+
+# Register validators (min_len, max_len, min_val, max_val — use 0 for unused)
+db.add_validator("users", "name", 2, 100, 0, 0)     # name: 2-100 chars
+db.add_validator("users", "age", 0, 0, 0, 150)      # age: 0-150
+
+# Validate before save
+db.hydrate("users", 0)
+db.instance_set("name", "")
+let err = db.validate_instance()
+if err != "":
+    print("Validation failed: " + err)
+```
+
+### Signals
+
+Fire lifecycle hooks (pre/post save/delete):
+
+```desi
+# Signal types: 0=pre_save, 1=post_save, 2=pre_delete, 3=post_delete
+db.fire_signal("users", 0)  # fire pre_save handlers
+db.instance_save()
+db.fire_signal("users", 1)  # fire post_save handlers
+```
+
+Signal handlers are registered via C function pointers in the runtime and can veto operations by returning -1.
+
 ## File-Based Migrations
 
 For real projects, generate version-controlled migration files with portable operations:
