@@ -994,6 +994,62 @@ pub def case_end(alias: str) -> str:
 	return __db_case_end(alias)
 
 # ============================================================
+# Model Instance Hydration + Save
+#
+# Django equivalents:
+#   user = User.objects.get(id=1)    → hydrate
+#   user.name = "Alice"              → instance_set
+#   user.save()                      → instance_save
+# ============================================================
+
+pub def hydrate(table: str, row: int) -> int:
+	"""Load a query result row into the model instance cache.
+	After fetching rows, call this to populate the instance.
+	table: the model table name (e.g. "users")
+	row: row index from the query result
+	Returns: field count loaded, or -1 on error.
+	Usage:
+	  db.objects("users")
+	  db.filter("id", "1")
+	  db.fetch_all()
+	  db.hydrate("users", 0)
+	  let name = db.instance_get("name")"""
+	return __orm_hydrate(table, row)
+
+pub def instance_get(field: str) -> str:
+	"""Get a field value from the hydrated instance.
+	Returns the value as a string.
+	Usage: let email = db.instance_get("email")"""
+	return __orm_instance_get(field)
+
+pub def instance_set(field: str, value: str) -> int:
+	"""Set a field value on the hydrated instance (in-memory only).
+	Call instance_save() to persist to database.
+	Usage: db.instance_set("name", "Bob")"""
+	return __orm_instance_set(field, value)
+
+pub def instance_save() -> int:
+	"""Persist the hydrated instance to the database.
+	If PK > 0: UPDATE the existing row.
+	If PK == 0: INSERT a new row.
+	Django equivalent: user.save()
+	Usage:
+	  db.hydrate("users", 0)
+	  db.instance_set("name", "Alice")
+	  db.instance_save()"""
+	return __orm_save()
+
+pub def instance_pk() -> int:
+	"""Return the primary key of the hydrated instance.
+	0 = new instance, >0 = existing row."""
+	return __orm_instance_pk()
+
+pub def instance_clear() -> int:
+	"""Clear the instance cache, resetting all fields."""
+	__orm_instance_clear()
+	return 0
+
+# ============================================================
 # get_or_create
 # ============================================================
 
@@ -1696,6 +1752,25 @@ pub def __db_using(db_name: str) -> int
 
 @extern("C")
 pub def __qs_raw(sql: str) -> int
+
+# Model Instance externs
+@extern("C")
+pub def __orm_hydrate(table: str, row: int) -> int
+
+@extern("C")
+pub def __orm_instance_get(field: str) -> str
+
+@extern("C")
+pub def __orm_instance_set(field: str, value: str) -> int
+
+@extern("C")
+pub def __orm_save() -> int
+
+@extern("C")
+pub def __orm_instance_pk() -> int
+
+@extern("C")
+pub def __orm_instance_clear() -> int
 
 # ============================================================
 # latest/earliest, only/defer, get_or_create, explain,

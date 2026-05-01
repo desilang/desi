@@ -762,3 +762,222 @@ char* __orm_field_spec(const char* table_name, int32_t field_index) {
 
     return strdup(buf);
 }
+
+// ============================================================
+// Model Instance Hydration + Save
+//
+// Hydrate: after a query, read row N into a per-model cache
+//          so user can access field values by name.
+//
+// Save: INSERT or UPDATE a model instance. If the PK field
+//       has a nonzero value, UPDATE; otherwise INSERT.
+//
+// Django equivalents:
+//   user = User.objects.get(id=1)  →  hydrate
+//   user.name = "Alice"            →  set_field
+//   user.save()                    →  save
+// ============================================================
+
+// Instance field cache — stores field values for the "current" instance
+#define MAX_INSTANCE_FIELDS 64
+static char g_instance_table[128];
+static char g_instance_fields[MAX_INSTANCE_FIELDS][64];
+static char g_instance_values[MAX_INSTANCE_FIELDS][4096];
+static int  g_instance_field_count = 0;
+static int  g_instance_pk_value = 0;  // 0 = new (INSERT), >0 = existing (UPDATE)
+
+// Extern: access query result values from crud.c
+extern char* __db_get_field_by(int32_t row, const char* col_name);
+extern int32_t __db_col_count(void);
+
+// __orm_hydrate — populate instance cache from query result row
+// After a fetch, call this to load row data into the instance cache.
+// table_name: the model table (e.g. "users")
+// row: row index from the query result
+// Returns: field count loaded, or -1 on error
+int32_t __orm_hydrate(const char* table_name, int32_t row) {
+    if (!table_name) return -1;
+
+    // Find model definition
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) {
+            model = &g_models[i];
+            break;
+        }
+    }
+    if (!model) return -1;
+
+    // Reset instance state
+    strncpy(g_instance_table, table_name, sizeof(g_instance_table) - 1);
+    g_instance_table[sizeof(g_instance_table) - 1] = '\0';
+    g_instance_field_count = 0;
+    g_instance_pk_value = 0;
+
+    // Load each field from the result row
+    for (int i = 0; i < model->field_count && i < MAX_INSTANCE_FIELDS; i++) {
+        FieldDef* f = &model->fields[i];
+        strncpy(g_instance_fields[i], f->name, 63);
+        g_instance_fields[i][63] = '\0';
+
+        char* val = __db_get_field_by(row, f->name);
+        if (val) {
+            strncpy(g_instance_values[i], val, 4095);
+            g_instance_values[i][4095] = '\0';
+            free(val);
+        } else {
+            g_instance_values[i][0] = '\0';
+        }
+
+        // Track PK for save() INSERT vs UPDATE detection
+        if (f->primary_key || f->type == FIELD_AUTO) {
+            g_instance_pk_value = atoi(g_instance_values[i]);
+        }
+
+        g_instance_field_count++;
+    }
+
+    return g_instance_field_count;
+}
+
+// __orm_instance_get — get a field value from the hydrated instance
+// Returns heap-allocated string (caller must free)
+char* __orm_instance_get(const char* field_name) {
+    if (!field_name) return strdup("");
+    for (int i = 0; i < g_instance_field_count; i++) {
+        if (strcmp(g_instance_fields[i], field_name) == 0) {
+            return strdup(g_instance_values[i]);
+        }
+    }
+    return strdup("");
+}
+
+// __orm_instance_set — set a field value on the hydrated instance
+// This modifies the in-memory cache, not the DB.
+int32_t __orm_instance_set(const char* field_name, const char* value) {
+    if (!field_name || !value) return -1;
+
+    // Update existing field
+    for (int i = 0; i < g_instance_field_count; i++) {
+        if (strcmp(g_instance_fields[i], field_name) == 0) {
+            strncpy(g_instance_values[i], value, 4095);
+            g_instance_values[i][4095] = '\0';
+            return 0;
+        }
+    }
+
+    // Add new field if space available
+    if (g_instance_field_count < MAX_INSTANCE_FIELDS) {
+        int idx = g_instance_field_count++;
+        strncpy(g_instance_fields[idx], field_name, 63);
+        g_instance_fields[idx][63] = '\0';
+        strncpy(g_instance_values[idx], value, 4095);
+        g_instance_values[idx][4095] = '\0';
+        return 0;
+    }
+
+    return -1;
+}
+
+// __orm_instance_pk — return the PK value of the hydrated instance
+// 0 = new instance (no PK yet), >0 = existing row
+int32_t __orm_instance_pk(void) {
+    return g_instance_pk_value;
+}
+
+// __orm_instance_table — return the table name of the hydrated instance
+char* __orm_instance_table(void) {
+    return strdup(g_instance_table);
+}
+
+// Extern: set_field and QuerySet ops from crud.c
+extern int32_t __qs_set_field(const char* key, const char* val);
+extern int32_t __qs_save(void);
+extern int32_t __qs_filter(const char* key, const char* val);
+extern int32_t __qs_update(void);
+extern void    __qs_clear(void);
+
+// __orm_save — persist the hydrated instance to the database
+// If PK > 0: UPDATE table SET field1=val1, ... WHERE pk=pk_value
+// If PK == 0: INSERT into table (field1, ...) VALUES (val1, ...)
+//
+// Uses the QuerySet infrastructure under the hood.
+// Returns: 0 on success, -1 on error
+int32_t __orm_save(void) {
+    if (g_instance_table[0] == '\0' || g_instance_field_count == 0) return -1;
+
+    // Find the model to identify the PK field
+    ModelDef* model = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, g_instance_table) == 0) {
+            model = &g_models[i];
+            break;
+        }
+    }
+    if (!model) return -1;
+
+    // Find PK field name
+    const char* pk_field = "id";  // default
+    for (int i = 0; i < model->field_count; i++) {
+        if (model->fields[i].primary_key || model->fields[i].type == FIELD_AUTO) {
+            pk_field = model->fields[i].name;
+            break;
+        }
+    }
+
+    // Clear QuerySet and set table
+    extern int32_t __qs_reset(const char* table);
+    __qs_reset(g_instance_table);
+
+    if (g_instance_pk_value > 0) {
+        // UPDATE: set all non-PK fields, filter by PK
+        for (int i = 0; i < g_instance_field_count; i++) {
+            if (strcmp(g_instance_fields[i], pk_field) == 0) continue;
+            // Skip auto fields
+            int skip = 0;
+            for (int j = 0; j < model->field_count; j++) {
+                if (strcmp(model->fields[j].name, g_instance_fields[i]) == 0) {
+                    if (model->fields[j].type == FIELD_AUTO ||
+                        model->fields[j].type == FIELD_GENERATED) {
+                        skip = 1;
+                    }
+                    break;
+                }
+            }
+            if (skip) continue;
+            __qs_set_field(g_instance_fields[i], g_instance_values[i]);
+        }
+
+        // Filter by PK
+        char pk_str[32];
+        snprintf(pk_str, sizeof(pk_str), "%d", g_instance_pk_value);
+        __qs_filter(pk_field, pk_str);
+
+        return __qs_update();
+    } else {
+        // INSERT: set all non-auto fields
+        for (int i = 0; i < g_instance_field_count; i++) {
+            int skip = 0;
+            for (int j = 0; j < model->field_count; j++) {
+                if (strcmp(model->fields[j].name, g_instance_fields[i]) == 0) {
+                    if (model->fields[j].type == FIELD_AUTO ||
+                        model->fields[j].type == FIELD_GENERATED) {
+                        skip = 1;
+                    }
+                    break;
+                }
+            }
+            if (skip) continue;
+            __qs_set_field(g_instance_fields[i], g_instance_values[i]);
+        }
+
+        return __qs_save();
+    }
+}
+
+// __orm_instance_clear — reset instance state
+void __orm_instance_clear(void) {
+    g_instance_table[0] = '\0';
+    g_instance_field_count = 0;
+    g_instance_pk_value = 0;
+}
