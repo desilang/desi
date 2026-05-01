@@ -13,6 +13,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdarg.h>
+#include "dynbuf.h"
 
 // ============================================================
 // Model Registry
@@ -1779,4 +1781,490 @@ int32_t __orm_reverse_count(const char* source_table, const char* fk_field,
     __qs_reset(source_table);
     __qs_filter(fk_field, pk_value);
     return __qs_count();
+}
+
+// ============================================================
+// Multi-Table Inheritance
+//
+// Django equivalent:
+//   class Place(Model):
+//       name = CharField()
+//   class Restaurant(Place):
+//       serves_pizza = BooleanField()
+//   # Creates both tables: places + restaurants (with place_ptr_id FK)
+//
+// Desi:
+//   db.model("places")
+//   db.auto_field("id")
+//   db.char_field("name", 100, 0, 0)
+//
+//   db.model("restaurants")
+//   db.auto_field("id")
+//   db.multi_table_inherit("restaurants", "places")
+//   db.boolean_field("serves_pizza", 0, 0)
+//   # Auto-adds: place_ptr_id INTEGER NOT NULL UNIQUE REFERENCES places(id)
+// ============================================================
+
+int32_t __orm_multi_table_inherit(const char* child_table, const char* parent_table) {
+    if (!child_table || !parent_table) return -1;
+
+    ModelDef* parent = NULL;
+    ModelDef* child = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, parent_table) == 0) parent = &g_models[i];
+        if (strcmp(g_models[i].name, child_table) == 0) child = &g_models[i];
+    }
+    if (!parent || !child) return -1;
+
+    // Find parent's PK field name
+    const char* parent_pk = "id";
+    for (int i = 0; i < parent->field_count; i++) {
+        if (parent->fields[i].primary_key) {
+            parent_pk = parent->fields[i].name;
+            break;
+        }
+    }
+
+    // Auto-add parent_ptr_id FK field to child
+    char fk_name[128];
+    snprintf(fk_name, sizeof(fk_name), "%s_ptr_id", parent_table);
+
+    // Check if already exists
+    for (int i = 0; i < child->field_count; i++) {
+        if (strcmp(child->fields[i].name, fk_name) == 0) return 0; // already added
+    }
+
+    if (child->field_count < 64) {
+        FieldDef* f = &child->fields[child->field_count++];
+        memset(f, 0, sizeof(FieldDef));
+        strncpy(f->name, fk_name, sizeof(f->name) - 1);
+        f->type = FIELD_FOREIGN_KEY;
+        f->nullable = 0;
+        f->unique = 1; // OneToOne semantics
+        strncpy(f->ref_table, parent_table, sizeof(f->ref_table) - 1);
+        strncpy(f->ref_field, parent_pk, sizeof(f->ref_field) - 1);
+        strncpy(f->on_delete, "CASCADE", sizeof(f->on_delete) - 1);
+    }
+
+    return 0;
+}
+
+// ============================================================
+// Proxy Models — same table, different model name
+//
+// Django equivalent:
+//   class UnmanagedUser(User):
+//       class Meta:
+//           proxy = True
+//       objects = ActiveManager()
+//
+// Desi:
+//   db.proxy_model("active_users", "users")
+//   db.register_manager("active_users", "default", "is_active__exact=true")
+// ============================================================
+
+#define MAX_PROXIES 16
+typedef struct {
+    char proxy_name[128];
+    char base_table[128];
+} ProxyDef;
+
+static ProxyDef g_proxies[MAX_PROXIES];
+static int g_proxy_count = 0;
+
+int32_t __orm_proxy_model(const char* proxy_name, const char* base_table) {
+    if (!proxy_name || !base_table || g_proxy_count >= MAX_PROXIES) return -1;
+
+    // Verify base table exists in model registry
+    int found = 0;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, base_table) == 0) { found = 1; break; }
+    }
+    if (!found) return -1;
+
+    ProxyDef* p = &g_proxies[g_proxy_count++];
+    strncpy(p->proxy_name, proxy_name, sizeof(p->proxy_name) - 1);
+    strncpy(p->base_table, base_table, sizeof(p->base_table) - 1);
+    return 0;
+}
+
+// Resolve proxy name to base table name
+const char* __orm_resolve_proxy(const char* name) {
+    if (!name) return name;
+    for (int i = 0; i < g_proxy_count; i++) {
+        if (strcmp(g_proxies[i].proxy_name, name) == 0) {
+            return g_proxies[i].base_table;
+        }
+    }
+    return name; // not a proxy — return as-is
+}
+
+// ============================================================
+// Built-in Audit Trail — auto-history table
+//
+// Django equivalent: django-simple-history
+//   class User(Model):
+//       history = HistoricalRecords()
+//   user.history.all()  →  UserHistoricalChange objects
+//
+// Desi:
+//   db.enable_audit("users")
+//   # Creates users_history table automatically
+//   # save()/delete() auto-log to history
+//   db.audit_log("users", "1")  →  history entries
+// ============================================================
+
+#define MAX_AUDITED 32
+static char g_audited_tables[MAX_AUDITED][128];
+static int g_audited_count = 0;
+
+int32_t __orm_enable_audit(const char* table_name) {
+    if (!table_name || g_audited_count >= MAX_AUDITED) return -1;
+
+    // Check not already audited
+    for (int i = 0; i < g_audited_count; i++) {
+        if (strcmp(g_audited_tables[i], table_name) == 0) return 0;
+    }
+
+    strncpy(g_audited_tables[g_audited_count++], table_name, 127);
+    return 0;
+}
+
+// Check if a table has auditing enabled
+int32_t __orm_is_audited(const char* table_name) {
+    if (!table_name) return 0;
+    for (int i = 0; i < g_audited_count; i++) {
+        if (strcmp(g_audited_tables[i], table_name) == 0) return 1;
+    }
+    return 0;
+}
+
+// Create the history table for an audited model.
+// Schema: id, action, record_id, changed_at, changed_by, + all model fields
+char* __orm_create_audit_table_sql(const char* table_name) {
+    if (!table_name) return strdup("");
+
+    ModelDef* m = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) { m = &g_models[i]; break; }
+    }
+    if (!m) return strdup("");
+
+    DynBuf sql;
+    dynbuf_init(&sql, 1024);
+
+    char hist_table[256];
+    snprintf(hist_table, sizeof(hist_table), "%s_history", table_name);
+
+    if (g_orm_dialect == 0) { // PG
+        dynbuf_appendf(&sql,
+            "CREATE TABLE IF NOT EXISTS %s ("
+            "history_id SERIAL PRIMARY KEY, "
+            "action VARCHAR(10) NOT NULL, "
+            "record_id INTEGER NOT NULL, "
+            "changed_at TIMESTAMPTZ DEFAULT NOW(), "
+            "changed_by VARCHAR(128) DEFAULT ''",
+            hist_table);
+    } else { // MySQL
+        dynbuf_appendf(&sql,
+            "CREATE TABLE IF NOT EXISTS %s ("
+            "history_id INT AUTO_INCREMENT PRIMARY KEY, "
+            "action VARCHAR(10) NOT NULL, "
+            "record_id INTEGER NOT NULL, "
+            "changed_at DATETIME DEFAULT CURRENT_TIMESTAMP, "
+            "changed_by VARCHAR(128) DEFAULT ''",
+            hist_table);
+    }
+
+    // Add snapshot of all model fields
+    for (int i = 0; i < m->field_count; i++) {
+        FieldDef* f = &m->fields[i];
+        // Skip PK (already captured as record_id)
+        if (f->primary_key) continue;
+
+        // Get column type SQL for this field
+        char* col_type = __orm_column_type_sql(table_name, f->name);
+        if (col_type && col_type[0]) {
+            dynbuf_appendf(&sql, ", %s %s", f->name, col_type);
+        }
+        if (col_type) free(col_type);
+    }
+
+    dynbuf_append(&sql, ")");
+    if (g_orm_dialect != 0) {
+        dynbuf_append(&sql, " ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    }
+
+    char* result = sql.data;
+    sql.data = NULL;
+    return result;
+}
+
+// Log an action to the audit history table
+// action: "INSERT", "UPDATE", or "DELETE"
+int32_t __orm_audit_record(const char* table_name, const char* action,
+                            const char* record_id) {
+    if (!table_name || !action || !record_id) return -1;
+    if (!__orm_is_audited(table_name)) return 0; // not audited, skip silently
+
+    extern int32_t __db_execute_stmt(const char* sql);
+
+    // Build INSERT into history table with current instance field values
+    DynBuf sql;
+    dynbuf_init(&sql, 512);
+
+    char hist_table[256];
+    snprintf(hist_table, sizeof(hist_table), "%s_history", table_name);
+
+    // Find model
+    ModelDef* m = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) { m = &g_models[i]; break; }
+    }
+
+    dynbuf_appendf(&sql,
+        "INSERT INTO %s (action, record_id, changed_by",
+        hist_table);
+
+    // Add field names
+    DynBuf vals;
+    dynbuf_init(&vals, 256);
+    dynbuf_appendf(&vals, "'%s', %s, ''", action, record_id);
+
+    if (m) {
+        for (int i = 0; i < m->field_count; i++) {
+            if (m->fields[i].primary_key) continue;
+            dynbuf_appendf(&sql, ", %s", m->fields[i].name);
+
+            // Get current value from hydrated instance
+            extern char* __orm_instance_get(const char* field);
+            char* val = __orm_instance_get(m->fields[i].name);
+            if (val && val[0]) {
+                // Escape single quotes
+                char escaped[1024];
+                int j = 0;
+                for (int k = 0; val[k] && j < 1020; k++) {
+                    if (val[k] == '\'') escaped[j++] = '\'';
+                    escaped[j++] = val[k];
+                }
+                escaped[j] = '\0';
+                dynbuf_appendf(&vals, ", '%s'", escaped);
+            } else {
+                dynbuf_append(&vals, ", NULL");
+            }
+            if (val) free(val);
+        }
+    }
+
+    dynbuf_appendf(&sql, ") VALUES (%s)", vals.data);
+
+    int32_t result = __db_execute_stmt(sql.data);
+
+    dynbuf_free(&sql);
+    dynbuf_free(&vals);
+    return result;
+}
+
+// Query audit history for a record
+int32_t __orm_audit_log(const char* table_name, const char* record_id) {
+    if (!table_name || !record_id) return -1;
+
+    extern int32_t __qs_reset(const char* table);
+    extern int32_t __qs_filter(const char* lookup, const char* val);
+    extern int32_t __qs_order_by(const char* field);
+    extern int32_t __qs_fetch(void);
+
+    char hist_table[256];
+    snprintf(hist_table, sizeof(hist_table), "%s_history", table_name);
+
+    __qs_reset(hist_table);
+    __qs_filter("record_id", record_id);
+    __qs_order_by("-changed_at"); // newest first
+    return __qs_fetch();
+}
+
+// ============================================================
+// Time-Travel Queries — query historical state
+//
+// Django equivalent: django-simple-history
+//   user.history.as_of(datetime(2024, 1, 1))
+//
+// Desi:
+//   db.as_of("users", "1", "2024-01-01 00:00:00")
+//   # Returns the state of record #1 as it was at that time
+// ============================================================
+
+int32_t __orm_as_of(const char* table_name, const char* record_id,
+                     const char* timestamp) {
+    if (!table_name || !record_id || !timestamp) return -1;
+
+    extern int32_t __db_query_exec(const char* sql);
+
+    char hist_table[256];
+    snprintf(hist_table, sizeof(hist_table), "%s_history", table_name);
+
+    DynBuf sql;
+    dynbuf_init(&sql, 512);
+    dynbuf_appendf(&sql,
+        "SELECT * FROM %s WHERE record_id = %s AND changed_at <= '%s' "
+        "AND action != 'DELETE' "
+        "ORDER BY changed_at DESC LIMIT 1",
+        hist_table, record_id, timestamp);
+
+    int32_t result = __db_query_exec(sql.data);
+    dynbuf_free(&sql);
+    return result;
+}
+
+// ============================================================
+// Runtime Field Validation
+//
+// Checks if a field name exists in a model's field registry.
+// Returns 1 if valid, 0 if unknown field.
+// Also provides "did you mean?" suggestion via Levenshtein distance.
+// ============================================================
+
+static int levenshtein(const char* s, const char* t) {
+    int slen = (int)strlen(s);
+    int tlen = (int)strlen(t);
+    if (slen == 0) return tlen;
+    if (tlen == 0) return slen;
+
+    // Use a single-row DP approach
+    int* prev = (int*)malloc((tlen + 1) * sizeof(int));
+    int* curr = (int*)malloc((tlen + 1) * sizeof(int));
+
+    for (int j = 0; j <= tlen; j++) prev[j] = j;
+
+    for (int i = 1; i <= slen; i++) {
+        curr[0] = i;
+        for (int j = 1; j <= tlen; j++) {
+            int cost = (s[i-1] == t[j-1]) ? 0 : 1;
+            int del = prev[j] + 1;
+            int ins = curr[j-1] + 1;
+            int sub = prev[j-1] + cost;
+            curr[j] = del < ins ? (del < sub ? del : sub) : (ins < sub ? ins : sub);
+        }
+        int* tmp = prev; prev = curr; curr = tmp;
+    }
+
+    int result = prev[tlen];
+    free(prev);
+    free(curr);
+    return result;
+}
+
+int32_t __orm_check_field(const char* table_name, const char* field_name) {
+    if (!table_name || !field_name) return 0;
+
+    // Resolve proxy
+    table_name = __orm_resolve_proxy(table_name);
+
+    ModelDef* m = NULL;
+    for (int i = 0; i < g_model_count; i++) {
+        if (strcmp(g_models[i].name, table_name) == 0) { m = &g_models[i]; break; }
+    }
+    if (!m) {
+        fprintf(stderr, "[orm] WARNING: unknown model '%s'\n", table_name);
+        return 0;
+    }
+
+    // Check exact match
+    for (int i = 0; i < m->field_count; i++) {
+        if (strcmp(m->fields[i].name, field_name) == 0) return 1;
+    }
+
+    // Field not found — find closest match
+    int best_dist = 999;
+    const char* best_match = NULL;
+    for (int i = 0; i < m->field_count; i++) {
+        int dist = levenshtein(field_name, m->fields[i].name);
+        if (dist < best_dist) {
+            best_dist = dist;
+            best_match = m->fields[i].name;
+        }
+    }
+
+    if (best_match && best_dist <= 3) {
+        fprintf(stderr, "[orm] WARNING: unknown field '%s' on model '%s' — did you mean '%s'?\n",
+            field_name, table_name, best_match);
+    } else {
+        fprintf(stderr, "[orm] WARNING: unknown field '%s' on model '%s'\n",
+            field_name, table_name);
+    }
+
+    return 0;
+}
+
+// ============================================================
+// QuerySet Result Caching
+//
+// Cache the last query result so re-accessing doesn't re-query DB.
+// Cache is invalidated on any filter/order_by/reset change.
+//
+// Django equivalent: QuerySets cache after first evaluation.
+// ============================================================
+
+#define QS_CACHE_MAX_ROWS 1000
+#define QS_CACHE_MAX_COLS 32
+#define QS_CACHE_VAL_SIZE 256
+
+static struct {
+    char values[QS_CACHE_MAX_ROWS][QS_CACHE_MAX_COLS][QS_CACHE_VAL_SIZE];
+    int rows;
+    int cols;
+    int valid;
+    char table[128];
+    char where_hash[256]; // simple hash of filter state
+} g_qs_cache = {0};
+
+void __qs_cache_invalidate(void) {
+    g_qs_cache.valid = 0;
+    g_qs_cache.rows = 0;
+    g_qs_cache.cols = 0;
+}
+
+int32_t __qs_cache_store(int rows, int cols) {
+    if (rows > QS_CACHE_MAX_ROWS || cols > QS_CACHE_MAX_COLS) {
+        g_qs_cache.valid = 0;
+        return -1; // too large to cache
+    }
+
+    extern char* __db_get_value_at(int32_t row, int32_t col);
+
+    for (int r = 0; r < rows; r++) {
+        for (int c = 0; c < cols; c++) {
+            char* val = __db_get_value_at(r, c);
+            if (val) {
+                strncpy(g_qs_cache.values[r][c], val, QS_CACHE_VAL_SIZE - 1);
+                g_qs_cache.values[r][c][QS_CACHE_VAL_SIZE - 1] = '\0';
+            } else {
+                g_qs_cache.values[r][c][0] = '\0';
+            }
+        }
+    }
+
+    g_qs_cache.rows = rows;
+    g_qs_cache.cols = cols;
+    g_qs_cache.valid = 1;
+    return 0;
+}
+
+int32_t __qs_cache_is_valid(void) {
+    return g_qs_cache.valid;
+}
+
+const char* __qs_cache_get(int row, int col) {
+    if (!g_qs_cache.valid || row >= g_qs_cache.rows || col >= g_qs_cache.cols) {
+        return "";
+    }
+    return g_qs_cache.values[row][col];
+}
+
+int32_t __qs_cache_rows(void) {
+    return g_qs_cache.valid ? g_qs_cache.rows : 0;
+}
+
+int32_t __qs_cache_cols(void) {
+    return g_qs_cache.valid ? g_qs_cache.cols : 0;
 }

@@ -2414,3 +2414,419 @@ int32_t __db_migrate_all(const char* dirs_newline_separated) {
     strlist_free(&dirs);
     return total_applied;
 }
+
+// ============================================================
+// Migration Squashing — collapse N migration files into 1
+//
+// Django equivalent: python manage.py squashmigrations app 0001 0010
+//
+// Reads all .desi migration files in `dir`, combines their forward
+// sections into a single consolidated file, and writes it to
+// `dir/output_name.desi`. Original files are NOT deleted — they
+// can be manually removed after squash is verified.
+// ============================================================
+
+int32_t __db_squash_migrations(const char* dir, const char* output_name) {
+    if (!dir || !output_name) return -1;
+
+    StrList files = scan_migrations(dir);
+    if (files.count == 0) {
+        printf("[squash] No migration files found in %s\n", dir);
+        fflush(stdout);
+        strlist_free(&files);
+        return 0;
+    }
+
+    if (files.count <= 1) {
+        printf("[squash] Only %d file(s) — nothing to squash\n", files.count);
+        fflush(stdout);
+        strlist_free(&files);
+        return 0;
+    }
+
+    DynBuf forward_all = dynbuf_new(2048);
+    DynBuf rollback_all = dynbuf_new(2048);
+    int squashed_count = 0;
+
+    for (int i = 0; i < files.count; i++) {
+        char path[512];
+        snprintf(path, sizeof(path), "%s/%s", dir, files.items[i]);
+        char* content = read_file(path);
+        if (!content) continue;
+
+        StrList fwd = strlist_new(4);
+        StrList rb = strlist_new(4);
+        parse_section(content, "forward", &fwd);
+        parse_section(content, "rollback", &rb);
+
+        // Append forward SQL
+        for (int s = 0; s < fwd.count; s++) {
+            if (forward_all.len > 0) dynbuf_append(&forward_all, "\n");
+            dynbuf_appendf(&forward_all, "    db.execute(\"\"\"%s\"\"\")", fwd.items[s]);
+        }
+
+        // Prepend rollback SQL (reverse order for proper undo)
+        for (int s = rb.count - 1; s >= 0; s--) {
+            if (rollback_all.len > 0) {
+                DynBuf tmp = dynbuf_new(rollback_all.len + 256);
+                dynbuf_appendf(&tmp, "    db.execute(\"\"\"%s\"\"\")\n%s",
+                    rb.items[s], rollback_all.data);
+                dynbuf_free(&rollback_all);
+                rollback_all = tmp;
+            } else {
+                dynbuf_appendf(&rollback_all, "    db.execute(\"\"\"%s\"\"\")", rb.items[s]);
+            }
+        }
+
+        squashed_count++;
+        strlist_free(&fwd);
+        strlist_free(&rb);
+        free(content);
+    }
+
+    // Write squashed file
+    char out_path[512];
+    snprintf(out_path, sizeof(out_path), "%s/%s.desi", dir, output_name);
+
+    FILE* fp = fopen(out_path, "w");
+    if (!fp) {
+        printf("[squash] Failed to create %s\n", out_path);
+        fflush(stdout);
+        dynbuf_free(&forward_all);
+        dynbuf_free(&rollback_all);
+        strlist_free(&files);
+        return -1;
+    }
+
+    // Write header
+    fprintf(fp, "# Squashed migration: %d files combined\n", squashed_count);
+    fprintf(fp, "# Replaces: ");
+    for (int i = 0; i < files.count; i++) {
+        if (i > 0) fprintf(fp, ", ");
+        fprintf(fp, "%s", files.items[i]);
+    }
+    fprintf(fp, "\n#\n# Depends: none\nimport db\n\n");
+
+    // Write forward
+    fprintf(fp, "def forward():\n");
+    if (forward_all.len > 0) {
+        fprintf(fp, "%s\n", forward_all.data);
+    } else {
+        fprintf(fp, "    pass\n");
+    }
+
+    // Write rollback
+    fprintf(fp, "\ndef rollback():\n");
+    if (rollback_all.len > 0) {
+        fprintf(fp, "%s\n", rollback_all.data);
+    } else {
+        fprintf(fp, "    pass\n");
+    }
+
+    fclose(fp);
+    printf("[squash] Squashed %d migrations → %s\n", squashed_count, out_path);
+    printf("[squash] Original files preserved. Delete them manually after verifying.\n");
+    fflush(stdout);
+
+    dynbuf_free(&forward_all);
+    dynbuf_free(&rollback_all);
+    strlist_free(&files);
+    return squashed_count;
+}
+
+// ============================================================
+// Data Migrations — register and invoke named code callbacks
+//
+// Django equivalent:
+//   def forwards(apps, schema_editor):
+//       User = apps.get_model('auth', 'User')
+//       for user in User.objects.all():
+//           user.name = user.name.upper()
+//           user.save()
+//
+// Desi:
+//   db.register_data_migration("uppercase_names", uppercase_fn)
+//   # In migration file: db.op_run_code("uppercase_names")
+// ============================================================
+
+#define MAX_DATA_MIGRATIONS 64
+typedef struct {
+    char label[128];
+    void (*fn)(void);
+} DataMigrationDef;
+
+static DataMigrationDef g_data_migrations[MAX_DATA_MIGRATIONS];
+static int g_data_migration_count = 0;
+
+int32_t __db_register_data_migration(const char* label, void (*fn)(void)) {
+    if (!label || !fn || g_data_migration_count >= MAX_DATA_MIGRATIONS) return -1;
+    DataMigrationDef* dm = &g_data_migrations[g_data_migration_count++];
+    strncpy(dm->label, label, sizeof(dm->label) - 1);
+    dm->fn = fn;
+    return 0;
+}
+
+int32_t __db_op_run_code(const char* label) {
+    if (!label) return -1;
+    for (int i = 0; i < g_data_migration_count; i++) {
+        if (strcmp(g_data_migrations[i].label, label) == 0) {
+            printf("[migrate] Running data migration: %s\n", label);
+            fflush(stdout);
+            g_data_migrations[i].fn();
+            printf("[migrate] Data migration '%s' complete\n", label);
+            fflush(stdout);
+            return 0;
+        }
+    }
+    printf("[migrate] WARNING: data migration '%s' not registered\n", label);
+    fflush(stdout);
+    return -1;
+}
+
+// ============================================================
+// Schema Diff / Dry Run — show what migrations WOULD generate
+//
+// Django equivalent: python manage.py makemigrations --dry-run
+//
+// Compares current ORM model definitions against the database
+// schema and returns a formatted string describing the changes.
+// Does NOT write any files or modify the database.
+// ============================================================
+
+char* __db_makemigrations_dryrun(const char* dir) {
+    if (!__db_is_connected()) return strdup("[dry-run] Not connected to database");
+
+    ensure_tracking();
+
+    DynBuf output = dynbuf_new(2048);
+    dynbuf_append(&output, "=== Migration Dry Run ===\n\n");
+
+    int changes = 0;
+    int model_count = __orm_model_count();
+
+    for (int m = 0; m < model_count; m++) {
+        const char* table = __orm_model_name(m);
+        if (!table || table[0] == '\0') continue;
+
+        // Skip abstract models
+        extern int32_t __orm_is_abstract(const char* table_name);
+        if (__orm_is_abstract(table)) continue;
+
+        if (!__db_table_exists(table)) {
+            // New table
+            char* create_sql = __orm_create_table_sql(table);
+            dynbuf_appendf(&output, "CREATE TABLE %s\n", table);
+            int fc = __orm_field_count(table);
+            for (int f = 0; f < fc; f++) {
+                const char* fname = __orm_field_name(table, f);
+                char* fspec = __orm_field_spec(table, f);
+                dynbuf_appendf(&output, "  + %s: %s\n", fname, fspec ? fspec : "?");
+                if (fspec) free(fspec);
+            }
+            dynbuf_append(&output, "\n");
+            free(create_sql);
+            changes++;
+        } else {
+            // Existing table — check for new/altered columns
+            int fc = __orm_field_count(table);
+            for (int f = 0; f < fc; f++) {
+                const char* fname = __orm_field_name(table, f);
+                if (!column_exists(table, fname)) {
+                    char* fspec = __orm_field_spec(table, f);
+                    dynbuf_appendf(&output, "ALTER TABLE %s\n  + ADD COLUMN %s: %s\n\n",
+                        table, fname, fspec ? fspec : "?");
+                    if (fspec) free(fspec);
+                    changes++;
+                } else {
+                    // Check for type changes
+                    char* db_type = get_column_type(table, fname);
+                    char* col_sql = __orm_column_type_sql(table, fname);
+                    if (db_type && col_sql && !types_match(db_type, col_sql)) {
+                        dynbuf_appendf(&output, "ALTER TABLE %s\n  ~ CHANGE %s: %s → %s\n\n",
+                            table, fname, db_type, col_sql);
+                        changes++;
+                    }
+                    if (db_type) free(db_type);
+                    if (col_sql) free(col_sql);
+                }
+            }
+        }
+    }
+
+    if (changes == 0) {
+        dynbuf_append(&output, "No changes detected — models match database schema.\n");
+    } else {
+        dynbuf_appendf(&output, "--- %d change(s) detected ---\n", changes);
+    }
+
+    char* result = output.data;
+    output.data = NULL;
+    return result;
+}
+
+// ============================================================
+// inspectdb — Reverse-engineer models from existing database
+//
+// Django equivalent: python manage.py inspectdb
+//
+// Queries information_schema for all user tables and generates
+// Desi model definition code (db.model / db.*_field calls).
+// ============================================================
+
+char* __db_inspectdb(void) {
+    if (!__db_is_connected()) return strdup("# Not connected to database\n");
+
+    DynBuf output = dynbuf_new(4096);
+    dynbuf_append(&output, "# Auto-generated by db.inspectdb()\n");
+    dynbuf_append(&output, "# Review and adjust types before using in production\n\n");
+    dynbuf_append(&output, "import db\n\n");
+
+    // Query all user tables
+    DynBuf sql = dynbuf_new(256);
+    if (is_pg()) {
+        dynbuf_append(&sql,
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' AND table_type = 'BASE TABLE' "
+            "AND table_name NOT LIKE '_desi_%' "
+            "ORDER BY table_name");
+    } else {
+        dynbuf_append(&sql,
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = DATABASE() AND table_type = 'BASE TABLE' "
+            "AND table_name NOT LIKE '_desi_%' "
+            "ORDER BY table_name");
+    }
+
+    int table_count = __db_query_exec(sql.data);
+    dynbuf_free(&sql);
+
+    if (table_count <= 0) {
+        dynbuf_append(&output, "# No tables found in database\n");
+        char* result = output.data; output.data = NULL;
+        return result;
+    }
+
+    // Collect table names first (query results will be overwritten)
+    StrList tables = strlist_new(table_count);
+    for (int t = 0; t < table_count; t++) {
+        char* tname = __db_get_value_at(t, 0);
+        if (tname) strlist_push(&tables, tname);
+    }
+
+    // For each table, generate model code
+    for (int t = 0; t < tables.count; t++) {
+        const char* tname = tables.items[t];
+
+        dynbuf_appendf(&output, "# --- %s ---\n", tname);
+        dynbuf_appendf(&output, "db.model(\"%s\")\n", tname);
+
+        // Query columns
+        DynBuf col_sql = dynbuf_new(512);
+        if (is_pg()) {
+            dynbuf_appendf(&col_sql,
+                "SELECT column_name, data_type, is_nullable, column_default, "
+                "character_maximum_length "
+                "FROM information_schema.columns "
+                "WHERE table_schema = 'public' AND table_name = '%s' "
+                "ORDER BY ordinal_position", tname);
+        } else {
+            dynbuf_appendf(&col_sql,
+                "SELECT column_name, column_type, is_nullable, column_default, "
+                "character_maximum_length "
+                "FROM information_schema.columns "
+                "WHERE table_schema = DATABASE() AND table_name = '%s' "
+                "ORDER BY ordinal_position", tname);
+        }
+
+        int col_count = __db_query_exec(col_sql.data);
+        dynbuf_free(&col_sql);
+
+        // Collect column data before it gets overwritten
+        typedef struct { char name[128]; char type[128]; int nullable; int max_len; } ColInfo;
+        ColInfo* cols = NULL;
+        if (col_count > 0) {
+            cols = (ColInfo*)calloc(col_count, sizeof(ColInfo));
+            for (int c = 0; c < col_count; c++) {
+                char* cn = __db_get_value_at(c, 0);
+                char* ct = __db_get_value_at(c, 1);
+                char* nullable = __db_get_value_at(c, 2);
+                char* max_len_s = __db_get_value_at(c, 4);
+                if (cn) strncpy(cols[c].name, cn, 127);
+                if (ct) strncpy(cols[c].type, ct, 127);
+                cols[c].nullable = (nullable && strcasecmp_local(nullable, "YES") == 0) ? 1 : 0;
+                cols[c].max_len = (max_len_s && max_len_s[0]) ? atoi(max_len_s) : 0;
+            }
+        }
+
+        for (int c = 0; c < col_count; c++) {
+            const char* cn = cols[c].name;
+            const char* ct = cols[c].type;
+            int nullable = cols[c].nullable;
+            int max_len = cols[c].max_len;
+
+            // Map SQL types to Desi field calls
+            if (strcmp(cn, "id") == 0 &&
+                (strcasecmp_local(ct, "integer") == 0 || strcasecmp_local(ct, "int") == 0 ||
+                 strncasecmp(ct, "serial", 6) == 0 || strncasecmp(ct, "bigserial", 9) == 0 ||
+                 strstr(ct, "AUTO_INCREMENT") != NULL || strstr(ct, "auto_increment") != NULL)) {
+                dynbuf_appendf(&output, "db.auto_field(\"id\")\n");
+            } else if (strcasecmp_local(ct, "text") == 0) {
+                dynbuf_appendf(&output, "db.text_field(\"%s\", %d, %d)\n",
+                    cn, nullable, 0);
+            } else if (strncasecmp(ct, "varchar", 7) == 0 ||
+                       strcasecmp_local(ct, "character varying") == 0) {
+                int ml = max_len > 0 ? max_len : 255;
+                dynbuf_appendf(&output, "db.char_field(\"%s\", %d, %d, %d)\n",
+                    cn, ml, nullable, 0);
+            } else if (strcasecmp_local(ct, "integer") == 0 ||
+                       strcasecmp_local(ct, "int") == 0 ||
+                       strcasecmp_local(ct, "bigint") == 0) {
+                dynbuf_appendf(&output, "db.integer_field(\"%s\", %d, %d)\n",
+                    cn, nullable, 0);
+            } else if (strcasecmp_local(ct, "boolean") == 0 ||
+                       strcasecmp_local(ct, "tinyint(1)") == 0) {
+                dynbuf_appendf(&output, "db.boolean_field(\"%s\", %d, 0)\n",
+                    cn, nullable);
+            } else if (strcasecmp_local(ct, "real") == 0 ||
+                       strcasecmp_local(ct, "float") == 0 ||
+                       strcasecmp_local(ct, "double precision") == 0 ||
+                       strcasecmp_local(ct, "double") == 0) {
+                dynbuf_appendf(&output, "db.float_field(\"%s\", %d, %d)\n",
+                    cn, nullable, 0);
+            } else if (strcasecmp_local(ct, "timestamp with time zone") == 0 ||
+                       strcasecmp_local(ct, "timestamptz") == 0 ||
+                       strcasecmp_local(ct, "datetime") == 0 ||
+                       strcasecmp_local(ct, "timestamp") == 0) {
+                dynbuf_appendf(&output, "db.datetime_field(\"%s\", %d, 0, 0)\n",
+                    cn, nullable);
+            } else if (strcasecmp_local(ct, "date") == 0) {
+                dynbuf_appendf(&output, "db.date_field(\"%s\", %d)\n",
+                    cn, nullable);
+            } else if (strcasecmp_local(ct, "jsonb") == 0 ||
+                       strcasecmp_local(ct, "json") == 0) {
+                dynbuf_appendf(&output, "db.json_field(\"%s\", %d)\n",
+                    cn, nullable);
+            } else if (strcasecmp_local(ct, "uuid") == 0) {
+                dynbuf_appendf(&output, "db.uuid_field(\"%s\", %d, 0)\n",
+                    cn, nullable);
+            } else if (strncasecmp(ct, "numeric", 7) == 0 ||
+                       strncasecmp(ct, "decimal", 7) == 0) {
+                dynbuf_appendf(&output, "db.decimal_field(\"%s\", 10, 2, %d, 0)\n",
+                    cn, nullable);
+            } else {
+                // Unknown type — emit comment
+                dynbuf_appendf(&output, "# db.char_field(\"%s\", 255, %d, 0)  # original: %s\n",
+                    cn, nullable, ct);
+            }
+        }
+
+        if (cols) free(cols);
+        dynbuf_append(&output, "\n");
+    }
+
+    strlist_free(&tables);
+
+    char* result = output.data;
+    output.data = NULL;
+    return result;
+}
