@@ -43,7 +43,8 @@ if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
     fi
 fi
 # Link against libdesi.a (static runtime) with dead code elimination
-clang build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS -lz -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
+# Note: -lz removed — compression is now bundled via miniz
+clang build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o

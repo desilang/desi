@@ -25,8 +25,8 @@ def main() -> int:
 	0
 
 # EXPECTED_OUTPUT:
-# compressed length: 132
+# compressed length: 142
 # Hello, World! This is a test of the Desi compression module.
 # roundtrip: ok
-# ratio: 110%
+# ratio: 118%
 # compress ok

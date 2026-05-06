@@ -1,7 +1,7 @@
 /*
  * gzip.h — Gzip compression for Desi HTTP stack
  *
- * Uses system zlib on macOS/Linux (linked via -lz).
+ * Uses bundled miniz (no external -lz dependency).
  * On Windows, provides a stub that disables compression gracefully.
  *
  * API:
@@ -19,14 +19,14 @@
 #ifdef _WIN32
   /* Windows: try to use zlib if linked, otherwise stub */
   #if defined(DESI_HAS_ZLIB)
-    #include <zlib.h>
+    #include "../miniz.h"
     #define DESI_GZIP_AVAILABLE 1
   #else
     #define DESI_GZIP_AVAILABLE 0
   #endif
 #else
-  /* macOS/Linux: zlib is always available */
-  #include <zlib.h>
+  /* macOS/Linux: use bundled miniz */
+  #include "../miniz.h"
   #define DESI_GZIP_AVAILABLE 1
 #endif
 
