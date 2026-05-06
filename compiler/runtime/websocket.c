@@ -28,13 +28,9 @@
 #include <errno.h>
 #include "websocket.h"
 
-/* zlib for permessage-deflate compression (RFC 7692) */
-#if __has_include(<zlib.h>)
-  #define DESI_HAS_ZLIB 1
-  #include <zlib.h>
-#else
-  #define DESI_HAS_ZLIB 0
-#endif
+/* Bundled miniz for permessage-deflate compression (RFC 7692) */
+#define DESI_HAS_ZLIB 1
+#include "miniz.h"
 
 /* Thread-local compression state per WS session */
 static _Thread_local int _ws_compression_active = 0;
