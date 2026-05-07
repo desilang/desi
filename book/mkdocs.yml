@@ -159,6 +159,20 @@ nav:
     - SQLite3: stdlib/sqlite3.md
     - Redis: stdlib/redis.md
     - Migrations: stdlib/migrations.md
+    - URL: stdlib/url.md
+    - Process: stdlib/process.md
+    - Collections: stdlib/collections.md
+    - Testing: stdlib/testing.md
+    - Dotenv: stdlib/dotenv.md
+    - Cache: stdlib/cache.md
+    - MIME: stdlib/mime.md
+    - INI: stdlib/ini.md
+    - JWT: stdlib/jwt.md
+    - Shell: stdlib/shell.md
+    - Diff: stdlib/diff.md
+    - YAML: stdlib/yaml.md
+    - CLI: stdlib/cli.md
+    - Table: stdlib/table.md
     - Contributing: stdlib/contributing.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md
