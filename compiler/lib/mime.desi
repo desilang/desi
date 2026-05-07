@@ -1,0 +1,48 @@
+# mime module — MIME type detection
+#
+# Map file extensions to MIME types and vice versa.
+#
+# Usage:
+#   import mime
+#   print(mime.from_path("image.png"))     # "image/png"
+#   print(mime.from_ext(".json"))          # "application/json"
+#   print(mime.is_text("text/html"))       # true
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __mime_from_ext(ext: str) -> str
+
+@extern("C")
+pub def __mime_from_path(path: str) -> str
+
+@extern("C")
+pub def __mime_ext_for(mime_type: str) -> str
+
+@extern("C")
+pub def __mime_is_text(mime_type: str) -> int
+
+@extern("C")
+pub def __mime_is_binary(mime_type: str) -> int
+
+# --- Public API ---
+
+## Get MIME type from a file extension (e.g., ".json" → "application/json").
+pub def from_ext(ext: str) -> str:
+	return __mime_from_ext(ext)
+
+## Get MIME type from a file path (e.g., "image.png" → "image/png").
+pub def from_path(path: str) -> str:
+	return __mime_from_path(path)
+
+## Get file extension for a MIME type (e.g., "text/html" → ".html").
+pub def ext_for(mime_type: str) -> str:
+	return __mime_ext_for(mime_type)
+
+## Check if a MIME type is text-based.
+pub def is_text(mime_type: str) -> bool:
+	return __mime_is_text(mime_type) == 1
+
+## Check if a MIME type is binary.
+pub def is_binary(mime_type: str) -> bool:
+	return __mime_is_binary(mime_type) == 1

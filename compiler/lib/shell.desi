@@ -1,0 +1,127 @@
+# shell module — Shell scripting helpers
+#
+# High-level wrappers for file operations and command execution.
+# Makes Desi a viable replacement for bash scripts.
+#
+# Usage:
+#   import shell
+#   let output = shell.exec("uname -a")
+#   shell.cp("src.txt", "dst.txt")
+#   if shell.is_file("config.yaml"):
+#       let content = shell.cat("config.yaml")
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __shell_exec(cmd: str) -> str
+
+@extern("C")
+pub def __shell_exec_status(cmd: str) -> int
+
+@extern("C")
+pub def __shell_glob(pattern: str) -> str
+
+@extern("C")
+pub def __shell_which(cmd: str) -> str
+
+@extern("C")
+pub def __shell_cp(src: str, dst: str) -> int
+
+@extern("C")
+pub def __shell_mv(src: str, dst: str) -> int
+
+@extern("C")
+pub def __shell_rm(path: str) -> int
+
+@extern("C")
+pub def __shell_mkdir_p(path: str) -> int
+
+@extern("C")
+pub def __shell_rmdir(path: str) -> int
+
+@extern("C")
+pub def __shell_exists(path: str) -> int
+
+@extern("C")
+pub def __shell_is_file(path: str) -> int
+
+@extern("C")
+pub def __shell_is_dir(path: str) -> int
+
+@extern("C")
+pub def __shell_cat(path: str) -> str
+
+@extern("C")
+pub def __shell_write(path: str, content: str) -> int
+
+@extern("C")
+pub def __shell_append(path: str, content: str) -> int
+
+@extern("C")
+pub def __shell_lines(path: str) -> int
+
+# --- Public API ---
+
+## Run a shell command and return its stdout (trimmed).
+pub def exec(cmd: str) -> str:
+	return __shell_exec(cmd)
+
+## Run a shell command and return the exit status code.
+pub def exec_status(cmd: str) -> int:
+	return __shell_exec_status(cmd)
+
+## Glob files matching a pattern. Returns newline-separated paths.
+pub def glob(pattern: str) -> str:
+	return __shell_glob(pattern)
+
+## Find a command in PATH. Returns full path or "".
+pub def which(cmd: str) -> str:
+	return __shell_which(cmd)
+
+## Copy a file from src to dst.
+pub def cp(src: str, dst: str) -> int:
+	return __shell_cp(src, dst)
+
+## Move/rename a file.
+pub def mv(src: str, dst: str) -> int:
+	return __shell_mv(src, dst)
+
+## Remove a file.
+pub def rm(path: str) -> int:
+	return __shell_rm(path)
+
+## Create directories recursively (like mkdir -p).
+pub def mkdir_p(path: str) -> int:
+	return __shell_mkdir_p(path)
+
+## Remove an empty directory.
+pub def rmdir(path: str) -> int:
+	return __shell_rmdir(path)
+
+## Check if a file or directory exists.
+pub def exists(path: str) -> bool:
+	return __shell_exists(path) == 1
+
+## Check if path is a regular file.
+pub def is_file(path: str) -> bool:
+	return __shell_is_file(path) == 1
+
+## Check if path is a directory.
+pub def is_dir(path: str) -> bool:
+	return __shell_is_dir(path) == 1
+
+## Read file contents as a string.
+pub def cat(path: str) -> str:
+	return __shell_cat(path)
+
+## Write content to a file (overwrites).
+pub def write(path: str, content: str) -> int:
+	return __shell_write(path, content)
+
+## Append content to a file.
+pub def append(path: str, content: str) -> int:
+	return __shell_append(path, content)
+
+## Count the number of lines in a file.
+pub def lines(path: str) -> int:
+	return __shell_lines(path)

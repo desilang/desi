@@ -1,0 +1,40 @@
+# diff module — Text diffing
+#
+# Line-based diffing using LCS algorithm.
+#
+# Usage:
+#   import diff
+#   let d = diff.unified("hello\nworld", "hello\nearth")
+#   print(d)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __diff_unified(old_text: str, new_text: str) -> str
+
+@extern("C")
+pub def __diff_lines(old_text: str, new_text: str) -> str
+
+@extern("C")
+pub def __diff_equal(a: str, b: str) -> int
+
+@extern("C")
+pub def __diff_count_changes(old_text: str, new_text: str) -> int
+
+# --- Public API ---
+
+## Produce a unified diff with --- / +++ headers.
+pub def unified(old_text: str, new_text: str) -> str:
+	return __diff_unified(old_text, new_text)
+
+## Produce line-by-line diff with +/- prefixes.
+pub def lines(old_text: str, new_text: str) -> str:
+	return __diff_lines(old_text, new_text)
+
+## Check if two texts are identical.
+pub def equal(a: str, b: str) -> bool:
+	return __diff_equal(a, b) == 1
+
+## Count the number of changed lines between two texts.
+pub def count_changes(old_text: str, new_text: str) -> int:
+	return __diff_count_changes(old_text, new_text)

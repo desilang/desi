@@ -1,0 +1,105 @@
+# url module — URL parsing, encoding, decoding, and building
+#
+# Usage:
+#   import url
+#   let u = url.parse("https://example.com:8080/api?page=2#top")
+#   print(url.get_scheme(u))   # "https"
+#   print(url.get_host(u))     # "example.com"
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __url_parse(raw: str) -> cptr
+
+@extern("C")
+pub def __url_get_scheme(handle: cptr) -> str
+
+@extern("C")
+pub def __url_get_host(handle: cptr) -> str
+
+@extern("C")
+pub def __url_get_port(handle: cptr) -> int
+
+@extern("C")
+pub def __url_get_path(handle: cptr) -> str
+
+@extern("C")
+pub def __url_get_query(handle: cptr) -> str
+
+@extern("C")
+pub def __url_get_fragment(handle: cptr) -> str
+
+@extern("C")
+pub def __url_get_userinfo(handle: cptr) -> str
+
+@extern("C")
+pub def __url_encode(raw: str) -> str
+
+@extern("C")
+pub def __url_decode(encoded: str) -> str
+
+@extern("C")
+pub def __url_query_get(query_string: str, key: str) -> str
+
+@extern("C")
+pub def __url_build(scheme: str, host: str, port: int, path: str, query: str, fragment: str) -> str
+
+@extern("C")
+pub def __url_join(base: str, relative: str) -> str
+
+@extern("C")
+pub def __url_free(handle: cptr) -> int
+
+# --- Public API ---
+
+## Parse a URL and return a handle.
+pub def parse(raw: str) -> cptr:
+	return __url_parse(raw)
+
+## Get the scheme from a parsed URL handle.
+pub def get_scheme(handle: cptr) -> str:
+	return __url_get_scheme(handle)
+
+## Get the host from a parsed URL handle.
+pub def get_host(handle: cptr) -> str:
+	return __url_get_host(handle)
+
+## Get the port from a parsed URL handle.
+pub def get_port(handle: cptr) -> int:
+	return __url_get_port(handle)
+
+## Get the path from a parsed URL handle.
+pub def get_path(handle: cptr) -> str:
+	return __url_get_path(handle)
+
+## Get the query string from a parsed URL handle.
+pub def get_query(handle: cptr) -> str:
+	return __url_get_query(handle)
+
+## Get the fragment from a parsed URL handle.
+pub def get_fragment(handle: cptr) -> str:
+	return __url_get_fragment(handle)
+
+## URL-encode a string.
+pub def encode(raw: str) -> str:
+	return __url_encode(raw)
+
+## URL-decode a string.
+pub def decode(encoded: str) -> str:
+	return __url_decode(encoded)
+
+## Get a query parameter value from a query string.
+pub def query_get(query_string: str, key: str) -> str:
+	return __url_query_get(query_string, key)
+
+## Build a URL from components.
+pub def build(scheme: str, host: str, port: int, path: str, query: str, fragment: str) -> str:
+	return __url_build(scheme, host, port, path, query, fragment)
+
+## Join a base URL with a relative path.
+pub def join(base: str, relative: str) -> str:
+	return __url_join(base, relative)
+
+## Free a parsed URL handle.
+pub def free(handle: cptr) -> int:
+	return __url_free(handle)

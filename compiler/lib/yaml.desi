@@ -1,0 +1,70 @@
+# yaml module — YAML parser
+#
+# Usage:
+#   import yaml
+#   let h = yaml.parse("key: value")
+#   print(yaml.get(h, "key"))
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __yaml_parse(content: str) -> cptr
+
+@extern("C")
+pub def __yaml_parse_file(path: str) -> cptr
+
+@extern("C")
+pub def __yaml_get(handle: cptr, path: str) -> str
+
+@extern("C")
+pub def __yaml_get_int(handle: cptr, path: str) -> int
+
+@extern("C")
+pub def __yaml_get_bool(handle: cptr, path: str) -> int
+
+@extern("C")
+pub def __yaml_has(handle: cptr, path: str) -> int
+
+@extern("C")
+pub def __yaml_keys(handle: cptr, path: str) -> str
+
+@extern("C")
+pub def __yaml_len(handle: cptr, path: str) -> int
+
+@extern("C")
+pub def __yaml_dump(handle: cptr) -> str
+
+@extern("C")
+pub def __yaml_free(handle: cptr) -> int
+
+# --- Public API ---
+
+pub def parse(content: str) -> cptr:
+	return __yaml_parse(content)
+
+pub def parse_file(path: str) -> cptr:
+	return __yaml_parse_file(path)
+
+pub def get(handle: cptr, path: str) -> str:
+	return __yaml_get(handle, path)
+
+pub def get_int(handle: cptr, path: str) -> int:
+	return __yaml_get_int(handle, path)
+
+pub def get_bool(handle: cptr, path: str) -> bool:
+	return __yaml_get_bool(handle, path) == 1
+
+pub def has(handle: cptr, path: str) -> bool:
+	return __yaml_has(handle, path) == 1
+
+pub def keys(handle: cptr, path: str) -> str:
+	return __yaml_keys(handle, path)
+
+pub def list_len(handle: cptr, path: str) -> int:
+	return __yaml_len(handle, path)
+
+pub def dump(handle: cptr) -> str:
+	return __yaml_dump(handle)
+
+pub def free(handle: cptr) -> int:
+	return __yaml_free(handle)

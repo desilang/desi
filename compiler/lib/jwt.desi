@@ -1,0 +1,49 @@
+# jwt module — JSON Web Tokens
+#
+# Encode, decode, and verify JWTs with HMAC-SHA256.
+#
+# Usage:
+#   import jwt
+#   let token = jwt.encode('{"sub":"user1","role":"admin"}', "my-secret")
+#   if jwt.verify(token, "my-secret"):
+#       let payload = jwt.decode(token, "my-secret")
+#       print(payload)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __jwt_encode(payload_json: str, secret: str) -> str
+
+@extern("C")
+pub def __jwt_decode(token: str, secret: str) -> str
+
+@extern("C")
+pub def __jwt_verify(token: str, secret: str) -> int
+
+@extern("C")
+pub def __jwt_get_payload(token: str) -> str
+
+@extern("C")
+pub def __jwt_get_header(token: str) -> str
+
+# --- Public API ---
+
+## Encode a JSON payload into a JWT string (HS256).
+pub def encode(payload_json: str, secret: str) -> str:
+	return __jwt_encode(payload_json, secret)
+
+## Decode and verify a JWT. Returns payload JSON or "" on failure.
+pub def decode(token: str, secret: str) -> str:
+	return __jwt_decode(token, secret)
+
+## Verify a JWT signature. Returns true if valid.
+pub def verify(token: str, secret: str) -> bool:
+	return __jwt_verify(token, secret) == 1
+
+## Get the payload from a JWT without verification.
+pub def get_payload(token: str) -> str:
+	return __jwt_get_payload(token)
+
+## Get the header from a JWT.
+pub def get_header(token: str) -> str:
+	return __jwt_get_header(token)

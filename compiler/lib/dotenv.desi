@@ -1,0 +1,42 @@
+# dotenv module — .env file loader
+#
+# Load KEY=VALUE pairs from .env files into environment variables.
+#
+# Usage:
+#   import dotenv
+#   dotenv.load()
+#   let api_key = dotenv.get("API_KEY")
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __dotenv_load(path: str) -> int
+
+@extern("C")
+pub def __dotenv_load_or_fail(path: str) -> int
+
+@extern("C")
+pub def __dotenv_parse(content: str) -> str
+
+@extern("C")
+pub def __dotenv_get(key: str) -> str
+
+# --- Public API ---
+
+## Load a .env file. Uses ".env" in the current directory by default.
+## Returns number of variables loaded. Silently ignores missing files.
+pub def load(path: str = ".env") -> int:
+	return __dotenv_load(path)
+
+## Load a .env file. Returns -1 if the file doesn't exist.
+pub def load_or_fail(path: str = ".env") -> int:
+	return __dotenv_load_or_fail(path)
+
+## Parse .env content string without setting environment variables.
+## Returns "KEY=VALUE\n..." pairs.
+pub def parse(content: str) -> str:
+	return __dotenv_parse(content)
+
+## Get an environment variable value (shortcut).
+pub def get(key: str) -> str:
+	return __dotenv_get(key)

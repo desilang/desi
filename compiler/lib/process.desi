@@ -1,0 +1,88 @@
+# process module — Run external commands
+#
+# Usage:
+#   import process
+#   let h = process.shell("echo hello")
+#   print(process.get_stdout(h))
+#   process.free(h)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __process_run(cmd: str, args: list<str>, argc: int) -> cptr
+
+@extern("C")
+pub def __process_run_shell(cmd_str: str) -> cptr
+
+@extern("C")
+pub def __process_get_stdout(handle: cptr) -> str
+
+@extern("C")
+pub def __process_get_stderr(handle: cptr) -> str
+
+@extern("C")
+pub def __process_get_exit_code(handle: cptr) -> int
+
+@extern("C")
+pub def __process_get_ok(handle: cptr) -> int
+
+@extern("C")
+pub def __process_output(cmd: str, args: list<str>, argc: int) -> str
+
+@extern("C")
+pub def __process_shell_output(cmd_str: str) -> str
+
+@extern("C")
+pub def __process_free(handle: cptr) -> int
+
+@extern("C")
+pub def __process_pid() -> int
+
+@extern("C")
+pub def __process_ppid() -> int
+
+# --- Public API ---
+
+## Run a command with arguments. Returns handle.
+pub def run(cmd: str, args: list<str>) -> cptr:
+	return __process_run(cmd, args, len(args))
+
+## Run a shell command via /bin/sh -c. Returns handle.
+pub def shell(cmd_str: str) -> cptr:
+	return __process_run_shell(cmd_str)
+
+## Get stdout from a process handle.
+pub def get_stdout(handle: cptr) -> str:
+	return __process_get_stdout(handle)
+
+## Get stderr from a process handle.
+pub def get_stderr(handle: cptr) -> str:
+	return __process_get_stderr(handle)
+
+## Get exit code from a process handle.
+pub def get_exit_code(handle: cptr) -> int:
+	return __process_get_exit_code(handle)
+
+## Check if process exited successfully.
+pub def get_ok(handle: cptr) -> bool:
+	return __process_get_ok(handle) == 1
+
+## Run command and return stdout directly.
+pub def output(cmd: str, args: list<str>) -> str:
+	return __process_output(cmd, args, len(args))
+
+## Run shell command and return stdout directly.
+pub def shell_output(cmd_str: str) -> str:
+	return __process_shell_output(cmd_str)
+
+## Free a process result handle.
+pub def free(handle: cptr) -> int:
+	return __process_free(handle)
+
+## Get current process ID.
+pub def pid() -> int:
+	return __process_pid()
+
+## Get parent process ID.
+pub def ppid() -> int:
+	return __process_ppid()
