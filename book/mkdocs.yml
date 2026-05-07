@@ -70,7 +70,10 @@ nav:
   - Getting Started:
     - Installation: getting-started/install.md
     - First Program: getting-started/first-program.md
+    - Using the REPL: getting-started/repl.md
     - IDE Setup: getting-started/ide-setup.md
+  - Guides:
+    - Coming From Other Languages: guides/coming-from.md
   - Tutorials:
     - Introduction: tutorials/intro.md
     - Variables & Types: tutorials/variables.md
@@ -119,6 +122,7 @@ nav:
     - Keywords: reference/keywords.md
     - desic CLI: reference/desic-cli.md
     - desic doc: reference/desic-doc.md
+    - Diagnostics: reference/diagnostics.md
   - Standard Library:
     - Strings: stdlib/strings.md
     - OS: stdlib/os.md

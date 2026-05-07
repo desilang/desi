@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/parse"
@@ -20,6 +21,7 @@ func main() {
 	in := bufio.NewScanner(os.Stdin)
 
 	lineNum := 0
+	showAST := false
 	for {
 		term.Prompt(">>> ")
 		if !in.Scan() {
@@ -37,6 +39,10 @@ func main() {
 			term.Println(":help    Show this message")
 			term.Println(":ast     Show AST for next input")
 			continue
+		case ":ast":
+			showAST = true
+			term.Println("(will show AST for next input)")
+			continue
 		}
 
 		lineNum++
@@ -50,17 +56,24 @@ func main() {
 			for _, e := range parseErrs {
 				fmt.Fprintf(os.Stderr, "  parse error: %s\n", e.Message)
 			}
+			showAST = false
 			continue
+		}
+
+		// Show AST if requested
+		if showAST {
+			ast.Print(os.Stdout, mod)
+			showAST = false
 		}
 
 		// Type check
 		diags, _ := check.Check(mod)
 		hasDiags := false
 		for _, d := range diags {
-			if d.Domain == "warn" || d.Domain == "type" || d.Domain == "class" {
-				renderDiag(d)
-				hasDiags = true
-			}
+			// Show all diagnostic domains (type, warn, class, borrow,
+			// call, collections, numeric, ffi, sync, module, project)
+			renderDiag(d)
+			hasDiags = true
 		}
 
 		if !hasDiags {
@@ -72,7 +85,7 @@ func main() {
 }
 
 func renderDiag(d diag.Diagnostic) {
-	prefix := "info"
+	prefix := d.Domain
 	switch d.Domain {
 	case "type":
 		prefix = "type error"
@@ -80,6 +93,22 @@ func renderDiag(d diag.Diagnostic) {
 		prefix = "warning"
 	case "class":
 		prefix = "class error"
+	case "borrow":
+		prefix = "borrow error"
+	case "call":
+		prefix = "call error"
+	case "collections":
+		prefix = "collection error"
+	case "numeric":
+		prefix = "numeric error"
+	case "ffi":
+		prefix = "ffi error"
+	case "sync":
+		prefix = "concurrency error"
+	case "module":
+		prefix = "module error"
+	case "project":
+		prefix = "project error"
 	}
 	msg := d.Message
 	if msg == "" {
