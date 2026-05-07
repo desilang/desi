@@ -1,145 +1,190 @@
-# Desi (revised bootstrap)
+<p align="center">
+  <img src="book/docs/assets/logo.svg" alt="Desi" width="120">
+  <br>
+  <strong>Desi</strong>
+  <br>
+  A compiled language with Python's clarity, Rust's safety, and batteries included.
+</p>
 
-A small, expression-first language with Python-style layout, Rust-like safety, and clear tooling.
-This branch is the **revised bootstrap**, now well beyond lexer: we have parser, type checker,
-borrow rules (M6), imports/resolution (M5), HIR + lowering, and an LLVM backend under test.
-Diagnostics are single-sourced from a catalog.
+<p align="center">
+  <a href="https://desilang.org"><img src="https://img.shields.io/badge/docs-desilang.org-blue"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-0.1.0-green"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-lightgrey"></a>
+</p>
 
-## Status (high-level)
+---
 
-**Core implemented**
+```desi
+import http
 
-- **Lexer** with layout (`Indent`/`Dedent`/`NL`) and greedy operator scan
-  - Numbers: `int` (dec/bin/oct/hex), `float` (`e`/`E`), **hex floats** (`0x…p±…`)
-  - Underscore separators; `.5` / `2.` accepted
-  - Strings: `"…"`, `"""…"""`, `f"…"`, escape validation
-  - Tabs-only indentation policy (leading spaces produce a diagnostic)
-- **Parser** for classes/structs/enums, flow statements, `match`, `using`/`defer`,
-  lambdas (incl. parenthesized), slices/steps, and comprehensions
-- **Type checker** with overloads, pipelines, multi-return, comprehensions
-- **Borrow checking (M6)** including caller/callee rules & last-use paths
-- **Imports/Resolver (M5)** with `__mod.desi` module entry support and cycle handling
-- **HIR + lowering** (incl. async lowering stubs) and LLVM module emission (tests present)
-- **Diagnostics**: unified renderer pulling titles/help/suggestions from a single **codes.json**
+let resp = http.get("https://api.example.com/users")
+let users = resp.json()
 
-**In progress / staged**
+for user in users:
+    print(f"{user['name']} — {user['email']}")
+```
 
-- **M7+**: more async + runtime shaping
-- **M8** groundwork visible in examples (async basic), more rules to come
+Desi compiles to native machine code via LLVM. No garbage collector, no runtime VM, no system dependencies. Ship a single binary.
 
-## Building from Source
+## Install
 
-Desi uses a `Makefile` to build the compiler, tools, and runtime library.
+```sh
+curl -sSL https://desilang.org/install.sh | sh
+```
 
-### Prerequisites
-- **Go 1.20+** (for compiler/tools)
-- **Clang/LLVM** (for runtime library and linking)
-- **Make** (for build automation)
+Or build from source:
 
-### Build Steps
+```sh
+git clone https://github.com/desilang/desi
+cd desi && make
+```
 
-1.  **Build Compiler & Runtime**:
-    ```sh
-    make
-    ```
-    This creates:
-    - `bin/desic`: The compiler
-    - `bin/desifmt`: The formatter
-    - `bin/desirepl`: The REPL
-    - `bin/desilsp`: The language server (LSP)
-    - `build/libdesi.a`: The static runtime library
+**Prerequisites:** Go 1.20+, Clang/LLVM, Make.
 
-2.  **Compile Desi Code**:
-    Use the provided script to compile and link your code:
-    ```sh
-    ./build-desi.sh examples/38_while_loop.desi my_program
-    ./build/output/my_program
-    ```
+## Quick Start
 
-## IDE Integration
+```sh
+# Create a project
+mkdir hello && cd hello
+echo 'print("Hello, Desi!")' > main.desi
 
-Desi has full LSP (Language Server Protocol) support via `desilsp`:
+# Compile and run
+desic run main.desi
+```
+
+## Why Desi?
+
+Desi takes the best ideas from Python, Rust, Go, Elixir, and Django — and combines them into one language where everything works out of the box:
+
+- **Python's readability** — Indentation-based, no braces, no semicolons
+- **Rust's safety** — Move semantics, borrow checking, `Option<T>` and `Result<T, E>`, no null
+- **Go's concurrency** — Channels, `select`, structured concurrency with supervisors
+- **Django's ORM** — QuerySets, field lookups, migrations, signals — all built-in
+- **LLVM performance** — Compiles to native code, ships as a single binary
+
+## A Taste of Desi
+
+```desi
+# Web server with routing
+import http
+
+http.get("/", lambda req:
+    http.text("Hello, World!"))
+
+http.get("/users/:id", lambda req:
+    let id = req.param("id")
+    let user = User.objects.get("id", id)
+    http.json({"name": user.name, "email": user.email}))
+
+http.listen(8080)
+```
+
+```desi
+# Django-style ORM — no setup, no dependencies
+import db
+
+@model
+class User:
+    name: str
+    email: str
+    age: int
+
+db.connect("postgres://localhost/myapp")
+db.create_table(User)
+
+let adults = User.objects.filter("age__gte", "18").order_by("name").all()
+for user in adults:
+    print(f"{user.name}: {user.email}")
+```
+
+```desi
+# Pattern matching with exhaustiveness checking
+enum Shape:
+    Circle(float)
+    Rect(float, float)
+    Triangle(float, float, float)
+
+def area(s: Shape) -> float:
+    match s:
+        Shape.Circle(r):
+            return 3.14159 * r * r
+        Shape.Rect(w, h):
+            return w * h
+        Shape.Triangle(a, b, c):
+            let s = (a + b + c) / 2.0
+            return (s * (s-a) * (s-b) * (s-c)) ** 0.5
+```
+
+## Batteries-Included Standard Library
+
+Everything below ships with the compiler. **No package manager needed.**
+
+| Category | Modules |
+|----------|---------|
+| **Web & Network** | `http` (client + server), `websocket`, `net` (TCP/UDP), `url`, `tls` |
+| **Database** | PostgreSQL, MySQL, SQLite3, Redis — Django-style ORM with migrations |
+| **Data Formats** | `json`, `toml`, `yaml`, `csv`, `ini`, `template` |
+| **Security** | `hash` (SHA-256, bcrypt, HMAC), `jwt`, `uuid`, `base64`, `encoding` |
+| **CLI & System** | `args`, `cli`, `process`, `signal`, `shell`, `os`, `fs`, `path`, `env`, `dotenv` |
+| **Concurrency** | `mutex`, `rwlock`, `channel`, `taskgroup`, `supervisor`, `semaphore`, `atomic`, `future` |
+| **Utilities** | `strings`, `fmt`, `re`, `math`, `random`, `datetime`, `time`, `color`, `log`, `validate` |
+| **Data Structures** | `collections` (deque, counter, stack, queue), `bytes`, `cache` (LRU, TTL) |
+| **Dev Tools** | `testing`, `diff`, `table`, `mime`, `compress` |
+
+**50 modules, 74 C runtime files, zero external dependencies.**
+
+## Tooling
+
+| Tool | Command | Description |
+|------|---------|-------------|
+| **Compiler** | `desic build` | Compile a project to a native binary |
+| **Runner** | `desic run` | Compile and run in one step |
+| **Test Runner** | `desic test` | Run `*_test.desi` files |
+| **Formatter** | `desifmt` | Auto-format Desi source code |
+| **REPL** | `desirepl` | Interactive Desi shell |
+| **Language Server** | `desilsp` | Full LSP for any editor |
+| **Hot Reload** | `desic watch` | Recompile on file change |
+
+## IDE Support
 
 | Editor | Setup |
 |--------|-------|
-| **VS Code** | `cd editors/vscode && npm install` then F5 to launch |
+| **VS Code** | `cd editors/vscode && npm install` then F5 |
 | **IntelliJ/IDEA** | `cd editors/intellij && ./gradlew buildPlugin` |
-| **Any LSP Editor** | Configure to run `bin/desilsp` via stdio |
+| **Any LSP Editor** | Configure to run `desilsp` via stdio |
 
-**Features**: Hover, completion, go-to-definition, find references, rename, code actions, formatting, semantic highlighting, inlay hints, and more.
+**LSP Features:** Hover, completion, go-to-definition, find references, rename, code actions, formatting, semantic highlighting, inlay hints, diagnostics.
 
-### Supported Platforms
+## Platform Support
 
-- **macOS** (x86_64, arm64): Fully supported.
-- **Linux** (x86_64, arm64): Fully supported (requires clang/llvm).
-- **Windows**:
-  - **Tools**: You can build Windows executables (`.exe`) from macOS/Linux using:
-    ```sh
-    make windows
-    ```
-  - **Runtime**: Compiling the runtime library (`libdesi.a`) and linking requires a C compiler (MinGW/Clang) on Windows. Cross-compilation of the runtime is possible by overriding `CC` and `AR` in the Makefile.
+| Platform | Status |
+|----------|--------|
+| macOS (x86_64, arm64) | ✅ Fully supported |
+| Linux (x86_64, arm64) | ✅ Fully supported |
+| Windows (x86_64) | ✅ Cross-compile from macOS/Linux |
 
-## Testing
+## Documentation
+
+- **[Getting Started](https://desilang.org/getting-started/)** — First steps with Desi
+- **[Standard Library Reference](https://desilang.org/stdlib/)** — All 50 modules documented
+- **[Language Guide](https://desilang.org/guide/)** — Syntax, types, concurrency, memory
+- **[Why Desi?](KILLER_FEATURES.md)** — Design philosophy and killer features
+- **[Changelog](CHANGELOG.md)** — Release history
+
+## Contributing
 
 ```sh
+# Run the full test suite
 go test ./...
+
+# Run example tests (484 programs with expected output)
+./test_examples.sh
+
+# Build everything from scratch
+make clean && make
 ```
 
-## Try it
-
-Dump tokens for a file:
-
-```sh
-go run ./compiler/cmd/desic -tokens examples/03_hex_float.desi
-```
-
-Emit a sample diagnostic:
-
-```sh
-go run ./compiler/cmd/desic -diag
-```
-
-See layout events:
-
-```sh
-go run ./compiler/cmd/desic -demo-layout
-```
-
-Type & borrow checking for a file:
-
-```sh
-go run ./compiler/cmd/desic -I "examples:compiler/lib" -check examples/12_m4_types_overload.desi
-```
-
-Lower/HIR → LLVM IR preview (example uses async sample):
-
-```sh
-go run ./compiler/cmd/desic emit-ir examples/15_m8_async_basic.desi
-```
-
-## Indentation policy
-
-Desi enforces **tabs-only** for leading indentation. Lines starting with spaces produce a diagnostic with a helpful fix-hint. Mid-line spaces for alignment are fine; only **leading** whitespace is checked.
-
-## Diagnostics
-
-Desi’s diagnostics are **single-sourced** from a catalog:
-
-* Titles, help text, and suggestions live in `compiler/internal/diag/codes.json`
-* The renderer (`compiler/internal/diag/render_tty.go`) prefers catalog values
-* New codes must be added to the catalog (tests enforce this)
-
-Read the full guide: **[docs/dev/diagnostics-catalog.md](docs/dev/diagnostics-catalog.md)**
-
-## Where to read more
-
-* **Syntax overview:** [docs/syntax.md](docs/syntax.md)
-* **Grammar (EBNF):** [docs/grammar.ebnf](docs/grammar.ebnf)
-* **Roadmap:** [docs/roadmap.md](docs/roadmap.md)
-* **Imports & resolver:** [docs/guides/m5-imports.md](docs/guides/m5-imports.md)
-* **Borrow rules (M6):** [docs/guides/m6-borrow.md](docs/guides/m6-borrow.md)
-* **LLVM IR optimization notes:** [docs/dev/llvm-ir-optimization.md](docs/dev/llvm-ir-optimization.md)
-* **Memory management notes:** [docs/dev/memory-management.md](docs/dev/memory-management.md)
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
 
 ## License
 

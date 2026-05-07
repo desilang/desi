@@ -2562,6 +2562,7 @@ int32_t __db_register_data_migration(const char* label, void (*fn)(void)) {
     if (!label || !fn || g_data_migration_count >= MAX_DATA_MIGRATIONS) return -1;
     DataMigrationDef* dm = &g_data_migrations[g_data_migration_count++];
     strncpy(dm->label, label, sizeof(dm->label) - 1);
+    dm->label[sizeof(dm->label) - 1] = '\0';
     dm->fn = fn;
     return 0;
 }
@@ -2751,8 +2752,8 @@ char* __db_inspectdb(void) {
                 char* ct = __db_get_value_at(c, 1);
                 char* nullable = __db_get_value_at(c, 2);
                 char* max_len_s = __db_get_value_at(c, 4);
-                if (cn) strncpy(cols[c].name, cn, 127);
-                if (ct) strncpy(cols[c].type, ct, 127);
+                if (cn) { strncpy(cols[c].name, cn, 127); cols[c].name[127] = '\0'; }
+                if (ct) { strncpy(cols[c].type, ct, 127); cols[c].type[127] = '\0'; }
                 cols[c].nullable = (nullable && strcasecmp_local(nullable, "YES") == 0) ? 1 : 0;
                 cols[c].max_len = (max_len_s && max_len_s[0]) ? atoi(max_len_s) : 0;
             }

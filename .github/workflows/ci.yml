@@ -38,3 +38,25 @@ jobs:
         run: |
           make compiler
           ./test_examples.sh
+
+      - name: Run leak detection (macOS only)
+        if: runner.os == 'macOS'
+        timeout-minutes: 5
+        run: |
+          # Run leak checks on a representative subset of examples
+          LEAK_EXAMPLES=(
+            examples/38_while_loop.desi
+            examples/42_generics.desi
+            examples/170_tuple_phase1.desi
+            examples/304_match_edge_cases.desi
+          )
+          LEAK_FAIL=0
+          for f in "${LEAK_EXAMPLES[@]}"; do
+            if [ -f "$f" ]; then
+              echo "--- Leak check: $(basename $f) ---"
+              bash test_leaks.sh "$f" || LEAK_FAIL=1
+            fi
+          done
+          if [ "$LEAK_FAIL" -ne 0 ]; then
+            echo "⚠ Some leak checks reported issues (non-blocking)"
+          fi

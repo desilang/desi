@@ -408,6 +408,9 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	}
 	runtimeLib := findRuntimeLib()
 	clangArgs := []string{objPath, "-o", exePath}
+	if optLevel != "" {
+		clangArgs = append(clangArgs, optLevel)
+	}
 	if runtimeLib != "" {
 		clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
 	}
