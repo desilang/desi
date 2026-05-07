@@ -60,8 +60,120 @@ This is the part that surprises people. Everything below ships with the compiler
 - **Logging** — Leveled logging (debug, info, warn, error).
 - **Compression** — gzip/zlib compress and decompress.
 
+### Code Analysis
+- **Runtime AST Library** — `import ast` lets you parse, walk, and analyze `.desi` source files at runtime. Build custom linters, code generators, and documentation tools — using the same parser the compiler uses internally.
+
 ### Validation
 - **Built-in validators** — `is_email()`, `is_url()`, `is_ipv4()`, `is_ipv6()`, `is_hex()`, `is_json()`. No third-party library needed for basic input validation.
+
+---
+
+## Performance Advisor — The Compiler That Coaches You
+
+Most compilers tell you *what's wrong*. Desi tells you *what's slow*.
+
+The **Performance Advisor** is a built-in static analysis engine that detects algorithmic anti-patterns at compile time — zero runtime overhead, zero external tools, zero configuration.
+
+### What it catches:
+
+```
+⚠ DPR0001 [perf/complexity]: O(n²) nested loop detected
+  ╭─ src/process.desi:24:9
+  │
+24│         for item in items:
+  │         ^^^^^^^^^^^^^^^^^^
+  │
+  = help: Consider using a dict/set for O(1) lookups, or precompute a mapping
+```
+
+- **O(n²) nested loops** — Flags `for > for` patterns with suggestions for hash-based alternatives.
+- **String concatenation in loops** — Detects `str + str` inside hot loops, recommends `list.join()`.
+- **Repeated collection lookups** — Catches `list.contains()` in loops, suggests `set` or `dict`.
+- **Unbounded allocations** — Warns about growing collections inside loops without size hints.
+
+### Three analysis levels:
+
+```toml
+# desi.mod
+[diagnostics]
+perf = "default"    # "relaxed", "default", or "strict"
+```
+
+- **relaxed** — Only the most obvious anti-patterns (O(n²) loops, string concat in loops).
+- **default** — Anti-patterns plus style suggestions (unnecessary copies, missed pipeline opportunities).
+- **strict** — Everything above plus micro-optimizations (arena hints, branch prediction suggestions).
+
+### `@perf` decorator for runtime benchmarking:
+
+```desi
+import perf
+
+@perf(iterations=1000)
+def my_algorithm(data: list[int]) -> int:
+    return data |> filter((x) => x > 0) |> sum()
+
+# Output:
+# ┌─ perf: my_algorithm ─────────────────┐
+# │ Iterations: 1,000                    │
+# │ Total:      45.2ms                   │
+# │ Average:    45.2μs                   │
+# │ Min:        42.1μs  Max: 128.3μs     │
+# └──────────────────────────────────────┘
+```
+
+The `@perf` decorator is **zero-cost in production** — it's automatically stripped from release builds via the `strip_in_release` macro protocol property. No `#ifdef`, no build flags, no dead code.
+
+### `desic perf` subcommand:
+
+```bash
+desic perf src/main.desi          # Run all @perf functions
+desic perf --level=strict .       # Strict advisor on entire project
+```
+
+---
+
+## Build Audit & Permissions — Security at Compile Time
+
+Desi's compiler acts as a security gatekeeper. Before your code builds, the compiler scans all imports — including transitive dependencies — and reports exactly what sensitive APIs they use.
+
+### `[permissions]` in desi.mod:
+
+```toml
+# desi.mod
+[permissions]
+allow = ["fs", "http", "json"]     # APIs your code is allowed to use
+deny  = ["shell", "process"]       # Explicitly blocked — build fails if used
+audit = true                       # Print audit report before building
+```
+
+### The audit report:
+
+```
+🔒 Build Audit Report
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  Your code:
+    ✓ fs       (Tier 1: System)
+    ✓ http     (Tier 2: Network)
+    ✓ json     (Tier 0: Safe)
+
+  Third-party: analytics_lib v0.2.1
+    ⚠ net      (Tier 2: Network) — used in analytics_lib/client.desi:17
+    ⚠ process  (Tier 1: System) — used in analytics_lib/utils.desi:42
+    ✗ DENIED: process is in deny list
+
+  Build blocked. Remove 'process' from deny list or remove the dependency.
+```
+
+### API sensitivity tiers:
+
+| Tier | Category | Modules | Risk |
+|------|----------|---------|------|
+| 0 | Safe | `math`, `string`, `json`, `re`, `collections` | None |
+| 1 | System | `fs`, `os`, `path`, `env`, `args`, `process` | File/env access |
+| 2 | Network | `http`, `net`, `db`, `redis`, `websocket` | Network access |
+| 3 | Privileged | `unsafe` blocks, raw pointers, `@extern` FFI | Arbitrary code execution |
+
+This isn't just a warning system — it's **enforceable policy**. CI pipelines can set `deny = ["shell", "unsafe"]` and guarantee no dependency introduces a backdoor.
 
 ---
 
@@ -81,6 +193,29 @@ using guard = mutex.lock():
     guard.value = guard.value + 1
 # Lock is released here. Always. Even if something panics.
 ```
+
+### Arena Allocators — Bulk Memory Without the Overhead
+
+Arenas give you the speed of manual memory management with the safety of automatic cleanup:
+
+```desi
+def handle_request(req: Request) -> Response:
+    using arena:
+        # All allocations in this scope use the arena
+        let header = arena.alloc(64)
+        let body = arena.alloc(4096)
+        let parsed = parse_json(body)
+
+        return build_response(parsed)
+    # Entire arena freed in ONE operation — no individual frees,
+    # no GC tracing, no reference counting overhead
+```
+
+**Why this matters:**
+- **Constant-time allocation** — Bump pointer, no free-list search.
+- **Constant-time deallocation** — Free everything at once when the scope ends.
+- **Cache-friendly** — Objects allocated together live together in memory.
+- **Perfect for request handling** — Each HTTP request gets an arena, processes, and the entire arena is freed when the response is sent. No memory leaks possible.
 
 ---
 
@@ -121,6 +256,37 @@ using tg = sync.TaskGroup():
 
 ### Thread-Safe Primitives
 Mutex, RwLock, Semaphore, Channels — all in `import sync`.
+
+---
+
+## User-Defined Macros — Extend the Compiler
+
+Desi's macro system lets you define custom decorators that hook into the compiler pipeline. Macros are defined as `@macro` classes and registered at compile time — zero runtime overhead.
+
+```desi
+@macro(target="class")
+class model:
+    property_name = "objects"
+    chainable = ["filter", "exclude", "order_by", "limit"]
+    terminal = ["fetch_all", "fetch_one", "count", "exists"]
+    runtime = {
+        "filter": "__db_filter",
+        "fetch_all": "__db_fetch_all"
+    }
+    require_fields = true
+    auto_pk = true
+```
+
+This single class definition gives every `@model` class a full QuerySet API, wired to C runtime functions, with validation rules — all enforced at compile time.
+
+**What macros can do:**
+- Inject properties and methods into decorated classes/functions.
+- Define chainable/terminal method APIs (like QuerySets).
+- Wire methods to C runtime functions via the `runtime` mapping.
+- Validate class structure (require fields, forbid names, auto-generate primary keys).
+- Support `strip_in_release = true` for dev-only decorators (like `@perf`, `@test`).
+
+**What's coming in v0.2.0:** Compile-time macro introspection — write macro rules in Desi itself, with full AST access. See the [roadmap](docs/roadmap/todo/compile_time_macros.md).
 
 ---
 
@@ -201,8 +367,30 @@ match result:
 - **REPL** — `desirepl` for interactive exploration.
 - **Formatter** — `desifmt` for consistent code style.
 - **LSP** — Full language server with hover, completions, go-to-definition, rename, code actions, semantic highlighting, inlay hints. Works in VS Code, IntelliJ, and any LSP-compatible editor.
+- **Performance advisor** — The compiler warns you about slow patterns before you even run your code.
+- **Build audit** — Know exactly what APIs your dependencies use before building.
 - **Single binary output** — Your entire program, including the runtime, database drivers, crypto, and HTTP client, compiles into one static binary. `scp` it to a server and run it.
 - **Cross-platform** — macOS (x86_64, arm64), Linux (x86_64, arm64), Windows (cross-compile from macOS/Linux).
+
+---
+
+## Hot Reload (Development Mode)
+
+Desi supports **hot reload in development** using native compilation + dynamic linking. No VM, no interpreter, no bytecode — just fast incremental recompilation:
+
+```
+Developer makes edit →
+  1. File watcher detects change
+  2. Recompile only affected modules to .so/.dylib
+  3. Pause running program at safe point
+  4. dlclose old module, dlopen new module
+  5. Rewire function pointers in dispatch table
+  6. Resume execution
+```
+
+- **Sub-second reload** for typical edits via LLVM incremental compilation.
+- **State preservation** via `write_state()`/`read_state()` hooks.
+- **Production builds are fully static** — no dynamic linking overhead.
 
 ---
 

@@ -449,9 +449,140 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 ---
 
+### M16 — Performance Tooling: Advisor, `@perf`, Runtime AST (🆕 Planned)
+
+**Goals**
+
+Deliver a zero-overhead performance analysis module with three components: a static analysis advisor that catches algorithmic anti-patterns at compile time, a `@perf` decorator for runtime benchmarking, and a runtime `ast` library for user-built analysis tools.
+
+**Static Analysis — Performance Advisor**
+
+* **Diagnostic codes**: `DPR` prefix (Desi PeRformance).
+  * `DPR0001` — O(n²) nested loop detected.
+  * `DPR0002` — String concatenation in loop (recommend `list.join()`).
+  * `DPR0003` — Repeated collection lookup in loop (recommend `set`/`dict`).
+  * `DPR0004` — Unbounded allocation in loop (recommend size hints).
+* **Three analysis levels**: `relaxed`, `default`, `strict`.
+  * Configured via `[diagnostics] perf = "default"` in `desi.mod`.
+* **Implementation**: Go-based rules in `internal/check/check_perf.go`.
+  * Advisor rules are pluggable functions, not hardcoded in the core type checker.
+  * Each rule receives a `*ast.FuncDecl` and emits diagnostics.
+
+**Runtime Benchmarking — `@perf` Decorator**
+
+* **Macro protocol**: Registered as a Tier 2 `MacroProtocol` (not a builtin decorator).
+  * `strip_in_release = true` — automatically removed from release builds.
+* **Decorator API**: `@perf(iterations=N)` on any function.
+  * Wraps function body with `__perf_bench_start()`/`__perf_bench_finish()` calls.
+  * Prints timing statistics: total, average, min, max.
+* **Runtime**: `runtime/perf.c` with high-resolution timing (`clock_gettime` / `mach_absolute_time`).
+* **Stdlib**: `lib/perf/__mod.desi` with safe Desi wrappers.
+
+**CLI — `desic perf` Subcommand**
+
+* Discovers and runs all `@perf`-decorated functions in the project.
+* Accepts `--level=relaxed|default|strict` to control advisor strictness.
+* Modeled after `testCmd` in the existing CLI infrastructure.
+
+**Runtime `ast` Library**
+
+* **`import ast`**: Parse `.desi` source files into walk-able AST trees at runtime.
+* Uses the same parser the compiler uses internally (exposed via C bindings).
+* Enables users to build custom linters, code generators, documentation tools.
+* Stable public types: `ast.FuncDecl`, `ast.ForStmt`, `ast.CallExpr`, `ast.Ident`, etc.
+* **This is the v0.1.0 foundation** for the v0.2.0 compile-time macro introspection.
+
+**Acceptance**
+
+* `DPR` diagnostics fire correctly for known anti-patterns (nested loops, string concat in loop).
+* `@perf` functions produce timing output when run via `desic perf`.
+* `@perf` code is absent from `desic build --release` output.
+* `import ast` can parse a `.desi` file and walk its tree at runtime.
+* Advisor level is configurable via `desi.mod` and `--level` CLI flag.
+* All prior milestones remain green.
+
+---
+
+### M17 — Build Audit & Permissions (🆕 Planned)
+
+**Goals**
+
+Implement a compile-time security audit system that scans the full import graph for sensitive API usage and enforces project-level permissions policies.
+
+**Manifest — `[permissions]` Section**
+
+* New section in `desi.mod`:
+  ```toml
+  [permissions]
+  allow = ["fs", "http", "json"]
+  deny = ["shell", "process"]
+  audit = true
+  ```
+* **`allow`**: Whitelist of permitted API modules. If set, any module not listed triggers a warning.
+* **`deny`**: Blacklist of forbidden API modules. If any dependency uses a denied module, the build fails.
+* **`audit`**: When `true`, print a full audit report before building.
+* Parsed and validated by `internal/project` manifest loader with `DPM*` diagnostics.
+
+**API Sensitivity Tiers**
+
+* Classification table in `internal/check/api_tiers.go`:
+  * **Tier 0 — Safe**: `math`, `string`, `json`, `re`, `collections`, `time`, `log`.
+  * **Tier 1 — System**: `fs`, `os`, `path`, `env`, `args`, `process`, `shell`.
+  * **Tier 2 — Network**: `http`, `net`, `db`, `redis`, `websocket`, `smtp`.
+  * **Tier 3 — Privileged**: `unsafe` blocks, raw pointers, `@extern` FFI.
+* Leverages existing `StdlibImports map[string]bool` in `check/info.go` for import tracking.
+
+**Audit Report**
+
+* Generated during the `desic build` pipeline after import resolution.
+* Lists every imported module per dependency with its sensitivity tier.
+* Highlights denied modules and blocks the build with actionable error messages.
+* Machine-readable output via `--error-format=json`.
+
+**Transitive Scanning**
+
+* The resolver already walks the full import graph.
+* Audit adds a post-resolution pass that collects all `StdlibImports` across all modules (including third-party).
+* Reports are per-dependency, showing which file and line uses each sensitive API.
+
+**Acceptance**
+
+* `[permissions]` section parses correctly with `DPM*` diagnostics for invalid values.
+* `deny = ["shell"]` causes `desic build` to fail if any dependency imports `shell`.
+* Audit report correctly identifies transitive dependencies and their API usage.
+* `--error-format=json` produces machine-readable audit output.
+* All prior milestones remain green.
+
+---
+
+## v0.2.0 Vision — Compile-Time Macro Introspection
+
+> **Status:** Design complete, implementation deferred to v0.2.0.
+> **Full design:** [compile_time_macros.md](todo/compile_time_macros.md)
+
+The headline feature for v0.2.0: **write macro rules in Desi that execute during compilation with full AST access.**
+
+### What this enables
+* User-defined compile-time analyzers (SQL injection detection, API contract validation).
+* Community-contributed advisor rules without modifying the Go compiler.
+* Domain-specific linters that run as part of the standard build.
+
+### Why deferred from v0.1.0
+* Requires embedding a Desi tree-walking interpreter in the Go compiler (4-6 weeks).
+* AST type API must be stable before exposure — v0.1.0 stabilizes the shapes.
+* Interpreter bugs could crash the compiler — unacceptable for launch quality.
+
+### Implementation path
+* **v0.1.0**: Runtime `ast` library + declarative macros (foundation).
+* **v0.2.0**: Tree-walking interpreter with sandboxing, `USR` diagnostic prefix.
+* **v0.3.0**: Stable AST API, remove `@experimental` flag.
+
+---
+
 ## Cross-cutting practices
 
 * **Testing:** unit tests per package; golden tests for diagnostics & formatter; integration smoke tests for codegen.
 * **Performance:** microbenchmarks for tight loops, pipelines, comprehensions; keep codegen O2-friendly.
+* **Security:** build audit scans transitive imports; `[permissions]` enforced in CI.
 * **Documentation:** keep `docs/grammar.ebnf` and guides canonical and updated.
 * **Style:** enforced by `desifmt` (no options).
