@@ -1,0 +1,64 @@
+# ini module — INI file parser
+#
+# Usage:
+#   import ini
+#   let h = ini.parse("[section]\nkey=value")
+#   print(ini.get(h, "section", "key"))
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __ini_parse(content: str) -> cptr
+
+@extern("C")
+pub def __ini_parse_file(path: str) -> cptr
+
+@extern("C")
+pub def __ini_get(handle: cptr, section: str, key: str) -> str
+
+@extern("C")
+pub def __ini_get_default(handle: cptr, section: str, key: str, default_val: str) -> str
+
+@extern("C")
+pub def __ini_has_section(handle: cptr, section: str) -> int
+
+@extern("C")
+pub def __ini_has_key(handle: cptr, section: str, key: str) -> int
+
+@extern("C")
+pub def __ini_sections(handle: cptr) -> str
+
+@extern("C")
+pub def __ini_keys(handle: cptr, section: str) -> str
+
+@extern("C")
+pub def __ini_free(handle: cptr) -> int
+
+# --- Public API ---
+
+pub def parse(content: str) -> cptr:
+	return __ini_parse(content)
+
+pub def parse_file(path: str) -> cptr:
+	return __ini_parse_file(path)
+
+pub def get(handle: cptr, section: str, key: str) -> str:
+	return __ini_get(handle, section, key)
+
+pub def get_default(handle: cptr, section: str, key: str, default_val: str) -> str:
+	return __ini_get_default(handle, section, key, default_val)
+
+pub def has_section(handle: cptr, section: str) -> bool:
+	return __ini_has_section(handle, section) == 1
+
+pub def has_key(handle: cptr, section: str, key: str) -> bool:
+	return __ini_has_key(handle, section, key) == 1
+
+pub def sections(handle: cptr) -> str:
+	return __ini_sections(handle)
+
+pub def keys(handle: cptr, section: str) -> str:
+	return __ini_keys(handle, section)
+
+pub def free(handle: cptr) -> int:
+	return __ini_free(handle)

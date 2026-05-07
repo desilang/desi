@@ -1,0 +1,53 @@
+# table module — Pretty table formatting
+#
+# Usage:
+#   import table
+#   let t = table.new(["Name", "Age", "City"])
+#   table.add_row(t, ["Alice", "30", "NYC"])
+#   print(table.render_simple(t))
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __table_new(col_names: list<str>, ncols: int) -> cptr
+
+@extern("C")
+pub def __table_add_row(handle: cptr, values: list<str>, ncols: int) -> int
+
+@extern("C")
+pub def __table_set_align(handle: cptr, col: int, align: int) -> int
+
+@extern("C")
+pub def __table_len(handle: cptr) -> int
+
+@extern("C")
+pub def __table_render(handle: cptr) -> str
+
+@extern("C")
+pub def __table_render_simple(handle: cptr) -> str
+
+@extern("C")
+pub def __table_free(handle: cptr) -> int
+
+# --- Public API ---
+
+pub def new(columns: list<str>) -> cptr:
+	return __table_new(columns, len(columns))
+
+pub def add_row(handle: cptr, values: list<str>) -> int:
+	return __table_add_row(handle, values, len(values))
+
+pub def set_align(handle: cptr, col: int, align: int) -> int:
+	return __table_set_align(handle, col, align)
+
+pub def size(handle: cptr) -> int:
+	return __table_len(handle)
+
+pub def render(handle: cptr) -> str:
+	return __table_render(handle)
+
+pub def render_simple(handle: cptr) -> str:
+	return __table_render_simple(handle)
+
+pub def free(handle: cptr) -> int:
+	return __table_free(handle)

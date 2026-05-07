@@ -1,0 +1,111 @@
+# signal module — OS signal handling
+#
+# Register handlers for Unix signals (SIGINT, SIGTERM, etc.).
+#
+# Usage:
+#   import signal
+#   signal.on_interrupt(lambda: print("Caught Ctrl+C!"))
+
+# --- C runtime bindings ---
+
+@extern("C")
+def __signal_on(signum: int, handler: () -> int) -> int
+
+@extern("C")
+def __signal_reset(signum: int) -> int
+
+@extern("C")
+def __signal_ignore(signum: int) -> int
+
+@extern("C")
+def __signal_raise(signum: int) -> int
+
+@extern("C")
+def __signal_name(signum: int) -> str
+
+@extern("C")
+def __signal_SIGINT() -> int
+
+@extern("C")
+def __signal_SIGTERM() -> int
+
+@extern("C")
+def __signal_SIGHUP() -> int
+
+@extern("C")
+def __signal_SIGQUIT() -> int
+
+@extern("C")
+def __signal_SIGUSR1() -> int
+
+@extern("C")
+def __signal_SIGUSR2() -> int
+
+@extern("C")
+def __signal_SIGALRM() -> int
+
+@extern("C")
+def __signal_SIGPIPE() -> int
+
+# --- Signal constants ---
+
+## Interrupt signal (Ctrl+C).
+pub var SIGINT: int = 2
+
+## Termination signal.
+pub var SIGTERM: int = 15
+
+## Hangup signal.
+pub var SIGHUP: int = 1
+
+## Quit signal.
+pub var SIGQUIT: int = 3
+
+## User-defined signal 1.
+pub var SIGUSR1: int = 30
+
+## User-defined signal 2.
+pub var SIGUSR2: int = 31
+
+## Alarm signal.
+pub var SIGALRM: int = 14
+
+## Broken pipe signal.
+pub var SIGPIPE: int = 13
+
+# --- Public API ---
+
+## Register a handler for a signal.
+pub def on(signum: int, handler: () -> int):
+	unsafe:
+		__signal_on(signum, handler)
+
+## Register a handler for SIGINT (Ctrl+C shortcut).
+pub def on_interrupt(handler: () -> int):
+	unsafe:
+		__signal_on(2, handler)
+
+## Register a handler for SIGTERM.
+pub def on_terminate(handler: () -> int):
+	unsafe:
+		__signal_on(15, handler)
+
+## Reset signal to default handler.
+pub def reset(signum: int):
+	unsafe:
+		__signal_reset(signum)
+
+## Ignore a signal.
+pub def ignore(signum: int):
+	unsafe:
+		__signal_ignore(signum)
+
+## Send a signal to the current process.
+pub def send(signum: int):
+	unsafe:
+		__signal_raise(signum)
+
+## Get human-readable name for a signal number.
+pub def name(signum: int) -> str:
+	unsafe:
+		return __signal_name(signum)

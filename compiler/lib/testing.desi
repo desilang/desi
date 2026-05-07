@@ -1,0 +1,164 @@
+# testing module — Test assertion framework
+#
+# Usage:
+#   import testing
+#   testing.assert_eq(1 + 1, 2, "basic addition")
+#   testing.assert_true(10 > 5, "comparison")
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __testing_assert_eq_int(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_ne_int(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_gt(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_lt(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_gte(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_lte(a: int, b: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_true(val: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_false(val: int, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_eq_float(a: float, b: float, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_close(a: float, b: float, tolerance: float, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_eq_str(a: str, b: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_ne_str(a: str, b: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_contains(haystack: str, needle: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_not_contains(haystack: str, needle: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_starts_with(s: str, prefix: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_assert_ends_with(s: str, suffix: str, msg: str) -> int
+
+@extern("C")
+pub def __testing_fail(msg: str) -> int
+
+@extern("C")
+pub def __testing_skip(msg: str) -> int
+
+@extern("C")
+pub def __testing_summary() -> int
+
+@extern("C")
+pub def __testing_reset() -> int
+
+@extern("C")
+pub def __testing_pass_count() -> int
+
+@extern("C")
+pub def __testing_fail_count() -> int
+
+# --- Public API ---
+
+## Assert two integers are equal.
+pub def assert_eq(a: int, b: int, msg: str) -> int:
+	return __testing_assert_eq_int(a, b, msg)
+
+## Assert two integers are not equal.
+pub def assert_ne(a: int, b: int, msg: str) -> int:
+	return __testing_assert_ne_int(a, b, msg)
+
+## Assert a > b.
+pub def assert_gt(a: int, b: int, msg: str) -> int:
+	return __testing_assert_gt(a, b, msg)
+
+## Assert a < b.
+pub def assert_lt(a: int, b: int, msg: str) -> int:
+	return __testing_assert_lt(a, b, msg)
+
+## Assert a >= b.
+pub def assert_gte(a: int, b: int, msg: str) -> int:
+	return __testing_assert_gte(a, b, msg)
+
+## Assert a <= b.
+pub def assert_lte(a: int, b: int, msg: str) -> int:
+	return __testing_assert_lte(a, b, msg)
+
+## Assert value is true.
+pub def assert_true(val: bool, msg: str) -> int:
+	return __testing_assert_true(val, msg)
+
+## Assert value is false.
+pub def assert_false(val: bool, msg: str) -> int:
+	return __testing_assert_false(val, msg)
+
+## Assert two floats are equal.
+pub def assert_eq_float(a: float, b: float, msg: str) -> int:
+	return __testing_assert_eq_float(a, b, msg)
+
+## Assert two floats are approximately equal within tolerance.
+pub def assert_close(a: float, b: float, tolerance: float, msg: str) -> int:
+	return __testing_assert_close(a, b, tolerance, msg)
+
+## Assert two strings are equal.
+pub def assert_eq_str(a: str, b: str, msg: str) -> int:
+	return __testing_assert_eq_str(a, b, msg)
+
+## Assert two strings are not equal.
+pub def assert_ne_str(a: str, b: str, msg: str) -> int:
+	return __testing_assert_ne_str(a, b, msg)
+
+## Assert haystack contains needle.
+pub def assert_contains(haystack: str, needle: str, msg: str) -> int:
+	return __testing_assert_contains(haystack, needle, msg)
+
+## Assert haystack does not contain needle.
+pub def assert_not_contains(haystack: str, needle: str, msg: str) -> int:
+	return __testing_assert_not_contains(haystack, needle, msg)
+
+## Assert string starts with prefix.
+pub def assert_starts_with(s: str, prefix: str, msg: str) -> int:
+	return __testing_assert_starts_with(s, prefix, msg)
+
+## Assert string ends with suffix.
+pub def assert_ends_with(s: str, suffix: str, msg: str) -> int:
+	return __testing_assert_ends_with(s, suffix, msg)
+
+## Unconditional test failure.
+pub def fail(msg: str) -> int:
+	return __testing_fail(msg)
+
+## Skip a test with a reason.
+pub def skip(msg: str) -> int:
+	return __testing_skip(msg)
+
+## Print test summary and return exit code.
+pub def summary() -> int:
+	return __testing_summary()
+
+## Reset assertion counters.
+pub def reset() -> int:
+	return __testing_reset()
+
+## Get number of passed assertions.
+pub def pass_count() -> int:
+	return __testing_pass_count()
+
+## Get number of failed assertions.
+pub def fail_count() -> int:
+	return __testing_fail_count()

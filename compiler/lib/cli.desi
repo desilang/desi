@@ -1,0 +1,130 @@
+# cli module — Command-line argument parsing and flag management
+#
+# Wraps the args runtime for defining flags, parsing command-line arguments,
+# and generating help messages.
+#
+# Usage:
+#   import cli
+#   cli.set_description("My cool tool")
+#   cli.define("--name", "-n", "User name", "World")
+#   cli.define_bool("--verbose", "-v", "Enable verbose output")
+#   if cli.check_help():
+#       exit(0)
+#   let name = cli.get_defined("--name")
+#   print(name)
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __args_count() -> int
+
+@extern("C")
+pub def __args_program() -> str
+
+@extern("C")
+pub def __args_get(index: int) -> str
+
+@extern("C")
+pub def __args_has_flag(name: str) -> int
+
+@extern("C")
+pub def __args_get_flag(name: str, default_val: str) -> str
+
+@extern("C")
+pub def __args_get_flag_int(name: str, default_val: int) -> int
+
+@extern("C")
+pub def __args_get_flag_bool(name: str) -> int
+
+@extern("C")
+pub def __args_set_description(desc: str) -> int
+
+@extern("C")
+pub def __args_define(long_name: str, short_name: str, description: str, default_val: str) -> int
+
+@extern("C")
+pub def __args_define_bool(long_name: str, short_name: str, description: str) -> int
+
+@extern("C")
+pub def __args_require(flag_name: str) -> int
+
+@extern("C")
+pub def __args_print_help() -> int
+
+@extern("C")
+pub def __args_check_help() -> int
+
+@extern("C")
+pub def __args_validate() -> str
+
+@extern("C")
+pub def __args_get_defined(long_name: str) -> str
+
+@extern("C")
+pub def __args_subcommand() -> str
+
+# --- Public API ---
+
+## Get the number of command-line arguments (excluding program name).
+pub def count() -> int:
+	return __args_count()
+
+## Get the program name (argv[0]).
+pub def program() -> str:
+	return __args_program()
+
+## Get a positional argument by index (0-based, after program name).
+pub def get(index: int) -> str:
+	return __args_get(index)
+
+## Check if a flag exists (--name or -n form).
+pub def has_flag(name: str) -> bool:
+	return __args_has_flag(name) == 1
+
+## Get a flag value with a default fallback.
+pub def get_flag(name: str, default_val: str) -> str:
+	return __args_get_flag(name, default_val)
+
+## Get a flag value as an integer.
+pub def get_flag_int(name: str, default_val: int) -> int:
+	return __args_get_flag_int(name, default_val)
+
+## Check if a boolean flag is set.
+pub def get_flag_bool(name: str) -> bool:
+	return __args_get_flag_bool(name) == 1
+
+## Set program description for help output.
+pub def set_description(desc: str) -> int:
+	return __args_set_description(desc)
+
+## Define a flag with long name, short name, description, and default value.
+pub def define(long_name: str, short_name: str, description: str, default_val: str) -> int:
+	return __args_define(long_name, short_name, description, default_val)
+
+## Define a boolean flag (no value expected).
+pub def define_bool(long_name: str, short_name: str, description: str) -> int:
+	return __args_define_bool(long_name, short_name, description)
+
+## Mark a flag as required.
+pub def require(flag_name: str) -> int:
+	return __args_require(flag_name)
+
+## Print formatted help message.
+pub def print_help() -> int:
+	return __args_print_help()
+
+## Check --help/-h flag; prints help and returns true if present.
+pub def check_help() -> bool:
+	return __args_check_help() == 1
+
+## Validate required flags. Returns "" if ok, error message if missing.
+pub def validate() -> str:
+	return __args_validate()
+
+## Get flag value using defined flags (checks both long and short names).
+pub def get_defined(long_name: str) -> str:
+	return __args_get_defined(long_name)
+
+## Get the subcommand (first non-flag argument).
+pub def subcommand() -> str:
+	return __args_subcommand()

@@ -1,0 +1,65 @@
+# cache module — In-memory LRU caching with optional TTL
+#
+# Usage:
+#   import cache
+#   let c = cache.lru_new(1000)
+#   cache.set(c, "key", "value")
+#   print(cache.get(c, "key"))
+
+# --- C runtime bindings ---
+
+@extern("C")
+pub def __cache_lru_new(max_size: int) -> cptr
+
+@extern("C")
+pub def __cache_lru_set(handle: cptr, key: str, value: str) -> int
+
+@extern("C")
+pub def __cache_lru_set_ttl(handle: cptr, key: str, value: str, ttl_sec: int) -> int
+
+@extern("C")
+pub def __cache_lru_get(handle: cptr, key: str) -> str
+
+@extern("C")
+pub def __cache_lru_has(handle: cptr, key: str) -> int
+
+@extern("C")
+pub def __cache_lru_remove(handle: cptr, key: str) -> int
+
+@extern("C")
+pub def __cache_lru_clear(handle: cptr) -> int
+
+@extern("C")
+pub def __cache_lru_len(handle: cptr) -> int
+
+@extern("C")
+pub def __cache_lru_free(handle: cptr) -> int
+
+# --- Public API ---
+
+pub def lru_new(max_size: int) -> cptr:
+	return __cache_lru_new(max_size)
+
+pub def set(handle: cptr, key: str, value: str) -> int:
+	return __cache_lru_set(handle, key, value)
+
+pub def set_ttl(handle: cptr, key: str, value: str, ttl_sec: int) -> int:
+	return __cache_lru_set_ttl(handle, key, value, ttl_sec)
+
+pub def get(handle: cptr, key: str) -> str:
+	return __cache_lru_get(handle, key)
+
+pub def has(handle: cptr, key: str) -> bool:
+	return __cache_lru_has(handle, key) == 1
+
+pub def remove(handle: cptr, key: str) -> int:
+	return __cache_lru_remove(handle, key)
+
+pub def clear(handle: cptr) -> int:
+	return __cache_lru_clear(handle)
+
+pub def size(handle: cptr) -> int:
+	return __cache_lru_len(handle)
+
+pub def free(handle: cptr) -> int:
+	return __cache_lru_free(handle)

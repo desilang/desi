@@ -1,0 +1,215 @@
+# collections module — Stack, Queue, Deque, Counter
+#
+# Usage:
+#   import collections
+#   let s = collections.stack_new()
+#   collections.stack_push(s, "hello")
+#   print(collections.stack_pop(s))
+
+# --- C runtime bindings: Deque ---
+
+@extern("C")
+pub def __deque_new() -> cptr
+
+@extern("C")
+pub def __deque_push_front(dq: cptr, value: str) -> int
+
+@extern("C")
+pub def __deque_push_back(dq: cptr, value: str) -> int
+
+@extern("C")
+pub def __deque_pop_front(dq: cptr) -> str
+
+@extern("C")
+pub def __deque_pop_back(dq: cptr) -> str
+
+@extern("C")
+pub def __deque_peek_front(dq: cptr) -> str
+
+@extern("C")
+pub def __deque_peek_back(dq: cptr) -> str
+
+@extern("C")
+pub def __deque_len(dq: cptr) -> int
+
+@extern("C")
+pub def __deque_is_empty(dq: cptr) -> int
+
+@extern("C")
+pub def __deque_free(dq: cptr) -> int
+
+# --- C runtime bindings: Stack ---
+
+@extern("C")
+pub def __stack_new() -> cptr
+
+@extern("C")
+pub def __stack_push(s: cptr, value: str) -> int
+
+@extern("C")
+pub def __stack_pop(s: cptr) -> str
+
+@extern("C")
+pub def __stack_peek(s: cptr) -> str
+
+@extern("C")
+pub def __stack_len(s: cptr) -> int
+
+@extern("C")
+pub def __stack_is_empty(s: cptr) -> int
+
+@extern("C")
+pub def __stack_free(s: cptr) -> int
+
+# --- C runtime bindings: Queue ---
+
+@extern("C")
+pub def __queue_new() -> cptr
+
+@extern("C")
+pub def __queue_enqueue(q: cptr, value: str) -> int
+
+@extern("C")
+pub def __queue_dequeue(q: cptr) -> str
+
+@extern("C")
+pub def __queue_peek(q: cptr) -> str
+
+@extern("C")
+pub def __queue_len(q: cptr) -> int
+
+@extern("C")
+pub def __queue_is_empty(q: cptr) -> int
+
+@extern("C")
+pub def __queue_free(q: cptr) -> int
+
+# --- C runtime bindings: Counter ---
+
+@extern("C")
+pub def __counter_new() -> cptr
+
+@extern("C")
+pub def __counter_add(c: cptr, key: str) -> int
+
+@extern("C")
+pub def __counter_add_n(c: cptr, key: str, n: int) -> int
+
+@extern("C")
+pub def __counter_get(c: cptr, key: str) -> int
+
+@extern("C")
+pub def __counter_total(c: cptr) -> int
+
+@extern("C")
+pub def __counter_len(c: cptr) -> int
+
+@extern("C")
+pub def __counter_most_common(c: cptr, n: int) -> str
+
+@extern("C")
+pub def __counter_free(c: cptr) -> int
+
+# --- Public API: Stack ---
+
+pub def stack_new() -> cptr:
+	return __stack_new()
+
+pub def stack_push(s: cptr, value: str) -> int:
+	return __stack_push(s, value)
+
+pub def stack_pop(s: cptr) -> str:
+	return __stack_pop(s)
+
+pub def stack_peek(s: cptr) -> str:
+	return __stack_peek(s)
+
+pub def stack_size(s: cptr) -> int:
+	return __stack_len(s)
+
+pub def stack_is_empty(s: cptr) -> bool:
+	return __stack_is_empty(s) == 1
+
+pub def stack_free(s: cptr) -> int:
+	return __stack_free(s)
+
+# --- Public API: Queue ---
+
+pub def queue_new() -> cptr:
+	return __queue_new()
+
+pub def queue_enqueue(q: cptr, value: str) -> int:
+	return __queue_enqueue(q, value)
+
+pub def queue_dequeue(q: cptr) -> str:
+	return __queue_dequeue(q)
+
+pub def queue_peek(q: cptr) -> str:
+	return __queue_peek(q)
+
+pub def queue_size(q: cptr) -> int:
+	return __queue_len(q)
+
+pub def queue_is_empty(q: cptr) -> bool:
+	return __queue_is_empty(q) == 1
+
+pub def queue_free(q: cptr) -> int:
+	return __queue_free(q)
+
+# --- Public API: Deque ---
+
+pub def deque_new() -> cptr:
+	return __deque_new()
+
+pub def deque_push_front(dq: cptr, value: str) -> int:
+	return __deque_push_front(dq, value)
+
+pub def deque_push_back(dq: cptr, value: str) -> int:
+	return __deque_push_back(dq, value)
+
+pub def deque_pop_front(dq: cptr) -> str:
+	return __deque_pop_front(dq)
+
+pub def deque_pop_back(dq: cptr) -> str:
+	return __deque_pop_back(dq)
+
+pub def deque_peek_front(dq: cptr) -> str:
+	return __deque_peek_front(dq)
+
+pub def deque_peek_back(dq: cptr) -> str:
+	return __deque_peek_back(dq)
+
+pub def deque_size(dq: cptr) -> int:
+	return __deque_len(dq)
+
+pub def deque_is_empty(dq: cptr) -> bool:
+	return __deque_is_empty(dq) == 1
+
+pub def deque_free(dq: cptr) -> int:
+	return __deque_free(dq)
+
+# --- Public API: Counter ---
+
+pub def counter_new() -> cptr:
+	return __counter_new()
+
+pub def counter_add(c: cptr, key: str) -> int:
+	return __counter_add(c, key)
+
+pub def counter_add_n(c: cptr, key: str, n: int) -> int:
+	return __counter_add_n(c, key, n)
+
+pub def counter_get(c: cptr, key: str) -> int:
+	return __counter_get(c, key)
+
+pub def counter_total(c: cptr) -> int:
+	return __counter_total(c)
+
+pub def counter_size(c: cptr) -> int:
+	return __counter_len(c)
+
+pub def counter_most_common(c: cptr, n: int) -> str:
+	return __counter_most_common(c, n)
+
+pub def counter_free(c: cptr) -> int:
+	return __counter_free(c)
