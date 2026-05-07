@@ -1,0 +1,45 @@
+# Test JWT module
+import jwt
+
+def main() -> int:
+	let secret = "my-super-secret-key"
+	let payload = "{\"sub\":\"user1\",\"role\":\"admin\",\"exp\":9999999999}"
+
+	# Encode
+	let token = jwt.encode(payload, secret)
+	print(token != "")
+
+	# Verify — should be valid
+	print(jwt.verify(token, secret))
+
+	# Verify — wrong secret should fail
+	print(jwt.verify(token, "wrong-secret"))
+
+	# Decode (verified)
+	let decoded = jwt.decode(token, secret)
+	print(decoded)
+
+	# Decode with wrong secret — returns ""
+	let bad_decode = jwt.decode(token, "wrong-secret")
+	print(bad_decode == "")
+
+	# Get header without verification
+	let header = jwt.get_header(token)
+	print(header)
+
+	# Get payload without verification
+	let raw_payload = jwt.get_payload(token)
+	print(raw_payload)
+
+	print("jwt ok")
+	0
+
+# EXPECTED_OUTPUT:
+# true
+# true
+# false
+# {"sub":"user1","role":"admin","exp":9999999999}
+# true
+# {"alg":"HS256","typ":"JWT"}
+# {"sub":"user1","role":"admin","exp":9999999999}
+# jwt ok

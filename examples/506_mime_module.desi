@@ -1,0 +1,51 @@
+# Test MIME module
+import mime
+
+def main() -> int:
+	# Extension to MIME
+	print(mime.from_ext(".json"))
+	print(mime.from_ext(".html"))
+	print(mime.from_ext(".png"))
+	print(mime.from_ext(".mp4"))
+	print(mime.from_ext(".wasm"))
+
+	# Path to MIME
+	print(mime.from_path("image.png"))
+	print(mime.from_path("styles.css"))
+	print(mime.from_path("app.js"))
+	print(mime.from_path("data.csv"))
+	print(mime.from_path("main.desi"))
+
+	# Reverse lookup
+	print(mime.ext_for("text/html"))
+	print(mime.ext_for("image/png"))
+
+	# Text vs binary
+	print(mime.is_text("text/html"))
+	print(mime.is_text("application/json"))
+	print(mime.is_binary("image/png"))
+	print(mime.is_binary("video/mp4"))
+	print(mime.is_text("image/png"))
+
+	print("mime ok")
+	0
+
+# EXPECTED_OUTPUT:
+# application/json
+# text/html
+# image/png
+# video/mp4
+# application/wasm
+# image/png
+# text/css
+# text/javascript
+# text/csv
+# text/x-desi
+# .html
+# .png
+# true
+# true
+# true
+# true
+# false
+# mime ok

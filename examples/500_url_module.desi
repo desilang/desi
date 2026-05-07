@@ -1,0 +1,52 @@
+# Test URL module
+import url
+
+def main() -> int:
+	# Parse a URL
+	let h = url.parse("https://user:pass@example.com:8080/api/users?page=2&limit=10#section")
+	print(url.get_scheme(h))
+	print(url.get_host(h))
+	print(url.get_port(h))
+	print(url.get_path(h))
+	print(url.get_query(h))
+	print(url.get_fragment(h))
+
+	# URL encoding
+	let encoded = url.encode("hello world & more")
+	print(encoded)
+
+	# URL decoding
+	let decoded = url.decode(encoded)
+	print(decoded)
+
+	# Query parameter extraction
+	let val = url.query_get("page=2&limit=10", "page")
+	print(val)
+	let val2 = url.query_get("page=2&limit=10", "limit")
+	print(val2)
+
+	# Build a URL
+	let built = url.build("https", "api.example.com", 443, "/v1/data", "format=json", "")
+	print(built)
+
+	# Join URLs
+	let joined = url.join("https://example.com/base/", "/new/path")
+	print(joined)
+
+	print("url ok")
+	0
+
+# EXPECTED_OUTPUT:
+# https
+# example.com
+# 8080
+# /api/users
+# page=2&limit=10
+# section
+# hello%20world%20%26%20more
+# hello world & more
+# 2
+# 10
+# https://api.example.com:443/v1/data?format=json
+# https://example.com/new/path
+# url ok

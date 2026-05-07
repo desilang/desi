@@ -1,0 +1,40 @@
+# Test testing module
+import testing
+
+def main() -> int:
+	# Integer assertions
+	testing.assert_eq(1 + 1, 2, "basic addition")
+	testing.assert_ne(1, 2, "not equal")
+	testing.assert_gt(10, 5, "greater than")
+	testing.assert_lt(3, 7, "less than")
+	testing.assert_gte(5, 5, "greater or equal")
+	testing.assert_lte(3, 3, "less or equal")
+
+	# Boolean assertions
+	testing.assert_true(true, "true check")
+	testing.assert_false(false, "false check")
+
+	# String assertions
+	testing.assert_eq_str("hello", "hello", "string equal")
+	testing.assert_ne_str("hello", "world", "string not equal")
+	testing.assert_contains("hello world", "world", "contains")
+	testing.assert_not_contains("hello world", "xyz", "not contains")
+	testing.assert_starts_with("hello world", "hello", "starts with")
+	testing.assert_ends_with("hello world", "world", "ends with")
+
+	# Float assertions
+	testing.assert_close(3.14, 3.14159, 0.01, "pi approx")
+
+	# Summary
+	let fails = testing.fail_count()
+	let passes = testing.pass_count()
+	print(f"passes: {str(passes)}")
+	print(f"fails: {str(fails)}")
+
+	print("testing ok")
+	0
+
+# EXPECTED_OUTPUT:
+# passes: 15
+# fails: 0
+# testing ok

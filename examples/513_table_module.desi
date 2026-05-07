@@ -1,0 +1,29 @@
+# Test table module
+import table
+
+def main() -> int:
+	# Create a table
+	let t = table.new(["Name", "Age", "Language"])
+	table.add_row(t, ["Alice", "30", "Desi"])
+	table.add_row(t, ["Bob", "25", "Rust"])
+	table.add_row(t, ["Charlie", "35", "Python"])
+	print(table.size(t))
+
+	# Render simple ASCII
+	let output = table.render_simple(t)
+	print(output)
+
+	print("table ok")
+	0
+
+# EXPECTED_OUTPUT:
+# 3
+# +---------+-----+----------+
+# | Name    | Age | Language |
+# +---------+-----+----------+
+# | Alice   | 30  | Desi     |
+# | Bob     | 25  | Rust     |
+# | Charlie | 35  | Python   |
+# +---------+-----+----------+
+# 
+# table ok

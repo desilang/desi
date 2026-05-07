@@ -1,0 +1,29 @@
+# Test dotenv module
+import dotenv
+
+def main() -> int:
+	# Parse .env content without setting env
+	let content = "# comment\nAPP_NAME=MyApp\nAPP_PORT=8080\nDEBUG=true\nexport SECRET_KEY=\"my-secret\"\n"
+	let parsed = dotenv.parse(content)
+	print(parsed)
+
+	# get — reads from actual env (set PATH exists on all systems)
+	let path = dotenv.get("PATH")
+	print(path != "")
+
+	# get non-existent key
+	let missing = dotenv.get("DEFINITELY_DOES_NOT_EXIST_12345")
+	print(missing == "")
+
+	print("dotenv ok")
+	0
+
+# EXPECTED_OUTPUT:
+# APP_NAME=MyApp
+# APP_PORT=8080
+# DEBUG=true
+# SECRET_KEY="my-secret"
+# 
+# true
+# true
+# dotenv ok
