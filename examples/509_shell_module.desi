@@ -1,0 +1,64 @@
+# Test shell module
+import shell
+
+def main() -> int:
+	# Execute command and get stdout
+	let result = shell.exec("echo hello shell")
+	print(result)
+
+	# Execute status
+	let status = shell.exec_status("true")
+	print(status)
+
+	# Which — find a command
+	let bash_path = shell.which("sh")
+	print(bash_path != "")
+
+	# File operations
+	shell.mkdir_p("/tmp/desi_shell_test/sub")
+	print(shell.is_dir("/tmp/desi_shell_test"))
+	print(shell.is_dir("/tmp/desi_shell_test/sub"))
+
+	# Write and read
+	shell.write("/tmp/desi_shell_test/test.txt", "hello from shell")
+	print(shell.cat("/tmp/desi_shell_test/test.txt"))
+	print(shell.is_file("/tmp/desi_shell_test/test.txt"))
+
+	# Append
+	shell.append("/tmp/desi_shell_test/test.txt", "\nline two")
+	let lines = shell.lines("/tmp/desi_shell_test/test.txt")
+	print(lines)
+
+	# Copy
+	shell.cp("/tmp/desi_shell_test/test.txt", "/tmp/desi_shell_test/copy.txt")
+	print(shell.exists("/tmp/desi_shell_test/copy.txt"))
+
+	# Move
+	shell.mv("/tmp/desi_shell_test/copy.txt", "/tmp/desi_shell_test/moved.txt")
+	print(shell.exists("/tmp/desi_shell_test/copy.txt"))
+	print(shell.exists("/tmp/desi_shell_test/moved.txt"))
+
+	# Cleanup
+	shell.rm("/tmp/desi_shell_test/test.txt")
+	shell.rm("/tmp/desi_shell_test/moved.txt")
+	shell.rmdir("/tmp/desi_shell_test/sub")
+	shell.rmdir("/tmp/desi_shell_test")
+	print(shell.exists("/tmp/desi_shell_test"))
+
+	print("shell ok")
+	0
+
+# EXPECTED_OUTPUT:
+# hello shell
+# 0
+# true
+# true
+# true
+# hello from shell
+# true
+# 1
+# true
+# false
+# true
+# false
+# shell ok

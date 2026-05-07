@@ -1,0 +1,43 @@
+# Test YAML module
+import yaml
+
+def main() -> int:
+	let content = "server:\n  host: localhost\n  port: 8080\n  debug: true\ndatabase:\n  driver: sqlite\n  path: /tmp/app.db\ntags:\n  - web\n  - api\n  - fast\n"
+
+	let h = yaml.parse(content)
+
+	# Get values via dotted paths
+	print(yaml.get(h, "server.host"))
+	print(yaml.get_int(h, "server.port"))
+	print(yaml.get_bool(h, "server.debug"))
+	print(yaml.get(h, "database.driver"))
+	print(yaml.get(h, "database.path"))
+
+	# List access
+	print(yaml.get(h, "tags.0"))
+	print(yaml.get(h, "tags.1"))
+	print(yaml.get(h, "tags.2"))
+	print(yaml.list_len(h, "tags"))
+
+	# Has
+	print(yaml.has(h, "server.host"))
+	print(yaml.has(h, "server.nonexistent"))
+	print(yaml.has(h, "database"))
+
+	print("yaml ok")
+	0
+
+# EXPECTED_OUTPUT:
+# localhost
+# 8080
+# true
+# sqlite
+# /tmp/app.db
+# web
+# api
+# fast
+# 3
+# true
+# false
+# true
+# yaml ok

@@ -1,0 +1,41 @@
+# Test INI module
+import ini
+
+def main() -> int:
+	let content = "[server]\nhost = localhost\nport = 8080\n\n[database]\ndriver = sqlite\npath = /tmp/app.db\npool_size = 5\n\n[logging]\nlevel = info\nfile = app.log\n"
+
+	let h = ini.parse(content)
+
+	# Get values
+	print(ini.get(h, "server", "host"))
+	print(ini.get(h, "server", "port"))
+	print(ini.get(h, "database", "driver"))
+	print(ini.get(h, "database", "path"))
+	print(ini.get(h, "logging", "level"))
+
+	# Has section/key
+	print(ini.has_section(h, "server"))
+	print(ini.has_section(h, "nonexistent"))
+	print(ini.has_key(h, "server", "host"))
+	print(ini.has_key(h, "server", "missing"))
+
+	# Default values
+	print(ini.get_default(h, "server", "timeout", "30"))
+	print(ini.get_default(h, "server", "host", "fallback"))
+
+	print("ini ok")
+	0
+
+# EXPECTED_OUTPUT:
+# localhost
+# 8080
+# sqlite
+# /tmp/app.db
+# info
+# true
+# false
+# true
+# false
+# 30
+# localhost
+# ini ok

@@ -1,0 +1,82 @@
+# Test collections module — Stack, Queue, Deque, Counter
+import collections
+
+def main() -> int:
+	# Stack (LIFO)
+	let s = collections.stack_new()
+	collections.stack_push(s, "a")
+	collections.stack_push(s, "b")
+	collections.stack_push(s, "c")
+	print(collections.stack_size(s))
+	print(collections.stack_peek(s))
+	print(collections.stack_pop(s))
+	print(collections.stack_pop(s))
+	print(collections.stack_pop(s))
+	print(collections.stack_is_empty(s))
+
+	# Queue (FIFO)
+	let q = collections.queue_new()
+	collections.queue_enqueue(q, "first")
+	collections.queue_enqueue(q, "second")
+	collections.queue_enqueue(q, "third")
+	print(collections.queue_size(q))
+	print(collections.queue_peek(q))
+	print(collections.queue_dequeue(q))
+	print(collections.queue_dequeue(q))
+	print(collections.queue_dequeue(q))
+	print(collections.queue_is_empty(q))
+
+	# Deque (double-ended)
+	let dq = collections.deque_new()
+	collections.deque_push_back(dq, "B")
+	collections.deque_push_front(dq, "A")
+	collections.deque_push_back(dq, "C")
+	print(collections.deque_size(dq))
+	print(collections.deque_peek_front(dq))
+	print(collections.deque_peek_back(dq))
+	print(collections.deque_pop_front(dq))
+	print(collections.deque_pop_back(dq))
+	print(collections.deque_pop_front(dq))
+
+	# Counter
+	let c = collections.counter_new()
+	collections.counter_add(c, "apple")
+	collections.counter_add(c, "banana")
+	collections.counter_add(c, "apple")
+	collections.counter_add(c, "apple")
+	collections.counter_add(c, "banana")
+	collections.counter_add(c, "cherry")
+	print(collections.counter_get(c, "apple"))
+	print(collections.counter_get(c, "banana"))
+	print(collections.counter_get(c, "cherry"))
+	print(collections.counter_total(c))
+	print(collections.counter_size(c))
+
+	print("collections ok")
+	0
+
+# EXPECTED_OUTPUT:
+# 3
+# c
+# c
+# b
+# a
+# true
+# 3
+# first
+# first
+# second
+# third
+# true
+# 3
+# A
+# C
+# A
+# C
+# B
+# 3
+# 2
+# 1
+# 6
+# 3
+# collections ok

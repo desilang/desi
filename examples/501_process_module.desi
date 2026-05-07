@@ -1,0 +1,45 @@
+# Test process module
+import process
+
+def main() -> int:
+	# Run a simple command
+	let h = process.shell("echo hello from subprocess")
+	print(process.get_stdout(h))
+	print(process.get_ok(h))
+	print(process.get_exit_code(h))
+
+	# Capture command output directly
+	let out = process.shell_output("echo 42")
+	print(out)
+
+	# Process info
+	let p = process.pid()
+	print(p > 0)
+	let pp = process.ppid()
+	print(pp > 0)
+
+	# Run command that fails
+	let fh = process.shell("exit 1")
+	print(process.get_ok(fh))
+	print(process.get_exit_code(fh))
+
+	# Multi-word command (use printf for portability)
+	let lh = process.shell("printf 'abc'")
+	print(process.get_stdout(lh))
+
+	print("process ok")
+	0
+
+# EXPECTED_OUTPUT:
+# hello from subprocess
+# 
+# true
+# 0
+# 42
+# 
+# true
+# true
+# false
+# 1
+# abc
+# process ok

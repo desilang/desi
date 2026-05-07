@@ -1,0 +1,54 @@
+# Test cache module — LRU cache with TTL
+import cache
+
+def main() -> int:
+	let c = cache.lru_new(5)
+
+	# Basic set/get
+	cache.set(c, "key1", "value1")
+	cache.set(c, "key2", "value2")
+	print(cache.get(c, "key1"))
+	print(cache.get(c, "key2"))
+	print(cache.size(c))
+
+	# Has
+	print(cache.has(c, "key1"))
+	print(cache.has(c, "nonexistent"))
+
+	# Remove
+	cache.remove(c, "key1")
+	print(cache.has(c, "key1"))
+	print(cache.size(c))
+
+	# Update existing key
+	cache.set(c, "key2", "updated")
+	print(cache.get(c, "key2"))
+
+	# LRU eviction — fill past capacity
+	cache.set(c, "a", "1")
+	cache.set(c, "b", "2")
+	cache.set(c, "c", "3")
+	cache.set(c, "d", "4")
+	cache.set(c, "e", "5")
+	# key2 should have been evicted (LRU, capacity 5)
+	print(cache.size(c))
+
+	# Clear
+	cache.clear(c)
+	print(cache.size(c))
+
+	print("cache ok")
+	0
+
+# EXPECTED_OUTPUT:
+# value1
+# value2
+# 2
+# true
+# false
+# false
+# 1
+# updated
+# 5
+# 0
+# cache ok

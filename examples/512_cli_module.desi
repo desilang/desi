@@ -1,0 +1,42 @@
+# Test CLI module (args-based)
+import cli
+
+def main() -> int:
+	# Define flags
+	cli.set_description("A test CLI application")
+	cli.define("--output", "-o", "Output destination", "stdout")
+	cli.define("--format", "-f", "Output format", "text")
+	cli.define_bool("--verbose", "-v", "Enable verbose output")
+
+	# Test default values via get_defined
+	let out = cli.get_defined("--output")
+	print(out)
+	let fmt = cli.get_defined("--format")
+	print(fmt)
+
+	# Test has_flag (these won't be set since no args)
+	print(cli.has_flag("--verbose"))
+
+	# Test get_flag with defaults
+	let val = cli.get_flag("--name", "default_name")
+	print(val)
+
+	# Test get_flag_int with default
+	let num = cli.get_flag_int("--count", 42)
+	print(num)
+
+	# Test validate (no required flags = ok)
+	let err = cli.validate()
+	print(err == "")
+
+	print("cli ok")
+	0
+
+# EXPECTED_OUTPUT:
+# stdout
+# text
+# false
+# default_name
+# 42
+# true
+# cli ok
