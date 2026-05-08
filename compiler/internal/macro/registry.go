@@ -173,6 +173,12 @@ type MacroProtocol struct {
 
 	// Validation rules for decorated classes
 	Validation *ValidationRules
+
+	// StripInRelease marks this macro's generated code for removal in release builds.
+	// When true, the lowering phase omits all instrumentation emitted by OnLower,
+	// and decorated functions become no-ops in `desic build --release`.
+	// Use case: @perf, @trace, @debug — dev-only instrumentation with zero release cost.
+	StripInRelease bool
 }
 
 // MacroRegistry is the central registry for all macro protocols.
@@ -372,3 +378,15 @@ func (r *MacroRegistry) GetClassProtocol(cls *types.Class) *MacroProtocol {
 	defer r.mu.RUnlock()
 	return r.protocols[cls.MacroDecorator]
 }
+
+// IsStrippable returns true if the named macro should be stripped in release builds.
+// Used by the lowering phase to decide whether to emit instrumentation code.
+func (r *MacroRegistry) IsStrippable(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if proto, ok := r.protocols[name]; ok {
+		return proto.StripInRelease
+	}
+	return false
+}
+

@@ -33,6 +33,8 @@ func init() {
 		exit(buildCmd(os.Args[2:]))
 	case "test":
 		exit(testCmd(os.Args[2:]))
+	case "perf":
+		exit(perfCmd(os.Args[2:]))
 	case "version":
 		term.Println("desic", version.Version)
 		exit(0)
@@ -54,6 +56,7 @@ func printUsage() {
 	term.Println("  build [file] [-o name]   Build executable (uses desi.mod if no file given)")
 	term.Println("  run [file] [-- args]     Build and run (uses desi.mod if no file given)")
 	term.Println("  test [files] [-v]        Run test files (*_test.desi)")
+	term.Println("  perf [--level] [files]   Run performance advisor")
 	term.Println("  check <file>             Type-check a file")
 	term.Println("  fmt [-w] <file|dir>      Format source code")
 	term.Println("  doc [--all] <file>       Generate documentation")

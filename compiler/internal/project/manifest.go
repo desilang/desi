@@ -20,6 +20,7 @@ type Manifest struct {
 	FFI         FFI
 	Database    Database            // [database] → the "default" connection
 	Databases   map[string]Database // [database.name] → named connections
+	Permissions Permissions         // [permissions] → build audit config
 	path        string              // absolute path to manifest
 }
 
@@ -55,6 +56,13 @@ type FFI struct {
 type Extern struct {
 	Name string
 	Lib  string
+}
+
+// Permissions holds the [permissions] section for build audit.
+type Permissions struct {
+	Allow []string // allowed stdlib modules/categories (e.g., ["http", "fs"])
+	Deny  []string // denied stdlib modules/categories (e.g., ["shell", "process"])
+	Audit bool     // if true, print audit report during build
 }
 
 type Database struct {
@@ -302,7 +310,7 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 		if strings.HasPrefix(trim, "[") && strings.HasSuffix(trim, "]") {
 			body := strings.TrimSpace(trim[1 : len(trim)-1])
 			switch body {
-			case "package", "build", "target", "diagnostics", "ffi", "database":
+			case "package", "build", "target", "diagnostics", "ffi", "database", "permissions":
 				s.section = body
 				s.dbName = "" // reset named DB context
 			default:
@@ -462,6 +470,17 @@ func parseDML(src string) (Manifest, []diag.Diagnostic) {
 					secName = "database." + s.dbName
 				}
 				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: %s.%s", secName, key)))
+			}
+		case "permissions":
+			switch key {
+			case "allow":
+				m.Permissions.Allow, _ = parseStringArray(val)
+			case "deny":
+				m.Permissions.Deny, _ = parseStringArray(val)
+			case "audit":
+				m.Permissions.Audit = parseString(val) == "true"
+			default:
+				diags = append(diags, simpleDiag("project.unknown_key", "DPM0001", "", fmt.Sprintf("unknown key: permissions.%s", key)))
 			}
 		default:
 			// outside any known section

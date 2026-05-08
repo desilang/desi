@@ -1,0 +1,86 @@
+# AST module — Parse and inspect Desi source files at runtime
+#
+# Provides a handle-based API for parsing .desi files and walking
+# the resulting AST tree. This is the foundation for v0.2.0
+# compile-time macro introspection.
+#
+# Example:
+#   import ast
+#   let handle = ast.parse_file("src/main.desi")
+#   let node_type = ast.node_type(handle)
+#   print(f"Root node: {node_type}")
+#   ast.free(handle)
+
+# ============================================================
+# C Runtime Bindings
+# ============================================================
+
+@extern("C")
+pub def __ast_parse_file(path: str) -> int
+
+@extern("C")
+pub def __ast_node_type(handle: int) -> str
+
+@extern("C")
+pub def __ast_node_children_count(handle: int) -> int
+
+@extern("C")
+pub def __ast_node_name(handle: int) -> str
+
+@extern("C")
+pub def __ast_node_line(handle: int) -> int
+
+@extern("C")
+pub def __ast_node_col(handle: int) -> int
+
+@extern("C")
+pub def __ast_free(handle: int) -> none
+
+# ============================================================
+# Public API — Safe Wrappers
+# ============================================================
+
+pub def parse_file(path: str) -> int:
+	"""Parse a .desi file and return an opaque AST handle.
+
+	Returns -1 on error (file not found, etc.).
+	The caller must call ast.free(handle) when done.
+
+	Example:
+		let h = ast.parse_file("src/main.desi")
+		if h >= 0:
+			print(ast.node_type(h))
+			ast.free(h)
+	"""
+	unsafe:
+		return __ast_parse_file(path)
+
+pub def node_type(handle: int) -> str:
+	"""Return the type name of the AST node (e.g., "Module", "FuncDecl")."""
+	unsafe:
+		return __ast_node_type(handle)
+
+pub def children_count(handle: int) -> int:
+	"""Return the number of child nodes."""
+	unsafe:
+		return __ast_node_children_count(handle)
+
+pub def node_name(handle: int) -> str:
+	"""Return the identifier name of the node, or empty string."""
+	unsafe:
+		return __ast_node_name(handle)
+
+pub def node_line(handle: int) -> int:
+	"""Return the source line number of this node."""
+	unsafe:
+		return __ast_node_line(handle)
+
+pub def node_col(handle: int) -> int:
+	"""Return the source column number of this node."""
+	unsafe:
+		return __ast_node_col(handle)
+
+pub def free(handle: int) -> none:
+	"""Free the AST tree associated with this handle."""
+	unsafe:
+		__ast_free(handle)
