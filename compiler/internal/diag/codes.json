@@ -812,5 +812,27 @@
       "title": "unknown ORM field",
       "help": "The field name does not match any field registered in a db.model() definition. Check for typos in the field name."
     }
+  },
+  "perf": {
+    "nested_loop": {
+      "id": "DPR0001",
+      "title": "deeply nested loop (O(n²) or worse)",
+      "help": "Consider restructuring with hash maps, sorting, or reducing nesting depth."
+    },
+    "string_concat_in_loop": {
+      "id": "DPR0002",
+      "title": "string concatenation inside loop",
+      "help": "String '+' in a loop creates O(n²) allocations. Use a list and join, or a string builder."
+    },
+    "repeated_collection_lookup": {
+      "id": "DPR0003",
+      "title": "repeated collection lookup with same key",
+      "help": "Cache the result in a local variable instead of looking up the same key multiple times."
+    },
+    "unbounded_alloc_in_loop": {
+      "id": "DPR0004",
+      "title": "unbounded allocation inside loop",
+      "help": "Creating new collections inside a loop body may cause excessive allocations. Pre-allocate or move outside the loop."
+    }
   }
 }

@@ -88,6 +88,11 @@ type Info struct {
 	// Key: the CallExpr node, Value: the chosen FuncCand.
 	// Used by the lowerer to emit the correct C symbol for overloaded functions.
 	ChosenOverloads map[*ast.CallExpr]*FuncCand
+
+	// PerfLevel is the configured performance advisor level ("relaxed", "default", "strict").
+	// Set by CLI flags (e.g., desic perf --level=strict) and read by RunPerfAdvisor.
+	// Empty string means "default".
+	PerfLevel string
 }
 
 // DbgCallInfo stores metadata for a dbg() call to emit [file:line] expr = value

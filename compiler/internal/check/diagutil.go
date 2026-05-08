@@ -29,6 +29,14 @@ func diagAt(codeID string, span diag.Span, msg string) diag.Diagnostic {
 		if slices.Contains(syncWarningCodes, codeID) {
 			domain = "warn"
 		}
+		// DPR* are performance advisor warnings
+		if len(codeID) >= 3 && codeID[:3] == "DPR" {
+			domain = "perf"
+		}
+		// DPM* are build audit / permissions diagnostics
+		if len(codeID) >= 3 && codeID[:3] == "DPM" {
+			domain = "project"
+		}
 	}
 	return diag.Diagnostic{
 		CodeID:  codeID,

@@ -1,0 +1,25 @@
+# @perf decorator protocol definition
+# Tier 2 macro — not a builtin, loaded via macro system
+#
+# Usage:
+#   @perf
+#   def my_benchmark() -> none:
+#       # code to benchmark
+#
+# The @perf decorator automatically wraps the function with
+# perf.start()/perf.finish() calls. In release builds, these
+# calls are stripped entirely (strip_in_release = true).
+
+@macro(target="func")
+class perf:
+	# Strip all perf instrumentation in release builds
+	strip_in_release = true
+
+	# Runtime function mapping
+	runtime = {
+		"start":  "__perf_bench_start",
+		"finish": "__perf_bench_finish"
+	}
+
+	# Runtime type (C functions)
+	runtime_type = "c"

@@ -185,6 +185,9 @@ func parseMacroClass(cd *ast.ClassDecl, info *macroDecInfo) (*MacroProtocol, err
 		}
 	}
 
+	// --- strip_in_release ---
+	proto.StripInRelease = extractBool(consts, "strip_in_release")
+
 	// --- OnCollect callback (generic) ---
 	proto.OnCollect = func(ctx *MacroContext) error {
 		if ctx.Class == nil || ctx.Decorator == nil {

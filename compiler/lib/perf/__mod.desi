@@ -1,0 +1,52 @@
+# Performance benchmarking module
+# Provides @perf decorator and timing functions
+# Stripped in release builds (zero-cost in production)
+
+# ============================================================
+# C Runtime Bindings
+# ============================================================
+
+@extern("C")
+pub def __perf_bench_start(name: str) -> none
+
+@extern("C")
+pub def __perf_bench_finish(name: str, iterations: int) -> none
+
+@extern("C")
+pub def __perf_bench_reset() -> none
+
+# ============================================================
+# Public API — Safe Wrappers
+# ============================================================
+
+pub def start(name: str) -> none:
+	"""Start timing a named benchmark section.
+
+	Call this at the beginning of the code you want to measure.
+	Pair with perf.finish() to record and print results.
+
+	Example:
+		perf.start("sort")
+		my_sort(data)
+		perf.finish("sort", 1)
+	"""
+	unsafe:
+		__perf_bench_start(name)
+
+pub def finish(name: str, iterations: int = 1) -> none:
+	"""Finish timing and print benchmark results.
+
+	Args:
+		name: Must match the name passed to start().
+		iterations: Number of iterations (for per-iteration stats).
+	
+	Output format:
+		bench  name  avg=1.234ms  min=1.100ms  max=1.400ms  iters=1000
+	"""
+	unsafe:
+		__perf_bench_finish(name, iterations)
+
+pub def reset() -> none:
+	"""Reset all stored benchmark entries."""
+	unsafe:
+		__perf_bench_reset()
