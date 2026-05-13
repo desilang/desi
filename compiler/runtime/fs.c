@@ -233,3 +233,157 @@ char* __fs_abs(const char* path) {
     }
     return strdup(path);
 }
+
+// ============================================================
+// Recursive directory walking
+// ============================================================
+
+// Helper: recursively collect paths into a DesiList
+static void walk_recurse(const char* dir_path, DesiList* result) {
+    DIR* dir = opendir(dir_path);
+    if (!dir) return;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        // Build full path: dir_path + "/" + entry->d_name
+        size_t dir_len = strlen(dir_path);
+        size_t name_len = strlen(entry->d_name);
+        char* full_path = (char*)malloc(dir_len + 1 + name_len + 1);
+        if (!full_path) continue;
+
+        memcpy(full_path, dir_path, dir_len);
+        full_path[dir_len] = '/';
+        memcpy(full_path + dir_len + 1, entry->d_name, name_len);
+        full_path[dir_len + 1 + name_len] = '\0';
+
+        list_append(result, (void*)full_path, 1);
+
+        // Recurse into subdirectories
+        struct stat st;
+        if (stat(full_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+            walk_recurse(full_path, result);
+        }
+    }
+    closedir(dir);
+}
+
+// Walk directory recursively. Returns list[str] of all full paths.
+// Python: os.walk() / pathlib.Path.rglob()
+// Go: filepath.Walk()
+// Rust: walkdir::WalkDir
+DesiList* __fs_walk(const char* path) {
+    DesiList* result = list_new(1, (ElemToStrFunc)str_to_str);
+    if (!path) return result;
+    walk_recurse(path, result);
+    return result;
+}
+
+// ============================================================
+// Temporary files and directories
+// ============================================================
+
+// Create a temporary file. Returns the path as a heap string.
+// Python: tempfile.mkstemp()
+// Go: os.CreateTemp()
+char* __fs_temp_file(void) {
+#ifdef _WIN32
+    char tmp_path[MAX_PATH];
+    char tmp_file[MAX_PATH];
+    GetTempPathA(MAX_PATH, tmp_path);
+    if (GetTempFileNameA(tmp_path, "desi", 0, tmp_file)) {
+        return strdup(tmp_file);
+    }
+    return strdup("");
+#else
+    const char* tmpdir = getenv("TMPDIR");
+    if (!tmpdir) tmpdir = "/tmp";
+    size_t len = strlen(tmpdir) + 20;
+    char* tmpl = (char*)malloc(len);
+    if (!tmpl) return strdup("");
+    snprintf(tmpl, len, "%s/desi_XXXXXX", tmpdir);
+    int fd = mkstemp(tmpl);
+    if (fd < 0) {
+        free(tmpl);
+        return strdup("");
+    }
+    close(fd);
+    return tmpl; // caller owns this string
+#endif
+}
+
+// Create a temporary directory. Returns the path as a heap string.
+// Python: tempfile.mkdtemp()
+// Go: os.MkdirTemp()
+char* __fs_temp_dir(void) {
+#ifdef _WIN32
+    char tmp_path[MAX_PATH];
+    GetTempPathA(MAX_PATH, tmp_path);
+    char dir_name[MAX_PATH];
+    snprintf(dir_name, MAX_PATH, "%sdesi_%lu", tmp_path, (unsigned long)GetCurrentProcessId());
+    CreateDirectoryA(dir_name, NULL);
+    return strdup(dir_name);
+#else
+    const char* tmpdir = getenv("TMPDIR");
+    if (!tmpdir) tmpdir = "/tmp";
+    size_t len = strlen(tmpdir) + 20;
+    char* tmpl = (char*)malloc(len);
+    if (!tmpl) return strdup("");
+    snprintf(tmpl, len, "%s/desi_XXXXXX", tmpdir);
+    char* result = mkdtemp(tmpl);
+    if (!result) {
+        free(tmpl);
+        return strdup("");
+    }
+    return tmpl; // mkdtemp modifies tmpl in-place
+#endif
+}
+
+// ============================================================
+// Recursive removal
+// ============================================================
+
+// Remove directory and all contents recursively (like rm -rf).
+// Returns 1 on success, 0 on error.
+// Python: shutil.rmtree()
+// Go: os.RemoveAll()
+int __fs_remove_all(const char* path) {
+    if (!path) return 0;
+
+    struct stat st;
+    if (stat(path, &st) != 0) return 0;
+
+    // If it's a file, just unlink
+    if (!S_ISDIR(st.st_mode)) {
+        return unlink(path) == 0 ? 1 : 0;
+    }
+
+    // It's a directory — recurse
+    DIR* dir = opendir(path);
+    if (!dir) return 0;
+
+    int success = 1;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        size_t path_len = strlen(path);
+        size_t name_len = strlen(entry->d_name);
+        char* child = (char*)malloc(path_len + 1 + name_len + 1);
+        if (!child) { success = 0; continue; }
+
+        snprintf(child, path_len + 1 + name_len + 1, "%s/%s", path, entry->d_name);
+
+        if (!__fs_remove_all(child)) {
+            success = 0;
+        }
+        free(child);
+    }
+    closedir(dir);
+
+    if (rmdir(path) != 0) success = 0;
+    return success;
+}

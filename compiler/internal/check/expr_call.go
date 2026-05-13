@@ -1281,7 +1281,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					if !cand.Type.Variadic && len(args) != len(cand.Type.Params) {
 						continue
 					}
-					// TODO: Handle variadic generics if needed
+					// Note: variadic generics (e.g. Tuple[T...]) are out of scope for v0.1.0.
+					// Current variadic dispatch uses the Variadic flag on Func.
 
 					match := true
 					for i, argT := range args {

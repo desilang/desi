@@ -422,7 +422,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 			// Inherit methods (can override)
 			for name, method := range baseCls.Methods {
 				if _, exists := cls.Methods[name]; !exists {
-					// TODO: Substitute types in method signatures if generic
+					// Substitute types in method signatures for generic classes
 					if subst != nil {
 						newMethod := *method
 						newParams := make([]types.T, len(method.Params))
@@ -823,8 +823,9 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 					// Ensure the type is correct
 					if len(ft.Params) > 0 {
 						if paramName == "cls" || isClassMethod {
-							// For @classmethod, inject Type[ClassName] (for now, just use cls)
-							// TODO: Implement Type[T] wrapper
+							// For @classmethod, inject Type[ClassName]
+							// v0.2.0: proper Type[T] metatype (Python's Type[cls])
+							// Current: use the class type directly — works for dispatch
 							ft.Params[0] = cls
 						} else {
 							ft.Params[0] = cls

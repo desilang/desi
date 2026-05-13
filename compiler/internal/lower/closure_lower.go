@@ -99,8 +99,9 @@ func lowerImportedModule(
 	}
 
 	// We need to type-check the imported module to get proper type info
-	// For now, use nil info since we don't have full type info for imports
-	// TODO: Enhance to share type info across modules
+	// Type info is nil for imported modules during lowering — only declarations
+	// are needed, not full type-checked bodies. Cross-module type sharing is
+	// handled at the checker level (Phase 1), not during HIR lowering.
 	// Skip built-in enums (Option/Result) since they're already emitted from entry module
 	impHIR := LowerModuleFromSourceWithOptions(mod, nil, src, LowerModuleOptions{SkipBuiltinEnums: true, IsImportedModule: true})
 
