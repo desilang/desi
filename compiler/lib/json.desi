@@ -47,6 +47,24 @@ pub def __json_get_int(node: Any) -> int
 @extern("C")
 pub def __json_get_float(node: Any) -> float
 
+@extern("C")
+pub def __json_stringify_pretty(node: Any, indent: int) -> str
+
+@extern("C")
+pub def __json_clone(node: Any) -> Any
+
+@extern("C")
+pub def __json_merge(base: Any, overlay: Any) -> Any
+
+@extern("C")
+pub def __json_equals(a: Any, b: Any) -> bool
+
+@extern("C")
+pub def __json_has_key(obj: Any, key: str) -> bool
+
+@extern("C")
+pub def __json_object_values(obj: Any) -> Any
+
 # JSON type constants (match JsonType enum in json.c)
 pub let JSON_NULL = 0
 pub let JSON_BOOL = 1
@@ -104,10 +122,22 @@ pub def object_get(node: Any, key: str) -> Any:
     unsafe:
         return __json_object_get(node, key)
 
-# Convert JSON node to string
+# Convert JSON node to compact string
 pub def stringify(node: Any) -> str:
     unsafe:
         return __json_stringify(node)
+
+# Serialize JSON node to compact string (alias for stringify)
+# Like Python's json.dumps()
+pub def dumps(node: Any) -> str:
+    unsafe:
+        return __json_stringify(node)
+
+# Serialize JSON node to pretty-printed string with indentation.
+# Like Python's json.dumps(data, indent=2)
+pub def pretty(node: Any, indent: int) -> str:
+    unsafe:
+        return __json_stringify_pretty(node, indent)
 
 # Check if JSON node is null
 pub def is_null(node: Any) -> bool:
@@ -212,3 +242,38 @@ pub def keys(obj: Any) -> Any:
 pub def object_key(obj: Any, index: int) -> str:
     unsafe:
         return __json_object_key(obj, index)
+
+# ============================================================
+# Advanced Operations
+# ============================================================
+
+# Deep clone a JSON node (returns independent copy)
+# Like Python's copy.deepcopy() for JSON data
+pub def clone(node: Any) -> Any:
+    unsafe:
+        return __json_clone(node)
+
+# Merge two JSON objects. The overlay's keys take precedence.
+# Like JavaScript's Object.assign() or Python's {**a, **b}
+pub def merge(base: Any, overlay: Any) -> Any:
+    unsafe:
+        return __json_merge(base, overlay)
+
+# Deep equality check between two JSON nodes
+# Like Python's == for dicts/lists
+pub def equals(a: Any, b: Any) -> bool:
+    unsafe:
+        return __json_equals(a, b)
+
+# Check if a JSON object contains a key
+# Like Python's "key" in dict
+pub def has_key(obj: Any, key: str) -> bool:
+    unsafe:
+        return __json_has_key(obj, key)
+
+# Get all values of a JSON object as a JSON array
+# Like Python's dict.values()
+pub def values(obj: Any) -> Any:
+    unsafe:
+        return __json_object_values(obj)
+

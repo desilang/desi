@@ -1,15 +1,22 @@
-# Log module — structured logging with level filtering and ANSI colors
+# Log module — structured logging with level filtering, timestamps, and file output
 #
 # Provides debug(), info(), warn(), error(), fatal() with ANSI colors.
 # Supports log level filtering via set_level().
 # DEBUG/INFO go to stdout, WARN/ERROR/FATAL go to stderr.
 #
+# Features:
+#   - Level filtering: set_level("WARN") to suppress DEBUG/INFO
+#   - Timestamps: set_timestamps(true) for ISO 8601 prefixes
+#   - File output: set_file("app.log") to log to a file
+#   - JSON format: set_json(true) for structured JSON lines
+#
 # Usage:
 #   import log
 #   log.info("Server started on port 8080")
-#   log.set_level("WARN")   # Only WARN, ERROR, FATAL will show
-#   log.info("hidden")      # Filtered out
-#   log.warn("visible")     # Shows
+#   log.set_level("WARN")         # Only WARN, ERROR, FATAL will show
+#   log.set_timestamps(true)      # Add ISO 8601 timestamps
+#   log.set_file("app.log")       # Log to file
+#   log.set_json(true)            # JSON structured output
 
 # --- C runtime bindings (private) ---
 
@@ -30,6 +37,15 @@ def __log_error(message: str) -> none
 
 @extern("C")
 def __log_fatal(message: str) -> none
+
+@extern("C")
+def __log_set_timestamps(enabled: bool) -> none
+
+@extern("C")
+def __log_set_json(enabled: bool) -> none
+
+@extern("C")
+def __log_set_file(path: str) -> none
 
 # --- Public API ---
 
@@ -64,3 +80,21 @@ pub def fatal(message: str) -> none:
 	unsafe:
 		__log_fatal(message)
 
+## Enable/disable ISO 8601 timestamps on all log messages.
+## When enabled, output looks like: 2026-05-13T14:30:00 [INFO] message
+pub def set_timestamps(enabled: bool) -> none:
+	unsafe:
+		__log_set_timestamps(enabled)
+
+## Enable/disable structured JSON output format.
+## When enabled, each log line is a JSON object:
+## {"level":"INFO","time":"2026-05-13T14:30:00","message":"..."}
+pub def set_json(enabled: bool) -> none:
+	unsafe:
+		__log_set_json(enabled)
+
+## Set log output to a file. Pass "" to reset to stdout/stderr.
+## Log messages are appended to the file.
+pub def set_file(path: str) -> none:
+	unsafe:
+		__log_set_file(path)
