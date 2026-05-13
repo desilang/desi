@@ -387,3 +387,160 @@ int __fs_remove_all(const char* path) {
     if (rmdir(path) != 0) success = 0;
     return success;
 }
+
+// ============================================================
+// Recursive directory copy
+// ============================================================
+
+// Copy directory and all contents recursively (like cp -r).
+// Returns 1 on success, 0 on error.
+// Python: shutil.copytree()
+// Go: (no stdlib equivalent, manual recursion)
+int __fs_copy_dir(const char* src, const char* dst) {
+    if (!src || !dst) return 0;
+
+    struct stat st;
+    if (stat(src, &st) != 0) return 0;
+
+    // If source is a file, copy it directly
+    if (!S_ISDIR(st.st_mode)) {
+        return __fs_copy(src, dst);
+    }
+
+    // Create destination directory
+    if (mkdir(dst, st.st_mode) != 0 && errno != EEXIST) return 0;
+
+    DIR* dir = opendir(src);
+    if (!dir) return 0;
+
+    int success = 1;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+            continue;
+
+        size_t src_len = strlen(src);
+        size_t dst_len = strlen(dst);
+        size_t name_len = strlen(entry->d_name);
+
+        char* src_child = (char*)malloc(src_len + 1 + name_len + 1);
+        char* dst_child = (char*)malloc(dst_len + 1 + name_len + 1);
+        if (!src_child || !dst_child) {
+            free(src_child); free(dst_child);
+            success = 0;
+            continue;
+        }
+
+        snprintf(src_child, src_len + 1 + name_len + 1, "%s/%s", src, entry->d_name);
+        snprintf(dst_child, dst_len + 1 + name_len + 1, "%s/%s", dst, entry->d_name);
+
+        if (!__fs_copy_dir(src_child, dst_child)) {
+            success = 0;
+        }
+        free(src_child);
+        free(dst_child);
+    }
+    closedir(dir);
+    return success;
+}
+
+// ============================================================
+// File metadata
+// ============================================================
+
+// Return file size in bytes (int64 for large files).
+// Returns -1 on error.
+int64_t __fs_file_size(const char* path) {
+    if (!path) return -1;
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (int64_t)st.st_size;
+}
+
+// Return file modification time as Unix timestamp (seconds since epoch).
+// Returns -1 on error.
+int64_t __fs_mtime(const char* path) {
+    if (!path) return -1;
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (int64_t)st.st_mtime;
+}
+
+// Return file permissions as octal integer (e.g. 0755 → 493).
+// Returns -1 on error.
+int __fs_permissions(const char* path) {
+    if (!path) return -1;
+    struct stat st;
+    if (stat(path, &st) != 0) return -1;
+    return (int)(st.st_mode & 0777);
+}
+
+// ============================================================
+// Executable lookup (which)
+// ============================================================
+
+// Find an executable on the system PATH.
+// Returns the full path if found, "" if not found.
+// Python: shutil.which()
+// Go: exec.LookPath()
+char* __fs_which(const char* cmd) {
+    if (!cmd || !*cmd) return strdup("");
+
+    // If cmd contains a slash, check it directly
+    if (strchr(cmd, '/') != NULL) {
+        if (access(cmd, X_OK) == 0) {
+            return strdup(cmd);
+        }
+        return strdup("");
+    }
+
+    const char* path_env = getenv("PATH");
+    if (!path_env) return strdup("");
+
+    char* path_copy = strdup(path_env);
+    if (!path_copy) return strdup("");
+
+    char* dir = path_copy;
+    char* next;
+    while (dir && *dir) {
+        next = strchr(dir, ':');
+        if (next) *next = '\0';
+
+        // Build full path: dir/cmd
+        size_t dir_len = strlen(dir);
+        size_t cmd_len = strlen(cmd);
+        char* full = (char*)malloc(dir_len + 1 + cmd_len + 1);
+        if (!full) { dir = next ? next + 1 : NULL; continue; }
+
+        snprintf(full, dir_len + 1 + cmd_len + 1, "%s/%s", dir, cmd);
+
+        if (access(full, X_OK) == 0) {
+            free(path_copy);
+            return full;
+        }
+        free(full);
+
+        dir = next ? next + 1 : NULL;
+    }
+
+    free(path_copy);
+    return strdup("");
+}
+
+// ============================================================
+// Set file permissions (chmod)
+// ============================================================
+
+// Set file permissions. Mode is octal (e.g. 0o755 → 493 decimal).
+// Returns 1 on success, 0 on error.
+// Python: os.chmod()
+// Go: os.Chmod()
+int __fs_chmod(const char* path, int mode) {
+    if (!path) return 0;
+#ifdef _WIN32
+    return 0; // Windows doesn't support chmod in POSIX style
+#else
+    return chmod(path, (mode_t)mode) == 0 ? 1 : 0;
+#endif
+}
+

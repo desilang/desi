@@ -776,6 +776,224 @@ char* __json_stringify(JsonNode* node) {
     return buf;
 }
 
+// ============================================================
+// Pretty-print Stringify (indented JSON)
+// ============================================================
+
+static void buf_append_indent(char** buf, size_t* len, size_t* cap, int depth, int indent) {
+    int spaces = depth * indent;
+    for (int i = 0; i < spaces; i++) {
+        buf_append_char(buf, len, cap, ' ');
+    }
+}
+
+static void stringify_pretty_to_buffer(JsonNode* node, char** buf, size_t* len, size_t* cap, int depth, int indent) {
+    if (!node) {
+        buf_append(buf, len, cap, "null");
+        return;
+    }
+
+    switch (node->type) {
+        case JSON_NULL:
+            buf_append(buf, len, cap, "null");
+            break;
+
+        case JSON_BOOL:
+            buf_append(buf, len, cap, node->bool_val ? "true" : "false");
+            break;
+
+        case JSON_NUMBER: {
+            char numstr[64];
+            // Use integer format for whole numbers
+            if (node->num_val == (double)(int64_t)node->num_val &&
+                node->num_val >= -1e15 && node->num_val <= 1e15) {
+                snprintf(numstr, sizeof(numstr), "%lld", (long long)(int64_t)node->num_val);
+            } else {
+                snprintf(numstr, sizeof(numstr), "%g", node->num_val);
+            }
+            buf_append(buf, len, cap, numstr);
+            break;
+        }
+
+        case JSON_STRING:
+            stringify_string(node->str_val, buf, len, cap);
+            break;
+
+        case JSON_ARRAY:
+            if (node->array.len == 0) {
+                buf_append(buf, len, cap, "[]");
+            } else {
+                buf_append(buf, len, cap, "[\n");
+                for (int i = 0; i < node->array.len; i++) {
+                    buf_append_indent(buf, len, cap, depth + 1, indent);
+                    stringify_pretty_to_buffer(node->array.items[i], buf, len, cap, depth + 1, indent);
+                    if (i < node->array.len - 1) buf_append_char(buf, len, cap, ',');
+                    buf_append_char(buf, len, cap, '\n');
+                }
+                buf_append_indent(buf, len, cap, depth, indent);
+                buf_append_char(buf, len, cap, ']');
+            }
+            break;
+
+        case JSON_OBJECT:
+            if (node->object.len == 0) {
+                buf_append(buf, len, cap, "{}");
+            } else {
+                buf_append(buf, len, cap, "{\n");
+                for (int i = 0; i < node->object.len; i++) {
+                    buf_append_indent(buf, len, cap, depth + 1, indent);
+                    stringify_string(node->object.keys[i], buf, len, cap);
+                    buf_append(buf, len, cap, ": ");
+                    stringify_pretty_to_buffer(node->object.values[i], buf, len, cap, depth + 1, indent);
+                    if (i < node->object.len - 1) buf_append_char(buf, len, cap, ',');
+                    buf_append_char(buf, len, cap, '\n');
+                }
+                buf_append_indent(buf, len, cap, depth, indent);
+                buf_append_char(buf, len, cap, '}');
+            }
+            break;
+    }
+}
+
+// Pretty-print JSON with indentation (default 2 spaces)
+// Python: json.dumps(data, indent=2)
+char* __json_stringify_pretty(JsonNode* node, int indent) {
+    if (indent <= 0) indent = 2;
+    size_t cap = 512;
+    size_t len = 0;
+    char* buf = (char*)malloc(cap);
+    buf[0] = '\0';
+
+    stringify_pretty_to_buffer(node, &buf, &len, &cap, 0, indent);
+
+    return buf;
+}
+
+// ============================================================
+// Deep copy a JSON node
+// ============================================================
+
+JsonNode* __json_clone(JsonNode* node) {
+    if (!node) return NULL;
+    JsonNode* copy = json_alloc(node->type);
+    switch (node->type) {
+        case JSON_BOOL:
+            copy->bool_val = node->bool_val;
+            break;
+        case JSON_NUMBER:
+            copy->num_val = node->num_val;
+            break;
+        case JSON_STRING:
+            copy->str_val = strdup(node->str_val ? node->str_val : "");
+            break;
+        case JSON_ARRAY:
+            copy->array.cap = node->array.len > 0 ? node->array.len : 1;
+            copy->array.items = (JsonNode**)malloc(copy->array.cap * sizeof(JsonNode*));
+            copy->array.len = node->array.len;
+            for (int i = 0; i < node->array.len; i++) {
+                copy->array.items[i] = __json_clone(node->array.items[i]);
+            }
+            break;
+        case JSON_OBJECT:
+            copy->object.cap = node->object.len > 0 ? node->object.len : 1;
+            copy->object.keys = (char**)malloc(copy->object.cap * sizeof(char*));
+            copy->object.values = (JsonNode**)malloc(copy->object.cap * sizeof(JsonNode*));
+            copy->object.len = node->object.len;
+            for (int i = 0; i < node->object.len; i++) {
+                copy->object.keys[i] = strdup(node->object.keys[i]);
+                copy->object.values[i] = __json_clone(node->object.values[i]);
+            }
+            break;
+        default:
+            break;
+    }
+    return copy;
+}
+
+// ============================================================
+// Merge two JSON objects (shallow merge, second wins on conflict)
+// ============================================================
+
+JsonNode* __json_merge(JsonNode* base, JsonNode* overlay) {
+    if (!base || base->type != JSON_OBJECT) return __json_clone(overlay);
+    if (!overlay || overlay->type != JSON_OBJECT) return __json_clone(base);
+
+    JsonNode* result = __json_clone(base);
+    for (int i = 0; i < overlay->object.len; i++) {
+        // Check if key exists in result — update; else add
+        int found = 0;
+        for (int j = 0; j < result->object.len; j++) {
+            if (strcmp(result->object.keys[j], overlay->object.keys[i]) == 0) {
+                __json_free(result->object.values[j]);
+                result->object.values[j] = __json_clone(overlay->object.values[i]);
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            __json_object_set(result, overlay->object.keys[i],
+                              __json_clone(overlay->object.values[i]));
+        }
+    }
+    return result;
+}
+
+// ============================================================
+// Check if two JSON nodes are equal (deep equality)
+// ============================================================
+
+int __json_equals(JsonNode* a, JsonNode* b) {
+    if (a == b) return 1;
+    if (!a || !b) return 0;
+    if (a->type != b->type) return 0;
+
+    switch (a->type) {
+        case JSON_NULL: return 1;
+        case JSON_BOOL: return a->bool_val == b->bool_val;
+        case JSON_NUMBER: return a->num_val == b->num_val;
+        case JSON_STRING: return strcmp(a->str_val, b->str_val) == 0;
+        case JSON_ARRAY:
+            if (a->array.len != b->array.len) return 0;
+            for (int i = 0; i < a->array.len; i++) {
+                if (!__json_equals(a->array.items[i], b->array.items[i])) return 0;
+            }
+            return 1;
+        case JSON_OBJECT:
+            if (a->object.len != b->object.len) return 0;
+            for (int i = 0; i < a->object.len; i++) {
+                JsonNode* bval = __json_object_get(b, a->object.keys[i]);
+                if (!bval || !__json_equals(a->object.values[i], bval)) return 0;
+            }
+            return 1;
+    }
+    return 0;
+}
+
+// ============================================================
+// Check if a JSON object contains a key
+// ============================================================
+
+int __json_has_key(JsonNode* obj, const char* key) {
+    if (!obj || obj->type != JSON_OBJECT || !key) return 0;
+    for (int i = 0; i < obj->object.len; i++) {
+        if (strcmp(obj->object.keys[i], key) == 0) return 1;
+    }
+    return 0;
+}
+
+// ============================================================
+// Get all values of a JSON object as a JSON array
+// ============================================================
+
+JsonNode* __json_object_values(JsonNode* obj) {
+    JsonNode* arr = __json_new_array();
+    if (!obj || obj->type != JSON_OBJECT) return arr;
+    for (int i = 0; i < obj->object.len; i++) {
+        __json_array_push(arr, __json_clone(obj->object.values[i]));
+    }
+    return arr;
+}
+
 /* ---- Dict-to-JSON bridge ---- */
 /* Converts a Desi runtime dict_t* directly to a JSON string. */
 /* This avoids the JsonNode intermediate representation.       */

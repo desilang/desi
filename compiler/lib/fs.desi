@@ -67,6 +67,21 @@ def __fs_temp_dir() -> str
 @extern("C")
 def __fs_remove_all(path: str) -> bool
 
+@extern("C")
+def __fs_copy_dir(src: str, dst: str) -> bool
+
+@extern("C")
+def __fs_mtime(path: str) -> int
+
+@extern("C")
+def __fs_permissions(path: str) -> int
+
+@extern("C")
+def __fs_which(cmd: str) -> str
+
+@extern("C")
+def __fs_chmod(path: str, mode: int) -> bool
+
 # --- Public API ---
 
 ## Read entire file as a string. Returns "" on error.
@@ -167,4 +182,35 @@ pub def temp_dir() -> str:
 pub def remove_all(path: str) -> bool:
 	unsafe:
 		return __fs_remove_all(path)
+
+## Copy directory and all contents recursively (like cp -r).
+## Like Python's shutil.copytree().
+pub def copy_dir(src: str, dst: str) -> bool:
+	unsafe:
+		return __fs_copy_dir(src, dst)
+
+## Get file modification time as Unix timestamp (seconds since epoch).
+## Returns -1 on error.
+pub def mtime(path: str) -> int:
+	unsafe:
+		return __fs_mtime(path)
+
+## Get file permissions as octal integer (e.g. 755 → 493).
+## Returns -1 on error.
+pub def permissions(path: str) -> int:
+	unsafe:
+		return __fs_permissions(path)
+
+## Find an executable on the system PATH.
+## Returns the full path if found, "" if not found.
+## Like Python's shutil.which() or Go's exec.LookPath().
+pub def which(cmd: str) -> str:
+	unsafe:
+		return __fs_which(cmd)
+
+## Set file permissions. Mode is octal (e.g. 0o755 → 493 decimal).
+## Like Python's os.chmod() or Go's os.Chmod().
+pub def chmod(path: str, mode: int) -> bool:
+	unsafe:
+		return __fs_chmod(path, mode)
 
