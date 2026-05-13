@@ -449,7 +449,7 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 ---
 
-### M16 — Performance Tooling: Advisor, `@perf`, Runtime AST (🆕 Planned)
+### M16 — Performance Tooling: Advisor, `@perf`, Runtime AST (✅ DONE)
 
 **Goals**
 
@@ -503,7 +503,7 @@ Deliver a zero-overhead performance analysis module with three components: a sta
 
 ---
 
-### M17 — Build Audit & Permissions (🆕 Planned)
+### M17 — Build Audit & Permissions (✅ DONE)
 
 **Goals**
 
