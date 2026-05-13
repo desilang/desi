@@ -413,7 +413,7 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 ---
 
-### M15 — Error Handling: try/except/finally/raise (🔧 In Progress)
+### M15 — Error Handling: try/except/finally/raise (✅ DONE)
 
 **What shipped (Phase 1 — syntax + lowerer scaffolding, ✅)**
 

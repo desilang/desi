@@ -9,7 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+**Error Handling (M15)**
+- `try/except/finally/raise` statements with Python-style syntax
+- Catchable exceptions via `setjmp`/`longjmp` runtime (10 built-in exception types)
+- `TryExpr` (`?` operator) context-aware: redirects to except handler inside try blocks
+- `__desi_panic(msg)` runtime function
+
+**Performance Tooling (M16)**
+- `desic perf` subcommand with `--level=relaxed|default|strict`
+- Performance advisor rules: `DPR0001` (nested loops), `DPR0002` (string concat in loop), `DPR0003` (repeated lookup), `DPR0004` (unbounded alloc)
+- `@perf` decorator with `strip_in_release = true` (zero-cost in production)
+- `runtime/perf.c` — high-resolution timing (mach_absolute_time / CLOCK_MONOTONIC)
+- `import perf` — safe Desi wrappers for benchmarking
+- `import ast` — runtime AST parsing and walking for `.desi` files
+
+**Build Audit & Permissions (M17)**
+- `[permissions]` section in `desi.mod` with `allow`, `deny`, `audit` keys
+- API sensitivity tiers: Safe (0), System (1), Network (2), Privileged (3)
+- Automatic build audit during `desic build` — blocks on denied imports
+- TTY and JSON audit report output
+- Deny-by-category support (e.g., `deny = ["privileged"]`)
+
+### Tests
+- 24 new tests for performance advisor, build audit, and API tier classification
 
 ---
 
