@@ -9,7 +9,9 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/desilang/desi/compiler/internal/check"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/project"
 	"github.com/desilang/desi/compiler/internal/term"
 	"github.com/desilang/desi/compiler/internal/version"
@@ -321,6 +323,17 @@ func buildCmd(argv []string) int {
 		if outputName == "" {
 			outputName = safePkgName(m.Package.Name)
 		}
+
+		// --- Build Audit ---
+		// Run if [permissions] section has audit=true or any allow/deny rules
+		perms := m.Permissions
+		if perms.Audit || len(perms.Allow) > 0 || len(perms.Deny) > 0 {
+			code := runBuildAudit(file, &perms)
+			if code != 0 {
+				return code
+			}
+		}
+
 		_ = mp
 	}
 
@@ -839,3 +852,52 @@ func detectOpenSSLPrefix() string {
 	}
 	return ""
 }
+
+// runBuildAudit performs a build audit by scanning the entry file for stdlib
+// imports and checking them against the [permissions] section in desi.mod.
+// Returns 0 if the build should proceed, 1 if blocked.
+func runBuildAudit(file string, perms *project.Permissions) int {
+	src, err := os.ReadFile(file)
+	if err != nil {
+		term.Eprintln("audit: cannot read", file, ":", err)
+		return 2
+	}
+
+	mod, pdiags := parse.ParseFile(file, src)
+	if len(pdiags) > 0 {
+		// Parse errors will be caught by emit-ir; just skip audit
+		return 0
+	}
+
+	// Run the checker to discover stdlib imports
+	_, info := check.Check(mod)
+
+	// Collect stdlib module names
+	var imports []string
+	for modName := range info.StdlibImports {
+		imports = append(imports, modName)
+	}
+
+	// Convert project.Permissions → check.Permissions
+	auditPerms := &check.Permissions{
+		Allow: perms.Allow,
+		Deny:  perms.Deny,
+		Audit: perms.Audit,
+	}
+
+	report := check.RunAudit(imports, auditPerms)
+
+	// Print report if audit mode is on
+	if perms.Audit {
+		term.Eprint(check.FormatReport(report))
+	}
+
+	// Block build if denied imports were found
+	if report.HasBlocked {
+		term.Eprintln("build: blocked by [permissions] — denied stdlib imports detected")
+		return 1
+	}
+
+	return 0
+}
+
