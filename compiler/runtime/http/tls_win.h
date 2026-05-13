@@ -428,7 +428,17 @@ void __http_set_ca_bundle(const char* path) {
 
 void __http_set_client_cert(const char* cert, const char* key) {
     (void)cert; (void)key;
-    /* TODO: Support client certificates via Windows certificate store */
+    /*
+     * NOTE: Client certificate support requires Windows-specific implementation:
+     *   1. Open the Windows certificate store (CertOpenSystemStore)
+     *   2. Find the certificate by subject or thumbprint (CertFindCertificateInStore)
+     *   3. Associate it with the Schannel credential (set paCred in SCHANNEL_CRED)
+     *   4. The 'cert' param should be a thumbprint/subject, 'key' is unused
+     *      since Windows manages private keys internally.
+     *
+     * This must be implemented and tested on a Windows machine.
+     * Tracked in: prep_for_v010.md (deferred items)
+     */
 }
 
 #else /* !_WIN32 */

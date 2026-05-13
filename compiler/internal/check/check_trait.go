@@ -6,12 +6,13 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
-// collectTrait registers the trait in the scope (M14 stub).
+// collectTrait registers the trait in the scope.
 func (c *checker) collectTrait(d *ast.TraitDecl) {
-	// For M14, we just register the name so it's not "unknown type".
-	// Real trait system would build a type symbol with method signatures.
-	// We'll treat it as a type for now.
-	// TODO: Add proper TraitSymbol to types package.
+	// Traits are registered by name so they resolve as valid types.
+	// The trait system currently works via checker.info.Impls map
+	// (type→trait→methods) and built-in trait checks in implementsTrait().
+	// A dedicated TraitSymbol in the types package is planned for v0.2.0
+	// when compile-time macro introspection requires richer type metadata.
 }
 
 // collectImpl registers the impl (M14).

@@ -52,16 +52,20 @@ This is the part that surprises people. Everything below ships with the compiler
 - **Regular Expressions** — POSIX-compatible regex via `re`.
 
 ### System & I/O
-- **File System** — Read, write, copy, move, delete, walk directories.
+- **File System** — Read, write, copy, move, delete, walk directories, temp files.
 - **OS** — Environment variables, process execution, platform info.
 - **Path** — Cross-platform path manipulation.
-- **Args** — CLI argument parsing.
-- **Datetime/Time** — Date arithmetic, formatting, timestamps.
-- **Logging** — Leveled logging (debug, info, warn, error).
+- **Process** — Run external commands, capture stdout/stderr, exit codes.
+- **Args** — CLI argument parsing with flags, subcommands, and help generation.
+- **Shell** — Shell scripting helpers: pipe, glob, cd, mkdir.
+- **Signal** — OS signal handling (`SIGINT`, `SIGTERM`) for graceful server shutdown.
+- **Datetime/Time** — Date arithmetic, formatting, timestamps, Duration, Stopwatch.
+- **Logging** — Leveled logging (debug, info, warn, error, fatal).
 - **Compression** — gzip/zlib compress and decompress.
 
 ### Code Analysis
 - **Runtime AST Library** — `import ast` lets you parse, walk, and analyze `.desi` source files at runtime. Build custom linters, code generators, and documentation tools — using the same parser the compiler uses internally.
+- **Text Diffing** — `import diff` for unified diff output between strings. Useful for testing, version control tools, and content comparison.
 
 ### Validation
 - **Built-in validators** — `is_email()`, `is_url()`, `is_ipv4()`, `is_ipv6()`, `is_hex()`, `is_json()`. No third-party library needed for basic input validation.
@@ -297,7 +301,7 @@ This is probably the most ambitious part of Desi. We took Django's ORM — the p
 ### What you get without any external package:
 - **Model definitions** — `char_field`, `integer_field`, `uuid_field`, `decimal_field`, `json_field`, etc.
 - **QuerySets** — Lazy, chainable, Django-style: `filter("name__icontains", "alice")`, `exclude`, `order_by`, `limit`, `annotate`, `group_by`, `having`.
-- **26 lookup types** — `exact`, `contains`, `startswith`, `gt`, `gte`, `in`, `range`, `isnull`, `year`, `month`, `json_has`, and more.
+- **24 lookup types** — `exact`, `iexact`, `contains`, `icontains`, `startswith`, `istartswith`, `endswith`, `iendswith`, `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `range`, `isnull`, `year`, `month`, `day`, `hour`, `minute`, `second`, `quarter`, `week`.
 - **Migrations** — Generate, apply, rollback, squash, dry-run, multi-app support.
 - **inspectdb** — Reverse-engineer models from an existing database.
 - **Relationships** — ForeignKey, OneToOneField, ManyToMany with auto-junction tables.
@@ -307,8 +311,7 @@ This is probably the most ambitious part of Desi. We took Django's ORM — the p
 - **Soft deletes** — `is_deleted` filtering with restore support.
 - **Row locking** — `SELECT FOR UPDATE` with NOWAIT and SKIP LOCKED.
 - **Dirty field tracking** — Only UPDATE what actually changed.
-- **Audit trail** — Built-in history tracking, no plugin needed.
-- **Time-travel queries** — Query the state of a record at any point in time.
+- **Audit trail** — Built-in history tracking with historical queries. No plugin needed — `db.enable_audit("users")` auto-creates a history table and logs every change.
 - **Field validation** — Runtime "did you mean?" suggestions for typo'd field names using Levenshtein distance.
 
 ```desi
@@ -391,6 +394,15 @@ Developer makes edit →
 - **Sub-second reload** for typical edits via LLVM incremental compilation.
 - **State preservation** via `write_state()`/`read_state()` hooks.
 - **Production builds are fully static** — no dynamic linking overhead.
+
+---
+
+## What's Coming
+
+- **Distributed Systems (v0.2.0)** — Erlang-inspired node connection, cross-node messaging, and distributed supervisors. Built on Desi's existing concurrency primitives with a binary wire protocol over TCP. See the [design doc](docs/roadmap/todo/distributed_systems.md).
+- **Compile-time Macros (v0.2.0)** — Write macro rules in Desi itself with full AST access. Community-contributed analyzer rules without modifying the Go compiler.
+- **Full Async/Await (v0.2.0)** — Design doc exists, implementation planned.
+- **WebAssembly Target (v0.2.0)** — Compile Desi to WASM for browser and edge deployments.
 
 ---
 

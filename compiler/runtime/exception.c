@@ -32,10 +32,22 @@
 // Tag 9 = ConnectionError
 
 // ==================== Thread-local State ====================
-// TODO: make thread-local when threading support arrives
+// Each thread gets its own exception handler stack and current exception.
+// This is critical for thread-safety when using try/except inside
+// TaskGroup tasks or spawned lambdas.
 
-static DesiExceptionFrame* current_frame = NULL;
-static DesiException current_exception = {0, NULL, NULL};
+#if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 201112L && !defined(__STDC_NO_THREADS__)
+  #define DESI_THREAD_LOCAL _Thread_local
+#elif defined(__GNUC__) || defined(__clang__)
+  #define DESI_THREAD_LOCAL __thread
+#elif defined(_MSC_VER)
+  #define DESI_THREAD_LOCAL __declspec(thread)
+#else
+  #define DESI_THREAD_LOCAL /* fallback: no thread-local, single-threaded only */
+#endif
+
+static DESI_THREAD_LOCAL DesiExceptionFrame* current_frame = NULL;
+static DESI_THREAD_LOCAL DesiException current_exception = {0, NULL, NULL};
 
 // ==================== API ====================
 

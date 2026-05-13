@@ -55,6 +55,18 @@ def __fs_move(src: str, dst: str) -> bool
 @extern("C")
 def __fs_abs(path: str) -> str
 
+@extern("C")
+def __fs_walk(path: str) -> list[str]
+
+@extern("C")
+def __fs_temp_file() -> str
+
+@extern("C")
+def __fs_temp_dir() -> str
+
+@extern("C")
+def __fs_remove_all(path: str) -> bool
+
 # --- Public API ---
 
 ## Read entire file as a string. Returns "" on error.
@@ -131,4 +143,28 @@ pub def move(src: str, dst: str) -> bool:
 pub def abs(path: str) -> str:
 	unsafe:
 		return __fs_abs(path)
+
+## Walk directory recursively. Returns list[str] of all full paths
+## (files and directories). Like Python's os.walk() or Go's filepath.Walk().
+pub def walk(path: str) -> list[str]:
+	unsafe:
+		return __fs_walk(path)
+
+## Create a temporary file. Returns the path as a string.
+## Like Python's tempfile.mkstemp() or Go's os.CreateTemp().
+pub def temp_file() -> str:
+	unsafe:
+		return __fs_temp_file()
+
+## Create a temporary directory. Returns the path as a string.
+## Like Python's tempfile.mkdtemp() or Go's os.MkdirTemp().
+pub def temp_dir() -> str:
+	unsafe:
+		return __fs_temp_dir()
+
+## Remove directory and all contents recursively (like rm -rf).
+## Like Python's shutil.rmtree() or Go's os.RemoveAll().
+pub def remove_all(path: str) -> bool:
+	unsafe:
+		return __fs_remove_all(path)
 

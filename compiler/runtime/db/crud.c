@@ -2612,9 +2612,16 @@ int32_t __qs_prefetch_execute(void) {
     // Step 2: For each prefetch, collect PKs and batch-query related table
     // Find the pk column index in the result
     for (int p = 0; p < qs_prefetch_count; p++) {
-        // Collect PKs from main result (pk_col values)
-        // For simplicity, we assume pk_col is column 0 (id) by default
-        int pk_col_idx = 0; // TODO: resolve from column name
+        // Resolve pk_col by name from the result columns
+        int pk_col_idx = 0; // default to column 0 if not found
+        int ncols = __db_col_count();
+        for (int c = 0; c < ncols; c++) {
+            char* cname = __db_col_name_at(c);
+            if (cname && strcmp(cname, qs_prefetches[p].pk_col) == 0) {
+                pk_col_idx = c;
+                break;
+            }
+        }
 
         char pk_list[4096] = "";
         int ppos = 0;

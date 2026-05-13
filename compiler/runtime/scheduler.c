@@ -10,6 +10,13 @@
 #include <stdio.h>
 #include <string.h>
 
+#if defined(__APPLE__)
+  #include <sys/sysctl.h>
+  #include <unistd.h>
+#elif !defined(_WIN32)
+  #include <unistd.h>
+#endif
+
 /* Platform-specific thread-local storage */
 #ifdef _WIN32
     #define DESI_THREAD_LOCAL __declspec(thread)
@@ -122,8 +129,23 @@ static void platform_cond_timedwait_ms(DesiPlatformCond* cond, DesiPlatformMutex
  */
 void scheduler_init(int n_workers) {
     if (n_workers <= 0) {
-        /* Default to number of CPU cores */
-        n_workers = 4; /* TODO: detect actual cores */
+        /* Detect actual number of CPU cores */
+#if defined(_WIN32)
+        SYSTEM_INFO sysinfo;
+        GetSystemInfo(&sysinfo);
+        n_workers = (int)sysinfo.dwNumberOfProcessors;
+#elif defined(__APPLE__)
+        int ncpu = 0;
+        size_t len = sizeof(ncpu);
+        if (sysctlbyname("hw.logicalcpu", &ncpu, &len, NULL, 0) == 0 && ncpu > 0) {
+            n_workers = ncpu;
+        } else {
+            n_workers = (int)sysconf(_SC_NPROCESSORS_ONLN);
+        }
+#else
+        n_workers = (int)sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+        if (n_workers <= 0) n_workers = 4; /* fallback */
     }
     
     g_scheduler.n_workers = n_workers;
