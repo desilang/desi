@@ -30,7 +30,7 @@ This is the part that surprises people. Everything below ships with the compiler
 - **PostgreSQL & MySQL** — Pure C wire protocol clients. No `libpq`, no `libmysqlclient`, no system dependencies.
 - **SQLite3** — The full engine compiled into the runtime. `import sqlite3` and you're done.
 - **Redis** — Pure RESP protocol client.
-- **Django-style ORM** — Models, QuerySets, `filter("age__gte", "18")`, 26 lookup types, migrations, soft deletes, row locking, bulk operations, audit trails, time-travel queries — all built in.
+- **Django-style ORM** — Models, QuerySets, `filter("age__gte", "18")`, 26 lookup types, migrations, soft deletes, row locking, bulk operations, audit trails, historical audit queries — all built in.
 
 ### Web & Networking
 - **HTTP client** — GET/POST/PUT/PATCH/DELETE with TLS. Headers, timeouts, JSON helpers.
@@ -55,7 +55,7 @@ This is the part that surprises people. Everything below ships with the compiler
 - **File System** — Read, write, copy, move, delete, walk directories, temp files.
 - **OS** — Environment variables, process execution, platform info.
 - **Path** — Cross-platform path manipulation.
-- **Process** — Run external commands, capture stdout/stderr, exit codes.
+- **Process** — Run external commands, capture stdout/stderr, exit codes, timeout with auto-kill, signal sending.
 - **Args** — CLI argument parsing with flags, subcommands, and help generation.
 - **Shell** — Shell scripting helpers: pipe, glob, cd, mkdir.
 - **Signal** — OS signal handling (`SIGINT`, `SIGTERM`) for graceful server shutdown.
@@ -301,7 +301,7 @@ This is probably the most ambitious part of Desi. We took Django's ORM — the p
 ### What you get without any external package:
 - **Model definitions** — `char_field`, `integer_field`, `uuid_field`, `decimal_field`, `json_field`, etc.
 - **QuerySets** — Lazy, chainable, Django-style: `filter("name__icontains", "alice")`, `exclude`, `order_by`, `limit`, `annotate`, `group_by`, `having`.
-- **24 lookup types** — `exact`, `iexact`, `contains`, `icontains`, `startswith`, `istartswith`, `endswith`, `iendswith`, `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `range`, `isnull`, `year`, `month`, `day`, `hour`, `minute`, `second`, `quarter`, `week`.
+- **26 lookup types** — `exact`, `iexact`, `contains`, `icontains`, `startswith`, `istartswith`, `endswith`, `iendswith`, `gt`, `gte`, `lt`, `lte`, `ne`, `in`, `range`, `isnull`, `year`, `month`, `day`, `hour`, `minute`, `second`, `quarter`, `week` — plus JSON lookups: `has`, `contains`.
 - **Migrations** — Generate, apply, rollback, squash, dry-run, multi-app support.
 - **inspectdb** — Reverse-engineer models from an existing database.
 - **Relationships** — ForeignKey, OneToOneField, ManyToMany with auto-junction tables.

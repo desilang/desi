@@ -23,6 +23,10 @@ import process
 | `process.free(h) -> int` | Free a process result handle |
 | `process.pid() -> int` | Get current process ID |
 | `process.ppid() -> int` | Get parent process ID |
+| `process.run_timeout(cmd, args, secs) -> cptr` | Run with timeout (kills after N seconds) |
+| `process.shell_timeout(cmd, secs) -> cptr` | Shell command with timeout |
+| `process.kill(pid) -> bool` | Kill a process by PID (SIGKILL) |
+| `process.send_signal(pid, sig) -> bool` | Send a signal to a process |
 
 ## Examples
 
@@ -65,6 +69,21 @@ def main() -> int:
     0
 ```
 
+### Run with Timeout
+
+```desi
+import process
+
+def main() -> int:
+    # Kill the command if it takes more than 5 seconds
+    let h = process.shell_timeout("sleep 30", 5)
+    if process.get_ok(h) == false:
+        print("Command timed out or failed")
+        print(process.get_stderr(h))  # "process killed: timeout after 5 seconds"
+    process.free(h)
+    0
+```
+
 ### Process Info
 
 ```desi
@@ -75,3 +94,12 @@ def main() -> int:
     print(f"Parent PID: {str(process.ppid())}")
     0
 ```
+
+## Comparison
+
+| Desi | Python | Go |
+|---|---|---|
+| `process.shell(cmd)` | `subprocess.run(cmd, shell=True)` | `exec.Command("sh", "-c", cmd)` |
+| `process.output(cmd, args)` | `subprocess.check_output([cmd])` | `exec.Command(cmd).Output()` |
+| `process.shell_timeout(cmd, 5)` | `subprocess.run(cmd, timeout=5)` | `exec.CommandContext(ctx, cmd)` |
+| `process.kill(pid)` | `os.kill(pid, SIGKILL)` | `process.Kill()` |

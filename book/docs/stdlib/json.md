@@ -181,6 +181,141 @@ while i < len:
     i = i + 1
 ```
 
+## Serialization
+
+### `json.dumps(node) -> str`
+
+Serialize a JSON node to a compact string (alias for `stringify`).
+
+```desi
+let obj = json.new_object()
+json.set(obj, "name", json.new_string("desi"))
+json.set(obj, "version", json.new_number(1.0))
+print(json.dumps(obj))  # {"name":"desi","version":1}
+```
+
+### `json.pretty(node, indent) -> str`
+
+Pretty-print JSON with indentation. Like Python's `json.dumps(data, indent=2)`.
+
+```desi
+let json_str = '{"name": "alice", "scores": [100, 95, 87]}'
+let data = json.parse(json_str)
+print(json.pretty(data, 2))
+# {
+#   "name": "alice",
+#   "scores": [
+#     100,
+#     95,
+#     87
+#   ]
+# }
+```
+
+## Builder API
+
+Build JSON objects and arrays programmatically:
+
+| Function | Description |
+|----------|-------------|
+| `new_object()` | Create empty `{}` |
+| `new_array()` | Create empty `[]` |
+| `new_string(s)` | Create string node |
+| `new_number(n)` | Create number node |
+| `new_bool(b)` | Create boolean node |
+| `new_null()` | Create null node |
+| `set(obj, key, val)` | Set key-value on object |
+| `push(arr, val)` | Append to array |
+| `remove(obj, key)` | Remove key from object |
+| `keys(obj)` | Get all keys as array |
+
+```desi
+import json
+
+def main() -> int:
+    let user = json.new_object()
+    json.set(user, "name", json.new_string("alice"))
+    json.set(user, "age", json.new_number(30.0))
+    json.set(user, "admin", json.new_bool(true))
+    
+    let tags = json.new_array()
+    json.push(tags, json.new_string("dev"))
+    json.push(tags, json.new_string("ops"))
+    json.set(user, "tags", tags)
+    
+    print(json.pretty(user, 2))
+    0
+```
+
+## Advanced Operations
+
+### `json.clone(node) -> Any`
+
+Deep copy a JSON node. Like Python's `copy.deepcopy()`.
+
+```desi
+let original = json.parse('{"x": 1}')
+let copy = json.clone(original)
+json.set(copy, "y", json.new_number(2.0))
+# original still has only "x"; copy has "x" and "y"
+```
+
+### `json.merge(base, overlay) -> Any`
+
+Merge two JSON objects. Overlay's keys take precedence.
+Like Python's `{**base, **overlay}` or JavaScript's `Object.assign()`.
+
+```desi
+let defaults = json.parse('{"theme": "dark", "lang": "en"}')
+let user_cfg = json.parse('{"lang": "hi"}')
+let merged = json.merge(defaults, user_cfg)
+print(json.pretty(merged, 2))
+# {"theme": "dark", "lang": "hi"}
+```
+
+### `json.equals(a, b) -> bool`
+
+Deep equality check between two JSON nodes.
+
+```desi
+let a = json.parse("[1, 2, 3]")
+let b = json.parse("[1, 2, 3]")
+let c = json.parse("[1, 2, 4]")
+
+print(json.equals(a, b))  # true
+print(json.equals(a, c))  # false
+```
+
+### `json.has_key(obj, key) -> bool`
+
+Check if a JSON object contains a key. Like Python's `"key" in dict`.
+
+```desi
+let config = json.parse('{"debug": true}')
+if json.has_key(config, "debug"):
+    print("Debug mode configured")
+```
+
+### `json.values(obj) -> Any`
+
+Get all values of a JSON object as an array. Like Python's `dict.values()`.
+
+```desi
+let scores = json.parse('{"math": 95, "science": 87}')
+let vals = json.values(scores)
+print(json.array_len(vals))  # 2
+```
+
+## Comparison
+
+| Desi | Python | Go | Rust |
+|---|---|---|---|
+| `json.parse(s)` | `json.loads(s)` | `json.Unmarshal()` | `serde_json::from_str()` |
+| `json.dumps(n)` | `json.dumps(d)` | `json.Marshal()` | `serde_json::to_string()` |
+| `json.pretty(n, 2)` | `json.dumps(d, indent=2)` | `json.MarshalIndent()` | `serde_json::to_string_pretty()` |
+| `json.merge(a, b)` | `{**a, **b}` | Manual | Manual |
+| `json.has_key(o, k)` | `k in d` | `_, ok := d[k]` | `d.get(k)` |
+
 ## See Also
 
 - [Error Handling](../language/error-handling.md) - For safe value access patterns
