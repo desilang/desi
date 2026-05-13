@@ -139,6 +139,12 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	ut.countUsesFromTypeAnnotations(mod)
 	res.Diags = append(res.Diags, ut.emitUnusedDiags()...)
 
+	// 5) Performance advisor — runs when PerfLevel is configured (e.g. via desic perf --level=strict).
+	if res.Info.PerfLevel != "" {
+		perfDiags := RunPerfAdvisor(mod, res.Info.PerfLevel)
+		res.Diags = append(res.Diags, perfDiags...)
+	}
+
 	return res
 }
 
