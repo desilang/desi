@@ -333,7 +333,7 @@ We ship **LLVM from day 1**, plus an interactive **REPL**. Diagnostics are Rust-
 
 ---
 
-### M14 — Defaults, Display, F-Strings (Stage 2), Import-Closure IR, and Stdlib Growth (🆕 Planned)
+### M14 — Defaults, Display, F-Strings (Stage 2), Import-Closure IR, and Stdlib Growth (✅ DONE)
 
 **Goals**
 
