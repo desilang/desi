@@ -579,6 +579,20 @@ The headline feature for v0.2.0: **write macro rules in Desi that execute during
 
 ---
 
+## Distributed Systems (v0.2.0+ Vision)
+
+> **Status:** Research phase. Full design doc: [distributed_systems.md](todo/distributed_systems.md)
+
+Erlang-inspired distributed actor/messaging layer built on Desi's existing concurrency primitives (channels, supervisors). Native-compiled (no VM), so this would be a TCP-based messaging protocol rather than BEAM-style location transparency.
+
+### Key components
+* **Node connection** — `distributed.start_node()`, `distributed.connect()`
+* **Cross-node messaging** — `distributed.send()` / `distributed.recv()`
+* **Distributed supervisor** — Remote `start_child()` with crash recovery across nodes
+* **Wire protocol** — Binary serialization, shared-secret auth, heartbeat
+
+---
+
 ## Cross-cutting practices
 
 * **Testing:** unit tests per package; golden tests for diagnostics & formatter; integration smoke tests for codegen.
