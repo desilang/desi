@@ -410,7 +410,7 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		llcArgs = append(llcArgs, optLevel)
 	}
 	llcArgs = append(llcArgs, irPath)
-	llcCmd := exec.Command("llc", llcArgs...)
+	llcCmd := exec.Command(findLLVMTool("llc"), llcArgs...)
 	llcCmd.Stderr = os.Stderr
 	if err := llcCmd.Run(); err != nil {
 		term.Eprintln("build: llc compilation failed:", err)
@@ -448,7 +448,7 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	} else {
 		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 	}
-	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
 		term.Eprintln("build: linking failed:", err)
@@ -623,7 +623,7 @@ func runSingleTest(testFile string, verbose bool) int {
 		term.Println("    compiling...")
 	}
 	objPath := filepath.Join(tmpDir, "test.o")
-	llcCmd := exec.Command("llc", "-filetype=obj", "-o", objPath, irPath)
+	llcCmd := exec.Command(findLLVMTool("llc"), "-filetype=obj", "-o", objPath, irPath)
 	llcCmd.Stderr = os.Stderr
 	if err := llcCmd.Run(); err != nil {
 		term.Eprintln("test: llc compilation failed for", testFile)
@@ -661,7 +661,7 @@ func runSingleTest(testFile string, verbose bool) int {
 		clangArgs = append(clangArgs, "-lm")
 	}
 
-	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
 		term.Eprintln("test: linking failed for", testFile)
@@ -851,6 +851,70 @@ func detectOpenSSLPrefix() string {
 		}
 	}
 	return ""
+}
+
+// findLLVMTool locates an LLVM tool (llc, clang, llvm-as, etc.) by checking:
+// 1. The system PATH (exec.LookPath)
+// 2. Platform-specific well-known locations:
+//   - macOS: Homebrew (/opt/homebrew/opt/llvm/bin, /usr/local/opt/llvm/bin)
+//   - Linux: /usr/lib/llvm-*/bin, /usr/bin
+//   - Windows: Chocolatey, MSYS2, Program Files
+//
+// Returns the full path if found, or the bare tool name as fallback.
+func findLLVMTool(name string) string {
+	// Fast path: already on PATH
+	if p, err := exec.LookPath(name); err == nil {
+		return p
+	}
+
+	var candidates []string
+
+	switch runtime.GOOS {
+	case "darwin":
+		// Homebrew: Apple Silicon, then Intel Mac
+		candidates = append(candidates,
+			filepath.Join("/opt/homebrew/opt/llvm/bin", name),
+			filepath.Join("/usr/local/opt/llvm/bin", name),
+			filepath.Join("/opt/homebrew/bin", name),
+			filepath.Join("/usr/local/bin", name),
+		)
+	case "linux":
+		// Versioned LLVM installs (e.g. /usr/lib/llvm-17/bin/llc)
+		for v := 20; v >= 14; v-- {
+			candidates = append(candidates,
+				fmt.Sprintf("/usr/lib/llvm-%d/bin/%s", v, name),
+			)
+		}
+		candidates = append(candidates,
+			filepath.Join("/usr/bin", name),
+			filepath.Join("/usr/local/bin", name),
+		)
+	case "windows":
+		// Chocolatey, MSYS2, and Program Files
+		if pf := os.Getenv("ProgramFiles"); pf != "" {
+			candidates = append(candidates,
+				filepath.Join(pf, "LLVM", "bin", name+".exe"),
+			)
+		}
+		if msys := os.Getenv("MSYSTEM_PREFIX"); msys != "" {
+			candidates = append(candidates,
+				filepath.Join(msys, "bin", name+".exe"),
+			)
+		}
+		candidates = append(candidates,
+			filepath.Join("C:\\msys64\\mingw64\\bin", name+".exe"),
+			filepath.Join("C:\\ProgramData\\chocolatey\\bin", name+".exe"),
+		)
+	}
+
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+
+	// Fallback: return bare name, let exec fail with a clear error
+	return name
 }
 
 // runBuildAudit performs a build audit by scanning the entry file for stdlib

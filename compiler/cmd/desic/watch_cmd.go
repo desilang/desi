@@ -337,7 +337,7 @@ func buildAndRun(file string, runAfterBuild bool, currentProcess **exec.Cmd, pro
 		term.Println("  🔨 Compiling to object code...")
 	}
 	objPath := filepath.Join(tempDir, baseName+".o")
-	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-o", objPath)
+	llcCmd := exec.Command(findLLVMTool("llc"), irPath, "-filetype=obj", "-o", objPath)
 	llcCmd.Stderr = os.Stderr
 	if err := llcCmd.Run(); err != nil {
 		elapsed := time.Since(startTime)
@@ -371,7 +371,7 @@ int main(void) { return __top__(); }
 	// Add common flags
 	clangArgs = append(clangArgs, "-lm", "-Wl,-dead_strip")
 
-	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
 		elapsed := time.Since(startTime)
@@ -543,7 +543,7 @@ func buildAndRunHot(file string, soPath string, currentProcess **exec.Cmd, proce
 	if verbose {
 		term.Println("  🔨 Compiling to PIC object...")
 	}
-	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
+	llcCmd := exec.Command(findLLVMTool("llc"), irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
 	llcCmd.Stderr = os.Stderr
 	if err := llcCmd.Run(); err != nil {
 		elapsed := time.Since(startTime)
@@ -561,7 +561,7 @@ func buildAndRunHot(file string, soPath string, currentProcess **exec.Cmd, proce
 	if buildDir != "" {
 		clangArgs = append(clangArgs, "-L"+buildDir, "-ldesi")
 	}
-	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
 		elapsed := time.Since(startTime)
@@ -659,7 +659,7 @@ func doHotReload(file string, soPath string, hostPID int, verbose bool) bool {
 	}
 
 	// Step 2: Compile to PIC object
-	llcCmd := exec.Command("llc", irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
+	llcCmd := exec.Command(findLLVMTool("llc"), irPath, "-filetype=obj", "-relocation-model=pic", "-o", objPath)
 	if err := llcCmd.Run(); err != nil {
 		term.Printf("❌ LLC failed (%.2fs)\n", time.Since(startTime).Seconds())
 		return false
@@ -671,7 +671,7 @@ func doHotReload(file string, soPath string, hostPID int, verbose bool) bool {
 	if buildDir != "" {
 		clangArgs = append(clangArgs, "-L"+buildDir, "-ldesi")
 	}
-	clangCmd := exec.Command("clang", clangArgs...)
+	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	if err := clangCmd.Run(); err != nil {
 		term.Printf("❌ Link failed (%.2fs)\n", time.Since(startTime).Seconds())
 		return false
