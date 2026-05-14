@@ -7,36 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [Unreleased]
-
-### Added
-
-**Error Handling (M15)**
-- `try/except/finally/raise` statements with Python-style syntax
-- Catchable exceptions via `setjmp`/`longjmp` runtime (10 built-in exception types)
-- `TryExpr` (`?` operator) context-aware: redirects to except handler inside try blocks
-- `__desi_panic(msg)` runtime function
-
-**Performance Tooling (M16)**
-- `desic perf` subcommand with `--level=relaxed|default|strict`
-- Performance advisor rules: `DPR0001` (nested loops), `DPR0002` (string concat in loop), `DPR0003` (repeated lookup), `DPR0004` (unbounded alloc)
-- `@perf` decorator with `strip_in_release = true` (zero-cost in production)
-- `runtime/perf.c` — high-resolution timing (mach_absolute_time / CLOCK_MONOTONIC)
-- `import perf` — safe Desi wrappers for benchmarking
-- `import ast` — runtime AST parsing and walking for `.desi` files
-
-**Build Audit & Permissions (M17)**
-- `[permissions]` section in `desi.mod` with `allow`, `deny`, `audit` keys
-- API sensitivity tiers: Safe (0), System (1), Network (2), Privileged (3)
-- Automatic build audit during `desic build` — blocks on denied imports
-- TTY and JSON audit report output
-- Deny-by-category support (e.g., `deny = ["privileged"]`)
-
-### Tests
-- 24 new tests for performance advisor, build audit, and API tier classification
-
----
-
 ## [0.1.0] - 2026-05-06
 
 ### Added
@@ -55,6 +25,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Global constants
 - Safe FFI with `extern` decorator
 - `assert` statement
+- `try/except/finally/raise` statements with Python-style syntax
+- Catchable exceptions via `setjmp`/`longjmp` runtime (10 built-in exception types)
+- `TryExpr` (`?` operator) context-aware: redirects to except handler inside try blocks
 
 **Type System**
 
@@ -94,10 +67,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Database: `db` (ORM), `sqlite3`, `postgres`, `mysql`, `redis`, `migrations`
 - Concurrency: `sync` (Mutex, RwLock, Channel, TaskGroup, Supervisor, Semaphore, Atomic, Select)
 - Utilities: `log`, `re`, `color`, `validate`
+- `strings` module: `strip`/`lstrip`/`rstrip` Python-compatible aliases for `trim`
+
+**Performance Tooling**
+
+- `desic perf` subcommand with `--level=relaxed|default|strict`
+- Performance advisor rules: `DPR0001` (nested loops), `DPR0002` (string concat in loop), `DPR0003` (repeated lookup), `DPR0004` (unbounded alloc)
+- `@perf` decorator with `strip_in_release = true` (zero-cost in production)
+- `runtime/perf.c` — high-resolution timing (mach_absolute_time / CLOCK_MONOTONIC)
+- `import perf` — safe Desi wrappers for benchmarking
+- `import ast` — runtime AST parsing and walking for `.desi` files
+
+**Build Audit & Permissions**
+
+- `[permissions]` section in `desi.mod` with `allow`, `deny`, `audit` keys
+- API sensitivity tiers: Safe (0), System (1), Network (2), Privileged (3)
+- Automatic build audit during `desic build` — blocks on denied imports
+- TTY and JSON audit report output
+- Deny-by-category support (e.g., `deny = ["privileged"]`)
 
 **Tooling**
 
-- `desic` — Compiler with `run`, `build`, `test`, `check`, `fmt`, `doc`, `emit-ir`, `init`, `watch` commands
+- `desic` — Compiler with `run`, `build`, `test`, `check`, `fmt`, `doc`, `emit-ir`, `init`, `watch`, `perf` commands
 - `desifmt` — Code formatter (idempotent, golden-tested)
 - `desirepl` — Interactive REPL with parse + type-check feedback
 - `desilsp` — Full Language Server Protocol implementation (hover, completion, definitions, references, rename, semantic tokens, inlay hints, call hierarchy, workspace symbols)
@@ -122,9 +113,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
-- All 461 examples pass (0 failures)
+- All 475 examples pass (0 failures)
+- Cross-platform LLVM tool auto-discovery for `llc`/`clang` (macOS Homebrew, Linux versioned, Windows MSYS2/Chocolatey)
 - Makefile: Fixed archive merge that lost libmpdec symbols
 - Guard pattern checker prevents guard/arena escapes
+
+### Tests
+
+- 24 tests for performance advisor, build audit, and API tier classification
 
 ---
 

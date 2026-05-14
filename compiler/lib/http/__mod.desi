@@ -531,6 +531,26 @@ pub def file_response(status: int, path: str, content_type: str) -> Any:
 		return __http_resp_from_file(status, path, content_type)
 
 # ============================================================
+# Server — render() — Unified Response Builder
+# ============================================================
+# The primary way to build server responses. One function for everything.
+#
+# Inline HTML:    return http.render("<h1>Hello</h1>")
+# With status:    return http.render("<h1>Not found</h1>", status=404)
+# From file:      return http.render(file="templates/index.html")
+# File + status:  return http.render(file="templates/404.html", status=404)
+# Plain text:     return http.render("hello", content_type="text/plain")
+# JSON file:      return http.render(file="data.json", content_type="application/json")
+
+## Build an HTTP response from inline content or a file.
+## Pass body as first argument for inline HTML, or use file= for disk serving.
+pub def render(body: str = "", file: str = "", status: int = 200, content_type: str = "text/html; charset=utf-8") -> Any:
+	if file != "":
+		unsafe:
+			return __http_resp_from_file(status, file, content_type)
+	return __http_resp_new(status, body, content_type)
+
+# ============================================================
 # Server — Request Accessors
 # ============================================================
 

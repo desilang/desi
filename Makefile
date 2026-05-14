@@ -134,5 +134,46 @@ vscode: $(DESILSP)
 editors: vscode
 	@echo "==> All editor plugins built"
 
+# Testing
+.PHONY: test test-examples test-leaks asan
+
+test:
+	@echo "==> Running Go unit tests..."
+	$(GO) test ./...
+	@echo "==> Running example tests..."
+	bash test_examples.sh
+
+test-examples:
+	bash test_examples.sh
+
+# ASAN: Rebuild runtime with AddressSanitizer for leak/overflow detection
+ASAN_CFLAGS = -fsanitize=address -fno-omit-frame-pointer -g
+ASAN_RUNTIME_OBJS = $(patsubst $(RUNTIME_SRC)/%.c,$(BUILD_DIR)/asan_%.o,$(RUNTIME_SRCS))
+ASAN_DB_OBJS = $(patsubst $(RUNTIME_DB)/%.c,$(BUILD_DIR)/asan_%.o,$(RUNTIME_DB_SRCS))
+
+asan: directories decimal-lib
+	@echo "==> Building ASAN runtime..."
+	@for src in $(RUNTIME_SRCS); do \
+		obj=$(BUILD_DIR)/asan_$$(basename $$src .c).o; \
+		echo "  CC [asan] $$src"; \
+		$(CC) $(ASAN_CFLAGS) $(OPENSSL_CFLAGS) -c $$src -o $$obj; \
+	done
+	@for src in $(RUNTIME_DB_SRCS); do \
+		obj=$(BUILD_DIR)/asan_$$(basename $$src .c).o; \
+		echo "  CC [asan] $$src"; \
+		$(CC) $(ASAN_CFLAGS) $(OPENSSL_CFLAGS) -c $$src -o $$obj; \
+	done
+	$(CC) $(ASAN_CFLAGS) -I$(DECIMAL_SRC) -c $(DECIMAL_SRC)/desi_decimal.c -o $(BUILD_DIR)/asan_desi_decimal.o
+	@echo "==> Merging ASAN runtime..."
+	@mkdir -p $(BUILD_DIR)/mpdec_objs
+	@cd $(BUILD_DIR)/mpdec_objs && $(AR) x ../../$(DECIMAL_LIB)
+	$(AR) rcs $(BUILD_DIR)/libdesi_asan.a $(BUILD_DIR)/asan_*.o $(BUILD_DIR)/mpdec_objs/*.o
+	@echo "✓ ASAN runtime built: $(BUILD_DIR)/libdesi_asan.a"
+	@echo "  Use: clang -fsanitize=address program.o -L$(BUILD_DIR) -ldesi_asan -o test_prog"
+
+test-leaks:
+	@echo "==> Running leak detection tests..."
+	bash test_leaks.sh
+
 clean:
 	rm -rf $(BUILD_DIR) $(BIN_DIR) gen/

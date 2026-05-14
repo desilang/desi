@@ -1,0 +1,40 @@
+# Named Arguments with Default Values
+# Demonstrates calling functions with named args that skip positional params,
+# out-of-order named args, and mixing positional + named args.
+
+def greet(body: str = "", file: str = "", status: int = 200, content_type: str = "text/html") -> str:
+    if file != "":
+        return "FILE:" + file + " status=" + str(status)
+    return "BODY:" + body + " status=" + str(status) + " ct=" + content_type
+
+# All defaults
+let R1 = greet()
+print(R1)
+
+# First positional only
+let R2 = greet("hello")
+print(R2)
+
+# Skip body, use named file — must not misassign to body
+let R3 = greet(file="index.html")
+print(R3)
+
+# Mixed: positional body + named status
+let R4 = greet("error page", status=404)
+print(R4)
+
+# Only named args, out of order
+let R5 = greet(status=301, file="redirect.html")
+print(R5)
+
+# Positional + trailing named
+let R6 = greet("inline", content_type="text/plain")
+print(R6)
+
+# EXPECTED_OUTPUT:
+# BODY: status=200 ct=text/html
+# BODY:hello status=200 ct=text/html
+# FILE:index.html status=200
+# BODY:error page status=404 ct=text/html
+# FILE:redirect.html status=301
+# BODY:inline status=200 ct=text/plain

@@ -190,6 +190,21 @@ pub def trim_right(s: str) -> str:
 	unsafe:
 		return __strings_trim_right(s)
 
+## Remove whitespace from both ends (alias for trim).
+pub def strip(s: str) -> str:
+	unsafe:
+		return __strings_trim(s)
+
+## Remove whitespace from the left (alias for trim_left).
+pub def lstrip(s: str) -> str:
+	unsafe:
+		return __strings_trim_left(s)
+
+## Remove whitespace from the right (alias for trim_right).
+pub def rstrip(s: str) -> str:
+	unsafe:
+		return __strings_trim_right(s)
+
 ## Replace all occurrences of old with new in s.
 pub def replace(s: str, old: str, new: str) -> str:
 	unsafe:
