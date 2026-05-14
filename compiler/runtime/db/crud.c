@@ -30,6 +30,9 @@ extern int32_t __db_execute_stmt(const char* sql);
 extern int32_t __db_execute_params(const char* sql, const char** params, int nparams);
 extern char*   __db_get_value_at(int32_t row, int32_t col);
 extern int32_t __db_is_connected(void);
+extern int32_t __db_col_count(void);
+extern char*   __db_col_name_at(int32_t idx);
+extern char*   __db_get_field_by(int32_t row, const char* name);
 
 // ---- External: ORM field registry (for select_related FK lookup) ----
 extern int32_t __orm_field_count(const char* table_name);
@@ -3121,9 +3124,7 @@ const char* __db_str_to_str(const char* s) {
 // Django equivalent: Model.objects.values()
 // ============================================================
 
-extern int32_t __db_col_count(void);
-extern char*   __db_col_name_at(int32_t idx);
-extern char*   __db_get_field_by(int32_t row, const char* name);
+
 
 char* __qs_values(int32_t row) {
     int ncols = __db_col_count();
