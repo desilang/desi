@@ -1,0 +1,16 @@
+# EXPECTED: SKIP
+# Minimal render test
+import http
+from http import Request
+
+def handle_request(req: Request) -> Any:
+	let path = http.req_path(req)
+	if path == "/":
+		return http.render("<h1>Hello Render!</h1>")
+	return http.text(404, "not found")
+
+def main() -> int:
+	print("Starting minimal render test on :9091...")
+	let srv = http.server(9091)
+	http.serve(srv, handle_request)
+	return 0

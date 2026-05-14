@@ -537,6 +537,61 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						return hir.ConstNull{}
 					}
 
+				case "render":
+					// http.render("<h1>Hi</h1>")                      → __http_resp_new(200, body, "text/html")
+					// http.render("<h1>Hi</h1>", status=404)          → __http_resp_new(404, body, "text/html")
+					// http.render(file="index.html")                  → __http_resp_from_file(200, file, "text/html")
+					// http.render("hello", content_type="text/plain") → __http_resp_new(200, body, "text/plain")
+					var bodyVal hir.Value
+					var fileVal hir.Value
+					var statusVal hir.Value
+					var ctVal hir.Value
+
+					if len(x.ArgNodes) > 0 {
+						posIdx := 0
+						for _, an := range x.ArgNodes {
+							if an.Name != nil {
+								switch an.Name.Name {
+								case "file":
+									fileVal = ls.lowerExpr(an.Expr)
+								case "status":
+									statusVal = ls.lowerExpr(an.Expr)
+								case "content_type":
+									ctVal = ls.lowerExpr(an.Expr)
+								}
+							} else {
+								val := ls.lowerExpr(an.Expr)
+								if posIdx == 0 {
+									bodyVal = val
+								}
+								posIdx++
+							}
+						}
+					} else if len(x.Args) >= 1 {
+						bodyVal = ls.lowerExpr(x.Args[0])
+					}
+
+					// Defaults
+					if statusVal == nil {
+						statusVal = hir.ConstInt{Text: "200"}
+					}
+					if ctVal == nil {
+						ctVal = hir.ConstStr{Text: "text/html; charset=utf-8"}
+					}
+
+					dst := ls.b.FreshTemp("render_resp")
+					if fileVal != nil {
+						// File-based: __http_resp_from_file(status, path, ct)
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_from_file", Args: []hir.Value{statusVal, fileVal, ctVal}, Type: "ptr"})
+					} else {
+						// Inline body: __http_resp_new(status, body, ct)
+						if bodyVal == nil {
+							bodyVal = hir.ConstStr{Text: ""}
+						}
+						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_new", Args: []hir.Value{statusVal, bodyVal, ctVal}, Type: "ptr"})
+					}
+					return dst
+
 				case "ws_on_open":
 					// http.ws_on_open(srv, handler) → __ws_set_on_open(@handler)
 					if len(x.Args) == 2 {
@@ -3106,16 +3161,10 @@ skipMethodCall:
 	// Legacy/Default behavior
 	callee := ls.calleeName(x.Callee, x)
 	var args []hir.Value
-	for _, a := range x.Args {
-		args = append(args, ls.lowerExpr(a))
-	}
 
-	// M14: Fill in default values for omitted arguments.
-	// If the callee has more params than supplied args, and those params
-	// have default expressions, lower the defaults and append to args.
-	if ls.info != nil && len(x.Args) > 0 || ls.info != nil {
-		var decl *ast.FuncDecl
-		// Try to find the FuncDecl for this callee
+	// M14: Resolve FuncDecl for default filling and named arg reordering.
+	var decl *ast.FuncDecl
+	if ls.info != nil {
 		if id, ok := x.Callee.(*ast.Ident); ok {
 			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
 				decl = set.Cands[0].Decl
@@ -3132,6 +3181,83 @@ skipMethodCall:
 				}
 			}
 		}
+	}
+
+	// Check if this call has any named arguments that need reordering.
+	hasNamedArgs := false
+	if len(x.ArgNodes) > 0 {
+		for _, an := range x.ArgNodes {
+			if an.Name != nil {
+				hasNamedArgs = true
+				break
+			}
+		}
+	}
+
+	if hasNamedArgs && decl != nil && len(decl.Params) > 0 {
+		// Named-arg-aware reordering: build args in parameter order.
+		// For each param, check if a named arg matches it; otherwise use
+		// the next positional arg or the param's default value.
+		nParams := len(decl.Params)
+		// Skip **kwargs param if present (it's handled by lowerKwargsCall)
+		if nParams > 0 && decl.Params[nParams-1].Kwargs {
+			nParams--
+		}
+		// Skip *args param if present
+		if nParams > 0 && decl.Params[nParams-1].Variadic {
+			nParams--
+		}
+
+		args = make([]hir.Value, nParams)
+		filled := make([]bool, nParams)
+
+		// Build a name→index map for params
+		paramIdx := make(map[string]int, nParams)
+		for i := 0; i < nParams; i++ {
+			paramIdx[decl.Params[i].Name.Name] = i
+		}
+
+		// First pass: place named args at their correct param positions
+		// and collect positional args in order.
+		var positionals []ast.Expr
+		for _, an := range x.ArgNodes {
+			if an.Name != nil {
+				if idx, ok := paramIdx[an.Name.Name]; ok {
+					args[idx] = ls.lowerExpr(an.Expr)
+					filled[idx] = true
+				}
+			} else {
+				positionals = append(positionals, an.Expr)
+			}
+		}
+
+		// Second pass: assign positional args to unfilled slots in order
+		posIdx := 0
+		for i := 0; i < nParams && posIdx < len(positionals); i++ {
+			if !filled[i] {
+				args[i] = ls.lowerExpr(positionals[posIdx])
+				filled[i] = true
+				posIdx++
+			}
+		}
+
+		// Third pass: fill remaining unfilled slots with defaults
+		for i := 0; i < nParams; i++ {
+			if !filled[i] && decl.Params[i].Default != nil {
+				args[i] = ls.lowerExpr(decl.Params[i].Default)
+				filled[i] = true
+			}
+		}
+
+		// Trim trailing unfilled args (shouldn't happen if defaults are correct)
+		// but keep the slice at nParams length for safety
+	} else {
+		// No named args or no decl — use legacy positional lowering
+		for _, a := range x.Args {
+			args = append(args, ls.lowerExpr(a))
+		}
+
+		// Fill trailing defaults for omitted positional args
 		if decl != nil && len(x.Args) < len(decl.Params) {
 			for i := len(x.Args); i < len(decl.Params); i++ {
 				if decl.Params[i].Default != nil {
