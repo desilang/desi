@@ -177,6 +177,7 @@ nav:
     - YAML: stdlib/yaml.md
     - CLI: stdlib/cli.md
     - Table: stdlib/table.md
+    - Signal: stdlib/signal.md
     - Contributing: stdlib/contributing.md
   - Concurrency:
     - Overview: concurrency/thread-safety.md

@@ -41,6 +41,18 @@ pub def __process_pid() -> int
 @extern("C")
 pub def __process_ppid() -> int
 
+@extern("C")
+pub def __process_run_timeout(cmd: str, args: list<str>, argc: int, timeout_secs: int) -> cptr
+
+@extern("C")
+pub def __process_shell_timeout(cmd_str: str, timeout_secs: int) -> cptr
+
+@extern("C")
+pub def __process_kill(pid_val: int) -> bool
+
+@extern("C")
+pub def __process_signal(pid_val: int, sig: int) -> bool
+
 # --- Public API ---
 
 ## Run a command with arguments. Returns handle.
@@ -86,3 +98,28 @@ pub def pid() -> int:
 ## Get parent process ID.
 pub def ppid() -> int:
 	return __process_ppid()
+
+## Run a command with timeout (seconds). Returns handle.
+## If timeout is exceeded, process is killed and exit_code = -1.
+## Timeout message is appended to stderr.
+## Like Python's subprocess.run(timeout=N) or Go's exec.CommandContext().
+pub def run_timeout(cmd: str, args: list<str>, timeout_secs: int) -> cptr:
+	return __process_run_timeout(cmd, args, len(args), timeout_secs)
+
+## Run a shell command with timeout (seconds). Returns handle.
+## If timeout is exceeded, process is killed and exit_code = -1.
+pub def shell_timeout(cmd_str: str, timeout_secs: int) -> cptr:
+	return __process_shell_timeout(cmd_str, timeout_secs)
+
+## Kill a process by PID (sends SIGKILL).
+## Returns true on success.
+## Like Python's os.kill(pid, signal.SIGKILL).
+pub def kill(pid_val: int) -> bool:
+	return __process_kill(pid_val)
+
+## Send a signal to a process by PID.
+## Returns true on success.
+## Like Python's os.kill(pid, sig).
+pub def send_signal(pid_val: int, sig: int) -> bool:
+	return __process_signal(pid_val, sig)
+
