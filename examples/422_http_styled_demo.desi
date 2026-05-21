@@ -1,0 +1,46 @@
+# EXPECTED: SKIP
+# HTTP Styled Demo — Tests inline CSS, external CSS/JS, and static file serving
+# Run manually: desic run examples/422_http_styled_demo.desi
+# Then open: http://localhost:9090/
+#
+# Tests:
+#   - Inline CSS (via http.html)
+#   - External CSS (via static file serving)
+#   - External JS (via static file serving)
+#   - http.serve_static for /static prefix
+#   - http.json_text for API responses
+#   - http.text for plain text
+
+import http
+from http import Request
+
+def handle_request(req: Request) -> Any:
+	let path = http.req_path(req)
+	let method = http.req_method(req)
+
+	# ── Page with INLINE CSS only ──
+	if path == "/inline":
+		return http.html(200, "<!DOCTYPE html><html><head><title>Desi — Inline CSS</title><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:system-ui;background:#1a1a2e;color:#eee;display:flex;align-items:center;justify-content:center;min-height:100vh}.box{background:linear-gradient(135deg,#16213e,#0f3460);padding:3rem;border-radius:16px;border:1px solid #533483;text-align:center}h1{font-size:2rem;color:#e94560;margin-bottom:1rem}p{color:#a8a8b3}</style></head><body><div class='box'><h1>Inline CSS Demo</h1><p>This page is styled entirely with inline CSS in the HTML response.</p><p style='margin-top:1rem;font-size:0.9rem;color:#533483'>Powered by Desi HTTP Server</p></div></body></html>")
+
+	# ── Page with EXTERNAL CSS + JS ──
+	if path == "/" or path == "/styled":
+		return http.html(200, "<!DOCTYPE html><html><head><meta charset='utf-8'><title>Desi — External CSS/JS</title><link rel='stylesheet' href='/static/style.css'><script src='/static/app.js' defer></script></head><body><div class='container'><h1>Desi HTTP Server</h1><p class='subtitle'>Styled with external CSS &amp; JS</p><div class='card'><span class='badge'>LIVE</span><p>This page loads <code>/static/style.css</code> and <code>/static/app.js</code> from the static file server.</p></div><div class='card'><span class='badge' id='health-status'>checking...</span><p>Health status fetched from <code>/api/health</code> via JavaScript fetch().</p></div><div class='routes'><div class='route'><span class='method'>GET</span><span class='path'>/</span> External CSS + JS</div><div class='route'><span class='method'>GET</span><span class='path'>/inline</span> Inline CSS only</div><div class='route'><span class='method'>GET</span><span class='path'>/api/health</span> JSON health check</div><div class='route'><span class='method'>GET</span><span class='path'>/static/*</span> Static files</div></div><div id='clock'></div></div></body></html>")
+
+	# ── API endpoint (called by app.js) ──
+	if path == "/api/health":
+		return http.json_text(200, "{\"status\":\"healthy\",\"server\":\"desi\",\"css\":\"external\",\"js\":\"external\"}")
+
+	# ── 404 ──
+	return http.html(404, "<!DOCTYPE html><html><head><title>404</title><style>body{font-family:system-ui;background:#0f172a;color:#e2e8f0;display:flex;align-items:center;justify-content:center;min-height:100vh}h1{font-size:5rem;background:linear-gradient(135deg,#ef4444,#f97316);-webkit-background-clip:text;-webkit-text-fill-color:transparent}p{color:#94a3b8;margin-top:1rem}</style></head><body><div style='text-align:center'><h1>404</h1><p>Page not found: " + path + "</p><p><a href='/' style='color:#38bdf8'>Go home</a></p></div></body></html>")
+
+def main() -> int:
+	let srv = http.server(9090)
+	# Serve static files from examples/static/ at /static/*
+	http.serve_static(srv, "/static", "examples/static")
+	print("Styled Demo Server running on http://localhost:9090")
+	print("  /         → External CSS + JS page")
+	print("  /inline   → Inline CSS page")
+	print("  /api/health → JSON API")
+	print("  /static/* → Static file serving")
+	http.serve(srv, handle_request)
+	return 0
