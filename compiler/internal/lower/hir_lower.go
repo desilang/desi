@@ -153,6 +153,13 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		funcName = mangleDesiName(funcName)
 	}
 	b := hir.NewFunc(funcName)
+	// Build param names map BEFORE lowering so isParam works during body lowering
+	paramNames := make(map[string]bool, len(fd.Params))
+	for _, p := range fd.Params {
+		if p.Name.Name != "" {
+			paramNames[p.Name.Name] = true
+		}
+	}
 	ls := &lowerState{
 		b:                   b,
 		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
@@ -160,6 +167,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		info:                info,
 		src:                 src,
 		globals:             globals,
+		paramNames:          paramNames,
 		tempsFromArenaAlloc: map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
 		inDunderNew:         dunderNewClass != "",
@@ -356,6 +364,7 @@ type lowerState struct {
 	globals     map[string]bool        // names of global variables
 	globalTypes map[string]types.T     // types of global variables (for field access)
 	enums       map[string]*types.Enum // user-defined enum declarations
+	paramNames  map[string]bool        // parameter names (populated before body lowering)
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
