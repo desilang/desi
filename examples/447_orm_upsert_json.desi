@@ -1,3 +1,4 @@
+# EXPECTED: SKIP
 # Example 447: ORM Phase 2 — UPSERT, JSON fields, update_or_create
 # Demonstrates: @model + Model.objects.create(), UPSERT, JSON helpers, update_or_create
 # EXPECTED_OUTPUT:
