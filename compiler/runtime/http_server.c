@@ -1377,7 +1377,15 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
 
         /* ---- Route dispatch (if middleware didn't handle) ---- */
         if (!resp) {
-            if (__desi_http_handler) {
+            if (srv->static_prefix[0] != '\0' && try_serve_static(srv, client_fd, ssl, req, keep_alive)) {
+                printf("%s %s → 200 [static]%s (fd=%d)\n", req->method, req->path,
+                       keep_alive ? " [ka]" : "", (int)client_fd);
+                fflush(stdout);
+                requests_served++;
+                free_request(req);
+                if (!keep_alive) break;
+                continue;
+            } else if (__desi_http_handler) {
                 resp = __desi_http_handler(req);
                 resp_owned = 1;
             } else if (srv->route_count > 0) {

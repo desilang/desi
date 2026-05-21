@@ -339,366 +339,10 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
-			// Handle http.serve(srv, handler), http.serve(srv), http.route(), http.get/post/put/delete/patch()
-			if id, ok := fe.X.(*ast.Ident); ok && id.Name == "http" {
-				switch fe.Name.Name {
-				case "serve":
-					if len(x.Args) == 2 {
-						// http.serve(srv, handler_fn) — single handler mode
-						// → __http_server_set_handler(@handler_fn)
-						// → __http_server_run(srv)
-						srvVal := ls.lowerExpr(x.Args[0])
-						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__http_server_set_handler", Args: []hir.Value{fnRef}})
-							ls.b.Emit(&hir.Call{Fn: "__http_server_run", Args: []hir.Value{srvVal}})
-							return hir.ConstInt{Text: "0"}
-						}
-					} else if len(x.Args) == 1 {
-						// http.serve(srv) — route-table mode (routes registered prior)
-						// → __http_server_run(srv)
-						srvVal := ls.lowerExpr(x.Args[0])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_run", Args: []hir.Value{srvVal}})
-						return hir.ConstInt{Text: "0"}
-					}
-
-				case "route":
-					// http.route(srv, method, path, handler)
-					// → __http_server_route(srv, method, path, @handler)
-					if len(x.Args) == 4 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						methodVal := ls.lowerExpr(x.Args[1])
-						pathVal := ls.lowerExpr(x.Args[2])
-						if handlerIdent, ok := x.Args[3].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__http_server_route", Args: []hir.Value{srvVal, methodVal, pathVal, fnRef}})
-							return hir.ConstNull{}
-						}
-					}
-
-				case "get", "post", "put", "delete", "patch":
-					// http.get(srv, path, handler) → __http_server_route(srv, "GET", path, @handler)
-					if len(x.Args) == 3 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						pathVal := ls.lowerExpr(x.Args[1])
-						methodStr := map[string]string{
-							"get": "GET", "post": "POST", "put": "PUT",
-							"delete": "DELETE", "patch": "PATCH",
-						}[fe.Name.Name]
-						if handlerIdent, ok := x.Args[2].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__http_server_route", Args: []hir.Value{
-								srvVal,
-								hir.ConstStr{Text: methodStr},
-								pathVal,
-								fnRef,
-							}})
-							return hir.ConstNull{}
-						}
-					}
-				case "serve_static":
-					// http.serve_static(srv, prefix, dir) → __http_server_static(srv, prefix, dir)
-					if len(x.Args) == 3 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						prefixVal := ls.lowerExpr(x.Args[1])
-						dirVal := ls.lowerExpr(x.Args[2])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_static", Args: []hir.Value{srvVal, prefixVal, dirVal}})
-						return hir.ConstNull{}
-					}
-
-				case "max_body":
-					// http.max_body(srv, max_bytes) → __http_server_max_body(srv, max_bytes)
-					if len(x.Args) == 2 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						maxVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_max_body", Args: []hir.Value{srvVal, maxVal}})
-						return hir.ConstNull{}
-					}
-
-				case "timeout":
-					// http.timeout(srv, seconds) → __http_server_timeout(srv, seconds)
-					if len(x.Args) == 2 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						secsVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_timeout", Args: []hir.Value{srvVal, secsVal}})
-						return hir.ConstNull{}
-					}
-
-				case "use":
-					// http.use(srv, middleware_fn) → __http_server_use(srv, @middleware_fn)
-					if len(x.Args) == 2 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						if mwIdent, ok := x.Args[1].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: mwIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__http_server_use", Args: []hir.Value{srvVal, fnRef}})
-							return hir.ConstNull{}
-						}
-					}
-
-				case "rate_limit":
-					// http.rate_limit(srv, max, window) → __http_server_rate_limit(srv, max, window)
-					if len(x.Args) == 3 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						maxVal := ls.lowerExpr(x.Args[1])
-						windowVal := ls.lowerExpr(x.Args[2])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_rate_limit", Args: []hir.Value{srvVal, maxVal, windowVal}})
-						return hir.ConstNull{}
-					}
-
-				case "cors":
-					// http.cors(srv, origin) → __http_server_cors(srv, origin)
-					if len(x.Args) == 2 {
-						srvVal := ls.lowerExpr(x.Args[0])
-						originVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__http_server_cors", Args: []hir.Value{srvVal, originVal}})
-						return hir.ConstNull{}
-					}
-
-				case "header":
-					// http.header(resp, key, value) → __http_resp_header(resp, key, value)
-					if len(x.Args) == 3 {
-						respVal := ls.lowerExpr(x.Args[0])
-						keyVal := ls.lowerExpr(x.Args[1])
-						valVal := ls.lowerExpr(x.Args[2])
-						ls.b.Emit(&hir.Call{Fn: "__http_resp_header", Args: []hir.Value{respVal, keyVal, valVal}})
-						return hir.ConstNull{}
-					}
-
-				case "html":
-					// http.html(status, "file.html")                    → __http_resp_from_file
-					// http.html(status, raw="<h1>Hi</h1>")              → __http_resp_new
-					// content_type= kwarg or 3rd positional overrides default ct
-					var statusVal hir.Value
-					var bodyVal hir.Value
-					var pathVal hir.Value
-					var ctVal hir.Value
-					isRaw := false
-
-					if len(x.ArgNodes) > 0 {
-						posIdx := 0
-						for _, an := range x.ArgNodes {
-							if an.Name != nil {
-								kwName := an.Name.Name
-								if kwName == "raw" {
-									bodyVal = ls.lowerExpr(an.Expr)
-									isRaw = true
-								} else if kwName == "content_type" {
-									ctVal = ls.lowerExpr(an.Expr)
-								}
-							} else {
-								val := ls.lowerExpr(an.Expr)
-								switch posIdx {
-								case 0:
-									statusVal = val
-								case 1:
-									pathVal = val
-								case 2:
-									ctVal = val
-								}
-								posIdx++
-							}
-						}
-					} else if len(x.Args) >= 1 {
-						statusVal = ls.lowerExpr(x.Args[0])
-						if len(x.Args) >= 2 {
-							pathVal = ls.lowerExpr(x.Args[1])
-						}
-						if len(x.Args) >= 3 {
-							ctVal = ls.lowerExpr(x.Args[2])
-						}
-					}
-
-					if statusVal != nil {
-						if ctVal == nil {
-							ctVal = hir.ConstStr{Text: "text/html; charset=utf-8"}
-						}
-						dst := ls.b.FreshTemp("html_resp")
-						if isRaw {
-							if bodyVal == nil {
-								bodyVal = hir.ConstStr{Text: ""}
-							}
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_new", Args: []hir.Value{statusVal, bodyVal, ctVal}, Type: "ptr"})
-						} else if pathVal != nil {
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_from_file", Args: []hir.Value{statusVal, pathVal, ctVal}, Type: "ptr"})
-						} else {
-							break
-						}
-						return dst
-					}
-				case "ws":
-					// http.ws(srv, path, handler) → __ws_set_path(path) + __ws_set_on_message(@handler)
-					if len(x.Args) == 3 {
-						pathVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_set_path", Args: []hir.Value{pathVal}})
-						if handlerIdent, ok := x.Args[2].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_message", Args: []hir.Value{fnRef}})
-						}
-						return hir.ConstNull{}
-					}
-
-				case "render":
-					// http.render("<h1>Hi</h1>")                      → __http_resp_new(200, body, "text/html")
-					// http.render("<h1>Hi</h1>", status=404)          → __http_resp_new(404, body, "text/html")
-					// http.render(file="index.html")                  → __http_resp_from_file(200, file, "text/html")
-					// http.render("hello", content_type="text/plain") → __http_resp_new(200, body, "text/plain")
-					var bodyVal hir.Value
-					var fileVal hir.Value
-					var statusVal hir.Value
-					var ctVal hir.Value
-
-					if len(x.ArgNodes) > 0 {
-						posIdx := 0
-						for _, an := range x.ArgNodes {
-							if an.Name != nil {
-								switch an.Name.Name {
-								case "file":
-									fileVal = ls.lowerExpr(an.Expr)
-								case "status":
-									statusVal = ls.lowerExpr(an.Expr)
-								case "content_type":
-									ctVal = ls.lowerExpr(an.Expr)
-								}
-							} else {
-								val := ls.lowerExpr(an.Expr)
-								if posIdx == 0 {
-									bodyVal = val
-								}
-								posIdx++
-							}
-						}
-					} else if len(x.Args) >= 1 {
-						bodyVal = ls.lowerExpr(x.Args[0])
-					}
-
-					// Defaults
-					if statusVal == nil {
-						statusVal = hir.ConstInt{Text: "200"}
-					}
-					if ctVal == nil {
-						ctVal = hir.ConstStr{Text: "text/html; charset=utf-8"}
-					}
-
-					dst := ls.b.FreshTemp("render_resp")
-					if fileVal != nil {
-						// File-based: __http_resp_from_file(status, path, ct)
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_from_file", Args: []hir.Value{statusVal, fileVal, ctVal}, Type: "ptr"})
-					} else {
-						// Inline body: __http_resp_new(status, body, ct)
-						if bodyVal == nil {
-							bodyVal = hir.ConstStr{Text: ""}
-						}
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "__http_resp_new", Args: []hir.Value{statusVal, bodyVal, ctVal}, Type: "ptr"})
-					}
-					return dst
-
-				case "ws_on_open":
-					// http.ws_on_open(srv, handler) → __ws_set_on_open(@handler)
-					if len(x.Args) == 2 {
-						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_open", Args: []hir.Value{fnRef}})
-							return hir.ConstNull{}
-						}
-					}
-
-				case "ws_on_close":
-					// http.ws_on_close(srv, handler) → __ws_set_on_close(@handler)
-					if len(x.Args) == 2 {
-						if handlerIdent, ok := x.Args[1].(*ast.Ident); ok {
-							fnRef := hir.FuncRef{Name: handlerIdent.Name}
-							ls.b.Emit(&hir.Call{Fn: "__ws_set_on_close", Args: []hir.Value{fnRef}})
-							return hir.ConstNull{}
-						}
-					}
-
-				case "ws_send":
-					// http.ws_send(conn, msg) → __ws_send(conn, msg)
-					if len(x.Args) == 2 {
-						connVal := ls.lowerExpr(x.Args[0])
-						msgVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_send", Args: []hir.Value{connVal, msgVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_broadcast":
-					// http.ws_broadcast(srv, msg) → __ws_broadcast(msg)
-					if len(x.Args) == 2 {
-						msgVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_broadcast", Args: []hir.Value{msgVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_close":
-					// http.ws_close(conn) → __ws_close(conn)
-					if len(x.Args) == 1 {
-						connVal := ls.lowerExpr(x.Args[0])
-						ls.b.Emit(&hir.Call{Fn: "__ws_close", Args: []hir.Value{connVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_join":
-					// http.ws_join(conn, room) → __ws_join(conn, room)
-					if len(x.Args) == 2 {
-						connVal := ls.lowerExpr(x.Args[0])
-						roomVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_join", Args: []hir.Value{connVal, roomVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_leave":
-					// http.ws_leave(conn, room) → __ws_leave(conn, room)
-					if len(x.Args) == 2 {
-						connVal := ls.lowerExpr(x.Args[0])
-						roomVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_leave", Args: []hir.Value{connVal, roomVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_to_room":
-					// http.ws_to_room(srv, room, msg) → __ws_to_room(room, msg)
-					if len(x.Args) == 3 {
-						roomVal := ls.lowerExpr(x.Args[1])
-						msgVal := ls.lowerExpr(x.Args[2])
-						ls.b.Emit(&hir.Call{Fn: "__ws_to_room", Args: []hir.Value{roomVal, msgVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_max_message_size":
-					// http.ws_max_message_size(srv, bytes) → __ws_set_max_message_size(bytes)
-					if len(x.Args) == 2 {
-						sizeVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_set_max_message_size", Args: []hir.Value{sizeVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_ping_interval":
-					// http.ws_ping_interval(srv, secs) → __ws_set_ping_interval(secs)
-					if len(x.Args) == 2 {
-						secsVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_set_ping_interval", Args: []hir.Value{secsVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_compression":
-					// http.ws_compression(srv, enabled) → __ws_set_compression(enabled)
-					if len(x.Args) == 2 {
-						enabledVal := ls.lowerExpr(x.Args[1])
-						ls.b.Emit(&hir.Call{Fn: "__ws_set_compression", Args: []hir.Value{enabledVal}})
-						return hir.ConstNull{}
-					}
-
-				case "ws_send_binary":
-					if len(x.Args) == 2 {
-						connVal := ls.lowerExpr(x.Args[0])
-						dataVal := ls.lowerExpr(x.Args[1])
-						lenTmp := ls.b.FreshTemp("binlen")
-						ls.b.Emit(&hir.Call{Dst: lenTmp, Fn: "__desi_str_len", Args: []hir.Value{dataVal}, Type: "i64"})
-						ls.b.Emit(&hir.Call{Fn: "__ws_send_binary", Args: []hir.Value{connVal, dataVal, lenTmp}})
-						return hir.ConstNull{}
-					}
-				}
-			}
+			// NOTE: HTTP interceptor block removed — all http.* calls are now handled
+			// by the Desi module wrappers in lib/http/__mod.desi which call @extern("C")
+			// functions directly. The lowerCallArgExpr() mechanism ensures callback
+			// arguments (handlers, middleware) are emitted as FuncRef automatically.
 			if t, ok := feXType.(*types.Dict); ok {
 				return ls.lowerDictMethod(fe, x.Args, t)
 			}
@@ -3223,7 +2867,7 @@ skipMethodCall:
 		for _, an := range x.ArgNodes {
 			if an.Name != nil {
 				if idx, ok := paramIdx[an.Name.Name]; ok {
-					args[idx] = ls.lowerExpr(an.Expr)
+					args[idx] = ls.lowerCallArgExpr(an.Expr)
 					filled[idx] = true
 				}
 			} else {
@@ -3235,7 +2879,7 @@ skipMethodCall:
 		posIdx := 0
 		for i := 0; i < nParams && posIdx < len(positionals); i++ {
 			if !filled[i] {
-				args[i] = ls.lowerExpr(positionals[posIdx])
+				args[i] = ls.lowerCallArgExpr(positionals[posIdx])
 				filled[i] = true
 				posIdx++
 			}
@@ -3254,7 +2898,7 @@ skipMethodCall:
 	} else {
 		// No named args or no decl — use legacy positional lowering
 		for _, a := range x.Args {
-			args = append(args, ls.lowerExpr(a))
+			args = append(args, ls.lowerCallArgExpr(a))
 		}
 
 		// Fill trailing defaults for omitted positional args
@@ -3888,5 +3532,41 @@ func (ls *lowerState) isQExpression(expr ast.Expr) bool {
 // Checks if an AST expression is an F() call or F binary expression.
 func isFExpression(expr ast.Expr) bool {
 	return macro.IsFExpression(expr, nil)
+}
+
+// lowerCallArgExpr lowers a call argument expression, automatically emitting
+// hir.FuncRef when the argument is a function identifier (not a local variable
+// or function parameter). This allows callback functions to be passed through
+// wrapper functions naturally, e.g. http.serve(srv, my_handler) →
+// FuncRef{"my_handler"} instead of Var{"my_handler"}.
+func (ls *lowerState) lowerCallArgExpr(expr ast.Expr) hir.Value {
+	if id, ok := expr.(*ast.Ident); ok && ls.info != nil {
+		name := id.Name
+		// Lambda aliases: "double" → "__lam$0"
+		if ls.info.LambdaAliases != nil {
+			if alias, ok := ls.info.LambdaAliases[name]; ok {
+				return hir.FuncRef{Name: alias}
+			}
+		}
+		// Known function AND not shadowed by a local variable, parameter, or global
+		if _, ok := ls.info.Funcs[name]; ok {
+			if !ls.hasLocal(name) && !ls.isParam(name) && !ls.isGlobal(name) {
+				return hir.FuncRef{Name: name}
+			}
+		}
+	}
+	return ls.lowerExpr(expr)
+}
+
+// isParam checks if the given name is a parameter of the current function.
+// Uses ls.paramNames which is populated before body lowering begins,
+// since ls.b.Func().Params is only populated after lowerBlock returns.
+func (ls *lowerState) isParam(name string) bool {
+	return ls.paramNames != nil && ls.paramNames[name]
+}
+
+// isGlobal checks if the given name is a global variable.
+func (ls *lowerState) isGlobal(name string) bool {
+	return ls.globals != nil && ls.globals[name]
 }
 

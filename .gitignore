@@ -40,3 +40,9 @@ test*.txt
 # Migration test artifacts
 *_migrations/
 examples/*_migrations/
+
+# SSL/TLS test certificates and keys
+*.pem
+*.key
+*.crt
+*.cert
