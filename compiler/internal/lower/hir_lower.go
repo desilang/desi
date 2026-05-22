@@ -45,6 +45,7 @@ var desiBuiltins = map[string]bool{
 	"sorted": true, "reversed": true, "zip": true, "enumerate": true,
 	"map": true, "filter": true, "reduce": true, "foldl": true, "foldr": true,
 	"range": true, "input": true, "hash": true, "id": true, "chr": true, "ord": true,
+	"hex": true, "oct": true, "bin": true, "abs": true, "round": true, "pow": true, "todo": true,
 	"set_recursion_limit": true, "is_reload": true, "reload_count": true,
 	"state_file": true, "write_state": true, "read_state": true, "delete_state": true,
 }

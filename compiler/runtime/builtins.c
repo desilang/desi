@@ -161,17 +161,17 @@ void __desi_assert_ne_bool(int a, int b, const char* context) {
 #include <math.h>
 
 // is_nan - check if float is NaN
-int __math_is_nan(double x) {
+bool __math_is_nan(double x) {
     return isnan(x) ? 1 : 0;
 }
 
 // is_inf - check if float is infinity (positive or negative)
-int __math_is_inf(double x) {
+bool __math_is_inf(double x) {
     return isinf(x) ? 1 : 0;
 }
 
 // is_finite - check if float is a normal number (not NaN or infinity)
-int __math_is_finite(double x) {
+bool __math_is_finite(double x) {
     return isfinite(x) ? 1 : 0;
 }
 
@@ -251,4 +251,156 @@ DesiList* list_sorted_int(DesiList* l) {
     }
     
     return result;
+}
+
+// ==================== Prelude Builtins ====================
+
+/* chr(n: int) → str — Encode a Unicode codepoint as a UTF-8 string. */
+char* __desi_chr(int32_t codepoint) {
+    char buf[8];
+    int len = 0;
+
+    if (codepoint < 0) {
+        char* s = (char*)malloc(2);
+        s[0] = '?'; s[1] = '\0';
+        return s;
+    } else if (codepoint < 0x80) {
+        buf[0] = (char)codepoint;
+        len = 1;
+    } else if (codepoint < 0x800) {
+        buf[0] = (char)(0xC0 | (codepoint >> 6));
+        buf[1] = (char)(0x80 | (codepoint & 0x3F));
+        len = 2;
+    } else if (codepoint < 0x10000) {
+        buf[0] = (char)(0xE0 | (codepoint >> 12));
+        buf[1] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[2] = (char)(0x80 | (codepoint & 0x3F));
+        len = 3;
+    } else if (codepoint < 0x110000) {
+        buf[0] = (char)(0xF0 | (codepoint >> 18));
+        buf[1] = (char)(0x80 | ((codepoint >> 12) & 0x3F));
+        buf[2] = (char)(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[3] = (char)(0x80 | (codepoint & 0x3F));
+        len = 4;
+    } else {
+        buf[0] = '?';
+        len = 1;
+    }
+
+    char* s = (char*)malloc(len + 1);
+    memcpy(s, buf, len);
+    s[len] = '\0';
+    return s;
+}
+
+/* ord(s: str) → int — Decode first UTF-8 char to Unicode codepoint. */
+int32_t __desi_ord(const char* s) {
+    if (!s || !*s) return 0;
+    unsigned char c = (unsigned char)s[0];
+    if (c < 0x80) return c;
+    if ((c & 0xE0) == 0xC0 && s[1])
+        return ((c & 0x1F) << 6) | (s[1] & 0x3F);
+    if ((c & 0xF0) == 0xE0 && s[1] && s[2])
+        return ((c & 0x0F) << 12) | ((s[1] & 0x3F) << 6) | (s[2] & 0x3F);
+    if ((c & 0xF8) == 0xF0 && s[1] && s[2] && s[3])
+        return ((c & 0x07) << 18) | ((s[1] & 0x3F) << 12) |
+               ((s[2] & 0x3F) << 6) | (s[3] & 0x3F);
+    return c;
+}
+
+/* hex(n: int) → str — Format as "0x..." */
+char* __desi_hex(int32_t n) {
+    char buf[32];
+    if (n < 0)
+        snprintf(buf, sizeof(buf), "-0x%x", (unsigned int)(-(int64_t)n));
+    else
+        snprintf(buf, sizeof(buf), "0x%x", (unsigned int)n);
+    return strdup(buf);
+}
+
+/* oct(n: int) → str — Format as "0o..." */
+char* __desi_oct(int32_t n) {
+    char buf[32];
+    if (n < 0)
+        snprintf(buf, sizeof(buf), "-0o%o", (unsigned int)(-(int64_t)n));
+    else
+        snprintf(buf, sizeof(buf), "0o%o", (unsigned int)n);
+    return strdup(buf);
+}
+
+/* bin(n: int) → str — Format as "0b..." */
+char* __desi_bin(int32_t n) {
+    char buf[48];
+    int pos = 0;
+    uint32_t val;
+    if (n < 0) {
+        buf[pos++] = '-';
+        val = (uint32_t)(-(int64_t)n);
+    } else {
+        val = (uint32_t)n;
+    }
+    buf[pos++] = '0';
+    buf[pos++] = 'b';
+    if (val == 0) {
+        buf[pos++] = '0';
+    } else {
+        int started = 0;
+        for (int i = 31; i >= 0; i--) {
+            if (val & (1U << i)) started = 1;
+            if (started) buf[pos++] = (val & (1U << i)) ? '1' : '0';
+        }
+    }
+    buf[pos] = '\0';
+    return strdup(buf);
+}
+
+/* abs(n: int) → int */
+int32_t __desi_abs_int(int32_t n) {
+    return n < 0 ? -n : n;
+}
+
+/* abs(n: float) → float */
+double __desi_abs_float(double n) {
+    return fabs(n);
+}
+
+/* round(n: float, digits: int) → float */
+double __desi_round(double n, int32_t digits) {
+    if (digits == 0) return round(n);
+    double factor = pow(10.0, (double)digits);
+    return round(n * factor) / factor;
+}
+
+/* pow(base: int, exp: int) → int */
+int32_t __desi_pow(int32_t base, int32_t exp) {
+    if (exp < 0) return 0;
+    int32_t result = 1;
+    for (int32_t i = 0; i < exp; i++) result *= base;
+    return result;
+}
+
+/* todo(msg: str) → never — panics with "not implemented" */
+void __desi_todo(const char* msg) {
+    if (msg && *msg)
+        fprintf(stderr, "not implemented: %s\n", msg);
+    else
+        fprintf(stderr, "not implemented\n");
+    exit(1);
+}
+
+/* hash(value: ptr) → int — FNV-1a hash of the pointer value */
+int32_t __desi_hash(const void* ptr) {
+    uint64_t h = 14695981039346656037ULL;
+    uint64_t val = (uint64_t)(uintptr_t)ptr;
+    for (int i = 0; i < 8; i++) {
+        h ^= (val & 0xFF);
+        h *= 1099511628211ULL;
+        val >>= 8;
+    }
+    return (int32_t)(h & 0x7FFFFFFF);
+}
+
+/* id(value: ptr) → int — pointer identity as integer */
+int32_t __desi_id(const void* ptr) {
+    return (int32_t)((uintptr_t)ptr & 0x7FFFFFFF);
 }

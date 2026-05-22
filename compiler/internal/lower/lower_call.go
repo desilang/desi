@@ -1245,6 +1245,103 @@ handlePrint:
 		}
 	}
 
+	// 1.55. chr/ord/hex/oct/bin/abs/round/pow/todo/hash/id builtins
+	if ls.info != nil {
+		calleeName := ls.calleeName(x.Callee, x)
+
+		// chr(n) -> __desi_chr(n) returns ptr (string)
+		if calleeName == "chr" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("chr_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_chr", Args: []hir.Value{argVal}, Type: "ptr"})
+			return res
+		}
+		// ord(s) -> __desi_ord(s) returns i32
+		if calleeName == "ord" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("ord_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_ord", Args: []hir.Value{argVal}, Type: "i32"})
+			return res
+		}
+		// hex(n) -> __desi_hex(n) returns ptr (string)
+		if calleeName == "hex" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("hex_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_hex", Args: []hir.Value{argVal}, Type: "ptr"})
+			return res
+		}
+		// oct(n) -> __desi_oct(n) returns ptr (string)
+		if calleeName == "oct" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("oct_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_oct", Args: []hir.Value{argVal}, Type: "ptr"})
+			return res
+		}
+		// bin(n) -> __desi_bin(n) returns ptr (string)
+		if calleeName == "bin" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("bin_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_bin", Args: []hir.Value{argVal}, Type: "ptr"})
+			return res
+		}
+		// abs(n) -> __desi_abs_int(n) or __desi_abs_float(n)
+		if calleeName == "abs" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			argT := ls.info.Types[x.Args[0]]
+			if argT != nil && types.Equal(argT, types.Float) {
+				res := ls.b.FreshTemp("abs_res")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_abs_float", Args: []hir.Value{argVal}, Type: "double"})
+				return res
+			}
+			res := ls.b.FreshTemp("abs_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_abs_int", Args: []hir.Value{argVal}, Type: "i32"})
+			return res
+		}
+		// round(n) -> __desi_round(n, 0) or round(n, d) -> __desi_round(n, d)
+		if calleeName == "round" && len(x.Args) >= 1 {
+			nVal := ls.lowerExpr(x.Args[0])
+			var digitsVal hir.Value = hir.ConstInt{Text: "0"}
+			if len(x.Args) >= 2 {
+				digitsVal = ls.lowerExpr(x.Args[1])
+			}
+			res := ls.b.FreshTemp("round_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_round", Args: []hir.Value{nVal, digitsVal}, Type: "double"})
+			return res
+		}
+		// pow(base, exp) -> __desi_pow(base, exp)
+		if calleeName == "pow" && len(x.Args) == 2 {
+			baseVal := ls.lowerExpr(x.Args[0])
+			expVal := ls.lowerExpr(x.Args[1])
+			res := ls.b.FreshTemp("pow_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_pow", Args: []hir.Value{baseVal, expVal}, Type: "i32"})
+			return res
+		}
+		// todo() or todo(msg) -> __desi_todo(msg)
+		if calleeName == "todo" {
+			var msgVal hir.Value = hir.ConstStr{Text: ""}
+			if len(x.Args) >= 1 {
+				msgVal = ls.lowerExpr(x.Args[0])
+			}
+			res := ls.b.FreshTemp("todo")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_todo", Args: []hir.Value{msgVal}})
+			return res
+		}
+		// hash(value) -> __desi_hash(value)
+		if calleeName == "hash" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("hash_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_hash", Args: []hir.Value{argVal}, Type: "i32"})
+			return res
+		}
+		// id(value) -> __desi_id(value)
+		if calleeName == "id" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			res := ls.b.FreshTemp("id_res")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_id", Args: []hir.Value{argVal}, Type: "i32"})
+			return res
+		}
+	}
+
 	// 1.6. sum(), min(), max(), any(), all() builtins
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee, x)
@@ -1998,29 +2095,6 @@ handlePrint:
 				indexVal := ls.lowerExpr(x.Args[1])
 				dst := ls.b.FreshTemp("json_obj_key")
 				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_object_key", Args: []hir.Value{objVal, indexVal}, Type: "ptr"})
-				return dst
-			}
-		}
-
-		// Handle math module functions (hardcoded like json module)
-		if id, ok := fe.X.(*ast.Ident); ok && id.Name == "math" {
-			method := fe.Name.Name
-			if method == "is_nan" && len(x.Args) >= 1 {
-				val := ls.lowerExpr(x.Args[0])
-				dst := ls.b.FreshTemp("is_nan")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_nan", Args: []hir.Value{val}, Type: "i1"})
-				return dst
-			}
-			if method == "is_inf" && len(x.Args) >= 1 {
-				val := ls.lowerExpr(x.Args[0])
-				dst := ls.b.FreshTemp("is_inf")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_inf", Args: []hir.Value{val}, Type: "i1"})
-				return dst
-			}
-			if method == "is_finite" && len(x.Args) >= 1 {
-				val := ls.lowerExpr(x.Args[0])
-				dst := ls.b.FreshTemp("is_finite")
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: "__math_is_finite", Args: []hir.Value{val}, Type: "i1"})
 				return dst
 			}
 		}
