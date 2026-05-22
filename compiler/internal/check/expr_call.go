@@ -829,12 +829,20 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 		callable := isCallableSym || isTypeSym || isFuncTypedVar || (set != nil && len(set.Cands) > 0)
 		if !callable {
-			if sym == nil {
-				c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+			// Check if it's a lowerer-only builtin (not registered in info.Funcs
+			// to avoid overload conflicts with stdlib modules)
+			switch id.Name {
+			case "abs", "pow", "round", "todo":
+				// These have special-case type checking below and
+				// lowerer dispatch in lower_call.go — let them through
+			default:
+				if sym == nil {
+					c.add(diagAt("DTE0001", id.Span, "undefined function: "+id.Name))
+					return nil
+				}
+				c.add(diagAt("DTE0105", id.Span, "value is not callable"))
 				return nil
 			}
-			c.add(diagAt("DTE0105", id.Span, "value is not callable"))
-			return nil
 		}
 
 		// Handle calling a Func-typed variable (lambda stored in variable)
@@ -904,6 +912,51 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				c.add(diagAt("DTE0001", call.Span, "sorted requires a list"))
 				return nil
 			}
+		}
+
+		// Built-in abs() function - accepts int or float, returns same type
+		if id.Name == "abs" && len(argsNodes) == 1 {
+			argType := c.typ(argsNodes[0].Expr)
+			if argType != nil {
+				if types.Equal(argType, types.Int) || types.Equal(argType, types.Float) {
+					c.info.Types[call] = argType
+					return argType
+				}
+			}
+			// Fall through to overload resolution for user-defined abs
+		}
+
+		// Built-in pow() function - accepts (int, int) -> int
+		if id.Name == "pow" && len(argsNodes) == 2 {
+			baseType := c.typ(argsNodes[0].Expr)
+			expType := c.typ(argsNodes[1].Expr)
+			if baseType != nil && expType != nil &&
+				types.Equal(baseType, types.Int) && types.Equal(expType, types.Int) {
+				c.info.Types[call] = types.Int
+				return types.Int
+			}
+			// Fall through for math.pow or other overloads
+		}
+
+		// Built-in round() function - accepts (float) or (float, int) -> float
+		if id.Name == "round" && len(argsNodes) >= 1 && len(argsNodes) <= 2 {
+			nType := c.typ(argsNodes[0].Expr)
+			if nType != nil && types.Equal(nType, types.Float) {
+				if len(argsNodes) == 2 {
+					c.typ(argsNodes[1].Expr) // type-check digits arg
+				}
+				c.info.Types[call] = types.Float
+				return types.Float
+			}
+		}
+
+		// Built-in todo() function - panics with "not implemented"
+		if id.Name == "todo" && len(argsNodes) <= 1 {
+			if len(argsNodes) == 1 {
+				c.typ(argsNodes[0].Expr) // type-check message arg
+			}
+			c.info.Types[call] = types.None
+			return types.None
 		}
 
 		if !hasNamed {

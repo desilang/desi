@@ -419,6 +419,17 @@ sorted(nums)  # Returns new list, nums unchanged
 | `enumerate(x)` | Iterable | iterator | Index-value pairs |
 | `reversed(x)` | Iterable | iterator | Reverse iteration |
 | `zip(a, b)` | Two iterables | iterator | Parallel iteration |
+| `chr(n)` | `int` | `str` | Unicode codepoint → string |
+| `ord(s)` | `str` | `int` | String → Unicode codepoint |
+| `hex(n)` | `int` | `str` | Integer → hex string (`0x...`) |
+| `oct(n)` | `int` | `str` | Integer → octal string (`0o...`) |
+| `bin(n)` | `int` | `str` | Integer → binary string (`0b...`) |
+| `abs(n)` | `int` or `float` | Same type | Absolute value |
+| `round(n, d)` | `float`, `int` | `float` | Round to d decimal places |
+| `pow(b, e)` | `int`, `int` | `int` | Integer exponentiation |
+| `todo()` | `str?` | never | Panic with "not implemented" |
+| `hash(x)` | `Any` | `int` | FNV-1a hash of value |
+| `id(x)` | `Any` | `int` | Pointer identity |
 
 ---
 

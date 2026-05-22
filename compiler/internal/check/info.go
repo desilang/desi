@@ -535,4 +535,54 @@ func addPreludeBuiltins(info *Info) {
 	addN("read_state", nil, nil, types.OptionOf(types.Str), nil)
 	// delete_state() -> bool: Delete state file after successful restore
 	addN("delete_state", nil, nil, types.Bool, nil)
+
+	// --- chr/ord builtins ---
+	// chr(n: int) -> str — Unicode codepoint to single-char string
+	add1("chr", types.Int, types.Str, "n", ast.ParamMove)
+	// ord(s: str) -> int — First char of string to Unicode codepoint
+	add1("ord", types.Str, types.Int, "s", ast.ParamMove)
+
+	// --- hex/oct/bin builtins ---
+	// hex(n: int) -> str — Integer to hex string with 0x prefix
+	add1("hex", types.Int, types.Str, "n", ast.ParamMove)
+	// oct(n: int) -> str — Integer to octal string with 0o prefix
+	add1("oct", types.Int, types.Str, "n", ast.ParamMove)
+	// bin(n: int) -> str — Integer to binary string with 0b prefix
+	add1("bin", types.Int, types.Str, "n", ast.ParamMove)
+
+	// NOTE: abs() and pow() are NOT registered as prelude builtins.
+	// abs conflicts with @extern("C", c_name="abs") in safe FFI wrappers.
+	// pow conflicts with math.pow(float, float) -> float module wrapper.
+	// Both work via direct lowerer dispatch in lower_call.go.
+
+	// --- round builtin ---
+	// round(n: float) -> float (0 decimal places)
+	add1("round", types.Float, types.Float, "n", ast.ParamMove)
+	// round(n: float, digits: int) -> float
+	addN("round",
+		[]types.T{types.Float, types.Int},
+		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
+		types.Float,
+		[]string{"n", "digits"},
+	)
+
+	// NOTE: pow() is NOT registered as a prelude builtin to avoid
+	// conflicting with math.pow(float, float) -> float. The standalone
+	// pow(int, int) -> int lowerer dispatch still works for direct calls.
+
+
+
+	// --- todo builtin (Rust-inspired) ---
+	// todo() -> never — panics with "not implemented"
+	addN("todo", nil, nil, types.None, nil)
+	// todo(msg: str) -> never — panics with custom message
+	add1("todo", types.Str, types.None, "msg", ast.ParamMove)
+
+	// --- hash builtin ---
+	// hash(value: Any) -> int — hash of a value
+	add1("hash", types.Any, types.Int, "value", ast.ParamMove)
+
+	// --- id builtin ---
+	// id(value: Any) -> int — pointer identity
+	add1("id", types.Any, types.Int, "value", ast.ParamMove)
 }

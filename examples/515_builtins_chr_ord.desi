@@ -1,0 +1,59 @@
+# EXPECTED_OUTPUT:
+# A = 65
+# Hello = 72
+# 0xff
+# 0o10
+# 0b1010
+# 0x0
+# 0o0
+# 0b0
+# -0xff
+# -0o10
+# -0b1010
+# 5
+# 3.14
+# 3.14
+# 1024
+# 1
+# chr/ord roundtrip ok
+# all builtins work!
+
+def main() -> int:
+    # chr/ord
+    print(chr(65) + " = " + str(ord("A")))
+    print(chr(72) + "ello = " + str(ord("H")))
+
+    # hex/oct/bin - positive
+    print(hex(255))
+    print(oct(8))
+    print(bin(10))
+
+    # hex/oct/bin - zero
+    print(hex(0))
+    print(oct(0))
+    print(bin(0))
+
+    # hex/oct/bin - negative
+    print(hex(-255))
+    print(oct(-8))
+    print(bin(-10))
+
+    # abs
+    print(abs(-5))
+    print(abs(-3.14))
+
+    # round
+    print(round(3.14159, 2))
+
+    # pow
+    print(pow(2, 10))
+    print(pow(5, 0))
+
+    # chr/ord roundtrip
+    let ch = chr(9731)  # snowman ☃
+    let code = ord(ch)
+    if code == 9731:
+        print("chr/ord roundtrip ok")
+
+    print("all builtins work!")
+    return 0
