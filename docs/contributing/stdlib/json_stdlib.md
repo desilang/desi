@@ -4,19 +4,56 @@ This document describes the internal implementation of the `json` standard libra
 
 ## Architecture
 
-The JSON module uses a **hybrid C+Desi architecture**:
+The JSON module uses a **decoupled C+Desi architecture** — the same pattern as HTTP and math modules. There are NO special-case interceptors in the lowerer.
 
 ```
-Desi Code → Type Checker → Lowering → HIR → LLVM Emit → C Runtime
-                ↓              ↓           ↓              ↓
-         expr_call.go    lower_call.go   emit_call.go   json.c
+User Code                     json.desi                         C Runtime
+json.parse(text)  →  pub def parse(text) →  @extern("C") __json_parse(text)  →  json.c
+json.is_null(n)   →  pub def is_null(n)  →  __json_type(n) == JSON_NULL       →  json.c
+json.set(o,k,v)   →  pub def set(o,k,v) →  @extern("C") __json_object_set    →  json.c
 ```
+
+### Key Design Decision: Decoupled from Lowerer
+
+Previously, `lower_call.go` had a ~192-line interceptor block that hard-coded JSON function dispatch. This was removed in May 2026 and replaced with direct `@extern("C")` calls from the Desi module — the same technique used for the HTTP module decoupling.
+
+**Benefits:**
+- Adding new JSON functions requires NO compiler changes — just C + Desi
+- User `@extern("C")` wrappers use the exact same code path as stdlib
+- Fixes silent `int` → `bool` type mismatches in C returns
 
 ## Components
 
-### 1. C Runtime (`compiler/runtime/json.c`)
+### 1. Desi Module (`compiler/lib/json.desi`)
 
-The C runtime handles all JSON parsing and stringification:
+The module has two sections:
+
+**C Runtime Bindings** (~30 `@extern("C")` declarations):
+```desi
+@extern("C")
+pub def __json_parse(text: str) -> Any
+
+@extern("C")
+def __json_new_object() -> Any
+
+@extern("C")
+def __json_object_set(obj: Any, key: str, val: Any)
+```
+
+**Public API** (~40 `pub def` wrappers):
+```desi
+pub def parse(text: str) -> Any:
+    unsafe:
+        return __json_parse(text)
+
+pub def is_null(node: Any) -> bool:
+    unsafe:
+        return __json_type(node) == JSON_NULL
+```
+
+Note: `is_null/is_bool/is_number/is_string/is_array/is_object` are computed in Desi as `__json_type(node) == CONSTANT` rather than calling dedicated C functions. This is cleaner and avoids extra C function calls.
+
+### 2. C Runtime (`compiler/runtime/json.c`)
 
 **Core Types:**
 ```c
@@ -25,7 +62,7 @@ typedef enum { JSON_NULL, JSON_BOOL, JSON_NUMBER, JSON_STRING, JSON_ARRAY, JSON_
 typedef struct JsonNode {
     JsonType type;
     union {
-        int bool_val;          // JSON_BOOL
+        bool bool_val;         // JSON_BOOL (was int, fixed May 2026)
         double num_val;        // JSON_NUMBER
         char* str_val;         // JSON_STRING
         JsonArray array;       // JSON_ARRAY
@@ -35,116 +72,52 @@ typedef struct JsonNode {
 ```
 
 **Key Functions:**
-| C Function | Desi API | Returns |
-|------------|----------|---------|
-| `__json_parse(ptr)` | `json.parse()` | `ptr` (JsonNode*) |
-| `__json_stringify(ptr)` | `json.stringify()` | `ptr` (string) |
-| `__json_is_null(ptr)` | `json.is_null()` | `i32` → `i1` |
-| `__json_is_int(ptr)` | `json.is_int()` | `i32` → `i1` |
-| `__json_get_int(ptr)` | `json.get_int()` | `i64` |
-| `__json_get_number(ptr)` | `json.get_number()` | `double` |
-| `__json_get_string(ptr)` | `json.get_string()` | `ptr` |
-| `__json_array_get(ptr, i32)` | `json.array_get()` | `ptr` |
-| `__json_object_get(ptr, ptr)` | `json.object_get()` | `ptr` |
-| `__json_object_key(ptr, i32)` | `json.object_key()` | `ptr` |
-| `__json_new_object()` | `json.new_object()` | `ptr` |
-| `__json_new_array()` | `json.new_array()` | `ptr` |
-| `__json_new_string(ptr)` | `json.new_string()` | `ptr` |
-| `__json_new_number(double)` | `json.new_number()` | `ptr` |
-| `__json_new_bool(i32)` | `json.new_bool()` | `ptr` |
-| `__json_new_null()` | `json.new_null()` | `ptr` |
-| `__json_object_set(ptr, ptr, ptr)` | `json.set()` | `void` |
-| `__json_array_push(ptr, ptr)` | `json.push()` | `void` |
-| `__json_object_remove(ptr, ptr)` | `json.remove()` | `void` |
-| `__json_object_keys(ptr)` | `json.keys()` | `ptr` |
-| `__json_free(ptr)` | internal | `void` |
+| C Function | Desi API | C Returns | LLVM Type |
+|------------|----------|-----------|-----------|
+| `__json_parse(ptr)` | `json.parse()` | `JsonNode*` | `ptr` |
+| `__json_stringify(ptr)` | `json.stringify()` | `char*` | `ptr` |
+| `__json_type(ptr)` | `json.get_type()` | `int` | `i32` |
+| `__json_is_int(ptr)` | `json.is_int()` | `bool` | `i1` |
+| `__json_get_bool(ptr)` | `json.get_bool()` | `bool` | `i1` |
+| `__json_get_int(ptr)` | `json.get_int()` | `int` | `i32` |
+| `__json_get_number(ptr)` | `json.get_number()` | `double` | `double` |
+| `__json_get_string(ptr)` | `json.get_string()` | `char*` | `ptr` |
+| `__json_equals(ptr, ptr)` | `json.equals()` | `bool` | `i1` |
+| `__json_has_key(ptr, ptr)` | `json.has_key()` | `bool` | `i1` |
+| `__json_new_object()` | `json.new_object()` | `JsonNode*` | `ptr` |
+| `__json_object_set(ptr, ptr, ptr)` | `json.set()` | `void` | `void` |
 
-### 2. Type Checker (`compiler/internal/check/expr_call.go`)
+### 3. LLVM Backend (`emit_call.go`)
 
-All `json.*` calls are handled specially around line 69-118:
+The backend still has interceptor blocks for JSON C functions. These handle:
+- **Type declarations**: `declare i1 @__json_is_int(ptr)` etc.
+- **Type tracking**: Store result types in `m.tempTypes` so later code knows the correct LLVM type
+- **Argument type conversion**: e.g., `trunc i64 to i32` for array indices
 
-```go
-if id, ok := fe.X.(*ast.Ident); ok && id.Name == "json" {
-    method := fe.Name.Name
-    // ... validate import
-    switch method {
-    case "is_null", "is_bool", "is_number", "is_string", "is_array", "is_object", "is_int":
-        c.info.Types[call] = types.Bool
-        return types.Bool
-    case "get_int":
-        c.info.Types[call] = types.Int
-        return types.Int
-    // ... etc
-    }
-}
-```
+These backend interceptors are NOT the same as the removed lowerer interceptors. The lowerer interceptors bypassed the Desi module entirely. The backend interceptors just ensure correct LLVM IR emission for the `@extern("C")` functions.
 
-### 3. Lowering (`compiler/internal/lower/lower_call.go`)
+### 4. Type Tracking Pattern
 
-Lowers `json.*` calls to HIR Call instructions. Each builder maps to the corresponding C function:
-
-```go
-// Builder example
-if method == "new_object" && len(x.Args) == 0 {
-    dst := ls.b.FreshTemp("json_obj")
-    ls.b.Emit(&hir.Call{Dst: dst, Fn: "__json_new_object", Args: nil, Type: "ptr"})
-    return dst
-}
-
-// Void mutation example
-if method == "set" && len(x.Args) >= 3 {
-    objVal := ls.lowerExpr(x.Args[0])
-    keyVal := ls.lowerExpr(x.Args[1])
-    valVal := ls.lowerExpr(x.Args[2])
-    ls.b.Emit(&hir.Call{Fn: "__json_object_set", Args: []hir.Value{objVal, keyVal, valVal}})
-    return hir.ConstNull{}
-}
-```
-
-### 4. Sig Overrides (`compiler/internal/backend/llvm/sig_overrides.go`)
-
-All `__json_*` functions are registered in `sig_overrides.go` with correct LLVM return types. This prevents the LLVM backend from defaulting to `i32`:
-
-```go
-SetFuncSig("__json_new_object", "ptr", nil)
-SetFuncSig("__json_object_set", "void", nil)
-// ... etc (19 total)
-```
-
-**Why this is needed:** Without sig overrides, the LLVM IR generator declares unknown extern functions as `declare i32 @fn(...)`, causing type mismatches when the caller expects `ptr` (string/node pointer).
-
-### 5. LLVM Emit (`compiler/internal/backend/llvm/emit_call.go`)
-
-Emits correct LLVM IR for each C function. Example:
-
-```go
-if c.Fn == "__json_get_int" && len(c.Args) == 1 {
-    m.ensureDecl("declare i64 @__json_get_int(ptr)")
-    dst := c.Dst.Name
-    _, nodeVal := m.operand(c.Args[0])
-    wprintf(&m.funcs, "  %s = call i64 @__json_get_int(ptr %s)\n", dst, nodeVal)
-    m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"
-    return
-}
-```
-
-**Important:** Type tracking in `m.tempTypes` is critical for:
-- F-string formatting (uses correct printf format)
-- Branch instructions (uses correct LLVM type)
-
-### 6. Type Tracking Pattern
-
-For functions returning non-i32 types, store in `tempTypes`:
+For functions returning non-i32 types, the backend stores the result type in `tempTypes`:
 
 ```go
 // After emitting call:
-if m.tempTypes == nil {
-    m.tempTypes = make(map[string]string)
-}
-m.tempTypes[strings.TrimPrefix(dst, "%")] = "i64"  // or "double", "ptr", "i1"
+m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"  // or "i32", "double", "i1"
 ```
 
-This prevents `inferType()` from defaulting to `i32`.
+This prevents `inferType()` from defaulting to `i32`, which would cause type mismatches when the result is passed to another function.
+
+## Adding New JSON Functions
+
+After decoupling, adding new JSON functions requires NO compiler changes:
+
+1. **C Runtime:** Add function in `json.c`
+2. **Desi Module:** Add `@extern("C")` declaration + `pub def` wrapper in `json.desi`
+3. **Test:** Add test case in example file
+4. **Document:** Update learner docs (`book/docs/stdlib/json.md`) and this file
+
+If the function returns a non-standard type (not `i32`), you may also need:
+5. **Backend:** Add an interceptor in `emit_call.go` with correct `ensureDecl` and `tempTypes`
 
 ## Builder Design
 
@@ -155,23 +128,12 @@ Builders create new `JsonNode*` on the heap via `calloc`/`malloc`:
 - **Remove:** `object_remove` frees key + value and shifts remaining entries.
 - **Keys:** `object_keys` returns a NEW array of NEW string nodes (caller owns both).
 
-## Adding New JSON Functions
-
-1. **C Runtime:** Add function in `json.c`
-2. **Sig Override:** Register in `sig_overrides.go` with correct return type
-3. **Type Checker:** Add case in `expr_call.go` json switch
-4. **Lowering:** Add handler in `lower_call.go` json block
-5. **LLVM Emit:** Add emit handler in `emit_call.go`
-6. **Desi API:** Add wrapper in `json.desi`
-7. **Test:** Add test case in example file
-8. **Document:** Update learner (`docs/stdlib/json.md`) and contributor docs
-
 ## Number Handling Design
 
 The hybrid Python+Rust approach:
 
 1. **`is_int(n)`** - Checks if `floor(n) == n` (no decimal part)
-2. **`get_int(n)`** - Returns `(int64_t)num_val` 
+2. **`get_int(n)`** - Returns `(int32_t)num_val`
 3. **`get_float(n)`** - Returns `num_val` as double
 
 This gives:
@@ -184,11 +146,7 @@ This gives:
 | File | Purpose |
 |------|---------|
 | `compiler/runtime/json.c` | C runtime (parser, stringify, builders) |
-| `compiler/lib/json.desi` | Desi API wrappers |
-| `compiler/internal/check/expr_call.go` | Type checking |
-| `compiler/internal/lower/lower_call.go` | HIR lowering |
-| `compiler/internal/backend/llvm/emit_call.go` | LLVM IR emit |
-| `compiler/internal/backend/llvm/sig_overrides.go` | LLVM return type overrides |
-| `docs/stdlib/json.md` | Learner documentation |
-| `docs/contributing/stdlib/json_stdlib.md` | Contributor documentation |
-
+| `compiler/lib/json.desi` | Desi API wrappers + `@extern("C")` declarations |
+| `compiler/internal/backend/llvm/emit_call.go` | LLVM IR emit (type declarations + tracking) |
+| `book/docs/stdlib/json.md` | Learner documentation |
+| `docs/contributing/stdlib/json_stdlib.md` | This file |
