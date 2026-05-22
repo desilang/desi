@@ -65,6 +65,42 @@ pub def __json_has_key(obj: Any, key: str) -> bool
 @extern("C")
 pub def __json_object_values(obj: Any) -> Any
 
+# Builder C functions
+@extern("C")
+def __json_new_object() -> Any
+
+@extern("C")
+def __json_new_array() -> Any
+
+@extern("C")
+def __json_new_string(s: str) -> Any
+
+@extern("C")
+def __json_new_number(n: float) -> Any
+
+@extern("C")
+def __json_new_bool(b: bool) -> Any
+
+@extern("C")
+def __json_new_null() -> Any
+
+# Mutation C functions
+@extern("C")
+def __json_object_set(obj: Any, key: str, val: Any)
+
+@extern("C")
+def __json_array_push(arr: Any, val: Any)
+
+@extern("C")
+def __json_object_remove(obj: Any, key: str)
+
+# Key access C functions
+@extern("C")
+def __json_object_keys(obj: Any) -> Any
+
+@extern("C")
+def __json_object_key(obj: Any, index: int) -> str
+
 # JSON type constants (match JsonType enum in json.c)
 pub let JSON_NULL = 0
 pub let JSON_BOOL = 1

@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // ============================================================
 // JSON Value Types
@@ -457,32 +458,32 @@ int __json_type(JsonNode* node) {
 }
 
 // Type check functions - return bool (0 or 1)
-int __json_is_null(JsonNode* node) {
+bool __json_is_null(JsonNode* node) {
     return __json_type(node) == JSON_NULL;
 }
 
-int __json_is_bool(JsonNode* node) {
+bool __json_is_bool(JsonNode* node) {
     return __json_type(node) == JSON_BOOL;
 }
 
-int __json_is_number(JsonNode* node) {
+bool __json_is_number(JsonNode* node) {
     return __json_type(node) == JSON_NUMBER;
 }
 
-int __json_is_string(JsonNode* node) {
+bool __json_is_string(JsonNode* node) {
     return __json_type(node) == JSON_STRING;
 }
 
-int __json_is_array(JsonNode* node) {
+bool __json_is_array(JsonNode* node) {
     return __json_type(node) == JSON_ARRAY;
 }
 
-int __json_is_object(JsonNode* node) {
+bool __json_is_object(JsonNode* node) {
     return __json_type(node) == JSON_OBJECT;
 }
 
 // Get boolean value
-int __json_get_bool(JsonNode* node) {
+bool __json_get_bool(JsonNode* node) {
     return (node && node->type == JSON_BOOL) ? node->bool_val : 0;
 }
 
@@ -492,7 +493,7 @@ double __json_get_number(JsonNode* node) {
 }
 
 // Check if number is a whole integer (Python-style smart detection)
-int __json_is_int(JsonNode* node) {
+bool __json_is_int(JsonNode* node) {
     if (!node || node->type != JSON_NUMBER) return 0;
     double val = node->num_val;
     return val == (double)(int64_t)val;
@@ -942,7 +943,7 @@ JsonNode* __json_merge(JsonNode* base, JsonNode* overlay) {
 // Check if two JSON nodes are equal (deep equality)
 // ============================================================
 
-int __json_equals(JsonNode* a, JsonNode* b) {
+bool __json_equals(JsonNode* a, JsonNode* b) {
     if (a == b) return 1;
     if (!a || !b) return 0;
     if (a->type != b->type) return 0;
@@ -973,7 +974,7 @@ int __json_equals(JsonNode* a, JsonNode* b) {
 // Check if a JSON object contains a key
 // ============================================================
 
-int __json_has_key(JsonNode* obj, const char* key) {
+bool __json_has_key(JsonNode* obj, const char* key) {
     if (!obj || obj->type != JSON_OBJECT || !key) return 0;
     for (int i = 0; i < obj->object.len; i++) {
         if (strcmp(obj->object.keys[i], key) == 0) return 1;
