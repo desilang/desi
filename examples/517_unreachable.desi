@@ -1,0 +1,22 @@
+# EXPECTED_OUTPUT:
+# path: positive
+# unreachable() does not trigger for reachable paths
+
+def classify(n: int) -> str:
+    if n > 0:
+        return "positive"
+    elif n < 0:
+        return "negative"
+    else:
+        return "zero"
+
+def main() -> int:
+    let x = 5
+    let kind = classify(x)
+    if kind == "positive" or kind == "negative" or kind == "zero":
+        print("path: " + kind)
+    else:
+        unreachable()
+
+    print("unreachable() does not trigger for reachable paths")
+    return 0

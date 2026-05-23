@@ -1326,6 +1326,12 @@ handlePrint:
 			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_todo", Args: []hir.Value{msgVal}})
 			return res
 		}
+		// unreachable() -> __desi_unreachable()
+		if calleeName == "unreachable" && len(x.Args) == 0 {
+			res := ls.b.FreshTemp("unreachable")
+			ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_unreachable", Args: []hir.Value{}})
+			return res
+		}
 		// hash(value) -> __desi_hash(value)
 		if calleeName == "hash" && len(x.Args) == 1 {
 			argVal := ls.lowerExpr(x.Args[0])

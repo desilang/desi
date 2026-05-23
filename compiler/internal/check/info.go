@@ -578,6 +578,10 @@ func addPreludeBuiltins(info *Info) {
 	// todo(msg: str) -> never — panics with custom message
 	add1("todo", types.Str, types.None, "msg", ast.ParamMove)
 
+	// --- unreachable builtin (Rust-inspired) ---
+	// unreachable() -> never — panics if an ostensibly unreachable code path is hit
+	addN("unreachable", nil, nil, types.None, nil)
+
 	// --- hash builtin ---
 	// hash(value: Any) -> int — hash of a value
 	add1("hash", types.Any, types.Int, "value", ast.ParamMove)

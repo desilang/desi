@@ -388,6 +388,12 @@ void __desi_todo(const char* msg) {
     exit(1);
 }
 
+/* unreachable() → never — panics if an ostensibly unreachable code path is hit */
+void __desi_unreachable(void) {
+    fprintf(stderr, "entered unreachable code\n");
+    exit(1);
+}
+
 /* hash(value: ptr) → int — FNV-1a hash of the pointer value */
 int32_t __desi_hash(const void* ptr) {
     uint64_t h = 14695981039346656037ULL;

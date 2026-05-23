@@ -832,7 +832,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			// Check if it's a lowerer-only builtin (not registered in info.Funcs
 			// to avoid overload conflicts with stdlib modules)
 			switch id.Name {
-			case "abs", "pow", "round", "todo":
+			case "abs", "pow", "round", "todo", "unreachable":
 				// These have special-case type checking below and
 				// lowerer dispatch in lower_call.go — let them through
 			default:
@@ -955,6 +955,12 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			if len(argsNodes) == 1 {
 				c.typ(argsNodes[0].Expr) // type-check message arg
 			}
+			c.info.Types[call] = types.None
+			return types.None
+		}
+
+		// Built-in unreachable() function - panics if this code path is hit
+		if id.Name == "unreachable" && len(argsNodes) == 0 {
 			c.info.Types[call] = types.None
 			return types.None
 		}
