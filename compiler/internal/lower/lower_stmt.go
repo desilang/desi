@@ -797,7 +797,25 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 		var elseBlk *hir.Block
 		elseTerminated := false
-		if s.Else != nil {
+		if len(s.Elifs) > 0 {
+			elseBlk = ls.b.NewBlock("elif")
+
+			ls.terminated = false
+			ls.b.SetBlock(elseBlk)
+
+			// Recursively lower the elif chain as a nested IfStmt
+			synth := &ast.IfStmt{
+				Cond:  s.Elifs[0].Cond,
+				Then:  s.Elifs[0].Body,
+				Elifs: s.Elifs[1:],
+				Else:  s.Else,
+			}
+			ls.lowerStmt(synth)
+			elseTerminated = ls.terminated
+			ls.b.SetBlock(oldCur)
+
+			ls.terminated = wasTerminated || (thenTerminated && elseTerminated)
+		} else if s.Else != nil {
 			elseBlk = ls.b.NewBlock("else")
 
 			ls.terminated = false // Start fresh for the block
