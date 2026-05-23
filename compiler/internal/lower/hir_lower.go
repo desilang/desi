@@ -350,8 +350,10 @@ func LowerDefaultToStr(name, typeName string, reprFuncName string) *hir.Func {
 		b.Emit(&hir.Call{Dst: res, Fn: reprFuncName, Args: []hir.Value{hir.Var{Name: "self"}}, Type: "ptr"})
 		b.Emit(&hir.Ret{Val: res})
 	} else {
-		// Fall back to returning the type name
-		b.Emit(&hir.Ret{Val: hir.ConstStr{Text: typeName}})
+		// Fall back to __desi_default_repr(self, type_name) → "<TypeName at 0xADDR>"
+		res := b.FreshTemp("repr_result")
+		b.Emit(&hir.Call{Dst: res, Fn: "__desi_default_repr", Args: []hir.Value{hir.Var{Name: "self"}, hir.ConstStr{Text: typeName}}, Type: "ptr"})
+		b.Emit(&hir.Ret{Val: res})
 	}
 	return f
 }

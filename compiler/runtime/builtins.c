@@ -404,3 +404,12 @@ int32_t __desi_hash(const void* ptr) {
 int32_t __desi_id(const void* ptr) {
     return (int32_t)((uintptr_t)ptr & 0x7FFFFFFF);
 }
+
+/* default_repr(obj: ptr, type_name: str) → str
+ * Returns "<TypeName at 0xADDRESS>" like Python's default __repr__.
+ * Used when printing objects that don't define __str__ or __repr__. */
+const char* __desi_default_repr(const void* obj, const char* type_name) {
+    char buf[128];
+    snprintf(buf, sizeof(buf), "<%s at 0x%lx>", type_name, (unsigned long)(uintptr_t)obj);
+    return strdup(buf);
+}

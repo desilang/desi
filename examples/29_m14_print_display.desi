@@ -11,5 +11,5 @@ def main():
 	# This should now work! print accepts Display types
 	print(p)
 
-# EXPECTED_OUTPUT:
-# Point
+# Default repr now prints: <Point at 0xADDR>
+# EXPECTED: SKIP

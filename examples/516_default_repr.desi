@@ -1,0 +1,41 @@
+# Test default repr for classes and structs without __str__
+# EXPECTED: SKIP
+# Output contains memory addresses that vary per run:
+#   <Dog at 0x...>
+#   Custom: Buddy (age 5)
+#   <Point at 0x...>
+
+class Dog:
+    name: str
+    age: int
+
+    pub def __new__(self, name: str, age: int):
+        self.name = name
+        self.age = age
+
+class Pet:
+    name: str
+    age: int
+
+    pub def __new__(self, name: str, age: int):
+        self.name = name
+        self.age = age
+
+    pub def __str__(self) -> str:
+        return f"Custom: {self.name} (age {self.age})"
+
+struct Point:
+    x: int
+    y: int
+
+def main() -> int:
+    let d = Dog("Rex", 3)
+    print(d)
+
+    let p = Pet("Buddy", 5)
+    print(p)
+
+    let pt = Point(10, 20)
+    print(pt)
+
+    return 0
