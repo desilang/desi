@@ -2090,12 +2090,21 @@ handlePrint:
 				typeName := argT.String()
 				shouldCallToStr := false
 				toStrFuncName := ""
+				defaultReprTypeName := "" // non-empty when using __desi_default_repr
 
-				// Case 1: Display trait implementation
+				// Case 1: Display trait implementation (user-defined, not auto-generated)
 				if impls, ok := ls.info.Impls[typeName]; ok {
-					if _, hasDisplay := impls["Display"]; hasDisplay {
-						shouldCallToStr = true
-						toStrFuncName = fmt.Sprintf("%s_to_str", typeName)
+					if methods, hasDisplay := impls["Display"]; hasDisplay {
+						// Check if the Display impl has a real body (user-defined)
+						// or is auto-generated (Body == nil from ensureDefaultDisplay)
+						for _, m := range methods {
+							if m.Body != nil {
+								shouldCallToStr = true
+								toStrFuncName = fmt.Sprintf("%s_to_str", typeName)
+								break
+							}
+						}
+						// If auto-generated (no real body), fall through to Case 2/3/4
 					}
 				}
 
@@ -2123,11 +2132,20 @@ handlePrint:
 						} else if _, found := t.Dunders["to_str"]; found {
 							shouldCallToStr = true
 							toStrFuncName = fmt.Sprintf("%s_to_str", t.Name)
+						} else {
+							// Case 4: No custom repr — use default "<ClassName at 0xADDR>"
+							shouldCallToStr = true
+							toStrFuncName = "__desi_default_repr"
+							defaultReprTypeName = t.Name
 						}
 					case *types.Struct:
 						// Structs can implement Display trait - handled in Case 1 above
-						// Or we can check for __repr__ method on the struct type
-						// For now, skip - structs need Display trait implementation
+						if !shouldCallToStr {
+							// No Display trait — use default "<StructName at 0xADDR>"
+							shouldCallToStr = true
+							toStrFuncName = "__desi_default_repr"
+							defaultReprTypeName = t.Name
+						}
 					}
 				}
 
@@ -2137,7 +2155,12 @@ handlePrint:
 				// If custom to_str, call it first
 				if shouldCallToStr {
 					strTemp := ls.b.FreshTemp("str")
-					ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal}, Type: "ptr"})
+					if defaultReprTypeName != "" {
+						// __desi_default_repr(obj, type_name) → "<TypeName at 0xADDR>"
+						ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal, hir.ConstStr{Text: defaultReprTypeName}}, Type: "ptr"})
+					} else {
+						ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal}, Type: "ptr"})
+					}
 					argVal = strTemp
 				}
 

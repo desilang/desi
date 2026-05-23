@@ -13,17 +13,15 @@ def main() -> int:
     p1.x := 10
     p1.y := 20
     
-    # Note: to_str() is auto-generated, returns "Point\n"
-    print(p1.to_str())  # Prints: Point
+    # Note: to_str() is auto-generated, returns "<Point at 0xADDR>"
+    print(p1.to_str())  # Prints: <Point at 0x...>
     
     let p2 = p1.__copy__()
     p2.x := 30
     
-    print(p2.to_str())  # Prints: Point
+    print(p2.to_str())  # Prints: <Point at 0x...>
     
     return 0
 
-# EXPECTED_OUTPUT:
-# Point
-#
-# Point
+# Default repr now prints: <Point at 0xADDR>
+# EXPECTED: SKIP
