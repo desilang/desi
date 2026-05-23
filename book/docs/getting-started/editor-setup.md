@@ -29,14 +29,57 @@ export PATH="$PATH:/path/to/desi/bin"
 
 ## Visual Studio Code (with LSP)
 
-1. Install the Desi extension:
-   ```bash
-   cd editors/vscode
-   npm install
-   code --install-extension .
-   ```
+The Desi VS Code extension provides syntax highlighting and full LSP support (hover, go-to-definition, completions, diagnostics).
 
-2. Open a `.desi` file and the LSP starts automatically.
+### Install the Extension
+
+=== "macOS / Linux"
+
+    ```bash
+    cd editors/vscode
+    npm install
+    npx vsce package --allow-missing-repository
+    code --install-extension desi-language-*.vsix
+    ```
+
+=== "Windows"
+
+    ```powershell
+    cd editors\vscode
+    npm install
+    npx vsce package --allow-missing-repository
+    # Then in VS Code: Extensions → "..." → Install from VSIX…
+    # and select editors\vscode\desi-language-*.vsix
+    ```
+
+### Configure the LSP Path
+
+Add to your project's `.vscode/settings.json`:
+
+```json
+{
+  "desi.lspPath": "/path/to/desi/bin/desilsp"
+}
+```
+
+On Windows use the full path to `desilsp.exe`:
+
+```json
+{
+  "desi.lspPath": "C:/path/to/desi/bin/desilsp.exe"
+}
+```
+
+If `desilsp` is on your `PATH`, no configuration is needed — the extension finds it automatically.
+
+### Build the LSP Server
+
+```bash
+make tools     # macOS / Linux  → bin/desilsp
+.\build.ps1    # Windows        → bin\desilsp.exe
+```
+
+Open any `.desi` file — the language server starts automatically.
 
 ---
 
@@ -63,6 +106,8 @@ lspconfig.desilsp.setup{}
 
 ## Syntax Highlighting (Fallback)
 
+If you prefer not to install the Desi extension, you can get approximate syntax highlighting by treating `.desi` files as Python.
+
 ## Visual Studio Code
 
 ### Recommended Settings
@@ -71,9 +116,6 @@ Create or edit `.vscode/settings.json` in your Desi projects:
 
 ```json
 {
-  "files.associations": {
-    "*.desi": "python"
-  },
   "[desi]": {
     "editor.tabSize": 4,
     "editor.insertSpaces": true
@@ -81,13 +123,11 @@ Create or edit `.vscode/settings.json` in your Desi projects:
 }
 ```
 
-This tells VSCode to treat `.desi` files as Python for syntax highlighting.
-
 ### Recommended Extensions
 
-- **Python** (by Microsoft) - For syntax highlighting
-- **Error Lens** - Inline error display
-- **Code Runner** - Quick run support
+- **Desi Language** (desilang) — Native `.desi` syntax highlighting + LSP
+- **Error Lens** — Inline error display
+- **Code Runner** — Quick run support
 
 ---
 

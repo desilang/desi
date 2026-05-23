@@ -166,6 +166,30 @@ def process_data(data: str) -> int:
 
 Inspired by Rust's `todo!()` macro. Calling `todo()` will print a message and exit with code 1.
 
+### unreachable()
+
+Mark a code path that should never be reached. Panics immediately if called:
+
+```desi
+def classify(n: int) -> str:
+    if n > 0:
+        return "positive"
+    elif n < 0:
+        return "negative"
+    else:
+        return "zero"
+
+def main() -> int:
+    let kind = classify(5)
+    if kind == "positive" or kind == "negative" or kind == "zero":
+        print("path: " + kind)
+    else:
+        unreachable()
+    0
+```
+
+Use `unreachable()` to document that a branch is impossible and catch logic errors early.
+
 ## Identity & Hashing
 
 | Function | Description |

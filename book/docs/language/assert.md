@@ -112,3 +112,62 @@ def main() -> int:
     test_calculator()
     0
 ```
+
+---
+
+## todo()
+
+`todo()` marks code that is not yet implemented. Calling it panics with a clear message and exits with code 1.
+
+```desi
+def process_data(data: str) -> int:
+    todo("implement data processing")
+
+def serialize(x: int) -> str:
+    todo()  # message is optional
+```
+
+Output when called:
+```
+not implemented: implement data processing
+```
+
+**When to use:** Use `todo()` as a placeholder during incremental development — it documents intent and fails loudly if accidentally reached in tests.
+
+---
+
+## unreachable()
+
+`unreachable()` marks code paths that should never execute. If reached, it panics.
+
+```desi
+def classify(n: int) -> str:
+    if n > 0:
+        return "positive"
+    elif n < 0:
+        return "negative"
+    else:
+        return "zero"
+
+def main() -> int:
+    let kind = classify(5)
+    if kind == "positive" or kind == "negative" or kind == "zero":
+        print("path: " + kind)
+    else:
+        unreachable()  # exhaustive check — this cannot happen
+    0
+```
+
+**Use `unreachable()` when:**
+
+- All meaningful branches are handled above
+- A match arm or condition should be exhaustive
+- You want the compiler to document that a code path is impossible
+
+Unlike `assert`, `unreachable()` takes no condition — it always panics if reached.
+
+| Function | Condition | Use case |
+|----------|-----------|----------|
+| `assert(cond)` | Panics if `cond` is false | Verify invariants |
+| `todo()` | Always panics | Unimplemented placeholder |
+| `unreachable()` | Always panics | Document impossible paths |

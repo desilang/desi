@@ -20,27 +20,41 @@ Before installing Desi, ensure you have:
 
 Clone the repository and build:
 
-```bash
-# Clone the repository
-git clone https://github.com/desilang/desi.git
-cd desi
+=== "macOS / Linux"
 
-# Build the compiler and runtime
-make
+    ```bash
+    git clone https://github.com/desilang/desi.git
+    cd desi
+    make
+    ./bin/desic version
+    ```
 
-# Verify installation
-./bin/desic version
-```
+=== "Windows"
+
+    ```powershell
+    git clone https://github.com/desilang/desi.git
+    cd desi
+    .\build.ps1
+    .\bin\desic.exe version
+    ```
 
 ### Verify LLVM
 
 Desi requires LLVM for compilation. Check your LLVM version:
 
-```bash
-llc --version
-```
+=== "macOS / Linux"
 
-If LLVM is not installed:
+    ```bash
+    llc --version
+    ```
+
+=== "Windows"
+
+    ```powershell
+    clang --version
+    ```
+
+If LLVM / Clang is not installed:
 
 === "macOS"
 
@@ -59,6 +73,12 @@ If LLVM is not installed:
     ```bash
     sudo dnf install llvm clang
     ```
+
+=== "Windows"
+
+    Download the LLVM installer from [llvm.org/releases](https://releases.llvm.org/) and install it.
+    Also install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+    with the **Desktop development with C++** workload — this provides `cl.exe` and `lib.exe` for the runtime build.
 
 ---
 
@@ -183,6 +203,10 @@ If you see LLVM-related errors:
    ```bash
    export PATH="/opt/homebrew/opt/llvm/bin:$PATH"
    ```
+3. On Windows, add the LLVM bin folder to your PATH:
+   ```
+   C:\Program Files\LLVM\bin
+   ```
 
 ### Linker Errors
 
@@ -191,8 +215,17 @@ If linking fails:
 1. Ensure Clang is installed
 2. Check that the runtime library is built:
    ```bash
-   make
+   make          # macOS / Linux
+   .\build.ps1   # Windows
    ```
+
+### Windows: Runtime Build Fails
+
+The Windows build script (`build.ps1`) requires Visual Studio Build Tools with the C++ workload. If `cl.exe` is not found:
+
+1. Install [Visual Studio Build Tools](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+2. Select **Desktop development with C++**
+3. Re-run `.\build.ps1`
 
 ---
 

@@ -9,7 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+
+- `unreachable()` builtin — panics if reached; documents impossible code paths (mirrors Rust's `unreachable!()`)
+- `todo()` builtin — panics with "not implemented"; placeholder for incremental development
+- `chr(n)` / `ord(s)` — Unicode codepoint ↔ string conversion
+- `hex(n)` / `oct(n)` / `bin(n)` — integer formatting with `0x`/`0o`/`0b` prefix
+- `abs(n)` — absolute value for `int` and `float`
+- `round(n, digits)` — float rounding to decimal places
+- `pow(base, exp)` — integer exponentiation
+- `hash(value)` / `id(value)` — FNV-1a hash and pointer identity
+- Default object representation: classes and structs print as `<TypeName at 0xADDR>` when no `__repr__` is defined
+- Windows build support: `build.ps1` script for full clean build on Windows (runtime + all compiler tools)
+- VS Code extension (`editors/vscode`) with native `.desi` syntax highlighting and LSP integration
+
+### Fixed
+
+- `elif` chains now compile correctly — all arms were previously silently dropped, leaving only the `if` and final `else`
+- String return values no longer carry a spurious `\n` — `return "positive"` was producing `"positive\n"`, breaking string comparisons
 
 ---
 
