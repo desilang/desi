@@ -27,6 +27,14 @@ static uint64_t perf_nanos(void) {
     if (tbi.denom == 0) mach_timebase_info(&tbi);
     return mach_absolute_time() * tbi.numer / tbi.denom;
 }
+#elif defined(_WIN32)
+#include <windows.h>
+static uint64_t perf_nanos(void) {
+    LARGE_INTEGER freq, cnt;
+    QueryPerformanceFrequency(&freq);
+    QueryPerformanceCounter(&cnt);
+    return (uint64_t)(cnt.QuadPart * 1000000000LL / freq.QuadPart);
+}
 #else
 #include <time.h>
 static uint64_t perf_nanos(void) {

@@ -192,7 +192,14 @@ if (-not $SkipRuntime) {
     Write-Step "Building Desi runtime library..."
     
     # Get all .c files in runtime directory (excluding decimal subdirectory)
-    $runtimeFiles = Get-ChildItem -Path $RuntimeSrc -Filter "*.c" -File
+    # Skip files that require Unix-only APIs (sockets, signals, POSIX regex, etc.)
+    $windowsExcludes = @(
+        'desi_host.c', 'http_server.c', 'tls.c', 'net.c', 'websocket.c',
+        'signal_handler.c', 'reload.c', 'fs.c', 'os.c', 'path.c',
+        'process.c', 'random.c', 're.c', 'shell.c', 'uuid.c'
+    )
+    $runtimeFiles = Get-ChildItem -Path $RuntimeSrc -Filter "*.c" -File |
+        Where-Object { $windowsExcludes -notcontains $_.Name }
     $decimalWrapper = Join-Path $DecimalSrc "desi_decimal.c"
     
     $objectFiles = @()
@@ -244,6 +251,10 @@ Write-Step "Building desirepl..."
 & $GoExe build -ldflags="-s -w" -o (Join-Path $BinDir "desirepl.exe") ./compiler/cmd/desirepl
 if ($LASTEXITCODE -ne 0) { throw "Failed to build desirepl" }
 
+Write-Step "Building desilsp..."
+& $GoExe build -ldflags="-s -w" -o (Join-Path $BinDir "desilsp.exe") ./compiler/cmd/desilsp
+if ($LASTEXITCODE -ne 0) { throw "Failed to build desilsp" }
+
 Write-Success "All tools built successfully!"
 
 # Summary
@@ -252,6 +263,7 @@ Write-Host "Build complete!" -ForegroundColor Green
 Write-Host "  Compiler:  $BinDir\desic.exe"
 Write-Host "  Formatter: $BinDir\desifmt.exe"
 Write-Host "  REPL:      $BinDir\desirepl.exe"
+Write-Host "  LSP:       $BinDir\desilsp.exe"
 if (-not $SkipRuntime) {
     Write-Host "  Runtime:   $LibDesi"
 }

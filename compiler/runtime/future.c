@@ -14,18 +14,18 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <pthread.h>
 #include <stdint.h>
+#include "platform.h"
 
 /* ---------- Future struct ---------- */
 
 typedef struct {
-    pthread_mutex_t lock;
-    pthread_cond_t  done_cv;
-    int             completed;
-    int64_t         value;       /* result (i64, or intptr_t for ptrs) */
-    pthread_t       thread;
-    int             thread_started;
+    DesiPlatformMutex lock;
+    DesiPlatformCond  done_cv;
+    int               completed;
+    int64_t           value;
+    DesiPlatformThread thread;
+    int               thread_started;
 } DesiFuture;
 
 /* ---------- API ---------- */
@@ -40,8 +40,8 @@ void* __future_new(void) {
         fprintf(stderr, "Desi panic: out of memory allocating future\n");
         exit(1);
     }
-    pthread_mutex_init(&f->lock, NULL);
-    pthread_cond_init(&f->done_cv, NULL);
+    DESI_MUTEX_INIT(f->lock);
+    DESI_COND_INIT(f->done_cv);
     f->completed = 0;
     f->value = 0;
     f->thread_started = 0;
@@ -55,11 +55,11 @@ void* __future_new(void) {
  */
 void __future_complete(void* fut, int64_t val) {
     DesiFuture* f = (DesiFuture*)fut;
-    pthread_mutex_lock(&f->lock);
+    DESI_MUTEX_LOCK(f->lock);
     f->value = val;
     f->completed = 1;
-    pthread_cond_signal(&f->done_cv);
-    pthread_mutex_unlock(&f->lock);
+    DESI_COND_SIGNAL(f->done_cv);
+    DESI_MUTEX_UNLOCK(f->lock);
 }
 
 /*
@@ -68,21 +68,26 @@ void __future_complete(void* fut, int64_t val) {
  */
 int64_t __await_blocking(void* fut) {
     DesiFuture* f = (DesiFuture*)fut;
-    pthread_mutex_lock(&f->lock);
+    DESI_MUTEX_LOCK(f->lock);
     while (!f->completed) {
-        pthread_cond_wait(&f->done_cv, &f->lock);
+        DESI_COND_WAIT(f->done_cv, f->lock);
     }
     int64_t val = f->value;
-    pthread_mutex_unlock(&f->lock);
+    DESI_MUTEX_UNLOCK(f->lock);
 
     /* Join the thread if it was started to clean up resources */
     if (f->thread_started) {
+#ifdef _WIN32
+        WaitForSingleObject(f->thread, INFINITE);
+        CloseHandle(f->thread);
+#else
         pthread_join(f->thread, NULL);
+#endif
     }
 
     /* Free the future — after await, it's consumed */
-    pthread_mutex_destroy(&f->lock);
-    pthread_cond_destroy(&f->done_cv);
+    DESI_MUTEX_DESTROY(f->lock);
+    DESI_COND_DESTROY(f->done_cv);
     free(f);
 
     return val;
@@ -108,7 +113,11 @@ typedef struct {
  *   2 args: int64_t body(void* future, int64_t a0, int64_t a1)
  *   etc.
  */
+#ifdef _WIN32
+static DWORD WINAPI __future_thread_entry(LPVOID raw_ctx) {
+#else
 static void* __future_thread_entry(void* raw_ctx) {
+#endif
     FutureSpawnCtx* ctx = (FutureSpawnCtx*)raw_ctx;
     void* future = ctx->future;
     int64_t result = 0;
@@ -150,7 +159,11 @@ static void* __future_thread_entry(void* raw_ctx) {
 
     __future_complete(future, result);
     free(ctx);
+#ifdef _WIN32
+    return 0;
+#else
     return NULL;
+#endif
 }
 
 /*
@@ -171,7 +184,11 @@ void __future_spawn_0(void* future, void* body_fn) {
     ctx->argc = 0;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+#ifdef _WIN32
+    f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
+#else
     pthread_create(&f->thread, NULL, __future_thread_entry, ctx);
+#endif
 }
 
 void __future_spawn_1(void* future, void* body_fn, int64_t a0) {
@@ -182,7 +199,11 @@ void __future_spawn_1(void* future, void* body_fn, int64_t a0) {
     ctx->args[0] = a0;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+#ifdef _WIN32
+    f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
+#else
     pthread_create(&f->thread, NULL, __future_thread_entry, ctx);
+#endif
 }
 
 void __future_spawn_2(void* future, void* body_fn, int64_t a0, int64_t a1) {
@@ -194,7 +215,11 @@ void __future_spawn_2(void* future, void* body_fn, int64_t a0, int64_t a1) {
     ctx->args[1] = a1;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+#ifdef _WIN32
+    f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
+#else
     pthread_create(&f->thread, NULL, __future_thread_entry, ctx);
+#endif
 }
 
 void __future_spawn_3(void* future, void* body_fn, int64_t a0, int64_t a1, int64_t a2) {
@@ -207,7 +232,11 @@ void __future_spawn_3(void* future, void* body_fn, int64_t a0, int64_t a1, int64
     ctx->args[2] = a2;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+#ifdef _WIN32
+    f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
+#else
     pthread_create(&f->thread, NULL, __future_thread_entry, ctx);
+#endif
 }
 
 void __future_spawn_4(void* future, void* body_fn, int64_t a0, int64_t a1, int64_t a2, int64_t a3) {
@@ -221,7 +250,11 @@ void __future_spawn_4(void* future, void* body_fn, int64_t a0, int64_t a1, int64
     ctx->args[3] = a3;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+#ifdef _WIN32
+    f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
+#else
     pthread_create(&f->thread, NULL, __future_thread_entry, ctx);
+#endif
 }
 
 /*

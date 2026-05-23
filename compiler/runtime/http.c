@@ -203,9 +203,20 @@ static PoolEntry _conn_pool[CONN_POOL_SIZE] = {0};
 static int conn_is_alive(Connection* c) {
     if (c->fd == DESI_INVALID_SOCKET) return 0;
     char probe;
+#ifdef _WIN32
+    u_long nonblock = 1;
+    ioctlsocket(c->fd, FIONBIO, &nonblock);
+    int n = recv(c->fd, &probe, 1, MSG_PEEK);
+    nonblock = 0;
+    ioctlsocket(c->fd, FIONBIO, &nonblock);
+    int wsa_err = WSAGetLastError();
+    if (n == 0) return 0;
+    if (n < 0 && wsa_err != WSAEWOULDBLOCK) return 0;
+#else
     ssize_t n = recv(c->fd, &probe, 1, MSG_PEEK | MSG_DONTWAIT);
     if (n == 0) return 0;  /* server closed */
     if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK) return 0;
+#endif
     return 1;
 }
 

@@ -22,6 +22,8 @@
   #define DESI_INVALID_SOCKET INVALID_SOCKET
   #define DESI_CLOSE_SOCKET closesocket
   typedef int ssize_t;
+  #define strcasecmp  _stricmp
+  #define strncasecmp _strnicmp
 #else
   #include <unistd.h>
   #include <sys/socket.h>

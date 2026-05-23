@@ -265,6 +265,9 @@ func runCmd(argv []string) int {
 
 	basename := strings.TrimSuffix(filepath.Base(file), ".desi")
 	exePath := filepath.Join(tmpDir, basename)
+	if runtime.GOOS == "windows" {
+		exePath += ".exe"
+	}
 
 	code := buildFile(file, exePath, optLevel, argv, false)
 	if code != 0 {
@@ -400,21 +403,32 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		return 2
 	}
 
-	// Step 2: Compile IR to object file using llc
+	// Step 2: Compile IR to object file
+	// Windows: clang -c (llc not bundled with LLVM for Windows)
+	// Unix:    llc -filetype=obj (faster, no driver overhead)
 	if verbose {
 		term.Println("==> Compiling LLVM IR to object file...")
 	}
 	objPath := filepath.Join(tmpDir, "program.o")
-	llcArgs := []string{"-filetype=obj", "-o", objPath}
-	if optLevel != "" {
-		llcArgs = append(llcArgs, optLevel)
+	var irCompileCmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		irArgs := []string{"-w", "-c", irPath, "-o", objPath}
+		if optLevel != "" {
+			irArgs = append(irArgs, optLevel)
+		}
+		irCompileCmd = exec.Command(findLLVMTool("clang"), irArgs...)
+	} else {
+		llcArgs := []string{"-filetype=obj", "-o", objPath}
+		if optLevel != "" {
+			llcArgs = append(llcArgs, optLevel)
+		}
+		llcArgs = append(llcArgs, irPath)
+		irCompileCmd = exec.Command(findLLVMTool("llc"), llcArgs...)
 	}
-	llcArgs = append(llcArgs, irPath)
-	llcCmd := exec.Command(findLLVMTool("llc"), llcArgs...)
-	llcCmd.Stderr = os.Stderr
-	if err := llcCmd.Run(); err != nil {
-		term.Eprintln("build: llc compilation failed:", err)
-		term.Eprintln("  Make sure LLVM is installed (brew install llvm)")
+	irCompileCmd.Stderr = os.Stderr
+	if err := irCompileCmd.Run(); err != nil {
+		term.Eprintln("build: IR compilation failed:", err)
+		term.Eprintln("  Make sure LLVM is installed (brew install llvm  /  choco install llvm)")
 		return exitCode(err)
 	}
 
@@ -423,12 +437,23 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		term.Println("==> Linking executable...")
 	}
 	runtimeLib := findRuntimeLib()
-	clangArgs := []string{objPath, "-o", exePath}
+	clangArgs := []string{objPath}
+	// Only add entry.obj when the IR defines @__top__ (no explicit def main).
+	// Programs with def main() already emit @main in the IR.
+	if entryObj := findEntryObj(); entryObj != "" && bytes.Contains(irBuf.Bytes(), []byte("@__top__")) {
+		clangArgs = append(clangArgs, entryObj)
+	}
+	clangArgs = append(clangArgs, "-o", exePath)
 	if optLevel != "" {
 		clangArgs = append(clangArgs, optLevel)
 	}
 	if runtimeLib != "" {
-		clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
+		if runtime.GOOS == "windows" {
+			// On Windows, link the lib directly (MSVC linker doesn't use -L/-l well)
+			clangArgs = append(clangArgs, runtimeLib)
+		} else {
+			clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
+		}
 	}
 	// Suppress noisy linker warnings (macOS version mismatch etc.)
 	clangArgs = append(clangArgs, "-w")
@@ -445,9 +470,8 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		// HTTPS TLS via system OpenSSL
 		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
 		// Note: -lz removed — compression is bundled via miniz in libdesi.a
-	} else {
-		clangArgs = append(clangArgs, "-Wl,--gc-sections")
 	}
+	// Windows: no extra linker flags needed; MSVC link.exe handles gc internally
 	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)
 	clangCmd.Stderr = os.Stderr
 	if err := clangCmd.Run(); err != nil {
@@ -458,28 +482,51 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	return 0
 }
 
-// findRuntimeLib locates libdesi.a by searching common paths.
+// findRuntimeLib locates libdesi.a (Unix) or libdesi.lib (Windows).
 func findRuntimeLib() string {
-	candidates := []string{}
+	names := []string{"libdesi.a", "libdesi.lib"}
+	dirs := []string{}
 
-	// Relative to executable
 	if exe, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exe)
-		candidates = append(candidates,
-			filepath.Join(exeDir, "..", "build", "libdesi.a"),
-			filepath.Join(exeDir, "..", "lib", "libdesi.a"),
+		dirs = append(dirs,
+			filepath.Join(exeDir, "..", "build"),
+			filepath.Join(exeDir, "..", "lib"),
 		)
 	}
-
-	// Relative to working directory
 	if cwd, err := os.Getwd(); err == nil {
-		candidates = append(candidates,
-			filepath.Join(cwd, "build", "libdesi.a"),
-			filepath.Join(cwd, "lib", "libdesi.a"),
+		dirs = append(dirs,
+			filepath.Join(cwd, "build"),
+			filepath.Join(cwd, "lib"),
 		)
 	}
 
-	for _, c := range candidates {
+	for _, dir := range dirs {
+		for _, name := range names {
+			c := filepath.Join(dir, name)
+			if _, err := os.Stat(c); err == nil {
+				return c
+			}
+		}
+	}
+	return ""
+}
+
+// findEntryObj locates entry.obj (Windows) needed as explicit link input
+// because MSVC linker won't pull main() from a static lib unless referenced.
+func findEntryObj() string {
+	if runtime.GOOS != "windows" {
+		return ""
+	}
+	dirs := []string{}
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "..", "build"))
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, filepath.Join(cwd, "build"))
+	}
+	for _, dir := range dirs {
+		c := filepath.Join(dir, "entry.obj")
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
@@ -618,15 +665,20 @@ func runSingleTest(testFile string, verbose bool) int {
 		return 2
 	}
 
-	// llc → object file
+	// IR → object file (Windows: clang -c, Unix: llc)
 	if verbose {
 		term.Println("    compiling...")
 	}
 	objPath := filepath.Join(tmpDir, "test.o")
-	llcCmd := exec.Command(findLLVMTool("llc"), "-filetype=obj", "-o", objPath, irPath)
-	llcCmd.Stderr = os.Stderr
-	if err := llcCmd.Run(); err != nil {
-		term.Eprintln("test: llc compilation failed for", testFile)
+	var irCmd *exec.Cmd
+	if runtime.GOOS == "windows" {
+		irCmd = exec.Command(findLLVMTool("clang"), "-w", "-c", irPath, "-o", objPath)
+	} else {
+		irCmd = exec.Command(findLLVMTool("llc"), "-filetype=obj", "-o", objPath, irPath)
+	}
+	irCmd.Stderr = os.Stderr
+	if err := irCmd.Run(); err != nil {
+		term.Eprintln("test: IR compilation failed for", testFile)
 		return exitCode(err)
 	}
 
@@ -635,30 +687,34 @@ func runSingleTest(testFile string, verbose bool) int {
 		term.Println("    linking...")
 	}
 	exePath := filepath.Join(tmpDir, "test_runner")
+	if runtime.GOOS == "windows" {
+		exePath += ".exe"
+	}
 	clangArgs := []string{"-o", exePath, objPath}
+	if entryObj := findEntryObj(); entryObj != "" && bytes.Contains(irBuf.Bytes(), []byte("@__top__")) {
+		clangArgs = append(clangArgs, entryObj)
+	}
 
 	// Suppress noisy linker warnings
 	clangArgs = append(clangArgs, "-w")
-	// Dead-code elimination
+	// Dead-code elimination + runtime lib
 	if runtime.GOOS == "darwin" {
 		clangArgs = append(clangArgs, "-Wl,-dead_strip")
-		// HTTPS TLS via OpenSSL (Homebrew or system)
 		if opensslPrefix := detectOpenSSLPrefix(); opensslPrefix != "" {
 			clangArgs = append(clangArgs, "-L"+opensslPrefix+"/lib", "-lssl", "-lcrypto")
 		}
-		// Note: -lz removed — compression is bundled via miniz in libdesi.a
 	} else if runtime.GOOS == "linux" {
-		clangArgs = append(clangArgs, "-Wl,--gc-sections")
-		// HTTPS TLS via system OpenSSL
-		clangArgs = append(clangArgs, "-lssl", "-lcrypto")
-		// Note: -lz removed — compression is bundled via miniz in libdesi.a
+		clangArgs = append(clangArgs, "-Wl,--gc-sections", "-lssl", "-lcrypto")
 	}
 
 	// Runtime library
 	if rtLib := findRuntimeLib(); rtLib != "" {
-		clangArgs = append(clangArgs, rtLib)
-		// If libdesi.a includes mpdec, we may need -lm
-		clangArgs = append(clangArgs, "-lm")
+		if runtime.GOOS == "windows" {
+			clangArgs = append(clangArgs, rtLib)
+		} else {
+			clangArgs = append(clangArgs, rtLib)
+			clangArgs = append(clangArgs, "-lm")
+		}
 	}
 
 	clangCmd := exec.Command(findLLVMTool("clang"), clangArgs...)

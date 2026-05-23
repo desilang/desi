@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 // Read a line from stdin (like Python's input())
 // Displays prompt, reads until newline, strips trailing newline.

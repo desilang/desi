@@ -82,7 +82,11 @@ static int parse_and_set(const char* content, int do_setenv) {
         /* Process escape sequences in double-quoted values */
         /* (simple: just handle \n and \t) */
         if (do_setenv && key[0]) {
-            setenv(key, value, 1); /* overwrite=1 */
+#ifdef _WIN32
+            _putenv_s(key, value);
+#else
+            setenv(key, value, 1);
+#endif
             count++;
         }
 

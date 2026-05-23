@@ -20,7 +20,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
-#include <pthread.h>
+#include "platform.h"
 
 /* ---- Doubly-linked list node ---- */
 
@@ -48,7 +48,7 @@ typedef struct {
     CacheNode*    tail;       /* least recently used */
     int           len;
     int           max_size;
-    pthread_mutex_t lock;
+    DesiPlatformMutex lock;
 } LRUCache;
 
 /* ---- Hash ---- */
@@ -134,13 +134,13 @@ LRUCache* __cache_lru_new(int max_size) {
     c->max_size = max_size > 0 ? max_size : 1000;
     c->num_buckets = c->max_size * 2;
     c->buckets = (CacheBucket**)calloc(c->num_buckets, sizeof(CacheBucket*));
-    pthread_mutex_init(&c->lock, NULL);
+    DESI_MUTEX_INIT(c->lock);
     return c;
 }
 
 void __cache_lru_set_ttl(LRUCache* c, const char* key, const char* value, int ttl_sec) {
     if (!c || !key) return;
-    pthread_mutex_lock(&c->lock);
+    DESI_MUTEX_LOCK(c->lock);
 
     CacheNode* existing = bucket_find(c, key);
     if (existing) {
@@ -149,7 +149,7 @@ void __cache_lru_set_ttl(LRUCache* c, const char* key, const char* value, int tt
         existing->expires = ttl_sec > 0 ? time(NULL) + ttl_sec : 0;
         dll_remove(c, existing);
         dll_push_front(c, existing);
-        pthread_mutex_unlock(&c->lock);
+        DESI_MUTEX_UNLOCK(c->lock);
         return;
     }
 
@@ -165,7 +165,7 @@ void __cache_lru_set_ttl(LRUCache* c, const char* key, const char* value, int tt
     bucket_insert(c, n);
     c->len++;
 
-    pthread_mutex_unlock(&c->lock);
+    DESI_MUTEX_UNLOCK(c->lock);
 }
 
 void __cache_lru_set(LRUCache* c, const char* key, const char* value) {
@@ -174,11 +174,11 @@ void __cache_lru_set(LRUCache* c, const char* key, const char* value) {
 
 const char* __cache_lru_get(LRUCache* c, const char* key) {
     if (!c || !key) return "";
-    pthread_mutex_lock(&c->lock);
+    DESI_MUTEX_LOCK(c->lock);
 
     CacheNode* n = bucket_find(c, key);
     if (!n) {
-        pthread_mutex_unlock(&c->lock);
+        DESI_MUTEX_UNLOCK(c->lock);
         return "";
     }
 
@@ -188,7 +188,7 @@ const char* __cache_lru_get(LRUCache* c, const char* key) {
         bucket_remove(c, key);
         free_node(n);
         c->len--;
-        pthread_mutex_unlock(&c->lock);
+        DESI_MUTEX_UNLOCK(c->lock);
         return "";
     }
 
@@ -196,7 +196,7 @@ const char* __cache_lru_get(LRUCache* c, const char* key) {
     dll_remove(c, n);
     dll_push_front(c, n);
 
-    pthread_mutex_unlock(&c->lock);
+    DESI_MUTEX_UNLOCK(c->lock);
     return n->value;
 }
 
@@ -207,7 +207,7 @@ int32_t __cache_lru_has(LRUCache* c, const char* key) {
 
 void __cache_lru_remove(LRUCache* c, const char* key) {
     if (!c || !key) return;
-    pthread_mutex_lock(&c->lock);
+    DESI_MUTEX_LOCK(c->lock);
     CacheNode* n = bucket_find(c, key);
     if (n) {
         dll_remove(c, n);
@@ -215,14 +215,14 @@ void __cache_lru_remove(LRUCache* c, const char* key) {
         free_node(n);
         c->len--;
     }
-    pthread_mutex_unlock(&c->lock);
+    DESI_MUTEX_UNLOCK(c->lock);
 }
 
 void __cache_lru_clear(LRUCache* c) {
     if (!c) return;
-    pthread_mutex_lock(&c->lock);
+    DESI_MUTEX_LOCK(c->lock);
     while (c->head) evict_tail(c);
-    pthread_mutex_unlock(&c->lock);
+    DESI_MUTEX_UNLOCK(c->lock);
 }
 
 int32_t __cache_lru_len(LRUCache* c)  { return c ? c->len : 0; }
@@ -231,6 +231,6 @@ void __cache_lru_free(LRUCache* c) {
     if (!c) return;
     while (c->head) evict_tail(c);
     free(c->buckets);
-    pthread_mutex_destroy(&c->lock);
+    DESI_MUTEX_DESTROY(c->lock);
     free(c);
 }

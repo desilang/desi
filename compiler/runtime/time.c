@@ -10,6 +10,19 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#include <time.h>
+
+/* Minimal strptime for Windows — handles %Y-%m-%d %H:%M:%S and %Y-%m-%dT%H:%M:%S */
+static char* strptime(const char* s, const char* fmt, struct tm* tm) {
+    (void)fmt;
+    int n = sscanf(s, "%d-%d-%d%*[T ]%d:%d:%d",
+                   &tm->tm_year, &tm->tm_mon, &tm->tm_mday,
+                   &tm->tm_hour, &tm->tm_min, &tm->tm_sec);
+    if (n < 3) return NULL;
+    tm->tm_year -= 1900;
+    tm->tm_mon  -= 1;
+    return (char*)(s + 10);
+}
 #else
 #include <unistd.h>
 #include <time.h>

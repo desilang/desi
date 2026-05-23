@@ -14,6 +14,9 @@
 #include <string.h>
 #include <time.h>
 #include <stdbool.h>
+#ifdef _WIN32
+#define strcasecmp _stricmp
+#endif
 
 // ============================================================
 // ISO 8601 Parsing/Formatting

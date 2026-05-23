@@ -59,7 +59,11 @@ int __env_load(const char* path) {
         memcpy(val, val_start, vlen);
         val[vlen] = '\0';
 
-        setenv(key, val, 0); // Don't overwrite existing
+#ifdef _WIN32
+        if (!getenv(key)) _putenv_s(key, val);
+#else
+        setenv(key, val, 0);
+#endif
         count++;
         free(key);
         free(val);
