@@ -7,8 +7,36 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 #include "list.h"
 #include "exception.h"
+
+// ==================== Platform Compat ====================
+// asprintf is a POSIX extension not available in MSVC.
+// Provide a portable implementation for Windows.
+#ifdef _WIN32
+int vasprintf(char** strp, const char* fmt, va_list ap) {
+    // First pass: measure the required length
+    va_list ap_copy;
+    va_copy(ap_copy, ap);
+    int needed = _vscprintf(fmt, ap_copy);
+    va_end(ap_copy);
+    if (needed < 0) { *strp = NULL; return -1; }
+    *strp = (char*)malloc((size_t)needed + 1);
+    if (!*strp) return -1;
+    int written = vsprintf_s(*strp, (size_t)needed + 1, fmt, ap);
+    if (written < 0) { free(*strp); *strp = NULL; return -1; }
+    return written;
+}
+
+int asprintf(char** strp, const char* fmt, ...) {
+    va_list ap;
+    va_start(ap, fmt);
+    int result = vasprintf(strp, fmt, ap);
+    va_end(ap);
+    return result;
+}
+#endif
 
 // ==================== Type[T] Runtime Support ====================
 // DesiTypeInfo represents runtime type information for Type[T]
