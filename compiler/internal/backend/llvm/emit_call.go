@@ -144,7 +144,59 @@ func (m *Module) emitCall(c *hir.Call) {
 		m.definedFunctions["taskgroup_is_cancelled"] = true
 	// Exception handling runtime
 	case "setjmp":
-		m.ensureDecl("declare i32 @setjmp(ptr)")
+		abiInfo := abi.Current()
+		if abiInfo.IsWindows() {
+			// Windows x64 MSVC: setjmp must be lowered to _setjmp(buf, frameaddr).
+			// Clang does this expansion automatically; since we write IR directly we
+			// must replicate it. Three things are required:
+			//
+			//   1. @llvm.frameaddress.p0(i32 0) → frame pointer for RtlUnwindEx
+			//   2. call i32 @_setjmp(ptr %buf, ptr %fp) [returns_twice attribute]
+			//   3. Store/reload result via alloca so the value is re-read from
+			//      memory after longjmp (a virtual register is set only once; the
+			//      alloca slot survives the longjmp stack restoration).
+			//
+			// Without (1): longjmp calls RtlUnwindEx(Frame=0) → STATUS_ACCESS_VIOLATION
+			// Without (3): after longjmp, setjmp result is stale 0 → try body re-runs
+			m.ensureDecl("declare i32 @_setjmp(ptr, ptr)")
+			m.ensureDecl("declare ptr @llvm.frameaddress.p0(i32)")
+			m.definedFunctions["setjmp"] = true
+
+			dst := c.Dst.Name
+			if dst == "" {
+				dst = fmt.Sprintf("%%t%d", m.tempID)
+				m.tempID++
+			}
+
+			// Get the frame pointer
+			fpTemp := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = call ptr @llvm.frameaddress.p0(i32 0)\n", fpTemp)
+
+			// Get the buf pointer
+			_, bufVal := m.operand(c.Args[0])
+
+			// Call _setjmp with returns_twice — result into a raw temp
+			rawTemp := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = call i32 @_setjmp(ptr %s, ptr %s) returns_twice\n",
+				rawTemp, bufVal, fpTemp)
+
+			// Alloca slot + store + reload: makes the value survive longjmp correctly
+			slotTemp := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = alloca i32\n", slotTemp)
+			wprintf(&m.funcs, "  store i32 %s, ptr %s\n", rawTemp, slotTemp)
+			wprintf(&m.funcs, "  %s = load i32, ptr %s\n", dst, slotTemp)
+
+			if m.tempTypes == nil {
+				m.tempTypes = make(map[string]string)
+			}
+			m.tempTypes[strings.TrimPrefix(dst, "%")] = "i32"
+			return
+		}
+		// POSIX: standard 1-arg setjmp with returns_twice
+		m.ensureDecl("declare i32 @setjmp(ptr) returns_twice")
 		m.definedFunctions["setjmp"] = true
 	case "__desi_try_push":
 		m.ensureDecl("declare void @__desi_try_push(ptr)")

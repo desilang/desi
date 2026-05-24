@@ -6,7 +6,7 @@
 //   raise → __desi_raise(tag, msg, type_name) → longjmp to handler
 //   except → __desi_get_exception() to read caught exception
 //
-// Performance: ~5-10ns per try entry (setjmp cost on ARM64)
+// Performance: ~5-10ns per try entry (setjmp cost on x64)
 // Upgrade path: replace with LLVM invoke/landingpad for zero-cost happy path
 
 #include <stdio.h>

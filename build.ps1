@@ -192,12 +192,14 @@ if (-not $SkipRuntime) {
     Write-Step "Building Desi runtime library..."
     
     # Get all .c files in runtime directory (excluding decimal subdirectory)
-    # Skip files that require Unix-only APIs (sockets, signals, POSIX regex, etc.)
+    # Files still pending Windows portability (deep POSIX/Unix-only APIs):
     $windowsExcludes = @(
-        'desi_host.c', 'http_server.c', 'tls.c', 'net.c', 'websocket.c',
-        'signal_handler.c', 'reload.c', 'fs.c', 'os.c', 'path.c',
+        'desi_host.c', 'http_server.c', 'tls.c', 'websocket.c',
+        'signal_handler.c', 'reload.c', 'fs.c', 'path.c',
         'process.c', 'random.c', 're.c', 'shell.c', 'uuid.c'
     )
+    # os.c  — ported to Win32 API (GetCurrentDirectory, FindFirstFile, etc.)
+    # net.c  — ported to WinSock2 (ssize_t typedef added, ensure_wsa() in place)
     $runtimeFiles = Get-ChildItem -Path $RuntimeSrc -Filter "*.c" -File |
         Where-Object { $windowsExcludes -notcontains $_.Name }
     $decimalWrapper = Join-Path $DecimalSrc "desi_decimal.c"

@@ -33,12 +33,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <stdint.h>
 
 #ifdef _WIN32
   #include <winsock2.h>
   #include <ws2tcpip.h>
   #pragma comment(lib, "ws2_32.lib")
   typedef int socklen_t;
+  /* ssize_t is POSIX; Winsock2 send/recv return int, so int is correct here */
+  typedef int ssize_t;
   #define CLOSE_SOCKET closesocket
   static int wsa_initialized = 0;
   static void ensure_wsa(void) {

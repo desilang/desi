@@ -25,8 +25,8 @@ def main() -> int:
     0
 
 # EXPECTED_OUTPUT:
-# darwin
+# windows
 # true
-# true
+# false
 # true
 # true

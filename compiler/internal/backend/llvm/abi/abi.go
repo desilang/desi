@@ -34,6 +34,24 @@ func Register(info *Info) {
 	current = info
 }
 
+// IsWindows returns true when targeting Windows MSVC.
+// Used to emit platform-specific IR patterns (e.g., 2-arg _setjmp).
+func (i *Info) IsWindows() bool {
+	// MSVC targets have "windows-msvc" in the triple
+	return len(i.TargetTriple) > 0 &&
+		(contains(i.TargetTriple, "windows-msvc") || contains(i.TargetTriple, "windows"))
+}
+
+// contains is a simple string.Contains replacement to avoid importing strings.
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 // NeedsI32ToI64Promotion returns true if i32 arguments to variadic functions
 // should be promoted to i64 for correct stack alignment.
 func (i *Info) NeedsI32ToI64Promotion(fnName string) bool {

@@ -24,6 +24,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# Force UTF-8 for output comparison — Desi programs always output UTF-8
+# (SetConsoleOutputCP(CP_UTF8) is called in entry.c), so the test runner
+# must read that output as UTF-8 or emoji/non-ASCII comparisons will fail.
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding          = [System.Text.Encoding]::UTF8
+
 # Parse range if provided
 if ($Range) {
     $parts = $Range -split ","
@@ -93,11 +99,11 @@ $Desic = Join-Path $BinDir "desic.exe"
 # Function to extract expected output from test file
 function Get-ExpectedOutput {
     param([string]$FilePath)
-    
+
     $inExpected = $false
     $output = ""
-    
-    foreach ($line in Get-Content $FilePath) {
+
+    foreach ($line in Get-Content $FilePath -Encoding UTF8) {
         if ($line -eq "# EXPECTED_OUTPUT:") {
             $inExpected = $true
             continue
@@ -114,9 +120,23 @@ function Get-ExpectedOutput {
             }
         }
     }
-    
+
     # Remove trailing newline for comparison
     return $output.TrimEnd("`n")
+}
+
+# Function to extract expected warning codes from test file header
+# Returns array of warning codes like @("DW0004", "DW0008") or empty array
+function Get-ExpectedWarnings {
+    param([string]$FilePath)
+
+    foreach ($line in Get-Content $FilePath -Encoding UTF8 -TotalCount 5) {
+        if ($line -match "^#\s*WARNINGS:\s*(.+)$") {
+            # Split on comma/space to get individual codes
+            return ($Matches[1] -split '[,\s]+' | Where-Object { $_ -ne '' })
+        }
+    }
+    return @()
 }
 
 # Find all test files matching [0-9]*.desi pattern
@@ -146,8 +166,10 @@ foreach ($testFile in $testFiles) {
     
     # Check test expectations
     $firstLine = Get-Content $testFile.FullName -TotalCount 1
-    $expectedFail = if ($firstLine -match "# EXPECTED:") { $firstLine } else { $null }
-    $hasExpectedOutput = (Get-Content $testFile.FullName | Select-String "# EXPECTED_OUTPUT:").Count -gt 0
+    $expectedFail    = if ($firstLine -match "# EXPECTED:") { $firstLine } else { $null }
+    $hasExpectedOutput = (Get-Content $testFile.FullName -Encoding UTF8 | Select-String "# EXPECTED_OUTPUT:").Count -gt 0
+    $expectedWarnings  = Get-ExpectedWarnings $testFile.FullName
+    $isWarningsTest    = $expectedWarnings.Count -gt 0
     
     # Build and run
     $compileSuccess = $false
@@ -161,8 +183,8 @@ foreach ($testFile in $testFiles) {
         $buildResult = & "$PSScriptRoot\build-desi.ps1" -InputFile $testFile.FullName -OutputName "test_exec" 2>&1
         if ($LASTEXITCODE -eq 0) {
             $compileSuccess = $true
-            $buildResult | Out-File $compileLog -Encoding ASCII
-            
+            $buildResult | Out-File $compileLog -Encoding UTF8
+
             # Try to run
             $execPath = Join-Path $OutputDir "test_exec.exe"
             if (Test-Path $execPath) {
@@ -170,8 +192,24 @@ foreach ($testFile in $testFiles) {
                 if ($LASTEXITCODE -eq 0) {
                     $runtimeSuccess = $true
                 }
-                $runtimeResult | Out-File $runtimeLog -Encoding ASCII
+                $runtimeResult | Out-File $runtimeLog -Encoding UTF8
             }
+        }
+        elseif ($isWarningsTest) {
+            # Compile failed — check if it's because of expected warnings
+            # (some compilers exit non-zero on warnings)
+            $buildOutput = $buildResult -join "`n"
+            $allFound = $true
+            foreach ($wcode in $expectedWarnings) {
+                if ($buildOutput -notmatch [regex]::Escape($wcode)) {
+                    $allFound = $false; break
+                }
+            }
+            if ($allFound) {
+                # Treat as compile success for WARNINGS tests
+                $compileSuccess = $true
+            }
+            $buildResult | Out-File $compileLog -Encoding UTF8
         }
         else {
             $buildResult | Out-File $compileLog -Encoding ASCII
@@ -210,7 +248,7 @@ foreach ($testFile in $testFiles) {
             # Check expected output if specified
             if ($hasExpectedOutput) {
                 $expected = Get-ExpectedOutput $testFile.FullName
-                $actual = (Get-Content $runtimeLog -Raw).TrimEnd()
+                $actual = (Get-Content $runtimeLog -Raw -Encoding UTF8).TrimEnd()
                 
                 # Normalize line endings (CRLF -> LF) for cross-platform comparison
                 $expected = $expected -replace "`r`n", "`n" -replace "`r", "`n"
