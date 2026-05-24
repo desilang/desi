@@ -150,15 +150,18 @@ func (m *Module) emitCall(c *hir.Call) {
 			// Clang does this expansion automatically; since we write IR directly we
 			// must replicate it. Three things are required:
 			//
-			//   1. @llvm.frameaddress.p0(i32 0) → frame pointer for RtlUnwindEx
-			//   2. call i32 @_setjmp(ptr %buf, ptr %fp) [returns_twice attribute]
-			//   3. Store/reload result via alloca so the value is re-read from
-			//      memory after longjmp (a virtual register is set only once; the
-			//      alloca slot survives the longjmp stack restoration).
+			//   1. Alloca the i32 result slot BEFORE frameaddress + _setjmp calls.
+			//      LLVM may treat allocas AFTER a returns_twice call as dynamic
+			//      (non-hoisted) allocas, which breaks the store/load pattern.
+			//   2. @llvm.frameaddress.p0(i32 0) → frame pointer for RtlUnwindEx
+			//   3. call i32 @_setjmp(ptr %buf, ptr %fp) returns_twice [on call site]
+			//   4. Store/reload result via the alloca slot so the value is re-read
+			//      from memory after longjmp (registers are stale, memory survives).
 			//
-			// Without (1): longjmp calls RtlUnwindEx(Frame=0) → STATUS_ACCESS_VIOLATION
-			// Without (3): after longjmp, setjmp result is stale 0 → try body re-runs
-			m.ensureDecl("declare i32 @_setjmp(ptr, ptr)")
+			// Without (1): second+ setjmps in non-entry blocks crash at runtime
+			// Without (2): longjmp calls RtlUnwindEx(Frame=0) → STATUS_ACCESS_VIOLATION
+			// Without (4): after longjmp, setjmp result stays 0 → try body re-runs
+			m.ensureDecl("declare i32 @_setjmp(ptr, ptr) returns_twice")
 			m.ensureDecl("declare ptr @llvm.frameaddress.p0(i32)")
 			m.definedFunctions["setjmp"] = true
 
@@ -168,24 +171,26 @@ func (m *Module) emitCall(c *hir.Call) {
 				m.tempID++
 			}
 
-			// Get the frame pointer
+			// 1. Alloca slot FIRST (before any calls) so LLVM hoists it to prologue
+			slotTemp := fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = alloca i32, align 4\n", slotTemp)
+
+			// 2. Get the frame pointer
 			fpTemp := fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
 			wprintf(&m.funcs, "  %s = call ptr @llvm.frameaddress.p0(i32 0)\n", fpTemp)
 
-			// Get the buf pointer
+			// 3. Get the buf pointer
 			_, bufVal := m.operand(c.Args[0])
 
-			// Call _setjmp with returns_twice — result into a raw temp
+			// 4. Call _setjmp — result into a raw temp
 			rawTemp := fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
 			wprintf(&m.funcs, "  %s = call i32 @_setjmp(ptr %s, ptr %s) returns_twice\n",
 				rawTemp, bufVal, fpTemp)
 
-			// Alloca slot + store + reload: makes the value survive longjmp correctly
-			slotTemp := fmt.Sprintf("%%t%d", m.tempID)
-			m.tempID++
-			wprintf(&m.funcs, "  %s = alloca i32\n", slotTemp)
+			// 5. Store + reload so the value survives longjmp stack restoration
 			wprintf(&m.funcs, "  store i32 %s, ptr %s\n", rawTemp, slotTemp)
 			wprintf(&m.funcs, "  %s = load i32, ptr %s\n", dst, slotTemp)
 
