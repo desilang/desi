@@ -746,8 +746,11 @@ func (m *Module) emitCall(c *hir.Call) {
 
 		// Bool to string
 		if ty == "i1" {
-			m.ensureDecl("declare ptr @bool_to_str(i1)")
-			wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", dst, val)
+			m.ensureDecl("declare ptr @bool_to_str(i32)")
+			extTemp := fmt.Sprintf("%%bext_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = zext i1 %s to i32\n", extTemp, val)
+			wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i32 %s)\n", dst, extTemp)
 			registerType(dst)
 			return
 		}

@@ -266,9 +266,32 @@ func (m *Module) IR() string {
 	m.writeGlobals()
 	m.emitTGWrappers()     // Emit TaskGroup wrapper functions
 	m.emitLazyInitThunks() // Emit lazy module init thunks
-	var out bytes.Buffer
-	// Use ABI layer for target information
+
+	// Windows script-mode fix: if this is a Windows target and no @main was
+	// defined (script-mode file with top-level statements but no def main()),
+	// emit a @main wrapper that calls __desi_runtime_init() then @__top__().
+	//
+	// On POSIX, entry.c in libdesi.lib provides this exact wrapper and the
+	// linker pulls it in automatically. On Windows, the MSVC linker only pulls
+	// lib members that resolve *undefined* symbols. Since @__top__ is DEFINED
+	// in the IR (not undefined), entry.obj is never pulled in → LNK1561.
+	//
+	// Emitting @main directly in the IR is the cleanest solution and matches
+	// what entry.c does without requiring any linker flag changes.
 	abiInfo := abi.Current()
+	if abiInfo.IsWindows() && !m.definedFunctions["main"] && m.definedFunctions["__top__"] {
+		m.ensureDecl("declare void @__desi_runtime_init()")
+		var b bytes.Buffer
+		wprintf(&b, "define i32 @main() {\n")
+		wprintf(&b, "entry:\n")
+		wprintf(&b, "  call void @__desi_runtime_init()\n")
+		wprintf(&b, "  call i32 @__top__()\n")
+		wprintf(&b, "  ret i32 0\n")
+		wprintf(&b, "}\n\n")
+		m.funcs.Write(b.Bytes())
+	}
+
+	var out bytes.Buffer
 	out.WriteString(fmt.Sprintf("target datalayout = \"%s\"\n", abiInfo.TargetLayout))
 	out.WriteString(fmt.Sprintf("target triple = \"%s\"\n\n", abiInfo.TargetTriple))
 

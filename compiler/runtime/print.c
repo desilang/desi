@@ -4,6 +4,17 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+  #include <windows.h>
+  #include <io.h>
+  #include <fcntl.h>
+  // MSVC CRT globals for command-line arguments
+  extern int __argc;
+  extern char** __argv;
+  // Forward declaration for args module init
+  extern void __args_init(int argc, char** argv);
+#endif
+
 // ============================================================
 // DesiStream: Unified stream type for all I/O operations
 // Same type works for stdout, stderr, and user files
@@ -23,10 +34,25 @@ DesiStream* __desi_stderr = NULL;
 
 // Runtime initialization - called at program start
 void __desi_runtime_init(void) {
+#ifdef _WIN32
+    // Always output UTF-8 — same behavior as Python/Rust on all platforms.
+    // This must run for ALL programs (def main + script mode) on Windows.
+    // Without this, Windows uses the system code page (e.g. 850/1252),
+    // which garbles non-ASCII characters and emoji.
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    // Set stdio to binary mode so UTF-8 bytes aren't mangled by CRLF translation
+    _setmode(_fileno(stdout), _O_BINARY);
+    _setmode(_fileno(stderr), _O_BINARY);
+    // Initialize CLI args using MSVC CRT globals so the args module works
+    // for def-main programs where entry.c's main() is bypassed by the linker.
+    __args_init(__argc, __argv);
+#endif
+
     __stdout_stream.handle = stdout;
     __stdout_stream.is_owned = 0;
     __desi_stdout = &__stdout_stream;
-    
+
     __stderr_stream.handle = stderr;
     __stderr_stream.is_owned = 0;
     __desi_stderr = &__stderr_stream;
@@ -153,7 +179,7 @@ void print_int(int64_t n) {
     printf("%lld\n", (long long)n);
 }
 
-const char* bool_to_cstring(bool b) {
+const char* bool_to_cstring(int b) {
     return b ? "true" : "false";
 }
 

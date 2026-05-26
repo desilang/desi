@@ -268,8 +268,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							m.ensureDecl("declare ptr @float_to_str(double)")
 							leftStr = convTemp
 						case "i1":
-							wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", convTemp, lval)
-							m.ensureDecl("declare ptr @bool_to_str(i1)")
+										convExt := fmt.Sprintf("%%bext_%d", m.tempID)
+										m.tempID++
+										wprintf(&m.funcs, "  %s = zext i1 %s to i32\n", convExt, lval)
+										wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i32 %s)\n", convTemp, convExt)
+										m.ensureDecl("declare ptr @bool_to_str(i32)")
 							leftStr = convTemp
 						}
 					} else {
@@ -319,8 +322,11 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							m.ensureDecl("declare ptr @float_to_str(double)")
 							rightStr = convTemp
 						case "i1":
-							wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i1 %s)\n", convTemp, rval)
-							m.ensureDecl("declare ptr @bool_to_str(i1)")
+									convExt := fmt.Sprintf("%%bext_%d", m.tempID)
+									m.tempID++
+									wprintf(&m.funcs, "  %s = zext i1 %s to i32\n", convExt, rval)
+									wprintf(&m.funcs, "  %s = call ptr @bool_to_str(i32 %s)\n", convTemp, convExt)
+									m.ensureDecl("declare ptr @bool_to_str(i32)")
 							rightStr = convTemp
 						}
 					} else {
