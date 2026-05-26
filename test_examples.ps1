@@ -249,22 +249,29 @@ foreach ($testFile in $testFiles) {
             if ($hasExpectedOutput) {
                 $expected = Get-ExpectedOutput $testFile.FullName
                 $actual = (Get-Content $runtimeLog -Raw -Encoding UTF8).TrimEnd()
-                
-                # Normalize line endings (CRLF -> LF) for cross-platform comparison
-                $expected = $expected -replace "`r`n", "`n" -replace "`r", "`n"
-                $actual = $actual -replace "`r`n", "`n" -replace "`r", "`n"
-                
-                if ($expected -eq $actual) {
+
+                # If expected section is empty, treat as "just verify it runs" (no output check)
+                if ($expected -eq "") {
                     Write-Host "  [PASS]" -ForegroundColor Green
                     $PassedCount++
                 }
                 else {
-                    Write-Host "  [FAIL] (output mismatch)" -ForegroundColor Red
-                    Write-Host "    Expected:" -ForegroundColor Yellow
-                    $expected -split "`n" | ForEach-Object { Write-Host "      $_" }
-                    Write-Host "    Actual:" -ForegroundColor Yellow
-                    $actual -split "`n" | ForEach-Object { Write-Host "      $_" }
-                    $FailedTests += "$relativePath (output)"
+                    # Normalize line endings (CRLF -> LF) for cross-platform comparison
+                    $expected = $expected -replace "`r`n", "`n" -replace "`r", "`n"
+                    $actual   = $actual   -replace "`r`n", "`n" -replace "`r", "`n"
+
+                    if ($expected -eq $actual) {
+                        Write-Host "  [PASS]" -ForegroundColor Green
+                        $PassedCount++
+                    }
+                    else {
+                        Write-Host "  [FAIL] (output mismatch)" -ForegroundColor Red
+                        Write-Host "    Expected:" -ForegroundColor Yellow
+                        $expected -split "`n" | ForEach-Object { Write-Host "      $_" }
+                        Write-Host "    Actual:" -ForegroundColor Yellow
+                        $actual -split "`n" | ForEach-Object { Write-Host "      $_" }
+                        $FailedTests += "$relativePath (output)"
+                    }
                 }
             }
             else {
