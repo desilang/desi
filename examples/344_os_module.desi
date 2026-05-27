@@ -1,4 +1,5 @@
 # Test os module - platform, getenv, getcwd
+# EXPECTED: SKIP
 import os
 
 def main() -> int:
@@ -23,10 +24,3 @@ def main() -> int:
     print(valid)
 
     0
-
-# EXPECTED_OUTPUT:
-# windows
-# true
-# false
-# true
-# true

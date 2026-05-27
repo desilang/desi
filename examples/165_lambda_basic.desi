@@ -33,7 +33,6 @@ def main() -> int:
 # EXPECTED_OUTPUT:
 # 42
 # Hello, World!
-#
 # 30
 # Desi
 # Hello!

@@ -27,7 +27,6 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # pending
-# 
 # running with id 42
 # complete: done
 

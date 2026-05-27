@@ -1,5 +1,5 @@
 # Test TaskGroup.run() with worker functions
-# SKIP: Concurrent output order is non-deterministic
+# EXPECTED: SKIP
 import sync
 
 # Worker function that will be spawned
@@ -22,11 +22,3 @@ def main() -> int:
     
     print("TaskGroup.run() test passed!")
     return 0
-
-# Note: Output order may vary due to concurrency
-# EXPECTED_OUTPUT:
-# Testing TaskGroup.run()...
-# Workers spawned, waiting...
-# Worker 1 done
-# Worker 2 done
-# TaskGroup.run() test passed!

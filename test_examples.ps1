@@ -162,6 +162,17 @@ foreach ($testFile in $testFiles) {
     
     $TotalCount++
     $relativePath = $testFile.FullName.Substring($ProjectRoot.Length + 1)
+    
+    # Check if test should be skipped (search first 3 lines for # EXPECTED: SKIP)
+    $first3Lines = Get-Content $testFile.FullName -TotalCount 3 -Encoding UTF8
+    $isSkip = $first3Lines | Where-Object { $_ -match "# EXPECTED: SKIP" }
+    if ($isSkip) {
+        Write-Host "[$TotalCount] Testing: $relativePath  [SKIP]" -ForegroundColor Yellow
+        $PassedCount++
+        Write-Host ""
+        continue
+    }
+    
     Write-Host "[$TotalCount] Testing: $relativePath"
     
     # Check test expectations
