@@ -142,7 +142,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						}
 					}
 					if types.Equal(typ, types.Int) {
-						fmtBuilder.WriteString("%lld")
+						fmtBuilder.WriteString("%d")
 					} else if types.Equal(typ, types.Str) {
 						fmtBuilder.WriteString("%s")
 					} else if types.Equal(typ, types.Float) {
@@ -2546,7 +2546,7 @@ func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
 		if ls.info != nil {
 			typ := ls.info.Types[expr]
 			if types.Equal(typ, types.Int) {
-				return "%lld"
+				return "%d"
 			} else if types.Equal(typ, types.Str) {
 				return "%s"
 			} else if types.Equal(typ, types.Float) {
@@ -2609,7 +2609,7 @@ func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
 		typeChar := spec[i]
 		switch typeChar {
 		case 'd':
-			result += "lld" // Use long long for integers
+			result += "d"
 		case 'f', 'F':
 			result += "f"
 		case 'e', 'E':
@@ -2622,7 +2622,7 @@ func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
 			result += "o"
 		case 'b':
 			// Binary not supported by printf - fall back to decimal
-			result += "lld"
+			result += "d"
 		case 's':
 			result += "s"
 		case '%':
@@ -2637,7 +2637,7 @@ func (ls *lowerState) specToPrintf(spec string, expr ast.Expr) string {
 		if ls.info != nil {
 			typ := ls.info.Types[expr]
 			if types.Equal(typ, types.Int) {
-				result += "lld"
+				result += "d"
 			} else if types.Equal(typ, types.Float) {
 				result += "f"
 			} else {

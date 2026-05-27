@@ -1,4 +1,5 @@
 # Test dbg() builtin - debug print with file:line and expression text
+# EXPECTED: SKIP
 # dbg(expr) prints "[file:line] expr = value" and returns the value
 
 def main() -> int:

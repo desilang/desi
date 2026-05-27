@@ -41,7 +41,7 @@ void list_sort(DesiList* list, int reverse);  // reverse: 0=asc, 1=desc
 DesiList* list_slice(DesiList* list, int64_t start, int64_t end);
 int64_t list_index(DesiList* list, void* item, int64_t start, int64_t end);
 int64_t list_count(DesiList* list, void* item);
-bool list_contains(DesiList* list, void* item);
+int list_contains(DesiList* list, void* item);
 
 // === Functional Operations ===
 // Note: These require function pointers for callbacks
@@ -52,8 +52,8 @@ typedef void* (*ReduceFunc)(void*, void*);
 DesiList* list_map(DesiList* list, MapFunc func);
 DesiList* list_filter(DesiList* list, FilterFunc func);
 void* list_reduce(DesiList* list, ReduceFunc func, void* initial);
-bool list_any(DesiList* list, FilterFunc predicate);
-bool list_all(DesiList* list, FilterFunc predicate);
+int list_any(DesiList* list, FilterFunc predicate);
+int list_all(DesiList* list, FilterFunc predicate);
 
 // === String Representation ===
 char* list_to_str(DesiList* list);

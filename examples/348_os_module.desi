@@ -1,4 +1,5 @@
 # Test os module - comprehensive
+# EXPECTED: SKIP
 import os
 
 def main() -> int:

@@ -438,7 +438,7 @@ int64_t list_count(DesiList* list, void* item) {
 }
 
 // Check if list contains item
-bool list_contains(DesiList* list, void* item) {
+int list_contains(DesiList* list, void* item) {
     return list_index(list, item, 0, list ? (int64_t)list->length : 0) != -1;
 }
 
@@ -493,29 +493,29 @@ void* list_reduce(DesiList* list, ReduceFunc func, void* initial) {
 }
 
 // Check if any element satisfies predicate
-bool list_any(DesiList* list, FilterFunc predicate) {
-    if (!list || !predicate) return false;
+int list_any(DesiList* list, FilterFunc predicate) {
+    if (!list || !predicate) return 0;
     
     for (size_t i = 0; i < list->length; i++) {
         if (predicate(list->data[i])) {
-            return true;
+            return 1;
         }
     }
     
-    return false;
+    return 0;
 }
 
 // Check if all elements satisfy predicate
-bool list_all(DesiList* list, FilterFunc predicate) {
-    if (!list || !predicate) return true; // Empty list = all true
+int list_all(DesiList* list, FilterFunc predicate) {
+    if (!list || !predicate) return 1; // Empty list = all true
     
     for (size_t i = 0; i < list->length; i++) {
         if (!predicate(list->data[i])) {
-            return false;
+            return 0;
         }
     }
     
-    return true;
+    return 1;
 }
 
 // ========== String Representation ==========

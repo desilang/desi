@@ -78,12 +78,10 @@ func (i *Info) VariadicSignature(fnName string, retType string) string {
 }
 
 // ExplicitCallSyntax returns the call instruction syntax with explicit signature if needed.
-// For stack-based conventions, we need to include the signature in the call instruction.
+// Always emit explicit variadic signatures for known variadic functions.
+// On MSVC x64, LLVM needs this to properly place double args in both integer
+// and XMM registers. On other platforms it's harmless — just more explicit IR.
 func (i *Info) ExplicitCallSyntax(fnName string, retType string) string {
-	if i.VariadicConv != StackBased {
-		return "" // No explicit syntax needed
-	}
-
 	switch fnName {
 	case "asprintf":
 		return "(ptr, ptr, ...)"

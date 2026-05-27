@@ -80,7 +80,7 @@ void set_add(set_t* s, int64_t value) {
     s->entry_count++;
 }
 
-bool set_contains(set_t* s, int64_t value) {
+int set_contains(set_t* s, int64_t value) {
     if (!s) return false;
     
     uint64_t hash = set_hash_int(value);

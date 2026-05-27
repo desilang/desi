@@ -24,7 +24,7 @@ typedef struct {
 set_t* set_new(ElemToStrFunc elem_to_str_fn);
 void set_free(set_t* s);
 void set_add(set_t* s, int64_t value);
-bool set_contains(set_t* s, int64_t value);
+int set_contains(set_t* s, int64_t value);
 void set_remove(set_t* s, int64_t value);
 void set_clear(set_t* s);
 int64_t set_len(set_t* s);
