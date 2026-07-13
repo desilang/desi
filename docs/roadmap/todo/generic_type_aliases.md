@@ -1,7 +1,10 @@
-# TODO: Generic Type Aliases
+# Generic Type Aliases
 
-**Status**: Proposed  
-**Priority**: Medium  
+**Status**: ✅ SHIPPED (v0.1.0) — this design doc predates the implementation and is kept for reference.
+**Implemented in**: `parse/decl_typealias.go`, `ast/typealias_node.go`, `check/check_type.go` (`collectTypeAlias`), `resolve/exports.go` (pub aliases), LSP support in `lsp/server.go`.
+**Behavior**: non-generic aliases are nominal (`types.TypeAlias` wrapper); generic aliases are structural (expand to target).
+**Examples**: `examples/140_generic_type_aliases.desi`, `examples/174_nominal_typing.desi`, `examples/229_g_edge_alias.desi`.
+**Priority**: ~~Medium~~ Done
 **Related**: Generics, Type system
 
 ## Overview
