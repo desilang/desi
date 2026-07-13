@@ -12,6 +12,12 @@
 #include <CommonCrypto/CommonHmac.h>
 #endif
 
+// MSVC has no __builtin_bswap*; map to its intrinsics
+#if defined(_MSC_VER)
+#define __builtin_bswap32 _byteswap_ulong
+#define __builtin_bswap64 _byteswap_uint64
+#endif
+
 static char* to_hex(const unsigned char* data, size_t len) {
     char* hex = (char*)malloc(2 * len + 1);
     if (!hex) return strdup("");
