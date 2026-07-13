@@ -7,43 +7,43 @@ def main() -> int:
 	print(result)
 
 	# Execute status
-	let status = shell.exec_status("true")
+	let status = shell.exec_status("exit 0")
 	print(status)
 
 	# Which — find a command
-	let bash_path = shell.which("sh")
+	let bash_path = shell.which("git")
 	print(bash_path != "")
 
 	# File operations
-	shell.mkdir_p("/tmp/desi_shell_test/sub")
-	print(shell.is_dir("/tmp/desi_shell_test"))
-	print(shell.is_dir("/tmp/desi_shell_test/sub"))
+	shell.mkdir_p("desi_shell_test_dir/sub")
+	print(shell.is_dir("desi_shell_test_dir"))
+	print(shell.is_dir("desi_shell_test_dir/sub"))
 
 	# Write and read
-	shell.write("/tmp/desi_shell_test/test.txt", "hello from shell")
-	print(shell.cat("/tmp/desi_shell_test/test.txt"))
-	print(shell.is_file("/tmp/desi_shell_test/test.txt"))
+	shell.write("desi_shell_test_dir/test.txt", "hello from shell")
+	print(shell.cat("desi_shell_test_dir/test.txt"))
+	print(shell.is_file("desi_shell_test_dir/test.txt"))
 
 	# Append
-	shell.append("/tmp/desi_shell_test/test.txt", "\nline two")
-	let lines = shell.lines("/tmp/desi_shell_test/test.txt")
+	shell.append("desi_shell_test_dir/test.txt", "\nline two")
+	let lines = shell.lines("desi_shell_test_dir/test.txt")
 	print(lines)
 
 	# Copy
-	shell.cp("/tmp/desi_shell_test/test.txt", "/tmp/desi_shell_test/copy.txt")
-	print(shell.exists("/tmp/desi_shell_test/copy.txt"))
+	shell.cp("desi_shell_test_dir/test.txt", "desi_shell_test_dir/copy.txt")
+	print(shell.exists("desi_shell_test_dir/copy.txt"))
 
 	# Move
-	shell.mv("/tmp/desi_shell_test/copy.txt", "/tmp/desi_shell_test/moved.txt")
-	print(shell.exists("/tmp/desi_shell_test/copy.txt"))
-	print(shell.exists("/tmp/desi_shell_test/moved.txt"))
+	shell.mv("desi_shell_test_dir/copy.txt", "desi_shell_test_dir/moved.txt")
+	print(shell.exists("desi_shell_test_dir/copy.txt"))
+	print(shell.exists("desi_shell_test_dir/moved.txt"))
 
 	# Cleanup
-	shell.rm("/tmp/desi_shell_test/test.txt")
-	shell.rm("/tmp/desi_shell_test/moved.txt")
-	shell.rmdir("/tmp/desi_shell_test/sub")
-	shell.rmdir("/tmp/desi_shell_test")
-	print(shell.exists("/tmp/desi_shell_test"))
+	shell.rm("desi_shell_test_dir/test.txt")
+	shell.rm("desi_shell_test_dir/moved.txt")
+	shell.rmdir("desi_shell_test_dir/sub")
+	shell.rmdir("desi_shell_test_dir")
+	print(shell.exists("desi_shell_test_dir"))
 
 	print("shell ok")
 	0

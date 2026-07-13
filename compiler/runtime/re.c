@@ -1,9 +1,174 @@
 // re.c - Regular expression module
-// Uses POSIX <regex.h> — available on macOS/Linux with no external deps.
+// Uses POSIX <regex.h> on macOS/Linux (no external deps).
+// Windows has no <regex.h>: a minimal API-compatible shim below implements
+// the ERE subset this module needs — literals, '.', [classes] with ranges
+// and negation, '*'/'+'/'?' quantifiers, '^'/'$' anchors, and '\' escapes.
+// Groups and alternation are not supported by the shim (regcomp fails,
+// and the module's error paths handle that gracefully).
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+/* ---- minimal POSIX regex API shim (Windows only) ---- */
+#define REG_EXTENDED 1
+#define REG_NOSUB    2
+
+typedef struct { long long rm_so, rm_eo; } regmatch_t;
+
+typedef enum { RE_CHAR, RE_ANY, RE_CLASS, RE_BOL, RE_EOL } ReType;
+typedef enum { RE_Q_ONE, RE_Q_STAR, RE_Q_PLUS, RE_Q_OPT } ReQuant;
+
+typedef struct {
+    ReType        type;
+    ReQuant       quant;
+    char          ch;
+    unsigned char cls[32]; /* 256-bit membership bitmap */
+    int           negate;
+} ReTok;
+
+typedef struct {
+    ReTok* toks;
+    int    n;
+} regex_t;
+
+static void re_cls_set(unsigned char* cls, unsigned char c) { cls[c >> 3] |= (unsigned char)(1 << (c & 7)); }
+static int  re_cls_has(const unsigned char* cls, unsigned char c) { return cls[c >> 3] & (1 << (c & 7)); }
+
+static int regcomp(regex_t* rx, const char* pat, int flags) {
+    (void)flags;
+    size_t plen = strlen(pat);
+    rx->toks = (ReTok*)calloc(plen + 1, sizeof(ReTok));
+    rx->n = 0;
+    if (!rx->toks) return 1;
+
+    const char* p = pat;
+    while (*p) {
+        ReTok* t = &rx->toks[rx->n];
+        t->quant = RE_Q_ONE;
+        if (*p == '^') {
+            t->type = RE_BOL; p++;
+        } else if (*p == '$') {
+            t->type = RE_EOL; p++;
+        } else if (*p == '.') {
+            t->type = RE_ANY; p++;
+        } else if (*p == '[') {
+            t->type = RE_CLASS;
+            p++;
+            if (*p == '^') { t->negate = 1; p++; }
+            if (*p == ']') { re_cls_set(t->cls, ']'); p++; } /* leading ] is literal */
+            while (*p && *p != ']') {
+                unsigned char lo = (unsigned char)*p;
+                if (*p == '\\' && p[1]) { p++; lo = (unsigned char)*p; }
+                if (p[1] == '-' && p[2] && p[2] != ']') {
+                    unsigned char hi = (unsigned char)p[2];
+                    for (unsigned c = lo; c <= hi; c++) re_cls_set(t->cls, (unsigned char)c);
+                    p += 3;
+                } else {
+                    re_cls_set(t->cls, lo);
+                    p++;
+                }
+            }
+            if (*p != ']') { free(rx->toks); rx->toks = NULL; return 1; }
+            p++;
+        } else if (*p == '\\' && p[1]) {
+            t->type = RE_CHAR;
+            p++;
+            switch (*p) {
+                case 'n': t->ch = '\n'; break;
+                case 't': t->ch = '\t'; break;
+                case 'r': t->ch = '\r'; break;
+                default:  t->ch = *p;   break;
+            }
+            p++;
+        } else if (*p == '(' || *p == ')' || *p == '|') {
+            /* groups/alternation unsupported */
+            free(rx->toks); rx->toks = NULL; return 1;
+        } else {
+            t->type = RE_CHAR;
+            t->ch = *p;
+            p++;
+        }
+
+        if (*p == '*')      { t->quant = RE_Q_STAR; p++; }
+        else if (*p == '+') { t->quant = RE_Q_PLUS; p++; }
+        else if (*p == '?') { t->quant = RE_Q_OPT;  p++; }
+        rx->n++;
+    }
+    return 0;
+}
+
+static void regfree(regex_t* rx) {
+    if (rx) { free(rx->toks); rx->toks = NULL; rx->n = 0; }
+}
+
+static int re_single(const ReTok* t, const char* s) {
+    unsigned char c = (unsigned char)*s;
+    if (c == '\0') return 0;
+    switch (t->type) {
+        case RE_CHAR:  return c == (unsigned char)t->ch;
+        case RE_ANY:   return c != '\n';
+        case RE_CLASS: { int in = re_cls_has(t->cls, c); return t->negate ? !in : in; }
+        default:       return 0;
+    }
+}
+
+/* Match tokens t[0..n) starting at s (str = string start); set *end on success. */
+static int re_here(const ReTok* t, int n, const char* s, const char* str, const char** end) {
+    if (n == 0) { *end = s; return 1; }
+    if (t->type == RE_BOL) {
+        if (s != str) return 0;
+        return re_here(t + 1, n - 1, s, str, end);
+    }
+    if (t->type == RE_EOL) {
+        if (*s != '\0') return 0;
+        return re_here(t + 1, n - 1, s, str, end);
+    }
+    switch (t->quant) {
+        case RE_Q_ONE:
+            if (!re_single(t, s)) return 0;
+            return re_here(t + 1, n - 1, s + 1, str, end);
+        case RE_Q_OPT:
+            if (re_single(t, s) && re_here(t + 1, n - 1, s + 1, str, end)) return 1;
+            return re_here(t + 1, n - 1, s, str, end);
+        case RE_Q_STAR:
+        case RE_Q_PLUS: {
+            const char* p = s;
+            while (re_single(t, p)) p++;
+            const char* min = (t->quant == RE_Q_PLUS) ? s + 1 : s;
+            /* greedy: longest repetition first, backtrack toward min */
+            while (p >= min) {
+                if (re_here(t + 1, n - 1, p, str, end)) return 1;
+                if (p == min) break;
+                p--;
+            }
+            return 0;
+        }
+    }
+    return 0;
+}
+
+static int regexec(const regex_t* rx, const char* s, size_t nmatch, regmatch_t* pmatch, int eflags) {
+    (void)eflags;
+    if (!rx->toks && rx->n > 0) return 1;
+    for (const char* start = s; ; start++) {
+        const char* end;
+        if (re_here(rx->toks, rx->n, start, s, &end)) {
+            if (nmatch > 0 && pmatch) {
+                pmatch[0].rm_so = start - s;
+                pmatch[0].rm_eo = end - s;
+            }
+            return 0;
+        }
+        if (*start == '\0') break;
+    }
+    return 1; /* no match */
+}
+/* ---- end shim ---- */
+#else
 #include <regex.h>
+#endif
+
 #include "list.h"
 
 // ============================================================

@@ -28,9 +28,27 @@
 #include <string.h>
 #include <stdint.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <glob.h>
 #include <errno.h>
+
+#ifdef _WIN32
+  #include <windows.h>
+  #include <direct.h>      /* _mkdir, _rmdir */
+  #include <io.h>          /* _unlink */
+  #define popen  _popen
+  #define pclose _pclose
+  #define unlink _unlink
+  #define rmdir  _rmdir
+  #define mkdir(path, mode) _mkdir(path)
+  #ifndef S_ISREG
+    #define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+  #endif
+  #ifndef S_ISDIR
+    #define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+  #endif
+#else
+  #include <unistd.h>
+  #include <glob.h>
+#endif
 
 /* ============================================================
  * Command execution
@@ -68,6 +86,59 @@ int32_t __shell_exec_status(const char* cmd) {
  * File globbing
  * ============================================================ */
 
+#ifdef _WIN32
+static int shell_cmp_str(const void* a, const void* b) {
+    return strcmp(*(const char* const*)a, *(const char* const*)b);
+}
+
+/* FindFirstFile-based glob: supports * and ? in the final path component
+ * (which covers the common "dir/*.ext" patterns; no braces/tilde). Returns
+ * dir-prefixed paths, sorted, "\n"-separated — same shape as POSIX glob. */
+char* __shell_glob(const char* pattern) {
+    if (!pattern) return strdup("");
+
+    /* Split into directory prefix + mask */
+    const char* sep1 = strrchr(pattern, '/');
+    const char* sep2 = strrchr(pattern, '\\');
+    const char* sep = (sep1 > sep2) ? sep1 : sep2;
+    size_t prefix_len = sep ? (size_t)(sep - pattern) + 1 : 0;
+
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return strdup("");
+
+    size_t n = 0, ncap = 16;
+    char** names = (char**)malloc(ncap * sizeof(char*));
+    do {
+        if (strcmp(fd.cFileName, ".") == 0 || strcmp(fd.cFileName, "..") == 0)
+            continue;
+        size_t name_len = strlen(fd.cFileName);
+        char* full = (char*)malloc(prefix_len + name_len + 1);
+        memcpy(full, pattern, prefix_len);
+        memcpy(full + prefix_len, fd.cFileName, name_len + 1);
+        if (n >= ncap) { ncap *= 2; names = (char**)realloc(names, ncap * sizeof(char*)); }
+        names[n++] = full;
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+
+    qsort(names, n, sizeof(char*), shell_cmp_str);
+
+    size_t cap = 4096, len = 0;
+    char* buf = (char*)malloc(cap);
+    buf[0] = '\0';
+    for (size_t i = 0; i < n; i++) {
+        size_t plen = strlen(names[i]);
+        while (len + plen + 2 >= cap) { cap *= 2; buf = (char*)realloc(buf, cap); }
+        if (i > 0) buf[len++] = '\n';
+        memcpy(buf + len, names[i], plen);
+        len += plen;
+        free(names[i]);
+    }
+    buf[len] = '\0';
+    free(names);
+    return buf;
+}
+#else
 char* __shell_glob(const char* pattern) {
     if (!pattern) return strdup("");
     glob_t results;
@@ -90,6 +161,7 @@ char* __shell_glob(const char* pattern) {
     globfree(&results);
     return buf;
 }
+#endif
 
 /* ============================================================
  * Path lookup
@@ -98,8 +170,19 @@ char* __shell_glob(const char* pattern) {
 char* __shell_which(const char* cmd) {
     if (!cmd) return strdup("");
     char find_cmd[512];
+#ifdef _WIN32
+    snprintf(find_cmd, sizeof(find_cmd), "where %s 2>nul", cmd);
+    char* out = __shell_exec(find_cmd);
+    /* `where` lists every match — keep only the first line, like which */
+    char* nl = strchr(out, '\n');
+    if (nl) *nl = '\0';
+    char* cr = strchr(out, '\r');
+    if (cr) *cr = '\0';
+    return out;
+#else
     snprintf(find_cmd, sizeof(find_cmd), "which %s 2>/dev/null", cmd);
     return __shell_exec(find_cmd);
+#endif
 }
 
 /* ============================================================
@@ -143,6 +226,16 @@ int32_t __shell_mkdir_p(const char* path) {
     if (!path) return -1;
     char tmp[1024];
     snprintf(tmp, sizeof(tmp), "%s", path);
+#ifdef _WIN32
+    for (char* p = tmp + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            char saved = *p;
+            *p = '\0';
+            mkdir(tmp, 0755);
+            *p = saved;
+        }
+    }
+#else
     for (char* p = tmp + 1; *p; p++) {
         if (*p == '/') {
             *p = '\0';
@@ -150,6 +243,7 @@ int32_t __shell_mkdir_p(const char* path) {
             *p = '/';
         }
     }
+#endif
     return mkdir(tmp, 0755) == 0 || errno == EEXIST ? 0 : -1;
 }
 

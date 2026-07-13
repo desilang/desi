@@ -23,8 +23,8 @@ def main() -> int:
 	print(process.get_ok(fh))
 	print(process.get_exit_code(fh))
 
-	# Multi-word command (use printf for portability)
-	let lh = process.shell("printf 'abc'")
+	# Multi-word command (echo works in sh and cmd.exe alike)
+	let lh = process.shell("echo abc")
 	print(process.get_stdout(lh))
 
 	print("process ok")
@@ -32,14 +32,15 @@ def main() -> int:
 
 # EXPECTED_OUTPUT:
 # hello from subprocess
-# 
+#
 # true
 # 0
 # 42
-# 
+#
 # true
 # true
 # false
 # 1
 # abc
+#
 # process ok

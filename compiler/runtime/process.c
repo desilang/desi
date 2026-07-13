@@ -18,13 +18,19 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <sys/time.h>
-#include <sys/select.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <signal.h>
+#ifdef _WIN32
+  #include <windows.h>
+  #include <tlhelp32.h>   /* CreateToolhelp32Snapshot for ppid */
+  #include <process.h>    /* _getpid */
+#else
+  #include <unistd.h>
+  #include <sys/wait.h>
+  #include <sys/time.h>
+  #include <sys/select.h>
+  #include <fcntl.h>
+  #include <errno.h>
+  #include <signal.h>
+#endif
 
 typedef struct {
     char*   stdout_buf;
@@ -32,6 +38,199 @@ typedef struct {
     int32_t exit_code;
 } ProcessResult;
 
+#ifdef _WIN32
+/* ============================================================
+ * Core (Windows): CreateProcess + anonymous pipes + capture
+ * ============================================================ */
+
+/* Append one argv element to a command line using Windows quoting rules
+ * (quote when needed; backslashes before a quote are doubled). */
+static void win_append_arg(char** buf, size_t* len, size_t* cap, const char* arg) {
+    size_t need = strlen(arg) * 2 + 4;
+    while (*len + need >= *cap) { *cap *= 2; *buf = (char*)realloc(*buf, *cap); }
+
+    if (*len > 0) (*buf)[(*len)++] = ' ';
+
+    int needs_quotes = (*arg == '\0') || strpbrk(arg, " \t\"") != NULL;
+    if (!needs_quotes) {
+        size_t alen = strlen(arg);
+        memcpy(*buf + *len, arg, alen);
+        *len += alen;
+        return;
+    }
+
+    (*buf)[(*len)++] = '"';
+    size_t backslashes = 0;
+    for (const char* p = arg; *p; p++) {
+        if (*p == '\\') {
+            backslashes++;
+        } else if (*p == '"') {
+            for (size_t i = 0; i < backslashes * 2 + 1; i++) (*buf)[(*len)++] = '\\';
+            backslashes = 0;
+            (*buf)[(*len)++] = '"';
+            continue;
+        } else {
+            for (size_t i = 0; i < backslashes; i++) (*buf)[(*len)++] = '\\';
+            backslashes = 0;
+        }
+        if (*p == '\\') continue; /* emitted when we know what follows */
+        (*buf)[(*len)++] = *p;
+    }
+    for (size_t i = 0; i < backslashes * 2; i++) (*buf)[(*len)++] = '\\';
+    (*buf)[(*len)++] = '"';
+}
+
+static char* win_build_cmdline(const char** argv) {
+    size_t cap = 256, len = 0;
+    char* buf = (char*)malloc(cap);
+    buf[0] = '\0';
+    for (int i = 0; argv[i]; i++) {
+        win_append_arg(&buf, &len, &cap, argv[i]);
+    }
+    buf[len] = '\0';
+    return buf;
+}
+
+/* Drain whatever is currently available from a pipe (non-blocking). */
+static void win_drain_pipe(HANDLE h, char** buf, size_t* len, size_t* cap) {
+    DWORD avail = 0;
+    while (PeekNamedPipe(h, NULL, 0, NULL, &avail, NULL) && avail > 0) {
+        while (*len + avail + 1 >= *cap) { *cap *= 2; *buf = (char*)realloc(*buf, *cap); }
+        DWORD got = 0;
+        if (!ReadFile(h, *buf + *len, avail, &got, NULL) || got == 0) break;
+        *len += got;
+        avail = 0;
+    }
+}
+
+/* Run cmdline (modified in place by CreateProcess), capture stdout/stderr.
+ * timeout_ms < 0 means no timeout. */
+static ProcessResult* win_exec_cmdline(char* cmdline, int timeout_ms) {
+    ProcessResult* r = (ProcessResult*)calloc(1, sizeof(ProcessResult));
+    r->exit_code = -1;
+
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = NULL;
+
+    HANDLE out_r = NULL, out_w = NULL, err_r = NULL, err_w = NULL;
+    if (!CreatePipe(&out_r, &out_w, &sa, 0) || !CreatePipe(&err_r, &err_w, &sa, 0)) {
+        r->stdout_buf = strdup("");
+        r->stderr_buf = strdup("pipe creation failed");
+        return r;
+    }
+    /* Parent ends must not be inherited by the child */
+    SetHandleInformation(out_r, HANDLE_FLAG_INHERIT, 0);
+    SetHandleInformation(err_r, HANDLE_FLAG_INHERIT, 0);
+
+    STARTUPINFOA si;
+    memset(&si, 0, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = out_w;
+    si.hStdError = err_w;
+    si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+
+    PROCESS_INFORMATION pi;
+    memset(&pi, 0, sizeof(pi));
+
+    BOOL ok = CreateProcessA(NULL, cmdline, NULL, NULL, TRUE,
+                             CREATE_NO_WINDOW, NULL, NULL, &si, &pi);
+    CloseHandle(out_w);
+    CloseHandle(err_w);
+
+    if (!ok) {
+        CloseHandle(out_r);
+        CloseHandle(err_r);
+        r->stdout_buf = strdup("");
+        r->stderr_buf = strdup("exec failed: CreateProcess error");
+        r->exit_code = 127;
+        return r;
+    }
+
+    size_t out_cap = 4096, out_len = 0;
+    char* out_buf = (char*)malloc(out_cap);
+    size_t err_cap = 4096, err_len = 0;
+    char* err_buf = (char*)malloc(err_cap);
+
+    DWORD start_ticks = GetTickCount();
+    int timed_out = 0;
+
+    for (;;) {
+        win_drain_pipe(out_r, &out_buf, &out_len, &out_cap);
+        win_drain_pipe(err_r, &err_buf, &err_len, &err_cap);
+
+        DWORD wait = WaitForSingleObject(pi.hProcess, 20);
+        if (wait == WAIT_OBJECT_0) {
+            /* Process exited — drain any remaining output */
+            win_drain_pipe(out_r, &out_buf, &out_len, &out_cap);
+            win_drain_pipe(err_r, &err_buf, &err_len, &err_cap);
+            break;
+        }
+        if (timeout_ms >= 0 && (int)(GetTickCount() - start_ticks) >= timeout_ms) {
+            timed_out = 1;
+            TerminateProcess(pi.hProcess, 1);
+            WaitForSingleObject(pi.hProcess, 2000);
+            break;
+        }
+    }
+
+    out_buf[out_len] = '\0';
+    err_buf[err_len] = '\0';
+    CloseHandle(out_r);
+    CloseHandle(err_r);
+
+    if (timed_out) {
+        r->exit_code = -1;
+        char timeout_msg[128];
+        snprintf(timeout_msg, sizeof(timeout_msg),
+                 "process killed: timeout after %d seconds", timeout_ms / 1000);
+        size_t msg_len = strlen(timeout_msg);
+        if (err_len + msg_len + 2 >= err_cap) {
+            err_cap = err_len + msg_len + 2;
+            err_buf = (char*)realloc(err_buf, err_cap);
+        }
+        if (err_len > 0) err_buf[err_len++] = '\n';
+        memcpy(err_buf + err_len, timeout_msg, msg_len + 1);
+    } else {
+        DWORD code = 0;
+        if (GetExitCodeProcess(pi.hProcess, &code)) {
+            r->exit_code = (int32_t)code;
+        }
+    }
+
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+
+    r->stdout_buf = out_buf;
+    r->stderr_buf = err_buf;
+    return r;
+}
+
+static ProcessResult* process_exec(const char** argv) {
+    char* cmdline = win_build_cmdline(argv);
+    ProcessResult* r = win_exec_cmdline(cmdline, -1);
+    free(cmdline);
+    return r;
+}
+
+static ProcessResult* process_exec_timeout(const char** argv, int timeout_secs) {
+    char* cmdline = win_build_cmdline(argv);
+    ProcessResult* r = win_exec_cmdline(cmdline, timeout_secs * 1000);
+    free(cmdline);
+    return r;
+}
+
+/* Build "cmd.exe /d /s /c "<cmd>"" for shell execution */
+static char* win_shell_cmdline(const char* cmd_str) {
+    size_t len = strlen(cmd_str) + 32;
+    char* cl = (char*)malloc(len);
+    snprintf(cl, len, "cmd.exe /d /s /c \"%s\"", cmd_str);
+    return cl;
+}
+
+#else
 /* ============================================================
  * Core: fork + exec + capture
  * ============================================================ */
@@ -114,6 +313,7 @@ static ProcessResult* process_exec(const char** argv) {
     r->stderr_buf = err_buf;
     return r;
 }
+#endif /* !_WIN32 (fork/exec core) */
 
 /* ============================================================
  * Public API
@@ -135,8 +335,15 @@ ProcessResult* __process_run(const char* cmd, const char** args, int argc) {
 }
 
 ProcessResult* __process_run_shell(const char* cmd_str) {
+#ifdef _WIN32
+    char* cl = win_shell_cmdline(cmd_str);
+    ProcessResult* r = win_exec_cmdline(cl, -1);
+    free(cl);
+    return r;
+#else
     const char* argv[] = {"/bin/sh", "-c", cmd_str, NULL};
     return process_exec(argv);
+#endif
 }
 
 const char* __process_get_stdout(ProcessResult* r) {
@@ -183,17 +390,42 @@ void __process_free(ProcessResult* r) {
  * ============================================================ */
 
 int32_t __process_pid(void) {
+#ifdef _WIN32
+    return (int32_t)GetCurrentProcessId();
+#else
     return (int32_t)getpid();
+#endif
 }
 
 int32_t __process_ppid(void) {
+#ifdef _WIN32
+    DWORD self = GetCurrentProcessId();
+    DWORD parent = 0;
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32 pe;
+        pe.dwSize = sizeof(pe);
+        if (Process32First(snap, &pe)) {
+            do {
+                if (pe.th32ProcessID == self) {
+                    parent = pe.th32ParentProcessID;
+                    break;
+                }
+            } while (Process32Next(snap, &pe));
+        }
+        CloseHandle(snap);
+    }
+    return (int32_t)parent;
+#else
     return (int32_t)getppid();
+#endif
 }
 
 /* ============================================================
  * Timeout execution: kill child after N seconds
  * ============================================================ */
 
+#ifndef _WIN32
 static ProcessResult* process_exec_timeout(const char** argv, int timeout_secs) {
     ProcessResult* r = (ProcessResult*)calloc(1, sizeof(ProcessResult));
     r->exit_code = -1;
@@ -322,6 +554,7 @@ static ProcessResult* process_exec_timeout(const char** argv, int timeout_secs) 
     r->stderr_buf = err_buf;
     return r;
 }
+#endif /* !_WIN32 (timeout core) */
 
 /* Run command with timeout (seconds). Returns result handle.
  * If timeout is exceeded, process is killed and exit_code = -1.
@@ -340,20 +573,42 @@ ProcessResult* __process_run_timeout(const char* cmd, const char** args, int arg
 
 /* Run shell command with timeout (seconds) */
 ProcessResult* __process_shell_timeout(const char* cmd_str, int timeout_secs) {
+#ifdef _WIN32
+    char* cl = win_shell_cmdline(cmd_str);
+    ProcessResult* r = win_exec_cmdline(cl, timeout_secs * 1000);
+    free(cl);
+    return r;
+#else
     const char* argv[] = {"/bin/sh", "-c", cmd_str, NULL};
     return process_exec_timeout(argv, timeout_secs);
+#endif
 }
 
 /* Kill a process by PID. Returns 1 on success, 0 on error.
  * Python: os.kill()
  * Go: process.Kill() */
 int __process_kill(int pid_val) {
+#ifdef _WIN32
+    HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, (DWORD)pid_val);
+    if (!h) return 0;
+    int ok = TerminateProcess(h, 1) ? 1 : 0;
+    CloseHandle(h);
+    return ok;
+#else
     return kill((pid_t)pid_val, SIGKILL) == 0 ? 1 : 0;
+#endif
 }
 
 /* Send signal to a process by PID. Returns 1 on success.
  * Python: os.kill(pid, signal) */
 int __process_signal(int pid_val, int sig) {
+#ifdef _WIN32
+    /* No POSIX signals on Windows: map the terminating signals
+     * (SIGKILL=9, SIGTERM=15) to TerminateProcess; others unsupported. */
+    if (sig == 9 || sig == 15) return __process_kill(pid_val);
+    return 0;
+#else
     return kill((pid_t)pid_val, sig) == 0 ? 1 : 0;
+#endif
 }
 
