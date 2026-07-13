@@ -14,6 +14,36 @@ func (m *Module) emitCall(c *hir.Call) {
 	// Check if this function belongs to a lazy module - emit init thunk if needed
 	m.ensureLazyModuleInit(c.Fn)
 
+	// bool_to_cstring(int): i1 arguments must be zero-extended to i32.
+	// Passed through a variadic declare, an i1 leaves the upper register
+	// bits undefined on Windows x64 and the C `int` parameter reads
+	// garbage — false formats as "true". Same ABI fix as bool_to_str.
+	if c.Fn == "bool_to_cstring" && len(c.Args) == 1 {
+		m.ensureDecl("declare ptr @bool_to_cstring(i32)")
+		ty, val := m.operand(c.Args[0])
+		dst := c.Dst.Name
+		if dst == "" {
+			dst = fmt.Sprintf("%%t%d", m.tempID)
+			m.tempID++
+		}
+		argOp := val
+		switch ty {
+		case "i1":
+			ext := fmt.Sprintf("%%bext_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = zext i1 %s to i32\n", ext, val)
+			argOp = ext
+		case "i64":
+			ext := fmt.Sprintf("%%bext_%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", ext, val)
+			argOp = ext
+		}
+		wprintf(&m.funcs, "  %s = call ptr @bool_to_cstring(i32 %s)\n", dst, argOp)
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
 	// Stream accessor functions: __get_stdout(), __get_stderr()
 	if c.Fn == "__get_stdout" && len(c.Args) == 0 {
 		m.ensureDecl("declare ptr @__get_stdout()")
