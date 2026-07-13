@@ -96,13 +96,23 @@ $Executable = Join-Path $OutputDir "$OutputName.exe"
 try {
     # Step 1: Compile Desi to LLVM IR
     Write-Host "==> Compiling Desi to LLVM IR..." -ForegroundColor Cyan
-    $irOutput = & $Desic emit-ir $InputFile 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    # Redirect at the OS handle level (Start-Process) so the IR reaches disk
+    # as raw UTF-8 bytes. Capturing stdout as PowerShell strings corrupts
+    # non-ASCII string constants and embedded newlines (and stderr warnings
+    # would throw under ErrorActionPreference=Stop), producing IR whose
+    # declared byte lengths no longer match — clang then rejects the module.
+    $IrErrLog = Join-Path $BuildDir "emit-ir.stderr.log"
+    $desicProc = Start-Process -FilePath $Desic -ArgumentList @('emit-ir', "`"$InputFile`"") `
+        -NoNewWindow -Wait -PassThru `
+        -RedirectStandardOutput $LlvmIr -RedirectStandardError $IrErrLog
+    # Forward diagnostics on stdout so callers capturing this script's output
+    # (test_examples.ps1) see warning/error codes in their compile log.
+    $desicMessages = if (Test-Path $IrErrLog) { Get-Content $IrErrLog -Encoding UTF8 } else { $null }
+    if ($desicMessages) { $desicMessages | Write-Output }
+    if ($desicProc.ExitCode -ne 0) {
         Write-Host "Error: Desi compilation failed" -ForegroundColor Red
-        Write-Host $irOutput
         exit 1
     }
-    $irOutput | Set-Content -Path $LlvmIr -Encoding ASCII
     
     # Step 2: Compile LLVM IR and link executable (clang can do both in one step)
     Write-Host "==> Compiling and linking executable..." -ForegroundColor Cyan

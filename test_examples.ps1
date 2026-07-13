@@ -196,14 +196,16 @@ foreach ($testFile in $testFiles) {
             $compileSuccess = $true
             $buildResult | Out-File $compileLog -Encoding UTF8
 
-            # Try to run
+            # Try to run — through cmd.exe so stdout+stderr merge into the log
+            # as raw UTF-8 bytes, mirroring test_examples.sh ('> log 2>&1').
+            # Capturing with 2>&1 in PowerShell 5.1 throws on the first stderr
+            # line under ErrorActionPreference=Stop and mangles non-ASCII output.
             $execPath = Join-Path $OutputDir "test_exec.exe"
             if (Test-Path $execPath) {
-                $runtimeResult = & $execPath 2>&1
+                cmd.exe /d /c " `"$execPath`" > `"$runtimeLog`" 2>&1 "
                 if ($LASTEXITCODE -eq 0) {
                     $runtimeSuccess = $true
                 }
-                $runtimeResult | Out-File $runtimeLog -Encoding UTF8
             }
         }
         elseif ($isWarningsTest) {
@@ -259,7 +261,9 @@ foreach ($testFile in $testFiles) {
             # Check expected output if specified
             if ($hasExpectedOutput) {
                 $expected = Get-ExpectedOutput $testFile.FullName
-                $actual = (Get-Content $runtimeLog -Raw -Encoding UTF8).TrimEnd()
+                # Get-Content -Raw returns $null for an empty file (PS 5.1)
+                $actualRaw = Get-Content $runtimeLog -Raw -Encoding UTF8
+                $actual = if ($null -ne $actualRaw) { $actualRaw.TrimEnd() } else { "" }
 
                 # If expected section is empty, treat as "just verify it runs" (no output check)
                 if ($expected -eq "") {

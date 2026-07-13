@@ -30,10 +30,13 @@ MSVC `cl.exe` compiles each `.c` file in `compiler/runtime/` to `.obj`, then `li
 
 Unix-only files are excluded (they use APIs unavailable on Windows: POSIX sockets, `fork`, POSIX regex, etc.):
 ```
-desi_host.c  http_server.c  tls.c  net.c  websocket.c
-signal_handler.c  reload.c  fs.c  os.c  path.c
+desi_host.c  http_server.c  tls.c  websocket.c
+signal_handler.c  reload.c  fs.c  path.c
 process.c  random.c  re.c  shell.c  uuid.c
 ```
+(`os.c` and `net.c` have been ported — Win32 API and WinSock2 respectively — and are built.)
+
+The `compiler/runtime/db/` directory (`RUNTIME_DB` in the Makefile) is also excluded: `pool.c` uses raw pthreads and `mysql.c`/`redis.c`/`db_timeout.h` use POSIX sockets. The db/ORM modules need a Win32 port before the `db` examples (437–446) can work on Windows.
 
 **Go binaries:** Standard `go build` — no platform differences.
 

@@ -202,19 +202,22 @@ if (-not $SkipRuntime) {
     # net.c  — ported to WinSock2 (ssize_t typedef added, ensure_wsa() in place)
     $runtimeFiles = Get-ChildItem -Path $RuntimeSrc -Filter "*.c" -File |
         Where-Object { $windowsExcludes -notcontains $_.Name }
+    # NOTE: compiler/runtime/db/*.c (RUNTIME_DB in the Makefile) is NOT built here:
+    # pool.c uses raw pthreads, mysql.c/redis.c/db_timeout.h use POSIX sockets.
+    # The db/ORM modules need a Win32 port (like os.c/net.c) before inclusion.
     $decimalWrapper = Join-Path $DecimalSrc "desi_decimal.c"
-    
+
     $objectFiles = @()
-    
+
     # Compile each runtime .c file
     foreach ($cFile in $runtimeFiles) {
         $objFile = Join-Path $BuildDir ($cFile.BaseName + ".obj")
         Write-Host "  Compiling $($cFile.Name)..." -ForegroundColor Gray
-        
+
         $compileCmd = "cl.exe /nologo /c /O2 /std:c17 /experimental:c11atomics /DNDEBUG `"$($cFile.FullName)`" /Fo`"$objFile`""
         $result = Invoke-VsCommand $compileCmd
         if ($Verbose) { Write-Host $result }
-        
+
         $objectFiles += $objFile
     }
     
