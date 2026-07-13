@@ -84,6 +84,12 @@ bool __desi_delete_state(void) {
     return remove(path) == 0;
 }
 
+// __desi_ptr_to_option_str depends on Option constructors generated into
+// the host program. lld-link resolves every undefined symbol in a pulled
+// archive member, so on Windows this helper would break linking of any
+// program that merely calls reload_count(). The state/reload functions
+// above are fully portable and remain available on all platforms.
+#ifndef _WIN32
 // Forward declarations for Option type (defined in generated code)
 extern void* Option_Some(void* value);
 extern void* Option_Nothing(void);
@@ -97,4 +103,5 @@ void* __desi_ptr_to_option_str(const char* ptr) {
     // ptr is already a C string, just wrap in Some
     return Option_Some((void*)ptr);
 }
+#endif
 
