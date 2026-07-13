@@ -111,11 +111,11 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		keyVal := ls.lowerExpr(d.Keys[i])
 		val := ls.lowerExpr(d.Values[i])
 
-		// Dict retains stored pointer values (collections) — treat as moved
+		// Dict retains stored pointer values (heap types) — treat as moved
 		if id, ok := d.Values[i].(*ast.Ident); ok {
 			if t := ls.info.Types[d.Values[i]]; t != nil {
 				switch t.(type) {
-				case *types.List, *types.Set, *types.Dict:
+				case *types.List, *types.Set, *types.Dict, *types.Enum, *types.Struct:
 					ls.cur().moved[id.Name] = true
 				}
 			}

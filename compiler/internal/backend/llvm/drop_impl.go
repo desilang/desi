@@ -144,8 +144,11 @@ func (m *Module) emitEnumDrop(val string, et *types.Enum) {
 		}
 	}
 
-	// If no variant has heap-allocated payloads, just free the enum
+	// If no variant has heap-allocated payload FIELDS, free the payload box
+	// (constructors malloc an 8-byte box per payload; unit variants store a
+	// null slot) and then the enum itself.
 	if !hasHeapPayload {
+		m.emitEnumPayloadBoxFree(val)
 		fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 		m.ensureDecl("declare void @free(ptr)")
 		return
@@ -251,14 +254,45 @@ func (m *Module) emitEnumDrop(val string, et *types.Enum) {
 		fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", doneLabel)
 	}
 
-	// Default case: no heap payload to drop
+	// Default case: variant without heap fields — still free its payload
+	// box (null for unit variants; the helper null-checks)
 	fmt.Fprintf(&m.funcs, "%s:\n", defaultLabel)
+	m.emitEnumPayloadBoxFree(val)
 	fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", doneLabel)
 
 	// Done: free the enum wrapper
 	fmt.Fprintf(&m.funcs, "%s:\n", doneLabel)
 	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
 	m.ensureDecl("declare void @free(ptr)")
+}
+
+// emitEnumPayloadBoxFree loads the payload box pointer from enum offset 8,
+// null-checks it, and frees it. Constructors always malloc payload boxes
+// (or store ptr null for unit variants), so the box itself is heap-owned
+// regardless of the payload's field types.
+func (m *Module) emitEnumPayloadBoxFree(val string) {
+	slot := fmt.Sprintf("%%enum_pbox_slot_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = getelementptr i8, ptr %s, i32 8\n", slot, val)
+
+	box := fmt.Sprintf("%%enum_pbox_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = load ptr, ptr %s\n", box, slot)
+
+	cond := fmt.Sprintf("%%enum_pbox_null_%d", m.tempID)
+	m.tempID++
+	fmt.Fprintf(&m.funcs, "  %s = icmp eq ptr %s, null\n", cond, box)
+
+	skipLabel := fmt.Sprintf("enum_pbox_skip_%d", m.mergeID)
+	freeLabel := fmt.Sprintf("enum_pbox_free_%d", m.mergeID)
+	m.mergeID++
+
+	fmt.Fprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n\n", cond, skipLabel, freeLabel)
+	fmt.Fprintf(&m.funcs, "%s:\n", freeLabel)
+	fmt.Fprintf(&m.funcs, "  call void @free(ptr %s)\n", box)
+	m.ensureDecl("declare void @free(ptr)")
+	fmt.Fprintf(&m.funcs, "  br label %%%s\n\n", skipLabel)
+	fmt.Fprintf(&m.funcs, "%s:\n", skipLabel)
 }
 
 func isHeapType(t types.T) bool {

@@ -213,6 +213,16 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			if _, isIndexExpr := s.Value.(*ast.IndexExpr); isIndexExpr {
 				skipDrop = true
 			}
+			// Field access aliases the owner's storage (struct/class/enum
+			// fields are freed recursively by the owner's drop)
+			if _, isFieldExpr := s.Value.(*ast.FieldExpr); isFieldExpr {
+				skipDrop = true
+			}
+			// `let x = expr?` extracts the payload in place — for heap
+			// payloads x aliases storage owned by the enum's owner
+			if _, isTryExpr := s.Value.(*ast.TryExpr); isTryExpr {
+				skipDrop = true
+			}
 			// Also skip drop for MutexGuard.value field access - it's borrowed from the mutex
 			if field, isFieldExpr := s.Value.(*ast.FieldExpr); isFieldExpr {
 				if ls.info != nil {
@@ -301,6 +311,17 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					}
 				}
 			}
+		}
+
+		// Post-lowering ownership check: values marked non-owned during
+		// expression lowering (payload aliases, stack-allocated slots from
+		// Option/Result methods) must never be dropped.
+		if init != nil && ls.isNonOwnedResult(init) {
+			delete(ls.cur().types, s.Name.Name)
+			if ls.cur().borrowed == nil {
+				ls.cur().borrowed = map[string]bool{}
+			}
+			ls.cur().borrowed[s.Name.Name] = true
 		}
 
 		// For mutable variables, always allocate storage

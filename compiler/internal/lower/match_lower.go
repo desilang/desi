@@ -15,6 +15,30 @@ func (ls *lowerState) lowerMatchExpr(m *ast.MatchExpr) hir.Value {
 	// Get scrutinee type
 	scrType := ls.info.Types[m.Scrutinee]
 
+	// Arm bindings alias the scrutinee's payload storage and may escape the
+	// match (returned, stored). The lowerer doesn't track binding→scrutinee
+	// aliasing, so conservatively give up ownership of a matched enum local:
+	// leaking it is safe, freeing it under a live binding is not.
+	if id, ok := m.Scrutinee.(*ast.Ident); ok {
+		hasBindings := false
+		for _, arm := range m.Arms {
+			switch arm.Pattern.(type) {
+			case *ast.CallExpr: // variant with payload bindings: Shape.Circle(r)
+				hasBindings = true
+			case *ast.Ident: // catch-all binding: x (aliases the whole value)
+				hasBindings = true
+			}
+			if hasBindings {
+				break
+			}
+		}
+		if hasBindings {
+			for i := len(ls.scopes) - 1; i >= 0; i-- {
+				ls.scopes[i].moved[id.Name] = true
+			}
+		}
+	}
+
 	// Result type of the match expression
 	resType := ls.info.Types[m]
 	llvmResType := "void"

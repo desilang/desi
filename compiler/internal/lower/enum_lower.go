@@ -107,7 +107,10 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 				Val: payloadPtr,
 			})
 		} else {
-			// Unit variant: set payload to null at offset 8
+			// Unit variant: set payload to null at offset 8.
+			// Must store a full 8-byte ptr null — an i32 0 store leaves the
+			// slot's upper 4 bytes as malloc garbage, and the enum drop
+			// null-checks this slot before freeing the payload box.
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
@@ -115,10 +118,9 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 				Indices: []hir.Value{hir.ConstInt{Text: "8"}},
 				Dst:     payloadPtrSlot,
 			})
-			// Store null (0)
 			entry.Stmts = append(entry.Stmts, &hir.Store{
 				Dst: payloadPtrSlot,
-				Val: hir.ConstInt{Text: "0"},
+				Val: hir.ConstNull{},
 			})
 		}
 
@@ -213,7 +215,8 @@ func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func 
 				Val: payloadPtr,
 			})
 		} else {
-			// Unit variant: set payload to null at offset 8
+			// Unit variant: set payload to null at offset 8 (full ptr-width
+			// null — see comment in LowerEnumConstructors above)
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
 			entry.Stmts = append(entry.Stmts, &hir.GetElementPtr{
 				Type:    "i8",
@@ -223,7 +226,7 @@ func LowerEnumConstructorsFromType(enumName string, et *types.Enum) []*hir.Func 
 			})
 			entry.Stmts = append(entry.Stmts, &hir.Store{
 				Dst: payloadPtrSlot,
-				Val: hir.ConstInt{Text: "0"},
+				Val: hir.ConstNull{},
 			})
 		}
 

@@ -26,6 +26,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 		info:                info,
 		src:                 nil,
 		tempsFromArenaAlloc: map[string]bool{},
+		nonOwnedTemps:       map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
 	}
 	ls.lowerBlock(blk)
@@ -170,6 +171,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		globals:             globals,
 		paramNames:          paramNames,
 		tempsFromArenaAlloc: map[string]bool{},
+		nonOwnedTemps:       map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
 		inDunderNew:         dunderNewClass != "",
 		dunderNewClass:      dunderNewClass,
@@ -329,6 +331,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 		info:                info,
 		src:                 src,
 		tempsFromArenaAlloc: map[string]bool{},
+		nonOwnedTemps:       map[string]bool{},
 		matchLocals:         map[string]hir.Value{},
 	}
 	ls.lowerBlock(blk)
@@ -370,6 +373,7 @@ type lowerState struct {
 	paramNames  map[string]bool        // parameter names (populated before body lowering)
 
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
+	nonOwnedTemps       map[string]bool      // temp.Name -> true if the value is a payload alias or stack slot (never drop)
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
 
 	// __new__ method context: when inside a user-defined __new__,
@@ -944,6 +948,23 @@ func (ls *lowerState) valueOf(e ast.Expr) hir.Value {
 }
 
 // --- type predicates
+
+// markNonOwnedResult records that a lowered expression's value is a payload
+// alias or stack-allocated slot — a `let` binding it must never be dropped
+// (freeing stack memory or another owner's storage crashes).
+func (ls *lowerState) markNonOwnedResult(v hir.Value) {
+	if t, ok := v.(hir.Temp); ok {
+		ls.nonOwnedTemps[t.Name] = true
+	}
+}
+
+// isNonOwnedResult reports whether the value was marked by markNonOwnedResult.
+func (ls *lowerState) isNonOwnedResult(v hir.Value) bool {
+	if t, ok := v.(hir.Temp); ok {
+		return ls.nonOwnedTemps[t.Name]
+	}
+	return false
+}
 
 func isRcLike(t types.T) bool {
 	switch t.(type) {

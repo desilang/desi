@@ -398,7 +398,12 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						enum = e
 					}
 				}
-				return ls.lowerOptionMethod(fe, x.Args, enum)
+				res := ls.lowerOptionMethod(fe, x.Args, enum)
+				// Option methods return scalars, payload aliases, or
+				// stack-allocated slots — never owned heap enums. A let
+				// binding must not drop (free) any of these.
+				ls.markNonOwnedResult(res)
+				return res
 			}
 
 			if types.IsResult(feXType) {
@@ -410,7 +415,10 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						enum = e
 					}
 				}
-				return ls.lowerResultMethod(fe, x.Args, enum)
+				res := ls.lowerResultMethod(fe, x.Args, enum)
+				// Same as Option: results are never owned heap enums.
+				ls.markNonOwnedResult(res)
+				return res
 			}
 
 			// Arena methods: alloc
@@ -3053,7 +3061,7 @@ skipMethodCall:
 				if id, ok := argNode.(*ast.Ident); ok {
 					if t := ls.info.Types[argNode]; t != nil {
 						switch t.(type) {
-						case *types.List, *types.Set, *types.Dict:
+						case *types.List, *types.Set, *types.Dict, *types.Enum, *types.Struct:
 							for i := len(ls.scopes) - 1; i >= 0; i-- {
 								ls.scopes[i].moved[id.Name] = true
 							}
