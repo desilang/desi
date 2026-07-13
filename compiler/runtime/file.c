@@ -53,19 +53,25 @@ DesiFile* file_open(const char* path, const char* mode, char** err_out) {
 // Read entire file contents - caller must free returned string
 // Returns 0 on success (out filled), 1 on error (err_out filled)
 int file_read_all(DesiFile* f, char** out, char** err_out) {
+    // Error paths must still set *out: callers load it unconditionally,
+    // and an untouched slot is uninitialized stack memory (reading it
+    // crashed on Windows when open() had failed and the handle was NULL).
     if (!f || f->closed || !f->handle) {
+        if (out) *out = strdup("");
         if (err_out) *err_out = strdup("file handle is closed or invalid");
         return 1;
     }
-    
+
     // Get file size
     long start = ftell(f->handle);
     if (fseek(f->handle, 0, SEEK_END) != 0) {
+        if (out) *out = strdup("");
         if (err_out) *err_out = strdup("failed to seek in file");
         return 1;
     }
     long size = ftell(f->handle);
     if (fseek(f->handle, start, SEEK_SET) != 0) {
+        if (out) *out = strdup("");
         if (err_out) *err_out = strdup("failed to seek in file");
         return 1;
     }
@@ -79,6 +85,7 @@ int file_read_all(DesiFile* f, char** out, char** err_out) {
     // Allocate and read
     char* buf = (char*)malloc(size + 1);
     if (!buf) {
+        if (out) *out = strdup("");
         if (err_out) *err_out = strdup("memory allocation failed");
         return 1;
     }

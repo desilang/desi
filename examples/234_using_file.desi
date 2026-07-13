@@ -2,14 +2,14 @@
 def main() -> int:
     print("Testing using with file")
     
-    using f = open("/tmp/test_using.txt", "w"):
+    using f = open("test_using.txt", "w"):
         print("Writing to file", file=f)
         print("Another line", file=f)
-    
+
     # File should be auto-closed here
-    
+
     # Read back to verify
-    let f2 = open("/tmp/test_using.txt", "r")
+    let f2 = open("test_using.txt", "r")
     let content = f2.read()
     print("File contents:")
     print(content)
