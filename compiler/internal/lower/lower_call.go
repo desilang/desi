@@ -1806,6 +1806,17 @@ handlePrint:
 					}
 				}
 			}
+			if fnName == "__desi_assert_eq_bool" {
+				// C signature takes int: zext i1 args to i32 — on Windows x64
+				// a raw i1 leaves the upper register bits undefined and the
+				// int comparison fails even for equal booleans.
+				e32 := ls.b.FreshTemp("assert_b32")
+				ls.b.Emit(&hir.Cast{Dst: e32, Src: expectedVal, Type: "i32"})
+				expectedVal = e32
+				a32 := ls.b.FreshTemp("assert_b32")
+				ls.b.Emit(&hir.Cast{Dst: a32, Src: actualVal, Type: "i32"})
+				actualVal = a32
+			}
 			ls.b.Emit(&hir.Call{Fn: fnName, Args: []hir.Value{expectedVal, actualVal, contextVal}})
 			return nil
 		}
@@ -1839,6 +1850,15 @@ handlePrint:
 						fnName = "__desi_assert_ne_int"
 					}
 				}
+			}
+			if fnName == "__desi_assert_ne_bool" {
+				// Same i1→i32 ABI requirement as assert_eq_bool above
+				a32 := ls.b.FreshTemp("assert_b32")
+				ls.b.Emit(&hir.Cast{Dst: a32, Src: aVal, Type: "i32"})
+				aVal = a32
+				b32 := ls.b.FreshTemp("assert_b32")
+				ls.b.Emit(&hir.Cast{Dst: b32, Src: bVal, Type: "i32"})
+				bVal = b32
 			}
 			ls.b.Emit(&hir.Call{Fn: fnName, Args: []hir.Value{aVal, bVal, contextVal}})
 			return nil
