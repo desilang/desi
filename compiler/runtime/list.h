@@ -22,6 +22,9 @@ DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn);
 void list_free(DesiList* list);
 void list_clear(DesiList* list);
 DesiList* list_copy(DesiList* list);
+// Clone an element if the tag marks it as list-owned (float boxes, tag 3);
+// other tags pass through unchanged. Use when elements flow between lists.
+void* list_clone_elem(void* item, int type_tag);
 
 // === Element Access ===
 void* list_get(DesiList* list, int64_t index);

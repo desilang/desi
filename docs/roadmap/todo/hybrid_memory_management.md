@@ -1,8 +1,18 @@
 # TODO: Hybrid Memory Management for Generics
 
-**Status**: Proposed  
-**Priority**: High  
+**Status**: Phase 1 landed (collection drops re-enabled); arenas/escape analysis still open
+**Priority**: High
 **Related**: Generics implementation, Move semantics, Borrow checker
+
+> **Phase 1 (2026-07):** The backend's `hir.Drop` handler (disabled since commit
+> `fad63ec6` over alloca-vs-heap confusion, later fixed for classes) now also frees
+> `list`/`set`/`dict` locals via `emitDropForType`, the lowerer conservatively marks
+> collection locals as moved when passed to user functions or stored into other
+> containers ("leak rather than use-after-free"), and `list.c` owns float element
+> boxes (tag 3): freed in `list_free`/`list_clear`/`list_set`, cloned in
+> `copy`/`slice`/`extend`/`filter`/`iter_collect`. Enum/struct payload drops and
+> str temps remain off pending Phase 2 (match-binding lifetimes). Arena-based
+> allocation below remains the long-term design.
 
 ## Current State
 

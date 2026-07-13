@@ -145,26 +145,28 @@ void* take_iter_next(TakeIter* iter) {
 // Generic: works with any iterator that has a next function
 DesiList* iter_collect(void* iter, void* (*next_fn)(void*), int type_tag) {
     DesiList* result = list_new(type_tag, NULL);
-    
+
     while (true) {
         void* elem = next_fn(iter);
         if (!elem) break;
-        list_append(result, elem, type_tag);
+        // Owned elements (float boxes) must be cloned — the source
+        // list still owns the originals and will free them.
+        list_append(result, list_clone_elem(elem, type_tag), type_tag);
     }
-    
+
     return result;
 }
 
 // Specialized collect for ListIter - simpler interface
 DesiList* list_iter_collect(ListIter* iter, int type_tag) {
     DesiList* result = list_new(type_tag, NULL);
-    
+
     while (true) {
         void* elem = list_iter_next(iter);
         if (!elem) break;
-        list_append(result, elem, type_tag);
+        list_append(result, list_clone_elem(elem, type_tag), type_tag);
     }
-    
+
     return result;
 }
 

@@ -925,6 +925,20 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 							wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
 							m.ensureDecl("declare void @free(ptr)")
 						}
+					} else if t, ok := x.Type.(types.T); ok {
+						// Collections: free via the type-aware drop helpers.
+						// Only List/Set/Dict for now — enum/struct payload extraction
+						// and str literals have lifetimes the lowerer doesn't yet
+						// model precisely enough to free safely.
+						switch t.(type) {
+						case *types.List, *types.Set, *types.Dict:
+							llvmTy, _ := m.operand(actualVal)
+							if llvmTy == "ptr" {
+								// valOp is "ptr %name" — emitDropForType wants the bare operand
+								bare := strings.TrimPrefix(valOp, "ptr ")
+								m.emitDropForType(bare, t)
+							}
+						}
 					}
 				}
 

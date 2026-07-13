@@ -396,6 +396,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						idx := ls.lowerExpr(indexExpr.Idx)
 						val := ls.lowerExpr(s.RHS[0])
 
+						// List takes ownership of the stored value
+						if id, ok := s.RHS[0].(*ast.Ident); ok {
+							ls.cur().moved[id.Name] = true
+						}
+
 						// Sign-extend index to i64
 						idx64 := ls.b.FreshTemp("idx_i64")
 						ls.b.Emit(&hir.Cast{Dst: idx64, Src: idx, Type: "i64"})
@@ -920,6 +925,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						ls.cur().locals = append(ls.cur().locals, varName)
 						ls.b.Emit(&hir.Let{Name: varName, Init: elemVal, Type: elemType})
 						ls.cur().types[varName] = elemType
+						// Loop var borrows the tuple's element — never free it here
+						ls.cur().borrowed[varName] = true
 					}
 
 					if s.Body != nil {
@@ -1343,6 +1350,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					// This allows reassignment to work with Store
 					ls.cur().mutable[valueName] = true
 					ls.cur().locals = append(ls.cur().locals, valueName)
+					// Value borrows the dict's storage — never free it here
+					ls.cur().borrowed[valueName] = true
 					ls.b.Emit(&hir.Let{Name: valueName, Init: nil, Type: valDesiType})
 					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: valueName}, Val: valueVal})
 				} else {

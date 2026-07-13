@@ -5,6 +5,38 @@
 
 #define LIST_INITIAL_CAPACITY 8
 
+// Float elements (tag 3) are 8-byte heap boxes OWNED by the list: the
+// compiler mallocs a box per stored double and list_free releases them.
+// Whenever elements flow between lists (copy/slice/extend/filter) the
+// box must be cloned so each list exclusively owns its elements —
+// sharing a box across two lists would double-free on cleanup.
+// Int (0), str (1), and bool (2) elements are not owned: ints/bools are
+// stored inline in the slot, strings may alias literals or other refs.
+#define DESI_TAG_FLOAT 3
+
+static void* desi_clone_float_box(void* item) {
+    if (!item) return item;
+    double* box = (double*)malloc(sizeof(double));
+    if (!box) return item; // OOM: fall back to sharing (leaks, never crashes)
+    *box = *(double*)item;
+    return box;
+}
+
+static void desi_free_float_elems(DesiList* list) {
+    if (!list || list->type_tag != DESI_TAG_FLOAT) return;
+    for (size_t i = 0; i < list->length; i++) {
+        free(list->data[i]);
+        list->data[i] = NULL;
+    }
+}
+
+// Public helper for other runtime modules (iterator.c collectors etc.):
+// clone the element if the tag marks it as an owned box, else pass through.
+void* list_clone_elem(void* item, int type_tag) {
+    if (type_tag == DESI_TAG_FLOAT) return desi_clone_float_box(item);
+    return item;
+}
+
 // ========== Core Operations ==========
 
 // Create a new empty list
@@ -31,16 +63,19 @@ DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
 // Free the list and its data array (does NOT free individual elements - compiler handles that)
 void list_free(DesiList* list) {
     if (!list) return;
-    
+
+    desi_free_float_elems(list); // owned float boxes
     if (list->data) {
         free(list->data);
     }
     free(list);
 }
 
-// Clear all elements from the list (does NOT free elements - compiler handles that)
+// Clear all elements from the list (frees owned float boxes; other
+// element kinds are compiler/GC territory)
 void list_clear(DesiList* list) {
     if (!list) return;
+    desi_free_float_elems(list);
     list->length = 0;
 }
 
@@ -63,7 +98,14 @@ DesiList* list_copy(DesiList* list) {
     // Copy elements (shallow copy - pointers only)
     memcpy(result->data, list->data, list->length * sizeof(void*));
     result->length = list->length;
-    
+
+    // Owned float boxes must not be shared between two lists
+    if (result->type_tag == DESI_TAG_FLOAT) {
+        for (size_t i = 0; i < result->length; i++) {
+            result->data[i] = desi_clone_float_box(result->data[i]);
+        }
+    }
+
     return result;
 }
 
@@ -107,7 +149,11 @@ void list_set(DesiList* list, int64_t index, void* item) {
                 (long long)index, list->length);
         return;
     }
-    
+
+    // Overwriting an owned float box: release the old one
+    if (list->type_tag == DESI_TAG_FLOAT && list->data[index] != item) {
+        free(list->data[index]);
+    }
     list->data[index] = item;
 }
 
@@ -157,9 +203,17 @@ void list_append(DesiList* list, void* item, int type_tag) {
 // Extend list with all items from another list
 void list_extend(DesiList* list, DesiList* other) {
     if (!list || !other) return;
-    
+
     list_ensure_capacity(list, list->length + other->length);
     memcpy(list->data + list->length, other->data, other->length * sizeof(void*));
+
+    // Owned float boxes must not be shared between two lists
+    if (list->type_tag == DESI_TAG_FLOAT || other->type_tag == DESI_TAG_FLOAT) {
+        for (size_t i = 0; i < other->length; i++) {
+            list->data[list->length + i] = desi_clone_float_box(list->data[list->length + i]);
+        }
+    }
+
     list->length += other->length;
 }
 
@@ -337,9 +391,13 @@ DesiList* list_slice(DesiList* list, int64_t start, int64_t end) {
     
     DesiList* result = list_new(list->type_tag, list->to_str_fn);
     for (int64_t i = start; i < end; i++) {
-        list_append(result, list->data[i], list->type_tag);
+        // Clone owned float boxes: slices are independent lists
+        list_append(result, list->type_tag == DESI_TAG_FLOAT
+                        ? desi_clone_float_box(list->data[i])
+                        : list->data[i],
+                    list->type_tag);
     }
-    
+
     return result;
 }
 
@@ -388,17 +446,23 @@ DesiList* list_slice_step(DesiList* list, int64_t start, int64_t end, int64_t st
     if (step > 0) {
         for (int64_t i = start; i < end; i += step) {
             if (i >= 0 && i < len) {
-                list_append(result, list->data[i], list->type_tag);
+                list_append(result, list->type_tag == DESI_TAG_FLOAT
+                                ? desi_clone_float_box(list->data[i])
+                                : list->data[i],
+                            list->type_tag);
             }
         }
     } else {
         for (int64_t i = start; i > end; i += step) {
             if (i >= 0 && i < len) {
-                list_append(result, list->data[i], list->type_tag);
+                list_append(result, list->type_tag == DESI_TAG_FLOAT
+                                ? desi_clone_float_box(list->data[i])
+                                : list->data[i],
+                            list->type_tag);
             }
         }
     }
-    
+
     return result;
 }
 
@@ -473,10 +537,14 @@ DesiList* list_filter(DesiList* list, FilterFunc func) {
     
     for (size_t i = 0; i < list->length; i++) {
         if (func(list->data[i])) {
-            list_append(result, list->data[i], list->type_tag);
+            // Clone owned float boxes: filter result is an independent list
+            list_append(result, list->type_tag == DESI_TAG_FLOAT
+                            ? desi_clone_float_box(list->data[i])
+                            : list->data[i],
+                        list->type_tag);
         }
     }
-    
+
     return result;
 }
 

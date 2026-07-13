@@ -111,6 +111,16 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 		keyVal := ls.lowerExpr(d.Keys[i])
 		val := ls.lowerExpr(d.Values[i])
 
+		// Dict retains stored pointer values (collections) — treat as moved
+		if id, ok := d.Values[i].(*ast.Ident); ok {
+			if t := ls.info.Types[d.Values[i]]; t != nil {
+				switch t.(type) {
+				case *types.List, *types.Set, *types.Dict:
+					ls.cur().moved[id.Name] = true
+				}
+			}
+		}
+
 		// Determine key type for this entry
 		var entryKeyType types.T
 		if ls.info != nil {

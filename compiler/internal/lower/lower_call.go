@@ -3034,6 +3034,36 @@ skipMethodCall:
 		retType = "ptr"
 	}
 
+	// Conservative ownership: a collection local passed to a user-defined
+	// function (or method) may be retained by the callee — the drop tracker
+	// can't see that. Mark it moved so scope exit doesn't free it: leaking
+	// is safer than use-after-free. Runtime helpers only borrow, so plain
+	// non-user callees don't mark.
+	if ls.info != nil {
+		userCallee := false
+		if id, ok := x.Callee.(*ast.Ident); ok {
+			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 && set.Cands[0].Decl != nil {
+				userCallee = true
+			}
+		} else if _, ok := x.Callee.(*ast.FieldExpr); ok {
+			userCallee = true // method / module-qualified call — may retain via self
+		}
+		if userCallee {
+			for _, argNode := range x.Args {
+				if id, ok := argNode.(*ast.Ident); ok {
+					if t := ls.info.Types[argNode]; t != nil {
+						switch t.(type) {
+						case *types.List, *types.Set, *types.Dict:
+							for i := len(ls.scopes) - 1; i >= 0; i-- {
+								ls.scopes[i].moved[id.Name] = true
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
 
 	// Consume args if not a known borrowing function

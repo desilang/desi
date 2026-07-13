@@ -21,6 +21,10 @@ func (ls *lowerState) lowerSetLit(x *ast.SetLit, t *types.Set) hir.Value {
 	// 2. Insert elements
 	for _, elem := range x.Elems {
 		keyVal := ls.lowerExpr(elem)
+		// Set takes ownership of stored pointer elements
+		if id, ok := elem.(*ast.Ident); ok {
+			ls.cur().moved[id.Name] = true
+		}
 		ls.b.Emit(&hir.Call{Fn: "set_add", Args: []hir.Value{dict, keyVal}})
 	}
 
@@ -35,6 +39,10 @@ func (ls *lowerState) lowerSetMethod(fe *ast.FieldExpr, args []ast.Expr, setType
 	case "add":
 		// add(elem)
 		elem := ls.lowerExpr(args[0])
+		// Set takes ownership of stored pointer elements
+		if id, ok := args[0].(*ast.Ident); ok {
+			ls.cur().moved[id.Name] = true
+		}
 		ls.b.Emit(&hir.Call{Fn: "set_add", Args: []hir.Value{receiver, elem}})
 		return nil
 
