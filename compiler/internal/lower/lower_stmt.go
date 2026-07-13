@@ -1909,6 +1909,9 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			} else if s.Init != nil && isReceiverType(ls.info.Types[s.Init]) {
 				// Receiver type: register for receiver_drop at scope end
 				ls.cur().receivers[ident] = true
+			} else if s.Init != nil && isTaskGroupType(ls.info.Types[s.Init]) {
+				// TaskGroup: taskgroup_destroy (waits, then frees) at scope end
+				ls.cur().taskGroups[ident] = true
 			} else {
 				// Fallback: Mark this name as an arena handle in the current scope.
 				ls.cur().arenas[ident] = true

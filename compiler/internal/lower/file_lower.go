@@ -137,3 +137,9 @@ func isReceiverType(t types.T) bool {
 	_, ok := t.(*types.ChannelReceiver)
 	return ok
 }
+
+// isTaskGroupType checks if a type is TaskGroup
+func isTaskGroupType(t types.T) bool {
+	_, ok := t.(*types.TaskGroup)
+	return ok
+}

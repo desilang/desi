@@ -406,6 +406,7 @@ type scope struct {
 	writeGuards map[string]bool    // RAII: write guards that need write_guard_unlock at scope end
 	senders     map[string]bool    // RAII: channel senders that need sender_drop at scope end
 	receivers   map[string]bool    // RAII: channel receivers that need receiver_drop at scope end
+	taskGroups  map[string]bool    // RAII: task groups that need taskgroup_destroy at scope end
 }
 
 func (ls *lowerState) push() {
@@ -427,6 +428,7 @@ func (ls *lowerState) push() {
 		writeGuards: map[string]bool{},
 		senders:     map[string]bool{},
 		receivers:   map[string]bool{},
+		taskGroups:  map[string]bool{},
 	})
 }
 func (ls *lowerState) pop() *scope {
@@ -838,6 +840,17 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		if varName, ok := v.(hir.Var); ok && sc.receivers[varName.Name] {
 			ls.b.Emit(&hir.Call{
 				Fn:   "receiver_drop",
+				Args: []hir.Value{v},
+				Type: "void",
+			})
+			continue
+		}
+		// TaskGroup? taskgroup_destroy waits for pending tasks, then frees.
+		// (Previously fell through to the arena fallback — __arena_destroy
+		// walked the TaskGroup as if it were a DesiArena and corrupted the heap.)
+		if varName, ok := v.(hir.Var); ok && sc.taskGroups[varName.Name] {
+			ls.b.Emit(&hir.Call{
+				Fn:   "taskgroup_destroy",
 				Args: []hir.Value{v},
 				Type: "void",
 			})
