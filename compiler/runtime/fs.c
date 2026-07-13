@@ -1,14 +1,96 @@
 // fs.c - File system module
 // Pure C, no external deps. Provides file I/O and directory operations.
+// Cross-platform: Win32 API on Windows, POSIX on Linux/macOS.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <dirent.h>
-#include <unistd.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <limits.h>
+
+#ifdef _WIN32
+  #include <windows.h>
+  #include <direct.h>      /* _mkdir, _rmdir */
+  #include <io.h>          /* _unlink, _access */
+
+  #define mkdir(path, mode) _mkdir(path)
+  #define rmdir _rmdir
+  #define unlink _unlink
+  #define access _access
+  #ifndef X_OK
+    #define X_OK 0         /* existence check — Windows has no exec bit */
+  #endif
+  #ifndef PATH_MAX
+    #define PATH_MAX MAX_PATH
+  #endif
+  #ifndef S_ISREG
+    #define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+  #endif
+  #ifndef S_ISDIR
+    #define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+  #endif
+  /* realpath(p, buf) — resolve only when the path exists, like POSIX */
+  static char* desi_fs_realpath(const char* p, char* buf) {
+      struct stat st;
+      if (stat(p, &st) != 0) return NULL;
+      return _fullpath(buf, p, PATH_MAX);
+  }
+  #define realpath(p, buf) desi_fs_realpath((p), (buf))
+
+  /* Minimal dirent shim over FindFirstFile/FindNextFile */
+  struct dirent { char d_name[MAX_PATH]; };
+  typedef struct {
+      HANDLE handle;
+      WIN32_FIND_DATAA fd;
+      struct dirent entry;
+      int first;
+  } DIR;
+
+  static DIR* opendir(const char* path) {
+      if (!path) return NULL;
+      size_t len = strlen(path);
+      char* pattern = (char*)malloc(len + 3);
+      if (!pattern) return NULL;
+      memcpy(pattern, path, len);
+      /* append \* (or just * after an existing separator) */
+      if (len > 0 && path[len - 1] != '/' && path[len - 1] != '\\') {
+          pattern[len++] = '\\';
+      }
+      pattern[len++] = '*';
+      pattern[len] = '\0';
+
+      DIR* d = (DIR*)malloc(sizeof(DIR));
+      if (!d) { free(pattern); return NULL; }
+      d->handle = FindFirstFileA(pattern, &d->fd);
+      free(pattern);
+      if (d->handle == INVALID_HANDLE_VALUE) { free(d); return NULL; }
+      d->first = 1;
+      return d;
+  }
+
+  static struct dirent* readdir(DIR* d) {
+      if (!d) return NULL;
+      if (d->first) {
+          d->first = 0;
+      } else if (!FindNextFileA(d->handle, &d->fd)) {
+          return NULL;
+      }
+      strncpy(d->entry.d_name, d->fd.cFileName, MAX_PATH - 1);
+      d->entry.d_name[MAX_PATH - 1] = '\0';
+      return &d->entry;
+  }
+
+  static void closedir(DIR* d) {
+      if (!d) return;
+      FindClose(d->handle);
+      free(d);
+  }
+#else
+  #include <dirent.h>
+  #include <unistd.h>
+  #include <fcntl.h>
+#endif
+
 #include "list.h"
 
 // Helper: string to_str callback for list_new
@@ -142,6 +224,18 @@ int __fs_mkdir(const char* path) {
     char* tmp = strdup(path);
     if (!tmp) return 0;
     size_t len = strlen(tmp);
+#ifdef _WIN32
+    if (tmp[len - 1] == '/' || tmp[len - 1] == '\\') tmp[len - 1] = '\0';
+
+    for (char* p = tmp + 1; *p; p++) {
+        if (*p == '/' || *p == '\\') {
+            char saved = *p;
+            *p = '\0';
+            mkdir(tmp, 0755);
+            *p = saved;
+        }
+    }
+#else
     if (tmp[len - 1] == '/') tmp[len - 1] = '\0';
 
     for (char* p = tmp + 1; *p; p++) {
@@ -151,6 +245,7 @@ int __fs_mkdir(const char* path) {
             *p = '/';
         }
     }
+#endif
     int result = mkdir(tmp, 0755) == 0 || errno == EEXIST ? 1 : 0;
     free(tmp);
     return result;
@@ -486,8 +581,16 @@ int __fs_permissions(const char* path) {
 char* __fs_which(const char* cmd) {
     if (!cmd || !*cmd) return strdup("");
 
-    // If cmd contains a slash, check it directly
-    if (strchr(cmd, '/') != NULL) {
+#ifdef _WIN32
+    const char PATH_LIST_SEP = ';';
+    int has_sep = strchr(cmd, '/') != NULL || strchr(cmd, '\\') != NULL;
+#else
+    const char PATH_LIST_SEP = ':';
+    int has_sep = strchr(cmd, '/') != NULL;
+#endif
+
+    // If cmd contains a separator, check it directly
+    if (has_sep) {
         if (access(cmd, X_OK) == 0) {
             return strdup(cmd);
         }
@@ -503,13 +606,13 @@ char* __fs_which(const char* cmd) {
     char* dir = path_copy;
     char* next;
     while (dir && *dir) {
-        next = strchr(dir, ':');
+        next = strchr(dir, PATH_LIST_SEP);
         if (next) *next = '\0';
 
-        // Build full path: dir/cmd
+        // Build full path: dir/cmd (+ room for ".exe" on Windows)
         size_t dir_len = strlen(dir);
         size_t cmd_len = strlen(cmd);
-        char* full = (char*)malloc(dir_len + 1 + cmd_len + 1);
+        char* full = (char*)malloc(dir_len + 1 + cmd_len + 5);
         if (!full) { dir = next ? next + 1 : NULL; continue; }
 
         snprintf(full, dir_len + 1 + cmd_len + 1, "%s/%s", dir, cmd);
@@ -518,6 +621,14 @@ char* __fs_which(const char* cmd) {
             free(path_copy);
             return full;
         }
+#ifdef _WIN32
+        // Retry with .exe appended (PATHEXT-lite)
+        strcat(full, ".exe");
+        if (access(full, X_OK) == 0) {
+            free(path_copy);
+            return full;
+        }
+#endif
         free(full);
 
         dir = next ? next + 1 : NULL;

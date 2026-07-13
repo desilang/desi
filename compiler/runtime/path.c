@@ -1,12 +1,66 @@
 // path.c - Path module C runtime
 // Provides filesystem path manipulation and query functions.
 // Uses __path_ prefix to avoid collisions.
+// Cross-platform: Win32 CRT on Windows, POSIX on Linux/macOS.
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <unistd.h>
-#include <libgen.h>
+
+#ifdef _WIN32
+  #include <direct.h>      /* _getcwd */
+  #include <io.h>
+  #define getcwd _getcwd
+  #ifndef S_ISREG
+    #define S_ISREG(m) (((m) & _S_IFMT) == _S_IFREG)
+  #endif
+  #ifndef S_ISDIR
+    #define S_ISDIR(m) (((m) & _S_IFMT) == _S_IFDIR)
+  #endif
+
+  /* Both separators are valid on Windows */
+  static int path_is_sep(char c) { return c == '/' || c == '\\'; }
+
+  /* Last separator in a string, or NULL */
+  static const char* path_last_sep(const char* p) {
+      const char* a = strrchr(p, '/');
+      const char* b = strrchr(p, '\\');
+      return (a > b) ? a : b;
+  }
+
+  /* Minimal basename/dirname for MSVC — same in-place semantics as libgen */
+  static char* basename(char* path) {
+      if (!path || !*path) return path;
+      size_t len = strlen(path);
+      while (len > 1 && path_is_sep(path[len - 1])) path[--len] = '\0';
+      char* sep = (char*)path_last_sep(path);
+      return sep ? sep + 1 : path;
+  }
+  static char* dirname(char* path) {
+      static char dot[] = ".";
+      if (!path || !*path) return dot;
+      size_t len = strlen(path);
+      while (len > 1 && path_is_sep(path[len - 1])) path[--len] = '\0';
+      char* sep = (char*)path_last_sep(path);
+      if (!sep) return dot;
+      if (sep == path) { sep[1] = '\0'; return path; } /* "/x" -> "/" */
+      *sep = '\0';
+      return path;
+  }
+
+  /* realpath equivalent: resolve only if the path exists (mirrors realpath) */
+  static char* desi_resolve(const char* p) {
+      struct stat st;
+      if (stat(p, &st) != 0) return NULL;
+      return _fullpath(NULL, p, 0);
+  }
+#else
+  #include <unistd.h>
+  #include <libgen.h>
+  static int path_is_sep(char c) { return c == '/'; }
+  static const char* path_last_sep(const char* p) { return strrchr(p, '/'); }
+  static char* desi_resolve(const char* p) { return realpath(p, NULL); }
+#endif
 
 // ============================================================
 // Path queries
@@ -38,7 +92,15 @@ int __path_is_dir(const char* p) {
 // Check if path is absolute
 int __path_is_abs(const char* p) {
     if (!p || *p == '\0') return 0;
+#ifdef _WIN32
+    /* C:\, C:/, \\server\share, or a leading slash */
+    if (path_is_sep(p[0])) return 1;
+    if (((p[0] >= 'A' && p[0] <= 'Z') || (p[0] >= 'a' && p[0] <= 'z')) &&
+        p[1] == ':' && (p[2] == '\0' || path_is_sep(p[2]))) return 1;
+    return 0;
+#else
     return p[0] == '/';
+#endif
 }
 
 // Get file size in bytes, -1 on error
@@ -80,7 +142,7 @@ char* __path_dirname(const char* p) {
 char* __path_ext(const char* p) {
     if (!p) return strdup("");
     const char* dot = strrchr(p, '.');
-    const char* slash = strrchr(p, '/');
+    const char* slash = path_last_sep(p);
     // Ensure dot is in the filename, not in directory part
     if (!dot || (slash && dot < slash)) return strdup("");
     // Don't count hidden files like ".bashrc" as having an extension
@@ -112,11 +174,11 @@ char* __path_join(const char* a, const char* b) {
     if (!a || *a == '\0') return strdup(b ? b : "");
     if (!b || *b == '\0') return strdup(a);
     // If b is absolute, just return b
-    if (b[0] == '/') return strdup(b);
+    if (__path_is_abs(b)) return strdup(b);
 
     size_t alen = strlen(a);
     size_t blen = strlen(b);
-    int need_sep = (a[alen - 1] != '/');
+    int need_sep = !path_is_sep(a[alen - 1]);
     size_t total = alen + blen + (need_sep ? 1 : 0);
 
     char* result = (char*)malloc(total + 1);
@@ -132,10 +194,10 @@ char* __path_join(const char* a, const char* b) {
 // Get absolute path (resolve relative to cwd)
 char* __path_abs(const char* p) {
     if (!p) return strdup("");
-    char* resolved = realpath(p, NULL);
+    char* resolved = desi_resolve(p);
     if (resolved) return resolved;
     // If path doesn't exist, manually join with cwd
-    if (p[0] == '/') return strdup(p);
+    if (__path_is_abs(p)) return strdup(p);
     char cwd[4096];
     if (getcwd(cwd, sizeof(cwd)) == NULL) return strdup(p);
     return __path_join(cwd, p);
@@ -145,8 +207,8 @@ char* __path_abs(const char* p) {
 char* __path_clean(const char* p) {
     if (!p || *p == '\0') return strdup(".");
 
-    // Simple approach: use realpath if path exists
-    char* resolved = realpath(p, NULL);
+    // Simple approach: resolve if path exists
+    char* resolved = desi_resolve(p);
     if (resolved) return resolved;
 
     // For non-existent paths, do basic normalization

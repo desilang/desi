@@ -2,10 +2,10 @@
 import path
 
 def main() -> int:
-    # Queries
-    print(path.exists("/tmp"))
-    print(path.is_dir("/tmp"))
-    print(path.is_file("/tmp"))
+    # Queries ("." exists everywhere; /tmp is Unix-only)
+    print(path.exists("."))
+    print(path.is_dir("."))
+    print(path.is_file("."))
     print(path.is_abs("/tmp"))
     print(path.is_abs("relative"))
 

@@ -1,23 +1,52 @@
 // random.c - Random number generation module
-// Uses /dev/urandom for secure randomness.
+// Uses /dev/urandom (POSIX) or rand_s (Windows CRT) for secure randomness.
+#ifdef _WIN32
+  #define _CRT_RAND_S      /* must precede <stdlib.h> for rand_s */
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
-#include <unistd.h>
-#include <fcntl.h>
+#ifdef _WIN32
+  #include <process.h>     /* _getpid */
+  #define getpid _getpid
+#else
+  #include <unistd.h>
+  #include <fcntl.h>
+#endif
 #include "list.h"
+
+// Fill buf with n cryptographically-strong random bytes.
+// Returns the number of bytes written, or -1 on failure.
+static long desi_urandom(void* out, size_t n) {
+#ifdef _WIN32
+    unsigned char* p = (unsigned char*)out;
+    size_t i = 0;
+    while (i < n) {
+        unsigned int r;
+        if (rand_s(&r) != 0) return -1;
+        size_t chunk = (n - i < sizeof(r)) ? (n - i) : sizeof(r);
+        memcpy(p + i, &r, chunk);
+        i += chunk;
+    }
+    return (long)n;
+#else
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) return -1;
+    long got = (long)read(fd, out, n);
+    close(fd);
+    return got;
+#endif
+}
 
 static int seeded = 0;
 
 static void ensure_seeded(void) {
     if (!seeded) {
         unsigned int seed;
-        int fd = open("/dev/urandom", O_RDONLY);
-        if (fd >= 0 && read(fd, &seed, sizeof(seed)) == sizeof(seed)) {
+        if (desi_urandom(&seed, sizeof(seed)) == (long)sizeof(seed)) {
             srand(seed);
-            close(fd);
         } else {
             srand((unsigned int)(time(NULL) ^ getpid()));
         }
@@ -201,15 +230,7 @@ char* __random_hex(int n) {
     unsigned char* buf = (unsigned char*)malloc(n);
     if (!buf) return strdup("");
 
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd >= 0) {
-        ssize_t got = read(fd, buf, n);
-        close(fd);
-        if (got != n) {
-            ensure_seeded();
-            for (int i = 0; i < n; i++) buf[i] = (unsigned char)(rand() & 0xFF);
-        }
-    } else {
+    if (desi_urandom(buf, (size_t)n) != n) {
         ensure_seeded();
         for (int i = 0; i < n; i++) buf[i] = (unsigned char)(rand() & 0xFF);
     }
@@ -226,13 +247,7 @@ char* __random_hex(int n) {
 
 int __random_crypto_random(void) {
     int val = 0;
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd >= 0) {
-        if (read(fd, &val, sizeof(val)) != sizeof(val)) {
-            val = rand();
-        }
-        close(fd);
-    } else {
+    if (desi_urandom(&val, sizeof(val)) != (long)sizeof(val)) {
         ensure_seeded();
         val = rand();
     }

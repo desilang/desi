@@ -2,12 +2,12 @@ import fs
 
 def main() -> int:
     # Setup: create a temp directory
-    let dir = "/tmp/desi_fs_test"
+    let dir = "desi_fs_test_dir"
     fs.mkdir(dir)
     print(fs.is_dir(dir))
 
     # write + read
-    let path = "/tmp/desi_fs_test/hello.txt"
+    let path = "desi_fs_test_dir/hello.txt"
     fs.write(path, "hello world")
     print(fs.read(path))
 
@@ -26,31 +26,31 @@ def main() -> int:
     # read_lines / write_lines
     let lines = fs.read_lines(path)
     print(lines)
-    fs.write_lines("/tmp/desi_fs_test/lines.txt", ["alpha", "beta", "gamma"])
-    print(fs.read("/tmp/desi_fs_test/lines.txt"))
+    fs.write_lines("desi_fs_test_dir/lines.txt", ["alpha", "beta", "gamma"])
+    print(fs.read("desi_fs_test_dir/lines.txt"))
 
     # list_dir
     let entries = fs.list_dir(dir)
     print(len(entries) >= 2)
 
     # copy
-    fs.copy(path, "/tmp/desi_fs_test/copy.txt")
-    print(fs.read("/tmp/desi_fs_test/copy.txt"))
+    fs.copy(path, "desi_fs_test_dir/copy.txt")
+    print(fs.read("desi_fs_test_dir/copy.txt"))
 
     # move
-    fs.move("/tmp/desi_fs_test/copy.txt", "/tmp/desi_fs_test/moved.txt")
-    print(fs.exists("/tmp/desi_fs_test/copy.txt"))
-    print(fs.exists("/tmp/desi_fs_test/moved.txt"))
+    fs.move("desi_fs_test_dir/copy.txt", "desi_fs_test_dir/moved.txt")
+    print(fs.exists("desi_fs_test_dir/copy.txt"))
+    print(fs.exists("desi_fs_test_dir/moved.txt"))
 
     # abs
-    let a = fs.abs("/tmp/desi_fs_test/hello.txt")
+    let a = fs.abs("desi_fs_test_dir/hello.txt")
     print(a != "")
 
     # remove
-    fs.remove("/tmp/desi_fs_test/hello.txt")
-    fs.remove("/tmp/desi_fs_test/lines.txt")
-    fs.remove("/tmp/desi_fs_test/moved.txt")
-    print(fs.exists("/tmp/desi_fs_test/hello.txt"))
+    fs.remove("desi_fs_test_dir/hello.txt")
+    fs.remove("desi_fs_test_dir/lines.txt")
+    fs.remove("desi_fs_test_dir/moved.txt")
+    print(fs.exists("desi_fs_test_dir/hello.txt"))
 
     # cleanup
     fs.remove(dir)

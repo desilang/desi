@@ -1,24 +1,43 @@
 // uuid.c - UUID generation module
-// Uses /dev/urandom for v4 UUIDs. No external deps.
+// Uses /dev/urandom (POSIX) or rand_s (Windows CRT) for v4 UUIDs. No external deps.
+#ifdef _WIN32
+  #define _CRT_RAND_S      /* must precede <stdlib.h> for rand_s */
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <ctype.h>
+#ifndef _WIN32
+  #include <unistd.h>
+  #include <fcntl.h>
+#endif
+
+// Fill buf with n cryptographically-strong random bytes. Returns 1 on success.
+static int uuid_secure_bytes(unsigned char* buf, size_t n) {
+#ifdef _WIN32
+    size_t i = 0;
+    while (i < n) {
+        unsigned int r;
+        if (rand_s(&r) != 0) return 0;
+        size_t chunk = (n - i < sizeof(r)) ? (n - i) : sizeof(r);
+        memcpy(buf + i, &r, chunk);
+        i += chunk;
+    }
+    return 1;
+#else
+    int fd = open("/dev/urandom", O_RDONLY);
+    if (fd < 0) return 0;
+    int ok = read(fd, buf, n) == (ssize_t)n;
+    close(fd);
+    return ok;
+#endif
+}
 
 // Generate UUID v4 (random)
 // Format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
 char* __uuid_v4(void) {
     unsigned char bytes[16];
-    int fd = open("/dev/urandom", O_RDONLY);
-    if (fd >= 0) {
-        if (read(fd, bytes, 16) != 16) {
-            close(fd);
-            return strdup("00000000-0000-4000-8000-000000000000");
-        }
-        close(fd);
-    } else {
+    if (!uuid_secure_bytes(bytes, 16)) {
         return strdup("00000000-0000-4000-8000-000000000000");
     }
 
