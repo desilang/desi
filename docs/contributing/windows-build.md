@@ -28,13 +28,17 @@ build\libdesi.lib
 **Runtime library (`build\libdesi.lib`):**
 MSVC `cl.exe` compiles each `.c` file in `compiler/runtime/` to `.obj`, then `lib.exe` merges them with `libmpdec.lib` into `libdesi.lib`.
 
-Unix-only files are excluded (they use APIs unavailable on Windows: POSIX sockets, `fork`, POSIX regex, etc.):
+Unix-only files are excluded (they use APIs unavailable on Windows: POSIX sockets, `fork`, signals):
 ```
-desi_host.c  http_server.c  tls.c  websocket.c
-signal_handler.c  reload.c  fs.c  path.c
-process.c  random.c  re.c  shell.c  uuid.c
+desi_host.c  http_server.c  tls.c  websocket.c  signal_handler.c
 ```
-(`os.c` and `net.c` have been ported — Win32 API and WinSock2 respectively — and are built.)
+Ported and built on Windows: `os.c`/`net.c` (Win32 API / WinSock2), `fs.c`/`path.c`
+(dirent shim, `_fullpath`), `random.c`/`uuid.c` (`rand_s`), `process.c`
+(CreateProcess), `shell.c` (`_popen`, FindFirstFile glob), `re.c` (bundled
+minimal-ERE regex shim), `reload.c` (portable C). `http_server_win.c` provides
+Windows link stubs for the server/websocket API so client-only programs link —
+the HTTP **client** works fully, including HTTPS via `http/tls_win.h` (Schannel);
+the HTTP **server** is not yet supported on Windows.
 
 The `compiler/runtime/db/` directory (`RUNTIME_DB` in the Makefile) is also excluded: `pool.c` uses raw pthreads and `mysql.c`/`redis.c`/`db_timeout.h` use POSIX sockets. The db/ORM modules need a Win32 port before the `db` examples (437–446) can work on Windows.
 
