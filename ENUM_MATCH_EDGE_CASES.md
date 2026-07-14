@@ -1,41 +1,48 @@
 # Edge Cases & Missing Features: Enum + Match + Struct
 
+> **2026-07 update:** items 1–3 below were fixed by hybrid memory
+> management phase 2 — enum instances (wrapper + payload box) and struct
+> instances are freed at scope exit with recursive heap-field cleanup.
+> See `docs/contributing/runtime/memory-management.md` for the design.
+> String payloads themselves are still not freed (str drops are phase 3).
+
 ## Critical Memory Management Issues
 
 ### 1. Enum Payload Memory Leaks
-**Status: BROKEN - Memory leak**
+**Status: FIXED (hybrid MM phase 2)** — enum locals are dropped at scope
+exit; the payload box and wrapper are freed, heap-typed payload fields
+recursively.
 ```desi
-# Current behavior: malloc() but never free()
 enum Result:
   Ok: int
   Err: str
 
 def test():
-  let r = Result.Ok(42)  # malloc(4) for int
-  # Function returns - payload never freed! LEAK
-  
-# Need: Automatic cleanup when enum goes out of scope
+  let r = Result.Ok(42)  # freed automatically at scope exit
 ```
 
 ### 2. Struct Field Memory Leaks
-**Status: UNKNOWN - Need to test**
+**Status: PARTIALLY FIXED** — struct instances are dropped at scope exit
+and heap-typed fields (lists, dicts, nested structs/enums) are freed
+recursively. `str` fields are not freed yet (strings may alias literals;
+str ownership is MM phase 3).
 ```desi
 struct Container:
-  data: str  # str is a heap-allocated type
-  
+  data: str
+
 def test():
   let c = Container(data: "hello")
-  # Does the string get freed? Probably NO
+  # Container is freed at scope exit; the str is not (phase 3)
 ```
 
 ### 3. Nested Allocations
-**Status: BROKEN**
+**Status: FIXED for enum/struct nesting** — recursive drops walk
+heap-typed payloads. `str` payloads remain phase 3.
 ```desi
 enum Nested:
-  Inner: str  # str itself is heap-allocated
-  
-# This is malloc() inside malloc() - both leak!
-let n = Nested.Inner("test")
+  Inner: str
+
+let n = Nested.Inner("test")  # enum + payload box freed; str pending
 ```
 
 ## Match Expression Edge Cases

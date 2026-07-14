@@ -140,6 +140,12 @@ If OpenSSL is not found on macOS/Linux, HTTP requests still work; only HTTPS wil
 
 Build web servers and APIs with Desi's built-in HTTP server.
 
+!!! note "Platform support"
+    The HTTP **server** (and WebSocket server) currently requires macOS or
+    Linux. On Windows, server calls print a "not yet supported" notice; the
+    HTTP **client** — including HTTPS via the system's Schannel TLS — works
+    fully on all platforms.
+
 ### Creating a Server
 
 ```desi

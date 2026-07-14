@@ -1,7 +1,8 @@
 # Desi — Memory Management Plan & Optional GC Strategy
 
 > Pythonic surface • Rust-like safety • Elixir-style async • Performance oriented.
-> This document records what the **Desi compiler will** do for memory management (short term) and what **can** be added later (optional GC), so contributors have a single source of truth.
+> This document records the memory-management design direction (and the optional-GC ideas), so contributors have a single source of truth.
+> **The implemented drop system is documented in [drops-implementation.md](drops-implementation.md)** — scope-exit drops for collections, enums, structs, and classes shipped in v0.1.0 (hybrid MM phases 1-2).
 
 ---
 

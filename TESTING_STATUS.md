@@ -1,5 +1,12 @@
 # Language Features Testing - Status Report
 
+> **⚠ Historical document** — this snapshot dates from the early backend
+> milestones and no longer reflects reality (structs, enums, match, for
+> loops, classes, and collections have long been implemented). For current
+> status see `CHANGELOG.md` (0.1.0) and the example suite:
+> `test_examples.sh` / `test_examples.ps1` — 473+/481 passing on all
+> platforms.
+
 ## ✅ FULLY WORKING
 
 ### Core Features

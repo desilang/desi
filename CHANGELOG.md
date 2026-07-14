@@ -111,12 +111,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Concurrency guide (12 pages)
   - Examples index
 
+**Windows Platform Support**
+
+- Full Windows build via `build.ps1` (MSVC runtime + Go tools) and
+  `build-desi.ps1`/`test_examples.ps1` (program builds and test harness)
+- Runtime modules ported to Win32: `os`, `net` (WinSock2), `fs`, `path`
+  (dirent shim, `_fullpath`), `random`, `uuid` (`rand_s`), `process`
+  (CreateProcess with pipes, timeouts, kill), `shell` (`_popen`,
+  FindFirstFile glob), `re` (bundled minimal-ERE regex shim), hot-reload
+  state functions
+- HTTPS client on Windows via Schannel (`http/tls_win.h`) — no OpenSSL
+  needed; HTTP/WebSocket *server* and `signal` remain macOS/Linux-only
+- 473 of 481 examples pass on Windows (remaining 8 need the db/ORM
+  runtime port)
+
+**Automatic Memory Management (hybrid MM, phases 1–2)**
+
+- Collection locals (`list`/`set`/`dict`) are freed at scope exit; float
+  element boxes are list-owned (freed on `list_free`, cloned across
+  copy/slice/extend/filter)
+- Enum instances (wrapper + payload box) and struct instances are freed
+  at scope exit with recursive heap-field cleanup
+- Conservative ownership analysis in the lowerer: values passed to user
+  functions, stored in containers, matched with payload bindings, or
+  aliased via field access/`?` extraction are never double-freed —
+  unclear ownership leaks safely instead of crashing
+- Constant-memory loops: millions of list/enum allocations peak at ~3 MB
+  working set
+
 ### Fixed
 
 - All 475 examples pass (0 failures)
 - Cross-platform LLVM tool auto-discovery for `llc`/`clang` (macOS Homebrew, Linux versioned, Windows MSYS2/Chocolatey)
 - Makefile: Fixed archive merge that lost libmpdec symbols
 - Guard pattern checker prevents guard/arena escapes
+- `using tg = sync.TaskGroup():` destroyed the TaskGroup as an arena —
+  heap corruption on every platform (crashed deterministically on
+  Windows; macOS survived only by memory-layout luck)
+- Windows x64 bool ABI: `i1` arguments passed to C `int` parameters left
+  garbage in the upper register bits — f-string bools always printed
+  "true" and `assert_eq(1 < 2, true)` failed while printing
+  "expected: true, actual: true" (`bool_to_str`, `bool_to_cstring`,
+  `__desi_assert_{eq,ne}_bool` all zext'd now)
+- `file_read_all` left the output slot uninitialized on error paths —
+  reading a failed `open()` crashed instead of returning ""
+- Struct-field drop offsets now match the aligned construction layout
+  (`{id: int, status: Enum}` stores the pointer at offset 8, not 4)
+- Enum unit-variant constructors store a full 8-byte null payload slot
+  (was a 4-byte store leaving garbage in the upper half)
 
 ### Tests
 

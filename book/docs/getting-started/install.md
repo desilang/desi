@@ -11,6 +11,9 @@ Before installing Desi, ensure you have:
 - **LLVM** (version 15 or later)
 - **Clang** (for linking)
 - **Go** (version 1.21+, for building from source)
+- **Windows only:** [Visual Studio Build Tools 2022](https://visualstudio.microsoft.com/downloads/#build-tools-for-visual-studio-2022)
+  with the *Desktop development with C++* workload (provides `cl.exe` and the
+  Windows SDK used to build the C runtime)
 
 ---
 

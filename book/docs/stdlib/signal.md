@@ -2,6 +2,10 @@
 
 Register handlers for Unix signals like SIGINT, SIGTERM, and more.
 
+!!! note "Platform support"
+    The signal module currently requires macOS or Linux. Windows support
+    (via SetConsoleCtrlHandler for Ctrl+C/close events) is planned.
+
 ## Import
 
 ```desi
