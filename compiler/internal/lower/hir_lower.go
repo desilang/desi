@@ -78,55 +78,86 @@ func isExternFunction(fd *ast.FuncDecl) bool {
 //	        return __random_choice_int(items)
 //
 // Returns the inner function name (e.g., "__random_choice_int"), or "" if not found.
-// Only inlines when the wrapper is a pure pass-through (same number of args).
-// Wrappers that add constant args (e.g., content-type) are NOT inlined.
+//
+// Inlining REPLACES the call site `wrapper(a, b, ...)` with `inner(a, b, ...)`,
+// forwarding the wrapper's actual arguments verbatim. That is only sound when
+// the wrapper is a *pure 1:1 pass-through*: a single meaningful statement whose
+// inner call forwards exactly the wrapper's parameters, in declaration order.
+// Otherwise the forwarded args would be mismatched — e.g. a multi-statement
+// wrapper like `http.ws` (set_path(path); set_on_message(handler)) would drop
+// the second call and pass `srv` where `__ws_set_path` expects `path`.
 func extractExternFromWrapper(fd *ast.FuncDecl) string {
 	if fd == nil || fd.Body == nil {
 		return ""
 	}
-	wrapperParamCount := len(fd.Params)
-	// Walk the body's statements to find CallExpr nodes
+
+	// Collect meaningful (non-docstring) statements. A pure pass-through has
+	// exactly one, containing the inner call.
+	var meaningful []ast.Stmt
 	for _, stmt := range fd.Body.Stmts {
-		if name, innerArgCount := extractCallFromStmt(stmt); name != "" {
-			// Only inline if wrapper is a pure pass-through:
-			// wrapper param count must match inner call arg count.
-			// If inner call has MORE args, the wrapper adds constant args
-			// (e.g., http.json_text adds "application/json") — don't inline.
-			if innerArgCount > wrapperParamCount {
-				return "" // Don't inline — call the wrapper function instead
-			}
-			return name
+		if _, isDoc := stmt.(*ast.DocStringStmt); isDoc {
+			continue
+		}
+		meaningful = append(meaningful, stmt)
+	}
+	if len(meaningful) != 1 {
+		return "" // multiple side effects — not a pass-through (e.g. http.ws)
+	}
+
+	name, args := extractCallWithArgsFromStmt(meaningful[0])
+	if name == "" {
+		return ""
+	}
+
+	// Arity must match exactly, and every argument must be the wrapper's
+	// parameter at the same position (verbatim forward, no constants/reorder).
+	if len(args) != len(fd.Params) {
+		return ""
+	}
+	for i, arg := range args {
+		id, ok := arg.(*ast.Ident)
+		if !ok || id.Name != fd.Params[i].Name.Name {
+			return ""
 		}
 	}
-	return ""
+	return name
 }
 
-func extractCallFromStmt(stmt ast.Stmt) (string, int) {
+// extractCallWithArgsFromStmt returns the callee name and argument expressions
+// of a single call statement (return/expr/unsafe-wrapped). Empty name if the
+// statement is not a simple call to a named function.
+func extractCallWithArgsFromStmt(stmt ast.Stmt) (string, []ast.Expr) {
 	switch s := stmt.(type) {
 	case *ast.ReturnStmt:
 		if s.Value != nil {
 			if call, ok := s.Value.(*ast.CallExpr); ok {
 				if id, ok := call.Callee.(*ast.Ident); ok {
-					return id.Name, len(call.Args)
+					return id.Name, call.Args
 				}
 			}
 		}
 	case *ast.ExprStmt:
 		if call, ok := s.Expr.(*ast.CallExpr); ok {
 			if id, ok := call.Callee.(*ast.Ident); ok {
-				return id.Name, len(call.Args)
+				return id.Name, call.Args
 			}
 		}
 	case *ast.UnsafeBlock:
 		if s.Body != nil {
+			// An unsafe block wrapping a single call is still a pass-through.
+			var meaningful []ast.Stmt
 			for _, inner := range s.Body.Stmts {
-				if name, count := extractCallFromStmt(inner); name != "" {
-					return name, count
+				if _, isDoc := inner.(*ast.DocStringStmt); isDoc {
+					continue
 				}
+				meaningful = append(meaningful, inner)
+			}
+			if len(meaningful) == 1 {
+				return extractCallWithArgsFromStmt(meaningful[0])
 			}
 		}
 	}
-	return "", 0
+	return "", nil
 }
 
 // LowerFuncFromDecl lowers a function declaration to HIR.
