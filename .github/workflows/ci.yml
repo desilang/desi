@@ -29,15 +29,32 @@ jobs:
       - name: Run Go tests
         run: go test ./...
 
-      - name: Build runtime (unix only)
+      - name: Build runtime (unix)
         if: runner.os != 'Windows'
         run: make runtime
 
-      - name: Run example tests (unix only)
+      - name: Run example tests (unix)
         if: runner.os != 'Windows'
         run: |
           make compiler
           ./test_examples.sh
+
+      - name: Build runtime + tools (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: .\build.ps1
+
+      - name: Run example tests (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        timeout-minutes: 150
+        # 437-446 are db/ORM examples — the db runtime is not ported to
+        # Windows yet (see docs/contributing/windows-build.md)
+        run: |
+          .\test_examples.ps1 -Range "0,436"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          .\test_examples.ps1 -Range "447,9999"
+          if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Run leak detection (macOS only)
         if: runner.os == 'macOS'
