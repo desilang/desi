@@ -32,14 +32,17 @@ Desi compiles to native machine code via LLVM. No garbage collector, no runtime 
 curl -sSL https://desilang.org/install.sh | sh
 ```
 
-Or build from source:
+Or build from source — see [BUILDING.md](BUILDING.md) for full instructions:
 
 ```sh
+# macOS / Linux
 git clone https://github.com/desilang/desi
 cd desi && make
-```
 
-**Prerequisites:** Go 1.20+, Clang/LLVM, Make.
+# Windows (installs prerequisites automatically)
+git clone https://github.com/desilang/desi
+cd desi; .\bootstrap.ps1
+```
 
 ## Quick Start
 
@@ -161,7 +164,7 @@ Everything below ships with the compiler. **No package manager needed.**
 |----------|--------|
 | macOS (x86_64, arm64) | ✅ Fully supported |
 | Linux (x86_64, arm64) | ✅ Fully supported |
-| Windows (x86_64) | ✅ Cross-compile from macOS/Linux |
+| Windows (x86_64) | ✅ Native build + cross-compile |
 
 ## Documentation
 
