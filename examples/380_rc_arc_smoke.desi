@@ -1,0 +1,27 @@
+# Test Rc and Arc smart pointers
+# EXPECTED_OUTPUT:
+# rc_val: 42
+# rc_cloned: 42
+# arc_val: 100
+# arc_cloned: 100
+# Done!
+
+def main() -> int:
+    # 1. Test Rc[T]
+    let r = rc(42)
+    print("rc_val: " + str(r.get()))
+
+    # Clone the Rc
+    let r2 = r.clone()
+    print("rc_cloned: " + str(r2.get()))
+
+    # 2. Test Arc[T]
+    let a = arc(100)
+    print("arc_val: " + str(a.get()))
+
+    # Clone the Arc
+    let a2 = a.clone()
+    print("arc_cloned: " + str(a2.get()))
+
+    print("Done!")
+    0

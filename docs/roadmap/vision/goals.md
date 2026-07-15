@@ -29,7 +29,7 @@ This is what works **right now**. The compiler is already capable of handling co
 -   **Move Semantics**: Assigning a value moves ownership (preventing double-free bugs).
 -   **Borrowing**: explicit `ref` and `inout` parameters for pass-by-reference.
 -   **Arena Allocators**: Bulk-allocate, bulk-free for request-scoped memory.
--   **Reference Counting**: `Rc[T]` for shared ownership, `Arc[T]` for thread-safe shared ownership.
+-   **Reference Counting**: `rc[T]` for shared ownership, `arc[T]` for thread-safe shared ownership.
 -   **No GC**: currently using `malloc`/`free` under the hood with compiler-inserted destructors.
 
 ### 3. Object-Oriented Programming (Classes)

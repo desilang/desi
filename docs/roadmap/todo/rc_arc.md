@@ -1,36 +1,22 @@
-# Rc/Arc Smart Pointers - Design Notes (Deferred)
+# Rc/Arc Smart Pointers - Design Notes (Shipped)
 
-## Status: DEFERRED
+## Status: SHIPPED in v0.1.0
 
-**Decision:** Rc and Arc are deferred until stdlib requires shared ownership patterns.
+**Decision:** Rc and Arc type checking, LLVM lowering, and runtime management have been fully implemented in the compiler as first-class types (`rc[T]` and `arc[T]`).
 
-## Rationale
+## Details
 
-1. **Arena + move semantics cover 90%+ of use cases**
-   - Arena for batch processing, request handling, parsing
-   - Move semantics for single ownership patterns
+1. **First-class syntax & constructors**
+   - Use `rc(value)` to construct an `rc[T]` pointer
+   - Use `arc(value)` to construct an `arc[T]` pointer
 
-2. **Most stdlib modules don't need shared ownership**
-   - `string` - operates on owned data
-   - `time` - stateless functions
-   - `fs` - file handles are single-owner
-   - `task` - futures use move semantics
+2. **Access & Cloning**
+   - Call `.get()` to access the inner value
+   - Call `.clone()` to clone the reference and increment reference counts
 
-3. **Complexity trade-off**
-   - Rc requires runtime counter management
-   - Arc adds atomic operations overhead
-   - Cycle detection adds more complexity
-
-## When to Implement
-
-Implement Rc when:
-- Graph data structures are needed in stdlib
-- Observer/callback patterns are common
-- Cache/memoization with shared references
-
-Implement Arc when:
-- Threading primitives are added
-- Shared state across async tasks
+3. **Runtime & Cleanup**
+   - Lowered to `__rc_new`, `__rc_clone`, `__rc_get` calls
+   - Scope end triggers automatic decref (`__rc_dec`), avoiding memory leaks
 
 ## Design Notes for Future
 
