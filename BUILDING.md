@@ -12,6 +12,16 @@ Flags: `-Test` (run examples), `-SkipBuild` (just set up tools), `-Clean` (fresh
 
 ## Quick Start (macOS / Linux)
 
+Run the one-file bootstrap — it installs anything missing, then builds:
+
+```sh
+./bootstrap.sh
+```
+
+Flags: `--test` / `-t` (run examples), `--skip-build` / `-s` (just set up tools), `--clean` / `-c` (fresh build), `--no-elevate` / `-n` (skip sudo).
+
+Alternatively, if you already have all prerequisites installed:
+
 ```sh
 make
 ```

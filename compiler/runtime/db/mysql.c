@@ -548,8 +548,9 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
             }
         }
     }
-skip_ssl:
+skip_ssl: ;
 #endif
+
 
     // Build Handshake Response packet
     unsigned char response[MY_BUF_SIZE];

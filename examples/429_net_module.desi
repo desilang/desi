@@ -4,7 +4,10 @@ import net
 def main() -> int:
 	# Test DNS resolution
 	let ip = net.resolve("localhost")
-	print(ip)
+	if ip == "127.0.0.1" or ip == "::1":
+		print("localhost resolved")
+	else:
+		print("unexpected ip: " + ip)
 
 	# Test TCP loopback: listen, dial, send, recv
 	let srv = net.listen("127.0.0.1", 19876)
@@ -30,7 +33,7 @@ def main() -> int:
 	0
 
 # EXPECTED_OUTPUT:
-# ::1
+# localhost resolved
 # hello desi
 # pong
 # net ok

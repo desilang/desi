@@ -59,14 +59,35 @@ echo "==> Compiling LLVM IR to object file..."
 $LLC build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
-# Detect if the source uses HTTP or DB module (needs OpenSSL)
 EXTRA_LINK_FLAGS=""
 if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
     # Add OpenSSL linker flags
-    if [ -d "/opt/homebrew/lib" ]; then
+    BREW_OPENSSL=""
+    if [ -x "/opt/homebrew/bin/brew" ]; then
+        BREW_OPENSSL=$(/opt/homebrew/bin/brew --prefix openssl 2>/dev/null || echo "")
+    elif command -v brew >/dev/null 2>&1; then
+        BREW_OPENSSL=$(brew --prefix openssl 2>/dev/null || echo "")
+    fi
+
+    if [ -n "$BREW_OPENSSL" ] && [ -d "$BREW_OPENSSL/lib" ]; then
+        EXTRA_LINK_FLAGS="-L$BREW_OPENSSL/lib -lssl -lcrypto"
+    elif [ -d "/opt/homebrew/opt/openssl/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/opt/homebrew/opt/openssl/lib -lssl -lcrypto"
+    elif [ -d "/opt/homebrew/opt/openssl@3/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto"
+    elif [ -d "/usr/local/opt/openssl/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/usr/local/opt/openssl/lib -lssl -lcrypto"
+    elif [ -d "/usr/local/opt/openssl@3/lib" ]; then
+        EXTRA_LINK_FLAGS="-L/usr/local/opt/openssl@3/lib -lssl -lcrypto"
+    elif [ -d "/opt/homebrew/lib" ]; then
         EXTRA_LINK_FLAGS="-L/opt/homebrew/lib -lssl -lcrypto"
     elif [ -d "/usr/local/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/usr/local/lib -lssl -lcrypto"
+        # Check if ssl libraries actually exist in /usr/local/lib to prevent false positive
+        if [ -f "/usr/local/lib/libssl.dylib" ] || [ -f "/usr/local/lib/libssl.a" ]; then
+            EXTRA_LINK_FLAGS="-L/usr/local/lib -lssl -lcrypto"
+        else
+            EXTRA_LINK_FLAGS="-lssl -lcrypto"
+        fi
     else
         EXTRA_LINK_FLAGS="-lssl -lcrypto"
     fi

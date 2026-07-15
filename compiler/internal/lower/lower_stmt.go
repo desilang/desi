@@ -533,15 +533,21 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					// If the field type is i32, we should store i32.
 
 					// Cast fieldPtr to fieldType*
-					_ = lowerType(fieldType) // Consumed for now to avoid unused var error if we need it later
+					fieldLowerType := lowerType(fieldType)
 					typedPtr := ls.b.FreshTemp("typed_field_ptr")
 					ls.b.Emit(&hir.Cast{Dst: typedPtr, Src: fieldPtr, Type: "ptr"}) // Cast i8* to ptr (void*)?
-					// Actually, Store takes Dst (ptr) and Val.
-					// LLVM Store: store <ty> <val>, <ty>* <ptr>
-					// We need to make sure Val has the correct type.
 
-					// If fieldLowerType is "ptr", we just store.
-					// If fieldLowerType is "i32", we store i32.
+					rhsType := ls.info.Types[s.RHS[0]]
+					rhsLLVMType := "i32"
+					if rhsType != nil {
+						rhsLLVMType = lowerType(rhsType)
+					}
+
+					if fieldLowerType != rhsLLVMType && fieldLowerType != "ptr" && rhsLLVMType != "ptr" {
+						castedVal := ls.b.FreshTemp("field_assign_cast")
+						ls.b.Emit(&hir.Cast{Dst: castedVal, Src: rhs, Type: fieldLowerType})
+						rhs = castedVal
+					}
 
 					ls.b.Emit(&hir.Store{
 						Dst: typedPtr,

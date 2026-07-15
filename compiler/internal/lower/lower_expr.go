@@ -18,7 +18,13 @@ import (
 func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	switch x := e.(type) {
 	case *ast.IntLit:
-		return hir.ConstInt{Text: x.Text}
+		ty := "i32"
+		if ls.info != nil {
+			if t := ls.info.Types[x]; t != nil {
+				ty = lowerType(t)
+			}
+		}
+		return hir.ConstInt{Text: x.Text, Type: ty}
 	case *ast.FloatLit:
 		return hir.ConstFloat{Text: x.Text}
 	case *ast.DecimalLit:
