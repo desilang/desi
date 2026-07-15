@@ -24,8 +24,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h>
 #include <errno.h>
+#ifdef _WIN32
+  #include <winsock2.h>
+  /* every close() in this file targets a socket */
+  #define close(fd) closesocket(fd)
+#else
+  #include <unistd.h>
+#endif
 #include "websocket.h"
 
 /* Bundled miniz for permessage-deflate compression (RFC 7692) */
@@ -33,11 +39,11 @@
 #include "miniz.h"
 
 /* Thread-local compression state per WS session */
-static _Thread_local int _ws_compression_active = 0;
+static DESI_TLS_QUAL int _ws_compression_active = 0;
 
 /* Thread-local SSL pointer: set by ws_do_handshake / ws_session_loop
  * so WS_SEND/WS_RECV macros auto-dispatch to TLS or raw sockets */
-_Thread_local DESI_SSL* _ws_current_ssl = NULL;
+DESI_TLS_QUAL DESI_SSL* _ws_current_ssl = NULL;
 
 /* ============================================================
  * Minimal SHA-1 (RFC 3174) — protocol handshake only
@@ -225,7 +231,7 @@ typedef struct {
 } WsRecvBuf;
 
 /* Thread-local so each worker's WS session has its own buffer */
-static _Thread_local WsRecvBuf _ws_prebuf = {NULL, 0, 0};
+static DESI_TLS_QUAL WsRecvBuf _ws_prebuf = {NULL, 0, 0};
 
 static void ws_set_prebuf(const uint8_t* data, size_t len) {
     _ws_prebuf.data = data;
@@ -794,7 +800,11 @@ typedef void (*ws_message_fn)(int conn_fd, const char* msg);
 typedef void (*ws_binary_fn)(int conn_fd, const char* data, size_t len);
 typedef void (*ws_lifecycle_fn)(int conn_fd);
 
-/* Ping keepalive thread — sends PING frames at configured interval */
+/* Ping keepalive thread — sends PING frames at configured interval.
+ * POSIX-only: relies on pthread_cancel, which has no clean Win32
+ * equivalent. Windows sessions simply run without server-initiated
+ * pings (clients ping on their own; PONG replies still work). */
+#ifndef _WIN32
 static void* ws_ping_thread(void* arg) {
     int client_fd = (int)(intptr_t)arg;
     int interval = __ws_state.ping_interval_secs;
@@ -811,6 +821,7 @@ static void* ws_ping_thread(void* arg) {
     }
     return NULL;
 }
+#endif /* !_WIN32 */
 
 void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DESI_SSL* ssl) {
     /* Set thread-local SSL for WS_SEND/WS_RECV macros */
@@ -845,7 +856,9 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DE
     printf("[ws] client connected fd=%d (%d total)\n", client_fd, __ws_state.conn_count);
     fflush(stdout);
 
-    /* Start ping keepalive thread if configured */
+    /* Start ping keepalive thread if configured (POSIX only — see
+     * ws_ping_thread above) */
+#ifndef _WIN32
     pthread_t ping_tid = 0;
     int has_ping_thread = 0;
     if (__ws_state.ping_interval_secs > 0) {
@@ -853,6 +866,7 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DE
             has_ping_thread = 1;
         }
     }
+#endif
 
     /* Read frame loop */
     WsFrame frame;
@@ -894,11 +908,13 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DE
     }
 
 done:
-    /* Stop ping thread if running */
+    /* Stop ping thread if running (POSIX only) */
+#ifndef _WIN32
     if (has_ping_thread) {
         pthread_cancel(ping_tid);
         pthread_join(ping_tid, NULL);
     }
+#endif
 
     /* Call on_close handler */
     if (close_handler) {

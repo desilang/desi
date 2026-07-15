@@ -192,16 +192,15 @@ if (-not $SkipRuntime) {
     Write-Step "Building Desi runtime library..."
     
     # Get all .c files in runtime directory (excluding decimal subdirectory)
-    # Files still pending Windows portability (deep POSIX/Unix-only APIs):
+    # Files still pending Windows portability:
     $windowsExcludes = @(
-        'desi_host.c', 'http_server.c', 'tls.c', 'websocket.c',
-        'signal_handler.c'
+        'desi_host.c',       # dlopen-based hot-reload host
+        'signal_handler.c'   # POSIX signal registration module
     )
-    # Ported to Win32: fs.c, path.c, random.c, uuid.c (dirent shim,
-    # _fullpath, rand_s, FindFirstFile); process.c (CreateProcess),
-    # shell.c (_popen, FindFirstFile glob), re.c (bundled regex shim);
-    # reload.c (portable C — getenv/fopen only). tls.c stays excluded:
-    # https on Windows goes through http/tls_win.h (Schannel) instead.
+    # Everything else is ported. Server stack: http_server.c (WinSock2 +
+    # supervisor threads), websocket.c (no keepalive ping thread on
+    # Windows), tls.c (Schannel path for server TLS; the client uses
+    # http/tls_win.h).
     # os.c  — ported to Win32 API (GetCurrentDirectory, FindFirstFile, etc.)
     # net.c  — ported to WinSock2 (ssize_t typedef added, ensure_wsa() in place)
     $runtimeFiles = Get-ChildItem -Path $RuntimeSrc -Filter "*.c" -File |

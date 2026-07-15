@@ -10,8 +10,17 @@
 #include "platform.h"
 #include "tls.h"
 
+/* Thread-local storage qualifier: MSVC C mode lacks _Thread_local */
+#ifndef DESI_TLS_QUAL
+  #if defined(_MSC_VER)
+    #define DESI_TLS_QUAL __declspec(thread)
+  #else
+    #define DESI_TLS_QUAL _Thread_local
+  #endif
+#endif
+
 /* Thread-local SSL pointer for current WS session */
-extern _Thread_local DESI_SSL* _ws_current_ssl;
+extern DESI_TLS_QUAL DESI_SSL* _ws_current_ssl;
 
 #ifdef _WIN32
   #include <winsock2.h>

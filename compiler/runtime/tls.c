@@ -171,14 +171,20 @@ void desi_tls_ctx_free(DESI_SSL_CTX* ctx) {
  */
 
 #define SECURITY_WIN32
+/* winsock2.h must precede windows.h (or windows.h pulls the legacy
+ * winsock.h and the two redefine sockaddr/fd_set) */
+#ifndef WIN32_LEAN_AND_MEAN
+  #define WIN32_LEAN_AND_MEAN
+#endif
+#include <winsock2.h>
 #include <windows.h>
 #include <security.h>
 #include <schannel.h>
 #include <wincrypt.h>
-#include <winsock2.h>
 
 #pragma comment(lib, "secur32.lib")
 #pragma comment(lib, "crypt32.lib")
+#pragma comment(lib, "advapi32.lib")  /* CryptAcquireContext / CryptImportKey */
 #pragma comment(lib, "ws2_32.lib")
 
 /* Schannel server TLS state (wraps SSPI handles) */

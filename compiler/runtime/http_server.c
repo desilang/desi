@@ -28,13 +28,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <errno.h>
 #include <signal.h>
+#ifndef _WIN32
+  #include <unistd.h>
+  #include <netinet/tcp.h>  /* TCP_NODELAY (winsock2.h provides it on Windows) */
+#endif
 #include "supervisor.h"
 #include "websocket.h"
 #include "tls.h"
-#include <netinet/tcp.h>  /* TCP_NODELAY */
 
 #ifdef _WIN32
   #include <winsock2.h>
@@ -46,6 +48,32 @@
       static int init = 0;
       if (!init) { WSADATA wsa; WSAStartup(MAKEWORD(2,2), &wsa); init = 1; }
   }
+  /* POSIX/GNU string + atomic shims for MSVC */
+  #define strcasecmp  _stricmp
+  #define strncasecmp _strnicmp
+  #define __sync_fetch_and_add(p, v) _InterlockedExchangeAdd((volatile long*)(p), (long)(v))
+  #define __sync_fetch_and_sub(p, v) _InterlockedExchangeAdd((volatile long*)(p), -(long)(v))
+  /* strcasestr is a GNU/BSD extension — MSVC has no equivalent */
+  static char* desi_strcasestr(const char* haystack, const char* needle) {
+      if (!haystack || !needle) return NULL;
+      if (!*needle) return (char*)haystack;
+      size_t nlen = strlen(needle);
+      for (const char* p = haystack; *p; p++) {
+          if (_strnicmp(p, needle, nlen) == 0) return (char*)p;
+      }
+      return NULL;
+  }
+  #define strcasestr desi_strcasestr
+  /* memmem is a GNU extension */
+  static void* desi_memmem(const void* hay, size_t hlen, const void* nee, size_t nlen) {
+      if (!hay || !nee || nlen == 0 || hlen < nlen) return NULL;
+      const char* h = (const char*)hay;
+      for (size_t i = 0; i + nlen <= hlen; i++) {
+          if (memcmp(h + i, nee, nlen) == 0) return (void*)(h + i);
+      }
+      return NULL;
+  }
+  #define memmem desi_memmem
 #else
   #include <sys/socket.h>
   #include <netinet/in.h>
@@ -77,12 +105,18 @@ static void shutdown_handler(int sig) {
 }
 
 static void install_signal_handlers(void) {
+#ifdef _WIN32
+    /* MSVC CRT supports signal() for SIGINT (Ctrl+C) and SIGTERM */
+    signal(SIGINT, shutdown_handler);
+    signal(SIGTERM, shutdown_handler);
+#else
     struct sigaction sa;
     sa.sa_handler = shutdown_handler;
     sa.sa_flags = 0;
     sigemptyset(&sa.sa_mask);
     sigaction(SIGINT, &sa, NULL);
     sigaction(SIGTERM, &sa, NULL);
+#endif
 }
 
 /* ============================================================
@@ -359,7 +393,7 @@ const char* __http_req_param(HttpServerRequest* req, const char* key) {
         if (strncmp(p, key, key_len) == 0 && p[key_len] == '=') {
             p += key_len + 1;  /* skip key= */
             /* Return value (static buffer, caller copies in Desi) */
-            static __thread char param_buf[1024];
+            static DESI_TLS_QUAL char param_buf[1024];
             int i = 0;
             while (*p && *p != '&' && i < 1023) {
                 param_buf[i++] = *p++;
@@ -623,7 +657,7 @@ void __http_server_cors(HttpServer* srv, const char* origin) {
 
 /* Parse Cookie header: "name1=val1; name2=val2" → value for name */
 const char* __http_req_cookie(HttpServerRequest* req, const char* name) {
-    static __thread char cookie_val[512];
+    static DESI_TLS_QUAL char cookie_val[512];
     if (!req || !name) return "";
     const char* cookies = find_header_safe(req->headers, "Cookie",
                                            cookie_val, sizeof(cookie_val));
@@ -1144,10 +1178,16 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
 
     /* Set request timeout on the socket */
     int req_timeout = srv->request_timeout > 0 ? srv->request_timeout : KEEPALIVE_TIMEOUT_SECS;
+#ifdef _WIN32
+    /* Windows SO_RCVTIMEO takes a DWORD in milliseconds, not a timeval */
+    DWORD tv_ms = (DWORD)req_timeout * 1000;
+    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, (const char*)&tv_ms, sizeof(tv_ms));
+#else
     struct timeval tv;
     tv.tv_sec = req_timeout;
     tv.tv_usec = 0;
     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+#endif
 
     /* Get client IP for rate limiting */
     struct sockaddr_in peer_addr;
@@ -1283,8 +1323,15 @@ static void handle_client(HttpServer* srv, server_socket_t client_fd, DESI_SSL* 
                     /* Reset recv timeout to blocking for persistent WS connection.
                      * NOTE: On macOS, {0, 0} means "zero timeout" (non-blocking), NOT
                      * "no timeout". Use a large value (24h) to block effectively forever. */
+#ifdef _WIN32
+                    /* Windows: DWORD milliseconds; 0 = never time out */
+                    DWORD ws_timeout_ms = 0;
+                    setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO,
+                               (const char*)&ws_timeout_ms, sizeof(ws_timeout_ms));
+#else
                     struct timeval ws_timeout = {86400, 0}; /* 24 hours */
                     setsockopt(client_fd, SOL_SOCKET, SO_RCVTIMEO, &ws_timeout, sizeof(ws_timeout));
+#endif
 
                     int ws_compressed = 0;
                     ws_do_handshake_ext(client_fd, ws_key, ssl,
@@ -1594,7 +1641,7 @@ typedef struct {
 } FormData;
 
 /* Thread-local form data for current request */
-static __thread FormData* _current_form = NULL;
+static DESI_TLS_QUAL FormData* _current_form = NULL;
 
 static char* find_boundary(const char* content_type) {
     const char* bp = strstr(content_type, "boundary=");

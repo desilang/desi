@@ -21,6 +21,10 @@
 
 #include <stddef.h>
 #include <sys/types.h>
+#if defined(_WIN32) && !defined(_SSIZE_T_DEFINED)
+  typedef long long ssize_t;   /* MSVC has no ssize_t */
+  #define _SSIZE_T_DEFINED
+#endif
 
 /* Forward-declare SSL types to avoid requiring <openssl/ssl.h> in all files */
 typedef struct ssl_ctx_st DESI_SSL_CTX;
