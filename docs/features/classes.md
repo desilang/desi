@@ -799,7 +799,7 @@ class Bad:
 ## Generic Classes
 
 > [!IMPORTANT]
-> **Current Status:** Generic class *type checking* is fully implemented. However, runtime requires **monomorphization** (generating specialized versions like `Box_int` from `Box<T>`), which is in progress. Non-generic classes work fully.
+> **Current Status:** Generic class type checking and runtime monomorphization (generating specialized versions like `Box_int` from `Box<T>`) are fully implemented and supported.
 
 ### Basic Generic Class
 

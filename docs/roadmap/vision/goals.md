@@ -72,30 +72,30 @@ This is what works **right now**. The compiler is already capable of handling co
 **Goal:** A stable, production-ready compiler that can build real CLI tools and basic applications. We are prioritizing stability over experimental features.
 
 ### 1. Fix Critical Gaps
--   [ ] **Recursion Limit**: Implement a default stack depth limit (e.g., 1000) to prevent segfaults on infinite recursion.
--   [ ] **Inheritance Workarounds**: Document and strictly define limitations on generic inheritance (e.g., `class Derived(Base<int>)` is deferred).
+-   [x] **Recursion Limit**: Implement a default stack depth limit (e.g., 1000) to prevent segfaults on infinite recursion.
+-   [x] **Inheritance Workarounds**: Document and strictly define limitations on generic inheritance (e.g., `class Derived(Base<int>)` is deferred).
 
 ### 2. Standard Library (The "Thin Wrapper" Strategy)
 We will not re-invent the wheel yet. v0.1.0 stdlib will be safe Desi wrappers around proven C functions.
--   [ ] **File I/O**: `File::open()`, `read_to_string()`, etc. wrapping C stdio.
--   [ ] **String Utils**: `split`, `trim`, `replace`.
--   [ ] **Env & Args**: Accessing command line args and environment variables.
--   [ ] **Result<T, E> Adoption**: Ensure all stdlib functions return `Result`, not exceptions.
--   [ ] **Runtime `ast` Library**: `import ast` to parse, walk, and analyze `.desi` source files. Uses the same parser the compiler uses internally. Enables user-built linters, code generators, and documentation tools.
+-   [x] **File I/O**: `File::open()`, `read_to_string()`, etc. wrapping C stdio.
+-   [x] **String Utils**: `split`, `trim`, `replace`.
+-   [x] **Env & Args**: Accessing command line args and environment variables.
+-   [x] **Result<T, E> Adoption**: Ensure all stdlib functions return `Result`, not exceptions.
+-   [x] **Runtime `ast` Library**: `import ast` to parse, walk, and analyze `.desi` source files. Uses the same parser the compiler uses internally. Enables user-built linters, code generators, and documentation tools.
 
 ### 3. Performance Tooling
--   [ ] **Performance Advisor**: Compile-time static analysis for algorithmic anti-patterns (`DPR` diagnostic codes). Three levels: relaxed, default, strict. Configurable via `[diagnostics] perf = "default"` in `desi.mod`.
--   [ ] **`@perf` Decorator**: Runtime benchmarking with iteration count, timing statistics, and automatic stripping in release builds.
--   [ ] **`desic perf` Subcommand**: Run all `@perf`-decorated functions and display timing results.
+-   [x] **Performance Advisor**: Compile-time static analysis for algorithmic anti-patterns (`DPR` diagnostic codes). Three levels: relaxed, default, strict. Configurable via `[diagnostics] perf = "default"` in `desi.mod`.
+-   [x] **`@perf` Decorator**: Runtime benchmarking with iteration count, timing statistics, and automatic stripping in release builds.
+-   [x] **`desic perf` Subcommand**: Run all `@perf`-decorated functions and display timing results.
 
 ### 4. Security & Build Audit
--   [ ] **`[permissions]` in desi.mod**: `allow`/`deny` lists for API sensitivity tiers (Safe, System, Network, Privileged). Build fails if denied APIs are used by any dependency.
--   [ ] **Audit Report**: `desic build` with `audit = true` prints a full report of what APIs each dependency uses before building.
--   [ ] **Transitive Scanning**: The compiler scans the entire import graph, including third-party code, for sensitive API usage.
+-   [x] **`[permissions]` in desi.mod**: `allow`/`deny` lists for API sensitivity tiers (Safe, System, Network, Privileged). Build fails if denied APIs are used by any dependency.
+-   [x] **Audit Report**: `desic build` with `audit = true` prints a full report of what APIs each dependency uses before building.
+-   [x] **Transitive Scanning**: The compiler scans the entire import graph, including third-party code, for sensitive API usage.
 
 ### 5. Safety & Polish
--   [ ] **Panic Handler**: Defined behavior for `unwrap()` failure (print stack trace + exit).
--   [ ] **Error Messages**: Polished, Rust-style compiler error messages (already mostly done).
+-   [x] **Panic Handler**: Defined behavior for `unwrap()` failure (print stack trace + exit).
+-   [x] **Error Messages**: Polished, Rust-style compiler error messages (already mostly done).
 
 ---
 
