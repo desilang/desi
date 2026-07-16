@@ -194,6 +194,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				varType = sym.Type
 				if isRcLike(sym.Type) {
 					ls.cur().rcLike[s.Name.Name] = true
+				} else if isWeakLike(sym.Type) {
+					ls.cur().weakLike[s.Name.Name] = true
 				}
 			}
 			// Fallback: if sym is nil, get type from RHS expression (for nested class calls etc)

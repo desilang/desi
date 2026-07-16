@@ -1,0 +1,30 @@
+# Test weak pointers - helper scope drop
+# EXPECTED_OUTPUT:
+# weak upgraded successfully: 123
+# weak is now dead!
+# Done!
+
+def create_weak() -> weak[int]:
+	let r = rc(123)
+	let w = weak(r)
+	
+	# Verify it can be upgraded inside the scope
+	let upgraded = w.upgrade()
+	if upgraded is Some(strong):
+		print("weak upgraded successfully: " + str(strong.get()))
+		
+	# w will be returned, r will go out of scope and be dropped
+	return w
+
+def main() -> int:
+	let w = create_weak()
+	
+	# Since r is now dropped, w.upgrade() should return Nothing
+	let upgraded2 = w.upgrade()
+	if upgraded2 is Some(strong2):
+		print("Error: weak pointer should be dead, but got: " + str(strong2.get()))
+	if upgraded2 is Nothing:
+		print("weak is now dead!")
+		
+	print("Done!")
+	return 0

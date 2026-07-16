@@ -1,57 +1,82 @@
-# Reference Counting (Rc)
+# Reference Counting (rc/arc/weak)
 
-`Rc[T]` provides shared ownership of values through reference counting.
+Desi provides reference-counted smart pointers for shared ownership of heap-allocated values:
+*   `rc[T]` - Single-threaded reference counting.
+*   `arc[T]` - Thread-safe reference counting (atomic).
+*   `weak[T]` - Non-owning weak reference to prevent cyclic references.
 
-## Creating an Rc
+## Creating an Rc/Arc
 
-```python
-let r := rc(42)         # Rc[int]
-let s := rc("hello")    # Rc[str]
+Use the built-in `rc()` or `arc()` constructor functions:
+
+```desi
+let r = rc(42)         # rc[int]
+let s = arc("hello")   # arc[str]
 ```
 
-## Getting the Value
+## Accessing the Inner Value
 
-```python
-let r := rc(42)
-let val := r.get()      # Returns 42
-print(val)              # 42
+Call the `.get()` method to read the value:
+
+```desi
+let r = rc(42)
+let val = r.get()      # Returns 42
 ```
 
-## Cloning (Sharing)
+## Sharing Ownership (Clone)
 
-```python
-let r := rc(42)
-let r2 := r.clone()     # Both point to same value
+Call `.clone()` to create another owner. This increments the reference count without copying the underlying value:
 
-# Both r and r2 now share ownership
-# Value is freed when BOTH go out of scope
+```desi
+let r = rc(42)
+let r2 = r.clone()     # Both point to the same value
+# Value is freed when BOTH r and r2 go out of scope
 ```
 
-## How It Works
+## Weak References (`weak[T]`)
 
-1. `rc(value)` allocates memory and stores the value with refcount=1
-2. `.clone()` increments the refcount (doesn't copy the value)
-3. `.get()` returns the inner value
-4. When Rc goes out of scope, refcount decrements
-5. When refcount reaches 0, memory is freed
+Weak references do not keep the underlying object alive. They prevent reference cycles (which cause memory leaks).
 
-## Example: Shared Ownership
+### Creating a Weak Reference
 
-```python
+Pass an `rc[T]` or `arc[T]` to the `weak()` constructor:
+
+```desi
+let r = rc(42)
+let w = weak(r)        # weak[int]
+```
+
+### Upgrading a Weak Reference
+
+To access the value, you must call `.upgrade()` to check if it's still alive. This returns an `Option[rc[T]]`:
+
+```desi
+let w = weak(r)
+
+match w.upgrade():
+    Some(strong):
+        print("Value is alive: " + str(strong.get()))
+    Nothing:
+        print("Value has been deallocated!")
+```
+
+## Full Lifecycle Example
+
+```desi
+def create_weak() -> weak[int]:
+	let r = rc(123)
+	let w = weak(r)
+	
+	# Upgrade succeeds because r is still alive
+	if w.upgrade() is Some(strong):
+		print("Value: " + str(strong.get()))
+	return w # r goes out of scope and is deallocated
+
 def main() -> int:
-    let data := rc(100)
-    
-    let copy1 := data.clone()  # refcount=2
-    let copy2 := data.clone()  # refcount=3
-    
-    print(data.get())   # 100
-    print(copy1.get())  # 100
-    print(copy2.get())  # 100
-    
-    # All three go out of scope → refcount drops to 0 → freed
-    return 0
+	let w = create_weak()
+	
+	# Upgrade fails because r has been deallocated
+	if w.upgrade() is Nothing:
+		print("Weak pointer is dead!")
+	return 0
 ```
-
-## Future: Arc (Atomic RC)
-
-`Arc[T]` will provide thread-safe reference counting for concurrent code.

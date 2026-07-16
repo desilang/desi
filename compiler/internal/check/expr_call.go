@@ -832,7 +832,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 			// Check if it's a lowerer-only builtin (not registered in info.Funcs
 			// to avoid overload conflicts with stdlib modules)
 			switch id.Name {
-			case "abs", "pow", "round", "todo", "unreachable":
+			case "abs", "pow", "round", "todo", "unreachable", "weak":
 				// These have special-case type checking below and
 				// lowerer dispatch in lower_call.go — let them through
 			default:
@@ -1222,6 +1222,22 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				arcType := types.ArcOf(args[0])
 				c.info.Types[call] = arcType
 				return arcType
+			}
+
+			// Built-in weak(rc_value) function - creates Weak[T] from Rc[T] or Arc[T]
+			if id.Name == "weak" && len(args) == 1 && args[0] != nil {
+				var inner types.T
+				if rc, ok := args[0].(*types.Rc); ok {
+					inner = rc.Inner
+				} else if arc, ok := args[0].(*types.Arc); ok {
+					inner = arc.Inner
+				} else {
+					c.add(diagAt("DTE0004", call.Span, "weak constructor expects an Rc or Arc argument"))
+					return nil
+				}
+				weakType := types.WeakOf(inner)
+				c.info.Types[call] = weakType
+				return weakType
 			}
 
 			// Built-in reduce(), foldl(), foldr() functions

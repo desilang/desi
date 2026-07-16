@@ -129,6 +129,36 @@ func (c *checker) resolveType(tn *ast.TypeName) types.T {
 				return nil
 			}
 			return types.ResultOf(ok, err)
+
+		case "rc":
+			if len(tn.Params) != 1 {
+				return nil
+			}
+			elem := c.resolveType(tn.Params[0])
+			if elem == nil {
+				return nil
+			}
+			return types.RcOf(elem)
+
+		case "arc":
+			if len(tn.Params) != 1 {
+				return nil
+			}
+			elem := c.resolveType(tn.Params[0])
+			if elem == nil {
+				return nil
+			}
+			return types.ArcOf(elem)
+
+		case "weak":
+			if len(tn.Params) != 1 {
+				return nil
+			}
+			elem := c.resolveType(tn.Params[0])
+			if elem == nil {
+				return nil
+			}
+			return types.WeakOf(elem)
 		}
 
 		// Check for user-defined generic types (enum/struct/class with type params)

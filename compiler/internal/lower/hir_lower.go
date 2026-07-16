@@ -21,7 +21,7 @@ func LowerBlockWithInfo(name string, blk *ast.Block, info *check.Info) *hir.Func
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, weakLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 nil,
@@ -49,6 +49,7 @@ var desiBuiltins = map[string]bool{
 	"hex": true, "oct": true, "bin": true, "abs": true, "round": true, "pow": true, "todo": true,
 	"set_recursion_limit": true, "is_reload": true, "reload_count": true,
 	"state_file": true, "write_state": true, "read_state": true, "delete_state": true,
+	"rc": true, "arc": true, "weak": true,
 }
 
 // mangleDesiName adds __desi$ prefix to a Desi function name.
@@ -195,7 +196,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 	}
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, weakLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -357,7 +358,7 @@ func LowerBlockFromSource(name string, blk *ast.Block, info *check.Info, src []b
 	b := hir.NewFunc(name)
 	ls := &lowerState{
 		b:                   b,
-		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
+		scopes:              []*scope{{locals: []string{}, rcLike: map[string]bool{}, weakLike: map[string]bool{}, moved: map[string]bool{}, arenas: map[string]bool{}, arenaOwned: map[string]bool{}, mutable: map[string]bool{}, types: map[string]types.T{}, tempDrops: map[string]bool{}, files: map[string]bool{}}}, // root
 		terminated:          false,
 		info:                info,
 		src:                 src,
@@ -426,6 +427,7 @@ type lowerState struct {
 type scope struct {
 	locals      []string        // in declaration order
 	rcLike      map[string]bool // locals that are rc/arc
+	weakLike    map[string]bool // locals that are weak
 	moved       map[string]bool // locals moved-from; skip drop
 	borrowed    map[string]bool // locals that are borrowed/aliased; skip drop
 	defers      []hir.Value
@@ -448,6 +450,7 @@ func (ls *lowerState) push() {
 	ls.scopes = append(ls.scopes, &scope{
 		locals:      []string{},
 		rcLike:      map[string]bool{},
+		weakLike:    map[string]bool{},
 		moved:       map[string]bool{},
 		borrowed:    map[string]bool{},
 		tempDrops:   map[string]bool{},
@@ -801,6 +804,8 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		}
 		if sc.rcLike[name] {
 			ls.b.Emit(&hir.DecRef{Val: hir.Var{Name: name}})
+		} else if sc.weakLike[name] {
+			ls.b.Emit(&hir.Call{Fn: "__weak_dec", Args: []hir.Value{hir.Var{Name: name}}, Type: "void"})
 		} else {
 			ls.b.Emit(&hir.Drop{Val: hir.Var{Name: name}, Type: sc.types[name]})
 		}
@@ -1000,6 +1005,15 @@ func (ls *lowerState) isNonOwnedResult(v hir.Value) bool {
 func isRcLike(t types.T) bool {
 	switch t.(type) {
 	case *types.Rc, *types.Arc:
+		return true
+	default:
+		return false
+	}
+}
+
+func isWeakLike(t types.T) bool {
+	switch t.(type) {
+	case *types.Weak:
 		return true
 	default:
 		return false

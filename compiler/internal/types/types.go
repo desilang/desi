@@ -597,6 +597,12 @@ func Equal(a, b T) bool {
 		return true
 	case *TypeParam:
 		return x.Name == b.(*TypeParam).Name
+	case *Rc:
+		return Equal(x.Inner, b.(*Rc).Inner)
+	case *Arc:
+		return Equal(x.Inner, b.(*Arc).Inner)
+	case *Weak:
+		return Equal(x.Inner, b.(*Weak).Inner)
 	default:
 		return false
 	}

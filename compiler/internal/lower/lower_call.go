@@ -1016,6 +1016,45 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				}
 			}
 
+			// Weak methods: upgrade
+			if _, ok := feXType.(*types.Weak); ok {
+				weakVal := ls.lowerExpr(fe.X)
+				switch fe.Name.Name {
+				case "upgrade":
+					rawPtr := ls.b.FreshTemp("weak_upgrade_raw")
+					ls.b.Emit(&hir.Call{Dst: rawPtr, Fn: "__weak_upgrade", Args: []hir.Value{weakVal}, Type: "ptr"})
+
+					isNotNull := ls.b.FreshTemp("weak_upgrade_is_not_null")
+					ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: rawPtr, RHS: hir.ConstNull{}, Dst: isNotNull, Type: "i1"})
+
+					resOptSlot := ls.b.FreshTemp("weak_upgrade_opt_slot")
+					ls.b.Emit(&hir.Alloca{Type: "ptr", Dst: resOptSlot})
+
+					curBlock := ls.b.Block()
+					someBlock := ls.b.NewBlock("upgrade_some")
+					nothingBlock := ls.b.NewBlock("upgrade_nothing")
+
+					// Some block: call Option.Some(rawPtr) and store in slot
+					ls.b.SetBlock(someBlock)
+					someVal := ls.b.FreshTemp("weak_upgrade_some")
+					ls.b.Emit(&hir.Call{Dst: someVal, Fn: "Option.Some", Args: []hir.Value{rawPtr}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Val: someVal, Dst: resOptSlot})
+
+					// Nothing block: call Option.Nothing() and store in slot
+					ls.b.SetBlock(nothingBlock)
+					nothingVal := ls.b.FreshTemp("weak_upgrade_nothing")
+					ls.b.Emit(&hir.Call{Dst: nothingVal, Fn: "Option.Nothing", Args: []hir.Value{}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Val: nothingVal, Dst: resOptSlot})
+
+					ls.b.SetBlock(curBlock)
+					ls.b.Emit(&hir.If{Cond: isNotNull, Then: someBlock, Else: nothingBlock})
+
+					resOpt := ls.b.FreshTemp("weak_upgrade_opt")
+					ls.b.Emit(&hir.Load{Type: "ptr", Src: resOptSlot, Dst: resOpt})
+					return resOpt
+				}
+			}
+
 			// Channel methods: sender, receiver, close
 			if _, ok := feXType.(*types.Channel); ok {
 				channelVal := ls.lowerExpr(fe.X)
@@ -1609,6 +1648,12 @@ handlePrint:
 				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "__rc_new", Args: []hir.Value{innerPtr}, Type: "ptr"})
 				ls.cur().rcLike[res.Name] = true
+				return res
+			case "weak":
+				// weak(rc) -> Weak*
+				res := ls.b.FreshTemp("weak")
+				ls.b.Emit(&hir.Call{Dst: res, Fn: "__weak_new", Args: []hir.Value{argVal}, Type: "ptr"})
+				ls.cur().weakLike[res.Name] = true
 				return res
 			}
 		}

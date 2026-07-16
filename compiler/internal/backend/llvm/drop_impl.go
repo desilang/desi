@@ -85,6 +85,12 @@ func (m *Module) emitDropForType(val string, t types.T) {
 		// Call dict_free for proper cleanup
 		wprintf(&m.funcs, "  call void @dict_free(ptr %s)\n", val)
 		m.ensureDecl("declare void @dict_free(ptr)")
+	case *types.Rc, *types.Arc:
+		wprintf(&m.funcs, "  call void @__rc_dec(ptr %s)\n", val)
+		m.ensureDecl("declare void @__rc_dec(ptr)")
+	case *types.Weak:
+		wprintf(&m.funcs, "  call void @__weak_dec(ptr %s)\n", val)
+		m.ensureDecl("declare void @__weak_dec(ptr)")
 	default:
 		// Simple free for other heap types (str, etc)
 		wprintf(&m.funcs, "  call void @free(ptr %s)\n", val)
@@ -297,7 +303,7 @@ func (m *Module) emitEnumPayloadBoxFree(val string) {
 
 func isHeapType(t types.T) bool {
 	switch t.(type) {
-	case *types.Struct, *types.Enum, *types.List, *types.Dict, *types.Set:
+	case *types.Struct, *types.Enum, *types.List, *types.Dict, *types.Set, *types.Rc, *types.Arc, *types.Weak:
 		return true
 	}
 	return false

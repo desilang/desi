@@ -386,6 +386,11 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		return c.resolveArcMethod(x, arc)
 	}
 
+	// Handle Weak[T] methods: upgrade
+	if weak, ok := t.(*types.Weak); ok {
+		return c.resolveWeakMethod(x, weak)
+	}
+
 	// Handle Type[T] field access: name, size
 	if tw, ok := t.(*types.TypeWrapper); ok {
 		return c.resolveTypeWrapperField(x, tw)
@@ -1597,6 +1602,26 @@ func (c *checker) resolveArcMethod(x *ast.FieldExpr, arc *types.Arc) types.T {
 		methodType = types.FuncOf(nil, arc, false)
 	default:
 		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Arc"))
+		return nil
+	}
+
+	c.info.Types[x] = methodType
+	return methodType
+}
+
+// resolveWeakMethod resolves methods on Weak[T]: upgrade
+func (c *checker) resolveWeakMethod(x *ast.FieldExpr, weak *types.Weak) types.T {
+	name := x.Name.Name
+	var methodType types.T
+
+	switch name {
+	case "upgrade":
+		// upgrade() -> Option[rc[T]]
+		rcType := types.RcOf(weak.Inner)
+		optType := types.OptionOf(rcType)
+		methodType = types.FuncOf(nil, optType, false)
+	default:
+		c.add(diagAt("DTE0001", x.Name.Span, "undefined method '"+name+"' on Weak"))
 		return nil
 	}
 
