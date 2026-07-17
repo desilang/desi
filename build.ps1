@@ -243,6 +243,44 @@ if (-not $SkipRuntime) {
     } else {
         throw "Failed to create runtime library"
     }
+
+    # --- LTO hot set (release builds) ---
+    # The hot-path runtime files are compiled a second time as LLVM bitcode
+    # so release links (-flto) can inline list/dict/string/rc/arena ops and
+    # the recursion guard into user code — the runtime-call overhead that
+    # -O2 alone can't touch. Release links list these objects explicitly
+    # BEFORE libdesi.lib: explicit objects always win, and because they come
+    # from the same sources, the native archive members are simply never
+    # pulled (no duplicate symbols). Debug builds ignore this directory.
+    $clangCmd = Get-Command clang -ErrorAction SilentlyContinue
+    if ($clangCmd) {
+        Write-Step "Building LTO hot set (release-build inlining)..."
+        $LtoDir = Join-Path $BuildDir "lto"
+        New-Item -ItemType Directory -Force -Path $LtoDir | Out-Null
+        # Membership is benchmark-driven, not exhaustive: list.c/iterator.c
+        # measurably REGRESS when inlined (inlined append/get bloat hot loop
+        # bodies beyond the call overhead they save — list_ops +20%), so
+        # they stay native. Re-measure with benchmarks\run_benchmarks.ps1
+        # -Release before changing this list.
+        $hotFiles = @(
+            'limits.c',    # __desi_call_enter/exit recursion guard
+            'set.c', 'dict.c',
+            'string.c', 'strings.c', 'hash.c',
+            'rc.c', 'arena.c',
+            'print.c', 'builtins.c'
+        )
+        foreach ($hf in $hotFiles) {
+            $src = Join-Path $RuntimeSrc $hf
+            if (-not (Test-Path $src)) { continue }
+            $obj = Join-Path $LtoDir ([System.IO.Path]::GetFileNameWithoutExtension($hf) + ".obj")
+            Write-Host "  Bitcode $hf..." -ForegroundColor Gray
+            & $clangCmd.Source -c -O2 -flto -std=c17 -DNDEBUG -w --target=x86_64-pc-windows-msvc $src -o $obj
+            if ($LASTEXITCODE -ne 0) { throw "clang -flto failed for $hf" }
+        }
+        Write-Success "LTO hot set built: $LtoDir"
+    } else {
+        Write-Host "  clang not found - skipping LTO hot set (release builds fall back to native lib)" -ForegroundColor Yellow
+    }
 }
 
 # Build Go compiler tools

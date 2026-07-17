@@ -128,8 +128,20 @@ try {
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
     $optArgs = @()
-    if ($Release) { $optArgs = @("-O2") }
-    $clangOutput = & $ClangExe @optArgs $LlvmIr $LibDesi -o $Executable `
+    $ltoObjs = @()
+    if ($Release) {
+        $optArgs = @("-O2")
+        # LTO: cross-module inline the hot runtime (list/dict/string/rc/
+        # arena/recursion guard) into the program. The bitcode objects are
+        # listed before libdesi.lib so they win symbol resolution; the
+        # native archive members from the same sources are never pulled.
+        $LtoDir = Join-Path $BuildDir "lto"
+        if (Test-Path $LtoDir) {
+            $ltoObjs = @(Get-ChildItem $LtoDir -Filter "*.obj" | ForEach-Object { $_.FullName })
+            if ($ltoObjs.Count -gt 0) { $optArgs += @("-flto", "-fuse-ld=lld") }
+        }
+    }
+    $clangOutput = & $ClangExe @optArgs $LlvmIr @ltoObjs $LibDesi -o $Executable `
         -lws2_32 `
         2>&1
     $clangExit = $LASTEXITCODE

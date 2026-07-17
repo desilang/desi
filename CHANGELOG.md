@@ -132,11 +132,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   builds route through clang instead of llc so inlining and loop
   optimizations apply. `build-desi.ps1 -Release` / `build-desi.sh
   --release` (or `DESI_RELEASE=1`) for script builds
+- Cross-module LTO for release builds (Windows): build.ps1 compiles a
+  benchmark-curated hot set of runtime files (recursion guard, dict,
+  strings, rc, arena) to LLVM bitcode; release links inline them into
+  user code via -flto -fuse-ld=lld. The recursion guard's cold path is
+  outlined so inlining it costs nothing per frame
 - `benchmarks/`: eight paired Desi-vs-C programs (identical work, same
   clang opt level, outputs must match) with time + peak-memory runners
-  for Windows and Unix. Desi beats C on string churn and matrix multiply
-  at -O2 and ties integer loops; the README documents every remaining
-  delta and its planned fix
+  for Windows and Unix. At -O2+LTO Desi wins string churn outright,
+  ties integer loops and matrix multiply, and uses less memory than C
+  on dict operations; the README documents every remaining delta and
+  its planned fix
 
 **Automatic Memory Management (hybrid MM, phases 1–3)**
 

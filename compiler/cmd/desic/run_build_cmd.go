@@ -414,12 +414,22 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	if verbose {
 		term.Println("==> Compiling LLVM IR to object file...")
 	}
+	// Release builds on Windows use the LTO hot set when build.ps1 produced
+	// it: hot runtime files as bitcode, cross-module inlined into the program.
+	var ltoObjs []string
+	if optLevel != "" && runtime.GOOS == "windows" {
+		ltoObjs = findLTOObjs()
+	}
+
 	objPath := filepath.Join(tmpDir, "program.o")
 	var irCompileCmd *exec.Cmd
 	if runtime.GOOS == "windows" {
 		irArgs := []string{"-w", "-c", irPath, "-o", objPath}
 		if optLevel != "" {
 			irArgs = append(irArgs, optLevel)
+		}
+		if len(ltoObjs) > 0 {
+			irArgs = append(irArgs, "-flto")
 		}
 		irCompileCmd = exec.Command(findLLVMTool("clang"), irArgs...)
 	} else if optLevel != "" {
@@ -444,6 +454,9 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	}
 	runtimeLib := findRuntimeLib()
 	clangArgs := []string{objPath}
+	// LTO bitcode objects go before the native archive so they win symbol
+	// resolution (same sources — the archive members are never pulled).
+	clangArgs = append(clangArgs, ltoObjs...)
 	// Only add entry.obj when the IR defines @__top__ (no explicit def main).
 	// Programs with def main() already emit @main in the IR.
 	if entryObj := findEntryObj(); entryObj != "" && bytes.Contains(irBuf.Bytes(), []byte("@__top__")) {
@@ -452,6 +465,9 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	clangArgs = append(clangArgs, "-o", exePath)
 	if optLevel != "" {
 		clangArgs = append(clangArgs, optLevel)
+	}
+	if len(ltoObjs) > 0 {
+		clangArgs = append(clangArgs, "-flto", "-fuse-ld=lld")
 	}
 	if runtimeLib != "" {
 		if runtime.GOOS == "windows" {
@@ -486,6 +502,35 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	}
 
 	return 0
+}
+
+// findLTOObjs locates the bitcode hot-set objects build.ps1 produces in
+// build/lto (Windows release builds). Empty when the set wasn't built —
+// release then just links the native archive without cross-module LTO.
+func findLTOObjs() []string {
+	dirs := []string{}
+	if exe, err := os.Executable(); err == nil {
+		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "..", "build", "lto"))
+	}
+	if cwd, err := os.Getwd(); err == nil {
+		dirs = append(dirs, filepath.Join(cwd, "build", "lto"))
+	}
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		var objs []string
+		for _, e := range entries {
+			if !e.IsDir() && strings.HasSuffix(e.Name(), ".obj") {
+				objs = append(objs, filepath.Join(dir, e.Name()))
+			}
+		}
+		if len(objs) > 0 {
+			return objs
+		}
+	}
+	return nil
 }
 
 // findRuntimeLib locates libdesi.a (Unix) or libdesi.lib (Windows).
