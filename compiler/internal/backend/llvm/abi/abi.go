@@ -1,5 +1,11 @@
 package abi
 
+import (
+	"os"
+	"os/exec"
+	"strings"
+)
+
 // Info holds platform-specific ABI information for LLVM code generation.
 type Info struct {
 	TargetTriple string
@@ -32,6 +38,28 @@ func Current() *Info {
 // Called by platform-specific files in their init() functions.
 func Register(info *Info) {
 	current = info
+
+	if current != nil && strings.Contains(current.TargetTriple, "apple-macosx") {
+		version := os.Getenv("MACOSX_DEPLOYMENT_TARGET")
+		if version == "" {
+			cmd := exec.Command("sw_vers", "-productVersion")
+			if out, err := cmd.Output(); err == nil {
+				version = strings.TrimSpace(string(out))
+			}
+		}
+		if version != "" {
+			parts := strings.Split(version, ".")
+			if len(parts) == 1 {
+				version = parts[0] + ".0.0"
+			} else if len(parts) == 2 {
+				version = parts[0] + "." + parts[1] + ".0"
+			}
+			idx := strings.Index(current.TargetTriple, "macosx")
+			if idx != -1 {
+				current.TargetTriple = current.TargetTriple[:idx+6] + version
+			}
+		}
+	}
 }
 
 // IsWindows returns true when targeting Windows MSVC.

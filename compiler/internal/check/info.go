@@ -89,6 +89,10 @@ type Info struct {
 	// Used by the lowerer to emit the correct C symbol for overloaded functions.
 	ChosenOverloads map[*ast.CallExpr]*FuncCand
 
+	// NonEscaping tracks local variables that do not escape their containing function.
+	// Key: local variable AST Ident node, Value: true if safe for arena allocation.
+	NonEscaping map[*ast.Ident]bool
+
 	// PerfLevel is the configured performance advisor level ("relaxed", "default", "strict").
 	// Set by CLI flags (e.g., desic perf --level=strict) and read by RunPerfAdvisor.
 	// Empty string means "default".
@@ -149,6 +153,7 @@ func NewInfo() *Info {
 		BoolConversions:     make(map[ast.Expr]*types.Class),
 		DbgCalls:            make(map[*ast.CallExpr]*DbgCallInfo),
 		ChosenOverloads:     make(map[*ast.CallExpr]*FuncCand),
+		NonEscaping:         make(map[*ast.Ident]bool),
 	}
 	addPreludeBuiltins(info)
 	return info
@@ -569,8 +574,6 @@ func addPreludeBuiltins(info *Info) {
 	// NOTE: pow() is NOT registered as a prelude builtin to avoid
 	// conflicting with math.pow(float, float) -> float. The standalone
 	// pow(int, int) -> int lowerer dispatch still works for direct calls.
-
-
 
 	// --- todo builtin (Rust-inspired) ---
 	// todo() -> never — panics with "not implemented"

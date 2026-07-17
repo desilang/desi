@@ -251,13 +251,13 @@ type Class struct {
 	AbstractMethods map[string]bool  // set of abstract method names
 	Decl            *ast.ClassDecl   // Backlink to AST for monomorphization
 	// Macro decorator support (generic — works for @model, @snodel, any macro)
-	MacroDecorator  string           // name of macro protocol applied (e.g., "model", "snodel")
+	MacroDecorator string // name of macro protocol applied (e.g., "model", "snodel")
 	// ORM model support (@model decorator)
-	IsModel         bool             // true if class has @model decorator
-	TableName       string           // SQL table name from @model("tablename")
-	ModelDB         []string         // named DB connections from @model(db=["analytics"])
-	ModelFields     []OrmField       // ORM field descriptors (populated by type checker)
-	Meta            *OrmMeta         // Meta class options (unique constraints, indexes, etc.)
+	IsModel     bool       // true if class has @model decorator
+	TableName   string     // SQL table name from @model("tablename")
+	ModelDB     []string   // named DB connections from @model(db=["analytics"])
+	ModelFields []OrmField // ORM field descriptors (populated by type checker)
+	Meta        *OrmMeta   // Meta class options (unique constraints, indexes, etc.)
 }
 
 // OrmMeta represents Django-style Meta class options for @model classes
@@ -291,26 +291,26 @@ const (
 
 // OrmField represents an ORM model field descriptor
 type OrmField struct {
-	Name       string       // field name
-	Kind       OrmFieldKind // AutoField, CharField, etc.
-	MaxLength  int          // for CharField
-	Precision  int          // for DecimalField
-	Scale      int          // for DecimalField
-	Nullable   bool         // nullable=true
-	Unique     bool         // unique=true
-	DbIndex    bool         // db_index=true
-	PrimaryKey bool         // primary_key=true (AutoField is always PK)
-	Default    string       // default value as string
-	HasDefault bool         // whether a default was specified
-	AutoNow    bool         // auto_now=true (DateTimeField)
-	AutoNowAdd bool         // auto_now_add=true (DateTimeField)
-	RefTable       string       // ForeignKey reference table
-	RefColumn      string       // ForeignKey reference column
-	OnDelete       string       // ForeignKey on_delete: CASCADE, PROTECT, etc.
-	Choices        []string     // choices=["draft","published"] → CHECK constraint
-	Expression     string       // GeneratedField SQL expression
-	OutputKind     OrmFieldKind // GeneratedField output type (e.g., OrmChar)
-	OutputMaxLen   int          // GeneratedField output max_length (for CharField)
+	Name         string       // field name
+	Kind         OrmFieldKind // AutoField, CharField, etc.
+	MaxLength    int          // for CharField
+	Precision    int          // for DecimalField
+	Scale        int          // for DecimalField
+	Nullable     bool         // nullable=true
+	Unique       bool         // unique=true
+	DbIndex      bool         // db_index=true
+	PrimaryKey   bool         // primary_key=true (AutoField is always PK)
+	Default      string       // default value as string
+	HasDefault   bool         // whether a default was specified
+	AutoNow      bool         // auto_now=true (DateTimeField)
+	AutoNowAdd   bool         // auto_now_add=true (DateTimeField)
+	RefTable     string       // ForeignKey reference table
+	RefColumn    string       // ForeignKey reference column
+	OnDelete     string       // ForeignKey on_delete: CASCADE, PROTECT, etc.
+	Choices      []string     // choices=["draft","published"] → CHECK constraint
+	Expression   string       // GeneratedField SQL expression
+	OutputKind   OrmFieldKind // GeneratedField output type (e.g., OrmChar)
+	OutputMaxLen int          // GeneratedField output max_length (for CharField)
 }
 
 // ClassConstant represents a class-level constant

@@ -18,7 +18,7 @@ const (
 // perfRule is a pluggable advisor rule. Each rule scans the AST and may emit
 // zero or more diagnostics. Rules are registered in ruleTable below.
 type perfRule struct {
-	code    string // e.g., "DPR0001"
+	code     string // e.g., "DPR0001"
 	minLevel string // minimum level at which this rule fires
 	fn       func(mod *ast.Module) []diag.Diagnostic
 }

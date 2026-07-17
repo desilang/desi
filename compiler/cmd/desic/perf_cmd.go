@@ -14,8 +14,9 @@ import (
 // perfCmd runs the performance advisor on one or more .desi files.
 //
 // Usage:
-//   desic perf [--level=relaxed|default|strict] <file.desi...>
-//   desic perf                                   (uses desi.mod entry)
+//
+//	desic perf [--level=relaxed|default|strict] <file.desi...>
+//	desic perf                                   (uses desi.mod entry)
 //
 // Exits 0 if no advisor warnings, 1 if warnings found, 2 on error.
 func perfCmd(argv []string) int {

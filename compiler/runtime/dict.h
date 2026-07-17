@@ -45,12 +45,15 @@ typedef struct dict {
     KeyHashFunc key_hash_fn;    // Custom key hash function (for TYPE_TAG_CUSTOM)
     KeyEqFunc key_eq_fn;        // Custom key equality function (for TYPE_TAG_CUSTOM)
     ElemToStrFunc value_to_str_fn; // Function pointer for custom value types
+    void* arena;                // Optional arena handle (Task 4)
 } dict_t;
 
 // Core operations - now accept generic keys
 // For custom types, key_ptr is used instead of key_int/key_str/key_float
 dict_t* dict_new(int key_type_tag, size_t key_size, size_t value_size, int value_type_tag, 
                  KeyHashFunc key_hash_fn, KeyEqFunc key_eq_fn, ElemToStrFunc value_to_str_fn);
+dict_t* dict_new_in(void* arena, int key_type_tag, size_t key_size, size_t value_size, int value_type_tag, 
+                    KeyHashFunc key_hash_fn, KeyEqFunc key_eq_fn, ElemToStrFunc value_to_str_fn);
 void dict_free(dict_t* d);
 void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float, 
                  void* key_ptr, const void* value, int value_type_tag);

@@ -290,7 +290,7 @@ This single class definition gives every `@model` class a full QuerySet API, wir
 - Validate class structure (require fields, forbid names, auto-generate primary keys).
 - Support `strip_in_release = true` for dev-only decorators (like `@perf`, `@test`).
 
-**What's coming in v0.2.0:** Compile-time macro introspection — write macro rules in Desi itself, with full AST access. See the [roadmap](docs/roadmap/todo/compile_time_macros.md).
+**User-Defined Procedural Macros:** Write macro rules in Desi itself with full AST querying and mutation access (like `ast_get_name`, `ast_get_body`, `ast_insert_stmt`), executed by the compiler during typechecking. See the [Language Guide: Macros](book/docs/language/macros.md).
 
 ---
 
@@ -400,7 +400,6 @@ Developer makes edit →
 ## What's Coming
 
 - **Distributed Systems (v0.2.0)** — Erlang-inspired node connection, cross-node messaging, and distributed supervisors. Built on Desi's existing concurrency primitives with a binary wire protocol over TCP. See the [design doc](docs/roadmap/todo/distributed_systems.md).
-- **Compile-time Macros (v0.2.0)** — Write macro rules in Desi itself with full AST access. Community-contributed analyzer rules without modifying the Go compiler.
 - **Full Async/Await (v0.2.0)** — Design doc exists, implementation planned.
 - **WebAssembly Target (v0.2.0)** — Compile Desi to WASM for browser and edge deployments.
 

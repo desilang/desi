@@ -37,30 +37,63 @@ match value:
     Option.Nothing: print("No value")
 ```
 
-### Methods
+### Option Methods
 
-| Method | Return | Description |
-|--------|--------|-------------|
-| `is_some()` | `bool` | Returns true if Some |
-| `is_nothing()` | `bool` | Returns true if Nothing |
-| `unwrap()` | `T` | Returns value or panics if Nothing |
-| `unwrap_or(default)` | `T` | Returns value or default if Nothing |
-| `expect(msg)` | `T` | Like unwrap but panics with custom message |
-| `map(fn)` | `Option<U>` | Transforms value: `Some(x).map(f) -> Some(f(x))` |
+Desi's `Option` type provides a rich set of helper methods to query, transform, and unwrap optional values safely.
 
-```desi
-let x: Option<int> = Option.Some(42)
+| Method | Signature / Return | Description |
+|--------|-------------------|-------------|
+| `is_some()` | `() -> bool` | Returns `true` if the option is `Some`. |
+| `is_none()` / `is_nothing()` | `() -> bool` | Returns `true` if the option is `Nothing`. |
+| `unwrap()` | `() -> T` | Returns the inner value of `Some`, or panics if `Nothing`. |
+| `unwrap_or(default)` | `(default: T) -> T` | Returns the inner value if `Some`, otherwise returns the `default` value. |
+| `unwrap_or_else(fn)` | `(fn: () -> T) -> T` | Returns the inner value if `Some`, otherwise computes a default by calling `fn` (lazy evaluation). |
+| `expect(msg)` | `(msg: str) -> T` | Returns the inner value of `Some`, or panics with the custom `msg` if `Nothing`. |
+| `map(fn)` | `(fn: (T) -> U) -> Option<U>` | Maps an `Option<T>` to `Option<U>` by applying `fn` to the contained value. |
+| `and_then(fn)` | `(fn: (T) -> Option<U>) -> Option<U>` | Returns `Nothing` if the option is `Nothing`, otherwise calls `fn` and returns its result (flat map). |
+| `or_else(fn)` | `(fn: () -> Option<T>) -> Option<T>` | Returns the option if it is `Some`, otherwise calls `fn` and returns its result. |
 
-if x.is_some():
-    print(f"Unwrapped: {x.unwrap()}")
+#### Code Examples
 
-let y: Option<str> = Option.Nothing
-if y.is_nothing():
-    print("y is nothing")
-```
+=== "Querying Options"
+    ```desi
+    let x = Option.Some(42)
+    assert x.is_some() == true
+    assert x.is_none() == false
+    assert x.is_nothing() == false
+    
+    let y: Option<int> = Option.Nothing
+    assert y.is_some() == false
+    assert y.is_none() == true
+    ```
+
+=== "Unwrapping & Fallbacks"
+    ```desi
+    let x = Option.Some(42)
+    print(x.unwrap())  # 42
+    
+    let y = Option.Nothing
+    print(y.unwrap_or(0))  # 0
+    
+    # Lazy default computation (expensive_default is only called if y is Nothing)
+    print(y.unwrap_or_else(fn() -> int: 10 + 20))  # 30
+    
+    # Expect with custom panic message
+    # y.expect("Value should be present!")  # Panics: "Value should be present!"
+    ```
+
+=== "Transforming (map/and_then)"
+    ```desi
+    let x = Option.Some(21)
+    let double_opt = x.map(fn(val: int) -> int: val * 2)  # Some(42)
+    
+    # and_then chains functions returning another Option
+    let to_str = fn(val: int) -> Option<str>: Option.Some(f"{val}")
+    let str_opt = x.and_then(to_str)  # Some("21")
+    ```
 
 !!! warning "unwrap() Panics"
-    Only use `unwrap()` when you're certain the value is `Some`. In production code, prefer pattern matching.
+    Only use `unwrap()` when you are 100% certain the value is `Some`. In production code, prefer fallback methods like `unwrap_or()`, `unwrap_or_else()`, or pattern matching.
 
 ### Common Use Cases
 
@@ -118,29 +151,61 @@ match result:
     Result.Err(e): print(f"Error: {e}")
 ```
 
-### Methods
+### Result Methods
 
-| Method | Return | Description |
-|--------|--------|-------------|
-| `is_ok()` | `bool` | Returns true if Ok |
-| `is_err()` | `bool` | Returns true if Err |
-| `unwrap()` | `T` | Returns value or panics |
-| `unwrap_err()` | `E` | Returns error or panics |
-| `unwrap_or(default)` | `T` | Returns value or default if Err |
-| `expect(msg)` | `T` | Like unwrap but panics with custom message |
-| `map(fn)` | `Result<U, E>` | Transforms Ok value: `Ok(x).map(f) -> Ok(f(x))` |
+Desi's `Result` type provides a complete suite of methods to query, transform, and safely extract values or errors.
 
-```desi
-let x: Result<int, str> = Result.Ok(100)
+| Method | Signature / Return | Description |
+|--------|-------------------|-------------|
+| `is_ok()` | `() -> bool` | Returns `true` if the result is `Ok`. |
+| `is_err()` | `() -> bool` | Returns `true` if the result is `Err`. |
+| `unwrap()` | `() -> T` | Returns the inner value of `Ok`, or panics if `Err`. |
+| `unwrap_err()` | `() -> E` | Returns the inner error of `Err`, or panics if `Ok`. |
+| `unwrap_or(default)` | `(default: T) -> T` | Returns the inner value if `Ok`, otherwise returns the `default` value. |
+| `unwrap_or_else(fn)` | `(fn: (E) -> T) -> T` | Returns the inner value if `Ok`, otherwise computes it by calling `fn(err)`. |
+| `expect(msg)` | `(msg: str) -> T` | Returns the inner value of `Ok`, or panics with the custom `msg` and error description if `Err`. |
+| `expect_err(msg)` | `(msg: str) -> E` | Returns the inner error of `Err`, or panics with the custom `msg` if `Ok`. |
+| `ok()` | `() -> Option<T>` | Converts the `Result<T, E>` into an `Option<T>`, mapping `Ok(v)` to `Some(v)` and discarding any error. |
+| `err()` | `() -> Option<E>` | Converts the `Result<T, E>` into an `Option<E>`, mapping `Err(e)` to `Some(e)` and discarding any success. |
+| `map(fn)` | `(fn: (T) -> U) -> Result<U, E>` | Maps a `Result<T, E>` to `Result<U, E>` by applying `fn` to the success value. |
+| `and_then(fn)` | `(fn: (T) -> Result<U, E>) -> Result<U, E>` | Returns `Err` if the result is `Err`, otherwise calls `fn` on the success value. |
+| `or_else(fn)` | `(fn: (E) -> Result<T, F>) -> Result<T, F>` | Returns the result if `Ok`, otherwise calls `fn` on the error value. |
 
-if x.is_ok():
-    print(f"Unwrapped: {x.unwrap()}")
+#### Code Examples
 
-let y: Result<int, str> = Result.Err("Failed")
+=== "Querying Results"
+    ```desi
+    let x: Result<int, str> = Result.Ok(100)
+    assert x.is_ok() == true
+    assert x.is_err() == false
+    
+    let y: Result<int, str> = Result.Err("io error")
+    assert y.is_ok() == false
+    assert y.is_err() == true
+    ```
 
-if y.is_err():
-    print(f"Error: {y.unwrap_err()}")
-```
+=== "Unwrapping & Conversion"
+    ```desi
+    let x = Result.Ok(100)
+    print(x.unwrap())  # 100
+    
+    let y = Result.Err("failed")
+    print(y.unwrap_err())  # "failed"
+    print(y.unwrap_or(0))  # 0
+    
+    # Lazy default computation with error parameter
+    print(y.unwrap_or_else(fn(err: str) -> int: 0))  # 0
+    
+    # Convert Result to Option
+    let x_opt = x.ok()  # Some(100)
+    let y_opt = y.err()  # Some("failed")
+    ```
+
+=== "Transforming"
+    ```desi
+    let x: Result<int, str> = Result.Ok(21)
+    let mapped = x.map(fn(val: int) -> int: val * 2)  # Ok(42)
+    ```
 
 ### Common Use Cases
 

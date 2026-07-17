@@ -15,10 +15,12 @@ typedef struct {
     size_t capacity;   // Total allocated capacity
     int type_tag;      // 0=int, 1=str, 2=bool, 3=other
     ElemToStrFunc to_str_fn;   // Function pointer for custom types
+    void* arena;       // Optional arena handle (Task 4)
 } DesiList;
 
 // === Core Operations ===
 DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn);
+DesiList* list_new_in(void* arena, int type_tag, ElemToStrFunc to_str_fn);
 void list_free(DesiList* list);
 void list_clear(DesiList* list);
 DesiList* list_copy(DesiList* list);

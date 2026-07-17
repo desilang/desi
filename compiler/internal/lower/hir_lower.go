@@ -2,6 +2,7 @@ package lower
 
 import (
 	"bytes"
+	"reflect"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -208,6 +209,32 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		inDunderNew:         dunderNewClass != "",
 		dunderNewClass:      dunderNewClass,
 		dunderNewSelf:       selfPtr,
+	}
+
+	// Task 4: Initialize local arena if we have non-escaping local variables
+	if hasNonEscapingLocals(fd.Body, info) {
+		arenaPtr := ls.b.FreshTemp("local_arena")
+		ls.b.Emit(&hir.Call{
+			Dst:  arenaPtr,
+			Fn:   "__arena_new",
+			Args: []hir.Value{hir.ConstInt{Text: "0", Type: "i64"}},
+			Type: "ptr",
+		})
+		ls.localArena = arenaPtr
+	}
+
+	// Populate parameter types into the root scope
+	if info != nil {
+		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
+			funcType := set.Cands[0].Type
+			if funcType != nil {
+				for i, p := range fd.Params {
+					if i < len(funcType.Params) && funcType.Params[i] != nil {
+						ls.scopes[0].types[p.Name.Name] = funcType.Params[i]
+					}
+				}
+			}
+		}
 	}
 
 	// Set return type BEFORE lowering body (needed for return type coercion)
@@ -423,6 +450,10 @@ type lowerState struct {
 	inTryBlock  bool       // true when lowering inside a try body
 	exceptBlock *hir.Block // the except handler block to jump to on Err
 	tryErrSlot  hir.Value  // alloca'd slot to store the error value for except
+
+	// Task 4: Escape Analysis & Automatic Function-Local Arenas
+	localArena        hir.Value // Function-scoped arena pointer if initialized
+	currentAllocArena hir.Value // The arena to direct allocations to during RHS lowering
 }
 
 type scope struct {
@@ -915,6 +946,10 @@ func (ls *lowerState) emitAllDefersAndDrops() {
 	for i := len(ls.scopes) - 1; i >= 0; i-- {
 		ls.emitScopeDrops(ls.scopes[i])
 	}
+	// Task 4: destroy local arena at function exit
+	if ls.localArena != nil {
+		ls.b.Emit(&hir.DestroyArena{Arena: ls.localArena})
+	}
 }
 
 func (ls *lowerState) hasLocal(name string) bool {
@@ -926,6 +961,15 @@ func (ls *lowerState) hasLocal(name string) bool {
 		}
 	}
 	return false
+}
+
+func (ls *lowerState) lookupLocalType(name string) types.T {
+	for i := len(ls.scopes) - 1; i >= 0; i-- {
+		if t, ok := ls.scopes[i].types[name]; ok {
+			return t
+		}
+	}
+	return nil
 }
 
 func (ls *lowerState) isMutable(name string) bool {
@@ -1021,4 +1065,125 @@ func isWeakLike(t types.T) bool {
 	}
 }
 
-// lowerDictLit builds HIR for dict literals:
+// emitAlloc emits an arena-backed allocation if currentAllocArena is active, otherwise standard malloc.
+func (ls *lowerState) emitAlloc(dst hir.Temp, size hir.Value) {
+	if ls.currentAllocArena != nil {
+		ls.b.Emit(&hir.ArenaAlloc{
+			Dst:   dst,
+			Arena: ls.currentAllocArena,
+			Args:  []hir.Value{size},
+		})
+		ls.tempsFromArenaAlloc[dst.Name] = true
+	} else {
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   "malloc",
+			Args: []hir.Value{size},
+			Type: "ptr",
+		})
+	}
+}
+
+// hasNonEscapingLocals recursively checks if a block contains any variables marked as non-escaping.
+func hasNonEscapingLocals(body *ast.Block, info *check.Info) bool {
+	if info == nil || len(info.NonEscaping) == 0 || body == nil {
+		return false
+	}
+	found := false
+	var inspect func(ast.Node)
+	inspect = func(node ast.Node) {
+		if node == nil || found {
+			return
+		}
+		val := reflect.ValueOf(node)
+		if val.Kind() == reflect.Ptr && val.IsNil() {
+			return
+		}
+		switch x := node.(type) {
+		case *ast.Block:
+			for _, s := range x.Stmts {
+				inspect(s)
+			}
+		case *ast.LetStmt:
+			if x.Name.Name != "" && info.NonEscaping[&x.Name] {
+				found = true
+				return
+			}
+			for i := range x.Pattern {
+				if info.NonEscaping[&x.Pattern[i]] {
+					found = true
+					return
+				}
+			}
+			inspect(x.Value)
+		case *ast.AssignStmt:
+			for _, rhs := range x.RHS {
+				inspect(rhs)
+			}
+		case *ast.ExprStmt:
+			inspect(x.Expr)
+		case *ast.ReturnStmt:
+			inspect(x.Value)
+		case *ast.IfStmt:
+			inspect(x.Cond)
+			inspect(x.Then)
+			for _, elif := range x.Elifs {
+				inspect(elif.Cond)
+				inspect(elif.Body)
+			}
+			inspect(x.Else)
+		case *ast.WhileStmt:
+			inspect(x.Cond)
+			inspect(x.Body)
+		case *ast.ForStmt:
+			inspect(x.Iter)
+			inspect(x.Body)
+		case *ast.CallExpr:
+			inspect(x.Callee)
+			for _, arg := range x.Args {
+				inspect(arg)
+			}
+		}
+	}
+	inspect(body)
+	return found
+}
+
+// emitListNew emits a list allocation call. If currentAllocArena is active, it calls list_new_in.
+func (ls *lowerState) emitListNew(dst hir.Temp, typeTag, toStrFunc hir.Value) {
+	if ls.currentAllocArena != nil {
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   "list_new_in",
+			Args: []hir.Value{ls.currentAllocArena, typeTag, toStrFunc},
+			Type: "ptr",
+		})
+	} else {
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   "list_new",
+			Args: []hir.Value{typeTag, toStrFunc},
+			Type: "ptr",
+		})
+	}
+}
+
+// emitDictNew emits a dict allocation call. If currentAllocArena is active, it calls dict_new_in.
+func (ls *lowerState) emitDictNew(dst hir.Temp, args []hir.Value) {
+	if ls.currentAllocArena != nil {
+		allArgs := append([]hir.Value{ls.currentAllocArena}, args...)
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   "dict_new_in",
+			Args: allArgs,
+			Type: "ptr",
+		})
+	} else {
+		ls.b.Emit(&hir.Call{
+			Dst:  dst,
+			Fn:   "dict_new",
+			Args: args,
+			Type: "ptr",
+		})
+	}
+}

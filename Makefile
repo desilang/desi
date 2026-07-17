@@ -12,6 +12,14 @@ RUNTIME_DB  = compiler/runtime/db
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
 
+# macOS deployment target detection
+UNAME_S := $(shell uname -s)
+ifeq ($(UNAME_S),Darwin)
+  MACOSX_VERSION ?= $(shell sw_vers -productVersion 2>/dev/null | cut -d. -f1-2 || echo "12.0")
+  export MACOSX_DEPLOYMENT_TARGET = $(MACOSX_VERSION)
+  CFLAGS += -mmacosx-version-min=$(MACOSX_VERSION)
+endif
+
 # OpenSSL detection for HTTPS support (Homebrew or system)
 OPENSSL_PREFIX := $(shell brew --prefix openssl 2>/dev/null || echo "")
 ifeq ($(OPENSSL_PREFIX),)
@@ -58,7 +66,7 @@ decimal-lib: $(DECIMAL_LIB)
 $(DECIMAL_LIB):
 	@echo "==> Building libmpdec (first time setup)..."
 	@mkdir -p $(DECIMAL_SRC)/lib $(DECIMAL_SRC)/include
-	cd $(DECIMAL_SRC)/mpdecimal-4.0.1 && ./configure --quiet && make -C libmpdec -s
+	cd $(DECIMAL_SRC)/mpdecimal-4.0.1 && ./configure --quiet CFLAGS="$(CFLAGS)" && make -C libmpdec -s
 	cp $(DECIMAL_SRC)/mpdecimal-4.0.1/libmpdec/libmpdec.a $(DECIMAL_SRC)/lib/
 	cp $(DECIMAL_SRC)/mpdecimal-4.0.1/libmpdec/mpdecimal.h $(DECIMAL_SRC)/include/
 	@echo "==> libmpdec built successfully"
@@ -74,15 +82,15 @@ $(LIB_DESI): $(RUNTIME_OBJS) $(RUNTIME_DB_OBJS) $(BUILD_DIR)/desi_decimal.o
 
 $(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
 	@echo "==> Compiling $<..."
-	$(CC) $(OPENSSL_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(OPENSSL_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/%.o: $(RUNTIME_DB)/%.c
 	@echo "==> Compiling db/$<..."
-	$(CC) $(OPENSSL_CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(OPENSSL_CFLAGS) -c $< -o $@
 
 $(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB)
 	@echo "==> Compiling decimal wrapper..."
-	$(CC) -I$(DECIMAL_SRC) -c $< -o $@
+	$(CC) $(CFLAGS) -I$(DECIMAL_SRC) -c $< -o $@
 
 # Compiler and Tools
 compiler: $(DESIC)

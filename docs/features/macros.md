@@ -1,20 +1,23 @@
 # Macro System
 
-**Status**: ✅ Implemented  
-**Since**: v0.10  
+**Status**: ✅ Fully Implemented (Declarative & Procedural)  
+**Since**: v0.1.0  
 **Related**: [ORM Models](orm_models.md), [Classes](classes.md)
 
 ---
 
 ## Overview
 
-Desi's macro system lets users define custom class decorators entirely in `.desi` files. The compiler is 100% domain-agnostic — it contains zero hardcoded decorator names. All behavior comes from the macro registry, which is populated from macro definitions.
+Desi features a dual-mode macro system designed to extend the compiler without modifying its source code:
 
-The built-in `@model` decorator (for ORM) is itself defined via this macro system in `stdlib/macros/orm.desi`.
+1. **Declarative Macros**: Scheme configurations defined via class-level decorators (such as `@model` or `@store`) that inject properties, chainable/terminal QuerySet methods, operator overloads, and custom primary keys.
+2. **Procedural Macros (Compile-Time)**: Custom functions decorated with `@macro` that are executed by the compiler's built-in interpreter during typechecking to inspect and mutate the Abstract Syntax Tree (AST) in-place.
 
-## Defining a Macro
+---
 
-A macro is a class decorated with `@macro(target="class")`:
+## Defining and Using Declarative Macros
+
+A declarative macro is defined by decorating a configuration class with `@macro(target="class")`:
 
 ```desi
 @macro(target="class")
@@ -34,112 +37,91 @@ class store:
     const auto_pk: bool = true
 ```
 
-## Configuration Keys
-
-| Key | Type | Description |
-|-----|------|-------------|
-| `property_name` | `str` | Injected property on decorated classes (e.g., `"objects"`, `"catalog"`) |
-| `chainable` | `list` | Methods that return the manager for chaining |
-| `terminal` | `list` | Methods that execute and return results |
-| `builtins` | `dict` | Global functions this macro introduces (`name → return_type`) |
-| `operators` | `dict` | Binary/unary operator overloads (`pattern → c_func`) |
-| `runtime` | `dict` | C runtime function mapping (`method → c_function_name`) |
-| `runtime_type` | `str` | Runtime type: `"c"` (default), future: `"desi"` |
-| `require_fields` | `bool` | Require at least one field in decorated classes |
-| `auto_pk` | `bool` | Auto-add `id: AutoField` if no PK exists |
-| `forbidden_field_names` | `list` | Field names users cannot declare |
-
-## Using a Custom Macro
-
-After defining `@store`, use it exactly like `@model`:
+Decorating a class with `@store` automatically registers it, letting you call methods like `Product.catalog.find(...)`:
 
 ```desi
 @store("products")
 class Product:
     pub name: CharField(100)
     pub price: IntField()
-
-def main() -> int:
-    # The compiler resolves "catalog" and "find" from the registry!
-    # Product.catalog.find(name="Widget")
-    0
 ```
 
-## Operator Patterns
+---
 
-| Pattern | Type | Example |
-|---------|------|---------|
-| `Q\|Q` | Binary OR | `Q(name="Ali") \| Q(age=25)` |
-| `Q&Q` | Binary AND | `Q(name="Ali") & Q(active=true)` |
-| `~Q` | Unary NOT | `~Q(active=false)` |
-| `F+F` | Arithmetic | `F("price") + F("tax")` |
+## User-Defined Procedural Macros (Compile-Time AST Mutation)
 
-## Macro Loading Pipeline
+Desi v0.1.0 supports procedural macros written in Desi itself. They are executed at compile-time during the semantic typechecking phase.
 
-```
-1. loadEmbeddedMacros()      — stdlib/macros/*.desi (embedded in binary)
-2. loadProjectMacros()       — project/macros/*.desi (from desi.mod)
-3. LoadMacrosFromModule()    — inline @macro classes in entry file
-4. Go init() fallback        — orm_protocol.go (backward compat)
-```
+### Writing a Procedural Macro
 
-All loading happens **before type checking**, so macros are available for decorator resolution.
-
-## Compiler Architecture
-
-The compiler never mentions any domain-specific strings. All dispatch goes through the `MacroRegistry`:
-
-| Compiler File | What It Does |
-|---------------|-------------|
-| `check/expr_field.go` | `Registry.LookupProperty()` — resolves `Class.property` |
-| `check/expr_field.go` | `Registry.LookupMethodOnClass()` — resolves `Class.property.method()` |
-| `check/expr_call.go` | `Registry.LookupBuiltin()` — resolves `Q()`, `F()`, etc. |
-| `check/check_type.go` | `cls.MacroDecorator != ""` — gates ORM field resolution |
-| `lower/lower_call.go` | `Registry.LookupProperty()` — emits `__qs_reset` calls |
-| `lower/class_lower.go` | `cls.MacroDecorator != ""` — gates `LowerModelInit` |
-| `macro/registry.go` | Central registry for all protocols, properties, builtins |
-
-## Runtime Mapping
-
-The `runtime` dict maps abstract method names to C function names:
+A procedural macro is a top-level function decorated with `@macro`. It receives the AST node of the decorated target as its first parameter:
 
 ```desi
-const runtime: dict = {
-    "reset":    "__qs_reset",     # binds table name
-    "filter":   "__qs_filter",   # adds WHERE clause
-    "fetch":    "__qs_fetch",    # executes SELECT
-    "create":   "__qs_do_insert" # executes INSERT
-}
+@macro
+def my_logger(node: Any):
+    # 1. Query properties of the AST node
+    let name = ast_get_name(node)
+    let body = ast_get_body(node)
+    
+    # 2. Synthesize new AST statements
+    let stmt = ast_create_print_stmt(f"[CUSTOM MACRO] Executing function: {name}")
+    
+    # 3. Mutate the AST in-place (inserted at the beginning of the body block)
+    ast_insert_stmt(body, 0, stmt)
 ```
 
-Custom macros can:
-1. **Reuse existing C functions** (e.g., the ORM's `__qs_*` functions)
-2. **Point to custom C libraries** via `@extern` declarations
+Applying the macro:
 
-## File Map
+```desi
+@my_logger
+def say_hello():
+    print("Inside say_hello")
+```
 
-| File | Role |
-|------|------|
-| `stdlib/macros/orm.desi` | `@model` macro definition |
-| `compiler/internal/macro/registry.go` | `MacroRegistry`, `PropertySpec`, `MacroBuiltin` |
-| `compiler/internal/macro/loader.go` | Parses `@macro` classes from AST |
-| `compiler/internal/macro/orm_protocol.go` | Go fallback for `@model` registration |
-| `compiler/internal/macro/builtin_decorators.go` | Tier 1 decorator guard |
+At compile-time, the decorator intercept runs, rewriting `say_hello` to print the custom log statement before executing the main function body.
 
-## Testing
+---
+
+## Compiler Architecture (For Contributors)
+
+### 1. Macro Collection & Decorator Interception
+The typechecker pipeline resides in `compiler/internal/check/check.go` and `check_type.go`:
+* **Phase 1 (Collection)**: The compiler scans declarations. Functions decorated with `@macro` are collected into `checker.macroDefs`.
+* **Phase 2 (Typechecking)**: Right before checking function body blocks (`checkFunc`) or class declarations (`checkClass`), the compiler loops over any applied decorators. If a decorator name matches a registered custom macro, it suspends checking, initializes a new environment, and invokes the interpreter.
+
+### 2. The Tree-Walking Interpreter
+The evaluator package is located in [compiler/internal/eval/eval.go](file:///Users/desiprogrammer/Desktop/Projects/go/desilang/desi/compiler/internal/eval/eval.go):
+* **Values**: Values are wrapped in Go structures implementing the `Value` interface (`IntValue`, `StrValue`, `AstNodeValue` for wrapping Go AST nodes, etc.).
+* **Scoping**: Lexical environment nesting is managed via the `Env` struct.
+* **Introspection & Mutation API**: Builtin compile-time methods are intercepted and handled inside the interpreter's `CallExpr` case:
+  * `ast_get_name(node)`: Inspects `*ast.FuncDecl` or `*ast.ClassDecl` and returns their string identifier name.
+  * `ast_set_name(node, new_name)`: Updates the name identifier of the AST node.
+  * `ast_get_body(node)`: Extracts the `*ast.Block` statement from a function declaration.
+  * `ast_create_print_stmt(msg)`: Allocates an `*ast.ExprStmt` containing a `*ast.CallExpr` targeting `print`.
+  * `ast_insert_stmt(block, index, stmt)`: Mutates a block's statement array (`block.Stmts`) to insert a new statement in-place.
+  * `ast_add_stmt(block, stmt)`: Appends a statement to the end of the block.
+
+* **Printing in Macros**: When `print` is called inside a macro at compile-time, it writes to `os.Stderr`. This prevents printing into standard output (`stdout`), which is reserved for emitting LLVM IR assemblies.
+
+### 3. Registering New AST Helpers
+To add a new AST mutation or query function:
+1. Register its callable name and type signature in `addPreludeBuiltins` inside [compiler/internal/check/info.go](file:///Users/desiprogrammer/Desktop/Projects/go/desilang/desi/compiler/internal/check/info.go).
+2. Add the name to the `preludeBuiltinNames` map in [compiler/internal/check/prelude_scope.go](file:///Users/desiprogrammer/Desktop/Projects/go/desilang/desi/compiler/internal/check/prelude_scope.go) to avoid shadowing diagnostics.
+3. Add a corresponding `case` handling inside `Eval` for `*ast.CallExpr` in [compiler/internal/eval/eval.go](file:///Users/desiprogrammer/Desktop/Projects/go/desilang/desi/compiler/internal/eval/eval.go).
+
+---
+
+## Testing & Verification
+
+To run tests specifically covering custom macros:
 
 ```bash
-# Custom macro test
-./bin/desic run examples/442_custom_macro.desi
+# Compile-time evaluation smoke test
+./test_examples.sh 385,385
 
-# Full regression suite (438 tests)
-bash test_examples.sh
+# Procedural macro AST mutation test
+./test_examples.sh 443,443
+
+# Full regression suite (487 tests)
+./test_examples.sh
 ```
-
-## Future Work
-
-- [ ] `runtime_type = "desi"` — pure Desi macro implementations (no C)
-- [ ] `[macros]` section in `desi.mod` for macro path configuration
-- [ ] Macro composition — combining multiple macros on one class
-- [ ] `@macro(target="func")` — function-level macros
-- [ ] `@macro(target="field")` — field-level macros

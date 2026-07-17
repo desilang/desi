@@ -6,6 +6,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/desugar"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/eval"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -14,8 +15,9 @@ import (
 
 // Result is a structured return used by the CLI.
 type Result struct {
-	Diags []diag.Diagnostic
-	Info  *Info
+	Diags  []diag.Diagnostic
+	Info   *Info
+	Module *ast.Module // The desugared AST
 }
 
 // Check keeps the legacy/public surface that tests expect: (diags, info).
@@ -70,8 +72,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 
 	// 3) Walk module: collect functions first, then check bodies.
 	c := &checker{
-		info:  res.Info,
-		scope: NewScope(top), // child of top so imported names & prelude are visible
+		info:      res.Info,
+		scope:     NewScope(top), // child of top so imported names & prelude are visible
+		macroDefs: make(map[string]*ast.FuncDecl),
 	}
 	// Remember the module (file-level) scope for anti-shadowing checks.
 	c.moduleScope = c.scope
@@ -132,6 +135,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	res.Diags = append(res.Diags, collectMembershipDiags(mod, res.Info)...)
 	// --------------------------------------------------------------------------
 
+	// ---- Task 4 hook: Escape Analysis for Function-Local Arenas --------------
+	runEscapeAnalysis(mod, res.Info)
+
 	// 4) After we know which identifiers resolved to which symbols,
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)
@@ -145,6 +151,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		res.Diags = append(res.Diags, perfDiags...)
 	}
 
+	res.Module = mod
 	return res
 }
 
@@ -222,6 +229,7 @@ type checker struct {
 	unsafeDepth int
 	expected    types.T // Expected type from context (for bidirectional checking)
 	inUsingInit bool    // True when type-checking UsingStmt.Init (for sync RAII checks)
+	macroDefs   map[string]*ast.FuncDecl
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
@@ -314,11 +322,31 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		c.info.TestFuncs[name] = fd
 	}
 
+	// Track @macro decorated functions
+	if hasDecorator(fd, "macro") {
+		c.macroDefs[name] = fd
+	}
+
 	// Bind the function name in the OUTER scope (not the temp scope)
 	_ = saved.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
 
 func (c *checker) checkFunc(fd *ast.FuncDecl) {
+	// Execute custom macro decorators first
+	for _, dec := range fd.Decorators {
+		if macroDef, exists := c.macroDefs[dec.Name.Name]; exists {
+			env := eval.NewEnv(nil)
+			if len(macroDef.Params) > 0 {
+				paramName := macroDef.Params[0].Name.Name
+				env.Set(paramName, eval.AstNodeValue{Node: fd})
+			}
+			_, err := eval.Eval(macroDef.Body, env)
+			if err != nil {
+				c.add(diagAt("DTE9999", fd.SpanOf(), "macro evaluation failed: "+err.Error()))
+			}
+		}
+	}
+
 	// New scope for parameters and locals.
 	saved := c.scope
 	savedFuncName := c.curFuncName
@@ -328,6 +356,15 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		c.scope = saved
 		c.curFuncName = savedFuncName
 	}()
+
+	if hasDecorator(fd, "macro") {
+		c.scope.Define(&Symbol{Name: "ast_get_name", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any}, types.Str, false)})
+		c.scope.Define(&Symbol{Name: "ast_set_name", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Str}, types.None, false)})
+		c.scope.Define(&Symbol{Name: "ast_get_body", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any}, types.Any, false)})
+		c.scope.Define(&Symbol{Name: "ast_create_print_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Str}, types.Any, false)})
+		c.scope.Define(&Symbol{Name: "ast_insert_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Int, types.Any}, types.None, false)})
+		c.scope.Define(&Symbol{Name: "ast_add_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Any}, types.None, false)})
+	}
 
 	// Reset per-function move-tracking state (our local tracker)
 	c.moved = MoveSet{}
@@ -420,6 +457,14 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	// Body.
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
+
+		if hasDecorator(fd, "comptime_run") {
+			env := eval.NewEnv(nil)
+			_, err := eval.Eval(fd.Body, env)
+			if err != nil {
+				c.add(diagAt("DTE9999", fd.SpanOf(), "comptime evaluation failed: "+err.Error()))
+			}
+		}
 	}
 
 	// Save moved variables for backend

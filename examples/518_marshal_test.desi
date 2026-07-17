@@ -1,0 +1,89 @@
+# Test: Custom Binary Serialization using marshal module
+import marshal
+
+def test_int():
+    print("Testing int...")
+    let x: int = 42
+    let data = marshal.dumps(x)
+    let y: int = marshal.loads::<int>(data)
+    assert y == 42
+    print(f"  OK: {x} -> {y}")
+
+def test_float():
+    print("Testing float...")
+    let x: float = 3.14159
+    let data = marshal.dumps(x)
+    let y: float = marshal.loads::<float>(data)
+    # Compare with small delta
+    assert (y - 3.14159) < 0.0001
+    assert (3.14159 - y) < 0.0001
+    print(f"  OK: {x} -> {y}")
+
+def test_bool():
+    print("Testing bool...")
+    let x: bool = true
+    let data = marshal.dumps(x)
+    let y: bool = marshal.loads::<bool>(data)
+    assert y == true
+    print(f"  OK: {x} -> {y}")
+
+def test_str():
+    print("Testing str...")
+    let x: str = "Hello Desi!"
+    let data = marshal.dumps(x)
+    let y: str = marshal.loads::<str>(data)
+    assert y == "Hello Desi!"
+    print(f"  OK: '{x}' -> '{y}'")
+
+def test_list_int():
+    print("Testing list[int]...")
+    let x: list[int] = [10, 20, 30]
+    let data = marshal.dumps(x)
+    let y: list[int] = marshal.loads::<list[int]>(data)
+    assert len(y) == 3
+    assert y[0] == 10
+    assert y[1] == 20
+    assert y[2] == 30
+    print("  OK: list[int]")
+
+def test_list_str():
+    print("Testing list[str]...")
+    let x: list[str] = ["foo", "bar"]
+    let data = marshal.dumps(x)
+    let y: list[str] = marshal.loads::<list[str]>(data)
+    assert len(y) == 2
+    assert y[0] == "foo"
+    assert y[1] == "bar"
+    print("  OK: list[str]")
+
+def test_dict():
+    print("Testing dict[str, int]...")
+    let x: dict[str, int] = {"a": 1, "b": 2}
+    let data = marshal.dumps(x)
+    let y: dict[str, int] = marshal.loads::<dict[str, int]>(data)
+    assert len(y) == 2
+    assert y["a"] == 1
+    assert y["b"] == 2
+    print("  OK: dict[str, int]")
+
+def test_tuple():
+    print("Testing tuple[int, float, str]...")
+    let x: tuple[int, float, str] = (100, 2.5, "test")
+    let data = marshal.dumps(x)
+    let y: tuple[int, float, str] = marshal.loads::<tuple[int, float, str]>(data)
+    assert y.0 == 100
+    assert (y.1 - 2.5) < 0.0001
+    assert y.2 == "test"
+    print("  OK: tuple")
+
+def main():
+    print("Running marshal tests...")
+    test_int()
+    test_float()
+    test_bool()
+    test_str()
+    test_list_int()
+    test_list_str()
+    test_dict()
+    test_tuple()
+    print("All marshal tests passed!")

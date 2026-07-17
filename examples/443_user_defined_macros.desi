@@ -1,0 +1,18 @@
+@macro
+def my_logger(node: Any):
+    let name = ast_get_name(node)
+    let body = ast_get_body(node)
+    let stmt = ast_create_print_stmt(f"[CUSTOM MACRO] Executing function: {name}")
+    ast_insert_stmt(body, 0, stmt)
+
+@my_logger
+def say_hello():
+    print("Inside say_hello")
+
+def main() -> int:
+    say_hello()
+    return 0
+
+# EXPECTED_OUTPUT:
+# [CUSTOM MACRO] Executing function: say_hello
+# Inside say_hello

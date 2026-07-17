@@ -112,6 +112,6 @@ Run time module tests:
 
 ## Related Files
 
-- [exports.go](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/resolve/exports.go) - Export collection
-- [import_sigs.go](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/check/import_sigs.go) - Import signature population
-- [lower_call.go](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/lower_call.go) - Duration return type workaround
+- [exports.go](../../../compiler/internal/resolve/exports.go) - Export collection
+- [import_sigs.go](../../../compiler/internal/check/import_sigs.go) - Import signature population
+- [lower_call.go](../../../compiler/internal/lower/lower_call.go) - Duration return type workaround

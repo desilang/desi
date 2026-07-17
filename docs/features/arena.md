@@ -215,6 +215,18 @@ let x = __arena_alloc(arena, 100)
 __arena_destroy(arena)  # Called automatically at scope exit
 ```
 
+### Automatic Function-Local Arenas (Task 4)
+
+In addition to manual `using arena:` blocks, the Desi compiler implements a static **escape analysis pass** in the typechecker (`compiler/internal/check/escape.go`).
+
+If the compiler detects that heap-allocated collection variables (like `list`, `dict`, `set`, and `tuple`) do not escape their containing function's scope, it will automatically:
+1. Initialize a function-local arena (`__arena_new(0)`) at function entry.
+2. Redirect all allocations for these variables to use arena-backed helpers (e.g. `list_new_in`, `dict_new_in`, or direct arena bump allocations).
+3. Suppress individual variable drops and ref-counting operations (`Drop`/`DecRef`) for these variables.
+4. Automatically destroy the function-local arena (`__arena_destroy`) when the function exits.
+
+This provides the memory efficiency and performance of arenas automatically, without any developer intervention.
+
 ---
 
 ## Performance Characteristics

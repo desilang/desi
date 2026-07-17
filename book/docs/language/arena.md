@@ -80,6 +80,12 @@ def game_loop():
         # Frame data freed - no GC pause!
 ```
 
+## Automatic Function-Local Arenas
+
+Desi compilers statically perform **escape analysis** on local variables. If the compiler determines that a heap-allocated collection (such as a `list`, `dict`, `set`, or `tuple`) does not escape the function scope, it will automatically promote the allocation to a function-local arena.
+
+The compiler automatically takes care of creating the arena, allocating the local collections from it, suppressing individual reference-count/drop operations, and destroying the arena on function exit. You do not need to write `using arena:` for function-local collections.
+
 ## Rules
 
 | Do | Don't |

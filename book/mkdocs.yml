@@ -99,6 +99,7 @@ nav:
     - Iterators: language/iterators.md
     - Iteration: language/iteration.md
     - Error Handling: language/error-handling.md
+    - Macros: language/macros.md
     - Reference Counting: language/rc.md
     - Pipeline Operator: language/pipeline.md
     - Membership (in): language/membership.md
@@ -135,6 +136,7 @@ nav:
     - Time: stdlib/time.md
     - DateTime: stdlib/datetime.md
     - JSON: stdlib/json.md
+    - Marshal: stdlib/marshal.md
     - TOML: stdlib/toml.md
     - CSV: stdlib/csv.md
     - HTTP Client: stdlib/http.md

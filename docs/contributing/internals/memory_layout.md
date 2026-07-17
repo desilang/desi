@@ -163,15 +163,15 @@ When an enum goes out of scope, the compiler generates cleanup code to free heap
 
 This prevents memory leaks for enums with payloads like `str`, `list`, `dict`, or nested enums.
 
-**Implementation**: [`drop_impl.go:emitEnumDrop()`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/backend/llvm/drop_impl.go)
+**Implementation**: [`drop_impl.go:emitEnumDrop()`](../../../compiler/internal/backend/llvm/drop_impl.go)
 
 ## Related Files
 
-- [`compiler/internal/lower/module_lower.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/module_lower.go) - `getAlign()`, `getClassSize()`, struct constructors
-- [`compiler/internal/lower/class_lower.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/class_lower.go) - Class allocation with alignment
-- [`compiler/internal/lower/enum_lower.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/enum_lower.go) - Enum layout (16 bytes)
-- [`compiler/internal/lower/lower_expr.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/lower_expr.go) - Field access offset calculation
-- [`compiler/internal/backend/llvm/drop_impl.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/backend/llvm/drop_impl.go) - Drop cleanup (struct, enum, list, dict, set)
+- [`compiler/internal/lower/module_lower.go`](../../../compiler/internal/lower/module_lower.go) - `getAlign()`, `getClassSize()`, struct constructors
+- [`compiler/internal/lower/class_lower.go`](../../../compiler/internal/lower/class_lower.go) - Class allocation with alignment
+- [`compiler/internal/lower/enum_lower.go`](../../../compiler/internal/lower/enum_lower.go) - Enum layout (16 bytes)
+- [`compiler/internal/lower/lower_expr.go`](../../../compiler/internal/lower/lower_expr.go) - Field access offset calculation
+- [`compiler/internal/backend/llvm/drop_impl.go`](../../../compiler/internal/backend/llvm/drop_impl.go) - Drop cleanup (struct, enum, list, dict, set)
 
 ## Historical Context
 

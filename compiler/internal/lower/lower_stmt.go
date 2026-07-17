@@ -19,7 +19,7 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 	}
 	// End-of-root-block finalization (only for outermost scope).
 	if len(ls.scopes) == 1 && !ls.terminated {
-		ls.emitScopeDrops(ls.cur())
+		ls.emitAllDefersAndDrops()
 		// If no explicit return ran, emit a default one (Tier-0: i32 0).
 		ls.b.Emit(&hir.Ret{Val: nil})
 		ls.terminated = true
@@ -30,6 +30,26 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	switch s := s.(type) {
 	case *ast.LetStmt:
+		isNonEscaping := false
+		if len(s.Pattern) > 0 {
+			for i := range s.Pattern {
+				ident := &s.Pattern[i]
+				if ls.info != nil && ls.info.NonEscaping[ident] {
+					isNonEscaping = true
+					ls.cur().arenaOwned[ident.Name] = true
+				}
+			}
+		} else {
+			if ls.info != nil && ls.info.NonEscaping[&s.Name] {
+				isNonEscaping = true
+				ls.cur().arenaOwned[s.Name.Name] = true
+			}
+		}
+		if isNonEscaping {
+			ls.currentAllocArena = ls.localArena
+			defer func() { ls.currentAllocArena = nil }()
+		}
+
 		// Handle tuple destructuring: let (a, b, c) = tuple or let (first, *rest) = tuple
 		if len(s.Pattern) > 0 {
 			// Evaluate the RHS tuple expression
@@ -282,32 +302,43 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// M15: Unbox result from generic functions if needed
 			// If the call is to a generic function and the expected type is primitive, unbox
-			if call, ok := s.Value.(*ast.CallExpr); ok {
-				if id, ok := call.Callee.(*ast.Ident); ok && ls.info != nil {
-					// Check if calling a generic function
-					isGeneric := false
-					if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
-						if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
-							isGeneric = true
+			if call, ok := s.Value.(*ast.CallExpr); ok && ls.info != nil {
+				chosen := ls.info.ChosenOverloads[call]
+				isGeneric := false
+				if chosen != nil {
+					if (chosen.Decl != nil && len(chosen.Decl.TypeParams) > 0) ||
+						(chosen.ModuleDecl != nil && len(chosen.ModuleDecl.TypeParams) > 0) {
+						isGeneric = true
+					}
+				}
+				if !isGeneric {
+					// Fallback to name check
+					if id, ok := call.Callee.(*ast.Ident); ok {
+						if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+							cand := set.Cands[0]
+							if (cand.Decl != nil && len(cand.Decl.TypeParams) > 0) ||
+								(cand.ModuleDecl != nil && len(cand.ModuleDecl.TypeParams) > 0) {
+								isGeneric = true
+							}
 						}
 					}
+				}
 
-					if isGeneric {
-						// Generic function returns ptr, but we might need primitive
-						expectedType := varType
-						if expectedType != nil {
-							if t, ok := expectedType.(types.T); ok {
-								expectedLowered := lowerType(t)
-								if expectedLowered != "ptr" && expectedLowered != "void" {
-									// Need to unbox: load from ptr
-									unboxed := ls.b.FreshTemp("unboxed")
-									ls.b.Emit(&hir.Load{
-										Type: expectedLowered,
-										Src:  init,
-										Dst:  unboxed,
-									})
-									init = unboxed
-								}
+				if isGeneric {
+					// Generic function returns ptr, but we might need primitive
+					expectedType := varType
+					if expectedType != nil {
+						if t, ok := expectedType.(types.T); ok {
+							expectedLowered := lowerType(t)
+							if expectedLowered != "ptr" && expectedLowered != "void" {
+								// Need to unbox: load from ptr
+								unboxed := ls.b.FreshTemp("unboxed")
+								ls.b.Emit(&hir.Load{
+									Type: expectedLowered,
+									Src:  init,
+									Dst:  unboxed,
+								})
+								init = unboxed
 							}
 						}
 					}
@@ -1336,7 +1367,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Call{Dst: valuePtr, Fn: "dict_get", Args: []hir.Value{dictVal, keyInt, keyVal, keyFloat, customKeyPtr, nullPtr}, Type: "ptr"})
 
 			// Load value — use correct type based on dict value type
-			var valLLVMType = "i32"          // default int
+			var valLLVMType = "i32" // default int
 			var valDesiType types.T = types.Int
 			if ls.info != nil {
 				if dictType := ls.info.Types[s.Iter]; dictType != nil {
@@ -1706,91 +1737,91 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 					}
 				}
 			}
-		// Check for dict key iteration: for key in dict
-		isDict := false
-		if ls.info != nil {
-			iterType := ls.info.Types[s.Iter]
-			if _, ok := iterType.(*types.Dict); ok {
-				isDict = true
-			}
-		}
-
-		if isDict && len(s.Targets) >= 1 {
-			// Dict key iteration: for key in dict → iterate over keys
-			dictIterVal := ls.lowerExpr(s.Iter)
-
-			// Get keys array and count: dict_keys(dict, &count) → char**
-			keyCountPtr := ls.b.FreshTemp("key_count_ptr")
-			ls.b.Emit(&hir.Alloca{Dst: keyCountPtr, Type: "i64", Count: 1})
-			keysPtr := ls.b.FreshTemp("keys_ptr")
-			ls.b.Emit(&hir.Call{Dst: keysPtr, Fn: "dict_keys", Args: []hir.Value{dictIterVal, keyCountPtr}, Type: "ptr"})
-
-			// Load key count
-			lenTemp := ls.b.FreshTemp("dict_len")
-			ls.b.Emit(&hir.Load{Type: "i64", Src: keyCountPtr, Dst: lenTemp})
-
-			// Allocate index variable
-			idxPtr := ls.b.FreshTemp("for_idx_ptr")
-			ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
-			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
-
-			// Condition block
-			condBlk := ls.b.NewBlock("for_cond")
-			oldCur := ls.b.Block()
-
-			ls.b.SetBlock(condBlk)
-			idxVal := ls.b.FreshTemp("for_idx")
-			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
-			condTemp := ls.b.FreshTemp("for_cond")
-			ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
-			ls.b.SetBlock(oldCur)
-
-			// Body block
-			bodyBlk := ls.b.NewBlock("for_body")
-			ls.b.SetBlock(bodyBlk)
-
-			// Load current index
-			idxBody := ls.b.FreshTemp("for_idx_body")
-			ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
-
-			// Cast to i32 for GEP
-			idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
-			ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
-
-			// Get key: keys_ptr[idx] → char* (string)
-			keyPtr := ls.b.FreshTemp("key_ptr")
-			ls.b.Emit(&hir.GetElementPtr{Type: "ptr", Base: keysPtr, Indices: []hir.Value{idxBodyI32}, Dst: keyPtr})
-			keyVal := ls.b.FreshTemp("key_val")
-			ls.b.Emit(&hir.Load{Type: "ptr", Src: keyPtr, Dst: keyVal})
-
-			// Bind key variable
-			if s.Targets[0].Name != nil {
-				ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: keyVal, Type: types.Str})
+			// Check for dict key iteration: for key in dict
+			isDict := false
+			if ls.info != nil {
+				iterType := ls.info.Types[s.Iter]
+				if _, ok := iterType.(*types.Dict); ok {
+					isDict = true
+				}
 			}
 
-			// Lower body
-			if s.Body != nil {
-				ls.lowerBlock(s.Body)
+			if isDict && len(s.Targets) >= 1 {
+				// Dict key iteration: for key in dict → iterate over keys
+				dictIterVal := ls.lowerExpr(s.Iter)
+
+				// Get keys array and count: dict_keys(dict, &count) → char**
+				keyCountPtr := ls.b.FreshTemp("key_count_ptr")
+				ls.b.Emit(&hir.Alloca{Dst: keyCountPtr, Type: "i64", Count: 1})
+				keysPtr := ls.b.FreshTemp("keys_ptr")
+				ls.b.Emit(&hir.Call{Dst: keysPtr, Fn: "dict_keys", Args: []hir.Value{dictIterVal, keyCountPtr}, Type: "ptr"})
+
+				// Load key count
+				lenTemp := ls.b.FreshTemp("dict_len")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: keyCountPtr, Dst: lenTemp})
+
+				// Allocate index variable
+				idxPtr := ls.b.FreshTemp("for_idx_ptr")
+				ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
+
+				// Condition block
+				condBlk := ls.b.NewBlock("for_cond")
+				oldCur := ls.b.Block()
+
+				ls.b.SetBlock(condBlk)
+				idxVal := ls.b.FreshTemp("for_idx")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxVal})
+				condTemp := ls.b.FreshTemp("for_cond")
+				ls.b.Emit(&hir.BinaryOp{Dst: condTemp, Op: "<", LHS: idxVal, RHS: lenTemp, Type: "i1"})
+				ls.b.SetBlock(oldCur)
+
+				// Body block
+				bodyBlk := ls.b.NewBlock("for_body")
+				ls.b.SetBlock(bodyBlk)
+
+				// Load current index
+				idxBody := ls.b.FreshTemp("for_idx_body")
+				ls.b.Emit(&hir.Load{Type: "i64", Src: idxPtr, Dst: idxBody})
+
+				// Cast to i32 for GEP
+				idxBodyI32 := ls.b.FreshTemp("for_idx_i32")
+				ls.b.Emit(&hir.Cast{Dst: idxBodyI32, Src: idxBody, Type: "i32"})
+
+				// Get key: keys_ptr[idx] → char* (string)
+				keyPtr := ls.b.FreshTemp("key_ptr")
+				ls.b.Emit(&hir.GetElementPtr{Type: "ptr", Base: keysPtr, Indices: []hir.Value{idxBodyI32}, Dst: keyPtr})
+				keyVal := ls.b.FreshTemp("key_val")
+				ls.b.Emit(&hir.Load{Type: "ptr", Src: keyPtr, Dst: keyVal})
+
+				// Bind key variable
+				if s.Targets[0].Name != nil {
+					ls.b.Emit(&hir.Let{Name: s.Targets[0].Name.Name, Init: keyVal, Type: types.Str})
+				}
+
+				// Lower body
+				if s.Body != nil {
+					ls.lowerBlock(s.Body)
+				}
+
+				// Scope cleanup
+				scFor := ls.pop()
+				if !ls.terminated {
+					ls.emitScopeDrops(scFor)
+				}
+
+				// Increment index
+				incTemp := ls.b.FreshTemp("for_inc")
+				ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
+				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
+
+				ls.b.SetBlock(oldCur)
+				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+
+				// Free keys array after loop
+				ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
+				return
 			}
-
-			// Scope cleanup
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
-
-			// Increment index
-			incTemp := ls.b.FreshTemp("for_inc")
-			ls.b.Emit(&hir.BinaryOp{Dst: incTemp, Op: "+", LHS: idxBody, RHS: hir.ConstInt{Text: "1", Type: "i64"}, Type: "i64"})
-			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
-
-			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
-
-			// Free keys array after loop
-			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
-			return
-		}
 
 			// List iteration (original code)
 			iterVal := ls.lowerExpr(s.Iter)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/eval"
 	"github.com/desilang/desi/compiler/internal/macro"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -328,6 +329,21 @@ func (c *checker) checkStruct(d *ast.StructDecl) {
 }
 
 func (c *checker) checkClass(d *ast.ClassDecl) {
+	// Execute custom macro decorators first
+	for _, dec := range d.Decorators {
+		if macroDef, exists := c.macroDefs[dec.Name.Name]; exists {
+			env := eval.NewEnv(nil)
+			if len(macroDef.Params) > 0 {
+				paramName := macroDef.Params[0].Name.Name
+				env.Set(paramName, eval.AstNodeValue{Node: d})
+			}
+			_, err := eval.Eval(macroDef.Body, env)
+			if err != nil {
+				c.add(diagAt("DTE9999", d.SpanOf(), "macro evaluation failed: "+err.Error()))
+			}
+		}
+	}
+
 	var cls *types.Class
 
 	// Try scope lookup first (for top-level classes)
@@ -551,7 +567,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 									meta.CompositePK = append(meta.CompositePK, p.Name)
 								}
 							}
-							}
+						}
 					}
 				}
 				cls.Meta = meta

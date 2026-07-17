@@ -14,10 +14,10 @@ import (
 
 // LowerModuleOptions controls module lowering behavior.
 type LowerModuleOptions struct {
-	SkipBuiltinEnums bool                       // Don't generate Option/Result constructors
-	IsImportedModule bool                       // Force-mangle all non-extern function definitions
-	DbEngine         string                     // "postgres" or "mysql" — auto-injects dialect call in __top__
-	DbDebugQueries   bool                       // if true, inject __db_set_debug_queries(1) in __top__
+	SkipBuiltinEnums bool                        // Don't generate Option/Result constructors
+	IsImportedModule bool                        // Force-mangle all non-extern function definitions
+	DbEngine         string                      // "postgres" or "mysql" — auto-injects dialect call in __top__
+	DbDebugQueries   bool                        // if true, inject __db_set_debug_queries(1) in __top__
 	NamedDatabases   map[string]project.Database // [database.name] sections from desi.mod
 }
 

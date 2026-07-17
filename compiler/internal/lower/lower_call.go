@@ -139,13 +139,13 @@ func (ls *lowerState) lowerKwargsCall(x *ast.CallExpr, cand *check.FuncCand) hir
 	// dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, to_str_fn)
 	dictRes := ls.b.FreshTemp("kwargs_dict")
 	ls.b.Emit(&hir.Call{Dst: dictRes, Fn: "dict_new", Args: []hir.Value{
-		hir.ConstInt{Text: "1", Type: "i32"},  // key_type_tag = str
-		hir.ConstInt{Text: "0", Type: "i64"},  // key_size = 0 (primitives)
-		hir.ConstInt{Text: "8", Type: "i64"},  // value_size = 8
-		valTypeTag,                             // value_type_tag
-		hir.ConstNull{},                        // key_hash_fn
-		hir.ConstNull{},                        // key_eq_fn
-		hir.ConstNull{},                        // to_str_fn
+		hir.ConstInt{Text: "1", Type: "i32"}, // key_type_tag = str
+		hir.ConstInt{Text: "0", Type: "i64"}, // key_size = 0 (primitives)
+		hir.ConstInt{Text: "8", Type: "i64"}, // value_size = 8
+		valTypeTag,                           // value_type_tag
+		hir.ConstNull{},                      // key_hash_fn
+		hir.ConstNull{},                      // key_eq_fn
+		hir.ConstNull{},                      // to_str_fn
 	}})
 
 	// Determine if kwargs value type is Any (mixed types)
@@ -197,11 +197,11 @@ func (ls *lowerState) lowerKwargsCall(x *ast.CallExpr, cand *check.FuncCand) hir
 		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{
 			dictRes,
 			hir.ConstInt{Text: "0", Type: "i64"}, // key_int (unused)
-			keyVal,                                 // key_str
-			hir.ConstFloat{Text: "0.0"},           // key_float (unused)
-			hir.ConstNull{},                        // key_ptr (unused)
-			valPtr,                                 // &value
-			insertTag,                              // value_type_tag (per-entry for Any)
+			keyVal,                               // key_str
+			hir.ConstFloat{Text: "0.0"},          // key_float (unused)
+			hir.ConstNull{},                      // key_ptr (unused)
+			valPtr,                               // &value
+			insertTag,                            // value_type_tag (per-entry for Any)
 		}})
 	}
 
@@ -246,7 +246,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					res := ls.b.FreshTemp("mutex")
 					// Allocate memory for the value (8 bytes for i64/ptr)
 					boxPtr := ls.b.FreshTemp("mutex_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					// Store the value into the box
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					// Create mutex with pointer to boxed value
@@ -304,7 +304,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					res := ls.b.FreshTemp("rwlock")
 					// Allocate memory for the value (8 bytes for i64/ptr)
 					boxPtr := ls.b.FreshTemp("rwlock_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					// Store the value into the box
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					// Create rwlock with pointer to boxed value
@@ -640,7 +640,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					ls.consumeTemp(argVal)
 					// Box the value for the channel
 					boxPtr := ls.b.FreshTemp("send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					dst := ls.b.FreshTemp("send_result")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
@@ -652,7 +652,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 					argVal := ls.lowerExpr(x.Args[0])
 					boxPtr := ls.b.FreshTemp("try_send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					dst := ls.b.FreshTemp("try_send_result")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_try_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
@@ -1086,7 +1086,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					ls.consumeTemp(argVal)
 					// Box the value to ptr
 					boxPtr := ls.b.FreshTemp("send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					switch fe.Name.Name {
 					case "send":
@@ -1248,7 +1248,7 @@ handlePrint:
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "len" && len(x.Args) == 1 {
-			if argT := ls.info.Types[x.Args[0]]; argT != nil {
+			if argT := ls.typeOf(x.Args[0]); argT != nil {
 				// Lower argument
 				argVal := ls.lowerExpr(x.Args[0])
 
@@ -1261,9 +1261,11 @@ handlePrint:
 					unwrappedT = ta.Target
 				}
 
-				// Check if it's a string type
+				// Check if it's a string or bytes type
 				if unwrappedT == types.Str {
 					lenFunc = "string_len"
+				} else if unwrappedT == types.Bytes {
+					lenFunc = "__bytes_len"
 				} else if _, ok := unwrappedT.(*types.List); ok {
 					lenFunc = "list_len"
 				} else if _, ok := unwrappedT.(*types.Dict); ok {
@@ -1340,7 +1342,7 @@ handlePrint:
 		// abs(n) -> __desi_abs_int(n) or __desi_abs_float(n)
 		if calleeName == "abs" && len(x.Args) == 1 {
 			argVal := ls.lowerExpr(x.Args[0])
-			argT := ls.info.Types[x.Args[0]]
+			argT := ls.typeOf(x.Args[0])
 			if argT != nil && types.Equal(argT, types.Float) {
 				res := ls.b.FreshTemp("abs_res")
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_abs_float", Args: []hir.Value{argVal}, Type: "double"})
@@ -1617,7 +1619,7 @@ handlePrint:
 				res := ls.b.FreshTemp("mutex")
 				// Allocate memory for the value (8 bytes for i64/ptr)
 				boxPtr := ls.b.FreshTemp("mutex_box")
-				ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				// Store the value into the box
 				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 				// Create mutex with pointer to boxed value
@@ -1637,7 +1639,7 @@ handlePrint:
 				res := ls.b.FreshTemp("rc")
 				// Allocate memory for the inner value (8 bytes for ptr/i64)
 				innerPtr := ls.b.FreshTemp("rc_inner")
-				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(innerPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				// Store the value into the inner allocation
 				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
 				// Create Rc with pointer to inner value
@@ -1650,7 +1652,7 @@ handlePrint:
 				// Same as rc for now (Arc runtime not yet implemented)
 				res := ls.b.FreshTemp("arc")
 				innerPtr := ls.b.FreshTemp("arc_inner")
-				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(innerPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "__rc_new", Args: []hir.Value{innerPtr}, Type: "ptr"})
 				ls.cur().rcLike[res.Name] = true
@@ -2405,7 +2407,6 @@ handlePrint:
 		}
 	}
 
-
 	// 2. M14 Stage 1: Method Calls (obj.method())
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
 		// Check if this is a nested class constructor call (e.g. Container.Box())
@@ -2691,12 +2692,7 @@ skipMethodCall:
 				inst := ls.b.FreshTemp("inst")
 				// Use heap allocation (malloc) for classes since they may escape
 				// the current scope (e.g., returned from functions like __copy__)
-				ls.b.Emit(&hir.Call{
-					Dst:  inst,
-					Fn:   "malloc",
-					Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
-					Type: "ptr",
-				})
+				ls.emitAlloc(inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"})
 
 				// 2. Call __new__
 				// Find __new__
@@ -3160,6 +3156,67 @@ skipMethodCall:
 		}
 	}
 
+	isMarshalDumps := callee == "__marshal_dumps"
+	if !isMarshalDumps && ls.info != nil {
+		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen.Type != nil {
+			if callee == "__desi$dumps" && types.Equal(chosen.Type.Ret, types.Bytes) {
+				isMarshalDumps = true
+			}
+		}
+	}
+	if isMarshalDumps && ls.info != nil && len(x.Args) == 1 {
+		argType := ls.typeOf(x.Args[0])
+		if argType == nil {
+			argType = types.Any
+		}
+		valExpr := x.Args[0]
+		argVal := ls.lowerExpr(valExpr)
+
+		var passVal hir.Value
+		if types.Equal(argType, types.Int) || types.Equal(argType, types.Float) || types.Equal(argType, types.Bool) || argType.String() == "char" {
+			tempSlot := ls.b.FreshTemp("marshal_val_slot")
+			ls.b.Emit(&hir.Alloca{Type: lowerType(argType), Dst: tempSlot})
+			ls.b.Emit(&hir.Store{Val: argVal, Dst: tempSlot})
+			passVal = tempSlot
+		} else {
+			passVal = argVal
+		}
+
+		typeInfoVal := ls.emitTypeInfo(argType)
+		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__marshal_dumps", Args: []hir.Value{passVal, typeInfoVal}, Type: "ptr"})
+		return dst
+	}
+
+	isMarshalLoads := callee == "__marshal_loads"
+	if !isMarshalLoads && ls.info != nil {
+		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen.Type != nil {
+			if callee == "__desi$loads" && len(chosen.Type.Params) == 1 && types.Equal(chosen.Type.Params[0], types.Bytes) {
+				isMarshalLoads = true
+			}
+		}
+	}
+	if isMarshalLoads && ls.info != nil && len(x.Args) == 1 {
+		dataExpr := x.Args[0]
+		dataVal := ls.lowerExpr(dataExpr)
+
+		retTypeObj := ls.typeOf(x)
+		if retTypeObj == nil {
+			retTypeObj = types.Any
+		}
+		typeInfoVal := ls.emitTypeInfo(retTypeObj)
+
+		rawRes := ls.b.FreshTemp("marshal_raw_res")
+		ls.b.Emit(&hir.Call{Dst: rawRes, Fn: "__marshal_loads", Args: []hir.Value{dataVal, typeInfoVal}, Type: "ptr"})
+
+		if types.Equal(retTypeObj, types.Int) || types.Equal(retTypeObj, types.Float) || types.Equal(retTypeObj, types.Bool) || retTypeObj.String() == "char" {
+			ls.b.Emit(&hir.Load{Type: lowerType(retTypeObj), Src: rawRes, Dst: dst})
+			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{rawRes}})
+		} else {
+			ls.b.Emit(&hir.Cast{Src: rawRes, Dst: dst, Type: retType})
+		}
+		return dst
+	}
+
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
 
 	// Consume args if not a known borrowing function
@@ -3214,15 +3271,16 @@ func isPrimitiveType(t types.T) bool {
 // if this is a valid Model.objects chain; ("", nil, nil, false) otherwise.
 //
 // Handle lifecycle (Phase 5):
-//   At the chain root (User.objects), emits:
-//     %qs = call ptr @__qs_handle_new("users")   → allocate handle
-//     call void @__qs_handle_bind(ptr %qs)         → set as active
-//   The handle is returned so the terminal caller can free it.
+//
+//	At the chain root (User.objects), emits:
+//	  %qs = call ptr @__qs_handle_new("users")   → allocate handle
+//	  call void @__qs_handle_bind(ptr %qs)         → set as active
+//	The handle is returned so the terminal caller can free it.
 //
 // Handles:
 //   - Direct:   FieldExpr(.objects, Ident(User))       → emit handle_new + handle_bind
 //   - Chained:  CallExpr(.filter, FieldExpr(.objects, Ident(User)))
-//               → emit handle_new + handle_bind + generic intermediate
+//     → emit handle_new + handle_bind + generic intermediate
 //
 // The caller (emitQsGeneric) emits the final/terminal operation and __qs_handle_free.
 func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, *types.Class, hir.Value, bool) {
@@ -3373,9 +3431,9 @@ func (ls *lowerState) emitQsArgs(spec *macro.MethodSpec, call *ast.CallExpr) {
 // It replaces the old 150-line emitQsTerminal switch statement.
 //
 // The method reads MethodSpec metadata to determine:
-//   1. How to process arguments (ArgStyle + KwargsFunc)
-//   2. Which C function executes the terminal action (TerminalFunc)
-//   3. Whether to construct a model instance from the result (ReturnsModel)
+//  1. How to process arguments (ArgStyle + KwargsFunc)
+//  2. Which C function executes the terminal action (TerminalFunc)
+//  3. Whether to construct a model instance from the result (ReturnsModel)
 //
 // Phase 5: After the terminal call completes and results are extracted,
 // the QuerySet handle is freed via __qs_handle_free. This ensures
@@ -3623,3 +3681,23 @@ func (ls *lowerState) isGlobal(name string) bool {
 	return ls.globals != nil && ls.globals[name]
 }
 
+func (ls *lowerState) emitTypeInfo(t types.T) hir.Value {
+	typeName := t.String()
+	var typeID uint64
+	for _, c := range typeName {
+		typeID = typeID*31 + uint64(c)
+	}
+	var typeSize int64 = 8 // Default pointer size
+	res := ls.b.FreshTemp("type_info")
+	ls.b.Emit(&hir.Call{
+		Dst: res,
+		Fn:  "__desi_type_new",
+		Args: []hir.Value{
+			hir.ConstInt{Text: fmt.Sprintf("%d", typeID), Type: "i64"},
+			hir.ConstStr{Text: typeName},
+			hir.ConstInt{Text: fmt.Sprintf("%d", typeSize), Type: "i64"},
+		},
+		Type: "ptr",
+	})
+	return res
+}
