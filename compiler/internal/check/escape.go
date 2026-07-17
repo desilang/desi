@@ -38,6 +38,7 @@ func runEscapeAnalysis(mod *ast.Module, info *Info) {
 type escapeVisitor struct {
 	info       *Info
 	candidates map[*Symbol]*ast.Ident // Maps candidate Symbol -> its declaring Ident node
+	tracked    map[*Symbol]bool       // Alias graph nodes that are not candidates (loop vars, match bindings)
 	escapes    map[*Symbol]bool       // Track if a symbol escapes
 	deps       map[*Symbol][]*Symbol  // Dependency edges: if B escapes, A in deps[B] escapes
 }
@@ -46,6 +47,7 @@ func analyzeFuncEscape(fd *ast.FuncDecl, info *Info) {
 	v := &escapeVisitor{
 		info:       info,
 		candidates: make(map[*Symbol]*ast.Ident),
+		tracked:    make(map[*Symbol]bool),
 		escapes:    make(map[*Symbol]bool),
 		deps:       make(map[*Symbol][]*Symbol),
 	}
@@ -81,14 +83,16 @@ func analyzeFuncEscape(fd *ast.FuncDecl, info *Info) {
 	// Step 2: Build constraints by visiting all statements and expressions
 	v.buildConstraints(fd.Body)
 
-	// Step 3: Propagate escape status backward along dependency edges
+	// Step 3: Propagate escape status backward along dependency edges.
+	// Iterate over all graph nodes (candidates AND tracked aliases like loop
+	// vars) — an escaping alias must pull the value it aliases along.
 	changed := true
 	for changed {
 		changed = false
-		for sym := range v.candidates {
+		for sym, dList := range v.deps {
 			if v.escapes[sym] {
-				// If sym escapes, all variables depending on sym also escape
-				for _, dep := range v.deps[sym] {
+				// If sym escapes, all variables flowing into sym also escape
+				for _, dep := range dList {
 					if !v.escapes[dep] {
 						v.escapes[dep] = true
 						changed = true
@@ -230,12 +234,70 @@ func (v *escapeVisitor) buildConstraints(node ast.Node) {
 			v.analyzeCallEscape(x)
 			return true
 
+		case *ast.ForStmt:
+			// Loop variables alias the iterable's interior. Track them as
+			// graph nodes: if a loop var escapes (stored, returned, passed
+			// to a retaining call), the iterable must escape too — otherwise
+			// the iterable gets arena-allocated while an interior pointer
+			// outlives the function.
+			iterRefs := v.collectRefs(x.Iter)
+			bindTarget := func(id *ast.Ident) {
+				if id == nil {
+					return
+				}
+				if sym := v.info.Idents[id]; sym != nil {
+					v.tracked[sym] = true
+					v.deps[sym] = append(v.deps[sym], iterRefs...)
+				}
+			}
+			for i := range x.Targets {
+				bindTarget(x.Targets[i].Name)
+			}
+			if id, ok := x.Target.(*ast.Ident); ok {
+				bindTarget(id)
+			} else if tup, ok := x.Target.(*ast.TupleLit); ok {
+				for _, el := range tup.Elems {
+					if id, ok := el.(*ast.Ident); ok {
+						bindTarget(id)
+					}
+				}
+			}
+			return true
+
+		case *ast.MatchExpr:
+			// Arm pattern bindings (Some(x), Circle(r), catch-all x) alias
+			// the scrutinee's payload — an escaping binding must pull the
+			// scrutinee along.
+			scrRefs := v.collectRefs(x.Scrutinee)
+			for _, arm := range x.Arms {
+				var bindIdents []*ast.Ident
+				switch p := arm.Pattern.(type) {
+				case *ast.CallExpr: // variant with payload bindings
+					for _, a := range p.Args {
+						if id, ok := a.(*ast.Ident); ok {
+							bindIdents = append(bindIdents, id)
+						}
+					}
+				case *ast.Ident: // catch-all binding aliases the whole value
+					bindIdents = append(bindIdents, p)
+				}
+				for _, id := range bindIdents {
+					if sym := v.info.Idents[id]; sym != nil {
+						v.tracked[sym] = true
+						v.deps[sym] = append(v.deps[sym], scrRefs...)
+					}
+				}
+			}
+			return true
+
 		case *ast.LambdaExpr:
-			// Any local candidate captured inside a lambda escapes
+			// Any local candidate (or tracked alias) captured inside a
+			// lambda escapes — the closure may outlive the function.
 			inspect(x.Body, func(subNode ast.Node) bool {
 				if id, ok := subNode.(*ast.Ident); ok {
 					if sym := v.info.Idents[id]; sym != nil {
-						if _, isCand := v.candidates[sym]; isCand {
+						_, isCand := v.candidates[sym]
+						if isCand || v.tracked[sym] {
 							v.escapes[sym] = true
 						}
 					}
@@ -253,7 +315,8 @@ func (v *escapeVisitor) collectRefs(expr ast.Expr) []*Symbol {
 	inspect(expr, func(n ast.Node) bool {
 		if id, ok := n.(*ast.Ident); ok {
 			if sym := v.info.Idents[id]; sym != nil {
-				if _, isCand := v.candidates[sym]; isCand {
+				_, isCand := v.candidates[sym]
+				if isCand || v.tracked[sym] {
 					refs = append(refs, sym)
 				}
 			}
@@ -311,106 +374,80 @@ func isSafeBuiltin(name string) bool {
 	return false
 }
 
-// inspect is a simple, complete AST depth-first traversal helper.
+// inspect is a complete AST depth-first traversal helper. It walks the node
+// graph generically via reflection instead of enumerating node types: any
+// struct field, slice element, or nested value struct that contains an
+// ast.Node is visited. An escape analysis with an incomplete traversal is
+// unsound — a reference inside a skipped construct (ternary, comprehension,
+// try-expr, …) would silently not create an escape edge, and the value
+// would be arena-allocated while an alias outlives the function.
 func inspect(node ast.Node, fn func(ast.Node) bool) {
 	if node == nil {
 		return
 	}
-	val := reflect.ValueOf(node)
-	if val.Kind() == reflect.Ptr && val.IsNil() {
+	rv := reflect.ValueOf(node)
+	if rv.Kind() == reflect.Ptr && rv.IsNil() {
 		return
 	}
 	if !fn(node) {
 		return
 	}
-	switch x := node.(type) {
-	case *ast.Block:
-		for _, s := range x.Stmts {
-			inspect(s, fn)
+	if rv.Kind() == reflect.Ptr {
+		rv = rv.Elem()
+	}
+	walkChildren(rv, fn)
+}
+
+// walkChildren visits every field/element of a struct or slice value,
+// dispatching ast.Node values back through inspect.
+func walkChildren(rv reflect.Value, fn func(ast.Node) bool) {
+	switch rv.Kind() {
+	case reflect.Struct:
+		for i := 0; i < rv.NumField(); i++ {
+			visitChild(rv.Field(i), fn)
 		}
-	case *ast.LetStmt:
-		inspect(x.Value, fn)
-	case *ast.AssignStmt:
-		for _, lhs := range x.LHS {
-			inspect(lhs, fn)
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < rv.Len(); i++ {
+			visitChild(rv.Index(i), fn)
 		}
-		for _, rhs := range x.RHS {
-			inspect(rhs, fn)
+	}
+}
+
+// visitChild inspects a single reflect value: ast.Node values recurse
+// through inspect (so fn fires on them); bare value structs and slices
+// (MatchArm, CompClause, ForTarget, …) are walked through for the nodes
+// they contain.
+func visitChild(fv reflect.Value, fn func(ast.Node) bool) {
+	if !fv.IsValid() || !fv.CanInterface() {
+		return
+	}
+	switch fv.Kind() {
+	case reflect.Interface, reflect.Ptr:
+		if fv.IsNil() {
+			return
 		}
-	case *ast.ExprStmt:
-		inspect(x.Expr, fn)
-	case *ast.ReturnStmt:
-		inspect(x.Value, fn)
-	case *ast.IfStmt:
-		inspect(x.Cond, fn)
-		inspect(x.Then, fn)
-		for _, elif := range x.Elifs {
-			inspect(elif.Cond, fn)
-			inspect(elif.Body, fn)
+		if n, ok := fv.Interface().(ast.Node); ok {
+			inspect(n, fn)
+			return
 		}
-		inspect(x.Else, fn)
-	case *ast.WhileStmt:
-		inspect(x.Cond, fn)
-		inspect(x.Body, fn)
-	case *ast.ForStmt:
-		inspect(x.Iter, fn)
-		inspect(x.Body, fn)
-	case *ast.MatchExpr:
-		inspect(x.Scrutinee, fn)
-		for _, arm := range x.Arms {
-			inspect(arm.Result, fn)
+		if fv.Kind() == reflect.Ptr {
+			walkChildren(fv.Elem(), fn)
+		} else {
+			visitChild(fv.Elem(), fn)
 		}
-	case *ast.BinaryExpr:
-		inspect(x.Lhs, fn)
-		inspect(x.Rhs, fn)
-	case *ast.UnaryExpr:
-		inspect(x.X, fn)
-	case *ast.CallExpr:
-		inspect(x.Callee, fn)
-		for _, arg := range x.Args {
-			inspect(arg, fn)
+	case reflect.Struct:
+		// Value-embedded nodes (e.g. LetStmt.Name is an ast.Ident value):
+		// use the address so identity matches the checker's Idents map keys.
+		if fv.CanAddr() {
+			if n, ok := fv.Addr().Interface().(ast.Node); ok {
+				inspect(n, fn)
+				return
+			}
 		}
-	case *ast.IndexExpr:
-		inspect(x.X, fn)
-		inspect(x.Idx, fn)
-	case *ast.FieldExpr:
-		inspect(x.X, fn)
-	case *ast.TupleLit:
-		for _, el := range x.Elems {
-			inspect(el, fn)
+		walkChildren(fv, fn)
+	case reflect.Slice, reflect.Array:
+		for i := 0; i < fv.Len(); i++ {
+			visitChild(fv.Index(i), fn)
 		}
-	case *ast.ListLit:
-		for _, el := range x.Elems {
-			inspect(el, fn)
-		}
-	case *ast.DictLit:
-		for _, k := range x.Keys {
-			inspect(k, fn)
-		}
-		for _, v := range x.Values {
-			inspect(v, fn)
-		}
-	case *ast.CastExpr:
-		inspect(x.X, fn)
-	case *ast.LambdaExpr:
-		inspect(x.Body, fn)
-	case *ast.TryStmt:
-		inspect(x.Body, fn)
-		inspect(x.Except, fn)
-		inspect(x.Finally, fn)
-	case *ast.UnsafeBlock:
-		inspect(x.Body, fn)
-	case *ast.UsingStmt:
-		inspect(x.Bind, fn)
-		inspect(x.Init, fn)
-		inspect(x.Body, fn)
-	case *ast.DeferStmt:
-		inspect(x.Call, fn)
-	case *ast.FString:
-		for _, part := range x.Parts {
-			inspect(part, fn)
-		}
-	case *ast.FStringExpr:
-		inspect(x.X, fn)
 	}
 }
