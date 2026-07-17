@@ -156,6 +156,13 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 		if fd.Body == nil || isExternDecorated(fd) {
 			continue
 		}
+		// Skip @macro functions: they run at compile time in the macro
+		// interpreter (eval package) and their bodies reference
+		// interpreter-only symbols (ast_get_name, ast_insert_stmt, …) that
+		// have no runtime definition — emitting them breaks the link.
+		if isMacroDecorated(fd) {
+			continue
+		}
 
 		if fd.Async {
 			w, p := LowerAsyncFunc(fd, src, info, globalNames) // Need to update signature
@@ -398,6 +405,17 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 func isExternDecorated(fd *ast.FuncDecl) bool {
 	for _, dec := range fd.Decorators {
 		if dec.Name.Name == "extern" {
+			return true
+		}
+	}
+	return false
+}
+
+// isMacroDecorated reports whether the function has an @macro decorator.
+// Macro functions are compile-time-only (interpreted by the eval package).
+func isMacroDecorated(fd *ast.FuncDecl) bool {
+	for _, dec := range fd.Decorators {
+		if dec.Name.Name == "macro" {
 			return true
 		}
 	}
