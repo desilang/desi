@@ -19,6 +19,9 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		if id, ok := args[0].(*ast.Ident); ok {
 			ls.cur().moved[id.Name] = true
 		}
+		// Temp results (string concat etc.) also transfer ownership — the
+		// list stores the raw pointer, so a scope-end free would dangle.
+		ls.consumeTemp(elem)
 
 		// Cast to ptr for generic storage (void*)
 		elemPtr := ls.b.FreshTemp("val_ptr")
@@ -44,6 +47,7 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		// set(index, elem)
 		index := ls.lowerExpr(args[0])
 		elem := ls.lowerExpr(args[1])
+		ls.consumeTemp(elem) // list stores the raw pointer
 
 		// Cast to ptr for generic storage
 		elemPtr := ls.b.FreshTemp("val_ptr")
@@ -76,6 +80,7 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 		// insert(index, elem)
 		index := ls.lowerExpr(args[0])
 		elem := ls.lowerExpr(args[1])
+		ls.consumeTemp(elem) // list stores the raw pointer
 		elemPtr := ls.b.FreshTemp("val_ptr")
 		ls.b.Emit(&hir.Cast{Dst: elemPtr, Src: elem, Type: "ptr"})
 		ls.b.Emit(&hir.Call{Fn: "list_insert", Args: []hir.Value{receiver, index, elemPtr}})

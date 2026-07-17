@@ -84,6 +84,8 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		// setdefault(key, default) -> Value
 		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
 		defVal := ls.lowerExpr(args[1])
+		// The default may be retained as the stored value — consume temps.
+		ls.consumeTemp(defVal)
 
 		// Get default value type
 		var valType types.T
@@ -143,8 +145,11 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 
 	case "insert":
 		// insert(key, value)
+		// Keys are strdup'd by dict_insert (temp keys may be freed), but
+		// values are stored as raw pointer slots — consume value temps.
 		keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(args[0], keyType)
 		val := ls.lowerExpr(args[1])
+		ls.consumeTemp(val)
 
 		// Get value type from type info
 		var valType types.T

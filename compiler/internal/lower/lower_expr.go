@@ -64,15 +64,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Fallback to placeholder if source unavailable
 		return hir.ConstStr{Text: "<lit>"}
 	case *ast.FString:
-		// F-string: use asprintf for formatting
-		// 1. Allocate buffer for result
-		bufPtr := ls.b.FreshTemp("fstr_buf")
-		ls.b.Emit(&hir.Alloca{Type: "ptr", Dst: bufPtr})
-
-		// 2. Build format string and arguments
+		// F-string: __desi_sprintf returns a freshly malloc'd string.
+		// (No result-buffer alloca: an alloca here lands inside loop bodies
+		// when the f-string is in a loop, and LLVM only reclaims allocas on
+		// function return — long loops would overflow the stack.)
+		// 1. Build format string and arguments
 		var fmtBuilder strings.Builder
 		var args []hir.Value
-		args = append(args, bufPtr) // First arg is &bufPtr
 
 		for _, part := range x.Parts {
 			switch p := part.(type) {
@@ -128,6 +126,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 					if types.Equal(typ, types.Float) && p.Spec == "" {
 						res := ls.b.FreshTemp("float_str")
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "float_to_str", Args: []hir.Value{val}, Type: "ptr"})
+						// float_to_str mallocs; asprintf copies it into the
+						// final buffer, so freeing at scope end is safe.
+						ls.addTempDrop(res.Name)
 						val = res
 					}
 				}
@@ -156,6 +157,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						// Convert float to string using runtime helper (trims trailing zeros)
 						res := ls.b.FreshTemp("float_str")
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "float_to_str", Args: []hir.Value{val}, Type: "ptr"})
+						// float_to_str mallocs; asprintf copies it into the
+						// final buffer, so freeing at scope end is safe.
+						ls.addTempDrop(res.Name)
 						val = res
 					} else if types.Equal(typ, types.Bool) {
 						fmtBuilder.WriteString("%s")
@@ -196,19 +200,20 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
-		// 3. Create format string constant and build final args
+		// 2. Create format string constant and build final args
 		fmtStr := hir.ConstStr{Text: fmtBuilder.String()}
 		finalArgs := make([]hir.Value, 0, len(args)+1)
-		finalArgs = append(finalArgs, args[0])     // bufPtr
-		finalArgs = append(finalArgs, fmtStr)      // format string
-		finalArgs = append(finalArgs, args[1:]...) // remaining args
+		finalArgs = append(finalArgs, fmtStr) // format string
+		finalArgs = append(finalArgs, args...)
 
-		// 4. Call asprintf
-		ls.b.Emit(&hir.Call{Fn: "asprintf", Args: finalArgs})
-
-		// 5. Load result from buffer
+		// 3. Call __desi_sprintf — returns the malloc'd result directly
 		res := ls.b.FreshTemp("fstr_res")
-		ls.b.Emit(&hir.Load{Type: "ptr", Src: bufPtr, Dst: res})
+		ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_sprintf", Args: finalArgs, Type: "ptr"})
+
+		// __desi_sprintf mallocs the result — track it like a concat temp
+		// so an unconsumed f-string (e.g. print(f"...") in a loop) is freed
+		// at scope end instead of leaking per evaluation.
+		ls.addTempDrop(res.Name)
 
 		return res
 	case *ast.TupleLit:
@@ -263,6 +268,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			} else {
 				// Regular element
 				val := ls.lowerExpr(e)
+				// The tuple stores the raw pointer for str elements —
+				// ownership of temps transfers to the tuple.
+				ls.consumeTemp(val)
 				var elemT types.T
 				if ls.info != nil {
 					elemT = ls.info.Types[e]
@@ -1964,6 +1972,9 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			if id, ok := e.(*ast.Ident); ok {
 				ls.cur().moved[id.Name] = true
 			}
+			// Temp results (string concat etc.) also transfer ownership —
+			// the list stores the raw pointer.
+			ls.consumeTemp(val)
 
 			// Cast to ptr for generic storage (void*)
 			// This handles both pointers (bitcast) and integers (inttoptr)
@@ -3096,6 +3107,12 @@ func (ls *lowerState) lowerTupleMembership(needle, tup hir.Value, tupType *types
 //
 // Returns %result as the value of the comprehension.
 func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
+	// The transform/filter expressions lower into the comprehension's loop
+	// blocks. Temps born there don't dominate the enclosing scope's end, so
+	// a scope-end free would be invalid IR — don't register them.
+	ls.suppressTempDrops()
+	defer ls.resumeTempDrops()
+
 	if len(c.Clauses) == 0 {
 		// Degenerate: no iteration clauses, just return empty list
 		res := ls.b.FreshTemp("list")

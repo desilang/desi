@@ -125,19 +125,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 473 of 481 examples pass on Windows (remaining 8 need the db/ORM
   runtime port)
 
-**Automatic Memory Management (hybrid MM, phases 1–2)**
+**Automatic Memory Management (hybrid MM, phases 1–3)**
 
 - Collection locals (`list`/`set`/`dict`) are freed at scope exit; float
   element boxes are list-owned (freed on `list_free`, cloned across
   copy/slice/extend/filter)
 - Enum instances (wrapper + payload box) and struct instances are freed
   at scope exit with recursive heap-field cleanup
+- String temporaries are freed at scope exit: `+` concatenation,
+  f-strings, `str(int/float/bool)`, `replace()`/`join()` results, and
+  `print`'s collection-to-string conversions no longer leak when used
+  transiently — `print("n: " + str(i))` in a hot loop now runs in
+  constant memory. Ownership transfers on binding, return, call
+  arguments, collection inserts, construction, and channel sends.
 - Conservative ownership analysis in the lowerer: values passed to user
   functions, stored in containers, matched with payload bindings, or
   aliased via field access/`?` extraction are never double-freed —
   unclear ownership leaks safely instead of crashing
-- Constant-memory loops: millions of list/enum allocations peak at ~3 MB
-  working set
+- Constant-memory loops: millions of list/enum/string-temp allocations
+  peak at ~3 MB working set
 
 ### Fixed
 
@@ -159,6 +165,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   (`{id: int, status: Enum}` stores the pointer at offset 8, not 4)
 - Enum unit-variant constructors store a full 8-byte null payload slot
   (was a 4-byte store leaving garbage in the upper half)
+- F-strings in long loops crashed with a stack overflow: the lowering
+  alloca'd an out-parameter slot per evaluation and LLVM only reclaims
+  allocas on function return. F-strings now compile to a single
+  `__desi_sprintf` call that returns the malloc'd string
+- `rc`/`arc` reference counts are now atomic (MSVC interlocked
+  intrinsics / GCC-Clang `__atomic` builtins) — `arc[T]` shared across
+  threads no longer races the refcount; `weak.upgrade()` uses a CAS loop
+  and the header free follows the collective-weak scheme, eliminating
+  the `__rc_dec`/`__weak_dec` double-free race
 
 ### Tests
 

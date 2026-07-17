@@ -59,8 +59,8 @@ func (i *Info) NeedsI32ToI64Promotion(fnName string) bool {
 	if i.VariadicConv != StackBased {
 		return false
 	}
-	// Apply to asprintf and printf
-	return fnName == "asprintf" || fnName == "printf"
+	// Apply to the printf-family variadics the compiler emits
+	return fnName == "asprintf" || fnName == "printf" || fnName == "__desi_sprintf"
 }
 
 // VariadicSignature returns the explicit LLVM IR function signature for variadic functions.
@@ -71,6 +71,8 @@ func (i *Info) VariadicSignature(fnName string, retType string) string {
 		return "declare i32 @asprintf(ptr, ptr, ...)"
 	case "printf":
 		return "declare i32 @printf(ptr, ...)"
+	case "__desi_sprintf":
+		return "declare ptr @__desi_sprintf(ptr, ...)"
 	default:
 		// Generic variadic declaration
 		return ""
@@ -86,6 +88,8 @@ func (i *Info) ExplicitCallSyntax(fnName string, retType string) string {
 	case "asprintf":
 		return "(ptr, ptr, ...)"
 	case "printf":
+		return "(ptr, ...)"
+	case "__desi_sprintf":
 		return "(ptr, ...)"
 	default:
 		return ""

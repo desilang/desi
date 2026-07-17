@@ -31,6 +31,8 @@ func (ls *lowerState) lowerStringMethod(fe *ast.FieldExpr, args []ast.Expr) hir.
 		newStr := ls.lowerExpr(args[1])
 		res := ls.b.FreshTemp("replace_result")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "string_replace", Args: []hir.Value{receiver, oldStr, newStr}, Type: "ptr"})
+		// string_replace mallocs — track so a transient result is freed.
+		ls.addTempDrop(res.Name)
 		return res
 	}
 
@@ -50,6 +52,8 @@ func (ls *lowerState) lowerListJoin(fe *ast.FieldExpr, args []ast.Expr, listType
 		delim := ls.lowerExpr(args[0])
 		res := ls.b.FreshTemp("join_result")
 		ls.b.Emit(&hir.Call{Dst: res, Fn: "string_join", Args: []hir.Value{receiver, delim}, Type: "ptr"})
+		// string_join mallocs — track so a transient result is freed.
+		ls.addTempDrop(res.Name)
 		return res
 	}
 

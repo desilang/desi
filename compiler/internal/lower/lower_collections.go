@@ -120,6 +120,10 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 				}
 			}
 		}
+		// Value temps (string concat etc.) also transfer ownership — the
+		// dict stores the raw pointer slot. Keys are strdup'd by the
+		// runtime, so key temps stay tracked and get freed.
+		ls.consumeTemp(val)
 
 		// Determine key type for this entry
 		var entryKeyType types.T

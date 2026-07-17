@@ -407,6 +407,7 @@ type lowerState struct {
 	tempsFromArenaAlloc map[string]bool      // temp.Name -> true if produced by ArenaAlloc
 	nonOwnedTemps       map[string]bool      // temp.Name -> true if the value is a payload alias or stack slot (never drop)
 	matchLocals         map[string]hir.Value // pattern binding variables (name -> HIR value)
+	tempSuppress        int                  // >0: don't register temp drops (expression-level control flow; see temp_tracking.go)
 
 	// __new__ method context: when inside a user-defined __new__,
 	// ClassName(field=val) should initialize self, not allocate new instance
@@ -906,7 +907,7 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 		}
 	}
 	// temporaries
-	ls.emitTempDrops()
+	ls.emitTempDrops(sc)
 }
 
 func (ls *lowerState) emitAllDefersAndDrops() {

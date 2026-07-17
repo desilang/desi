@@ -25,6 +25,7 @@ func (ls *lowerState) lowerSetLit(x *ast.SetLit, t *types.Set) hir.Value {
 		if id, ok := elem.(*ast.Ident); ok {
 			ls.cur().moved[id.Name] = true
 		}
+		ls.consumeTemp(keyVal) // set stores the raw pointer bits
 		ls.b.Emit(&hir.Call{Fn: "set_add", Args: []hir.Value{dict, keyVal}})
 	}
 
@@ -43,6 +44,7 @@ func (ls *lowerState) lowerSetMethod(fe *ast.FieldExpr, args []ast.Expr, setType
 		if id, ok := args[0].(*ast.Ident); ok {
 			ls.cur().moved[id.Name] = true
 		}
+		ls.consumeTemp(elem) // set stores the raw pointer bits
 		ls.b.Emit(&hir.Call{Fn: "set_add", Args: []hir.Value{receiver, elem}})
 		return nil
 

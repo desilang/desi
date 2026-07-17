@@ -9,6 +9,13 @@ import (
 )
 
 func (ls *lowerState) lowerMatchExpr(m *ast.MatchExpr) hir.Value {
+	// Arm expressions lower into per-arm blocks that don't dominate the
+	// enclosing scope's end — temps born there must not be registered for
+	// scope-end drops (the free would be invalid IR). Covers lowerMatchArms
+	// too, which runs within this call.
+	ls.suppressTempDrops()
+	defer ls.resumeTempDrops()
+
 	// 1. Evaluate scrutinee
 	scrutinee := ls.lowerExpr(m.Scrutinee)
 

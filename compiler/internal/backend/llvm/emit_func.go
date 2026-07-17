@@ -927,8 +927,22 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 						}
 					} else if t, ok := x.Type.(types.T); ok {
 						// Heap types: free via the type-aware drop helpers.
-						// Str stays off — string locals may alias literals
-						// (freeing a global constant crashes).
+						// Str is temp-only — string LOCALS (hir.Var) may alias
+						// literals or another owner's storage, so they are never
+						// freed here. String TEMPS (hir.Temp) are only registered
+						// for drop by the lowerer when they are unconsumed rvalue
+						// results of heap-producing ops (string_concat), which
+						// makes them provably owned and safe to free.
+						if t == types.Str {
+							if _, isTemp := x.Val.(hir.Temp); isTemp {
+								llvmTy, _ := m.operand(actualVal)
+								if llvmTy == "ptr" {
+									wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
+									m.ensureDecl("declare void @free(ptr)")
+								}
+							}
+							continue
+						}
 						switch t.(type) {
 						case *types.List, *types.Set, *types.Dict, *types.Enum, *types.Struct:
 							llvmTy, _ := m.operand(actualVal)

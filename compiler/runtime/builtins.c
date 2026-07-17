@@ -38,6 +38,32 @@ int asprintf(char** strp, const char* fmt, ...) {
 }
 #endif
 
+// __desi_sprintf — f-string formatting: returns a freshly malloc'd string.
+// Unlike asprintf's out-parameter form, returning the buffer lets the
+// compiler emit a plain call with no stack slot. (An alloca per f-string
+// evaluation overflows the stack in long loops — allocas inside LLVM loop
+// bodies are only reclaimed on function return.)
+// Uses two-pass vsnprintf: portable C99, no vasprintf/_GNU_SOURCE needed.
+char* __desi_sprintf(const char* fmt, ...) {
+    va_list ap, ap2;
+    va_start(ap, fmt);
+    va_copy(ap2, ap);
+    int n = vsnprintf(NULL, 0, fmt, ap);
+    va_end(ap);
+    if (n < 0) {
+        va_end(ap2);
+        return strdup("");
+    }
+    char* buf = (char*)malloc((size_t)n + 1);
+    if (!buf) {
+        va_end(ap2);
+        return strdup("");
+    }
+    vsnprintf(buf, (size_t)n + 1, fmt, ap2);
+    va_end(ap2);
+    return buf;
+}
+
 // ==================== Type[T] Runtime Support ====================
 // DesiTypeInfo represents runtime type information for Type[T]
 

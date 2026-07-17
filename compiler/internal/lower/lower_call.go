@@ -635,6 +635,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						return hir.ConstInt{Text: "0"}
 					}
 					argVal := ls.lowerExpr(x.Args[0])
+					// The pointer crosses the channel to the receiver —
+					// ownership transfers, don't free at scope end.
+					ls.consumeTemp(argVal)
 					// Box the value for the channel
 					boxPtr := ls.b.FreshTemp("send_box")
 					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
@@ -1078,6 +1081,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				dst := ls.b.FreshTemp("send_result")
 				if len(x.Args) > 0 {
 					argVal := ls.lowerExpr(x.Args[0])
+					// The pointer crosses the channel to the receiver —
+					// ownership transfers, don't free at scope end.
+					ls.consumeTemp(argVal)
 					// Box the value to ptr
 					boxPtr := ls.b.FreshTemp("send_box")
 					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
@@ -2240,6 +2246,13 @@ handlePrint:
 					} else {
 						ls.b.Emit(&hir.Call{Dst: strTemp, Fn: toStrFuncName, Args: []hir.Value{argVal}, Type: "ptr"})
 					}
+					// Runtime to_str helpers malloc their result — track it so
+					// the printed temp is freed at scope end. User dunders
+					// (__str__/__repr__/to_str) may return literals: not tracked.
+					switch toStrFuncName {
+					case "list_to_str", "dict_to_str", "set_to_str", "__desi_default_repr":
+						ls.addTempDrop(strTemp.Name)
+					}
 					argVal = strTemp
 				}
 
@@ -2639,6 +2652,9 @@ skipMethodCall:
 					// Initialize self's fields directly
 					for i, arg := range x.Args {
 						argVal := ls.lowerExpr(arg)
+						// Field stores the raw pointer — temp ownership
+						// transfers to the instance.
+						ls.consumeTemp(argVal)
 						if i < len(cls.Fields) {
 							offset := 0
 							for j := 0; j < i; j++ {
@@ -2700,7 +2716,11 @@ skipMethodCall:
 				var args []hir.Value
 				args = append(args, inst)
 				for _, a := range x.Args {
-					args = append(args, ls.lowerExpr(a))
+					av := ls.lowerExpr(a)
+					// __new__ stores args into instance fields — temp
+					// ownership transfers to the instance.
+					ls.consumeTemp(av)
+					args = append(args, av)
 				}
 
 				// Emit call
@@ -2745,6 +2765,9 @@ skipMethodCall:
 					name := arg.Name.Name
 					valExpr := arg.Expr
 					val := ls.lowerExpr(valExpr)
+					// Field stores the raw pointer — temp ownership
+					// transfers to the struct.
+					ls.consumeTemp(val)
 
 					// Find field
 					offset := 0
@@ -3144,6 +3167,17 @@ skipMethodCall:
 	if callee != "print" && callee != "asprintf" && callee != "bool_to_cstring" && !strings.HasPrefix(callee, "arena.") {
 		for _, arg := range args {
 			ls.consumeTemp(arg)
+		}
+	}
+
+	// str(int/float/bool) mallocs its result (int_to_str/float_to_str/
+	// bool_to_str) — track it like a concat temp so a transient use
+	// (print("n: " + str(n)) in a loop) is freed at scope end.
+	// str(str) is an identity bitcast of the SAME pointer: never track it.
+	if callee == "str" && len(x.Args) == 1 && ls.info != nil {
+		argT := ls.info.Types[x.Args[0]]
+		if types.Equal(argT, types.Int) || types.Equal(argT, types.Float) || types.Equal(argT, types.Bool) {
+			ls.addTempDrop(dst.Name)
 		}
 	}
 
