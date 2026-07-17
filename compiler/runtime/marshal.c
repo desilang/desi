@@ -166,13 +166,20 @@ static unsigned char read_byte(Reader* r) {
 }
 
 static void read_bytes(Reader* r, unsigned char* dest, size_t size) {
-    if (r->pos + size > r->len) {
+    // Overflow-safe bounds check: r->pos + size could wrap for huge
+    // stream-supplied sizes, so compare against the remaining span.
+    if (size > r->len - r->pos) {
         memset(dest, 0, size);
         r->pos = r->len;
         return;
     }
     memcpy(dest, r->data + r->pos, size);
     r->pos += size;
+}
+
+// remaining returns how many unread bytes the reader holds.
+static size_t reader_remaining(const Reader* r) {
+    return r->len - r->pos;
 }
 
 // Recursive Serialization
@@ -279,12 +286,33 @@ static void serialize_val(Buffer* b, void* val, MarshalType* mt) {
     }
 }
 
+// Expected wire tag for each MarshalKind (indexed by enum value).
+static const unsigned char marshal_kind_tags[] = {
+    0x01, // MARSHAL_INT
+    0x02, // MARSHAL_FLOAT
+    0x03, // MARSHAL_BOOL
+    0x04, // MARSHAL_STR
+    0x08, // MARSHAL_NONE
+    0x05, // MARSHAL_LIST
+    0x06, // MARSHAL_DICT
+    0x07, // MARSHAL_TUPLE
+};
+
 // Recursive Deserialization
+//
+// Malformed input policy: this parses attacker-controllable bytes, so a
+// wrong tag or a length that exceeds the remaining input poisons the
+// reader (r->pos = r->len). Every subsequent read then zero-fills, and
+// the result degrades to deterministic zero values / empty collections —
+// never an out-of-bounds access, overflowing allocation, or crash.
 static void* deserialize_val(Reader* r, MarshalType* mt) {
     if (!mt) return NULL;
-    
+
     unsigned char tag = read_byte(r);
-    
+    if (tag != marshal_kind_tags[mt->kind]) {
+        r->pos = r->len; // mismatched/corrupt stream — poison
+    }
+
     switch (mt->kind) {
         case MARSHAL_NONE:
             return NULL;
@@ -315,8 +343,15 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
         case MARSHAL_STR: {
             uint64_t len = 0;
             read_bytes(r, (unsigned char*)&len, 8);
-            char* s = malloc(len + 1);
-            if (len > 0) read_bytes(r, (unsigned char*)s, len);
+            // A valid stream can't claim more content than it holds; a
+            // clamped len also keeps malloc(len + 1) from overflowing.
+            if (len > reader_remaining(r)) {
+                len = 0;
+                r->pos = r->len;
+            }
+            char* s = malloc((size_t)len + 1);
+            if (!s) return strdup("");
+            if (len > 0) read_bytes(r, (unsigned char*)s, (size_t)len);
             s[len] = '\0';
             return s;
         }
@@ -324,6 +359,13 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
         case MARSHAL_LIST: {
             uint64_t len = 0;
             read_bytes(r, (unsigned char*)&len, 8);
+            // Each element occupies at least one byte (its tag) — a larger
+            // count is malformed and would loop allocating from an
+            // exhausted reader.
+            if (len > reader_remaining(r)) {
+                len = 0;
+                r->pos = r->len;
+            }
             int tag = 3;
             if (mt->val->kind == MARSHAL_INT) tag = 0;
             else if (mt->val->kind == MARSHAL_STR) tag = 1;
@@ -351,6 +393,11 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
         case MARSHAL_DICT: {
             uint64_t len = 0;
             read_bytes(r, (unsigned char*)&len, 8);
+            // Each entry needs at least two tag bytes — larger is malformed.
+            if (len > reader_remaining(r)) {
+                len = 0;
+                r->pos = r->len;
+            }
             int key_tag = 4;
             if (mt->key->kind == MARSHAL_INT) key_tag = 0;
             else if (mt->key->kind == MARSHAL_STR) key_tag = 1;
@@ -399,8 +446,16 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
         case MARSHAL_TUPLE: {
             uint64_t len = 0;
             read_bytes(r, (unsigned char*)&len, 8);
-            void** elements = malloc(len * sizeof(void*));
-            for (uint64_t i = 0; i < len; i++) {
+            // The TYPE dictates the tuple arity; the stream length is only
+            // validated. Looping to a stream-supplied len would index
+            // mt->elems out of bounds.
+            if (len != (uint64_t)mt->elem_count) {
+                r->pos = r->len; // arity mismatch — poison, zero-fill elems
+            }
+            size_t n = (size_t)mt->elem_count;
+            void** elements = malloc((n > 0 ? n : 1) * sizeof(void*));
+            if (!elements) return NULL;
+            for (size_t i = 0; i < n; i++) {
                 elements[i] = deserialize_val(r, mt->elems[i]);
             }
             return elements;
