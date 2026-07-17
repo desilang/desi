@@ -194,8 +194,7 @@ if (-not $SkipRuntime) {
     # Get all .c files in runtime directory (excluding decimal subdirectory)
     # Files still pending Windows portability:
     $windowsExcludes = @(
-        'desi_host.c',       # dlopen-based hot-reload host
-        'signal_handler.c'   # POSIX signal registration module
+        'desi_host.c'        # dlopen-based hot-reload host (Mach-O / ELF only)
     )
     # Everything else is ported. Server stack: http_server.c (WinSock2 +
     # supervisor threads), websocket.c (no keepalive ping thread on
