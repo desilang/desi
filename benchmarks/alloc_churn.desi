@@ -1,0 +1,12 @@
+# Allocator benchmark: 500k short-lived lists. Each iteration allocates a
+# 3-element list, reads it, and hybrid MM frees it at loop-body scope exit —
+# peak memory must stay flat. Mirrors alloc_churn.c (malloc/fill/read/free).
+def main() -> int:
+	let mut total = 0
+	let mut i = 0
+	while i < 500000:
+		let t = [i % 100, i % 50, i % 10]
+		total := total + t[0] + t[1] + t[2]
+		i := i + 1
+	print(total)
+	return 0

@@ -1,0 +1,45 @@
+# Float benchmark: 80x80 matrix multiply over list[list[float]].
+# Exercises nested list indexing and boxed float elements (tag 3).
+# Elements come from a rolling 0..9 float seed (no int->float cast in the
+# language yet); C fills in the same order, so the checksum matches exactly.
+def main() -> int:
+	let n = 80
+
+	let mut a: list[list[float]] = []
+	let mut b: list[list[float]] = []
+	let mut seed = 0.0
+	let mut i = 0
+	while i < n:
+		let mut row_a: list[float] = []
+		let mut row_b: list[float] = []
+		let mut j = 0
+		while j < n:
+			row_a.append(seed)
+			seed := seed + 1.0
+			if seed >= 10.0:
+				seed := 0.0
+			row_b.append(seed)
+			seed := seed + 1.0
+			if seed >= 10.0:
+				seed := 0.0
+			j := j + 1
+		a.append(row_a)
+		b.append(row_b)
+		i := i + 1
+
+	let mut total = 0.0
+	let mut r = 0
+	while r < n:
+		let mut c = 0
+		while c < n:
+			let mut acc = 0.0
+			let mut k = 0
+			while k < n:
+				acc := acc + a[r][k] * b[k][c]
+				k := k + 1
+			total := total + acc
+			c := c + 1
+		r := r + 1
+
+	print(total)
+	return 0

@@ -38,8 +38,13 @@ reported. The runner warns if the Desi and C outputs differ.
 | Name | What it measures |
 |---|---|
 | `loop_sum` | Raw arithmetic: 100M-iteration add loop |
+| `fib_recursive` | Function-call overhead: naive fib(32), ~5.5M calls |
 | `string_churn` | Allocation churn: 200k transient strings (str() + concat + free); peak memory must stay flat |
+| `string_build` | Accumulator concat (`s := s + "x"`) — tracks the known phase-4 reassignment gap; expect Desi to lose it today |
+| `alloc_churn` | 500k short-lived lists, freed per iteration by scope-exit drops |
 | `list_ops` | Collections: 1M appends with growth, 1M indexed reads, scope-exit free |
+| `dict_ops` | Hash map: 100k int-keyed inserts + 100k lookups vs open addressing |
+| `matrix_mul` | Float math: 80x80 matrix multiply over list[list[float]] (boxed elements) vs flat C arrays |
 
 ## Reference numbers (Windows 11, x64, clang -O0)
 
@@ -47,13 +52,31 @@ Measured 2026-07-17 on the v0.1.0 dev branch (best of 3):
 
 | Benchmark | Desi | C | Peak memory (Desi / C) |
 |---|---|---|---|
-| loop_sum | 64.3 ms | 66.1 ms | 3.2 MB / 3.2 MB |
-| string_churn | 43.1 ms | 47.8 ms | 3.2 MB / 3.2 MB |
-| list_ops | 30.6 ms | 23.6 ms | 11.9 MB / 7.8 MB |
+| loop_sum | 62.2 ms | 69.5 ms | 3.2 MB / 3.2 MB |
+| fib_recursive | 43.4 ms | 30.7 ms | 3.2 MB / 3.2 MB |
+| string_churn | 44.6 ms | 47.4 ms | 3.2 MB / 3.2 MB |
+| string_build | 46.0 ms | 18.6 ms | 51.2 MB / 3.2 MB |
+| alloc_churn | 54.1 ms | 36.7 ms | 2.8 MB / 3.2 MB |
+| list_ops | 28.0 ms | 23.0 ms | 11.9 MB / 7.9 MB |
+| dict_ops | 38.0 ms | 27.9 ms | 12.4 MB / 6.8 MB |
+| matrix_mul | 30.0 ms | 21.0 ms | 3.8 MB / 3.2 MB |
 
-Numbers vary by machine — the point is the *ratio*: Desi's generated code
-tracks C (loop_sum and string_churn are within noise of each other), and
-churn-heavy programs hold a flat working set thanks to scope-exit drops.
-list_ops' extra ~4 MB is the list representation: elements are stored in
-8-byte `void*` slots vs C's packed 4-byte ints, plus `list_append` call
-overhead vs an inlined array store.
+Numbers vary by machine and run — the point is the *ratio*. Desi wins or
+ties the arithmetic and string-churn benchmarks outright; the collection
+benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
+
+- **list/dict memory**: elements live in 8-byte generic slots vs C's
+  packed types, and every op is a runtime call vs an inlined store.
+  Typed element storage and codegen fast paths are the planned fixes.
+- **fib_recursive**: each Desi call runs the recursion-depth guard
+  (`__desi_call_enter`/`__desi_call_exit`); C has no equivalent safety.
+- **alloc_churn**: a Desi list is two allocations (header + data) vs
+  C's one malloc.
+- **string_build**: the accumulator pattern reallocates the whole string
+  per append and keeps intermediates alive until scope exit — the
+  tracked hybrid-MM phase-4 item. This benchmark exists to watch that
+  gap close.
+
+These benchmarks have already caught real bugs: dict_ops found both a
+missing dict index-assignment lowering (access violation) and a hash
+table that never rehashed (278x slowdown at 100k entries).

@@ -1,0 +1,14 @@
+# String accumulator benchmark: append one char 10k times.
+# KNOWN GAP (tracked for hybrid MM phase 4): each `s := s + "x"` allocates
+# a fresh string and the previous value is not freed until scope exit, so
+# Desi does O(n^2) copying AND holds every intermediate alive. The C side
+# uses amortized buffer growth like a C programmer would. This benchmark
+# exists to track the gap closing — expect Desi to lose it today.
+def main() -> int:
+	let mut s = ""
+	let mut i = 0
+	while i < 10000:
+		s := s + "x"
+		i := i + 1
+	print(len(s))
+	return 0

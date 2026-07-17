@@ -1,0 +1,10 @@
+# Function-call benchmark: naive recursive fibonacci(32) — ~5.5M calls.
+# Measures pure calling-convention overhead. Mirrors fib_recursive.c.
+def fib(n: int) -> int:
+	if n < 2:
+		return n
+	return fib(n - 1) + fib(n - 2)
+
+def main() -> int:
+	print(fib(32))
+	return 0
