@@ -21,6 +21,12 @@ var preludeBuiltinNames = map[string]struct{}{
 	"len":   {},
 	"bool":  {},
 	"open":  {},
+	"ast_get_name": {},
+	"ast_set_name": {},
+	"ast_get_body": {},
+	"ast_create_print_stmt": {},
+	"ast_insert_stmt": {},
+	"ast_add_stmt": {},
 }
 
 // isPreludeBuiltinName reports whether 'name' is one of the always-available builtins.

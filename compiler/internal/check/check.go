@@ -72,8 +72,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 
 	// 3) Walk module: collect functions first, then check bodies.
 	c := &checker{
-		info:  res.Info,
-		scope: NewScope(top), // child of top so imported names & prelude are visible
+		info:      res.Info,
+		scope:     NewScope(top), // child of top so imported names & prelude are visible
+		macroDefs: make(map[string]*ast.FuncDecl),
 	}
 	// Remember the module (file-level) scope for anti-shadowing checks.
 	c.moduleScope = c.scope
@@ -228,6 +229,7 @@ type checker struct {
 	unsafeDepth int
 	expected    types.T // Expected type from context (for bidirectional checking)
 	inUsingInit bool    // True when type-checking UsingStmt.Init (for sync RAII checks)
+	macroDefs   map[string]*ast.FuncDecl
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
@@ -320,11 +322,31 @@ func (c *checker) collectFunc(fd *ast.FuncDecl) {
 		c.info.TestFuncs[name] = fd
 	}
 
+	// Track @macro decorated functions
+	if hasDecorator(fd, "macro") {
+		c.macroDefs[name] = fd
+	}
+
 	// Bind the function name in the OUTER scope (not the temp scope)
 	_ = saved.Define(&Symbol{Name: name, Kind: SymFunc, Type: sig, Node: fd})
 }
 
 func (c *checker) checkFunc(fd *ast.FuncDecl) {
+	// Execute custom macro decorators first
+	for _, dec := range fd.Decorators {
+		if macroDef, exists := c.macroDefs[dec.Name.Name]; exists {
+			env := eval.NewEnv(nil)
+			if len(macroDef.Params) > 0 {
+				paramName := macroDef.Params[0].Name.Name
+				env.Set(paramName, eval.AstNodeValue{Node: fd})
+			}
+			_, err := eval.Eval(macroDef.Body, env)
+			if err != nil {
+				c.add(diagAt("DTE9999", fd.SpanOf(), "macro evaluation failed: "+err.Error()))
+			}
+		}
+	}
+
 	// New scope for parameters and locals.
 	saved := c.scope
 	savedFuncName := c.curFuncName

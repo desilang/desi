@@ -124,28 +124,217 @@ func Eval(node ast.Node, env *Env) (Value, error) {
 		return Eval(x.Expr, env)
 
 	case *ast.CallExpr:
-		if id, ok := x.Callee.(*ast.Ident); ok && id.Name == "print" {
-			var args []string
-			for _, arg := range x.Args {
-				val, err := Eval(arg, env)
+		if id, ok := x.Callee.(*ast.Ident); ok {
+			switch id.Name {
+			case "print":
+				var args []string
+				for _, arg := range x.Args {
+					val, err := Eval(arg, env)
+					if err != nil {
+						return nil, err
+					}
+					if val != nil {
+						args = append(args, val.String())
+					}
+				}
+				fmt.Fprint(os.Stderr, "Compile-time print: ")
+				for i, arg := range args {
+					if i > 0 {
+						fmt.Fprint(os.Stderr, " ")
+					}
+					fmt.Fprint(os.Stderr, arg)
+				}
+				fmt.Fprintln(os.Stderr)
+				return nil, nil
+
+			case "ast_get_name":
+				if len(x.Args) != 1 {
+					return nil, fmt.Errorf("ast_get_name expects 1 argument")
+				}
+				argVal, err := Eval(x.Args[0], env)
 				if err != nil {
 					return nil, err
 				}
-				if val != nil {
-					args = append(args, val.String())
+				nodeVal, ok := argVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_get_name expects an AST node value")
 				}
-			}
-			fmt.Fprint(os.Stderr, "Compile-time print: ")
-			for i, arg := range args {
-				if i > 0 {
-					fmt.Fprint(os.Stderr, " ")
+				if nodeVal.Node == nil {
+					return StrValue{Val: ""}, nil
 				}
-				fmt.Fprint(os.Stderr, arg)
+				if fd, ok := nodeVal.Node.(*ast.FuncDecl); ok {
+					return StrValue{Val: fd.Name.Name}, nil
+				}
+				if cd, ok := nodeVal.Node.(*ast.ClassDecl); ok {
+					return StrValue{Val: cd.Name.Name}, nil
+				}
+				return StrValue{Val: ""}, nil
+
+			case "ast_set_name":
+				if len(x.Args) != 2 {
+					return nil, fmt.Errorf("ast_set_name expects 2 arguments")
+				}
+				argVal, err := Eval(x.Args[0], env)
+				if err != nil {
+					return nil, err
+				}
+				nodeVal, ok := argVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_set_name expects an AST node value as first argument")
+				}
+				nameVal, err := Eval(x.Args[1], env)
+				if err != nil {
+					return nil, err
+				}
+				newName, ok := nameVal.(StrValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_set_name expects a string as second argument")
+				}
+				if fd, ok := nodeVal.Node.(*ast.FuncDecl); ok {
+					fd.Name.Name = newName.Val
+				} else if cd, ok := nodeVal.Node.(*ast.ClassDecl); ok {
+					cd.Name.Name = newName.Val
+				}
+				return nil, nil
+
+			case "ast_get_body":
+				if len(x.Args) != 1 {
+					return nil, fmt.Errorf("ast_get_body expects 1 argument")
+				}
+				argVal, err := Eval(x.Args[0], env)
+				if err != nil {
+					return nil, err
+				}
+				nodeVal, ok := argVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_get_body expects an AST node value")
+				}
+				if fd, ok := nodeVal.Node.(*ast.FuncDecl); ok {
+					return AstNodeValue{Node: fd.Body}, nil
+				}
+				return nil, fmt.Errorf("ast_get_body only supported on function declarations")
+
+			case "ast_create_print_stmt":
+				if len(x.Args) != 1 {
+					return nil, fmt.Errorf("ast_create_print_stmt expects 1 argument")
+				}
+				msgVal, err := Eval(x.Args[0], env)
+				if err != nil {
+					return nil, err
+				}
+				msgStr, ok := msgVal.(StrValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_create_print_stmt expects a string argument")
+				}
+				stmt := &ast.ExprStmt{
+					Expr: &ast.CallExpr{
+						Callee: &ast.Ident{Name: "print"},
+						Args:   []ast.Expr{&ast.StrLit{Value: msgStr.Val}},
+						ArgNodes: []ast.CallArg{
+							{Expr: &ast.StrLit{Value: msgStr.Val}},
+						},
+					},
+				}
+				return AstNodeValue{Node: stmt}, nil
+
+			case "ast_insert_stmt":
+				if len(x.Args) != 3 {
+					return nil, fmt.Errorf("ast_insert_stmt expects 3 arguments")
+				}
+				blockVal, err := Eval(x.Args[0], env)
+				if err != nil {
+					return nil, err
+				}
+				blockNode, ok := blockVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_insert_stmt expects an AST block as first argument")
+				}
+				block, ok := blockNode.Node.(*ast.Block)
+				if !ok {
+					return nil, fmt.Errorf("first argument is not an AST Block")
+				}
+				idxVal, err := Eval(x.Args[1], env)
+				if err != nil {
+					return nil, err
+				}
+				idx, ok := idxVal.(IntValue)
+				if !ok {
+					return nil, fmt.Errorf("second argument must be an integer index")
+				}
+				stmtVal, err := Eval(x.Args[2], env)
+				if err != nil {
+					return nil, err
+				}
+				stmtNode, ok := stmtVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("third argument must be an AST statement")
+				}
+				stmt, ok := stmtNode.Node.(ast.Stmt)
+				if !ok {
+					return nil, fmt.Errorf("third argument is not a valid Stmt")
+				}
+
+				pos := int(idx.Val)
+				if pos < 0 {
+					pos = 0
+				}
+				if pos > len(block.Stmts) {
+					pos = len(block.Stmts)
+				}
+				block.Stmts = append(block.Stmts, nil)
+				copy(block.Stmts[pos+1:], block.Stmts[pos:])
+				block.Stmts[pos] = stmt
+				return nil, nil
+
+			case "ast_add_stmt":
+				if len(x.Args) != 2 {
+					return nil, fmt.Errorf("ast_add_stmt expects 2 arguments")
+				}
+				blockVal, err := Eval(x.Args[0], env)
+				if err != nil {
+					return nil, err
+				}
+				blockNode, ok := blockVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("ast_add_stmt expects an AST block as first argument")
+				}
+				block, ok := blockNode.Node.(*ast.Block)
+				if !ok {
+					return nil, fmt.Errorf("first argument is not an AST Block")
+				}
+				stmtVal, err := Eval(x.Args[1], env)
+				if err != nil {
+					return nil, err
+				}
+				stmtNode, ok := stmtVal.(AstNodeValue)
+				if !ok {
+					return nil, fmt.Errorf("second argument must be an AST statement")
+				}
+				stmt, ok := stmtNode.Node.(ast.Stmt)
+				if !ok {
+					return nil, fmt.Errorf("second argument is not a valid Stmt")
+				}
+				block.Stmts = append(block.Stmts, stmt)
+				return nil, nil
 			}
-			fmt.Fprintln(os.Stderr)
-			return nil, nil
 		}
-		return nil, fmt.Errorf("compile-time function call only supported for print, got: %T", x.Callee)
+		return nil, fmt.Errorf("unsupported compile-time call: %T", x.Callee)
+	case *ast.FString:
+		var res string
+		for _, part := range x.Parts {
+			val, err := Eval(part, env)
+			if err != nil {
+				return nil, err
+			}
+			if val != nil {
+				res += val.String()
+			}
+		}
+		return StrValue{Val: res}, nil
+
+	case *ast.FStringExpr:
+		return Eval(x.X, env)
+
 	case *ast.IntLit:
 		i, err := strconv.ParseInt(x.Text, 10, 64)
 		if err != nil {
