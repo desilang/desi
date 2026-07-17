@@ -135,6 +135,7 @@ nav:
     - Time: stdlib/time.md
     - DateTime: stdlib/datetime.md
     - JSON: stdlib/json.md
+    - Marshal: stdlib/marshal.md
     - TOML: stdlib/toml.md
     - CSV: stdlib/csv.md
     - HTTP Client: stdlib/http.md
