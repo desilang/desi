@@ -2,6 +2,7 @@ package eval
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"strconv"
 
@@ -108,6 +109,43 @@ func Eval(node ast.Node, env *Env) (Value, error) {
 	}
 
 	switch x := node.(type) {
+	case *ast.Block:
+		var lastVal Value
+		for _, stmt := range x.Stmts {
+			v, err := Eval(stmt, env)
+			if err != nil {
+				return nil, err
+			}
+			lastVal = v
+		}
+		return lastVal, nil
+
+	case *ast.ExprStmt:
+		return Eval(x.Expr, env)
+
+	case *ast.CallExpr:
+		if id, ok := x.Callee.(*ast.Ident); ok && id.Name == "print" {
+			var args []string
+			for _, arg := range x.Args {
+				val, err := Eval(arg, env)
+				if err != nil {
+					return nil, err
+				}
+				if val != nil {
+					args = append(args, val.String())
+				}
+			}
+			fmt.Fprint(os.Stderr, "Compile-time print: ")
+			for i, arg := range args {
+				if i > 0 {
+					fmt.Fprint(os.Stderr, " ")
+				}
+				fmt.Fprint(os.Stderr, arg)
+			}
+			fmt.Fprintln(os.Stderr)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("compile-time function call only supported for print, got: %T", x.Callee)
 	case *ast.IntLit:
 		i, err := strconv.ParseInt(x.Text, 10, 64)
 		if err != nil {

@@ -6,6 +6,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/desugar"
 	"github.com/desilang/desi/compiler/internal/diag"
+	"github.com/desilang/desi/compiler/internal/eval"
 	"github.com/desilang/desi/compiler/internal/resolve"
 	"github.com/desilang/desi/compiler/internal/types"
 )
@@ -425,6 +426,14 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 	// Body.
 	if fd.Body != nil {
 		c.checkBlock(fd.Body)
+
+		if hasDecorator(fd, "comptime_run") {
+			env := eval.NewEnv(nil)
+			_, err := eval.Eval(fd.Body, env)
+			if err != nil {
+				c.add(diagAt("DTE9999", fd.SpanOf(), "comptime evaluation failed: "+err.Error()))
+			}
+		}
 	}
 
 	// Save moved variables for backend
