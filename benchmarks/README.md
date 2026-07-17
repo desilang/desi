@@ -8,13 +8,19 @@ memory** of the compiled executables.
 
 ```powershell
 # Windows (requires bin\desic.exe built — run ..\build.ps1 first)
-.\benchmarks\run_benchmarks.ps1
+.\benchmarks\run_benchmarks.ps1            # both sides -O0
+.\benchmarks\run_benchmarks.ps1 -Release   # both sides -O2
 ```
 
 ```sh
 # macOS / Linux (requires make having been run)
-./benchmarks/run_benchmarks.sh
+./benchmarks/run_benchmarks.sh             # both sides -O0
+./benchmarks/run_benchmarks.sh --release   # both sides -O2
 ```
+
+Release mode maps to `desic build --release` (alias for `-O2`): the emitted
+IR runs the full clang -O2 pipeline instead of -O0, and the C sides compile
+with -O2 so parity holds.
 
 Each program is run 3 times; the best wall time and the OS-reported peak
 memory (PeakWorkingSet64 on Windows, max RSS via /usr/bin/time on Unix) are
@@ -76,6 +82,26 @@ benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
   per append and keeps intermediates alive until scope exit — the
   tracked hybrid-MM phase-4 item. This benchmark exists to watch that
   gap close.
+
+## Release mode (-O2 both sides, same machine/day)
+
+| Benchmark | Desi | C | |
+|---|---|---|---|
+| loop_sum | 30.5 ms | 19.3 ms | 2.1x faster than Desi -O0 |
+| string_churn | 48.1 ms | 54.2 ms | Desi wins |
+| matrix_mul | 23.3 ms | 24.4 ms | Desi wins |
+| dict_ops | 33.8 ms | 28.3 ms | |
+| list_ops | 29.6 ms | 23.9 ms | |
+| fib_recursive | 43.4 ms | 28.5 ms | recursion guard; -O2 can't remove it |
+| alloc_churn | 58.5 ms | 17.8 ms | runtime calls opaque without LTO |
+| string_build | 56.0 ms | 18.0 ms | phase-4 tracker |
+
+The -O2 column shows exactly where the next levers are: benchmarks bound
+by program-side loops (loop_sum, matrix_mul, string_churn) improve or win
+outright, while benchmarks bound by *runtime calls* (alloc_churn, list,
+dict) barely move — the optimizer can't see through calls into the
+separately-compiled libdesi. Cross-module LTO (runtime built as LLVM
+bitcode) is the planned fix for that class.
 
 These benchmarks have already caught real bugs: dict_ops found both a
 missing dict index-assignment lowering (access violation) and a hash

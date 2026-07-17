@@ -8,17 +8,24 @@
 .EXAMPLE
     .\build-desi.ps1 examples\01_hello_world.desi
     .\build-desi.ps1 examples\01_hello_world.desi hello
+    .\build-desi.ps1 examples\01_hello_world.desi -Release   # optimized (-O2)
 #>
 
 param(
     [Parameter(Mandatory=$true, Position=0)]
     [string]$InputFile,
-    
+
     [Parameter(Position=1)]
-    [string]$OutputName
+    [string]$OutputName,
+
+    # Optimized build (clang -O2). Also enabled by DESI_RELEASE=1 so
+    # harnesses (test_examples.ps1, CI) can flip it without new plumbing.
+    [switch]$Release
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($env:DESI_RELEASE -eq "1") { $Release = $true }
 
 # Directories
 $ProjectRoot = $PSScriptRoot
@@ -120,7 +127,9 @@ try {
     # Temporarily disable ErrorActionPreference to prevent stderr warnings from causing exceptions
     $oldEAP = $ErrorActionPreference
     $ErrorActionPreference = "Continue"
-    $clangOutput = & $ClangExe $LlvmIr $LibDesi -o $Executable `
+    $optArgs = @()
+    if ($Release) { $optArgs = @("-O2") }
+    $clangOutput = & $ClangExe @optArgs $LlvmIr $LibDesi -o $Executable `
         -lws2_32 `
         2>&1
     $clangExit = $LASTEXITCODE

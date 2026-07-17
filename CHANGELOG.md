@@ -122,8 +122,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   state functions
 - HTTPS client on Windows via Schannel (`http/tls_win.h`) — no OpenSSL
   needed; HTTP/WebSocket *server* and `signal` remain macOS/Linux-only
-- 473 of 481 examples pass on Windows (remaining 8 need the db/ORM
+- 479 of 487 examples pass on Windows (remaining 8 need the db/ORM
   runtime port)
+
+**Release builds and benchmarks**
+
+- `desic build --release` / `desic run --release` (alias for `-O2`):
+  the emitted IR runs the full clang -O2 pipeline; on Unix, optimized
+  builds route through clang instead of llc so inlining and loop
+  optimizations apply. `build-desi.ps1 -Release` / `build-desi.sh
+  --release` (or `DESI_RELEASE=1`) for script builds
+- `benchmarks/`: eight paired Desi-vs-C programs (identical work, same
+  clang opt level, outputs must match) with time + peak-memory runners
+  for Windows and Unix. Desi beats C on string churn and matrix multiply
+  at -O2 and ties integer loops; the README documents every remaining
+  delta and its planned fix
 
 **Automatic Memory Management (hybrid MM, phases 1–3)**
 

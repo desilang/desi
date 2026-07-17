@@ -2,18 +2,32 @@
 # Desi vs C benchmark runner (macOS / Linux).
 #
 # For each benchmark pair (<name>.desi / <name>.c):
-#   - builds the Desi program via build-desi.sh (clang default opt level)
-#   - builds the C program via clang -O0 (same opt level for parity)
+#   - builds the Desi program via build-desi.sh
+#   - builds the C program via clang at the SAME opt level for parity
+#     (default -O0; --release compiles both sides at -O2)
 #   - runs each 3 times via /usr/bin/time, reports best wall time and
 #     maximum resident set size
 #
-# Usage: ./benchmarks/run_benchmarks.sh
+# Usage: ./benchmarks/run_benchmarks.sh [--release]
 set -e
+
+RELEASE=0
+if [ "$1" = "--release" ] || [ "$1" = "-r" ]; then
+    RELEASE=1
+fi
 
 BENCH_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(dirname "$BENCH_DIR")"
 OUT_DIR="$BENCH_DIR/out"
 mkdir -p "$OUT_DIR"
+
+if [ "$RELEASE" = "1" ]; then
+    C_OPT="-O2"
+    echo "Mode: RELEASE (-O2 both sides)"
+else
+    C_OPT="-O0"
+    echo "Mode: default (-O0 both sides)"
+fi
 
 # max RSS: macOS `time -l` reports bytes, Linux `time -v` reports kbytes.
 OS="$(uname -s)"
@@ -49,11 +63,15 @@ printf "%-14s %10s %10s %10s %10s   %s\n" "Benchmark" "Desi ms" "C ms" "Desi MB"
 for src in "$BENCH_DIR"/*.desi; do
     name=$(basename "$src" .desi)
 
-    "$REPO_ROOT/build-desi.sh" "$src" >/dev/null 2>&1
+    if [ "$RELEASE" = "1" ]; then
+        "$REPO_ROOT/build-desi.sh" --release "$src" >/dev/null 2>&1
+    else
+        "$REPO_ROOT/build-desi.sh" "$src" >/dev/null 2>&1
+    fi
     desi_exe="$REPO_ROOT/build/output/$name"
 
     c_exe="$OUT_DIR/${name}_c"
-    clang -O0 "$BENCH_DIR/$name.c" -o "$c_exe"
+    clang $C_OPT "$BENCH_DIR/$name.c" -o "$c_exe"
 
     set -- $(run_timed "$desi_exe")
     d_ms=$1; d_kb=$2; d_out=$3

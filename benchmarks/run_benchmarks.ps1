@@ -3,20 +3,29 @@
     Desi vs C benchmark runner (Windows).
 .DESCRIPTION
     For each benchmark pair (<name>.desi / <name>.c):
-      - builds the Desi program via build-desi.ps1 (clang default opt level)
-      - builds the C program via clang -O0 (same opt level for parity)
+      - builds the Desi program via build-desi.ps1
+      - builds the C program via clang at the SAME opt level for parity
+        (default -O0; -Release compiles both sides at -O2)
       - runs each 3 times, reports best wall time and OS-reported peak
         working set (Process.PeakWorkingSet64 — exact, not sampled)
     Run from anywhere; paths resolve relative to this script.
 .EXAMPLE
-    .\benchmarks\run_benchmarks.ps1
+    .\benchmarks\run_benchmarks.ps1            # both sides -O0
+    .\benchmarks\run_benchmarks.ps1 -Release   # both sides -O2
 #>
+
+param(
+    [switch]$Release
+)
 
 $ErrorActionPreference = "Stop"
 $BenchDir = $PSScriptRoot
 $RepoRoot = Split-Path $BenchDir
 $OutDir = Join-Path $BenchDir "out"
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+
+$COpt = if ($Release) { "-O2" } else { "-O0" }
+Write-Host "Mode: $(if ($Release) { 'RELEASE (-O2 both sides)' } else { 'default (-O0 both sides)' })" -ForegroundColor Yellow
 
 function Measure-Exe {
     param([string]$Exe)
@@ -47,12 +56,16 @@ foreach ($name in $names) {
     Write-Host "==> $name" -ForegroundColor Cyan
 
     # Build Desi side
-    & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") | Out-Null
+    if ($Release) {
+        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") -Release | Out-Null
+    } else {
+        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") | Out-Null
+    }
     $desiExe = Join-Path $RepoRoot "build\output\$name.exe"
 
-    # Build C side at the same opt level clang applies to Desi IR (-O0)
+    # Build C side at the same opt level as the Desi IR
     $cExe = Join-Path $OutDir "$name`_c.exe"
-    & clang -O0 (Join-Path $BenchDir "$name.c") -o $cExe
+    & clang $COpt (Join-Path $BenchDir "$name.c") -o $cExe
     if ($LASTEXITCODE -ne 0) { throw "clang failed for $name.c" }
 
     $desi = Measure-Exe $desiExe

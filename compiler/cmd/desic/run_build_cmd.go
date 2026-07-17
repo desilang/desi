@@ -68,6 +68,7 @@ func printUsage() {
 	term.Println("  help                     Show this help")
 	term.Println("")
 	term.Println("Flags:")
+	term.Println("  --release, -r            Optimized build (alias for -O2)")
 	term.Println("  -O2                      Optimize output")
 	term.Println("  -I <roots>               Import roots (colon-separated)")
 	term.Println("  --error-format <fmt>     Error format: human|json")
@@ -230,6 +231,8 @@ func runCmd(argv []string) int {
 			break
 		}
 		switch {
+		case a == "--release" || a == "-r":
+			optLevel = "-O2"
 		case strings.HasPrefix(a, "-O"):
 			optLevel = a
 		case strings.HasPrefix(a, "-"):
@@ -305,6 +308,8 @@ func buildCmd(argv []string) int {
 			}
 			outputName = argv[i+1]
 			i++
+		case a == "--release" || a == "-r":
+			optLevel = "-O2"
 		case strings.HasPrefix(a, "-O"):
 			optLevel = a
 		case strings.HasPrefix(a, "-"):
@@ -417,11 +422,12 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 			irArgs = append(irArgs, optLevel)
 		}
 		irCompileCmd = exec.Command(findLLVMTool("clang"), irArgs...)
+	} else if optLevel != "" {
+		// Optimized builds go through clang so the full -O pipeline runs
+		// (inlining, loop opts) — llc alone only optimizes codegen.
+		irCompileCmd = exec.Command(findLLVMTool("clang"), "-w", "-c", optLevel, irPath, "-o", objPath)
 	} else {
 		llcArgs := []string{"-filetype=obj", "-o", objPath}
-		if optLevel != "" {
-			llcArgs = append(llcArgs, optLevel)
-		}
 		llcArgs = append(llcArgs, irPath)
 		irCompileCmd = exec.Command(findLLVMTool("llc"), llcArgs...)
 	}

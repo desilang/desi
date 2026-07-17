@@ -1,17 +1,32 @@
 #!/bin/bash
 # Build a Desi program into an executable
-# Usage: ./build-desi.sh <input.desi> [executable_name]
+# Usage: ./build-desi.sh [--release] <input.desi> [executable_name]
+#   --release    optimized build (llc/clang -O2); also DESI_RELEASE=1
 
 set -e
 
+RELEASE=0
+if [ "$1" = "--release" ] || [ "$1" = "-r" ]; then
+    RELEASE=1
+    shift
+fi
+if [ "$DESI_RELEASE" = "1" ]; then
+    RELEASE=1
+fi
+
 if [ $# -lt 1 ]; then
-    echo "Usage: $0 <input.desi> [executable_name]"
+    echo "Usage: $0 [--release] <input.desi> [executable_name]"
     exit 1
 fi
 
 INPUT="$1"
 BASENAME=$(basename "$INPUT" .desi)
 OUTPUT_NAME="${2:-$BASENAME}"
+
+OPT_FLAGS=""
+if [ "$RELEASE" = "1" ]; then
+    OPT_FLAGS="-O2"
+fi
 
 # --- Auto-discover LLVM tools ---
 find_tool() {
@@ -56,7 +71,13 @@ echo "==> Compiling Desi to LLVM IR..."
 ./bin/desic emit-ir "$INPUT" > build/program.ll
 
 echo "==> Compiling LLVM IR to object file..."
-$LLC build/program.ll -filetype=obj -o build/program.o
+if [ "$RELEASE" = "1" ]; then
+    # clang runs the full -O2 IR pipeline (inlining, loop opts);
+    # llc alone only does codegen-level optimization.
+    $CLANG -w -O2 -c build/program.ll -o build/program.o
+else
+    $LLC build/program.ll -filetype=obj -o build/program.o
+fi
 
 echo "==> Linking executable..."
 EXTRA_LINK_FLAGS=""
@@ -100,7 +121,7 @@ if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
 fi
 # Link against libdesi.a (static runtime) with dead code elimination
 # Note: -lz removed — compression is now bundled via miniz
-$CLANG build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS $OPENSSL_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
+$CLANG $OPT_FLAGS build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS $OPENSSL_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o
