@@ -186,8 +186,8 @@ static void serialize_val(Buffer* b, void* val, MarshalType* mt) {
             
         case MARSHAL_INT: {
             buf_write_byte(b, 0x01);
-            int64_t v = (val == NULL) ? 0 : *(int32_t*)val;
-            buf_write_bytes(b, (unsigned char*)&v, 8);
+            int32_t v = (val == NULL) ? 0 : *(int32_t*)val;
+            buf_write_bytes(b, (unsigned char*)&v, 4);
             break;
         }
         
@@ -290,10 +290,10 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
             return NULL;
             
         case MARSHAL_INT: {
-            int64_t v64 = 0;
-            read_bytes(r, (unsigned char*)&v64, 8);
-            int64_t* box = malloc(8);
-            *box = v64;
+            int32_t v32 = 0;
+            read_bytes(r, (unsigned char*)&v32, 4);
+            int64_t* box = calloc(1, 8);
+            *(int32_t*)box = v32;
             return box;
         }
         
@@ -307,8 +307,8 @@ static void* deserialize_val(Reader* r, MarshalType* mt) {
         
         case MARSHAL_BOOL: {
             unsigned char byte_val = read_byte(r);
-            int64_t* box = malloc(8);
-            *box = byte_val ? 1 : 0;
+            int64_t* box = calloc(1, 8);
+            *(bool*)box = byte_val ? true : false;
             return box;
         }
         
@@ -418,7 +418,7 @@ DesiBytes* __marshal_dumps(void* val, DesiTypeInfo* type) {
     serialize_val(&b, val, mt);
     free_marshal_type(mt);
     
-    DesiBytes* res = __bytes_new(b.data, b.len);
+    DesiBytes* res = __bytes_new(b.data, (int32_t)b.len);
     free(b.data);
     return res;
 }

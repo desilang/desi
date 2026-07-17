@@ -388,6 +388,11 @@ func Eval(node ast.Node, env *Env) (Value, error) {
 					return IntValue{Val: l.Val + r.Val}, nil
 				}
 			}
+			if l, ok := lhs.(FloatValue); ok {
+				if r, ok := rhs.(FloatValue); ok {
+					return FloatValue{Val: l.Val + r.Val}, nil
+				}
+			}
 			if l, ok := lhs.(StrValue); ok {
 				if r, ok := rhs.(StrValue); ok {
 					return StrValue{Val: l.Val + r.Val}, nil
@@ -399,10 +404,20 @@ func Eval(node ast.Node, env *Env) (Value, error) {
 					return IntValue{Val: l.Val - r.Val}, nil
 				}
 			}
+			if l, ok := lhs.(FloatValue); ok {
+				if r, ok := rhs.(FloatValue); ok {
+					return FloatValue{Val: l.Val - r.Val}, nil
+				}
+			}
 		case "*":
 			if l, ok := lhs.(IntValue); ok {
 				if r, ok := rhs.(IntValue); ok {
 					return IntValue{Val: l.Val * r.Val}, nil
+				}
+			}
+			if l, ok := lhs.(FloatValue); ok {
+				if r, ok := rhs.(FloatValue); ok {
+					return FloatValue{Val: l.Val * r.Val}, nil
 				}
 			}
 		case "/":
@@ -414,9 +429,53 @@ func Eval(node ast.Node, env *Env) (Value, error) {
 					return IntValue{Val: l.Val / r.Val}, nil
 				}
 			}
+			if l, ok := lhs.(FloatValue); ok {
+				if r, ok := rhs.(FloatValue); ok {
+					if r.Val == 0 {
+						return nil, fmt.Errorf("division by zero")
+					}
+					return FloatValue{Val: l.Val / r.Val}, nil
+				}
+			}
 		case "==":
+			switch l := lhs.(type) {
+			case IntValue:
+				if r, ok := rhs.(IntValue); ok {
+					return BoolValue{Val: l.Val == r.Val}, nil
+				}
+			case FloatValue:
+				if r, ok := rhs.(FloatValue); ok {
+					return BoolValue{Val: l.Val == r.Val}, nil
+				}
+			case BoolValue:
+				if r, ok := rhs.(BoolValue); ok {
+					return BoolValue{Val: l.Val == r.Val}, nil
+				}
+			case StrValue:
+				if r, ok := rhs.(StrValue); ok {
+					return BoolValue{Val: l.Val == r.Val}, nil
+				}
+			}
 			return BoolValue{Val: lhs.String() == rhs.String()}, nil
 		case "!=":
+			switch l := lhs.(type) {
+			case IntValue:
+				if r, ok := rhs.(IntValue); ok {
+					return BoolValue{Val: l.Val != r.Val}, nil
+				}
+			case FloatValue:
+				if r, ok := rhs.(FloatValue); ok {
+					return BoolValue{Val: l.Val != r.Val}, nil
+				}
+			case BoolValue:
+				if r, ok := rhs.(BoolValue); ok {
+					return BoolValue{Val: l.Val != r.Val}, nil
+				}
+			case StrValue:
+				if r, ok := rhs.(StrValue); ok {
+					return BoolValue{Val: l.Val != r.Val}, nil
+				}
+			}
 			return BoolValue{Val: lhs.String() != rhs.String()}, nil
 		}
 		return nil, fmt.Errorf("unsupported operator: %s", x.Op)

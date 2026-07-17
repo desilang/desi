@@ -220,15 +220,30 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 						m.ssa[x.Name] = x.Init
 					}
 				} else if x.Init != nil {
-					switch x.Init.(type) {
+					switch initVal := x.Init.(type) {
 					case hir.ConstBool:
 						llvmTy, size = "i1", 1
 					case hir.ConstStr:
 						llvmTy, size = "ptr", 8
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
+					case hir.ConstFloat:
+						llvmTy, size = "double", 8
 					case hir.Temp:
-						llvmTy, size = "i32", 4
+						if ty, exists := m.tempTypes[initVal.Name]; exists {
+							llvmTy = ty
+							if ty == "ptr" || ty == "double" {
+								size = 8
+							} else if ty == "i1" || ty == "i8" {
+								size = 1
+							} else if ty == "i16" {
+								size = 2
+							} else {
+								size = 4
+							}
+						} else {
+							llvmTy, size = "i32", 4
+						}
 					}
 					m.ssa[x.Name] = x.Init
 				} else if !isReferenceType(x.Type) {

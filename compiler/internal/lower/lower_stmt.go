@@ -47,12 +47,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		}
 		if isNonEscaping {
 			ls.currentAllocArena = ls.localArena
+			defer func() { ls.currentAllocArena = nil }()
 		}
-
-		func() {
-			if isNonEscaping {
-				defer func() { ls.currentAllocArena = nil }()
-			}
 
 			// Handle tuple destructuring: let (a, b, c) = tuple or let (first, *rest) = tuple
 			if len(s.Pattern) > 0 {
@@ -385,7 +381,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// Consume temp so it's not dropped
 			ls.consumeTemp(t)
 		}
-		}()
+
 
 	case *ast.AssignStmt:
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {

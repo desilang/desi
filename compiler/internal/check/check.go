@@ -357,6 +357,15 @@ func (c *checker) checkFunc(fd *ast.FuncDecl) {
 		c.curFuncName = savedFuncName
 	}()
 
+	if hasDecorator(fd, "macro") {
+		c.scope.Define(&Symbol{Name: "ast_get_name", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any}, types.Str, false)})
+		c.scope.Define(&Symbol{Name: "ast_set_name", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Str}, types.None, false)})
+		c.scope.Define(&Symbol{Name: "ast_get_body", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any}, types.Any, false)})
+		c.scope.Define(&Symbol{Name: "ast_create_print_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Str}, types.Any, false)})
+		c.scope.Define(&Symbol{Name: "ast_insert_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Int, types.Any}, types.None, false)})
+		c.scope.Define(&Symbol{Name: "ast_add_stmt", Kind: SymVar, Type: types.FuncOf([]types.T{types.Any, types.Any}, types.None, false)})
+	}
+
 	// Reset per-function move-tracking state (our local tracker)
 	c.moved = MoveSet{}
 	if c.info != nil {

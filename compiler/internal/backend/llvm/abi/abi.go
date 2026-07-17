@@ -31,9 +31,15 @@ func Current() *Info {
 	if current == nil {
 		panic("abi: no platform-specific ABI registered")
 	}
+	return current
+}
 
-	// Dynamically adjust macOS deployment target version in the triple if on Darwin
-	if strings.Contains(current.TargetTriple, "apple-macosx") {
+// Register sets the current platform's ABI info.
+// Called by platform-specific files in their init() functions.
+func Register(info *Info) {
+	current = info
+
+	if current != nil && strings.Contains(current.TargetTriple, "apple-macosx") {
 		version := os.Getenv("MACOSX_DEPLOYMENT_TARGET")
 		if version == "" {
 			cmd := exec.Command("sw_vers", "-productVersion")
@@ -54,14 +60,6 @@ func Current() *Info {
 			}
 		}
 	}
-
-	return current
-}
-
-// Register sets the current platform's ABI info.
-// Called by platform-specific files in their init() functions.
-func Register(info *Info) {
-	current = info
 }
 
 // IsWindows returns true when targeting Windows MSVC.

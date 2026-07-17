@@ -593,19 +593,4 @@ func addPreludeBuiltins(info *Info) {
 
 	// --- id builtin ---
 	// id(value: Any) -> int — pointer identity
-	add1("id", types.Any, types.Int, "value", ast.ParamMove)
-
-	// --- Compile-time macro AST helpers ---
-	// ast_get_name(node: Any) -> str
-	add1("ast_get_name", types.Any, types.Str, "node", ast.ParamMove)
-	// ast_set_name(node: Any, name: str) -> None
-	addN("ast_set_name", []types.T{types.Any, types.Str}, []ast.ParamMode{ast.ParamMove, ast.ParamMove}, types.None, []string{"node", "name"})
-	// ast_get_body(node: Any) -> Any
-	add1("ast_get_body", types.Any, types.Any, "node", ast.ParamMove)
-	// ast_create_print_stmt(msg: str) -> Any
-	add1("ast_create_print_stmt", types.Str, types.Any, "msg", ast.ParamMove)
-	// ast_insert_stmt(block: Any, index: int, stmt: Any) -> None
-	addN("ast_insert_stmt", []types.T{types.Any, types.Int, types.Any}, []ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove}, types.None, []string{"block", "index", "stmt"})
-	// ast_add_stmt(block: Any, stmt: Any) -> None
-	addN("ast_add_stmt", []types.T{types.Any, types.Any}, []ast.ParamMode{ast.ParamMove, ast.ParamMove}, types.None, []string{"block", "stmt"})
-}
+	add1("id", types.Any, types.Int, "value", ast.ParamMove)}

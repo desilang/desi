@@ -2470,10 +2470,10 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			if ls.info != nil {
 				if typ := ls.info.Types[x]; typ != nil {
 					resultType = lowerType(typ)
-				} else if lhsTyp := ls.info.Types[x.Lhs]; lhsTyp != nil {
+				} else if lhsTyp := ls.typeOf(x.Lhs); lhsTyp != nil {
 					// Fallback: infer from LHS operand type (common for sub-expressions)
 					resultType = lowerType(lhsTyp)
-				} else if rhsTyp := ls.info.Types[x.Rhs]; rhsTyp != nil {
+				} else if rhsTyp := ls.typeOf(x.Rhs); rhsTyp != nil {
 					// Fallback: infer from RHS operand type
 					resultType = lowerType(rhsTyp)
 				} else {
