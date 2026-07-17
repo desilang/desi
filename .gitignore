@@ -6,6 +6,11 @@ dist/
 *.test
 *.out
 
+# MSVC build outputs (Windows)
+*.obj
+*.pdb
+*.ilk
+
 # Editors
 .idea/
 .vscode/
