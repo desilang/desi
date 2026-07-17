@@ -1,0 +1,12 @@
+# Memory benchmark: string allocation churn (200k iterations).
+# Each iteration builds "item <n>" (str() conversion + concat) as a
+# transient temporary; hybrid MM frees both temps at scope end, so the
+# working set must stay flat. Mirrors string_churn.c (malloc/snprintf/free).
+def main() -> int:
+	let mut total = 0
+	let mut i = 0
+	while i < 200000:
+		total := total + len("item " + str(i))
+		i := i + 1
+	print(total)
+	return 0

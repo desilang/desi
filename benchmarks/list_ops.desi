@@ -1,0 +1,18 @@
+# Collections benchmark: build a 1M-element list, then sum it by index.
+# The list local is dropped (freed) at scope exit by hybrid MM.
+# Elements are i % 100 so the sum stays inside 32-bit range on both sides.
+# Mirrors list_ops.c (growable array + sum + free).
+def main() -> int:
+	let mut nums: list[int] = []
+	let mut i = 0
+	while i < 1000000:
+		nums.append(i % 100)
+		i := i + 1
+
+	let mut total = 0
+	let mut j = 0
+	while j < 1000000:
+		total := total + nums[j]
+		j := j + 1
+	print(total)
+	return 0

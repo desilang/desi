@@ -1,0 +1,10 @@
+# CPU benchmark: tight integer arithmetic loop (100M iterations).
+# Mirrors loop_sum.c — both sides compile at clang -O0.
+def main() -> int:
+	let mut acc = 0
+	let mut i = 0
+	while i < 100000000:
+		acc := acc + i
+		i := i + 1
+	print(acc)
+	return 0
