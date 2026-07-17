@@ -471,6 +471,58 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 			}
 
+			// Handle dict index assignment: d[key] := value — desugars to
+			// dict_insert (insert-or-update), mirroring the d.insert(k, v)
+			// method lowering in dict_lower.go. Without this case the
+			// statement fell through to the generic assign path and produced
+			// invalid stores (runtime access violation).
+			if indexExpr, ok := s.LHS[0].(*ast.IndexExpr); ok {
+				if ls.info != nil {
+					if dictType, ok := ls.info.Types[indexExpr.X].(*types.Dict); ok {
+						dict := ls.lowerExpr(indexExpr.X)
+						keyInt, keyStr, keyFloat, keyPtr := ls.prepareKeyArgs(indexExpr.Idx, dictType.Key)
+						val := ls.lowerExpr(s.RHS[0])
+
+						// Dict retains stored pointer values — same ownership
+						// rules as dict literals: heap-typed idents are moved,
+						// value temps are consumed. Keys are strdup'd by the
+						// runtime, so key temps stay tracked.
+						if id, ok := s.RHS[0].(*ast.Ident); ok {
+							if t := ls.info.Types[s.RHS[0]]; t != nil {
+								switch t.(type) {
+								case *types.List, *types.Set, *types.Dict, *types.Enum, *types.Struct:
+									ls.cur().moved[id.Name] = true
+								}
+							}
+						}
+						ls.consumeTemp(val)
+
+						// Widen the value to an i64 slot (floats keep their
+						// bits via BitCast) and pass it BY VALUE — an alloca
+						// spill here would allocate stack per loop iteration
+						// (LLVM only reclaims allocas on function return) and
+						// overflow in long insert loops.
+						valType := ls.info.Types[s.RHS[0]]
+						isFloatVal := valType == types.Float || valType == types.F32 || valType == types.F64
+						val64 := ls.b.FreshTemp("val64")
+						if isFloatVal {
+							ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
+						} else {
+							ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
+						}
+
+						var typeTag hir.Value = hir.ConstInt{Text: "0", Type: "i32"}
+						if valType != nil {
+							typeTag = getTypeTag(valType)
+						}
+
+						// dict_insert_val(dict, key_int, key_str, key_float, key_ptr, value, value_type_tag)
+						ls.b.Emit(&hir.Call{Fn: "dict_insert_val", Args: []hir.Value{dict, keyInt, keyStr, keyFloat, keyPtr, val64, typeTag}})
+						return
+					}
+				}
+			}
+
 			// Handle field assignment: obj.field = val
 			if field, ok := s.LHS[0].(*ast.FieldExpr); ok {
 				// Lower receiver

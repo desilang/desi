@@ -160,18 +160,15 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 		// Check if value is a float type - need BitCast to preserve bits
 		isFloat := valType == types.Float || valType == types.F32 || valType == types.F64
 
-		// Spill value to stack to pass as pointer
-		valPtr := ls.b.FreshTemp("val_ptr")
+		// Widen the value to an i64 slot and pass it BY VALUE — an alloca
+		// spill here would allocate stack per loop iteration (LLVM only
+		// reclaims allocas on function return) and overflow in long
+		// insert loops.
+		val64 := ls.b.FreshTemp("val64")
 		if isFloat {
-			val64 := ls.b.FreshTemp("val64")
 			ls.b.Emit(&hir.BitCast{Val: val, Dst: val64, Type: "i64"})
-			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
-			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 		} else {
-			val64 := ls.b.FreshTemp("val64")
 			ls.b.Emit(&hir.Cast{Dst: val64, Src: val, Type: "i64"})
-			ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: valPtr})
-			ls.b.Emit(&hir.Store{Dst: valPtr, Val: val64})
 		}
 
 		// Determine type tag
@@ -180,8 +177,8 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 			typeTag = getTypeTag(ls.info.Types[args[1]])
 		}
 
-		// dict_insert(dict, key_int, key_str, key_float, key_ptr, &value, value_type_tag)
-		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr, valPtr, typeTag}})
+		// dict_insert_val(dict, key_int, key_str, key_float, key_ptr, value, value_type_tag)
+		ls.b.Emit(&hir.Call{Fn: "dict_insert_val", Args: []hir.Value{receiver, keyInt, keyStr, keyFloat, keyPtr, val64, typeTag}})
 		return nil
 
 	case "has_key":

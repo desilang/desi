@@ -23,6 +23,8 @@ func getFuncSig(name string) (funcSig, bool) {
 func init() {
 	// Dict runtime overrides
 	SetFuncSig("dict_new", "ptr", nil)
+	SetFuncSig("dict_insert", "void", nil)
+	SetFuncSig("dict_insert_val", "void", nil)
 	SetFuncSig("dict_get", "ptr", nil)
 	SetFuncSig("dict_keys", "ptr", nil)
 	SetFuncSig("dict_values", "ptr", nil)

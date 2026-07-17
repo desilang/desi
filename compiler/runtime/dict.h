@@ -55,8 +55,10 @@ dict_t* dict_new(int key_type_tag, size_t key_size, size_t value_size, int value
 dict_t* dict_new_in(void* arena, int key_type_tag, size_t key_size, size_t value_size, int value_type_tag, 
                     KeyHashFunc key_hash_fn, KeyEqFunc key_eq_fn, ElemToStrFunc value_to_str_fn);
 void dict_free(dict_t* d);
-void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float, 
+void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float,
                  void* key_ptr, const void* value, int value_type_tag);
+void dict_insert_val(dict_t* d, int64_t key_int, const char* key_str, double key_float,
+                     void* key_ptr, int64_t value, int value_type_tag);
 void* dict_get(dict_t* d, int64_t key_int, const char* key_str, double key_float, 
                void* key_ptr, const void* default_val);
 void* dict_setdefault(dict_t* d, int64_t key_int, const char* key_str, double key_float, 

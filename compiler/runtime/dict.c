@@ -182,6 +182,16 @@ void dict_free(dict_t* d) {
 }
 
 // Insert or update a key-value pair
+// By-value insert: takes the 8-byte value slot directly instead of a
+// pointer. This is what compiler-generated index assignment (d[k] := v)
+// and d.insert(k, v) call — spilling the value to an alloca at the call
+// site would allocate stack per loop iteration (LLVM only reclaims
+// allocas on function return), overflowing the stack in long loops.
+void dict_insert_val(dict_t* d, int64_t key_int, const char* key_str, double key_float,
+                     void* key_ptr, int64_t value, int value_type_tag) {
+    dict_insert(d, key_int, key_str, key_float, key_ptr, &value, value_type_tag);
+}
+
 void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float,
                  void* key_ptr, const void* value, int value_type_tag) {
     if (!d) return;
