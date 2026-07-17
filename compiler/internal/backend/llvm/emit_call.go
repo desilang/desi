@@ -220,9 +220,13 @@ func (m *Module) emitCall(c *hir.Call) {
 			wprintf(&m.funcs, "  %s = call i32 @_setjmp(ptr %s, ptr %s) returns_twice\n",
 				rawTemp, bufVal, fpTemp)
 
-			// 5. Store + reload so the value survives longjmp stack restoration
-			wprintf(&m.funcs, "  store i32 %s, ptr %s\n", rawTemp, slotTemp)
-			wprintf(&m.funcs, "  %s = load i32, ptr %s\n", dst, slotTemp)
+			// 5. Store + reload so the value survives longjmp stack restoration.
+			//    Both MUST be volatile: at -O2, store-to-load forwarding folds a
+			//    non-volatile round-trip back into the register value and deletes
+			//    the slot — after longjmp that register is stale and the try body
+			//    re-runs (the exact failure this slot exists to prevent).
+			wprintf(&m.funcs, "  store volatile i32 %s, ptr %s\n", rawTemp, slotTemp)
+			wprintf(&m.funcs, "  %s = load volatile i32, ptr %s\n", dst, slotTemp)
 
 			if m.tempTypes == nil {
 				m.tempTypes = make(map[string]string)

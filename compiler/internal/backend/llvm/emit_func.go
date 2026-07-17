@@ -87,6 +87,24 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	if fn.Inline {
 		attrs = " alwaysinline"
 	}
+	// Functions containing setjmp (try/except) must keep a real frame
+	// pointer: llvm.frameaddress(0) feeds _setjmp/RtlUnwindEx on Windows,
+	// and -O2's frame-pointer omission would hand longjmp a garbage frame
+	// (access violation during unwind). noinline keeps the setjmp frame in
+	// the function that owns the jmp_buf.
+	hasSetjmp := false
+setjmpScan:
+	for _, b := range fn.Blocks {
+		for _, s := range b.Stmts {
+			if c, ok := s.(*hir.Call); ok && c.Fn == "setjmp" {
+				hasSetjmp = true
+				break setjmpScan
+			}
+		}
+	}
+	if hasSetjmp {
+		attrs += " noinline \"frame-pointer\"=\"all\""
+	}
 	wprintf(&m.funcs, ")%s {\n", attrs)
 
 	type localInfo struct {
@@ -677,7 +695,13 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					count = 1
 				}
 				if count > 1 {
-					wprintf(&m.funcs, "  %s = alloca %s, i32 %d\n", x.Dst.Name, ty, count)
+					// Multi-element buffers get align 16: the try/except
+					// jmp_buf is one of these, and MSVC's _setjmp saves SSE
+					// registers into it with aligned 16-byte stores — a
+					// default (align 1) i8 buffer only works when stack
+					// layout happens to align it; -O2's stack packing broke
+					// that (access violation inside _setjmp).
+					wprintf(&m.funcs, "  %s = alloca %s, i32 %d, align 16\n", x.Dst.Name, ty, count)
 				} else {
 					wprintf(&m.funcs, "  %s = alloca %s\n", x.Dst.Name, ty)
 				}
