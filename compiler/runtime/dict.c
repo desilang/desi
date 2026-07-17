@@ -181,7 +181,6 @@ void dict_free(dict_t* d) {
     free(d);
 }
 
-// Insert or update a key-value pair
 // By-value insert: takes the 8-byte value slot directly instead of a
 // pointer. This is what compiler-generated index assignment (d[k] := v)
 // and d.insert(k, v) call — spilling the value to an alloca at the call
@@ -192,6 +191,42 @@ void dict_insert_val(dict_t* d, int64_t key_int, const char* key_str, double key
     dict_insert(d, key_int, key_str, key_float, key_ptr, &value, value_type_tag);
 }
 
+// Grow the bucket array (2x) and relink every entry. Without rehashing,
+// chains grow linearly with entry count and every operation degrades to
+// O(n) — a 100k-entry dict was ~280x slower than a plain hash table.
+// Entries themselves are not reallocated, only relinked, so key/value
+// pointers held by callers stay valid.
+static void dict_resize(dict_t* d) {
+    size_t new_count = d->bucket_count * 2;
+    dict_entry_t** new_buckets;
+    if (d->arena) {
+        new_buckets = (dict_entry_t**)__arena_calloc(d->arena, new_count, sizeof(dict_entry_t*));
+        // old bucket array stays in the arena; freed with the arena
+    } else {
+        new_buckets = calloc(new_count, sizeof(dict_entry_t*));
+    }
+    if (!new_buckets) return; // OOM: keep the old table (slow but correct)
+
+    for (size_t i = 0; i < d->bucket_count; i++) {
+        dict_entry_t* entry = d->buckets[i];
+        while (entry) {
+            dict_entry_t* next = entry->next;
+            uint64_t hash = hash_key(d, entry->key_int, entry->key_str, entry->key_float, entry->key_ptr);
+            size_t idx = hash % new_count;
+            entry->next = new_buckets[idx];
+            new_buckets[idx] = entry;
+            entry = next;
+        }
+    }
+
+    if (!d->arena) {
+        free(d->buckets);
+    }
+    d->buckets = new_buckets;
+    d->bucket_count = new_count;
+}
+
+// Insert or update a key-value pair
 void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_float,
                  void* key_ptr, const void* value, int value_type_tag) {
     if (!d) return;
@@ -261,6 +296,12 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
     new_entry->next = d->buckets[index];
     d->buckets[index] = new_entry;
     d->entry_count++;
+
+    // Amortized growth: rehash when the load factor passes 0.75
+    // (entry_count / bucket_count > 3/4, in integer math)
+    if (d->entry_count * 4 > d->bucket_count * 3) {
+        dict_resize(d);
+    }
 }
 
 // Get value for a key, or return default if not found
