@@ -575,8 +575,6 @@ func addPreludeBuiltins(info *Info) {
 	// conflicting with math.pow(float, float) -> float. The standalone
 	// pow(int, int) -> int lowerer dispatch still works for direct calls.
 
-
-
 	// --- todo builtin (Rust-inspired) ---
 	// todo() -> never — panics with "not implemented"
 	addN("todo", nil, nil, types.None, nil)
@@ -593,4 +591,5 @@ func addPreludeBuiltins(info *Info) {
 
 	// --- id builtin ---
 	// id(value: Any) -> int — pointer identity
-	add1("id", types.Any, types.Int, "value", ast.ParamMove)}
+	add1("id", types.Any, types.Int, "value", ast.ParamMove)
+}

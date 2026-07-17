@@ -139,13 +139,13 @@ func (ls *lowerState) lowerKwargsCall(x *ast.CallExpr, cand *check.FuncCand) hir
 	// dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, to_str_fn)
 	dictRes := ls.b.FreshTemp("kwargs_dict")
 	ls.b.Emit(&hir.Call{Dst: dictRes, Fn: "dict_new", Args: []hir.Value{
-		hir.ConstInt{Text: "1", Type: "i32"},  // key_type_tag = str
-		hir.ConstInt{Text: "0", Type: "i64"},  // key_size = 0 (primitives)
-		hir.ConstInt{Text: "8", Type: "i64"},  // value_size = 8
-		valTypeTag,                             // value_type_tag
-		hir.ConstNull{},                        // key_hash_fn
-		hir.ConstNull{},                        // key_eq_fn
-		hir.ConstNull{},                        // to_str_fn
+		hir.ConstInt{Text: "1", Type: "i32"}, // key_type_tag = str
+		hir.ConstInt{Text: "0", Type: "i64"}, // key_size = 0 (primitives)
+		hir.ConstInt{Text: "8", Type: "i64"}, // value_size = 8
+		valTypeTag,                           // value_type_tag
+		hir.ConstNull{},                      // key_hash_fn
+		hir.ConstNull{},                      // key_eq_fn
+		hir.ConstNull{},                      // to_str_fn
 	}})
 
 	// Determine if kwargs value type is Any (mixed types)
@@ -197,11 +197,11 @@ func (ls *lowerState) lowerKwargsCall(x *ast.CallExpr, cand *check.FuncCand) hir
 		ls.b.Emit(&hir.Call{Fn: "dict_insert", Args: []hir.Value{
 			dictRes,
 			hir.ConstInt{Text: "0", Type: "i64"}, // key_int (unused)
-			keyVal,                                 // key_str
-			hir.ConstFloat{Text: "0.0"},           // key_float (unused)
-			hir.ConstNull{},                        // key_ptr (unused)
-			valPtr,                                 // &value
-			insertTag,                              // value_type_tag (per-entry for Any)
+			keyVal,                               // key_str
+			hir.ConstFloat{Text: "0.0"},          // key_float (unused)
+			hir.ConstNull{},                      // key_ptr (unused)
+			valPtr,                               // &value
+			insertTag,                            // value_type_tag (per-entry for Any)
 		}})
 	}
 
@@ -2394,7 +2394,6 @@ handlePrint:
 		}
 	}
 
-
 	// 2. M14 Stage 1: Method Calls (obj.method())
 	if fe, ok := x.Callee.(*ast.FieldExpr); ok && ls.info != nil {
 		// Check if this is a nested class constructor call (e.g. Container.Box())
@@ -3149,7 +3148,7 @@ skipMethodCall:
 		}
 		valExpr := x.Args[0]
 		argVal := ls.lowerExpr(valExpr)
-		
+
 		var passVal hir.Value
 		if types.Equal(argType, types.Int) || types.Equal(argType, types.Float) || types.Equal(argType, types.Bool) || argType.String() == "char" {
 			tempSlot := ls.b.FreshTemp("marshal_val_slot")
@@ -3159,12 +3158,12 @@ skipMethodCall:
 		} else {
 			passVal = argVal
 		}
-		
+
 		typeInfoVal := ls.emitTypeInfo(argType)
 		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__marshal_dumps", Args: []hir.Value{passVal, typeInfoVal}, Type: "ptr"})
 		return dst
 	}
-	
+
 	isMarshalLoads := callee == "__marshal_loads"
 	if !isMarshalLoads && ls.info != nil {
 		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen.Type != nil {
@@ -3176,16 +3175,16 @@ skipMethodCall:
 	if isMarshalLoads && ls.info != nil && len(x.Args) == 1 {
 		dataExpr := x.Args[0]
 		dataVal := ls.lowerExpr(dataExpr)
-		
+
 		retTypeObj := ls.typeOf(x)
 		if retTypeObj == nil {
 			retTypeObj = types.Any
 		}
 		typeInfoVal := ls.emitTypeInfo(retTypeObj)
-		
+
 		rawRes := ls.b.FreshTemp("marshal_raw_res")
 		ls.b.Emit(&hir.Call{Dst: rawRes, Fn: "__marshal_loads", Args: []hir.Value{dataVal, typeInfoVal}, Type: "ptr"})
-		
+
 		if types.Equal(retTypeObj, types.Int) || types.Equal(retTypeObj, types.Float) || types.Equal(retTypeObj, types.Bool) || retTypeObj.String() == "char" {
 			ls.b.Emit(&hir.Load{Type: lowerType(retTypeObj), Src: rawRes, Dst: dst})
 			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{rawRes}})
@@ -3238,15 +3237,16 @@ func isPrimitiveType(t types.T) bool {
 // if this is a valid Model.objects chain; ("", nil, nil, false) otherwise.
 //
 // Handle lifecycle (Phase 5):
-//   At the chain root (User.objects), emits:
-//     %qs = call ptr @__qs_handle_new("users")   → allocate handle
-//     call void @__qs_handle_bind(ptr %qs)         → set as active
-//   The handle is returned so the terminal caller can free it.
+//
+//	At the chain root (User.objects), emits:
+//	  %qs = call ptr @__qs_handle_new("users")   → allocate handle
+//	  call void @__qs_handle_bind(ptr %qs)         → set as active
+//	The handle is returned so the terminal caller can free it.
 //
 // Handles:
 //   - Direct:   FieldExpr(.objects, Ident(User))       → emit handle_new + handle_bind
 //   - Chained:  CallExpr(.filter, FieldExpr(.objects, Ident(User)))
-//               → emit handle_new + handle_bind + generic intermediate
+//     → emit handle_new + handle_bind + generic intermediate
 //
 // The caller (emitQsGeneric) emits the final/terminal operation and __qs_handle_free.
 func (ls *lowerState) resolveModelObjectsChain(receiver ast.Expr, outerCall *ast.CallExpr) (string, *types.Class, hir.Value, bool) {
@@ -3397,9 +3397,9 @@ func (ls *lowerState) emitQsArgs(spec *macro.MethodSpec, call *ast.CallExpr) {
 // It replaces the old 150-line emitQsTerminal switch statement.
 //
 // The method reads MethodSpec metadata to determine:
-//   1. How to process arguments (ArgStyle + KwargsFunc)
-//   2. Which C function executes the terminal action (TerminalFunc)
-//   3. Whether to construct a model instance from the result (ReturnsModel)
+//  1. How to process arguments (ArgStyle + KwargsFunc)
+//  2. Which C function executes the terminal action (TerminalFunc)
+//  3. Whether to construct a model instance from the result (ReturnsModel)
 //
 // Phase 5: After the terminal call completes and results are extracted,
 // the QuerySet handle is freed via __qs_handle_free. This ensures
@@ -3667,4 +3667,3 @@ func (ls *lowerState) emitTypeInfo(t types.T) hir.Value {
 	})
 	return res
 }
-

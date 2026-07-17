@@ -451,8 +451,8 @@ type lowerState struct {
 	tryErrSlot  hir.Value  // alloca'd slot to store the error value for except
 
 	// Task 4: Escape Analysis & Automatic Function-Local Arenas
-	localArena         hir.Value // Function-scoped arena pointer if initialized
-	currentAllocArena  hir.Value // The arena to direct allocations to during RHS lowering
+	localArena        hir.Value // Function-scoped arena pointer if initialized
+	currentAllocArena hir.Value // The arena to direct allocations to during RHS lowering
 }
 
 type scope struct {

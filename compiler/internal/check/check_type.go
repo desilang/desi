@@ -567,7 +567,7 @@ func (c *checker) checkClass(d *ast.ClassDecl) {
 									meta.CompositePK = append(meta.CompositePK, p.Name)
 								}
 							}
-							}
+						}
 					}
 				}
 				cls.Meta = meta

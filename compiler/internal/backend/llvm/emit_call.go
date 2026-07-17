@@ -381,7 +381,6 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-
 	// JSON get int: __json_get_int(node) -> i32 (Desi int = i32)
 	if c.Fn == "__json_get_int" && len(c.Args) == 1 {
 		m.ensureDecl("declare i32 @__json_get_int(ptr)")

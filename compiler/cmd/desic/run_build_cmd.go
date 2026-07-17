@@ -1020,4 +1020,3 @@ func runBuildAudit(file string, perms *project.Permissions) int {
 
 	return 0
 }
-

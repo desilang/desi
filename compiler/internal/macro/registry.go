@@ -43,10 +43,10 @@ const (
 
 // MacroContext provides context to macro protocol callbacks during type checking.
 type MacroContext struct {
-	Class     *types.Class      // the class being decorated (ClassMacro only)
-	Decorator *ast.Decorator    // the decorator AST node
-	ClassDecl *ast.ClassDecl    // the class AST declaration
-	Info      interface{}       // *check.Info — interface{} to avoid import cycle
+	Class     *types.Class   // the class being decorated (ClassMacro only)
+	Decorator *ast.Decorator // the decorator AST node
+	ClassDecl *ast.ClassDecl // the class AST declaration
+	Info      interface{}    // *check.Info — interface{} to avoid import cycle
 }
 
 // LowerContext provides context to macro protocol callbacks during HIR lowering.
@@ -58,18 +58,18 @@ type LowerContext struct {
 
 // MacroBuiltin defines a function introduced by a macro protocol (e.g., Q(), F()).
 type MacroBuiltin struct {
-	Name      string   // function name (e.g., "Q", "F", "Count")
-	RetType   types.T  // return type of the function
-	Protocol  string   // which macro protocol introduced this builtin
+	Name     string  // function name (e.g., "Q", "F", "Count")
+	RetType  types.T // return type of the function
+	Protocol string  // which macro protocol introduced this builtin
 }
 
 // MacroOp defines an operator overload for macro-produced types.
 type MacroOp struct {
-	Op        string // operator symbol: "|", "&", "~", "+", "-", "*", "/"
+	Op        string                                     // operator symbol: "|", "&", "~", "+", "-", "*", "/"
 	LhsCheck  func(expr ast.Expr, info interface{}) bool // returns true if LHS is a macro expression
 	RhsCheck  func(expr ast.Expr, info interface{}) bool // returns true if RHS is a macro expression (optional)
-	RetType   types.T // return type of the operation
-	LowerFunc func(lhs, rhs hir.Value) *hir.Call // compile-time lowering to C call
+	RetType   types.T                                    // return type of the operation
+	LowerFunc func(lhs, rhs hir.Value) *hir.Call         // compile-time lowering to C call
 	Protocol  string
 }
 
@@ -86,10 +86,10 @@ type MacroUnaryOp struct {
 // For example, @model injects ".objects" — a @snodel macro could inject ".snobjects".
 // The compiler never hardcodes property names; it reads them from the protocol.
 type PropertySpec struct {
-	Name         string                 // property name (e.g., "objects", "snobjects")
-	Methods      map[string]MethodSpec  // methods available on this property
-	RuntimeFuncs map[string]string      // method name → C runtime function name (e.g., "filter" → "__qs_filter")
-	RuntimeType  string                 // "c" (default) or "desi" — determines how runtime funcs are called
+	Name         string                // property name (e.g., "objects", "snobjects")
+	Methods      map[string]MethodSpec // methods available on this property
+	RuntimeFuncs map[string]string     // method name → C runtime function name (e.g., "filter" → "__qs_filter")
+	RuntimeType  string                // "c" (default) or "desi" — determines how runtime funcs are called
 }
 
 // MethodSpec defines a synthesized method on a macro-injected property.
@@ -97,8 +97,8 @@ type MethodSpec struct {
 	Name        string
 	RetType     types.T
 	ParamTypes  []types.T
-	IsChainable bool    // true if method returns the manager (for chaining)
-	IsTerminal  bool    // true if method triggers query execution
+	IsChainable bool // true if method returns the manager (for chaining)
+	IsTerminal  bool // true if method triggers query execution
 
 	// Generic dispatch metadata — drives the lowerer WITHOUT hardcoded switch.
 	// The lowerer reads these fields and emits calls generically.
@@ -109,12 +109,12 @@ type MethodSpec struct {
 	//   "kwargs_set"    — each kwarg (name=val) emits KwargsFunc(name_str, val)
 	//   "positional"    — each positional arg emits KwargsFunc(arg)
 	//   "none"          — no arg processing
-	ArgStyle     string
+	ArgStyle string
 
 	// KwargsFunc is the C runtime function called per argument.
 	// For "kwargs_filter"/"kwargs_set": called as Fn(key_str, val) for each kwarg.
 	// For "positional": called as Fn(arg) for each positional arg.
-	KwargsFunc   string
+	KwargsFunc string
 
 	// TerminalFunc is the C runtime function that executes the terminal action.
 	// Called after all args are processed. E.g. "__qs_fetch", "__qs_first", "__qs_count".
@@ -185,8 +185,8 @@ type MacroProtocol struct {
 type MacroRegistry struct {
 	mu         sync.RWMutex
 	protocols  map[string]*MacroProtocol
-	builtins   map[string]*MacroBuiltin  // global builtin function index
-	operators  map[string][]*MacroOp     // op -> list of macro ops
+	builtins   map[string]*MacroBuiltin // global builtin function index
+	operators  map[string][]*MacroOp    // op -> list of macro ops
 	unaryOps   map[string][]*MacroUnaryOp
 	properties map[string]*propertyIndex // property name -> protocol + spec
 }
@@ -266,10 +266,12 @@ func (r *MacroRegistry) LookupBuiltin(name string) *MacroBuiltin {
 // or (nil, nil, false).
 //
 // This is the 100% generic replacement for hardcoded checks like:
-//   if cls.IsModel && fieldName == "objects" { ... }
+//
+//	if cls.IsModel && fieldName == "objects" { ... }
 //
 // Now the compiler says:
-//   if proto, prop, ok := macro.Registry.LookupProperty(cls, fieldName); ok { ... }
+//
+//	if proto, prop, ok := macro.Registry.LookupProperty(cls, fieldName); ok { ... }
 //
 // It doesn't know what "objects" is. It just knows the protocol says this
 // field name is an injected property.
@@ -389,4 +391,3 @@ func (r *MacroRegistry) IsStrippable(name string) bool {
 	}
 	return false
 }
-

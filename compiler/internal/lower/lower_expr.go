@@ -3386,4 +3386,3 @@ func (ls *lowerState) typeOf(e ast.Expr) types.T {
 	}
 	return nil
 }
-
