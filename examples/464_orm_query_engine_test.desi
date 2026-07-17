@@ -47,7 +47,7 @@ class Order:
 def main() -> int:
 	print("=== Phase 4: Query Engine ===")
 	let host = env.get("PG_HOST", "127.0.0.1")
-	let user = env.get("PG_USER", "desiprogrammer")
+	let user = env.get("PG_USER", "postgres")
 	let pass = env.get("PG_PASS", "")
 	let dbname = env.get("PG_DB", "postgres")
 	db.connect("postgres", host, 5432, dbname, user, pass)

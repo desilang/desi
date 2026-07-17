@@ -215,7 +215,63 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					c.add(diagAt("DME0003", fe.Name.Span, base.Name+" has no exported '"+fe.Name.Name+"'"))
 					return nil
 				}
-				arityCands := filterByArity(set.Cands, len(args))
+
+				// Perform generic function inference on module-qualified candidates
+				var inferredCands []*FuncCand
+				for _, cand := range set.Cands {
+					if len(cand.Type.TypeParams) > 0 {
+						inferred := make(map[string]types.T)
+						if len(call.TypeArgs) > 0 {
+							for i, tp := range cand.Type.TypeParams {
+								if i < len(call.TypeArgs) {
+									resolved := c.resolveType(call.TypeArgs[i])
+									if resolved != nil {
+										inferred[tp.Name] = resolved
+									}
+								}
+							}
+						}
+						if !cand.Type.Variadic && len(args) != len(cand.Type.Params) {
+							continue
+						}
+						match := true
+						for i, argT := range args {
+							if i >= len(cand.Type.Params) {
+								break
+							}
+							paramT := cand.Type.Params[i]
+							if !unify(paramT, argT, inferred) {
+								match = false
+								break
+							}
+						}
+						if match {
+							allInferred := true
+							for _, tp := range cand.Type.TypeParams {
+								if _, ok := inferred[tp.Name]; !ok {
+									allInferred = false
+									break
+								}
+							}
+							if allInferred {
+								newType := substitute(cand.Type, inferred).(*types.Func)
+								newCand := &FuncCand{
+									Decl:       cand.Decl,
+									Type:       newType,
+									Modes:      cand.Modes,
+									Extern:     cand.Extern,
+									Defaults:   cand.Defaults,
+									ParamNames: cand.ParamNames,
+								}
+								inferredCands = append(inferredCands, newCand)
+							}
+						}
+					} else {
+						inferredCands = append(inferredCands, cand)
+					}
+				}
+
+				arityCands := filterByArity(inferredCands, len(args))
 				if len(arityCands) == 0 {
 					c.add(diagAt("DTE0046", fe.Name.Span, "arity mismatch: wrong number of arguments"))
 					return nil
@@ -254,8 +310,64 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 
 			// Named-args path (per-candidate mapping) - only execute if there are named args
 			if hasNamed {
-				var exact []*FuncCand
+				// Perform generic function inference on module-qualified candidates (named path)
+				var inferredCands []*FuncCand
 				for _, cand := range set.Cands {
+					if len(cand.Type.TypeParams) > 0 {
+						vec, ok := c.canonicalizeForCandidate(cand, argsNodes)
+						if !ok {
+							continue
+						}
+						inferred := make(map[string]types.T)
+						if len(call.TypeArgs) > 0 {
+							for i, tp := range cand.Type.TypeParams {
+								if i < len(call.TypeArgs) {
+									resolved := c.resolveType(call.TypeArgs[i])
+									if resolved != nil {
+										inferred[tp.Name] = resolved
+									}
+								}
+							}
+						}
+						match := true
+						for i, argT := range vec {
+							if i >= len(cand.Type.Params) {
+								break
+							}
+							paramT := cand.Type.Params[i]
+							if !unify(paramT, argT, inferred) {
+								match = false
+								break
+							}
+						}
+						if match {
+							allInferred := true
+							for _, tp := range cand.Type.TypeParams {
+								if _, ok := inferred[tp.Name]; !ok {
+									allInferred = false
+									break
+								}
+							}
+							if allInferred {
+								newType := substitute(cand.Type, inferred).(*types.Func)
+								newCand := &FuncCand{
+									Decl:       cand.Decl,
+									Type:       newType,
+									Modes:      cand.Modes,
+									Extern:     cand.Extern,
+									Defaults:   cand.Defaults,
+									ParamNames: cand.ParamNames,
+								}
+								inferredCands = append(inferredCands, newCand)
+							}
+						}
+					} else {
+						inferredCands = append(inferredCands, cand)
+					}
+				}
+
+				var exact []*FuncCand
+				for _, cand := range inferredCands {
 					vec, ok := c.canonicalizeForCandidate(cand, argsNodes)
 					if !ok {
 						continue
@@ -985,8 +1097,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					argType = ta.Target
 				}
 
-				// Special case for string
-				if types.Equal(argType, types.Str) {
+				// Special case for string and bytes
+				if types.Equal(argType, types.Str) || types.Equal(argType, types.Bytes) {
 					c.info.Types[call] = types.Int
 					return types.Int
 				}
@@ -1349,6 +1461,16 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				if len(cand.Type.TypeParams) > 0 {
 					// Generic candidate
 					inferred := make(map[string]types.T)
+					if len(call.TypeArgs) > 0 {
+						for i, tp := range cand.Type.TypeParams {
+							if i < len(call.TypeArgs) {
+								resolved := c.resolveType(call.TypeArgs[i])
+								if resolved != nil {
+									inferred[tp.Name] = resolved
+								}
+							}
+						}
+					}
 					// Unify args with params
 					// Note: filterExactByTypes checks assignability, but for generics we need unification first.
 

@@ -96,9 +96,9 @@ With process isolation (Elixir-style):
 
 ## Related Documents
 
-- [Sync Module](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/docs/features/sync.md) - Current concurrency
-- [Hot Reload Design](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/docs/roadmap/todo/hot_reload_panic.md) - Process model
-- [Roadmap M8](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/docs/roadmap/roadmap.md) - Async milestone (current stub)
+- [Sync Module](../../../docs/features/sync.md) - Current concurrency
+- [Hot Reload Design](../../../docs/roadmap/todo/hot_reload_panic.md) - Process model
+- [Roadmap M8](../../../docs/roadmap/roadmap.md) - Async milestone (current stub)
 
 ## Decision Points (For Future)
 

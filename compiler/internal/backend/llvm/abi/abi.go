@@ -1,5 +1,11 @@
 package abi
 
+import (
+	"os"
+	"os/exec"
+	"strings"
+)
+
 // Info holds platform-specific ABI information for LLVM code generation.
 type Info struct {
 	TargetTriple string
@@ -25,6 +31,30 @@ func Current() *Info {
 	if current == nil {
 		panic("abi: no platform-specific ABI registered")
 	}
+
+	// Dynamically adjust macOS deployment target version in the triple if on Darwin
+	if strings.Contains(current.TargetTriple, "apple-macosx") {
+		version := os.Getenv("MACOSX_DEPLOYMENT_TARGET")
+		if version == "" {
+			cmd := exec.Command("sw_vers", "-productVersion")
+			if out, err := cmd.Output(); err == nil {
+				version = strings.TrimSpace(string(out))
+			}
+		}
+		if version != "" {
+			parts := strings.Split(version, ".")
+			if len(parts) == 1 {
+				version = parts[0] + ".0.0"
+			} else if len(parts) == 2 {
+				version = parts[0] + "." + parts[1] + ".0"
+			}
+			idx := strings.Index(current.TargetTriple, "macosx")
+			if idx != -1 {
+				current.TargetTriple = current.TargetTriple[:idx+6] + version
+			}
+		}
+	}
+
 	return current
 }
 

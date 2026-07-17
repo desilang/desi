@@ -20,13 +20,26 @@ Thumbs.db
 /desic
 /build/
 
-# mpdecimal build artifacts (Windows)
+# mpdecimal build artifacts (Windows, macOS, Unix)
 compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.obj
-compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/.objs/
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.o
 compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.lib
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.a
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.dylib
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.so
 compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.exp
 compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.manifest
-compiler/runtime/decimal/lib/*.lib
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/.objs/
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/.pc/
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec++/.pc/
+compiler/runtime/decimal/mpdecimal-4.0.1/Makefile
+compiler/runtime/decimal/mpdecimal-4.0.1/config.log
+compiler/runtime/decimal/mpdecimal-4.0.1/config.status
+compiler/runtime/decimal/mpdecimal-4.0.1/config.h
+compiler/runtime/decimal/mpdecimal-4.0.1/tests/Makefile
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/Makefile
+compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec++/Makefile
+compiler/runtime/decimal/lib/
 
 output.txt
 test*.txt

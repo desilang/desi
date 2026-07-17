@@ -281,10 +281,10 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Calculate struct size (ptr = 8 bytes on 64-bit, so N elements = N * 8)
 		structSize := len(allElems) * 8
 
-		// Allocate on heap using malloc
+		// Allocate on heap using malloc or arena-backed allocation
 		dst := ls.b.FreshTemp("tuple_ptr")
 		sizeVal := hir.ConstInt{Text: fmt.Sprintf("%d", structSize), Type: "i64"}
-		ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{sizeVal}, Type: "ptr"})
+		ls.emitAlloc(dst, sizeVal)
 
 		// Store elements
 		for i, elem := range allElems {
@@ -306,7 +306,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				if valType == "i32" || valType == "i1" {
 					elemSize = hir.ConstInt{Text: "4", Type: "i64"}
 				}
-				ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{elemSize}, Type: "ptr"})
+				ls.emitAlloc(boxPtr, elemSize)
 				// Store the value
 				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: val})
 				boxedVal = boxPtr
@@ -403,7 +403,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			// Allocate new tuple
 			dstSize := sliceCount * 8
 			dst := ls.b.FreshTemp("slice_tuple")
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", dstSize), Type: "i64"}}, Type: "ptr"})
+			ls.emitAlloc(dst, hir.ConstInt{Text: fmt.Sprintf("%d", dstSize), Type: "i64"})
 
 			// Copy elements from source to destination
 			for i := 0; i < sliceCount; i++ {
@@ -587,7 +587,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return res
 
 	case *ast.IndexExpr:
-		lhsType := ls.info.Types[x.X]
+		lhsType := ls.typeOf(x.X)
 
 		// Handle custom classes with __getitem__ dunder
 		if cls, ok := lhsType.(*types.Class); ok {
@@ -695,6 +695,13 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
 				return ptrDst
 			}
+			// Cast i64 back to i32 or i1 for primitives
+			targetLLVMType := lowerType(dictValType)
+			if targetLLVMType == "i32" || targetLLVMType == "i1" {
+				castedDst := ls.b.FreshTemp("val_casted")
+				ls.b.Emit(&hir.Cast{Src: valDst, Dst: castedDst, Type: targetLLVMType})
+				return castedDst
+			}
 			return valDst
 		}
 
@@ -747,7 +754,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			if fieldExpr, ok := x.X.(*ast.FieldExpr); ok {
 				// Try to get the type of the field
 				if ls.info != nil {
-					if baseType := ls.info.Types[fieldExpr.X]; baseType != nil {
+					if baseType := ls.typeOf(fieldExpr.X); baseType != nil {
 						if cls, ok := baseType.(*types.Class); ok {
 							// Look up the field in the class
 							fieldName := fieldExpr.Name.Name
@@ -839,12 +846,19 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 			// Determine type - check multiple sources
 			loadType := "ptr" // default to ptr for heap-allocated types
+			var resolvedType types.T
 			if ls.info != nil {
 				if sym := ls.info.Idents[x]; sym != nil && sym.Type != nil {
-					loadType = lowerType(sym.Type)
+					resolvedType = sym.Type
 				} else if t := ls.info.Types[x]; t != nil {
-					loadType = lowerType(t)
+					resolvedType = t
 				}
+			}
+			if resolvedType == nil {
+				resolvedType = ls.lookupLocalType(x.Name)
+			}
+			if resolvedType != nil {
+				loadType = lowerType(resolvedType)
 			}
 
 			ls.b.Emit(&hir.Load{
@@ -1629,15 +1643,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// Check if base is a struct, class, or generic instance
 		var fields []types.Field
-		baseType := ls.info.Types[x.X]
-
-		if baseType == nil {
-			if id, ok := x.X.(*ast.Ident); ok {
-				if sym := ls.info.Idents[id]; sym != nil {
-					baseType = sym.Type
-				}
-			}
-		}
+		baseType := ls.typeOf(x.X)
 
 		// Unwrap TypeAlias to access underlying type for field access
 		if alias, ok := baseType.(*types.TypeAlias); ok {
@@ -1752,11 +1758,14 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				boxed := ls.b.FreshTemp("tuple_elem_boxed")
 				ls.b.Emit(&hir.Load{Type: "ptr", Src: elemPtr, Dst: boxed})
 
-				// Unbox: load actual value from boxed pointer
-				val := ls.b.FreshTemp("tuple_elem_val")
-				ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: val})
+				if llvmElemType != "ptr" && llvmElemType != "void" {
+					// Unbox: load actual value from boxed pointer
+					val := ls.b.FreshTemp("tuple_elem_val")
+					ls.b.Emit(&hir.Load{Type: llvmElemType, Src: boxed, Dst: val})
+					return val
+				}
 
-				return val
+				return boxed
 			}
 		} else if g, ok := baseType.(*types.Generic); ok {
 			if s, ok := g.Base.(*types.Struct); ok {
@@ -1865,12 +1874,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 				// Allocate bound method struct (16 bytes: fn + receiver)
 				callable := ls.b.FreshTemp("bound_method")
-				ls.b.Emit(&hir.Call{
-					Dst:  callable,
-					Fn:   "malloc",
-					Args: []hir.Value{hir.ConstInt{Text: "16"}},
-					Type: "ptr",
-				})
+				ls.emitAlloc(callable, hir.ConstInt{Text: "16"})
 
 				// Store method function pointer at offset 0
 				mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
@@ -1903,12 +1907,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				if _, exists := cls.Methods[name]; exists {
 					// Bound method on generic class instance
 					callable := ls.b.FreshTemp("bound_method")
-					ls.b.Emit(&hir.Call{
-						Dst:  callable,
-						Fn:   "malloc",
-						Args: []hir.Value{hir.ConstInt{Text: "16"}},
-						Type: "ptr",
-					})
+					ls.emitAlloc(callable, hir.ConstInt{Text: "16"})
 
 					mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
 					fnSlot := ls.b.FreshTemp("fn_slot")
@@ -1954,7 +1953,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag, toStrFunc}})
+		ls.emitListNew(res, typeTag, toStrFunc)
 
 		// Append elements - list takes ownership
 		for _, e := range x.Elems {
@@ -2471,6 +2470,12 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			if ls.info != nil {
 				if typ := ls.info.Types[x]; typ != nil {
 					resultType = lowerType(typ)
+				} else if lhsTyp := ls.info.Types[x.Lhs]; lhsTyp != nil {
+					// Fallback: infer from LHS operand type (common for sub-expressions)
+					resultType = lowerType(lhsTyp)
+				} else if rhsTyp := ls.info.Types[x.Rhs]; rhsTyp != nil {
+					// Fallback: infer from RHS operand type
+					resultType = lowerType(rhsTyp)
 				} else {
 					resultType = "i32" // default fallback
 				}
@@ -2481,7 +2486,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 		// String equality/inequality: use strcmp instead of pointer comparison
 		if (x.Op == "==" || x.Op == "!=") && ls.info != nil {
-			lhsType := ls.info.Types[x.Lhs]
+			lhsType := ls.typeOf(x.Lhs)
 			if types.Equal(lhsType, types.Str) {
 				cmpResult := ls.b.FreshTemp("strcmp_res")
 				ls.b.Emit(&hir.Call{
@@ -3099,10 +3104,7 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	if len(c.Clauses) == 0 {
 		// Degenerate: no iteration clauses, just return empty list
 		res := ls.b.FreshTemp("list")
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{
-			hir.ConstInt{Text: "0", Type: "i32"},
-			hir.ConstNull{},
-		}})
+		ls.emitListNew(res, hir.ConstInt{Text: "0", Type: "i32"}, hir.ConstNull{})
 		return res
 	}
 
@@ -3121,7 +3123,7 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 			toStrFunc = resolveToStrFunc(t.Elem)
 		}
 	}
-	ls.b.Emit(&hir.Call{Dst: res, Fn: "list_new", Args: []hir.Value{typeTag, toStrFunc}})
+	ls.emitListNew(res, typeTag, toStrFunc)
 
 	// 2. Detect range(start, stop) call for efficient lowering
 	// Check BEFORE lowering the iterable to avoid emitting a range() call
@@ -3298,3 +3300,90 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 
 	return res
 }
+
+func (ls *lowerState) typeOf(e ast.Expr) types.T {
+	if ls.info != nil {
+		if t := ls.info.Types[e]; t != nil {
+			return t
+		}
+	}
+	if e == nil {
+		return nil
+	}
+	switch x := e.(type) {
+	case *ast.Ident:
+		// 1. Look up in scope types stack (most accurate for local variables and parameters)
+		for i := len(ls.scopes) - 1; i >= 0; i-- {
+			if t, ok := ls.scopes[i].types[x.Name]; ok && t != nil {
+				return t
+			}
+		}
+		// 2. Look up in Idents map (by exact AST pointer)
+		if ls.info != nil {
+			if sym := ls.info.Idents[x]; sym != nil && sym.Type != nil {
+				return sym.Type
+			}
+		}
+		// 3. Look up in globalTypes map (by name)
+		if ls.globalTypes != nil {
+			if t, ok := ls.globalTypes[x.Name]; ok && t != nil {
+				return t
+			}
+		}
+	case *ast.IndexExpr:
+		recvType := ls.typeOf(x.X)
+		if recvType != nil {
+			// Unwrap TypeAlias
+			if ta, ok := recvType.(*types.TypeAlias); ok {
+				recvType = ta.Target
+			}
+			if listT, ok := recvType.(*types.List); ok {
+				return listT.Elem
+			}
+			if dictT, ok := recvType.(*types.Dict); ok {
+				return dictT.Val
+			}
+			if types.Equal(recvType, types.Str) || types.Equal(recvType, types.Bytes) {
+				return types.Int
+			}
+		}
+	case *ast.FieldExpr:
+		recvType := ls.typeOf(x.X)
+		if recvType != nil {
+			if ta, ok := recvType.(*types.TypeAlias); ok {
+				recvType = ta.Target
+			}
+			if tupT, ok := recvType.(*types.Tuple); ok {
+				var idx int
+				if _, err := fmt.Sscanf(x.Name.Name, "%d", &idx); err == nil && idx >= 0 && idx < len(tupT.Elems) {
+					return tupT.Elems[idx]
+				}
+			}
+			if cls, ok := recvType.(*types.Class); ok {
+				for _, f := range cls.Fields {
+					if f.Name == x.Name.Name {
+						return f.Type
+					}
+				}
+				base := cls.Base
+				for base != nil {
+					for _, f := range base.Fields {
+						if f.Name == x.Name.Name {
+							return f.Type
+						}
+					}
+					base = base.Base
+				}
+			}
+			if strct, ok := recvType.(*types.Struct); ok {
+				for _, f := range strct.Fields {
+					if f.Name == x.Name.Name {
+						return f.Type
+					}
+				}
+			}
+		}
+	}
+	return nil
+}
+

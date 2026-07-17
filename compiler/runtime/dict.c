@@ -78,6 +78,51 @@ static bool keys_equal(dict_t* d, dict_entry_t* entry, int64_t key_int, const ch
 
 // ==================== Core Operations ====================
 
+extern void* __arena_alloc(void* arena, size_t size);
+extern void* __arena_calloc(void* arena, size_t count, size_t size);
+
+static char* arena_strdup(void* arena, const char* s) {
+    if (!s) return NULL;
+    size_t len = strlen(s);
+    char* res = (char*)__arena_alloc(arena, len + 1);
+    if (res) {
+        memcpy(res, s, len + 1);
+    }
+    return res;
+}
+
+// Create a new dictionary inside an arena
+dict_t* dict_new_in(void* arena, int key_type_tag, size_t key_size, size_t value_size, int value_type_tag,
+                    KeyHashFunc key_hash_fn, KeyEqFunc key_eq_fn, ElemToStrFunc value_to_str_fn) {
+    if (!arena) return dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, value_to_str_fn);
+    
+    if (value_size == 0) {
+        fprintf(stderr, "dict_new_in: value_size cannot be 0\n");
+        return NULL;
+    }
+    
+    dict_t* d = (dict_t*)__arena_alloc(arena, sizeof(dict_t));
+    if (!d) return NULL;
+    
+    d->buckets = (dict_entry_t**)__arena_calloc(arena, INITIAL_BUCKET_COUNT, sizeof(dict_entry_t*));
+    if (!d->buckets) {
+        return NULL;
+    }
+    
+    d->bucket_count = INITIAL_BUCKET_COUNT;
+    d->entry_count = 0;
+    d->key_size = key_size;
+    d->value_size = value_size;
+    d->key_type_tag = key_type_tag;
+    d->value_type_tag = value_type_tag;
+    d->key_hash_fn = key_hash_fn;
+    d->key_eq_fn = key_eq_fn;
+    d->value_to_str_fn = value_to_str_fn;
+    d->arena = arena;
+    
+    return d;
+}
+
 // Create a new dictionary
 dict_t* dict_new(int key_type_tag, size_t key_size, size_t value_size, int value_type_tag,
                  KeyHashFunc key_hash_fn, KeyEqFunc key_eq_fn, ElemToStrFunc value_to_str_fn) {
@@ -104,13 +149,14 @@ dict_t* dict_new(int key_type_tag, size_t key_size, size_t value_size, int value
     d->key_hash_fn = key_hash_fn;
     d->key_eq_fn = key_eq_fn;
     d->value_to_str_fn = value_to_str_fn;
+    d->arena = NULL;
     
     return d;
 }
 
 // Free all memory associated with dictionary
 void dict_free(dict_t* d) {
-    if (!d) return;
+    if (!d || d->arena) return;
     
     for (size_t i = 0; i < d->bucket_count; i++) {
         dict_entry_t* entry = d->buckets[i];
@@ -161,7 +207,9 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
     }
     
     // Create new entry
-    dict_entry_t* new_entry = malloc(sizeof(dict_entry_t));
+    dict_entry_t* new_entry = d->arena
+        ? (dict_entry_t*)__arena_alloc(d->arena, sizeof(dict_entry_t))
+        : (dict_entry_t*)malloc(sizeof(dict_entry_t));
     if (!new_entry) return;
     
     // Store key based on type
@@ -171,13 +219,13 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
     new_entry->key_str = NULL;
     
     if (d->key_type_tag == TYPE_TAG_STR && key_str) {
-        new_entry->key_str = strdup(key_str);
+        new_entry->key_str = d->arena ? arena_strdup(d->arena, key_str) : strdup(key_str);
     } else if (d->key_type_tag == TYPE_TAG_CUSTOM && key_ptr) {
         // For custom keys with hash/eq functions (value-based), copy the data
         // For default pointer identity (no functions), store pointer directly
         if (d->key_hash_fn && d->key_eq_fn && d->key_size > 0) {
             // Value-based: copy the key data
-            new_entry->key_ptr = malloc(d->key_size);
+            new_entry->key_ptr = d->arena ? __arena_alloc(d->arena, d->key_size) : malloc(d->key_size);
             if (new_entry->key_ptr) {
                 memcpy(new_entry->key_ptr, key_ptr, d->key_size);
             }
@@ -187,11 +235,13 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
         }
     }
     
-    new_entry->value = malloc(d->value_size);
+    new_entry->value = d->arena ? __arena_alloc(d->arena, d->value_size) : malloc(d->value_size);
     if (!new_entry->value) {
-        if (new_entry->key_str) free(new_entry->key_str);
-        if (new_entry->key_ptr) free(new_entry->key_ptr);
-        free(new_entry);
+        if (!d->arena) {
+            if (new_entry->key_str) free(new_entry->key_str);
+            if (new_entry->key_ptr) free(new_entry->key_ptr);
+            free(new_entry);
+        }
         return;
     }
     memcpy(new_entry->value, value, d->value_size);
@@ -343,20 +393,22 @@ void dict_clear(dict_t* d) {
     if (!d) return;
     
     for (size_t i = 0; i < d->bucket_count; i++) {
-        dict_entry_t* entry = d->buckets[i];
-        while (entry) {
-            dict_entry_t* next = entry->next;
-            if (d->key_type_tag == TYPE_TAG_STR) {
-                free(entry->key_str);
-            } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                // Only free if we own the key (value-based with copy)
-                if (d->key_hash_fn && d->key_eq_fn) {
-                    free(entry->key_ptr);
+        if (!d->arena) {
+            dict_entry_t* entry = d->buckets[i];
+            while (entry) {
+                dict_entry_t* next = entry->next;
+                if (d->key_type_tag == TYPE_TAG_STR) {
+                    free(entry->key_str);
+                } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
+                    // Only free if we own the key (value-based with copy)
+                    if (d->key_hash_fn && d->key_eq_fn) {
+                        free(entry->key_ptr);
+                    }
                 }
+                free(entry->value);
+                free(entry);
+                entry = next;
             }
-            free(entry->value);
-            free(entry);
-            entry = next;
         }
         d->buckets[i] = NULL;
     }

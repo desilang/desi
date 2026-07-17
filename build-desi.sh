@@ -60,6 +60,12 @@ $LLC build/program.ll -filetype=obj -o build/program.o
 
 echo "==> Linking executable..."
 EXTRA_LINK_FLAGS=""
+if [ "$(uname)" = "Darwin" ]; then
+    MACOSX_VERSION=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1-2 || echo "12.0")
+    export MACOSX_DEPLOYMENT_TARGET="$MACOSX_VERSION"
+    EXTRA_LINK_FLAGS="-mmacosx-version-min=$MACOSX_VERSION"
+fi
+OPENSSL_LINK_FLAGS=""
 if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
     # Add OpenSSL linker flags
     BREW_OPENSSL=""
@@ -70,31 +76,31 @@ if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
     fi
 
     if [ -n "$BREW_OPENSSL" ] && [ -d "$BREW_OPENSSL/lib" ]; then
-        EXTRA_LINK_FLAGS="-L$BREW_OPENSSL/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L$BREW_OPENSSL/lib -lssl -lcrypto"
     elif [ -d "/opt/homebrew/opt/openssl/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/opt/homebrew/opt/openssl/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L/opt/homebrew/opt/openssl/lib -lssl -lcrypto"
     elif [ -d "/opt/homebrew/opt/openssl@3/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto"
     elif [ -d "/usr/local/opt/openssl/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/usr/local/opt/openssl/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L/usr/local/opt/openssl/lib -lssl -lcrypto"
     elif [ -d "/usr/local/opt/openssl@3/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/usr/local/opt/openssl@3/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L/usr/local/opt/openssl@3/lib -lssl -lcrypto"
     elif [ -d "/opt/homebrew/lib" ]; then
-        EXTRA_LINK_FLAGS="-L/opt/homebrew/lib -lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-L/opt/homebrew/lib -lssl -lcrypto"
     elif [ -d "/usr/local/lib" ]; then
         # Check if ssl libraries actually exist in /usr/local/lib to prevent false positive
         if [ -f "/usr/local/lib/libssl.dylib" ] || [ -f "/usr/local/lib/libssl.a" ]; then
-            EXTRA_LINK_FLAGS="-L/usr/local/lib -lssl -lcrypto"
+            OPENSSL_LINK_FLAGS="-L/usr/local/lib -lssl -lcrypto"
         else
-            EXTRA_LINK_FLAGS="-lssl -lcrypto"
+            OPENSSL_LINK_FLAGS="-lssl -lcrypto"
         fi
     else
-        EXTRA_LINK_FLAGS="-lssl -lcrypto"
+        OPENSSL_LINK_FLAGS="-lssl -lcrypto"
     fi
 fi
 # Link against libdesi.a (static runtime) with dead code elimination
 # Note: -lz removed — compression is now bundled via miniz
-$CLANG build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
+$CLANG build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS $OPENSSL_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o

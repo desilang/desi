@@ -41,7 +41,7 @@ error[DSY0010] type: type does not satisfy trait bound
 
 | File | Purpose |
 |------|---------|
-| [`ast/nodes.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/ast/nodes.go) | `TypeParamNode` struct with `Bounds` |
-| [`check/check_trait.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/check/check_trait.go) | `implementsTrait()`, `validateGenericBounds()` |
-| [`check/typename_resolver.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/check/typename_resolver.go) | Bound checking at `Generic` creation |
-| [`parse/decl.go`](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/parse/decl.go) | Parsing `<T: Trait>` syntax |
+| [`ast/nodes.go`](../../../compiler/internal/ast/nodes.go) | `TypeParamNode` struct with `Bounds` |
+| [`check/check_trait.go`](../../../compiler/internal/check/check_trait.go) | `implementsTrait()`, `validateGenericBounds()` |
+| [`check/typename_resolver.go`](../../../compiler/internal/check/typename_resolver.go) | Bound checking at `Generic` creation |
+| [`parse/decl.go`](../../../compiler/internal/parse/decl.go) | Parsing `<T: Trait>` syntax |

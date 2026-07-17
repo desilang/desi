@@ -246,7 +246,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					res := ls.b.FreshTemp("mutex")
 					// Allocate memory for the value (8 bytes for i64/ptr)
 					boxPtr := ls.b.FreshTemp("mutex_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					// Store the value into the box
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					// Create mutex with pointer to boxed value
@@ -304,7 +304,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					res := ls.b.FreshTemp("rwlock")
 					// Allocate memory for the value (8 bytes for i64/ptr)
 					boxPtr := ls.b.FreshTemp("rwlock_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					// Store the value into the box
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					// Create rwlock with pointer to boxed value
@@ -637,7 +637,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					argVal := ls.lowerExpr(x.Args[0])
 					// Box the value for the channel
 					boxPtr := ls.b.FreshTemp("send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					dst := ls.b.FreshTemp("send_result")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
@@ -649,7 +649,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					}
 					argVal := ls.lowerExpr(x.Args[0])
 					boxPtr := ls.b.FreshTemp("try_send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					dst := ls.b.FreshTemp("try_send_result")
 					ls.b.Emit(&hir.Call{Dst: dst, Fn: "channel_try_send", Args: []hir.Value{senderVal, boxPtr}, Type: "i1"})
@@ -1080,7 +1080,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 					argVal := ls.lowerExpr(x.Args[0])
 					// Box the value to ptr
 					boxPtr := ls.b.FreshTemp("send_box")
-					ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+					ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 					ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 					switch fe.Name.Name {
 					case "send":
@@ -1242,7 +1242,7 @@ handlePrint:
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee, x)
 		if calleeName == "len" && len(x.Args) == 1 {
-			if argT := ls.info.Types[x.Args[0]]; argT != nil {
+			if argT := ls.typeOf(x.Args[0]); argT != nil {
 				// Lower argument
 				argVal := ls.lowerExpr(x.Args[0])
 
@@ -1255,9 +1255,11 @@ handlePrint:
 					unwrappedT = ta.Target
 				}
 
-				// Check if it's a string type
+				// Check if it's a string or bytes type
 				if unwrappedT == types.Str {
 					lenFunc = "string_len"
+				} else if unwrappedT == types.Bytes {
+					lenFunc = "__bytes_len"
 				} else if _, ok := unwrappedT.(*types.List); ok {
 					lenFunc = "list_len"
 				} else if _, ok := unwrappedT.(*types.Dict); ok {
@@ -1334,7 +1336,7 @@ handlePrint:
 		// abs(n) -> __desi_abs_int(n) or __desi_abs_float(n)
 		if calleeName == "abs" && len(x.Args) == 1 {
 			argVal := ls.lowerExpr(x.Args[0])
-			argT := ls.info.Types[x.Args[0]]
+			argT := ls.typeOf(x.Args[0])
 			if argT != nil && types.Equal(argT, types.Float) {
 				res := ls.b.FreshTemp("abs_res")
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_abs_float", Args: []hir.Value{argVal}, Type: "double"})
@@ -1611,7 +1613,7 @@ handlePrint:
 				res := ls.b.FreshTemp("mutex")
 				// Allocate memory for the value (8 bytes for i64/ptr)
 				boxPtr := ls.b.FreshTemp("mutex_box")
-				ls.b.Emit(&hir.Call{Dst: boxPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(boxPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				// Store the value into the box
 				ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 				// Create mutex with pointer to boxed value
@@ -1631,7 +1633,7 @@ handlePrint:
 				res := ls.b.FreshTemp("rc")
 				// Allocate memory for the inner value (8 bytes for ptr/i64)
 				innerPtr := ls.b.FreshTemp("rc_inner")
-				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(innerPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				// Store the value into the inner allocation
 				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
 				// Create Rc with pointer to inner value
@@ -1644,7 +1646,7 @@ handlePrint:
 				// Same as rc for now (Arc runtime not yet implemented)
 				res := ls.b.FreshTemp("arc")
 				innerPtr := ls.b.FreshTemp("arc_inner")
-				ls.b.Emit(&hir.Call{Dst: innerPtr, Fn: "malloc", Args: []hir.Value{hir.ConstInt{Text: "8", Type: "i64"}}, Type: "ptr"})
+				ls.emitAlloc(innerPtr, hir.ConstInt{Text: "8", Type: "i64"})
 				ls.b.Emit(&hir.Store{Dst: innerPtr, Val: argVal})
 				ls.b.Emit(&hir.Call{Dst: res, Fn: "__rc_new", Args: []hir.Value{innerPtr}, Type: "ptr"})
 				ls.cur().rcLike[res.Name] = true
@@ -2675,12 +2677,7 @@ skipMethodCall:
 				inst := ls.b.FreshTemp("inst")
 				// Use heap allocation (malloc) for classes since they may escape
 				// the current scope (e.g., returned from functions like __copy__)
-				ls.b.Emit(&hir.Call{
-					Dst:  inst,
-					Fn:   "malloc",
-					Args: []hir.Value{hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
-					Type: "ptr",
-				})
+				ls.emitAlloc(inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"})
 
 				// 2. Call __new__
 				// Find __new__
@@ -3137,6 +3134,67 @@ skipMethodCall:
 		}
 	}
 
+	isMarshalDumps := callee == "__marshal_dumps"
+	if !isMarshalDumps && ls.info != nil {
+		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen.Type != nil {
+			if callee == "__desi$dumps" && types.Equal(chosen.Type.Ret, types.Bytes) {
+				isMarshalDumps = true
+			}
+		}
+	}
+	if isMarshalDumps && ls.info != nil && len(x.Args) == 1 {
+		argType := ls.typeOf(x.Args[0])
+		if argType == nil {
+			argType = types.Any
+		}
+		valExpr := x.Args[0]
+		argVal := ls.lowerExpr(valExpr)
+		
+		var passVal hir.Value
+		if types.Equal(argType, types.Int) || types.Equal(argType, types.Float) || types.Equal(argType, types.Bool) || argType.String() == "char" {
+			tempSlot := ls.b.FreshTemp("marshal_val_slot")
+			ls.b.Emit(&hir.Alloca{Type: lowerType(argType), Dst: tempSlot})
+			ls.b.Emit(&hir.Store{Val: argVal, Dst: tempSlot})
+			passVal = tempSlot
+		} else {
+			passVal = argVal
+		}
+		
+		typeInfoVal := ls.emitTypeInfo(argType)
+		ls.b.Emit(&hir.Call{Dst: dst, Fn: "__marshal_dumps", Args: []hir.Value{passVal, typeInfoVal}, Type: "ptr"})
+		return dst
+	}
+	
+	isMarshalLoads := callee == "__marshal_loads"
+	if !isMarshalLoads && ls.info != nil {
+		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen.Type != nil {
+			if callee == "__desi$loads" && len(chosen.Type.Params) == 1 && types.Equal(chosen.Type.Params[0], types.Bytes) {
+				isMarshalLoads = true
+			}
+		}
+	}
+	if isMarshalLoads && ls.info != nil && len(x.Args) == 1 {
+		dataExpr := x.Args[0]
+		dataVal := ls.lowerExpr(dataExpr)
+		
+		retTypeObj := ls.typeOf(x)
+		if retTypeObj == nil {
+			retTypeObj = types.Any
+		}
+		typeInfoVal := ls.emitTypeInfo(retTypeObj)
+		
+		rawRes := ls.b.FreshTemp("marshal_raw_res")
+		ls.b.Emit(&hir.Call{Dst: rawRes, Fn: "__marshal_loads", Args: []hir.Value{dataVal, typeInfoVal}, Type: "ptr"})
+		
+		if types.Equal(retTypeObj, types.Int) || types.Equal(retTypeObj, types.Float) || types.Equal(retTypeObj, types.Bool) || retTypeObj.String() == "char" {
+			ls.b.Emit(&hir.Load{Type: lowerType(retTypeObj), Src: rawRes, Dst: dst})
+			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{rawRes}})
+		} else {
+			ls.b.Emit(&hir.Cast{Src: rawRes, Dst: dst, Type: retType})
+		}
+		return dst
+	}
+
 	ls.b.Emit(&hir.Call{Dst: dst, Fn: callee, Args: args, Type: retType})
 
 	// Consume args if not a known borrowing function
@@ -3587,5 +3645,26 @@ func (ls *lowerState) isParam(name string) bool {
 // isGlobal checks if the given name is a global variable.
 func (ls *lowerState) isGlobal(name string) bool {
 	return ls.globals != nil && ls.globals[name]
+}
+
+func (ls *lowerState) emitTypeInfo(t types.T) hir.Value {
+	typeName := t.String()
+	var typeID uint64
+	for _, c := range typeName {
+		typeID = typeID*31 + uint64(c)
+	}
+	var typeSize int64 = 8 // Default pointer size
+	res := ls.b.FreshTemp("type_info")
+	ls.b.Emit(&hir.Call{
+		Dst: res,
+		Fn:  "__desi_type_new",
+		Args: []hir.Value{
+			hir.ConstInt{Text: fmt.Sprintf("%d", typeID), Type: "i64"},
+			hir.ConstStr{Text: typeName},
+			hir.ConstInt{Text: fmt.Sprintf("%d", typeSize), Type: "i64"},
+		},
+		Type: "ptr",
+	})
+	return res
 }
 

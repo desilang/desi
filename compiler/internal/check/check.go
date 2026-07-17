@@ -14,8 +14,9 @@ import (
 
 // Result is a structured return used by the CLI.
 type Result struct {
-	Diags []diag.Diagnostic
-	Info  *Info
+	Diags  []diag.Diagnostic
+	Info   *Info
+	Module *ast.Module // The desugared AST
 }
 
 // Check keeps the legacy/public surface that tests expect: (diags, info).
@@ -132,6 +133,9 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	res.Diags = append(res.Diags, collectMembershipDiags(mod, res.Info)...)
 	// --------------------------------------------------------------------------
 
+	// ---- Task 4 hook: Escape Analysis for Function-Local Arenas --------------
+	runEscapeAnalysis(mod, res.Info)
+
 	// 4) After we know which identifiers resolved to which symbols,
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)
@@ -145,6 +149,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 		res.Diags = append(res.Diags, perfDiags...)
 	}
 
+	res.Module = mod
 	return res
 }
 

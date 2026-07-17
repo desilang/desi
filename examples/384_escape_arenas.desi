@@ -1,0 +1,22 @@
+# Test: Escape Analysis & Automatic Function-Local Arenas
+# EXPECTED_OUTPUT:
+# Testing arena loop...
+# Done!
+
+def run_loop(n: int):
+    let mut i = 0
+    while i < n:
+        # These allocations do not escape run_loop and should be arena-allocated
+        let x: list[int] = [i, i + 1, i + 2]
+        let y: dict[int, int] = {i: i * 2}
+        let t = (i, i + 1)
+        assert x[0] == i
+        assert y[i] == i * 2
+        assert t.0 == i
+        i := i + 1
+
+def main() -> int:
+    print("Testing arena loop...")
+    run_loop(1000)
+    print("Done!")
+    0

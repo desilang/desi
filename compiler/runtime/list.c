@@ -39,6 +39,28 @@ void* list_clone_elem(void* item, int type_tag) {
 
 // ========== Core Operations ==========
 
+extern void* __arena_alloc(void* arena, size_t size);
+
+// Create a new empty list inside an arena
+DesiList* list_new_in(void* arena, int type_tag, ElemToStrFunc to_str_fn) {
+    if (!arena) return list_new(type_tag, to_str_fn);
+    DesiList* list = (DesiList*)__arena_alloc(arena, sizeof(DesiList));
+    if (!list) {
+        return NULL;
+    }
+    
+    list->capacity = LIST_INITIAL_CAPACITY;
+    list->length = 0;
+    list->type_tag = type_tag;
+    list->to_str_fn = to_str_fn;
+    list->arena = arena;
+    list->data = (void**)__arena_alloc(arena, list->capacity * sizeof(void*));
+    if (!list->data) {
+        return NULL;
+    }
+    return list;
+}
+
 // Create a new empty list
 DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
     DesiList* list = (DesiList*)malloc(sizeof(DesiList));
@@ -50,6 +72,7 @@ DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
     list->length = 0;
     list->type_tag = type_tag;
     list->to_str_fn = to_str_fn;  // Store function pointer
+    list->arena = NULL;
     list->data = (void**)malloc(list->capacity * sizeof(void*));
     
     if (!list->data) {
@@ -62,7 +85,7 @@ DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
 
 // Free the list and its data array (does NOT free individual elements - compiler handles that)
 void list_free(DesiList* list) {
-    if (!list) return;
+    if (!list || list->arena) return;
 
     desi_free_float_elems(list); // owned float boxes
     if (list->data) {
@@ -174,12 +197,22 @@ static void list_ensure_capacity(DesiList* list, size_t new_capacity) {
         target *= 2;
     }
     
-    void** new_data = (void**)realloc(list->data, target * sizeof(void*));
-    if (!new_data) {
-        fprintf(stderr, "list_ensure_capacity: realloc failed\n");
-        exit(1);
+    if (list->arena) {
+        void** new_data = (void**)__arena_alloc(list->arena, target * sizeof(void*));
+        if (!new_data) {
+            fprintf(stderr, "list_ensure_capacity: arena_alloc failed\n");
+            exit(1);
+        }
+        memcpy(new_data, list->data, list->length * sizeof(void*));
+        list->data = new_data;
+    } else {
+        void** new_data = (void**)realloc(list->data, target * sizeof(void*));
+        if (!new_data) {
+            fprintf(stderr, "list_ensure_capacity: realloc failed\n");
+            exit(1);
+        }
+        list->data = new_data;
     }
-    list->data = new_data;
     list->capacity = target;
 }
 

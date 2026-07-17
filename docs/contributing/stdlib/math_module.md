@@ -76,8 +76,8 @@ Many math function names (`sin`, `cos`, `log2`, etc.) collide with libc. When th
 
 ## Related Files
 
-- [math.c](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/runtime/math.c) — 40+ C functions
-- [__mod.desi](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/lib/math/__mod.desi) — 550+ line Desi module
-- [hir_lower.go](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/hir_lower.go) — Symbol mangling
-- [string.c:float_to_str](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/runtime/string.c) — Python-style float formatting
-- [lower_expr.go](file:///Users/desiprogrammer/Desktop/Projects/go_stuff/desi/compiler/internal/lower/lower_expr.go) — F-string float_to_str integration
+- [math.c](../../../compiler/runtime/math.c) — 40+ C functions
+- [__mod.desi](../../../compiler/lib/math/__mod.desi) — 550+ line Desi module
+- [hir_lower.go](../../../compiler/internal/lower/hir_lower.go) — Symbol mangling
+- [string.c:float_to_str](../../../compiler/runtime/string.c) — Python-style float formatting
+- [lower_expr.go](../../../compiler/internal/lower/lower_expr.go) — F-string float_to_str integration

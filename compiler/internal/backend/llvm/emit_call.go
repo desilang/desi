@@ -256,6 +256,34 @@ func (m *Module) emitCall(c *hir.Call) {
 		m.definedFunctions["__desi_exception_matches"] = true
 	}
 
+	// Marshal dumps: __marshal_dumps(val, type) -> ptr (DesiBytes)
+	if c.Fn == "__marshal_dumps" && len(c.Args) == 2 {
+		m.ensureDecl("declare ptr @__marshal_dumps(ptr, ptr)")
+		dst := c.Dst.Name
+		_, valOp := m.operand(c.Args[0])
+		_, typeOp := m.operand(c.Args[1])
+		wprintf(&m.funcs, "  %s = call ptr @__marshal_dumps(ptr %s, ptr %s)\n", dst, valOp, typeOp)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
+	// Marshal loads: __marshal_loads(data, type) -> ptr
+	if c.Fn == "__marshal_loads" && len(c.Args) == 2 {
+		m.ensureDecl("declare ptr @__marshal_loads(ptr, ptr)")
+		dst := c.Dst.Name
+		_, dataOp := m.operand(c.Args[0])
+		_, typeOp := m.operand(c.Args[1])
+		wprintf(&m.funcs, "  %s = call ptr @__marshal_loads(ptr %s, ptr %s)\n", dst, dataOp, typeOp)
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(dst, "%")] = "ptr"
+		return
+	}
+
 	// JSON parse: __json_parse(text) -> ptr
 	if c.Fn == "__json_parse" && len(c.Args) == 1 {
 		m.ensureDecl("declare ptr @__json_parse(ptr)")

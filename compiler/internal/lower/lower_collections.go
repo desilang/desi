@@ -102,9 +102,9 @@ func (ls *lowerState) lowerDictLit(d *ast.DictLit) hir.Value {
 	}
 
 	// dict_new(key_type_tag, key_size, value_size, value_type_tag, key_hash_fn, key_eq_fn, to_str_fn)
-	ls.b.Emit(&hir.Call{Dst: res, Fn: "dict_new", Args: []hir.Value{
+	ls.emitDictNew(res, []hir.Value{
 		keyTypeTag, keySize, valueSize, valTypeTag, keyHashFn, keyEqFn, toStrFunc,
-	}})
+	})
 
 	// Insert each key-value pair
 	for i := range d.Keys {

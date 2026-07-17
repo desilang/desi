@@ -184,7 +184,42 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				// For mutable reference types (Init == nil) or value types,
 				// emit alloca for proper stack storage
 				llvmTy, size := "ptr", 8 // Default to ptr for reference types
-				if x.Init != nil {
+				if x.Type != nil {
+					if typ, ok := x.Type.(types.T); ok {
+						tyStr := typ.String()
+						switch tyStr {
+						case "float", "f64":
+							llvmTy, size = "double", 8
+						case "f32":
+							llvmTy, size = "float", 4
+						case "bool":
+							llvmTy, size = "i1", 1
+						case "i64", "u64", "usize", "isize":
+							llvmTy, size = "i64", 8
+						case "i16", "u16":
+							llvmTy, size = "i16", 2
+						case "i8", "u8", "byte":
+							llvmTy, size = "i8", 1
+						case "i128", "u128":
+							llvmTy, size = "i128", 16
+						case "int", "i32", "u32":
+							llvmTy, size = "i32", 4
+						default:
+							if _, ok := typ.(*types.Class); ok {
+								llvmTy, size = "ptr", 8
+							} else if isReferenceType(typ) {
+								llvmTy, size = "ptr", 8
+							} else {
+								llvmTy, size = "i32", 4
+							}
+						}
+					} else {
+						llvmTy, size = "i32", 4
+					}
+					if x.Init != nil {
+						m.ssa[x.Name] = x.Init
+					}
+				} else if x.Init != nil {
 					switch x.Init.(type) {
 					case hir.ConstBool:
 						llvmTy, size = "i1", 1
@@ -193,21 +228,8 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 					case hir.ConstInt:
 						llvmTy, size = "i32", 4
 					case hir.Temp:
-						// Check the actual type - classes are pointers
-						if x.Type != nil {
-							if _, ok := x.Type.(*types.Class); ok {
-								llvmTy, size = "ptr", 8
-							} else if isReferenceType(x.Type) {
-								llvmTy, size = "ptr", 8
-							} else {
-								llvmTy, size = "i32", 4
-							}
-						} else {
-							// No type info, default to i32
-							llvmTy, size = "i32", 4
-						}
+						llvmTy, size = "i32", 4
 					}
-					// Even with initializer, record SSA alias for convenience.
 					m.ssa[x.Name] = x.Init
 				} else if !isReferenceType(x.Type) {
 					// Value types without initializer
@@ -515,7 +537,14 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 				_ = rty // Suppress unused variable warning
 				wprintf(&m.funcs, "  %s = %s %s %s, %s\n",
 					x.Dst.String(), llvmInst, lty, lval, rval)
-				m.tempTypes[x.Dst.Name] = x.Type
+				// Track the result type based on actual emitted instruction:
+				// - Comparisons (icmp/fcmp) always produce i1
+				// - Arithmetic ops produce the operand type (lty)
+				if strings.HasPrefix(llvmInst, "icmp") || strings.HasPrefix(llvmInst, "fcmp") {
+					m.tempTypes[x.Dst.Name] = "i1"
+				} else {
+					m.tempTypes[x.Dst.Name] = lty
+				}
 
 			case *hir.Ret:
 				// Emit lifetime.end for all locals *before* the ret (once).

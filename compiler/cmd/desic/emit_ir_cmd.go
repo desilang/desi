@@ -121,7 +121,7 @@ func init() {
 	}
 
 	// Lower the entry module to HIR
-	hm := lower.LowerModuleFromSourceWithOptions(mod, res.Info, src, lowerOpts)
+	hm := lower.LowerModuleFromSourceWithOptions(res.Module, res.Info, src, lowerOpts)
 	if hm == nil || len(hm.Funcs) == 0 {
 		term.Eprintln("emit-ir:", filepath.Base(file)+": no functions to lower")
 		term.Flush()
@@ -130,7 +130,7 @@ func init() {
 
 	// Collect all HIR modules (entry + imports)
 	allModules := []*hir.Module{hm}
-	allASTs := []*ast.Module{mod}
+	allASTs := []*ast.Module{res.Module}
 
 	// Track processed modules to avoid duplicates
 	processed := make(map[string]bool)
@@ -467,9 +467,9 @@ func loadAndLowerModule(path string, loader resolve.Loader, info *check.Info) (*
 	var src []byte
 
 	// Lower to HIR using the IMPORTED module's type info (not the main module's info)
-	hm := lower.LowerModuleFromSourceWithOptions(mod, impRes.Info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true, IsImportedModule: true})
+	hm := lower.LowerModuleFromSourceWithOptions(impRes.Module, impRes.Info, src, lower.LowerModuleOptions{SkipBuiltinEnums: true, IsImportedModule: true})
 
-	return hm, src, mod, nil
+	return hm, src, impRes.Module, nil
 }
 
 // buildImportRoots builds the list of import roots with auto-detection.

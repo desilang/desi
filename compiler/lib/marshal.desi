@@ -1,0 +1,23 @@
+# Marshal module - Custom binary serialization protocol
+
+# ============================================================
+# C Runtime Bindings
+# ============================================================
+
+@extern("C")
+def __marshal_dumps<T>(val: T) -> bytes
+
+@extern("C")
+def __marshal_loads<T>(data: bytes) -> T
+
+# ============================================================
+# Public API
+# ============================================================
+
+pub def dumps<T>(val: T) -> bytes:
+	unsafe:
+		return __marshal_dumps(val)
+
+pub def loads<T>(data: bytes) -> T:
+	unsafe:
+		return __marshal_loads::<T>(data)

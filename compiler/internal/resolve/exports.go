@@ -275,12 +275,21 @@ func CollectExports(mod *ast.Module) *Exports {
 		}
 	}
 
+	var fnTypeParams map[string]*types.TypeParam
+
 	// resolveTypeName resolves an AST TypeName to a types.T, handling generic
 	// containers (list[T], dict[K,V], set[T]), tuples, unions, and simple types.
 	var resolveTypeName func(tn *ast.TypeName) (types.T, bool)
 	resolveTypeName = func(tn *ast.TypeName) (types.T, bool) {
 		if tn == nil {
 			return nil, false
+		}
+
+		// Check if it is a type parameter of the function itself
+		if fnTypeParams != nil {
+			if tp, ok := fnTypeParams[tn.Name]; ok {
+				return tp, true
+			}
 		}
 
 		// Handle tuple types: (int, str, ...)
@@ -384,6 +393,15 @@ func CollectExports(mod *ast.Module) *Exports {
 			continue // export gate requires pub
 		}
 
+		// Initialize type parameters for this function to resolve generics in signature
+		fnTypeParams = make(map[string]*types.TypeParam)
+		var typeParams []types.TypeParam
+		for _, tp := range fn.TypeParams {
+			tpObj := &types.TypeParam{Name: tp.Name.Name}
+			fnTypeParams[tp.Name.Name] = tpObj
+			typeParams = append(typeParams, *tpObj)
+		}
+
 		// All params must be annotated and resolvable.
 		params := make([]types.T, len(fn.Params))
 		okTypes := true
@@ -424,6 +442,7 @@ func CollectExports(mod *ast.Module) *Exports {
 		}
 
 		ft := types.FuncOf(params, rt, variadic)
+		ft.TypeParams = typeParams
 		name := fn.Name.Name
 		out.Funcs[name] = append(out.Funcs[name], ft)
 

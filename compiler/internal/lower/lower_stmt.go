@@ -19,7 +19,7 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 	}
 	// End-of-root-block finalization (only for outermost scope).
 	if len(ls.scopes) == 1 && !ls.terminated {
-		ls.emitScopeDrops(ls.cur())
+		ls.emitAllDefersAndDrops()
 		// If no explicit return ran, emit a default one (Tier-0: i32 0).
 		ls.b.Emit(&hir.Ret{Val: nil})
 		ls.terminated = true
@@ -30,8 +30,32 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	switch s := s.(type) {
 	case *ast.LetStmt:
-		// Handle tuple destructuring: let (a, b, c) = tuple or let (first, *rest) = tuple
+		isNonEscaping := false
 		if len(s.Pattern) > 0 {
+			for i := range s.Pattern {
+				ident := &s.Pattern[i]
+				if ls.info != nil && ls.info.NonEscaping[ident] {
+					isNonEscaping = true
+					ls.cur().arenaOwned[ident.Name] = true
+				}
+			}
+		} else {
+			if ls.info != nil && ls.info.NonEscaping[&s.Name] {
+				isNonEscaping = true
+				ls.cur().arenaOwned[s.Name.Name] = true
+			}
+		}
+		if isNonEscaping {
+			ls.currentAllocArena = ls.localArena
+		}
+
+		func() {
+			if isNonEscaping {
+				defer func() { ls.currentAllocArena = nil }()
+			}
+
+			// Handle tuple destructuring: let (a, b, c) = tuple or let (first, *rest) = tuple
+			if len(s.Pattern) > 0 {
 			// Evaluate the RHS tuple expression
 			tupleVal := ls.lowerExpr(s.Value)
 
@@ -282,32 +306,43 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// M15: Unbox result from generic functions if needed
 			// If the call is to a generic function and the expected type is primitive, unbox
-			if call, ok := s.Value.(*ast.CallExpr); ok {
-				if id, ok := call.Callee.(*ast.Ident); ok && ls.info != nil {
-					// Check if calling a generic function
-					isGeneric := false
-					if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
-						if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
-							isGeneric = true
+			if call, ok := s.Value.(*ast.CallExpr); ok && ls.info != nil {
+				chosen := ls.info.ChosenOverloads[call]
+				isGeneric := false
+				if chosen != nil {
+					if (chosen.Decl != nil && len(chosen.Decl.TypeParams) > 0) ||
+						(chosen.ModuleDecl != nil && len(chosen.ModuleDecl.TypeParams) > 0) {
+						isGeneric = true
+					}
+				}
+				if !isGeneric {
+					// Fallback to name check
+					if id, ok := call.Callee.(*ast.Ident); ok {
+						if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
+							cand := set.Cands[0]
+							if (cand.Decl != nil && len(cand.Decl.TypeParams) > 0) ||
+								(cand.ModuleDecl != nil && len(cand.ModuleDecl.TypeParams) > 0) {
+								isGeneric = true
+							}
 						}
 					}
+				}
 
-					if isGeneric {
-						// Generic function returns ptr, but we might need primitive
-						expectedType := varType
-						if expectedType != nil {
-							if t, ok := expectedType.(types.T); ok {
-								expectedLowered := lowerType(t)
-								if expectedLowered != "ptr" && expectedLowered != "void" {
-									// Need to unbox: load from ptr
-									unboxed := ls.b.FreshTemp("unboxed")
-									ls.b.Emit(&hir.Load{
-										Type: expectedLowered,
-										Src:  init,
-										Dst:  unboxed,
-									})
-									init = unboxed
-								}
+				if isGeneric {
+					// Generic function returns ptr, but we might need primitive
+					expectedType := varType
+					if expectedType != nil {
+						if t, ok := expectedType.(types.T); ok {
+							expectedLowered := lowerType(t)
+							if expectedLowered != "ptr" && expectedLowered != "void" {
+								// Need to unbox: load from ptr
+								unboxed := ls.b.FreshTemp("unboxed")
+								ls.b.Emit(&hir.Load{
+									Type: expectedLowered,
+									Src:  init,
+									Dst:  unboxed,
+								})
+								init = unboxed
 							}
 						}
 					}
@@ -350,6 +385,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// Consume temp so it's not dropped
 			ls.consumeTemp(t)
 		}
+		}()
 
 	case *ast.AssignStmt:
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {
