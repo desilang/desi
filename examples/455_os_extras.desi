@@ -12,10 +12,10 @@ def main() -> int:
 	let has_tmp = len(tmp) > 0
 	print(f"has_tmp: {str(has_tmp)}")
 
-	# which
-	let ls_path = os.which("ls")
-	let has_ls = len(ls_path) > 0
-	print(f"has_ls: {str(has_ls)}")
+	# which — git is on PATH on every platform that can clone this repo
+	let git_path = os.which("git")
+	let has_git = len(git_path) > 0
+	print(f"has_git: {str(has_git)}")
 
 	# which — non-existent
 	let nope = os.which("this_does_not_exist_12345")
@@ -28,6 +28,6 @@ def main() -> int:
 # EXPECTED_OUTPUT:
 # has_home: true
 # has_tmp: true
-# has_ls: true
+# has_git: true
 # no_cmd: true
 # os extras ok
