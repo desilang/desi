@@ -921,6 +921,16 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// free(ptr): use the canonical typed declare. The generic fallback below
+	// would emit `declare i32 @free(...)`, which clashes with the
+	// `declare void @free(ptr)` the drop paths emit in the same module —
+	// clang rejects two differently-typed declares for one symbol.
+	if c.Fn == "free" && len(c.Args) == 1 {
+		wprintf(&m.funcs, "  call void @free(%s)\n", m.ptrOperand(c.Args[0]))
+		m.ensureDecl("declare void @free(ptr)")
+		return
+	}
+
 	// Fallback: external call — choose return type via overrides/async, honor c.Dst if provided.
 	ret := c.Type
 	if ret == "" {
