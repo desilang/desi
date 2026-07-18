@@ -82,7 +82,7 @@ for src in "$BENCH_DIR"/*.desi; do
         echo "WARN: output mismatch for $name: desi=$d_out c=$c_out" >&2
     fi
 
-    printf "%-14s %10s %10s %10s %10s   %s\n" "$name" "$d_ms" "$c_ms" \
-        "$(awk "BEGIN{printf \"%.1f\", $d_kb/1024}")" \
-        "$(awk "BEGIN{printf \"%.1f\", $c_kb/1024}")" "$d_out"
+    d_mb=$(awk "BEGIN{printf \"%.1f\", $d_kb/1024}")
+    c_mb=$(awk "BEGIN{printf \"%.1f\", $c_kb/1024}")
+    printf "%-14s %10s %10s %10s %10s   %s\n" "$name" "$d_ms" "$c_ms" "$d_mb" "$c_mb" "$d_out"
 done
