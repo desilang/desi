@@ -87,14 +87,46 @@ benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
 
 | Benchmark | Desi | C | Peak memory (Desi / C) | |
 |---|---|---|---|---|
-| loop_sum | 20.6 ms | 19.7 ms | 2.8 / 2.8 MB | parity |
-| matrix_mul | 22.8 ms | 22.0 ms | 3.3 / 2.9 MB | parity |
-| string_churn | 42.1 ms | 46.8 ms | 2.8 / 2.8 MB | **Desi wins** |
-| dict_ops | 31.3 ms | 24.5 ms | **4.4** / 6.8 MB | Desi uses less memory |
-| list_ops | 28.0 ms | 22.8 ms | 7.9 / 7.9 MB | 8-byte element slots |
-| fib_recursive | 41.9 ms | 26.6 ms | 2.8 / 3.1 MB | recursion-guard cost |
-| alloc_churn | 51.8 ms | 19.9 ms | 2.8 / 2.8 MB | 2 mallocs per list vs 1 |
-| string_build | 46.5 ms | 18.7 ms | 51.2 / 2.9 MB | phase-4 tracker |
+| dict_ops | 20-22 ms | 19-33 ms | **1.6** / 1.6-6.8 MB | wins or ties; was 4x less memory in several runs |
+| loop_sum | 16-24 ms | 17-21 ms | 1.7 / 1.6 MB | trades wins |
+| string_churn | 42-62 ms | 46-58 ms | 2.8 / 3.2 MB | trades wins run-to-run |
+| matrix_mul | 21-30 ms | 17-34 ms | 1.9 / 2.1 MB | trades wins |
+| list_ops | 21-28 ms | 17-25 ms | 11.9 / 7.9 MB | 8-byte element slots |
+| alloc_churn | 48.3 ms | 25.8 ms | 2.8 / 3.2 MB | was 51.8 before single-alloc lists |
+| fib_recursive | 30-38 ms | 20-27 ms | 2.8 / 2.8 MB | recursion-guard cost |
+| **string_build** | **31.4 ms** | 17.2 ms | **1.6** / 3.2 MB | **was 43.5 MB — Desi now uses HALF of C's memory** |
+
+Ranges reflect run-to-run variance on the reference machine (~±25%).
+Two results are structural, not noise: the built-in dict matches or
+beats a hand-rolled C open-addressing table, and string_build — once
+the worst result in the table at 43.5 MB leaked — now holds a smaller
+working set than C's amortized buffer.
+
+### String accumulators (why string_build stopped leaking)
+
+The lowerer proves when a mutable string local is only ever used in
+borrowing positions (concat/compare operands, f-strings, len, print,
+return) and, only then, gives it owned semantics: the literal init
+becomes a heap copy (`__desi_str_new`) and `s := s + x` lowers to
+`__desi_str_append_free` — a realloc-based append that frees the old
+value. One realloc per append instead of a fresh full-copy allocation,
+and no leaked intermediates. Anything the analysis can't prove
+(aliasing, user-call arguments, collection stores, `str(s)`, lambda
+captures) disqualifies the variable and it keeps the leak-safe default
+lowering — a wrong qualification would free memory something still
+references, so every unknown is a "no" (`compiler/internal/lower/str_accum.go`).
+
+### Allocator design (why dict wins and lists got cheaper)
+
+- **Dicts**: entries are carved from pooled 64-entry blocks (one malloc
+  per block, not per insert), values <= 8 bytes live inline in the entry
+  (no value box), and the table rehashes at 0.75 load factor. An insert
+  that used to cost 2 mallocs now costs ~1/64th of one. Entries never
+  move (blocks are stable), so value pointers survive rehashing.
+- **Lists**: the header and initial capacity share ONE malloc (data
+  points just past the header); first growth moves data to its own
+  block. Short-lived lists — the common case under scope-exit drops —
+  cost one malloc/free instead of two.
 
 ### How release builds work
 

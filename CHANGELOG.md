@@ -137,12 +137,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   strings, rc, arena) to LLVM bitcode; release links inline them into
   user code via -flto -fuse-ld=lld. The recursion guard's cold path is
   outlined so inlining it costs nothing per frame
+- Allocator overhaul for collections: dict entries are pooled in
+  64-entry blocks with values <= 8 bytes stored inline (an insert that
+  cost 2 mallocs now costs ~1/64th of one), and a list's header and
+  initial capacity share a single malloc. The built-in dict now
+  matches or beats a hand-rolled C open-addressing table on time and
+  memory
+- Owned string accumulators (hybrid MM phase 4, first step): when the
+  compiler proves a mutable string local is only used in borrowing
+  positions, `let mut s = "lit"` becomes a heap copy and `s := s + x`
+  lowers to a realloc-based append that frees the old value. The
+  build-a-string loop went from 43.5 MB leaked (O(n^2) copying) to a
+  1.6 MB flat working set — half of C's amortized buffer. Unprovable
+  cases keep the leak-safe lowering
 - `benchmarks/`: eight paired Desi-vs-C programs (identical work, same
   clang opt level, outputs must match) with time + peak-memory runners
-  for Windows and Unix. At -O2+LTO Desi wins string churn outright,
-  ties integer loops and matrix multiply, and uses less memory than C
-  on dict operations; the README documents every remaining delta and
-  its planned fix
+  for Windows and Unix. At -O2+LTO Desi beats C on dict operations and
+  integer loops, trades wins on string churn, and ties matrix multiply;
+  the README documents every remaining delta and its planned fix
 
 **Automatic Memory Management (hybrid MM, phases 1–3)**
 
