@@ -1,13 +1,12 @@
-# EXPECTED: COMPILE_ERROR
 # Hot Reload State Preservation Test
 #
 # Tests that write_state()/read_state() preserve state across reloads.
 #
-# HOW TO TEST:
-# 1. Run: desic watch --run .
-# 2. First run: "First run - saving state"
-# 3. Edit this file (add a comment) -> "Reloaded! State: hello"
-# 4. Press Ctrl+C to stop
+# EXPECTED_OUTPUT:
+# First run - saving initial state
+# Reload count: 0
+# Running... tick 0
+# Done!
 
 from time import sleep
 
@@ -39,10 +38,11 @@ def main() -> int:
 	print("Reload count:", reload_count())
 
 	let mut i = 0
-	while i < 3:
+	while i < 1:
 		print("Running... tick", i)
-		sleep(1.0)
+		sleep(0.1)
 		i := i + 1
 
 	print("Done!")
+	delete_state()
 	0

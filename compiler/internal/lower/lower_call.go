@@ -1961,10 +1961,7 @@ handlePrint:
 			// Call C function that returns ptr (NULL if not set)
 			rawPtr := ls.b.FreshTemp("state_file_raw")
 			ls.b.Emit(&hir.Call{Dst: rawPtr, Fn: "__desi_state_file", Args: nil, Type: "ptr"})
-			// Wrap in Option - use Option.Some if non-null, Option.Nothing otherwise
-			dst := ls.b.FreshTemp("state_file_opt")
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_ptr_to_option_str", Args: []hir.Value{rawPtr}, Type: "ptr"})
-			return dst
+			return ls.wrapPtrInOption(rawPtr, "state_file")
 		}
 
 		// write_state(json: str) -> bool
@@ -1979,9 +1976,7 @@ handlePrint:
 		if calleeName == "read_state" && len(x.Args) == 0 {
 			rawPtr := ls.b.FreshTemp("read_state_raw")
 			ls.b.Emit(&hir.Call{Dst: rawPtr, Fn: "__desi_read_state", Args: nil, Type: "ptr"})
-			dst := ls.b.FreshTemp("read_state_opt")
-			ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_ptr_to_option_str", Args: []hir.Value{rawPtr}, Type: "ptr"})
-			return dst
+			return ls.wrapPtrInOption(rawPtr, "read_state")
 		}
 
 		// delete_state() -> bool
@@ -3700,4 +3695,35 @@ func (ls *lowerState) emitTypeInfo(t types.T) hir.Value {
 		Type: "ptr",
 	})
 	return res
+}
+
+func (ls *lowerState) wrapPtrInOption(rawPtr hir.Value, prefix string) hir.Value {
+	isNotNull := ls.b.FreshTemp(prefix + "_is_not_null")
+	ls.b.Emit(&hir.BinaryOp{Op: "!=", LHS: rawPtr, RHS: hir.ConstNull{}, Dst: isNotNull, Type: "i1"})
+
+	resOptSlot := ls.b.FreshTemp(prefix + "_opt_slot")
+	ls.b.Emit(&hir.Alloca{Type: "ptr", Dst: resOptSlot})
+
+	curBlock := ls.b.Block()
+	someBlock := ls.b.NewBlock(prefix + "_some")
+	nothingBlock := ls.b.NewBlock(prefix + "_nothing")
+
+	// Some block: call Option.Some(rawPtr) and store in slot
+	ls.b.SetBlock(someBlock)
+	someVal := ls.b.FreshTemp(prefix + "_some")
+	ls.b.Emit(&hir.Call{Dst: someVal, Fn: "Option.Some", Args: []hir.Value{rawPtr}, Type: "ptr"})
+	ls.b.Emit(&hir.Store{Val: someVal, Dst: resOptSlot})
+
+	// Nothing block: call Option.Nothing() and store in slot
+	ls.b.SetBlock(nothingBlock)
+	nothingVal := ls.b.FreshTemp(prefix + "_nothing")
+	ls.b.Emit(&hir.Call{Dst: nothingVal, Fn: "Option.Nothing", Args: []hir.Value{}, Type: "ptr"})
+	ls.b.Emit(&hir.Store{Val: nothingVal, Dst: resOptSlot})
+
+	ls.b.SetBlock(curBlock)
+	ls.b.Emit(&hir.If{Cond: isNotNull, Then: someBlock, Else: nothingBlock})
+
+	resOpt := ls.b.FreshTemp(prefix + "_opt")
+	ls.b.Emit(&hir.Load{Type: "ptr", Src: resOptSlot, Dst: resOpt})
+	return resOpt
 }
