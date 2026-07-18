@@ -45,6 +45,8 @@ func init() {
 	SetFuncSig("set_intersection", "ptr", nil)
 	SetFuncSig("set_difference", "ptr", nil)
 	SetFuncSig("bool_to_cstring", "ptr", nil)
+	SetFuncSig("__desi_str_new", "ptr", nil)
+	SetFuncSig("__desi_str_append_free", "ptr", nil)
 
 	// List runtime overrides
 	SetFuncSig("list_new", "ptr", nil)

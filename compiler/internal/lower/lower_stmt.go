@@ -290,8 +290,17 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 		var init hir.Value
 		if s.Value != nil {
-			// detect trivial move: let y = x
-			if id, ok := s.Value.(*ast.Ident); ok {
+			// Owned string accumulator (see str_accum.go): the literal
+			// init becomes a heap copy so later appends may realloc/free
+			// it. Freeing a literal global would crash — ownership must
+			// start at construction.
+			if _, isLit := s.Value.(*ast.StrLit); isLit && s.Mutable && ls.strAccums[s.Name.Name] {
+				lit := ls.lowerExpr(s.Value)
+				t := ls.b.FreshTemp("str_accum")
+				ls.b.Emit(&hir.Call{Dst: t, Fn: "__desi_str_new", Args: []hir.Value{lit}, Type: "ptr"})
+				init = t
+			} else if id, ok := s.Value.(*ast.Ident); ok {
+				// detect trivial move: let y = x
 				init = ls.lowerExpr(s.Value)
 				if ls.hasLocal(id.Name) {
 					ls.cur().moved[id.Name] = true
@@ -384,6 +393,33 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.AssignStmt:
 		if len(s.LHS) == 1 && len(s.RHS) == 1 {
+			// Owned string accumulators (see str_accum.go): rewrite
+			//   s := s + X   →  s = __desi_str_append_free(s, X)
+			//   s := "lit"   →  free(s); s = __desi_str_new("lit")
+			// The append reallocs in place and frees the old value —
+			// no O(n^2) copying, no leaked intermediates.
+			if lhsID, isID := s.LHS[0].(*ast.Ident); isID && ls.strAccums[lhsID.Name] {
+				if suffix, isAppend := isStrAccumAppend(s, lhsID.Name); isAppend {
+					oldVal := ls.lowerExpr(s.RHS[0].(*ast.BinaryExpr).Lhs)
+					sufVal := ls.lowerExpr(suffix)
+					// The append COPIES the suffix; a tracked temp suffix
+					// stays registered and is freed at scope end.
+					dst := ls.b.FreshTemp("str_append")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_str_append_free", Args: []hir.Value{oldVal, sufVal}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: lhsID.Name}, Val: dst})
+					return
+				}
+				if isStrAccumReset(s, lhsID.Name) {
+					oldVal := ls.lowerExpr(s.LHS[0])
+					ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{oldVal}, Type: "void"})
+					lit := ls.lowerExpr(s.RHS[0])
+					dst := ls.b.FreshTemp("str_reset")
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "__desi_str_new", Args: []hir.Value{lit}, Type: "ptr"})
+					ls.b.Emit(&hir.Store{Dst: hir.Var{Name: lhsID.Name}, Val: dst})
+					return
+				}
+			}
+
 			// Check for static field assignment (ClassName.FIELD = value)
 			if fieldExpr, ok := s.LHS[0].(*ast.FieldExpr); ok {
 				if ls.info != nil {

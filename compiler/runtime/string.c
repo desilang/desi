@@ -73,6 +73,37 @@ char* float_to_str(double value) {
     return result;
 }
 
+// ==================== Accumulator support ====================
+// The lowerer rewrites eligible mutable string accumulators
+// (let mut s = "lit"; s := s + x in a loop) to these owned-string
+// helpers, so the loop stops leaking every intermediate value and
+// stops copying the whole prefix each iteration.
+
+// Fresh owned copy of a literal (accumulator initialization/reset).
+char* __desi_str_new(const char* s) {
+    return strdup(s ? s : "");
+}
+
+// Append suffix to an OWNED heap string, freeing/reusing the old
+// allocation. realloc typically extends in place, so building a string
+// of length N by appending costs ~O(N) bytes copied instead of the
+// O(N^2) that repeated string_concat incurs — and nothing leaks.
+// `old` must be heap-owned (the lowerer guarantees it via __desi_str_new)
+// and `suffix` must not alias `old` (the lowerer rejects s := s + s).
+char* __desi_str_append_free(char* old, const char* suffix) {
+    size_t old_len = old ? strlen(old) : 0;
+    size_t suf_len = suffix ? strlen(suffix) : 0;
+    char* result = (char*)realloc(old, old_len + suf_len + 1);
+    if (!result) {
+        return old; // OOM: keep the old value, drop the suffix (never crash)
+    }
+    if (suf_len > 0) {
+        memcpy(result + old_len, suffix, suf_len);
+    }
+    result[old_len + suf_len] = '\0';
+    return result;
+}
+
 // Convert bool to string (newly allocated)
 char* bool_to_str(int value) {
     if (value) {
