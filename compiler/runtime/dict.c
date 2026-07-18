@@ -119,7 +119,10 @@ dict_t* dict_new_in(void* arena, int key_type_tag, size_t key_size, size_t value
     d->key_eq_fn = key_eq_fn;
     d->value_to_str_fn = value_to_str_fn;
     d->arena = arena;
-    
+    d->entry_blocks = NULL;
+    d->entry_freelist = NULL;
+    d->entry_block_used = 0;
+
     return d;
 }
 
@@ -150,33 +153,33 @@ dict_t* dict_new(int key_type_tag, size_t key_size, size_t value_size, int value
     d->key_eq_fn = key_eq_fn;
     d->value_to_str_fn = value_to_str_fn;
     d->arena = NULL;
-    
+    d->entry_blocks = NULL;
+    d->entry_freelist = NULL;
+    d->entry_block_used = 0;
+
     return d;
 }
+
+// Forward declarations (entry pool helpers are defined after the insert
+// section; free/clear below need them)
+static void dict_free_entry_contents(dict_t* d, dict_entry_t* entry);
+static void dict_free_entry_blocks(dict_t* d);
 
 // Free all memory associated with dictionary
 void dict_free(dict_t* d) {
     if (!d || d->arena) return;
-    
+
     for (size_t i = 0; i < d->bucket_count; i++) {
         dict_entry_t* entry = d->buckets[i];
         while (entry) {
             dict_entry_t* next = entry->next;
-            if (d->key_type_tag == TYPE_TAG_STR) {
-                free(entry->key_str);
-            } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                // Only free if we own the key (value-based with copy)
-                if (d->key_hash_fn && d->key_eq_fn) {
-                    free(entry->key_ptr);
-                }
-                // Pointer-identity keys are not owned, don't free
-            }
-            free(entry->value);
-            free(entry);
+            dict_free_entry_contents(d, entry);
+            // entry storage itself belongs to the pooled blocks
             entry = next;
         }
     }
-    
+
+    dict_free_entry_blocks(d);
     free(d->buckets);
     free(d);
 }
@@ -189,6 +192,79 @@ void dict_free(dict_t* d) {
 void dict_insert_val(dict_t* d, int64_t key_int, const char* key_str, double key_float,
                      void* key_ptr, int64_t value, int value_type_tag) {
     dict_insert(d, key_int, key_str, key_float, key_ptr, &value, value_type_tag);
+}
+
+// ==================== Entry Pool ====================
+// Entries are carved from pooled blocks (one malloc per DICT_ENTRY_BLOCK
+// entries) instead of malloc'd individually — inserting N entries used to
+// cost 2N mallocs (entry + value box); with the pool and inline values
+// it's ~N/64. Popped/removed entries recycle through a freelist. Arena
+// dicts keep allocating entries from their arena.
+
+#define DICT_ENTRY_BLOCK 64
+
+typedef struct dict_entry_block {
+    struct dict_entry_block* next;
+    dict_entry_t entries[DICT_ENTRY_BLOCK];
+} dict_entry_block_t;
+
+static dict_entry_t* dict_alloc_entry(dict_t* d) {
+    if (d->arena) {
+        return (dict_entry_t*)__arena_alloc(d->arena, sizeof(dict_entry_t));
+    }
+    if (d->entry_freelist) {
+        dict_entry_t* e = d->entry_freelist;
+        d->entry_freelist = e->next;
+        return e;
+    }
+    dict_entry_block_t* head = (dict_entry_block_t*)d->entry_blocks;
+    if (!head || d->entry_block_used >= DICT_ENTRY_BLOCK) {
+        dict_entry_block_t* blk = (dict_entry_block_t*)malloc(sizeof(dict_entry_block_t));
+        if (!blk) return NULL;
+        blk->next = head;
+        d->entry_blocks = blk;
+        d->entry_block_used = 0;
+        head = blk;
+    }
+    return &head->entries[d->entry_block_used++];
+}
+
+// Return an entry to the freelist. The caller has already released any
+// owned key/value contents.
+static void dict_recycle_entry(dict_t* d, dict_entry_t* e) {
+    if (d->arena) return; // arena entries die with the arena
+    e->next = d->entry_freelist;
+    d->entry_freelist = e;
+}
+
+// Release all pooled entry blocks (dict_free / dict_clear).
+static void dict_free_entry_blocks(dict_t* d) {
+    dict_entry_block_t* blk = (dict_entry_block_t*)d->entry_blocks;
+    while (blk) {
+        dict_entry_block_t* next = blk->next;
+        free(blk);
+        blk = next;
+    }
+    d->entry_blocks = NULL;
+    d->entry_freelist = NULL;
+    d->entry_block_used = 0;
+}
+
+// Free the owned CONTENTS of an entry (key copies + external value box).
+// The entry itself belongs to the pool.
+static void dict_free_entry_contents(dict_t* d, dict_entry_t* entry) {
+    if (d->key_type_tag == TYPE_TAG_STR) {
+        free(entry->key_str);
+    } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
+        // Only free if we own the key (value-based with copy)
+        if (d->key_hash_fn && d->key_eq_fn) {
+            free(entry->key_ptr);
+        }
+        // Pointer-identity keys are not owned, don't free
+    }
+    if (entry->value && entry->value != (void*)&entry->value_inline) {
+        free(entry->value);
+    }
 }
 
 // Grow the bucket array (2x) and relink every entry. Without rehashing,
@@ -251,10 +327,8 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
         entry = entry->next;
     }
     
-    // Create new entry
-    dict_entry_t* new_entry = d->arena
-        ? (dict_entry_t*)__arena_alloc(d->arena, sizeof(dict_entry_t))
-        : (dict_entry_t*)malloc(sizeof(dict_entry_t));
+    // Create new entry (pooled — no per-insert malloc)
+    dict_entry_t* new_entry = dict_alloc_entry(d);
     if (!new_entry) return;
     
     // Store key based on type
@@ -280,14 +354,20 @@ void dict_insert(dict_t* d, int64_t key_int, const char* key_str, double key_flo
         }
     }
     
-    new_entry->value = d->arena ? __arena_alloc(d->arena, d->value_size) : malloc(d->value_size);
-    if (!new_entry->value) {
-        if (!d->arena) {
-            if (new_entry->key_str) free(new_entry->key_str);
-            if (new_entry->key_ptr) free(new_entry->key_ptr);
-            free(new_entry);
+    // Values that fit the inline slot (the normal 8-byte case) need no
+    // allocation at all; larger values fall back to a heap box.
+    if (d->value_size <= sizeof(new_entry->value_inline)) {
+        new_entry->value = (void*)&new_entry->value_inline;
+    } else {
+        new_entry->value = d->arena ? __arena_alloc(d->arena, d->value_size) : malloc(d->value_size);
+        if (!new_entry->value) {
+            if (!d->arena) {
+                if (new_entry->key_str) free(new_entry->key_str);
+                if (new_entry->key_ptr) free(new_entry->key_ptr);
+                dict_recycle_entry(d, new_entry);
+            }
+            return;
         }
-        return;
     }
     memcpy(new_entry->value, value, d->value_size);
     new_entry->value_type_tag = value_type_tag;
@@ -419,7 +499,18 @@ void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float
                 d->buckets[index] = entry->next;
             }
             
+            // Copy the value OUT of the entry before recycling it: an
+            // inline value lives inside the entry, and the entry goes back
+            // to the pool for reuse. The returned box is caller-owned heap
+            // memory, same contract as before pooling.
             void* value = entry->value;
+            if (value == (void*)&entry->value_inline) {
+                void* box = malloc(d->value_size);
+                if (box) {
+                    memcpy(box, value, d->value_size);
+                }
+                value = box;
+            }
             if (d->key_type_tag == TYPE_TAG_STR) {
                 free(entry->key_str);
             } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
@@ -428,7 +519,7 @@ void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float
                     free(entry->key_ptr);
                 }
             }
-            free(entry);
+            dict_recycle_entry(d, entry);
             d->entry_count--;
             return value;
         }
@@ -442,28 +533,24 @@ void* dict_pop(dict_t* d, int64_t key_int, const char* key_str, double key_float
 // Clear all entries
 void dict_clear(dict_t* d) {
     if (!d) return;
-    
+
     for (size_t i = 0; i < d->bucket_count; i++) {
         if (!d->arena) {
             dict_entry_t* entry = d->buckets[i];
             while (entry) {
                 dict_entry_t* next = entry->next;
-                if (d->key_type_tag == TYPE_TAG_STR) {
-                    free(entry->key_str);
-                } else if (d->key_type_tag == TYPE_TAG_CUSTOM) {
-                    // Only free if we own the key (value-based with copy)
-                    if (d->key_hash_fn && d->key_eq_fn) {
-                        free(entry->key_ptr);
-                    }
-                }
-                free(entry->value);
-                free(entry);
+                dict_free_entry_contents(d, entry);
                 entry = next;
             }
         }
         d->buckets[i] = NULL;
     }
-    
+
+    // Entry storage is pooled: release the blocks wholesale instead of
+    // per-entry frees. (Clear is rare; block churn is fine.)
+    if (!d->arena) {
+        dict_free_entry_blocks(d);
+    }
     d->entry_count = 0;
 }
 

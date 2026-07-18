@@ -29,7 +29,8 @@ typedef struct dict_entry {
     char* key_str;              // String key (owned, strdup'd)
     double key_float;           // Float key
     void* key_ptr;              // Custom type key (owned, malloc'd copy)
-    void* value;                // Generic value pointer
+    void* value;                // Generic value pointer (== &value_inline when the value fits)
+    int64_t value_inline;       // Inline storage for values <= 8 bytes (the common case) — no per-insert value malloc
     int value_type_tag;         // Per-entry value type tag (for Any-typed dicts)
     struct dict_entry* next;    // Chaining for collisions
 } dict_entry_t;
@@ -46,6 +47,9 @@ typedef struct dict {
     KeyEqFunc key_eq_fn;        // Custom key equality function (for TYPE_TAG_CUSTOM)
     ElemToStrFunc value_to_str_fn; // Function pointer for custom value types
     void* arena;                // Optional arena handle (Task 4)
+    void* entry_blocks;         // Pooled entry storage (blocks of entries; one malloc per block, not per insert)
+    dict_entry_t* entry_freelist; // Recycled entries from pop/remove
+    size_t entry_block_used;    // Entries carved from the newest block
 } dict_t;
 
 // Core operations - now accept generic keys

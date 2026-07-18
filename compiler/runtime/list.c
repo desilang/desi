@@ -61,25 +61,29 @@ DesiList* list_new_in(void* arena, int type_tag, ElemToStrFunc to_str_fn) {
     return list;
 }
 
+// A heap list's header and initial data array live in ONE malloc block:
+// the data pointer starts right after the header. Short-lived lists (the
+// common case under scope-exit drops) then cost a single malloc/free
+// instead of two. Growth moves data to its own allocation; this predicate
+// distinguishes the two states.
+static int list_data_is_inline(const DesiList* list) {
+    return list->data == (void**)((const char*)list + sizeof(DesiList));
+}
+
 // Create a new empty list
 DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
-    DesiList* list = (DesiList*)malloc(sizeof(DesiList));
+    DesiList* list = (DesiList*)malloc(sizeof(DesiList) + LIST_INITIAL_CAPACITY * sizeof(void*));
     if (!list) {
         return NULL;
     }
-    
+
     list->capacity = LIST_INITIAL_CAPACITY;
     list->length = 0;
     list->type_tag = type_tag;
     list->to_str_fn = to_str_fn;  // Store function pointer
     list->arena = NULL;
-    list->data = (void**)malloc(list->capacity * sizeof(void*));
-    
-    if (!list->data) {
-        free(list);
-        return NULL;
-    }
-    
+    list->data = (void**)((char*)list + sizeof(DesiList)); // inline
+
     return list;
 }
 
@@ -88,7 +92,7 @@ void list_free(DesiList* list) {
     if (!list || list->arena) return;
 
     desi_free_float_elems(list); // owned float boxes
-    if (list->data) {
+    if (list->data && !list_data_is_inline(list)) {
         free(list->data);
     }
     free(list);
@@ -102,20 +106,19 @@ void list_clear(DesiList* list) {
     list->length = 0;
 }
 
+// Forward declaration: list_copy grows the fresh list through the
+// capacity helper (a raw realloc would corrupt the inline data block).
+static void list_ensure_capacity(DesiList* list, size_t new_capacity);
+
 // Create a shallow copy of the list
 DesiList* list_copy(DesiList* list) {
     if (!list) return NULL;
-    
+
     DesiList* result = list_new(list->type_tag, list->to_str_fn);  // Copy function pointer too
-    
-    // Ensure capacity
+
+    // Ensure capacity (handles the inline-data case)
     if (list->length > result->capacity) {
-        result->data = (void**)realloc(result->data, list->length * sizeof(void*));
-        if (!result->data) {
-            fprintf(stderr, "list_copy: realloc failed\n");
-            exit(1);
-        }
-        result->capacity = list->length;
+        list_ensure_capacity(result, list->length);
     }
     
     // Copy elements (shallow copy - pointers only)
@@ -201,6 +204,16 @@ static void list_ensure_capacity(DesiList* list, size_t new_capacity) {
         void** new_data = (void**)__arena_alloc(list->arena, target * sizeof(void*));
         if (!new_data) {
             fprintf(stderr, "list_ensure_capacity: arena_alloc failed\n");
+            exit(1);
+        }
+        memcpy(new_data, list->data, list->length * sizeof(void*));
+        list->data = new_data;
+    } else if (list_data_is_inline(list)) {
+        // Inline data lives inside the header's malloc block — it can't be
+        // realloc'd (interior pointer). First growth moves it out.
+        void** new_data = (void**)malloc(target * sizeof(void*));
+        if (!new_data) {
+            fprintf(stderr, "list_ensure_capacity: malloc failed\n");
             exit(1);
         }
         memcpy(new_data, list->data, list->length * sizeof(void*));
