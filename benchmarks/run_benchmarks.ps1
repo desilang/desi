@@ -29,22 +29,33 @@ Write-Host "Mode: $(if ($Release) { 'RELEASE (-O2 both sides)' } else { 'default
 
 function Measure-Exe {
     param([string]$Exe)
-    $bestMs = [double]::MaxValue
+    $stdoutFile = Join-Path $OutDir "last_stdout.txt"
+
+    # Memory pass (untimed — doubles as the Defender first-launch warmup):
+    # PeakWorkingSet64 must be sampled while the process is alive, and the
+    # sampling loop distorts wall time (Windows sleeps in ~15ms quanta, a
+    # busy-poll burns a core), so memory and timing are measured in
+    # SEPARATE runs.
     $peak = 0
-    $output = ""
-    for ($run = 0; $run -lt 3; $run++) {
+    $p = Start-Process -FilePath $Exe -PassThru -NoNewWindow `
+        -RedirectStandardOutput $stdoutFile
+    while (-not $p.HasExited) {
+        try { $p.Refresh(); if ($p.PeakWorkingSet64 -gt $peak) { $peak = $p.PeakWorkingSet64 } } catch {}
+        Start-Sleep -Milliseconds 2
+    }
+
+    # Timing passes: nothing runs concurrently; WaitForExit blocks natively.
+    $bestMs = [double]::MaxValue
+    for ($run = 0; $run -lt 4; $run++) {
         $sw = [System.Diagnostics.Stopwatch]::StartNew()
         $p = Start-Process -FilePath $Exe -PassThru -NoNewWindow `
-            -RedirectStandardOutput (Join-Path $OutDir "last_stdout.txt")
-        # PeakWorkingSet64 must be sampled while the process is alive —
-        # after exit the refresh fails and the property reads 0.
-        while (-not $p.HasExited) {
-            try { $p.Refresh(); if ($p.PeakWorkingSet64 -gt $peak) { $peak = $p.PeakWorkingSet64 } } catch {}
-        }
+            -RedirectStandardOutput $stdoutFile
+        $p.WaitForExit()
         $sw.Stop()
         if ($sw.Elapsed.TotalMilliseconds -lt $bestMs) { $bestMs = $sw.Elapsed.TotalMilliseconds }
     }
-    $output = (Get-Content (Join-Path $OutDir "last_stdout.txt") -Raw -ErrorAction SilentlyContinue)
+
+    $output = (Get-Content $stdoutFile -Raw -ErrorAction SilentlyContinue)
     if ($output) { $output = $output.Trim() }
     return @{ Ms = [math]::Round($bestMs, 1); PeakMB = [math]::Round($peak / 1MB, 1); Out = $output }
 }
@@ -86,4 +97,6 @@ foreach ($name in $names) {
 }
 
 Write-Host ""
-$results | Format-Table -AutoSize
+# Out-String renders the table fully before output — PS 5.1's streaming
+# Format-Table can NullReference when downstream cmdlets select over it.
+$results | Format-Table -AutoSize | Out-String | Write-Host

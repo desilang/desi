@@ -83,25 +83,43 @@ benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
   tracked hybrid-MM phase-4 item. This benchmark exists to watch that
   gap close.
 
-## Release mode (-O2 both sides, same machine/day)
+## Release mode (-O2 both sides + LTO hot set, same machine/day)
 
-| Benchmark | Desi | C | |
-|---|---|---|---|
-| loop_sum | 30.5 ms | 19.3 ms | 2.1x faster than Desi -O0 |
-| string_churn | 48.1 ms | 54.2 ms | Desi wins |
-| matrix_mul | 23.3 ms | 24.4 ms | Desi wins |
-| dict_ops | 33.8 ms | 28.3 ms | |
-| list_ops | 29.6 ms | 23.9 ms | |
-| fib_recursive | 43.4 ms | 28.5 ms | recursion guard; -O2 can't remove it |
-| alloc_churn | 58.5 ms | 17.8 ms | runtime calls opaque without LTO |
-| string_build | 56.0 ms | 18.0 ms | phase-4 tracker |
+| Benchmark | Desi | C | Peak memory (Desi / C) | |
+|---|---|---|---|---|
+| loop_sum | 20.6 ms | 19.7 ms | 2.8 / 2.8 MB | parity |
+| matrix_mul | 22.8 ms | 22.0 ms | 3.3 / 2.9 MB | parity |
+| string_churn | 42.1 ms | 46.8 ms | 2.8 / 2.8 MB | **Desi wins** |
+| dict_ops | 31.3 ms | 24.5 ms | **4.4** / 6.8 MB | Desi uses less memory |
+| list_ops | 28.0 ms | 22.8 ms | 7.9 / 7.9 MB | 8-byte element slots |
+| fib_recursive | 41.9 ms | 26.6 ms | 2.8 / 3.1 MB | recursion-guard cost |
+| alloc_churn | 51.8 ms | 19.9 ms | 2.8 / 2.8 MB | 2 mallocs per list vs 1 |
+| string_build | 46.5 ms | 18.7 ms | 51.2 / 2.9 MB | phase-4 tracker |
 
-The -O2 column shows exactly where the next levers are: benchmarks bound
-by program-side loops (loop_sum, matrix_mul, string_churn) improve or win
-outright, while benchmarks bound by *runtime calls* (alloc_churn, list,
-dict) barely move — the optimizer can't see through calls into the
-separately-compiled libdesi. Cross-module LTO (runtime built as LLVM
-bitcode) is the planned fix for that class.
+### How release builds work
+
+`build.ps1` compiles a curated **LTO hot set** of runtime files
+(recursion guard, dict/set, strings, rc, arena, print) a second time as
+LLVM bitcode into `build/lto/`. Release links list those objects before
+`libdesi.lib` (explicit objects win symbol resolution; the native archive
+members from the same sources are never pulled) and pass
+`-flto -fuse-ld=lld`, so the optimizer inlines hot runtime calls into
+user code. Two lessons already encoded in the set:
+
+- **Hot/cold splitting matters**: inlining the recursion guard originally
+  *regressed* fib — its cold-path 256-byte message buffer landed in every
+  caller's frame. The cold path is now a `noinline` function (limits.c).
+- **Membership is benchmark-driven**: list.c measurably regressed when
+  inlined (append/get bloat hot loop bodies beyond the call they save),
+  so it stays native. Re-measure before changing the set in build.ps1.
+
+### Measurement notes
+
+The runner measures memory and time in SEPARATE runs: peak-working-set
+sampling needs a polling loop whose sleep quantum (~15 ms on Windows)
+would distort wall time, so timing runs use a bare `WaitForExit`. The
+first (memory) run also absorbs Defender's first-launch scan of freshly
+linked executables. Reported time is best of 4.
 
 These benchmarks have already caught real bugs: dict_ops found both a
 missing dict index-assignment lowering (access violation) and a hash
