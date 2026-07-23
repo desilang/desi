@@ -31,11 +31,13 @@ fi
 # --- Auto-discover LLVM tools ---
 find_tool() {
     local name="$1"
-    # Check PATH first
-    if command -v "$name" >/dev/null 2>&1; then
-        echo "$name"
-        return
-    fi
+    # Check PATH first with common version suffixes
+    for suffix in "" "-mp-21" "-mp-20" "-mp-19" "-mp-18" "-21" "-20" "-19" "-18"; do
+        if command -v "${name}${suffix}" >/dev/null 2>&1; then
+            echo "${name}${suffix}"
+            return
+        fi
+    done
     # macOS: Homebrew (Apple Silicon, then Intel)
     for prefix in /opt/homebrew/opt/llvm/bin /usr/local/opt/llvm/bin /opt/homebrew/bin /usr/local/bin; do
         if [ -x "$prefix/$name" ]; then
@@ -72,9 +74,13 @@ echo "==> Compiling Desi to LLVM IR..."
 
 echo "==> Compiling LLVM IR to object file..."
 if [ "$RELEASE" = "1" ]; then
-    # clang runs the full -O2 IR pipeline (inlining, loop opts);
-    # llc alone only does codegen-level optimization.
-    $CLANG -w -O2 -c build/program.ll -o build/program.o
+    # Try clang first for full O2 pipeline optimization, fallback to opt + llc if there's a toolchain mismatch
+    if ! $CLANG -w -O2 -c build/program.ll -o build/program.o 2>/dev/null; then
+        OPT=$(find_tool opt)
+        $OPT -O2 build/program.ll -o build/program_opt.bc
+        $LLC -O2 build/program_opt.bc -filetype=obj -o build/program.o
+        rm -f build/program_opt.bc
+    fi
 else
     $LLC build/program.ll -filetype=obj -o build/program.o
 fi

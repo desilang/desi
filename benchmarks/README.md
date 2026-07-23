@@ -82,8 +82,37 @@ benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
   per append and keeps intermediates alive until scope exit — the
   tracked hybrid-MM phase-4 item. This benchmark exists to watch that
   gap close.
+## Reference numbers (macOS 14.6, Apple Silicon, M-series, clang -O0)
 
-## Release mode (-O2 both sides + LTO hot set, same machine/day)
+Measured 2026-07-18 on the v0.1.0 dev branch (best of 3):
+
+| Benchmark | Desi | C | Peak memory (Desi / C) |
+|---|---|---|---|
+| loop_sum | 224.0 ms | 108.0 ms | 1.5 MB / 1.4 MB |
+| fib_recursive | 48.0 ms | 24.0 ms | 1.5 MB / 1.4 MB |
+| string_churn | 33.0 ms | 40.0 ms | 1.5 MB / 1.5 MB |
+| string_build | 20.0 ms | 13.0 ms | 51.8 MB / 1.5 MB |
+| alloc_churn | 45.0 ms | 25.0 ms | 1.6 MB / 1.5 MB |
+| list_ops | 23.0 ms | 16.0 ms | 9.2 MB / 5.4 MB |
+| dict_ops | 20.0 ms | 14.0 ms | 13.2 MB / 5.5 MB |
+| matrix_mul | 19.0 ms | 15.0 ms | 2.0 MB / 1.6 MB |
+
+## Reference numbers (macOS 14.6, Apple Silicon, M-series, release -O2)
+
+Measured 2026-07-18 on the v0.1.0 dev branch (best of 3):
+
+| Benchmark | Desi | C | Peak memory (Desi / C) |
+|---|---|---|---|
+| loop_sum | 14.0 ms | 13.0 ms | 1.5 MB / 1.5 MB |
+| fib_recursive | 48.0 ms | 19.0 ms | 1.5 MB / 1.5 MB |
+| string_churn | 32.0 ms | 37.0 ms | 1.5 MB / 1.5 MB |
+| string_build | 20.0 ms | 14.0 ms | 51.8 MB / 1.5 MB |
+| alloc_churn | 45.0 ms | 14.0 ms | 1.6 MB / 1.4 MB |
+| list_ops | 19.0 ms | 14.0 ms | 9.2 MB / 5.3 MB |
+| dict_ops | 20.0 ms | 14.0 ms | 12.0 MB / 5.4 MB |
+| matrix_mul | 18.0 ms | 13.0 ms | 1.9 MB / 1.6 MB |
+
+## Release mode (Windows 11, -O2 both sides + LTO hot set, same machine/day)
 
 | Benchmark | Desi | C | Peak memory (Desi / C) | |
 |---|---|---|---|---|
