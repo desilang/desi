@@ -1,0 +1,58 @@
+# Binary Tree benchmark: 10k node BST insertion and in-order traversal.
+# Tests class instantiation, mutable field access, list of class instances, and tree traversal.
+class Node:
+	pub mut val: int
+	pub mut left: int
+	pub mut right: int
+
+def main() -> int:
+	let mut nodes: list[Node] = []
+	let mut seed = 123456789
+	let mut k = 0
+	while k < 10000:
+		seed := ((seed * 1664525 + 1013904223) & 2147483647) % 2147483647
+		let mut val = seed % 1000000
+		if val < 0:
+			val := -val
+
+		let new_idx = len(nodes)
+		let mut node = Node()
+		node.val := val
+		node.left := -1
+		node.right := -1
+		nodes.append(node)
+
+		if new_idx > 0:
+			let mut ins_curr = 0
+			let mut placed = false
+			while not placed:
+				if val < nodes[ins_curr].val:
+					if nodes[ins_curr].left == -1:
+						nodes[ins_curr].left := new_idx
+						placed := true
+					else:
+						ins_curr := nodes[ins_curr].left
+				else:
+					if nodes[ins_curr].right == -1:
+						nodes[ins_curr].right := new_idx
+						placed := true
+					else:
+						ins_curr := nodes[ins_curr].right
+
+		k := k + 1
+
+	let mut checksum = 0
+	let mut stack: list[int] = []
+	let mut trav_curr = 0
+
+	while trav_curr != -1 or len(stack) > 0:
+		while trav_curr != -1:
+			stack.append(trav_curr)
+			trav_curr := nodes[trav_curr].left
+
+		trav_curr := stack.pop()
+		checksum := (checksum + nodes[trav_curr].val) % 1000000007
+		trav_curr := nodes[trav_curr].right
+
+	print(checksum)
+	return 0

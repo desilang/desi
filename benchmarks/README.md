@@ -52,6 +52,7 @@ reported. The runner warns if the Desi and C outputs differ.
 | `dict_ops` | Hash map: 100k int-keyed inserts + 100k lookups vs open addressing |
 | `matrix_mul` | Float math: 80x80 matrix multiply over list[list[float]] (boxed elements) vs flat C arrays |
 | `quicksort` | Sorting & In-place partitioning: 10k deterministic integers sorted with iterative QuickSort |
+| `binary_tree` | Object/Class allocation & Tree traversal: 10k BST node insertion & in-order traversal |
 
 ## Reference numbers (Windows 11, x64, clang -O0)
 
@@ -90,15 +91,16 @@ Measured 2026-07-23 on the v0.1.0 dev branch (best of 3):
 
 | Benchmark | Desi | C | Peak memory (Desi / C) |
 |---|---|---|---|
-| loop_sum | 220.0 ms | 108.0 ms | 1.5 MB / 1.4 MB |
-| fib_recursive | 48.0 ms | 23.0 ms | 1.5 MB / 1.4 MB |
-| string_churn | 42.0 ms | 38.0 ms | 1.5 MB / 1.5 MB |
-| string_build | 14.0 ms | 13.0 ms | 1.6 MB / 1.5 MB |
+| loop_sum | 220.0 ms | 107.0 ms | 1.5 MB / 1.4 MB |
+| fib_recursive | 47.0 ms | 24.0 ms | 1.5 MB / 1.4 MB |
+| string_churn | 35.0 ms | 39.0 ms | 1.5 MB / 1.5 MB |
+| string_build | 14.0 ms | 14.0 ms | 1.8 MB / 1.5 MB |
 | alloc_churn | 35.0 ms | 25.0 ms | 1.5 MB / 1.5 MB |
-| list_ops | 20.0 ms | 15.0 ms | 9.2 MB / 5.3 MB |
-| dict_ops | 17.0 ms | 14.0 ms | 12.3 MB / 5.4 MB |
-| matrix_mul | 19.0 ms | 15.0 ms | 2.1 MB / 1.6 MB |
-| quicksort | 22.0 ms | 20.0 ms | 4.0 MB / 1.7 MB |
+| list_ops | 19.0 ms | 16.0 ms | 9.2 MB / 5.3 MB |
+| dict_ops | 17.0 ms | 14.0 ms | 12.4 MB / 5.4 MB |
+| matrix_mul | 17.0 ms | 15.0 ms | 2.1 MB / 1.6 MB |
+| quicksort | 15.0 ms | 14.0 ms | 3.8 MB / 1.5 MB |
+| binary_tree | 15.0 ms | 14.0 ms | 2.6 MB / 1.6 MB |
 
 ## Reference numbers (macOS 14.6, Apple Silicon, M-series, release -O2)
 
@@ -106,15 +108,16 @@ Measured 2026-07-23 on the v0.1.0 dev branch (best of 3):
 
 | Benchmark | Desi | C | Peak memory (Desi / C) |
 |---|---|---|---|
-| loop_sum | 14.0 ms | 13.0 ms | 1.5 MB / 1.4 MB |
+| loop_sum | 13.0 ms | 13.0 ms | 1.5 MB / 1.4 MB |
 | fib_recursive | 47.0 ms | 19.0 ms | 1.5 MB / 1.4 MB |
-| string_churn | 33.0 ms | 38.0 ms | 1.5 MB / 1.5 MB |
-| string_build | 14.0 ms | 13.0 ms | 1.6 MB / 1.5 MB |
+| string_churn | 33.0 ms | 37.0 ms | 1.5 MB / 1.5 MB |
+| string_build | 13.0 ms | 13.0 ms | 1.6 MB / 1.5 MB |
 | alloc_churn | 35.0 ms | 13.0 ms | 1.5 MB / 1.4 MB |
 | list_ops | 19.0 ms | 14.0 ms | 9.2 MB / 5.3 MB |
-| dict_ops | 18.0 ms | 14.0 ms | 12.4 MB / 5.4 MB |
-| matrix_mul | 17.0 ms | 14.0 ms | 1.9 MB / 1.6 MB |
-| quicksort | 20.0 ms | 19.0 ms | 1.8 MB / 1.7 MB |
+| dict_ops | 17.0 ms | 13.0 ms | 12.4 MB / 5.5 MB |
+| matrix_mul | 17.0 ms | 13.0 ms | 1.9 MB / 1.6 MB |
+| quicksort | 14.0 ms | 14.0 ms | 1.6 MB / 1.5 MB |
+| binary_tree | 15.0 ms | 13.0 ms | 1.8 MB / 1.6 MB |
 
 ## Release mode (Windows 11, -O2 both sides + LTO hot set, same machine/day)
 
