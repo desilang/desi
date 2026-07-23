@@ -82,7 +82,14 @@ benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
   per append and keeps intermediates alive until scope exit — the
   tracked hybrid-MM phase-4 item. This benchmark exists to watch that
   gap close.
+
 ## Reference numbers (macOS 14.6, Apple Silicon, M-series, clang -O0)
+
+> **STALE — re-measure before quoting.** These macOS tables were captured
+> on the mac branch BEFORE the allocator overhaul (pooled dict entries,
+> single-alloc lists) and the string-accumulator rewrite merged — visible
+> in the data: string_build shows 51.8 MB (now ~1.6 MB) and dict_ops
+> 13.2 MB (now ~1.6 MB). Refresh on the merged tree.
 
 Measured 2026-07-18 on the v0.1.0 dev branch (best of 3):
 
