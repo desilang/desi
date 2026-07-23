@@ -56,34 +56,34 @@ reported. The runner warns if the Desi and C outputs differ.
 
 ## Reference numbers (Windows 11, x64, clang -O0)
 
-Measured 2026-07-17 on the v0.1.0 dev branch (best of 3):
+Measured 2026-07-23 on the v0.1.0 dev branch (best of 4):
 
 | Benchmark | Desi | C | Peak memory (Desi / C) |
 |---|---|---|---|
-| loop_sum | 62.2 ms | 69.5 ms | 3.2 MB / 3.2 MB |
-| fib_recursive | 43.4 ms | 30.7 ms | 3.2 MB / 3.2 MB |
-| string_churn | 44.6 ms | 47.4 ms | 3.2 MB / 3.2 MB |
-| string_build | 46.0 ms | 18.6 ms | 51.2 MB / 3.2 MB |
-| alloc_churn | 54.1 ms | 36.7 ms | 2.8 MB / 3.2 MB |
-| list_ops | 28.0 ms | 23.0 ms | 11.9 MB / 7.9 MB |
-| dict_ops | 38.0 ms | 27.9 ms | 12.4 MB / 6.8 MB |
-| matrix_mul | 30.0 ms | 21.0 ms | 3.8 MB / 3.2 MB |
+| loop_sum | 63.9 ms | 61.3 ms | 2.8 MB / 3.2 MB |
+| fib_recursive | 39.6 ms | 24.4 ms | 2.8 MB / 2.8 MB |
+| string_churn | 36.6 ms | 43.7 ms | 2.8 MB / 2.8 MB |
+| string_build | 18.3 ms | 19.3 ms | 3.2 MB / 2.1 MB |
+| alloc_churn | 38.7 ms | 30.6 ms | 2.8 MB / 2.6 MB |
+| list_ops | 29.0 ms | 24.3 ms | 2.1 MB / 2.1 MB |
+| dict_ops | 24.6 ms | 24.3 ms | 2.0 MB / 6.8 MB |
+| matrix_mul | 24.5 ms | 19.2 ms | 3.9 MB / 2.2 MB |
+| quicksort | 20.9 ms | 21.2 ms | 2.5 MB / 2.0 MB |
+| binary_tree | 20.6 ms | 20.6 ms | 2.0 MB / 2.0 MB |
 
 Numbers vary by machine and run — the point is the *ratio*. Desi wins or
-ties the arithmetic and string-churn benchmarks outright; the collection
-benchmarks sit within 1.2-1.5x of hand-rolled C with understood causes:
+ties the arithmetic and string benchmarks outright and now uses LESS
+memory than hand-rolled C on dict operations; the remaining gaps have
+understood causes:
 
-- **list/dict memory**: elements live in 8-byte generic slots vs C's
-  packed types, and every op is a runtime call vs an inlined store.
-  Typed element storage and codegen fast paths are the planned fixes.
 - **fib_recursive**: each Desi call runs the recursion-depth guard
-  (`__desi_call_enter`/`__desi_call_exit`); C has no equivalent safety.
-- **alloc_churn**: a Desi list is two allocations (header + data) vs
-  C's one malloc.
-- **string_build**: the accumulator pattern reallocates the whole string
-  per append and keeps intermediates alive until scope exit — the
-  tracked hybrid-MM phase-4 item. This benchmark exists to watch that
-  gap close.
+  (`__desi_call_enter`/`__desi_call_exit`), which makes stack exhaustion
+  a catchable RuntimeError — C has no equivalent safety.
+- **alloc_churn**: a Desi list is header + data (single malloc, then the
+  element array) plus a runtime call per append vs C's inlined store.
+- **matrix_mul memory**: `list[list[float]]` boxes elements in 8-byte
+  slots vs C's packed doubles — the planned packed-element-storage work
+  closes this.
 
 ## Reference numbers (macOS 14.6, Apple Silicon, M-series, clang -O0)
 
@@ -119,24 +119,29 @@ Measured 2026-07-23 on the v0.1.0 dev branch (best of 3):
 | quicksort | 14.0 ms | 14.0 ms | 1.6 MB / 1.5 MB |
 | binary_tree | 15.0 ms | 13.0 ms | 1.8 MB / 1.6 MB |
 
-## Release mode (Windows 11, -O2 both sides + LTO hot set, same machine/day)
+## Reference numbers (Windows 11, x64, -O2 both sides + LTO hot set)
 
-| Benchmark | Desi | C | Peak memory (Desi / C) | |
-|---|---|---|---|---|
-| dict_ops | 20-22 ms | 19-33 ms | **1.6** / 1.6-6.8 MB | wins or ties; was 4x less memory in several runs |
-| loop_sum | 16-24 ms | 17-21 ms | 1.7 / 1.6 MB | trades wins |
-| string_churn | 42-62 ms | 46-58 ms | 2.8 / 3.2 MB | trades wins run-to-run |
-| matrix_mul | 21-30 ms | 17-34 ms | 1.9 / 2.1 MB | trades wins |
-| list_ops | 21-28 ms | 17-25 ms | 11.9 / 7.9 MB | 8-byte element slots |
-| alloc_churn | 48.3 ms | 25.8 ms | 2.8 / 3.2 MB | was 51.8 before single-alloc lists |
-| fib_recursive | 30-38 ms | 20-27 ms | 2.8 / 2.8 MB | recursion-guard cost |
-| **string_build** | **31.4 ms** | 17.2 ms | **1.6** / 3.2 MB | **was 43.5 MB — Desi now uses HALF of C's memory** |
+Measured 2026-07-23 on the v0.1.0 dev branch (best of 4):
 
-Ranges reflect run-to-run variance on the reference machine (~±25%).
-Two results are structural, not noise: the built-in dict matches or
-beats a hand-rolled C open-addressing table, and string_build — once
-the worst result in the table at 43.5 MB leaked — now holds a smaller
-working set than C's amortized buffer.
+| Benchmark | Desi | C | Peak memory (Desi / C) |
+|---|---|---|---|
+| loop_sum | 17.4 ms | 17.7 ms | 3.2 MB / 3.0 MB |
+| fib_recursive | 35.5 ms | 22.6 ms | 2.8 MB / 2.8 MB |
+| string_churn | 35.2 ms | 44.6 ms | 2.8 MB / 2.8 MB |
+| string_build | 18.9 ms | 17.8 ms | 2.8 MB / 3.2 MB |
+| alloc_churn | 42.8 ms | 20.9 ms | 2.8 MB / 2.8 MB |
+| list_ops | 24.1 ms | 21.1 ms | 5.9 MB / 5.7 MB |
+| dict_ops | 23.9 ms | 23.3 ms | 5.2 MB / 6.8 MB |
+| matrix_mul | 18.6 ms | 17.7 ms | 3.3 MB / 3.2 MB |
+| quicksort | 19.1 ms | 19.2 ms | 3.0 MB / 2.9 MB |
+| binary_tree | 23.6 ms | 23.1 ms | 3.1 MB / 2.9 MB |
+
+At -O2 Desi ties or beats C on loop_sum, string_churn, quicksort, and
+matrix_mul, and holds within ~1.1x on the collection benchmarks — while
+using less memory than C on dict_ops. string_build, once the worst
+result in the suite at 43.5 MB leaked, is now at parity (the string
+accumulator rewrite, below). The remaining time gaps are alloc_churn
+(list allocation overhead) and fib_recursive (the recursion guard).
 
 ### String accumulators (why string_build stopped leaking)
 
