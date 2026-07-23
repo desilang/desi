@@ -457,9 +457,14 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 	// LTO bitcode objects go before the native archive so they win symbol
 	// resolution (same sources — the archive members are never pulled).
 	clangArgs = append(clangArgs, ltoObjs...)
-	// Only add entry.obj when the IR defines @__top__ (no explicit def main).
-	// Programs with def main() already emit @main in the IR.
-	if entryObj := findEntryObj(); entryObj != "" && bytes.Contains(irBuf.Bytes(), []byte("@__top__")) {
+	// Only add entry.obj when the program does NOT define @main — entry.obj
+	// provides a main() that calls @__top__. A program can have BOTH a
+	// def main() and a @__top__ (imports and module-level statements emit
+	// one), and force-linking entry.obj then fails with a duplicate main.
+	// The archive path (libdesi.lib also contains entry.obj) resolves this
+	// lazily; the explicit path must apply the same rule.
+	hasMain := bytes.Contains(irBuf.Bytes(), []byte("@main("))
+	if entryObj := findEntryObj(); entryObj != "" && !hasMain && bytes.Contains(irBuf.Bytes(), []byte("@__top__")) {
 		clangArgs = append(clangArgs, entryObj)
 	}
 	clangArgs = append(clangArgs, "-o", exePath)
