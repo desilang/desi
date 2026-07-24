@@ -42,6 +42,25 @@ func (ls *lowerState) prepareKeyArgs(keyExpr ast.Expr, keyType types.T) (keyInt 
 	return keyInt, keyStr, keyFloat, keyPtr
 }
 
+// narrowDictValue narrows a value loaded from a dict (always widened to an
+// i64 slot in the runtime) back to its declared LLVM type. Without this,
+// d.get()/d.setdefault() return i64 where d[k] returns i32, so feeding the
+// result into int arithmetic emits invalid IR ('i64 but expected i32').
+// Mirrors the narrowing the index-expression path already performs.
+func (ls *lowerState) narrowDictValue(valDst hir.Value, valType types.T) hir.Value {
+	switch lowerType(valType) {
+	case "i32", "i1", "i8", "i16":
+		narrowed := ls.b.FreshTemp("val_narrow")
+		ls.b.Emit(&hir.Cast{Src: valDst, Dst: narrowed, Type: lowerType(valType)})
+		return narrowed
+	case "double", "float":
+		narrowed := ls.b.FreshTemp("val_fp")
+		ls.b.Emit(&hir.BitCast{Val: valDst, Dst: narrowed, Type: lowerType(valType)})
+		return narrowed
+	}
+	return valDst
+}
+
 func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictType *types.Dict) hir.Value {
 	receiver := ls.lowerExpr(fe.X)
 	method := fe.Name.Name
@@ -78,7 +97,7 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 			ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
 			return ptrDst
 		}
-		return valDst
+		return ls.narrowDictValue(valDst, valType)
 
 	case "setdefault":
 		// setdefault(key, default) -> Value
@@ -141,7 +160,7 @@ func (ls *lowerState) lowerDictMethod(fe *ast.FieldExpr, args []ast.Expr, dictTy
 			ls.b.Emit(&hir.Cast{Src: valDst, Dst: ptrDst, Type: "ptr"})
 			return ptrDst
 		}
-		return valDst
+		return ls.narrowDictValue(valDst, dictValType)
 
 	case "insert":
 		// insert(key, value)
