@@ -1,4 +1,7 @@
-# Drops Implementation (Hybrid MM, Phases 1–3)
+# Drops Implementation (Hybrid MM, Phases 1–4)
+
+> User-facing summary: [../../memory-model.md](../../memory-model.md).
+> This document is the implementation map for contributors.
 
 How Desi actually frees heap values today — what gets dropped, where the
 decisions are made, and the invariants to preserve when touching the
@@ -148,6 +151,28 @@ corruption on macOS); an over-aggressive mark only leaks.
   struct/enum *field* recursion, and string fields may alias literals.
   String freeing happens only through the temp path in `emit_func.go`.
 - **Allocas inside loop bodies** (the f-string stack overflow, above).
+  This is now handled structurally: `hoistAllocasToEntry` in
+  `emit_func.go` moves every alloca a function emits to the top of its
+  entry block, so an expression-lowering alloca that lands in a loop
+  body (Option/Result method result slots, match-expression slots, dict
+  get/setdefault spills) is allocated once rather than per iteration.
+  Alloca lines carry no SSA operands, so the move is dependency-safe.
+  You should still prefer by-value runtime calls where practical, but
+  the hoist is the backstop that makes the whole class non-fatal.
+
+## Phase 4: owned string accumulators (`str_accum.go`)
+
+When the lowerer can prove a mutable string local is used only in
+borrowing positions (concat/compare operands, f-strings, `len`, `print`,
+`return`), it gives the variable owned semantics: the literal init
+becomes a heap copy (`__desi_str_new`) and `s := s + x` lowers to
+`__desi_str_append_free` — a realloc-based append that frees the old
+buffer. This turns the accumulator loop from O(n²) copying with every
+intermediate leaked into amortized in-place appends. Any use the analysis
+can't prove borrowing (aliasing, user-call arguments, collection stores,
+`str(s)`, lambda capture, `s := s + s`) disqualifies the variable, which
+then keeps the phase-3 leak-safe lowering. Conservative-by-default: a
+wrong qualification would free memory something still references.
 
 ## Verifying changes
 
@@ -172,9 +197,6 @@ corruption on macOS); an over-aggressive mark only leaks.
 - Collection string-element ownership: strdup-on-insert +
   free-on-`list_free` (the float-box model, extended to tag 1) with an
   adopting `list_append_owned` for runtime producers like `split`.
-- Freeing the old value on mutable-string reassignment (today it leaks:
-  the accumulator pattern `s := s + "x"` keeps only the final value
-  alive).
 - Function-scoped arenas + escape analysis
   (`docs/roadmap/todo/hybrid_memory_management.md`)
 - Freeing heap elements stored *inside* collections (today the
