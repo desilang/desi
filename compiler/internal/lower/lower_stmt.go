@@ -726,14 +726,19 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 	case *ast.AugAssignStmt:
 		// Lower aug-assign: x += y becomes x = x + y
-		// For mutable stack variables: load, binop, store
+		// For mutable stack variables: load, binop/call, store
 		if id, ok := s.Left.(*ast.Ident); ok {
 			varName := id.Name
+			leftType := ls.typeOf(s.Left)
+			llvmType := "i32"
+			if leftType != nil {
+				llvmType = lowerType(leftType)
+			}
 
 			// Load current value
 			loadTemp := ls.b.FreshTemp("aug_load")
 			if ls.isMutable(varName) {
-				ls.b.Emit(&hir.Load{Type: "i32", Src: hir.Var{Name: varName}, Dst: loadTemp, DesiType: nil})
+				ls.b.Emit(&hir.Load{Type: llvmType, Src: hir.Var{Name: varName}, Dst: loadTemp, DesiType: nil})
 			} else {
 				// For SSA-style variables, use the current value directly
 				loadTemp = hir.Temp{Name: "%" + varName}
@@ -745,9 +750,14 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			// Extract operator from aug op (e.g., "+=" -> "+")
 			op := strings.TrimSuffix(s.Op, "=")
 
-			// Emit binary operation
 			resultTemp := ls.b.FreshTemp("aug_result")
-			ls.b.Emit(&hir.BinaryOp{Dst: resultTemp, Op: op, LHS: loadTemp, RHS: rhs, Type: "i32"})
+			if op == "+" && leftType != nil && types.Equal(leftType, types.Str) {
+				// String concatenation: call string_concat
+				ls.b.Emit(&hir.Call{Dst: resultTemp, Fn: "string_concat", Args: []hir.Value{loadTemp, rhs}, Type: "ptr"})
+			} else {
+				// Emit binary operation with correct type
+				ls.b.Emit(&hir.BinaryOp{Dst: resultTemp, Op: op, LHS: loadTemp, RHS: rhs, Type: llvmType})
+			}
 
 			// Store result back
 			if ls.isMutable(varName) {

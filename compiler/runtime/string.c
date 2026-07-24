@@ -26,15 +26,15 @@ char* string_concat(const char* a, const char* b) {
     return result;
 }
 
-// Convert int to string (newly allocated)
-char* int_to_str(int value) {
-    // Max int is ~10 digits + sign + null
-    char* result = (char*)malloc(12);
+// Convert int/i64 to string (newly allocated)
+char* int_to_str(int64_t value) {
+    // Max int64 is ~19 digits + sign + null
+    char* result = (char*)malloc(24);
     if (!result) {
         fprintf(stderr, "int_to_str: allocation failed\n");
         exit(1);
     }
-    snprintf(result, 12, "%d", value);
+    snprintf(result, 24, "%lld", (long long)value);
     return result;
 }
 

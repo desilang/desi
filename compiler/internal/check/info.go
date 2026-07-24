@@ -221,6 +221,14 @@ func addPreludeBuiltins(info *Info) {
 	for _, k := range coreKinds {
 		add1("str", k, types.Str, "value", ast.ParamMove)
 	}
+	// int(value: T) -> int
+	for _, k := range coreKinds {
+		add1("int", k, types.Int, "value", ast.ParamMove)
+	}
+	// float(value: T) -> float
+	for _, k := range coreKinds {
+		add1("float", k, types.Float, "value", ast.ParamMove)
+	}
 	// bool(value: T) -> bool
 	for _, k := range coreKinds {
 		add1("bool", k, types.Bool, "value", ast.ParamMove)

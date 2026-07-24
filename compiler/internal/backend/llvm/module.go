@@ -214,6 +214,14 @@ func (m *Module) ensureCStringGlobal(text string, withNewline bool) (gname strin
 }
 
 func (m *Module) ensureDecl(line string) {
+	if idx := strings.Index(line, "@"); idx != -1 {
+		if openParen := strings.Index(line[idx:], "("); openParen != -1 {
+			fnPattern := line[idx : idx+openParen+1] // e.g. "@string_concat("
+			if strings.Contains(m.globals.String(), fnPattern) {
+				return
+			}
+		}
+	}
 	if strings.Contains(m.globals.String(), line) {
 		return
 	}

@@ -1,0 +1,70 @@
+# Test matrix: primitive operators across int, float, bool, and bitwise ops
+#
+# EXPECTED_OUTPUT:
+# add: 15
+# sub: 5
+# mul: 50
+# div: 2
+# mod: 0
+# eq: true
+# ne: false
+# lt: true
+# gt: false
+# le: true
+# ge: false
+# float_add: 5.5
+# float_sub: 1.5
+# float_mul: 7.0
+# float_div: 1.75
+# float_eq: true
+# float_lt: true
+# and_op: true
+# or_op: true
+# not_op: false
+# bit_and: 1
+# bit_or: 7
+# bit_xor: 6
+# bit_shl: 20
+# bit_shr: 2
+# chr_ord: 97
+
+def main() -> int:
+	let a = 10
+	let b = 5
+	print("add:", a + b)
+	print("sub:", a - b)
+	print("mul:", a * b)
+	print("div:", a / b)
+	print("mod:", a % b)
+
+	print("eq:", a == 10)
+	print("ne:", a != 10)
+	print("lt:", b < a)
+	print("gt:", b > a)
+	print("le:", b <= 5)
+	print("ge:", b >= 10)
+
+	let fa = 3.5
+	let fb = 2.0
+	print("float_add:", fa + fb)
+	print("float_sub:", fa - fb)
+	print("float_mul:", fa * fb)
+	print("float_div:", fa / fb)
+	print("float_eq:", fa == 3.5)
+	print("float_lt:", fa < 5.0)
+
+	let t = true
+	let f = false
+	print("and_op:", t and true)
+	print("or_op:", f or t)
+	print("not_op:", not t)
+
+	print("bit_and:", 5 & 3)
+	print("bit_or:", 5 | 3)
+	print("bit_xor:", 5 ^ 3)
+	print("bit_shl:", 5 << 2)
+	print("bit_shr:", 10 >> 2)
+
+	print("chr_ord:", ord(chr(97)))
+
+	0

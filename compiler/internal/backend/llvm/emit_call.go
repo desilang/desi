@@ -14,6 +14,16 @@ func (m *Module) emitCall(c *hir.Call) {
 	// Check if this function belongs to a lazy module - emit init thunk if needed
 	m.ensureLazyModuleInit(c.Fn)
 
+	if c.Fn == "string_concat" {
+		m.ensureDecl("declare ptr @string_concat(ptr, ptr)")
+	}
+	if c.Fn == "__desi_str_to_int" {
+		m.ensureDecl("declare i32 @__desi_str_to_int(ptr)")
+	}
+	if c.Fn == "__desi_str_to_float" {
+		m.ensureDecl("declare double @__desi_str_to_float(ptr)")
+	}
+
 	// bool_to_cstring(int): i1 arguments must be zero-extended to i32.
 	// Passed through a variadic declare, an i1 leaves the upper register
 	// bits undefined on Windows x64 and the C `int` parameter reads
@@ -609,15 +619,15 @@ func (m *Module) emitCall(c *hir.Call) {
 		}
 		// Integer arguments
 		ty, val := m.operand(c.Args[0])
-		if ty == "i32" || ty == "i64" {
+		if ty == "i32" || ty == "i64" || ty == "i8" || ty == "i16" {
 			m.ensureDecl("declare i32 @printf(ptr, ...)")
 			fmtG, fmtN := m.ensureCStringGlobal("%ld", false)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
 				m.tempID, fmtN, fmtN, fmtG)
 			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)
 			m.tempID++
-			if ty == "i32" {
-				wprintf(&m.funcs, "  %%t%d = sext i32 %s to i64\n", m.tempID, val)
+			if ty != "i64" {
+				wprintf(&m.funcs, "  %%t%d = sext %s %s to i64\n", m.tempID, ty, val)
 				wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %s, i64 %%t%d)\n", m.tempID+1, fmtPtr, m.tempID)
 				m.tempID += 2
 			} else {
@@ -627,9 +637,16 @@ func (m *Module) emitCall(c *hir.Call) {
 			return
 		}
 		// Float arguments: call print_float_item_py (Python-like, no newline)
-		if ty == "double" {
+		if ty == "double" || ty == "float" {
 			m.ensureDecl("declare void @print_float_item_py(double)")
-			wprintf(&m.funcs, "  call void @print_float_item_py(double %s)\n", val)
+			var dval string = val
+			if ty == "float" {
+				ext := fmt.Sprintf("%%fext_%d", m.tempID)
+				m.tempID++
+				wprintf(&m.funcs, "  %s = fpext float %s to double\n", ext, val)
+				dval = ext
+			}
+			wprintf(&m.funcs, "  call void @print_float_item_py(double %s)\n", dval)
 			return
 		}
 		// Boolean arguments
@@ -657,17 +674,15 @@ func (m *Module) emitCall(c *hir.Call) {
 			m.tempID++
 			return
 		}
-		// General case: ptr (string)
-		if ty == "ptr" {
-			m.ensureDecl("declare i32 @printf(ptr, ...)")
-			fmtG, fmtN := m.ensureCStringGlobal("%s", false)
-			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
-				m.tempID, fmtN, fmtN, fmtG)
-			wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
-				m.tempID+1, m.tempID, val)
-			m.tempID += 2
-			return
-		}
+		// General case: ptr (string) or unhandled type
+		m.ensureDecl("declare i32 @printf(ptr, ...)")
+		fmtG, fmtN := m.ensureCStringGlobal("%s", false)
+		wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
+			m.tempID, fmtN, fmtN, fmtG)
+		wprintf(&m.funcs, "  %%t%d = call i32 (ptr, ...) @printf(ptr %%t%d, ptr %s)\n",
+			m.tempID+1, m.tempID, val)
+		m.tempID += 2
+		return
 	}
 
 	// Built-in print_raw - print exact string without formatting (for sep/end)
@@ -776,17 +791,16 @@ func (m *Module) emitCall(c *hir.Call) {
 			m.varTypes[name] = types.Str
 		}
 
-		// Integer to string
-		if ty == "i32" || ty == "i64" {
-			m.ensureDecl("declare ptr @int_to_str(i32)")
-			if ty == "i64" {
-				// Truncate to i32 for now
-				truncDst := fmt.Sprintf("%%t%d", m.tempID)
+		// Integer to string (int / i64)
+		if ty == "i32" || ty == "i64" || ty == "i8" || ty == "i16" {
+			m.ensureDecl("declare ptr @int_to_str(i64)")
+			if ty != "i64" {
+				extDst := fmt.Sprintf("%%t%d", m.tempID)
 				m.tempID++
-				wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", truncDst, val)
-				val = truncDst
+				wprintf(&m.funcs, "  %s = sext %s %s to i64\n", extDst, ty, val)
+				val = extDst
 			}
-			wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", dst, val)
+			wprintf(&m.funcs, "  %s = call ptr @int_to_str(i64 %s)\n", dst, val)
 			registerType(dst)
 			return
 		}

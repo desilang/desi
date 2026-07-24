@@ -1,0 +1,43 @@
+# Test matrix: string and numeric compound assignment (+=, -=, *=, /=, %=)
+#
+# EXPECTED_OUTPUT:
+# str_concat: hello world!
+# str_aug: hello world!
+# num_add: 15
+# num_sub: 10
+# num_mul: 30
+# num_div: 15
+# num_mod: 1
+# float_aug: 5.5
+
+def main() -> int:
+	let s1 = "hello "
+	let s2 = "world!"
+	let s3 = s1 + s2
+	print("str_concat:", s3)
+
+	let mut s = "hello "
+	s += "world!"
+	print("str_aug:", s)
+
+	let mut n = 10
+	n += 5
+	print("num_add:", n)
+
+	n -= 5
+	print("num_sub:", n)
+
+	n *= 3
+	print("num_mul:", n)
+
+	n /= 2
+	print("num_div:", n)
+
+	n %= 2
+	print("num_mod:", n)
+
+	let mut f = 2.5
+	f += 3.0
+	print("float_aug:", f)
+
+	0

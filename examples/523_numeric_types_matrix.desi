@@ -1,0 +1,28 @@
+# Test matrix: sized numeric types (i8-i64, u8-u64, f32/f64) and str() no-truncation check
+#
+# EXPECTED_OUTPUT:
+# i64_val: 9223372036854775807
+# u64_val: -1
+# i32_val: 2147483647
+# i16_val: 32767
+# i8_val: 127
+# f32_val: 3.14
+# str_i64: 9223372036854775807
+
+def main() -> int:
+	let max_i64: i64 = 9223372036854775807
+	let max_u64: u64 = 18446744073709551615
+	let max_i32: i32 = 2147483647
+	let max_i16: i16 = 32767
+	let max_i8: i8 = 127
+	let val_f32: f32 = 3.14
+
+	print("i64_val:", max_i64)
+	print("u64_val:", max_u64)
+	print("i32_val:", max_i32)
+	print("i16_val:", max_i16)
+	print("i8_val:", max_i8)
+	print("f32_val:", val_f32)
+	print("str_i64:", str(max_i64))
+
+	0

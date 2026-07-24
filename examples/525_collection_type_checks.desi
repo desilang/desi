@@ -1,0 +1,6 @@
+# EXPECTED: COMPILE_ERROR
+# Test matrix: negative type checking for collections (type mismatch error)
+
+def main() -> int:
+	let lst: list[int] = ["hello"]
+	0

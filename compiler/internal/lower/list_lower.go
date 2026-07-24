@@ -67,9 +67,17 @@ func (ls *lowerState) lowerListMethod(fe *ast.FieldExpr, args []ast.Expr, listTy
 
 	case "pop":
 		// pop() -> T
-		res := ls.b.FreshTemp("popped")
-		ls.b.Emit(&hir.Call{Dst: res, Fn: "list_pop", Args: []hir.Value{receiver, hir.ConstInt{Text: "-1", Type: "i64"}}})
-		return res
+		resPtr := ls.b.FreshTemp("popped_ptr")
+		ls.b.Emit(&hir.Call{Dst: resPtr, Fn: "list_pop", Args: []hir.Value{receiver, hir.ConstInt{Text: "-1", Type: "i64"}}, Type: "ptr"})
+		if listType != nil && listType.Elem != nil {
+			llvmTy := lowerType(listType.Elem)
+			if llvmTy != "ptr" {
+				res := ls.b.FreshTemp("popped")
+				ls.b.Emit(&hir.Cast{Dst: res, Src: resPtr, Type: llvmTy})
+				return res
+			}
+		}
+		return resPtr
 
 	case "free":
 		// free()

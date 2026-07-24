@@ -1,0 +1,36 @@
+# Test matrix: primitive type casts and conversions (int(), float(), str(), bool())
+#
+# EXPECTED_OUTPUT:
+# int(3.14): 3
+# int("42"): 42
+# int(true): 1
+# float(10): 10.0
+# float("3.14"): 3.14
+# float(true): 1.0
+# str(123): 123
+# str(3.14): 3.14
+# str(true): true
+# bool(1): true
+# bool(0): false
+# bool("hello"): true
+# bool(""): false
+
+def main() -> int:
+	print("int(3.14):", int(3.14))
+	print("int(\"42\"):", int("42"))
+	print("int(true):", int(true))
+
+	print("float(10):", float(10))
+	print("float(\"3.14\"):", float("3.14"))
+	print("float(true):", float(true))
+
+	print("str(123):", str(123))
+	print("str(3.14):", str(3.14))
+	print("str(true):", str(true))
+
+	print("bool(1):", bool(1))
+	print("bool(0):", bool(0))
+	print("bool(\"hello\"):", bool("hello"))
+	print("bool(\"\"):", bool(""))
+
+	0

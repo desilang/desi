@@ -413,6 +413,17 @@ int32_t __desi_abs_int(int32_t n) {
     return n < 0 ? -n : n;
 }
 
+/* string to number conversions for int() and float() builtins */
+int32_t __desi_str_to_int(const char* s) {
+    if (!s) return 0;
+    return (int32_t)atoi(s);
+}
+
+double __desi_str_to_float(const char* s) {
+    if (!s) return 0.0;
+    return atof(s);
+}
+
 /* abs(n: float) → float */
 double __desi_abs_float(double n) {
     return fabs(n);

@@ -34,26 +34,12 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					c.add(diagAt("DTE0004", st.Span, "cannot assign '"+rhs.String()+"' to '"+t.String()+"'"))
 				}
 
-				// Propagate expected type to empty collection literals
-				// This ensures lowering sees the concrete type (e.g., list[Person]) instead of list[none]
+				// Propagate expected type to RHS literals (int/float literals, collection literals)
+				// This ensures lowering sees the concrete type (e.g. i64, u64, f32) instead of default i32
 				if rhs != nil {
-					// List: [] -> list[none]
-					if l, ok := rhs.(*types.List); ok && l.Elem == types.None {
-						if _, ok := t.(*types.List); ok {
-							c.info.Types[st.Value] = t
-						}
-					}
-					// Set: set() -> set[none]
-					if s, ok := rhs.(*types.Set); ok && s.Elem == types.None {
-						if _, ok := t.(*types.Set); ok {
-							c.info.Types[st.Value] = t
-						}
-					}
-					// Dict: {} -> dict[none, none]
-					if d, ok := rhs.(*types.Dict); ok && d.Key == types.None && d.Val == types.None {
-						if _, ok := t.(*types.Dict); ok {
-							c.info.Types[st.Value] = t
-						}
+					switch st.Value.(type) {
+					case *ast.IntLit, *ast.FloatLit, *ast.DecimalLit, *ast.ListLit, *ast.DictLit, *ast.SetLit:
+						c.info.Types[st.Value] = t
 					}
 				}
 			} else {

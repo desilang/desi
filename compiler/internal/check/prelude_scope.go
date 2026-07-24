@@ -18,6 +18,8 @@ func injectPreludeIntoScope(top *Scope, info *Info) {
 var preludeBuiltinNames = map[string]struct{}{
 	"print": {},
 	"str":   {},
+	"int":   {},
+	"float": {},
 	"len":   {},
 	"bool":  {},
 	"open":  {},

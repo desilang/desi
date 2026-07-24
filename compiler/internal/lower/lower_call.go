@@ -1304,6 +1304,90 @@ handlePrint:
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee, x)
 
+		// int(arg) -> convert arg to int32
+		if calleeName == "int" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			argT := ls.typeOf(x.Args[0])
+			res := ls.b.FreshTemp("int_res")
+			if argT != nil {
+				if types.Equal(argT, types.Float) || types.Equal(argT, types.F32) || types.Equal(argT, types.F64) {
+					ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "i32"})
+					return res
+				}
+				if types.Equal(argT, types.Str) {
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_str_to_int", Args: []hir.Value{argVal}, Type: "i32"})
+					return res
+				}
+				if types.Equal(argT, types.Bool) {
+					ls.b.Emit(&hir.Select{Cond: argVal, Then: hir.ConstInt{Text: "1"}, Else: hir.ConstInt{Text: "0"}, Dst: res, Type: "i32"})
+					return res
+				}
+				if types.Equal(argT, types.Int) || types.Equal(argT, types.I32) {
+					return argVal
+				}
+				if types.Equal(argT, types.I64) || types.Equal(argT, types.U64) || types.Equal(argT, types.ISize) || types.Equal(argT, types.USize) {
+					ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "i32"})
+					return res
+				}
+			}
+			ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "i32"})
+			return res
+		}
+
+		// float(arg) -> convert arg to double
+		if calleeName == "float" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			argT := ls.typeOf(x.Args[0])
+			res := ls.b.FreshTemp("float_res")
+			if argT != nil {
+				if types.Equal(argT, types.Int) || types.Equal(argT, types.I32) || types.Equal(argT, types.I64) || types.Equal(argT, types.U64) {
+					ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "double"})
+					return res
+				}
+				if types.Equal(argT, types.Str) {
+					ls.b.Emit(&hir.Call{Dst: res, Fn: "__desi_str_to_float", Args: []hir.Value{argVal}, Type: "double"})
+					return res
+				}
+				if types.Equal(argT, types.Bool) {
+					ls.b.Emit(&hir.Select{Cond: argVal, Then: hir.ConstFloat{Text: "1.0"}, Else: hir.ConstFloat{Text: "0.0"}, Dst: res, Type: "double"})
+					return res
+				}
+				if types.Equal(argT, types.Float) || types.Equal(argT, types.F64) {
+					return argVal
+				}
+			}
+			ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "double"})
+			return res
+		}
+
+		// bool(arg) -> convert arg to i1 (boolean)
+		if calleeName == "bool" && len(x.Args) == 1 {
+			argVal := ls.lowerExpr(x.Args[0])
+			argT := ls.typeOf(x.Args[0])
+			res := ls.b.FreshTemp("bool_res")
+			if argT != nil {
+				if types.Equal(argT, types.Int) || types.Equal(argT, types.I32) || types.Equal(argT, types.I64) || types.Equal(argT, types.U64) {
+					ls.b.Emit(&hir.BinaryOp{Dst: res, Op: "!=", LHS: argVal, RHS: hir.ConstInt{Text: "0"}, Type: lowerType(argT)})
+					return res
+				}
+				if types.Equal(argT, types.Float) || types.Equal(argT, types.F64) {
+					ls.b.Emit(&hir.BinaryOp{Dst: res, Op: "!=", LHS: argVal, RHS: hir.ConstFloat{Text: "0.0"}, Type: "double"})
+					return res
+				}
+				if types.Equal(argT, types.Str) {
+					lenVal := ls.b.FreshTemp("strlen")
+					ls.b.Emit(&hir.Call{Dst: lenVal, Fn: "strlen", Args: []hir.Value{argVal}, Type: "i64"})
+					ls.b.Emit(&hir.BinaryOp{Dst: res, Op: ">", LHS: lenVal, RHS: hir.ConstInt{Text: "0"}, Type: "i64"})
+					return res
+				}
+				if types.Equal(argT, types.Bool) {
+					return argVal
+				}
+			}
+			ls.b.Emit(&hir.Cast{Dst: res, Src: argVal, Type: "i1"})
+			return res
+		}
+
 		// chr(n) -> __desi_chr(n) returns ptr (string)
 		if calleeName == "chr" && len(x.Args) == 1 {
 			argVal := ls.lowerExpr(x.Args[0])

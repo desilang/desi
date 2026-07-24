@@ -314,9 +314,15 @@ setjmpScan:
 						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
 						m.tempID++
 						switch lty {
-						case "i32":
-							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", convTemp, lval)
-							m.ensureDecl("declare ptr @int_to_str(i32)")
+						case "i32", "i64", "i8", "i16":
+							extVal := lval
+							if lty != "i64" {
+								extVal = fmt.Sprintf("%%iext_%d", m.tempID)
+								m.tempID++
+								wprintf(&m.funcs, "  %s = sext %s %s to i64\n", extVal, lty, lval)
+							}
+							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i64 %s)\n", convTemp, extVal)
+							m.ensureDecl("declare ptr @int_to_str(i64)")
 							leftStr = convTemp
 						case "double", "float":
 							wprintf(&m.funcs, "  %s = call ptr @float_to_str(double %s)\n", convTemp, lval)
@@ -368,9 +374,15 @@ setjmpScan:
 						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
 						m.tempID++
 						switch rty {
-						case "i32":
-							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i32 %s)\n", convTemp, rval)
-							m.ensureDecl("declare ptr @int_to_str(i32)")
+						case "i32", "i64", "i8", "i16":
+							extVal := rval
+							if rty != "i64" {
+								extVal = fmt.Sprintf("%%iext_%d", m.tempID)
+								m.tempID++
+								wprintf(&m.funcs, "  %s = sext %s %s to i64\n", extVal, rty, rval)
+							}
+							wprintf(&m.funcs, "  %s = call ptr @int_to_str(i64 %s)\n", convTemp, extVal)
+							m.ensureDecl("declare ptr @int_to_str(i64)")
 							rightStr = convTemp
 						case "double", "float":
 							wprintf(&m.funcs, "  %s = call ptr @float_to_str(double %s)\n", convTemp, rval)
