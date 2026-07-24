@@ -9,31 +9,31 @@
 # --- C runtime bindings ---
 
 @extern("C")
-pub def __cache_lru_new(max_size: int) -> cptr
+def __cache_lru_new(max_size: int) -> cptr
 
 @extern("C")
-pub def __cache_lru_set(handle: cptr, key: str, value: str) -> int
+def __cache_lru_set(handle: cptr, key: str, value: str) -> int
 
 @extern("C")
-pub def __cache_lru_set_ttl(handle: cptr, key: str, value: str, ttl_sec: int) -> int
+def __cache_lru_set_ttl(handle: cptr, key: str, value: str, ttl_sec: int) -> int
 
 @extern("C")
-pub def __cache_lru_get(handle: cptr, key: str) -> str
+def __cache_lru_get(handle: cptr, key: str) -> str
 
 @extern("C")
-pub def __cache_lru_has(handle: cptr, key: str) -> int
+def __cache_lru_has(handle: cptr, key: str) -> int
 
 @extern("C")
-pub def __cache_lru_remove(handle: cptr, key: str) -> int
+def __cache_lru_remove(handle: cptr, key: str) -> int
 
 @extern("C")
-pub def __cache_lru_clear(handle: cptr) -> int
+def __cache_lru_clear(handle: cptr) -> int
 
 @extern("C")
-pub def __cache_lru_len(handle: cptr) -> int
+def __cache_lru_len(handle: cptr) -> int
 
 @extern("C")
-pub def __cache_lru_free(handle: cptr) -> int
+def __cache_lru_free(handle: cptr) -> int
 
 # --- Public API ---
 

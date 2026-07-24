@@ -10,16 +10,16 @@
 # --- C runtime bindings ---
 
 @extern("C")
-pub def __dotenv_load(path: str) -> int
+def __dotenv_load(path: str) -> int
 
 @extern("C")
-pub def __dotenv_load_or_fail(path: str) -> int
+def __dotenv_load_or_fail(path: str) -> int
 
 @extern("C")
-pub def __dotenv_parse(content: str) -> str
+def __dotenv_parse(content: str) -> str
 
 @extern("C")
-pub def __dotenv_get(key: str) -> str
+def __dotenv_get(key: str) -> str
 
 # --- Public API ---
 

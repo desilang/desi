@@ -11,19 +11,19 @@
 # --- C runtime bindings ---
 
 @extern("C")
-pub def __mime_from_ext(ext: str) -> str
+def __mime_from_ext(ext: str) -> str
 
 @extern("C")
-pub def __mime_from_path(path: str) -> str
+def __mime_from_path(path: str) -> str
 
 @extern("C")
-pub def __mime_ext_for(mime_type: str) -> str
+def __mime_ext_for(mime_type: str) -> str
 
 @extern("C")
-pub def __mime_is_text(mime_type: str) -> int
+def __mime_is_text(mime_type: str) -> int
 
 @extern("C")
-pub def __mime_is_binary(mime_type: str) -> int
+def __mime_is_binary(mime_type: str) -> int
 
 # --- Public API ---
 

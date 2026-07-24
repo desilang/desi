@@ -1,4 +1,4 @@
-# SKIPPED: Requires live network (calls external httpbin.org 24 times)
+# EXPECTED: SKIP - Requires live network (calls external httpbin.org 24 times)
 # HTTP Client - Comprehensive Test (requires network access)
 # Run manually: desic run examples/407_http_client.desi
 # Tests GET, POST, JSON, timeouts, URL encode/decode, custom headers,

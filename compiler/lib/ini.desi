@@ -8,31 +8,31 @@
 # --- C runtime bindings ---
 
 @extern("C")
-pub def __ini_parse(content: str) -> cptr
+def __ini_parse(content: str) -> cptr
 
 @extern("C")
-pub def __ini_parse_file(path: str) -> cptr
+def __ini_parse_file(path: str) -> cptr
 
 @extern("C")
-pub def __ini_get(handle: cptr, section: str, key: str) -> str
+def __ini_get(handle: cptr, section: str, key: str) -> str
 
 @extern("C")
-pub def __ini_get_default(handle: cptr, section: str, key: str, default_val: str) -> str
+def __ini_get_default(handle: cptr, section: str, key: str, default_val: str) -> str
 
 @extern("C")
-pub def __ini_has_section(handle: cptr, section: str) -> int
+def __ini_has_section(handle: cptr, section: str) -> int
 
 @extern("C")
-pub def __ini_has_key(handle: cptr, section: str, key: str) -> int
+def __ini_has_key(handle: cptr, section: str, key: str) -> int
 
 @extern("C")
-pub def __ini_sections(handle: cptr) -> str
+def __ini_sections(handle: cptr) -> str
 
 @extern("C")
-pub def __ini_keys(handle: cptr, section: str) -> str
+def __ini_keys(handle: cptr, section: str) -> str
 
 @extern("C")
-pub def __ini_free(handle: cptr) -> int
+def __ini_free(handle: cptr) -> int
 
 # --- Public API ---
 

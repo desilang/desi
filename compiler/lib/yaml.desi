@@ -8,34 +8,34 @@
 # --- C runtime bindings ---
 
 @extern("C")
-pub def __yaml_parse(content: str) -> cptr
+def __yaml_parse(content: str) -> cptr
 
 @extern("C")
-pub def __yaml_parse_file(path: str) -> cptr
+def __yaml_parse_file(path: str) -> cptr
 
 @extern("C")
-pub def __yaml_get(handle: cptr, path: str) -> str
+def __yaml_get(handle: cptr, path: str) -> str
 
 @extern("C")
-pub def __yaml_get_int(handle: cptr, path: str) -> int
+def __yaml_get_int(handle: cptr, path: str) -> int
 
 @extern("C")
-pub def __yaml_get_bool(handle: cptr, path: str) -> int
+def __yaml_get_bool(handle: cptr, path: str) -> int
 
 @extern("C")
-pub def __yaml_has(handle: cptr, path: str) -> int
+def __yaml_has(handle: cptr, path: str) -> int
 
 @extern("C")
-pub def __yaml_keys(handle: cptr, path: str) -> str
+def __yaml_keys(handle: cptr, path: str) -> str
 
 @extern("C")
-pub def __yaml_len(handle: cptr, path: str) -> int
+def __yaml_len(handle: cptr, path: str) -> int
 
 @extern("C")
-pub def __yaml_dump(handle: cptr) -> str
+def __yaml_dump(handle: cptr) -> str
 
 @extern("C")
-pub def __yaml_free(handle: cptr) -> int
+def __yaml_free(handle: cptr) -> int
 
 # --- Public API ---
 

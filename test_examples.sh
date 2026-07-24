@@ -105,7 +105,7 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
     
     # Check if this test should be skipped
-    if head -n 3 "$f" | grep -q "# EXPECTED: SKIP"; then
+    if head -n 5 "$f" | grep -q -E "(# EXPECTED: SKIP|# SKIPPED)"; then
         echo "[$TOTAL_COUNT] Testing: $f  ⊘ SKIPPED"
         PASSED_COUNT=$((PASSED_COUNT + 1))
         continue
