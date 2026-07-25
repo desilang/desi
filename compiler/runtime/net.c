@@ -67,6 +67,30 @@
 // TCP Client
 // ============================================================
 
+// Create a socket for `p` and connect it; return a connected fd, or -1.
+//
+// On Windows, a busy loopback can transiently fail connect() with
+// WSAEADDRINUSE: the auto-selected local ephemeral port collides with a
+// lingering TIME_WAIT 4-tuple from a previous connection. A fresh socket
+// picks a different local port, so we retry a bounded number of times
+// before giving up. POSIX keeps its single-attempt behavior unchanged.
+static int net_connect_one(struct addrinfo* p) {
+    int fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+    if (fd < 0) return -1;
+    if (connect(fd, p->ai_addr, p->ai_addrlen) == 0) return fd;
+#ifdef _WIN32
+    for (int attempt = 0; attempt < 64 && WSAGetLastError() == WSAEADDRINUSE; attempt++) {
+        CLOSE_SOCKET(fd);
+        Sleep(1);
+        fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+        if (fd < 0) return -1;
+        if (connect(fd, p->ai_addr, p->ai_addrlen) == 0) return fd;
+    }
+#endif
+    CLOSE_SOCKET(fd);
+    return -1;
+}
+
 // Connect to host:port, return socket fd (-1 on error)
 int32_t __net_dial(const char* host, int32_t port) {
     ensure_wsa();
@@ -85,15 +109,8 @@ int32_t __net_dial(const char* host, int32_t port) {
 
     int fd = -1;
     for (p = res; p != NULL; p = p->ai_next) {
-        fd = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-        if (fd < 0) continue;
-
-        if (connect(fd, p->ai_addr, p->ai_addrlen) < 0) {
-            CLOSE_SOCKET(fd);
-            fd = -1;
-            continue;
-        }
-        break; // Connected
+        fd = net_connect_one(p);
+        if (fd >= 0) break; // Connected
     }
 
     freeaddrinfo(res);
