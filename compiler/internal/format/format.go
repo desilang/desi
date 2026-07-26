@@ -3,6 +3,7 @@ package format
 import (
 	"bytes"
 	"fmt"
+	"strings"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -316,7 +317,26 @@ func rewrite(src []byte) []byte {
 				isStringTok := cur == token.STR || cur == token.LONGSTR || cur == token.RAWSTR ||
 					cur == token.FSTR_START || cur == token.FSTR_PART || cur == token.FSTR_END
 
-				if !isStringTok && it.Lexeme != "" {
+				// F-string pieces must not go through source reconstruction.
+				// That path takes the source between this token's start and
+				// the next token's start, which is wrong here: an f-string's
+				// tokens interleave with the tokens of its interpolated
+				// expressions instead of running contiguously, so the spans
+				// overlap and the literal comes out duplicated and mangled.
+				// The scanner hands us the exact text instead — `f"` and `"`
+				// verbatim, and for a chunk the only transformation it applies
+				// is collapsing `{{`/`}}`, which escapeFStringPart undoes.
+				if cur == token.FSTR_START || cur == token.FSTR_END {
+					w.tok(it.Lexeme)
+					if w.lineKind == _lineUnknown {
+						w.lineKind = _lineStringOnly
+					}
+				} else if cur == token.FSTR_PART {
+					w.tok(escapeFStringPart(it.Lexeme))
+					if w.lineKind == _lineUnknown {
+						w.lineKind = _lineStringOnly
+					}
+				} else if !isStringTok && it.Lexeme != "" {
 					// Numeric literal — lexeme carries the exact source form.
 					w.tok(it.Lexeme)
 					w.lineKind = _lineCode
@@ -394,9 +414,32 @@ func rewrite(src []byte) []byte {
 }
 
 // shouldSpaceBefore returns true if we should place a single space BEFORE `cur`.
+// escapeFStringPart turns a scanned f-string chunk back into its source form.
+// The scanner collapses `{{` to `{` and `}}` to `}` while building the chunk
+// (backslash escapes are kept verbatim), so re-doubling the braces reproduces
+// exactly what the user wrote — and keeps a literal brace from being re-read
+// as the start of an interpolation.
+func escapeFStringPart(lexeme string) string {
+	s := strings.ReplaceAll(lexeme, "{", "{{")
+	return strings.ReplaceAll(s, "}", "}}")
+}
+
 func shouldSpaceBefore(w *writer, cur lex.Item, lookahead token.Token) bool {
 	t := cur.Tok
 	if w.atBOL {
+		return false
+	}
+
+	// 0) Never introduce spacing inside an f-string. The chunks are emitted
+	// verbatim from source (including the `{` and `}`), so a space here lands
+	// *inside* the string literal and changes what the program prints:
+	// f"{foo}" would become f" {foo} ". Re-formatting that output then
+	// re-lexes the injected spaces as new chunks and corrupts the literal
+	// outright, which is why formatting was not idempotent.
+	if t == token.FSTR_PART || t == token.FSTR_END {
+		return false
+	}
+	if w.prevTok == token.FSTR_START || w.prevTok == token.FSTR_PART {
 		return false
 	}
 
