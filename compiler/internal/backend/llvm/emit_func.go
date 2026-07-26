@@ -28,6 +28,12 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	m.currentMoves = nil
 	m.curFuncName = fn.Name // Track for call depth instrumentation
 
+	// Record where this function's text begins so we can hoist its allocas
+	// to the entry block at the end (see hoistAllocasToEntry). EmitFunc is
+	// not reentrant into m.funcs, so the function's text is the buffer tail
+	// [funcStart:] once emission completes.
+	funcStart := m.funcs.Len()
+
 	// Look up moves and param types if we have origin info
 	if m.info != nil && fn.Origin != nil {
 		if fd, ok := fn.Origin.(*ast.FuncDecl); ok {
@@ -1169,6 +1175,48 @@ setjmpScan:
 	}
 	m.curFuncRetTy = ""
 	wprintf(&m.funcs, "}\n")
+
+	// Hoist every alloca in this function to the top of its entry block.
+	// An alloca emitted inside a loop body (option/result method result
+	// slots, match-expression slots, dict get/setdefault spills, ...) is
+	// re-executed each iteration and only reclaimed at function return, so
+	// a long loop overflows the stack (the f-string bug class, but general).
+	// Alloca instructions have no SSA operands — only a compile-time type
+	// and constant count — so moving the lines up is always dependency-safe,
+	// and the entry block dominates every use. This is what C frontends do.
+	if hoisted, changed := hoistAllocasToEntry(m.funcs.String()[funcStart:]); changed {
+		m.funcs.Truncate(funcStart)
+		m.funcs.WriteString(hoisted)
+	}
+}
+
+// hoistAllocasToEntry moves every `%x = alloca ...` line in one function's
+// IR text to just after its `entry:` label. Returns the rewritten text and
+// whether anything moved. Safe because alloca lines reference no SSA values.
+func hoistAllocasToEntry(fnText string) (string, bool) {
+	lines := strings.Split(fnText, "\n")
+	var allocas []string
+	rest := make([]string, 0, len(lines))
+	entryInsert := -1 // index into rest just after the entry label
+	for _, ln := range lines {
+		t := strings.TrimSpace(ln)
+		if strings.HasPrefix(t, "%") && strings.Contains(t, " = alloca ") {
+			allocas = append(allocas, ln)
+			continue
+		}
+		rest = append(rest, ln)
+		if entryInsert == -1 && t == "entry:" {
+			entryInsert = len(rest)
+		}
+	}
+	if len(allocas) == 0 || entryInsert == -1 {
+		return fnText, false
+	}
+	out := make([]string, 0, len(rest)+len(allocas))
+	out = append(out, rest[:entryInsert]...)
+	out = append(out, allocas...)
+	out = append(out, rest[entryInsert:]...)
+	return strings.Join(out, "\n"), true
 }
 
 // intTypeBits returns the bit width for LLVM integer types, or 0 if not an integer

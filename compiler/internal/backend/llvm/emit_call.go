@@ -621,7 +621,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		ty, val := m.operand(c.Args[0])
 		if ty == "i32" || ty == "i64" || ty == "i8" || ty == "i16" {
 			m.ensureDecl("declare i32 @printf(ptr, ...)")
-			fmtG, fmtN := m.ensureCStringGlobal("%ld", false)
+			fmtG, fmtN := m.ensureCStringGlobal("%lld", false)
 			wprintf(&m.funcs, "  %%t%d = getelementptr inbounds [%d x i8], [%d x i8]* %s, i64 0, i64 0\n",
 				m.tempID, fmtN, fmtN, fmtG)
 			fmtPtr := fmt.Sprintf("%%t%d", m.tempID)

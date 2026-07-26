@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>  // int64_t (int_to_str) — MSVC needs this explicitly
 
 // Concatenate two strings, returns newly allocated string
 // Caller is responsible for freeing the result

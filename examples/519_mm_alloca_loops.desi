@@ -1,0 +1,73 @@
+# Memory-management regression guard: allocas emitted inside expression
+# lowering (Option/Result method result slots, match-expression slots,
+# dict get/setdefault default-value spills) must be hoisted to the function
+# entry block. If they are re-executed per loop iteration, a long loop
+# overflows the stack — this file drives each construct 500k times, so a
+# regression crashes instead of passing. See hoistAllocasToEntry in
+# compiler/internal/backend/llvm/emit_func.go.
+
+enum Sign:
+	Neg: none
+	Zero: none
+	Pos: none
+
+def classify(n: int) -> Sign:
+	if n < 0:
+		return Sign.Neg
+	if n == 0:
+		return Sign.Zero
+	return Sign.Pos
+
+def main() -> int:
+	# 1. Option.unwrap_or (result-slot alloca)
+	let mut acc = 0
+	let mut i = 0
+	while i < 500000:
+		let o: Option<int> = Option.Some(i)
+		acc := (acc + o.unwrap_or(0)) % 1000000007
+		let nn: Option<int> = Option.Nothing
+		acc := (acc + nn.unwrap_or(7)) % 1000000007
+		i := i + 1
+	print(acc)
+
+	# 2. Value-producing match expression (result-slot alloca)
+	let mut macc = 0
+	let mut j = 0
+	while j < 500000:
+		let s = classify(j % 3 - 1)
+		let v: int = match s:
+			Sign.Neg: 1
+			Sign.Zero: 2
+			Sign.Pos: 3
+		macc := (macc + v) % 1000000007
+		j := j + 1
+	print(macc)
+
+	# 3. dict.get(key, default) (default-value spill alloca)
+	let mut d: dict[int, int] = {0: 0}
+	d[1] := 42
+	let mut gacc = 0
+	let mut k = 0
+	while k < 500000:
+		gacc := (gacc + d.get(1, -1)) % 1000000007
+		gacc := (gacc + d.get(999, -1)) % 1000000007
+		k := k + 1
+	print(gacc)
+
+	# 4. dict.setdefault(key, default) (default-value spill alloca)
+	let mut sd: dict[int, int] = {0: 0}
+	let mut sacc = 0
+	let mut m = 0
+	while m < 500000:
+		let sv = sd.setdefault(1, m)
+		sacc := (sacc + sv) % 1000000007
+		m := m + 1
+	print(sacc)
+
+	return 0
+
+# EXPECTED_OUTPUT:
+# 3249125
+# 999999
+# 20500000
+# 0

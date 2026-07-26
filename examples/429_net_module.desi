@@ -11,8 +11,25 @@ def main() -> int:
 
 	# Test TCP loopback: listen, dial, send, recv
 	let srv = net.listen("127.0.0.1", 19876)
+	if srv < 0:
+		print("listen failed")
+		return 1
+
 	let client = net.dial("127.0.0.1", 19876)
+	if client < 0:
+		# No local socket available (e.g. the OS dynamic-port range is
+		# exhausted by other processes). Bail out rather than block forever
+		# in accept() waiting for a peer that will never connect.
+		print("dial failed")
+		net.close(srv)
+		return 1
+
 	let peer = net.accept(srv)
+	if peer < 0:
+		print("accept failed")
+		net.close(client)
+		net.close(srv)
+		return 1
 
 	# Send from client, recv on server side
 	net.send(client, "hello desi")
