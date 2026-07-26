@@ -27,7 +27,57 @@ func FormatBytes(src []byte) ([]byte, []diag.Diagnostic) {
 		return nil, diags
 	}
 	out := rewrite(src)
+
+	// Formatting is a layout change, so the code must survive it unchanged.
+	// Verify that before handing back something a caller may write over the
+	// user's file: bugs here destroy source, and they have — f-strings were
+	// being duplicated, raw strings truncated, and a `static` keyword
+	// dropped outright. Refusing is always better than corrupting.
+	if err := verifyTokensPreserved(src, out); err != nil {
+		return nil, []diag.Diagnostic{{
+			Domain:  "format",
+			CodeID:  "DFM0001",
+			Title:   "formatting would change the code",
+			Message: err.Error() + " — file left unchanged; please report this",
+		}}
+	}
 	return out, nil
+}
+
+// verifyTokensPreserved reports whether src and out carry the same code.
+// Blank lines are normalized by design, so NL tokens are ignored; everything
+// else — including block structure via Indent/Dedent — must match exactly.
+func verifyTokensPreserved(src, out []byte) error {
+	a := significantTokens(src)
+	b := significantTokens(out)
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] != b[i] {
+			return fmt.Errorf("token %d changed from %q to %q", i+1, a[i], b[i])
+		}
+	}
+	if len(a) != len(b) {
+		if len(a) > len(b) {
+			return fmt.Errorf("formatting dropped %d token(s), starting with %q", len(a)-len(b), a[len(b)])
+		}
+		return fmt.Errorf("formatting added %d token(s), starting with %q", len(b)-len(a), b[len(a)])
+	}
+	return nil
+}
+
+func significantTokens(src []byte) []string {
+	sc := lex.NewScannerWithFile(src, "<verify>")
+	var toks []string
+	for {
+		it := sc.Next()
+		if it.Tok == token.EOF {
+			break
+		}
+		if it.Tok == token.NL {
+			continue
+		}
+		toks = append(toks, it.Tok.String()+"\x00"+it.Lexeme)
+	}
+	return toks
 }
 
 // ---- internal writer ----
