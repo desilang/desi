@@ -4,4 +4,8 @@ def add(a: int, b: int) -> int: a + b
 
 def main() -> int:
 	let x = 1 |> add(2)
-	x
+	print(x)
+	0
+
+# EXPECTED_OUTPUT:
+# 3

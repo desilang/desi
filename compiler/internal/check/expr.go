@@ -777,6 +777,17 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 		c.info.Idents[x] = sym
 		return sym.Type
 	}
+	// KNOWN GAP: an unresolved identifier returns nil with no diagnostic, so
+	// a typo'd name survives checking and reaches the backend, which emits a
+	// reference to a value it never defined. The user then sees a raw LLVM
+	// "use of undefined value" dump plus a misleading "make sure LLVM is
+	// installed" hint instead of a name error.
+	//
+	// Reporting here is NOT correct yet: comprehension variables
+	// ([x for x in ...]) and match-arm bindings are bound by machinery that
+	// does not register them in c.scope, so a diagnostic at this point
+	// rejects valid programs (examples/23_range_map_filter.desi). Fixing this
+	// properly means introducing those bindings into scope during checking.
 	return nil
 }
 

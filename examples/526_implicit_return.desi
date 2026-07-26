@@ -1,0 +1,55 @@
+# Implicit return: the last expression of a function is its return value.
+#
+# Regression guard. This used to be lowered as a plain expression statement —
+# evaluated, then discarded — so the function fell through to the default
+# return: callers silently got 0 for int and NULL for str, with no diagnostic.
+# It went unnoticed because every other example's main() ends in `0`, which is
+# exactly what the broken default produced. See applyImplicitReturn in
+# compiler/internal/lower/lower_stmt.go.
+
+def square(n: int) -> int:
+	n * n
+
+def greet(name: str) -> str:
+	"hello " + name
+
+def is_even(n: int) -> bool:
+	n % 2 == 0
+
+def half(n: int) -> float:
+	float(n) / 2.0
+
+# Single-line body form.
+def add(a: int, b: int) -> int: a + b
+
+# A trailing none-typed call is NOT a return value: this must still compile
+# and simply print, rather than trying to return print's result.
+def announce(msg: str) -> none:
+	print(msg)
+
+# An explicit return still wins over the trailing expression.
+def early(n: int) -> int:
+	if n > 0:
+		return 1
+	0
+
+def main() -> int:
+	print(square(7))
+	print(greet("desi"))
+	print(is_even(4))
+	print(half(5))
+	print(add(20, 22))
+	announce("announced")
+	print(early(3))
+	print(early(-3))
+	0
+
+# EXPECTED_OUTPUT:
+# 49
+# hello desi
+# true
+# 2.5
+# 42
+# announced
+# 1
+# 0

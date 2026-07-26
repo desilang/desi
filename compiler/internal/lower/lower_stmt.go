@@ -11,7 +11,8 @@ import (
 
 // lowerBlock lowers a block of statements
 func (ls *lowerState) lowerBlock(blk *ast.Block) {
-	for _, s := range blk.Stmts {
+	stmts := ls.applyImplicitReturn(blk.Stmts)
+	for _, s := range stmts {
 		if ls.terminated {
 			break
 		}
@@ -24,6 +25,49 @@ func (ls *lowerState) lowerBlock(blk *ast.Block) {
 		ls.b.Emit(&hir.Ret{Val: nil})
 		ls.terminated = true
 	}
+}
+
+// applyImplicitReturn rewrites a trailing expression statement at the top
+// level of a value-returning function into a real return.
+//
+// "The last expression is returned" is documented and used throughout the
+// tutorials, but the trailing expression used to be lowered as a plain
+// ExprStmt — its value computed, then discarded — and the function fell
+// through to the default `Ret{Val: nil}`. Callers silently got 0 for int
+// returns and NULL for str returns (printing "(null)"), with no diagnostic.
+// Every example's main() ends in `0`, which is exactly the default, so the
+// suite never noticed.
+//
+// Rewriting to *ast.ReturnStmt (rather than emitting a Ret here) keeps the
+// single return path responsible for return-type coercion, evaluating the
+// value before defers/drops, and marking a returned ident as moved.
+func (ls *lowerState) applyImplicitReturn(stmts []ast.Stmt) []ast.Stmt {
+	// Only the function's own body block; nested blocks fall through to their
+	// enclosing function.
+	if len(ls.scopes) != 1 || len(stmts) == 0 {
+		return stmts
+	}
+	ret := ls.b.Func().RetType
+	if ret == "" || ret == "void" {
+		return stmts
+	}
+	last, ok := stmts[len(stmts)-1].(*ast.ExprStmt)
+	if !ok {
+		return stmts
+	}
+	// The trailing expression must actually produce a value. A function that
+	// ends in a `none`-typed call (`print(...)`) is not returning it.
+	if ls.info == nil {
+		return stmts
+	}
+	t := ls.info.Types[last.Expr]
+	if t == nil || types.Equal(t, types.None) {
+		return stmts
+	}
+	out := make([]ast.Stmt, len(stmts))
+	copy(out, stmts[:len(stmts)-1])
+	out[len(stmts)-1] = &ast.ReturnStmt{Value: last.Expr, Span: last.Span}
+	return out
 }
 
 // lowerStmt lowers a single statement
