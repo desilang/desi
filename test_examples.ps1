@@ -19,7 +19,23 @@
 param(
     [int]$Start = 0,
     [int]$End = 9999,
-    [string]$Range
+    [string]$Range,
+
+    # Parallel sharding (used by test_examples_parallel.ps1). With
+    # -ShardCount N, this process runs only the tests whose position in the
+    # sorted list satisfies (index % N == Shard), and keeps its compile
+    # intermediates in build\shard<Shard> so concurrent shards never share
+    # program.ll or test_exec.exe. Defaults leave behavior unchanged.
+    [int]$Shard = -1,
+    [int]$ShardCount = 0,
+
+    # Skip rebuilding desic (the parallel driver builds it once up front so
+    # shards don't race writing bin\desic.exe).
+    [switch]$NoBuild,
+
+    # Per-test wall-clock limit. Without this a single hanging example blocks
+    # the whole suite forever (there was no timeout at all before).
+    [int]$TimeoutSec = 120
 )
 
 $ErrorActionPreference = "Stop"
@@ -42,7 +58,9 @@ if ($Range) {
 # Directories
 $ProjectRoot = $PSScriptRoot
 $BuildDir = Join-Path $ProjectRoot "build"
-$OutputDir = Join-Path $BuildDir "output"
+# Each shard compiles into its own scratch dir; unsharded runs use build\.
+$ScratchDir = if ($ShardCount -gt 0) { Join-Path $BuildDir "shard$Shard" } else { $BuildDir }
+$OutputDir = Join-Path $ScratchDir "output"
 $BinDir = Join-Path $ProjectRoot "bin"
 $ExamplesDir = Join-Path $ProjectRoot "examples"
 
@@ -78,21 +96,23 @@ Write-Host "Running Desi Example Tests ($Start to $End)"
 Write-Host "=========================================="
 Write-Host ""
 
-# Build compiler first
-Write-Host "Building compiler..."
-Push-Location $ProjectRoot
-try {
-    & $GoExe build -o (Join-Path $BinDir "desic.exe") ./compiler/cmd/desic
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[FAIL] Compiler build failed!" -ForegroundColor Red
-        exit 1
+# Build compiler first (skipped for shards — the driver already built it)
+if (-not $NoBuild) {
+    Write-Host "Building compiler..."
+    Push-Location $ProjectRoot
+    try {
+        & $GoExe build -o (Join-Path $BinDir "desic.exe") ./compiler/cmd/desic
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[FAIL] Compiler build failed!" -ForegroundColor Red
+            exit 1
+        }
     }
+    finally {
+        Pop-Location
+    }
+    Write-Host "[OK] Compiler built successfully" -ForegroundColor Green
+    Write-Host ""
 }
-finally {
-    Pop-Location
-}
-Write-Host "[OK] Compiler built successfully" -ForegroundColor Green
-Write-Host ""
 
 $Desic = Join-Path $BinDir "desic.exe"
 
@@ -146,6 +166,7 @@ $testFiles = Get-ChildItem -Path $ExamplesDir -Filter "*.desi" -Recurse |
         if ($_.Name -match "^(\d+)") { [int]$Matches[1] } else { 0 }
     }
 
+$fileIndex = -1
 foreach ($testFile in $testFiles) {
     # Extract number from filename
     if ($testFile.Name -match "^(\d+)") {
@@ -154,12 +175,19 @@ foreach ($testFile in $testFiles) {
     else {
         continue
     }
-    
+
     # Skip if outside range
     if ($num -lt $Start -or $num -gt $End) {
         continue
     }
-    
+
+    # Round-robin shard selection: interleaving (rather than contiguous
+    # blocks) keeps slow clusters like the db/ORM range spread evenly.
+    $fileIndex++
+    if ($ShardCount -gt 0 -and ($fileIndex % $ShardCount) -ne $Shard) {
+        continue
+    }
+
     $TotalCount++
     $relativePath = $testFile.FullName.Substring($ProjectRoot.Length + 1)
     
@@ -191,7 +219,7 @@ foreach ($testFile in $testFiles) {
     
     # Try to compile and run
     try {
-        $buildResult = & "$PSScriptRoot\build-desi.ps1" -InputFile $testFile.FullName -OutputName "test_exec" 2>&1
+        $buildResult = & "$PSScriptRoot\build-desi.ps1" -InputFile $testFile.FullName -OutputName "test_exec" -WorkDir $ScratchDir 2>&1
         if ($LASTEXITCODE -eq 0) {
             $compileSuccess = $true
             $buildResult | Out-File $compileLog -Encoding UTF8
@@ -202,9 +230,24 @@ foreach ($testFile in $testFiles) {
             # line under ErrorActionPreference=Stop and mangles non-ASCII output.
             $execPath = Join-Path $OutputDir "test_exec.exe"
             if (Test-Path $execPath) {
-                cmd.exe /d /c " `"$execPath`" > `"$runtimeLog`" 2>&1 "
-                if ($LASTEXITCODE -eq 0) {
-                    $runtimeSuccess = $true
+                # Run under a wall-clock limit. A hung example used to block
+                # the entire suite (no timeout existed); now it is killed —
+                # with its whole process tree — and reported as a failure.
+                # ProcessStartInfo (not Start-Process) so the cmd redirect is
+                # passed through verbatim: Start-Process re-quotes arguments
+                # containing spaces, which breaks '"exe" > "log" 2>&1'.
+                $psi = New-Object System.Diagnostics.ProcessStartInfo
+                $psi.FileName = "cmd.exe"
+                $psi.Arguments = '/d /c ""' + $execPath + '" > "' + $runtimeLog + '" 2>&1"'
+                $psi.UseShellExecute = $false
+                $psi.CreateNoWindow = $true
+                $runProc = [System.Diagnostics.Process]::Start($psi)
+                if ($runProc.WaitForExit($TimeoutSec * 1000)) {
+                    if ($runProc.ExitCode -eq 0) { $runtimeSuccess = $true }
+                }
+                else {
+                    & taskkill /T /F /PID $runProc.Id *>$null
+                    "TIMEOUT after ${TimeoutSec}s" | Out-File $runtimeLog -Append -Encoding UTF8
                 }
             }
         }

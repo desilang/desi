@@ -20,7 +20,14 @@ param(
 
     # Optimized build (clang -O2). Also enabled by DESI_RELEASE=1 so
     # harnesses (test_examples.ps1, CI) can flip it without new plumbing.
-    [switch]$Release
+    [switch]$Release,
+
+    # Private scratch directory for this invocation's intermediates
+    # (program.ll, emit-ir stderr log, output exe). Defaults to the shared
+    # "build" dir, preserving existing single-job behavior. Parallel test
+    # shards each pass their own so concurrent compiles cannot clobber one
+    # another's IR — the reason the suite could not be parallelized before.
+    [string]$WorkDir
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,7 +37,10 @@ if ($env:DESI_RELEASE -eq "1") { $Release = $true }
 # Directories
 $ProjectRoot = $PSScriptRoot
 $BuildDir = Join-Path $ProjectRoot "build"
-$OutputDir = Join-Path $BuildDir "output"
+# Intermediates live in $ScratchDir; only it changes for parallel shards.
+# $BuildDir keeps pointing at the shared build tree (libdesi.lib, lto/).
+$ScratchDir = if ($WorkDir) { $WorkDir } else { $BuildDir }
+$OutputDir = Join-Path $ScratchDir "output"
 $BinDir = Join-Path $ProjectRoot "bin"
 $DecimalLib = Join-Path $ProjectRoot "compiler\runtime\decimal\lib"
 
@@ -97,7 +107,7 @@ if (-not $ClangExe) {
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 
 # Intermediate files
-$LlvmIr = Join-Path $BuildDir "program.ll"
+$LlvmIr = Join-Path $ScratchDir "program.ll"
 $Executable = Join-Path $OutputDir "$OutputName.exe"
 
 try {
@@ -108,7 +118,7 @@ try {
     # non-ASCII string constants and embedded newlines (and stderr warnings
     # would throw under ErrorActionPreference=Stop), producing IR whose
     # declared byte lengths no longer match — clang then rejects the module.
-    $IrErrLog = Join-Path $BuildDir "emit-ir.stderr.log"
+    $IrErrLog = Join-Path $ScratchDir "emit-ir.stderr.log"
     $desicProc = Start-Process -FilePath $Desic -ArgumentList @('emit-ir', "`"$InputFile`"") `
         -NoNewWindow -Wait -PassThru `
         -RedirectStandardOutput $LlvmIr -RedirectStandardError $IrErrLog

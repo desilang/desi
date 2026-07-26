@@ -47,13 +47,15 @@ jobs:
       - name: Run example tests (windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        timeout-minutes: 150
+        timeout-minutes: 60
         # 437-446 are db/ORM examples — the db runtime is not ported to
-        # Windows yet (see docs/contributing/windows-build.md)
+        # Windows yet (see docs/contributing/windows-build.md).
+        # The parallel runner shards across processes; every test is a full
+        # compile+link, so this is CPU bound and scales with the runner.
         run: |
-          .\test_examples.ps1 -Range "0,436"
+          .\test_examples_parallel.ps1 -Range "0,436"
           if ($LASTEXITCODE -ne 0) { exit 1 }
-          .\test_examples.ps1 -Range "447,9999"
+          .\test_examples_parallel.ps1 -Range "447,9999"
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Run leak detection (macOS only)
