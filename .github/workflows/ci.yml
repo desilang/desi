@@ -2,20 +2,30 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # Release work happens on dev-* branches; gating only main lets
+    # platform divergence sit undetected until the merge.
+    branches: [main, 'dev-**']
   pull_request:
-    branches: [main]
+    branches: [main, 'dev-**']
 
 permissions:
   contents: read
 
 jobs:
   build-and-test:
+    # Both optimization levels on every platform: -O2 exploits invalid IR
+    # that -O0 tolerates, so the release leg catches miscompiles the debug
+    # leg hides (jmp_buf alignment, folded setjmp slots, frame-pointer
+    # omission were all found this way).
+    name: ${{ matrix.os }} / ${{ matrix.opt }}
     strategy:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
+        opt: [debug, release]
     runs-on: ${{ matrix.os }}
+    env:
+      DESI_RELEASE: ${{ matrix.opt == 'release' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -26,7 +36,9 @@ jobs:
       - name: Build compiler
         run: go build -ldflags="-s -w" ./...
 
+      # Opt level does not affect the Go unit tests; run them once.
       - name: Run Go tests
+        if: matrix.opt == 'debug'
         run: go test ./...
 
       - name: Build runtime (unix)
@@ -35,6 +47,7 @@ jobs:
 
       - name: Run example tests (unix)
         if: runner.os != 'Windows'
+        timeout-minutes: 90
         run: |
           make compiler
           ./test_examples.sh
@@ -59,7 +72,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       - name: Run leak detection (macOS only)
-        if: runner.os == 'macOS'
+        if: runner.os == 'macOS' && matrix.opt == 'debug'
         timeout-minutes: 5
         run: |
           # Run leak checks on a representative subset of examples
@@ -79,3 +92,55 @@ jobs:
           if [ "$LEAK_FAIL" -ne 0 ]; then
             echo "⚠ Some leak checks reported issues (non-blocking)"
           fi
+
+  benchmarks:
+    # Guards benchmark *correctness*, not wall-clock. Shared CI runners are
+    # too noisy for an absolute-time threshold to mean anything — a timing
+    # gate here would flake and get ignored, which is worse than no gate.
+    # What is deterministic is that each Desi benchmark must produce the
+    # same output as its C counterpart; run_benchmarks.sh already detects
+    # that and we promote the warning to a failure. Timings are uploaded
+    # for humans to compare against benchmarks/README.md.
+    name: benchmarks (ubuntu, release)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      # run_benchmarks.sh reads max RSS from `/usr/bin/time -v`, which is the
+      # GNU time binary — not the shell builtin — and is not guaranteed to be
+      # present on the runner image.
+      - name: Install GNU time
+        run: |
+          if ! [ -x /usr/bin/time ]; then
+            sudo apt-get update
+            sudo apt-get install -y time
+          fi
+
+      - name: Build runtime + compiler
+        run: |
+          make runtime
+          make compiler
+
+      - name: Run benchmarks (release)
+        timeout-minutes: 30
+        run: |
+          set -o pipefail
+          ./benchmarks/run_benchmarks.sh --release 2> bench.err | tee bench.out
+          echo "--- stderr ---"
+          cat bench.err
+          if grep -q "output mismatch" bench.err; then
+            echo "::error::A Desi benchmark produced different output than its C counterpart"
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: benchmark-results
+          path: |
+            bench.out
+            bench.err

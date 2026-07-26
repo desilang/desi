@@ -34,6 +34,10 @@ param(
 $ErrorActionPreference = "Stop"
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
+# Mirror build-desi.ps1: DESI_RELEASE=1 selects the optimized leg, so CI can
+# pick debug vs release with one environment variable instead of a flag.
+if ($env:DESI_RELEASE -eq "1") { $Release = $true }
+
 $ProjectRoot = $PSScriptRoot
 $BinDir = Join-Path $ProjectRoot "bin"
 $BuildDir = Join-Path $ProjectRoot "build"
