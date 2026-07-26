@@ -97,3 +97,20 @@ print(f"IP: {ip}")
 | TLS/HTTPS | ❌ (use http) | ✅ |
 
 Use `net` for custom protocols (game servers, chat, IRC). Use `http` for web APIs and WebSocket.
+
+## Error handling
+
+`dial`, `listen`, and `accept` return `-1` on failure. Always check the
+result before using the descriptor — a blocking `accept()` will otherwise
+wait forever for a peer that never connects:
+
+```desi
+let fd = net.dial("127.0.0.1", 8080)
+if fd < 0:
+	print("connect failed")
+	return 1
+```
+
+On Windows, an intermittent `dial` failure on `127.0.0.1` is usually local
+port exhaustion rather than a problem with your code — see
+[Windows: dial failed on localhost](../guides/windows-networking.md).

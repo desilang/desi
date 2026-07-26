@@ -74,6 +74,7 @@ nav:
     - IDE Setup: getting-started/ide-setup.md
   - Guides:
     - Coming From Other Languages: guides/coming-from.md
+    - "Windows: dial failed on localhost": guides/windows-networking.md
   - Tutorials:
     - Introduction: tutorials/intro.md
     - Variables & Types: tutorials/variables.md
