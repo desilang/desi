@@ -24,6 +24,7 @@ import (
 	"github.com/desilang/desi/compiler/internal/diag"
 	"github.com/desilang/desi/compiler/internal/parse"
 	"github.com/desilang/desi/compiler/internal/term"
+	"github.com/desilang/desi/compiler/internal/types"
 	"github.com/desilang/desi/compiler/internal/version"
 )
 
@@ -122,33 +123,63 @@ func evaluate(s *session, desic, input string) {
 		return
 	}
 
-	// Otherwise prefer showing a value: if `print(<input>)` type checks,
-	// the input is an expression and the user wants to see it. Checking is
-	// in-process and cheap, so trying both costs no compile.
-	if src := s.assemble(input, kindExpr, true); typeChecks(src, false) {
-		out, ok := run(desic, src)
-		if !ok {
-			return
-		}
-		// An expression is not retained: it has already been shown, and
-		// replaying it would repeat any side effects.
-		emitNew(out, s.baseline)
+	// Check the input as written, then ask the checker what the trailing
+	// expression's type is. Guessing instead (trying `print(<input>)` and
+	// seeing if it checks) wrongly wraps a none-typed call: `print(x)`
+	// became `print(print(x))`, which passes the checker but emits IR
+	// referencing a value that does not exist.
+	src := s.assemble(input, kindStmt, false)
+	mod, info, ok := parseAndCheck(src, true)
+	if !ok {
 		return
 	}
 
-	// Fall back to a statement, and report its diagnostics if it fails —
-	// they describe what the user actually typed.
-	src := s.assemble(input, kindStmt, false)
-	if !typeChecks(src, true) {
+	display := false
+	if t := trailingExprType(mod, info); t != nil && !types.Equal(t, types.None) {
+		display = true
+	}
+
+	runSrc := src
+	if display {
+		runSrc = s.assemble(input, kindExpr, true)
+	}
+	out, ok := run(desic, runSrc)
+	if !ok {
 		return
 	}
-	out, ok := run(desic, src)
-	if !ok {
+	if display {
+		// A displayed expression is not retained: it has already been shown,
+		// and replaying it would repeat any side effects.
+		emitNew(out, s.baseline)
 		return
 	}
 	s.accept(input, kindStmt, out)
 	emitNew(out, s.baseline)
 	s.baseline = out
+}
+
+// trailingExprType reports the type of the statement that assemble() placed
+// just before main's closing `return 0`, or nil if it is not an expression.
+func trailingExprType(mod *ast.Module, info *check.Info) types.T {
+	if mod == nil || info == nil {
+		return nil
+	}
+	for _, d := range mod.Decls {
+		fd, ok := d.(*ast.FuncDecl)
+		if !ok || fd.Name.Name != "main" || fd.Body == nil {
+			continue
+		}
+		stmts := fd.Body.Stmts
+		if len(stmts) < 2 {
+			return nil
+		}
+		es, ok := stmts[len(stmts)-2].(*ast.ExprStmt)
+		if !ok {
+			return nil
+		}
+		return info.Types[es.Expr]
+	}
+	return nil
 }
 
 type inputKind int
@@ -260,17 +291,17 @@ func emitNew(out, baseline string) {
 	}
 }
 
-// typeChecks parses and checks src. Diagnostics are reported only when
-// `report` is set, so the speculative expression attempt stays silent.
-func typeChecks(src string, report bool) bool {
+// parseAndCheck parses and checks src, returning the module and type info.
+// Warnings do not make an input invalid; anything else does.
+func parseAndCheck(src string, report bool) (*ast.Module, *check.Info, bool) {
 	mod, parseErrs := parse.ParseFile("<repl>", []byte(src))
 	if len(parseErrs) > 0 {
 		if report {
 			reportParseErrors(parseErrs)
 		}
-		return false
+		return nil, nil, false
 	}
-	diags, _ := check.Check(mod)
+	diags, info := check.Check(mod)
 	ok := true
 	for _, d := range diags {
 		if d.Domain == "warn" {
@@ -281,6 +312,12 @@ func typeChecks(src string, report bool) bool {
 			renderDiag(d)
 		}
 	}
+	return mod, info, ok
+}
+
+// typeChecks reports whether src is valid, surfacing any diagnostics.
+func typeChecks(src string, report bool) bool {
+	_, _, ok := parseAndCheck(src, report)
 	return ok
 }
 

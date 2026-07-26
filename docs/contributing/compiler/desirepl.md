@@ -1,267 +1,165 @@
 # desirepl — REPL Internals & Implementation Guide
 
-> **For Contributors**: This document covers the REPL architecture, wrapping strategy, diagnostic rendering, and known limitations with guidance for future improvements.
+> **For Contributors**: architecture, the session model, how an input is
+> classified, and what is deliberately left out.
 
----
-
-## Table of Contents
-
-1. [Architecture](#architecture)
-2. [Source Code](#source-code)
-3. [Input Wrapping Strategy](#input-wrapping-strategy)
-4. [Diagnostic Rendering](#diagnostic-rendering)
-5. [REPL Commands](#repl-commands)
-6. [Testing](#testing)
-7. [Known Limitations](#known-limitations)
-8. [Future Work](#future-work)
+User-facing documentation: `book/docs/getting-started/repl.md`.
 
 ---
 
 ## Architecture
 
-The REPL is a **check-only** tool. It does NOT execute code — it only parses and type-checks each input line. The pipeline for each input is:
+Desi is compiled and has no interpreter, so the REPL does not evaluate
+anything itself. It keeps a **session** of everything accepted so far,
+assembles a complete program from it plus the new input, and runs that
+program through `desic run`:
 
 ```
-User Input → Wrap in function → Parse → Type Check → Display result
+User input → classify → assemble full program → parse + check (in-process)
+           → desic run (compile + link + execute) → show new output
 ```
 
-```mermaid
-flowchart LR
-    A["User Input"] --> B["Wrap: def __repl_N():\n\t<input>"]
-    B --> C["parse.ParseFile()"]
-    C -->|errors| D["Display parse errors"]
-    C -->|ok| E["check.Check()"]
-    E -->|diags| F["Display diagnostics"]
-    E -->|clean| G["Print 'ok'"]
-```
+Source: `compiler/cmd/desirepl/main.go`.
 
-### Why check-only?
+### Why compile instead of interpreting
 
-Full execution would require the LLVM backend (`emit-ir` → `llc` → `clang` → run`), which is expensive per line. The check-only approach gives sub-millisecond feedback, making it useful for:
+`compiler/internal/eval` exists to evaluate **compile-time macros**. It
+handles a handful of node kinds and 7 builtins (`print` plus `ast_*`
+helpers) — no user-defined functions, no `len()`, no control flow. A REPL
+built on it would quietly diverge from the language: expressions would
+behave differently at the prompt than in a real program.
 
-- Validating syntax experiments
-- Exploring the type system
-- Debugging type errors interactively
-- Teaching the language
+Driving the real compiler costs roughly half a second per input and
+guarantees the prompt agrees with a build. That trade is deliberate.
+
+`desic` is located next to the `desirepl` binary (how releases ship), with
+`PATH` as a fallback — see `findDesic`.
 
 ---
 
-## Source Code
-
-The entire REPL is a single file:
-
-```
-compiler/cmd/desirepl/main.go
-```
-
-### Dependencies
-
-| Package | Purpose |
-|---------|---------|
-| `parse` | `ParseFile()` — converts source to AST |
-| `check` | `Check()` — type checking and diagnostics |
-| `ast` | `Print()` — AST pretty-printer for `:ast` command |
-| `diag` | `Diagnostic` struct — error/warning data |
-| `term` | `Println()`, `Prompt()`, `Flush()` — terminal I/O |
-| `version` | `String()` — version display |
-
-### Build
-
-```bash
-go build -o bin/desirepl ./compiler/cmd/desirepl/
-```
-
----
-
-## Input Wrapping Strategy
-
-Each user input line is wrapped in a synthetic function to satisfy the parser's expectation that statements appear inside a function body:
+## The session model
 
 ```go
-src := fmt.Sprintf("def __repl_%d():\n\t%s\n", lineNum, line)
-fileName := fmt.Sprintf("<repl:%d>", lineNum)
-```
-
-For example, `let x = 42` becomes:
-
-```desi
-def __repl_1():
-	let x = 42
-```
-
-### Why this works
-
-- The parser expects statements inside a block (function/if/for body)
-- Wrapping in a function gives us a valid top-level declaration
-- The `__repl_N` naming avoids collisions between lines
-- The `<repl:N>` filename provides meaningful location info in diagnostics
-
-### Where it breaks
-
-- **Nested `def`**: `def foo(): return 42` creates a function inside the wrapper function, which fails to parse due to indentation
-- **Multi-line constructs**: The REPL is line-by-line, so `if x:\n    foo()` spanning two lines won't work
-- **Cross-line state**: Each line gets a fresh function scope, so variables declared on one line aren't available on the next
-
----
-
-## Diagnostic Rendering
-
-All diagnostic domains are rendered with appropriate labels:
-
-```go
-switch d.Domain {
-case "type":     prefix = "type error"
-case "warn":     prefix = "warning"
-case "class":    prefix = "class error"
-case "borrow":   prefix = "borrow error"
-case "call":     prefix = "call error"
-case "collections": prefix = "collection error"
-case "numeric":  prefix = "numeric error"
-case "ffi":      prefix = "ffi error"
-case "sync":     prefix = "concurrency error"
-case "module":   prefix = "module error"
-case "project":  prefix = "project error"
+type session struct {
+    imports  []string // `import x` — must precede declarations
+    decls    []string // def/class/enum/struct/trait — top level
+    stmts    []string // let/assignment/if/... — inside main()
+    baseline string   // stdout of the session as it currently stands
 }
 ```
 
-Output format:
+`assemble` emits, in order: imports, declarations, then `def main() -> int:`
+containing the retained statements, the new input, and `return 0`.
 
-```
-  [DTE0004] type error: cannot assign 'int' to 'str'
-  [DW0001] warning: unused variable or parameter
-```
+**What is retained:** imports, declarations, and statements. **What is not:**
+expressions. An expression has already been displayed, and keeping it would
+repeat any side effect on every subsequent input.
 
-### Important: No domain filtering
+### baseline
 
-Previous versions only rendered `warn`, `type`, and `class` diagnostics. This was fixed to show **all** domains. If you add a new diagnostic domain, add a case to `renderDiag()`.
+Retained statements are replayed with each input, so their output would be
+printed again every time. After each accepted input the run's full stdout is
+stored as `baseline`; the next run prints only the part beyond that prefix
+(`emitNew`). Side effects inside retained statements still re-execute — that
+is inherent to replay and is documented for users.
+
+---
+
+## Classifying an input
+
+`classify` handles the structural cases by keyword: `import`/`from` →
+import, `def`/`class`/`enum`/`struct`/`trait`/`impl`/`macro`/`type` →
+declaration. Multi-line input is a block, never an expression.
+
+Everything else is decided by **asking the checker**, not by guessing:
+
+1. Assemble the program with the input as a plain statement.
+2. Parse and check in-process (`parseAndCheck`) — no compile, so this is cheap.
+3. `trailingExprType` finds the statement `assemble` placed just before
+   main's `return 0` and looks up `info.Types[expr]`.
+4. If that type exists and is not `none`, re-assemble with the input wrapped
+   in `print(...)` so the value is displayed.
+
+> **Do not** revert this to the earlier heuristic of "try `print(<input>)`
+> and see whether it type checks". `print` accepts a `none`-typed argument at
+> the checker level, so `print(x)` became `print(print(x))`, which passed
+> checking and then emitted IR referencing a value that was never defined —
+> the user saw a raw LLVM `use of undefined value` dump.
+
+---
+
+## Reading blocks
+
+`readLogical` returns one logical input. A line whose trimmed text ends in
+`:` opens a block: subsequent lines are read (with a `... ` prompt) until a
+blank line. That is what makes multi-line `def`s enterable. The user's own
+indentation is preserved; `indent` adds one tab when a fragment is embedded
+into `main()`.
+
+---
+
+## Failure handling
+
+An input that fails to parse, fails checking, or fails to compile/run is
+reported and **dropped** — `accept` is never called for it, so the session
+stays valid and the next input still works. Compile and runtime failures are
+surfaced from `desic`'s stderr.
+
+Diagnostics are rendered by `renderDiag`, which maps `d.Domain` to a readable
+prefix (`type` → "type error", `borrow` → "borrow error", …). All domains are
+shown; warnings do not invalidate an input.
 
 ---
 
 ## REPL Commands
 
-Commands are handled before wrapping/parsing:
-
-| Command | Aliases | Behavior |
-|---------|---------|----------|
-| `:quit` | `:q`, `quit`, `exit` | Flush terminal and exit |
-| `:help` | `:h` | Print command list |
-| `:ast` | — | Set flag; next input dumps AST before checking |
-
-The `:ast` flag is single-shot — it resets after one input (or on parse error).
+| Command | Behavior |
+|---------|----------|
+| `:help`, `:h` | Command list plus a note that retained statements re-run |
+| `:session` | Print the accumulated imports, decls, and statements |
+| `:reset` | Clear the session |
+| `:ast` | Pretty-print the AST of the next input |
+| `:quit`, `:q`, `quit`, `exit` | Exit |
 
 ---
 
 ## Testing
 
-The REPL has no Go test files. Testing is done via piped input:
+There are no automated REPL tests yet. Drive it with piped stdin:
 
-```bash
-# Basic smoke test
-echo 'let x = 10
-print("hello")
-let y: str = 42
-:quit' | ./bin/desirepl
-
-# Error recovery test
-echo ')))
-[[[
-{{{
-print("still works")
-:quit' | ./bin/desirepl
-
-# :ast test
-echo ':ast
-let x = 42
-:quit' | ./bin/desirepl
-
-# EOF handling
-printf '' | ./bin/desirepl
+```powershell
+"1 + 2`nlet x = 10`nx * 4`n:quit" | Out-File -Encoding utf8 in.txt
+.\bin\desirepl.exe < in.txt
 ```
 
-### Test coverage checklist
+Cases worth covering when adding tests:
 
-- [ ] Basic `let` bindings → `ok`
-- [ ] `print()` calls → `ok`
-- [ ] Type mismatches → diagnostic with code ID
-- [ ] Data structures (list, dict, tuple) → `ok`
-- [ ] Control flow (`if`, `for`) → `ok`
-- [ ] `let mut` → `ok`
-- [ ] Malformed input → parse errors, no crash
-- [ ] All exit commands work
-- [ ] EOF exits cleanly (code 0)
-- [ ] `:ast` shows AST for next input
-- [ ] `:help` prints command list
+- Expression displays a value (`1 + 2` → `3`)
+- Binding persists (`let x = 10` then `x * 4` → `40`)
+- `print(...)` prints once and is not double-wrapped
+- Multi-line `def` then a call to it
+- A type error leaves the session usable
+- `:reset` clears state
 
 ---
 
 ## Known Limitations
 
-### No cross-line state
-
-Each line gets a fresh `__repl_N()` function, so:
-
-```
->>> let x = 10    # ok
->>> print(x)      # ERROR: x undefined
-```
-
-**Root cause**: `check.Check()` is called independently per line. There's no shared scope.
-
-### No code execution
-
-The REPL doesn't run code. `print("hello")` is type-checked but not executed.
-
-**Root cause**: Execution requires the full LLVM pipeline (`emit-ir` → `llc` → `clang`), which is too slow for line-by-line interaction.
-
-### No multiline input
-
-All input must fit on one line. Multiline `if`/`for`/`match` blocks don't work.
+- **No readline**: no history, no arrow-key line editing. Input is read with
+  `bufio.Scanner`. This is the most noticeable gap.
+- **No completion or highlighting.**
+- **~0.5s per input** — a full compile and link each time.
+- **Retained statements re-run**, so side effects in a kept statement repeat.
 
 ---
 
 ## Future Work
 
-### Phase 1: Cross-line state (recommended)
-
-To support `let x = 10` then `print(x)`:
-
-1. Maintain a persistent `*check.Scope` across inputs
-2. Accumulate all statements into a single growing function body
-3. Re-check from scratch each time (or incrementally extend the scope)
-
-```go
-// Sketch:
-accumulated := []string{}
-for line := nextInput() {
-    accumulated = append(accumulated, line)
-    src := wrapAll(accumulated)
-    mod, errs := parse.ParseFile(...)
-    diags, _ := check.Check(mod)
-    // Show only new diagnostics
-}
-```
-
-### Phase 2: Execution
-
-To actually run code:
-
-1. Compile accumulated statements to LLVM IR
-2. Use LLVM's JIT (MCJIT or OrcJIT) via CGo
-3. Execute in-process without spawning `llc`/`clang`
-
-This is a significant undertaking and would require CGo bindings to LLVM.
-
-### Phase 3: Multiline input
-
-Detect incomplete input (trailing `:`, unclosed brackets) and prompt for continuation:
-
-```
->>> if x > 0:
-...     print("positive")
-...
-ok
-```
-
-### Phase 4: readline support
-
-Add history, tab completion, and cursor movement using a readline library like `github.com/chzyer/readline`.
+1. **readline** (history, line editing) — the highest-value improvement.
+   Needs a dependency or a hand-rolled terminal mode; the Scanner loop in
+   `main` is the only thing that has to change.
+2. **Avoid recompiling the whole session** — cache the compiled session and
+   link only the new input, or keep a persistent process. Reduces latency and
+   removes the replay side-effect wart.
+3. **`:load <file>`** to seed a session from a file.
+4. **`:type <expr>`** — `trailingExprType` already computes exactly this.

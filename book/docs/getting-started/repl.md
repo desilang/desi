@@ -1,7 +1,15 @@
 # Using the REPL
 
-The Desi REPL (`desirepl`) is an interactive environment for exploring the language.
-It parses and type-checks each line you enter, giving instant feedback.
+`desirepl` is a small interactive prompt for trying out Desi — expressions,
+a few bindings, a short function. It is deliberately simple in 0.1.0: it is
+a scratchpad, not a development environment. See
+[Limitations](#limitations) before you settle in.
+
+Desi is a compiled language, so there is no interpreter behind the prompt.
+The REPL keeps track of what you have entered, assembles a real program from
+it, and compiles and runs it with `desic`. That means the REPL can never
+disagree with a real build — the trade-off is roughly half a second per
+input.
 
 ---
 
@@ -11,11 +19,9 @@ It parses and type-checks each line you enter, giving instant feedback.
 desirepl
 ```
 
-You'll see:
-
 ```
 desirepl 0.1.0
-Type expressions or statements. :quit to exit.
+Type expressions or statements. :help for commands, :quit to exit.
 
 >>>
 ```
@@ -24,73 +30,62 @@ Type expressions or statements. :quit to exit.
 
 ## Quick Tour
 
-### Variables and Expressions
+### Expressions show their value
 
 ```
->>> let x = 42
-ok
+>>> 1 + 2
+3
+>>> 5 > 3
+true
+```
+
+### Bindings persist across lines
+
+```
+>>> let x = 10
+>>> x * 4
+40
 >>> let name = "Desi"
-ok
 >>> print(f"Hello, {name}!")
-ok
->>> let items = [1, 2, 3]
-ok
->>> print(items[0])
-ok
+Hello, Desi!
 ```
 
-The REPL prints `ok` when your code is valid. Each line is independently
-parsed and type-checked.
+### Collections
 
-### Type Errors
+```
+>>> let nums = [10, 20, 30]
+>>> nums[0]
+10
+>>> len(nums)
+3
+>>> let info = {"lang": "desi"}
+>>> info["lang"]
+desi
+```
 
-The REPL catches type errors immediately:
+### Functions
+
+A line ending in `:` starts a block. Keep typing, then finish with a blank
+line:
+
+```
+>>> def double(n: int) -> int:
+...     n * 2
+...
+>>> double(21)
+42
+```
+
+### Errors do not end the session
+
+Type errors are reported and the offending input is discarded — everything
+you entered before it is still there:
 
 ```
 >>> let x: str = 42
   [DTE0004] type error: cannot assign 'int' to 'str'
->>> let y: int = "hello"
-  [DTE0004] type error: cannot assign 'str' to 'int'
-```
-
-### Data Structures
-
-```
->>> let nums = [10, 20, 30]
-ok
->>> let info = {"name": "Desi", "version": "0.1.0"}
-ok
->>> let point = (3.14, 2.71)
-ok
-```
-
-### Control Flow
-
-Single-line control flow works:
-
-```
->>> if true: print("yes")
-ok
->>> for i in range(5): print(i)
-ok
-```
-
-### Mutable Variables
-
-```
->>> let mut counter = 0
-ok
-```
-
-### Boolean Expressions
-
-```
->>> let a = true and false
-ok
->>> let b = 5 > 3
-ok
->>> let c = 10 == 10
-ok
+>>> 1 + 1
+2
 ```
 
 ---
@@ -100,70 +95,57 @@ ok
 | Command | Description |
 |---------|-------------|
 | `:help` or `:h` | Show available commands |
+| `:session` | Show everything currently in the session |
+| `:reset` | Clear the session |
+| `:ast` | Show the AST for the next input |
 | `:quit` or `:q` | Exit the REPL |
 | `quit` or `exit` | Exit the REPL (convenience) |
-| `:ast` | Show the AST for the next input |
 
 ### Viewing the AST
-
-The `:ast` command is useful for understanding how Desi parses your code:
 
 ```
 >>> :ast
 (will show AST for next input)
->>> let x = 42
-Module("<repl:1>")
-    Func __repl_1()
-        Block
-            Let x = Int(42)
-ok
+>>> let z = 42
+Module("<repl>")
+	Func __repl()
+		Block
+			Let z = Int(42)
 ```
 
 ---
 
-## Error Recovery
+## How it works
 
-The REPL handles malformed input gracefully — it will never crash:
+Each input is classified and stored:
 
-```
->>> )))
-  parse error: unexpected token while parsing expression
->>> [[[
-  parse error: expected ]
->>> print(
-  parse error: unclosed )
->>> let x = 10
-ok
-```
+- **Imports and declarations** (`import`, `def`, `class`, `enum`, …) are kept
+  and placed at the top of the generated program.
+- **Statements** (`let`, assignments, `if`/`while` blocks) are kept and
+  replayed inside `main()`.
+- **Expressions** are wrapped in `print(...)` so you see the value, and are
+  *not* kept — they have already been shown.
 
-You can always continue entering code after an error.
-
----
-
-## What the REPL Checks
-
-The REPL runs the full Desi type checker on each input, including:
-
-- **Type errors** — mismatched types, undefined variables
-- **Borrow errors** — move-after-use, aliasing violations
-- **Call errors** — wrong argument count, missing named args
-- **Warnings** — unused variables, unreachable code
-- **All other diagnostics** — collection errors, numeric overflow, FFI issues
+Because retained statements are replayed with every later input, a statement
+with a side effect runs again each time. Output you have already seen is not
+reprinted, but something like `let f = open_file(...)` in the session will be
+re-executed. Use `:reset` to start over.
 
 ---
 
 ## Limitations
 
-The REPL is a **check-only** tool — it validates your code but does not execute it.
-This means:
+`desirepl` is intentionally minimal in 0.1.0. It is **not** an IDE like
+Python's IDLE, and it is not as capable as `python`'s own REPL:
 
-- **No output from `print()`** — the call is type-checked but not run
-- **No cross-line variables** — each line is checked independently, so
-  `let x = 10` on one line and `print(x)` on the next will report `x` as undefined
-- **No function definitions** — `def foo():` inside the REPL won't work
-  due to the wrapping mechanism
+- **No command history or line editing.** Arrow keys do not recall previous
+  input — there is no readline support yet. This is the roughest edge.
+- **No tab completion and no syntax highlighting.**
+- **No editor window, no debugger, no inspector.**
+- **About half a second per input**, because each one is compiled and run.
+- **Retained statements re-run**, as described above.
 
-For running code, use `desic run`:
+For anything beyond a quick experiment, write a file and run it:
 
 ```bash
 # Run a file
@@ -173,10 +155,14 @@ desic run hello.desi
 desic run
 ```
 
+The REPL is expected to grow — history and line editing first. Its current
+scope is deliberately narrow rather than half-finished in a way that misleads
+you about what it can do.
+
 ---
 
 ## See Also
 
 - [First Program](first-program.md) — Write and run your first Desi program
 - [desic CLI Reference](../reference/desic-cli.md) — Full command-line reference
-- [Editor Setup](editor-setup.md) — Configure your editor for Desi
+- [IDE Setup](ide-setup.md) — Configure your editor for Desi
