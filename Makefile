@@ -57,8 +57,16 @@ DESILSP = $(BIN_DIR)/desilsp
 
 all: directories runtime compiler tools
 
-directories:
-	@mkdir -p $(BUILD_DIR) $(BIN_DIR)
+directories: $(BUILD_DIR) $(BIN_DIR)
+
+# Real directory targets so they can be used as order-only prerequisites
+# below. Order-only (after the '|') means "must exist first" without the
+# directory's mtime ever forcing a rebuild.
+$(BUILD_DIR):
+	@mkdir -p $(BUILD_DIR)
+
+$(BIN_DIR):
+	@mkdir -p $(BIN_DIR)
 
 # Auto-build libmpdec if not present
 decimal-lib: $(DECIMAL_LIB)
@@ -80,15 +88,15 @@ $(LIB_DESI): $(RUNTIME_OBJS) $(RUNTIME_DB_OBJS) $(BUILD_DIR)/desi_decimal.o
 	@cd $(BUILD_DIR)/mpdec_objs && $(AR) x ../../$(DECIMAL_LIB)
 	$(AR) rcs $@ $^ $(BUILD_DIR)/mpdec_objs/*.o
 
-$(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c
+$(BUILD_DIR)/%.o: $(RUNTIME_SRC)/%.c | $(BUILD_DIR)
 	@echo "==> Compiling $<..."
 	$(CC) $(CFLAGS) $(OPENSSL_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/%.o: $(RUNTIME_DB)/%.c
+$(BUILD_DIR)/%.o: $(RUNTIME_DB)/%.c | $(BUILD_DIR)
 	@echo "==> Compiling db/$<..."
 	$(CC) $(CFLAGS) $(OPENSSL_CFLAGS) -c $< -o $@
 
-$(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB)
+$(BUILD_DIR)/desi_decimal.o: $(DECIMAL_SRC)/desi_decimal.c $(DECIMAL_LIB) | $(BUILD_DIR)
 	@echo "==> Compiling decimal wrapper..."
 	$(CC) $(CFLAGS) -I$(DECIMAL_SRC) -c $< -o $@
 
@@ -97,19 +105,19 @@ compiler: $(DESIC)
 
 tools: $(DESIFMT) $(DESIREPL) $(DESILSP)
 
-$(DESIC):
+$(DESIC): | $(BIN_DIR)
 	@echo "==> Building desic..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desic
 
-$(DESIFMT):
+$(DESIFMT): | $(BIN_DIR)
 	@echo "==> Building desifmt..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desifmt
 
-$(DESIREPL):
+$(DESIREPL): | $(BIN_DIR)
 	@echo "==> Building desirepl..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desirepl
 
-$(DESILSP):
+$(DESILSP): | $(BIN_DIR)
 	@echo "==> Building desilsp..."
 	$(GO) build -ldflags="-s -w" -o $@ ./compiler/cmd/desilsp
 
