@@ -17,16 +17,23 @@
 #
 # EXPECTED_OUTPUT:
 # === Migration Op DSL Test ===
+# [op] Created table op_test_users
 # op_create_table: ok
 # table exists: 1
+# [op] Added column to op_test_users
 # op_add_column: ok
 # col_added: 1
+# [op] Renamed column op_test_users.bio → biography
 # op_rename_column: ok
+# [op] Altered column op_test_users.name → VARCHAR(255)
 # op_alter_column: ok
+# [op] Created index on op_test_users(email)
 # op_add_index: ok
+# [op] Dropped column biography from op_test_users
 # op_drop_column: ok
 # op_run_sql insert: ok
 # row_count: 1
+# [op] Dropped table op_test_users
 # op_drop_table: ok
 # table_after_drop: 0
 # === Done ===

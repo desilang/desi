@@ -14,30 +14,26 @@
 #
 # EXPECTED_OUTPUT:
 # === File-based Migration Test ===
-# [makemigrations] Created test_migrations/0001_initial.desi (1 operation(s))
+# [makemigrations] Created test_migrations/0001_initial.desi (1 operation(s)) [app: test_migrations]
 # makemigrations: 1 operations
 # file count: 1
 # has forward: yes
-#
 # has rollback: yes
-#
-# has db.execute: yes
-#
-# [migrate] Applied 0001_initial.desi ✓
-# [migrate] Applied 1 migration(s)
+# has db.execute: no
+# [migrate] Applied 0001_initial.desi [test_migrations] ✓
+# [migrate] Applied 1 migration(s) for app 'test_migrations'
 # migrate: 1 applied
 # table exists: 1
 # [migrate] No pending migrations
 # re-migrate: 0
-# [rollback] Rolled back 0001_initial.desi (1 operation(s)) ✓
+# [rollback] Rolled back 0001_initial.desi [test_migrations] (1 operation(s)) ✓
 # rollback: 1
 # table after rollback: 0
-# [migrate] Applied 0001_initial.desi ✓
-# [migrate] Applied 1 migration(s)
+# [migrate] Applied 0001_initial.desi [test_migrations] ✓
+# [migrate] Applied 1 migration(s) for app 'test_migrations'
 # re-migrate from file: 1
 # table re-exists: 1
 # status has check: yes
-#
 # === Done ===
 
 import db

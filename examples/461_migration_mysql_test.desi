@@ -14,10 +14,10 @@
 #
 # EXPECTED_OUTPUT:
 # === MySQL Migration Test ===
-# [makemigrations] Created my_migrations/0001_initial.desi (1 operation(s))
+# [makemigrations] Created my_migrations/0001_initial.desi (1 operation(s)) [app: my_migrations]
 # makemigrations: 1
-# [migrate] Applied 0001_initial.desi ✓
-# [migrate] Applied 1 migration(s)
+# [migrate] Applied 0001_initial.desi [my_migrations] ✓
+# [migrate] Applied 1 migration(s) for app 'my_migrations'
 # migrate #1: 1 applied
 # mig_users exists: 1
 # column count: 5
@@ -25,11 +25,11 @@
 # migrate #2 (should be 0): 0
 # status retrieved: yes
 # rows inserted: 2
-# [rollback] Rolled back 0001_initial.desi (1 operation(s)) ✓
+# [rollback] Rolled back 0001_initial.desi [my_migrations] (1 operation(s)) ✓
 # rollback: 1 operations
 # mig_users after rollback: 0
-# [migrate] Applied 0001_initial.desi ✓
-# [migrate] Applied 1 migration(s)
+# [migrate] Applied 0001_initial.desi [my_migrations] ✓
+# [migrate] Applied 1 migration(s) for app 'my_migrations'
 # re-migrate: 1 applied
 # === Done ===
 
