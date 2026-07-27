@@ -1,0 +1,71 @@
+# EXPECTED: SKIP
+# SKIPPED: requires live PostgreSQL (set PG_HOST, PG_USER, PG_PASS, PG_DB)
+#
+# QuerySets are independent objects, as Django's are.
+#
+# Regression guard for the property the ORM did not have: there used to be a
+# single implicit queryset, so building a second one destroyed the first, and
+# refining a query mutated it in place. Each QuerySet now owns its own handle
+# (see __qs_handle_clone in compiler/runtime/db/crud.c), and every refining
+# method returns a new one.
+import db
+import env
+
+def main() -> int:
+	let host = env.get("PG_HOST", "127.0.0.1")
+	let user = env.get("PG_USER", "postgres")
+	let pass = env.get("PG_PASS", "")
+	let dbname = env.get("PG_DB", "postgres")
+	db.connect("postgres", host, 5432, dbname, user, pass)
+
+	db.execute("DROP TABLE IF EXISTS qs_indep")
+	db.execute("CREATE TABLE qs_indep (id SERIAL PRIMARY KEY, name VARCHAR(50), age INTEGER)")
+	db.execute("INSERT INTO qs_indep (name, age) VALUES ('Alice', 30), ('Bob', 25), ('Kid', 10), ('Zoe', 40)")
+
+	# Two refinements of one base, built in an interleaved order.
+	let base = db.objects("qs_indep")
+	let adults = base.filter("age__gt", "21")
+	let minors = base.filter("age__lt", "18")
+
+	print("base: " + str(base.count()))
+	print("adults: " + str(adults.count()))
+	print("minors: " + str(minors.count()))
+
+	# Chaining produces a new queryset; the source is unchanged.
+	let named = adults.filter("name", "Alice")
+	print("adults named Alice: " + str(named.count()))
+	print("adults unchanged: " + str(adults.count()))
+
+	# Ordering and limiting are non-mutating too.
+	let top2 = adults.order_by("-age").limit(2)
+	print("top2 rows: " + str(top2.fetch()))
+	print("oldest: " + db.get_field(0, "name"))
+	print("adults still unchanged: " + str(adults.count()))
+
+	print("minors exist: " + str(minors.exists()))
+	print("minors deleted: " + str(minors.delete()))
+	print("base after delete: " + str(base.count()))
+
+	base.release()
+	adults.release()
+	minors.release()
+	named.release()
+	top2.release()
+
+	db.execute("DROP TABLE IF EXISTS qs_indep")
+	print("=== Done ===")
+	0
+
+# EXPECTED_OUTPUT:
+# base: 4
+# adults: 3
+# minors: 1
+# adults named Alice: 1
+# adults unchanged: 3
+# top2 rows: 2
+# oldest: Zoe
+# adults still unchanged: 3
+# minors exist: 1
+# minors deleted: 1
+# base after delete: 3
+# === Done ===

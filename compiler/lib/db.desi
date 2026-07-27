@@ -744,9 +744,171 @@ pub def __qs_do_insert() -> int
 #   let c = db.count()             # SELECT COUNT(*)
 # ============================================================
 
-pub def objects(table: str) -> int:
-	"""Set active table for ORM queries (like Django's Model.objects)."""
-	return __qs_reset(table)
+# ============================================================
+# QuerySet — independent, chainable query objects
+#
+# Each QuerySet owns its own handle, so several can be alive at once and
+# refining one never disturbs another:
+#
+#   let base   = db.objects("users")
+#   let adults = base.filter("age__gt", "21")
+#   let minors = base.filter("age__lt", "18")
+#   print(base.count())     # still every user
+#
+# Refining methods (filter, exclude, order_by, ...) return a NEW QuerySet,
+# as Django's do. Terminal methods (count, fetch, delete, ...) run the query
+# for this handle. Every method binds its own handle first, which is what
+# keeps them independent.
+# ============================================================
+
+pub class QuerySet:
+	pub mut h: cptr
+
+	# ---- refinement: each returns a new QuerySet ----
+
+	def derive(self) -> QuerySet:
+		"""Copy this queryset's state into a fresh handle and bind it."""
+		unsafe:
+			let c = __qs_handle_clone(self.h)
+			__qs_handle_bind(c)
+			let q = QuerySet()
+			q.h := c
+			return q
+
+	pub def filter(self, lookup: str, val: str) -> QuerySet:
+		"""Narrow with a WHERE condition. Django lookups: age__gt, name__contains."""
+		let q = self.derive()
+		__qs_filter(lookup, val)
+		return q
+
+	pub def exclude(self, lookup: str, val: str) -> QuerySet:
+		"""Narrow with a WHERE NOT condition."""
+		let q = self.derive()
+		__qs_exclude(lookup, val)
+		return q
+
+	pub def order_by(self, col: str) -> QuerySet:
+		"""Order results. Prefix with '-' for descending."""
+		let q = self.derive()
+		__qs_order_by(col)
+		return q
+
+	pub def limit(self, n: int) -> QuerySet:
+		"""Cap the number of rows returned."""
+		let q = self.derive()
+		__qs_limit(n)
+		return q
+
+	pub def offset(self, n: int) -> QuerySet:
+		"""Skip the first n rows."""
+		let q = self.derive()
+		__qs_offset(n)
+		return q
+
+	pub def distinct(self) -> QuerySet:
+		"""SELECT DISTINCT."""
+		let q = self.derive()
+		__qs_distinct()
+		return q
+
+	pub def group_by(self, cols: str) -> QuerySet:
+		"""GROUP BY the given comma-separated columns."""
+		let q = self.derive()
+		__qs_group_by(cols)
+		return q
+
+	pub def having(self, condition: str) -> QuerySet:
+		"""HAVING clause for an aggregated query."""
+		let q = self.derive()
+		__qs_having(condition)
+		return q
+
+	pub def annotate(self, alias: str, func: str, col: str) -> QuerySet:
+		"""Add an aggregate column, e.g. annotate("n", "COUNT", "id")."""
+		let q = self.derive()
+		__qs_annotate(alias, func, col)
+		return q
+
+	pub def select_related(self, field_name: str) -> QuerySet:
+		"""JOIN a foreign key so its row comes back in the same query."""
+		let q = self.derive()
+		__qs_select_related(field_name)
+		return q
+
+	# ---- terminal: run the query for this handle ----
+
+	def use(self) -> int:
+		"""Make this queryset's handle the active one."""
+		unsafe:
+			return __qs_handle_bind(self.h)
+
+	pub def count(self) -> int:
+		"""SELECT COUNT(*)."""
+		self.use()
+		return __qs_count()
+
+	pub def exists(self) -> int:
+		"""1 if any row matches, else 0."""
+		self.use()
+		return __qs_exists()
+
+	pub def fetch(self) -> int:
+		"""Run the SELECT. Returns the row count; read rows with db.get_field()."""
+		self.use()
+		return __qs_fetch()
+
+	pub def all(self) -> int:
+		"""Run the SELECT with no further filtering. Returns the row count."""
+		self.use()
+		return __qs_all()
+
+	pub def first(self) -> int:
+		"""Fetch only the first row."""
+		self.use()
+		return __qs_first()
+
+	pub def last(self) -> int:
+		"""Fetch only the last row."""
+		self.use()
+		return __qs_last()
+
+	pub def delete(self) -> int:
+		"""DELETE the matching rows. Returns rows affected."""
+		self.use()
+		return __qs_delete()
+
+	pub def update(self, col: str, val: str) -> int:
+		"""UPDATE one column on the matching rows. Returns rows affected."""
+		self.use()
+		return __qs_update(col, val)
+
+	pub def set(self, key: str, val: str) -> int:
+		"""Stage a column value for insert()."""
+		self.use()
+		return __qs_set_field(key, val)
+
+	pub def insert(self) -> int:
+		"""INSERT the values staged with set()."""
+		self.use()
+		return __qs_do_insert()
+
+	pub def release(self) -> int:
+		"""Free this queryset's handle."""
+		unsafe:
+			return __qs_handle_free(self.h)
+
+pub def objects(table: str) -> QuerySet:
+	"""Start a query against a table, like Django's Model.objects.
+
+	The returned QuerySet owns its own handle, so several can be alive at
+	once. It is also bound as the active queryset, which keeps the
+	module-level helpers (db.filter_by, db.count, ...) working against it."""
+	unsafe:
+		let h = __qs_handle_new(table)
+		__qs_handle_bind(h)
+		let q = QuerySet()
+		q.h := h
+		return q
 
 pub def filter_by(lookup: str, val: str) -> int:
 	"""Add WHERE condition. Supports Django lookups: age__lt, name__contains, etc."""
