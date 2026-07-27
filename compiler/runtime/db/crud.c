@@ -2934,6 +2934,59 @@ int32_t __qs_do_insert(void) {
     return result;
 }
 
+// __qs_save — INSERT the fields staged with __qs_set_field.
+//
+// This is what __orm_save() calls for a model instance with no primary key,
+// i.e. Django's `obj.save()` on an unsaved object. It was declared extern in
+// orm.c and never defined, so the ORM did not link at all on Linux; macOS
+// only got away with it because -dead_strip discarded the calling code.
+int32_t __qs_save(void) {
+    return __qs_do_insert();
+}
+
+// __qs_save_update — UPDATE the fields staged with __qs_set_field, restricted
+// by the WHERE clause built so far.
+//
+// The counterpart to __qs_save for an instance that already has a primary key.
+// __qs_update(col, val) cannot serve here: it writes exactly one column, while
+// saving an instance writes every changed field in one statement.
+//
+// Parameter ordering matters and is already correct by construction: __orm_save
+// stages the field values first (so they occupy qs_insert_param_start ..
+// +count-1) and only then calls __qs_filter for the primary key, whose
+// placeholder is embedded in qs_where. Numbering here therefore matches the
+// order values sit in qs_params.
+int32_t __qs_save_update(void) {
+    if (qs_insert_count == 0 || qs_table[0] == '\0') return -1;
+
+    char sql[8192];
+    int pos = snprintf(sql, sizeof(sql), "UPDATE %s SET ", qs_table);
+
+    for (int i = 0; i < qs_insert_count && pos < (int)sizeof(sql); i++) {
+        if (i > 0) pos += snprintf(sql + pos, sizeof(sql) - pos, ", ");
+        char ph[16];
+        write_placeholder(ph, sizeof(ph), qs_insert_param_start + i + 1);
+        pos += snprintf(sql + pos, sizeof(sql) - pos, "%s = %s", qs_insert_keys[i], ph);
+    }
+
+    if (qs_where[0] && pos < (int)sizeof(sql)) {
+        pos += snprintf(sql + pos, sizeof(sql) - pos, " WHERE %s", qs_where);
+    }
+
+    debug_log_query(sql);
+
+    int32_t result;
+    if (qs_param_count > 0) {
+        result = __db_execute_params(sql, qs_params, qs_param_count);
+    } else {
+        result = __db_execute_stmt(sql);
+    }
+
+    qs_insert_count = 0;
+    qs_insert_param_start = 0;
+    return result;
+}
+
 // Get by ID (parameterized)
 int32_t __qs_get_by_id(int32_t id_val) {
     char id_str[32];

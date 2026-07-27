@@ -909,7 +909,15 @@ char* __orm_instance_table(void) {
 extern int32_t __qs_set_field(const char* key, const char* val);
 extern int32_t __qs_save(void);
 extern int32_t __qs_filter(const char* key, const char* val);
-extern int32_t __qs_update(void);
+// Saving an instance writes every changed field in one statement, which is
+// __qs_save_update. It is NOT __qs_update: that takes (col, val) and writes a
+// single column. This was previously declared here as `__qs_update(void)` and
+// called with no arguments, so the two-argument definition in crud.c read
+// whatever happened to be in the argument registers as `col` and `val` — the
+// declaration mismatch is invisible to the linker and the UPDATE path was
+// corrupt rather than merely missing.
+extern int32_t __qs_save_update(void);
+extern int32_t __db_execute_stmt(const char* sql);
 extern void    __qs_clear(void);
 
 // Forward declarations
@@ -990,7 +998,7 @@ int32_t __orm_save(void) {
         char pk_str[32];
         snprintf(pk_str, sizeof(pk_str), "%d", g_instance_pk_value);
         __qs_filter(pk_field, pk_str);
-        result = __qs_update();
+        result = __qs_save_update();
     } else {
         // INSERT: set all non-auto fields
         for (int i = 0; i < g_instance_field_count; i++) {
@@ -1445,7 +1453,6 @@ char* __orm_m2m_create_sql(const char* junction_name) {
 }
 
 // Extern: query execution from crud.c
-extern int32_t __db_exec(const char* sql);
 extern int32_t __db_exec_param(const char* sql, const char** params, int param_count);
 
 // __orm_m2m_add — add a link: INSERT INTO junction (from_col, to_col) VALUES (from_id, to_id)
@@ -1466,7 +1473,7 @@ int32_t __orm_m2m_add(const char* junction_name, const char* from_id, const char
             "INSERT IGNORE INTO %s (%s, %s) VALUES (%s, %s)",
             m->name, m->from_col, m->to_col, from_id, to_id);
     }
-    return __db_exec(sql);
+    return __db_execute_stmt(sql);
 }
 
 // __orm_m2m_remove — remove a link
@@ -1481,7 +1488,7 @@ int32_t __orm_m2m_remove(const char* junction_name, const char* from_id, const c
     snprintf(sql, sizeof(sql),
         "DELETE FROM %s WHERE %s = %s AND %s = %s",
         m->name, m->from_col, from_id, m->to_col, to_id);
-    return __db_exec(sql);
+    return __db_execute_stmt(sql);
 }
 
 // __orm_m2m_clear — remove all links for a given source ID
@@ -1496,7 +1503,7 @@ int32_t __orm_m2m_clear(const char* junction_name, const char* from_id) {
     snprintf(sql, sizeof(sql),
         "DELETE FROM %s WHERE %s = %s",
         m->name, m->from_col, from_id);
-    return __db_exec(sql);
+    return __db_execute_stmt(sql);
 }
 
 // __orm_m2m_all — query all related IDs, returns count via fetch

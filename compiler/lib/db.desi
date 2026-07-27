@@ -402,7 +402,18 @@ pub def migrate_all(dirs: list[str]) -> int:
 	Dependencies between apps are resolved via '# Depends:' headers in migration files.
 	Returns total count of applied migrations across all apps.
 	Usage: db.migrate_all(["accounts/migrations", "orders/migrations"])"""
-	let joined = "\n".join(dirs)
+	# Built by hand rather than with dirs.join("\n"): this module defines a
+	# `join` of its own (the SQL JOIN builder above), and that name shadows the
+	# built-in list method, so `dirs.join("\n")` resolves to it and lowers to a
+	# one-argument call to an undefined `join` symbol — which is what stopped
+	# every db/ORM example from linking.
+	let mut joined = ""
+	let mut i = 0
+	while i < len(dirs):
+		if i > 0:
+			joined := joined + "\n"
+		joined := joined + dirs[i]
+		i := i + 1
 	return __db_migrate_all(joined)
 
 # ============================================================
