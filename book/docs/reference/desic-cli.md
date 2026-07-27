@@ -8,6 +8,13 @@ The `desic` command-line tool is your primary interface for working with Desi co
 
 Watch for file changes and automatically rebuild/run.
 
+!!! warning "macOS and Linux only"
+    `desic watch` is not available on Windows. It relies on Unix signals
+    (`SIGUSR1`) and shared-library (`.so`) reloading, neither of which has a
+    Windows implementation yet. Running it there prints a message and exits
+    rather than watching anything. Every other `desic` command — `run`,
+    `build`, `test`, `check`, `fmt`, `doc` — works on all three platforms.
+
 ```bash
 desic watch           # Watch and type-check only
 desic watch --run .   # Watch, build, and run with auto-restart

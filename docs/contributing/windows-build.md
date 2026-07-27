@@ -63,6 +63,21 @@ Windows-specific guards to be aware of:
 - `strptime()` is not in MSVC — a minimal stub lives in `time.c`
 - `MSG_DONTWAIT` (POSIX) → `ioctlsocket(FIONBIO)` on Windows
 
+## Not available on Windows
+
+- **`compiler/runtime/db/*.c`** — raw pthreads in `pool.c`, POSIX sockets in
+  `mysql.c`/`redis.c`/`db_timeout.h`. Examples 437–446 fail to link with
+  `__db_*`/`__orm_*` undefined until someone ports it.
+- **`desic watch`** — hot reload needs Unix signals (`SIGUSR1`) and `.so`
+  reloading. `watch_cmd_windows.go` is a stub that prints a message and
+  exits 1; the real implementation in `watch_cmd.go` is `//go:build !windows`.
+  Note that the no-flag mode is only "type-check on change" and does not
+  actually need either of those, so a Windows watcher is feasible if someone
+  wants it. User-facing note lives in `book/docs/reference/desic-cli.md`.
+
+Everything else — `run`, `build`, `test`, `check`, `fmt`, `doc`, `desirepl`,
+`desifmt`, `desilsp` — works on Windows.
+
 ## macOS / Linux
 
 Use `make` as usual. The Makefile excludes `desi_host.c` but all other runtime files compile on Unix.

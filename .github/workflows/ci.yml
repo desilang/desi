@@ -78,6 +78,15 @@ jobs:
           .\test_examples_parallel.ps1 -Range "447,9999"
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
+      # The example suite covers the compiler; this covers the other shipped
+      # binaries (desirepl, desifmt, desilsp, desic init/run/test/build),
+      # which had no automated coverage and were each broken in some way.
+      - name: Smoke-test shipped tooling (windows)
+        if: runner.os == 'Windows' && matrix.opt == 'debug'
+        shell: pwsh
+        timeout-minutes: 10
+        run: .\tools\smoke.ps1
+
       - name: Run leak detection (macOS only)
         if: runner.os == 'macOS' && matrix.opt == 'debug'
         timeout-minutes: 5
