@@ -202,7 +202,7 @@ type TypeWrapper struct {
 
 func (t *TypeWrapper) isType() {}
 func (t *TypeWrapper) String() string {
-	return fmt.Sprintf("Type[%s]", t.Wrapped.String())
+	return fmt.Sprintf("Type[%s]", str(t.Wrapped))
 }
 
 type Field struct {
@@ -347,48 +347,62 @@ func (*ListIter) isType()   {}
 func (*MapIter) isType()    {}
 func (*FilterIter) isType() {}
 
-func (t *List) String() string { return "list[" + t.Elem.String() + "]" }
-func (t *Set) String() string  { return "set[" + t.Elem.String() + "]" }
-func (t *Dict) String() string { return "dict[" + t.Key.String() + ", " + t.Val.String() + "]" }
+// str renders a component type, tolerating nil.
+//
+// Types are printed for diagnostics and for editor tooling, both of which run
+// on code that does not type check — a half-written function has parameters
+// whose types were never resolved. Calling String() on those nil components
+// used to panic, which took the whole language server down the first time a
+// completion request touched an unresolved signature.
+func str(t T) string {
+	if t == nil {
+		return "?"
+	}
+	return t.String()
+}
+
+func (t *List) String() string { return "list[" + str(t.Elem) + "]" }
+func (t *Set) String() string  { return "set[" + str(t.Elem) + "]" }
+func (t *Dict) String() string { return "dict[" + str(t.Key) + ", " + str(t.Val) + "]" }
 func (t *Tuple) String() string {
 	parts := make([]string, len(t.Elems))
 	for i, e := range t.Elems {
-		parts[i] = e.String()
+		parts[i] = str(e)
 	}
 	return "tuple[" + strings.Join(parts, ", ") + "]"
 }
-func (t *Future) String() string { return "future[" + t.Elem.String() + "]" }
+func (t *Future) String() string { return "future[" + str(t.Elem) + "]" }
 func (t *Func) String() string {
 	ps := make([]string, len(t.Params))
 	for i, p := range t.Params {
-		ps[i] = p.String()
+		ps[i] = str(p)
 	}
-	return "func(" + strings.Join(ps, ", ") + ") -> " + t.Ret.String()
+	return "func(" + strings.Join(ps, ", ") + ") -> " + str(t.Ret)
 }
 func (t *Multi) String() string {
 	parts := make([]string, len(t.Elems))
 	for i, e := range t.Elems {
-		parts[i] = e.String()
+		parts[i] = str(e)
 	}
 	return "multi[" + strings.Join(parts, ", ") + "]"
 }
 func (t *Union) String() string {
 	parts := make([]string, len(t.Variants))
 	for i, v := range t.Variants {
-		parts[i] = v.String()
+		parts[i] = str(v)
 	}
 	return strings.Join(parts, "|")
 }
 
 func (t *Generic) String() string {
 	if len(t.Args) == 0 {
-		return t.Base.String()
+		return str(t.Base)
 	}
 	args := make([]string, len(t.Args))
 	for i, a := range t.Args {
-		args[i] = a.String()
+		args[i] = str(a)
 	}
-	return t.Base.String() + "<" + strings.Join(args, ", ") + ">"
+	return str(t.Base) + "<" + strings.Join(args, ", ") + ">"
 }
 
 func (t *TypeParam) String() string {
@@ -397,14 +411,14 @@ func (t *TypeParam) String() string {
 	}
 	return t.Name + ": " + strings.Join(t.Bounds, " + ")
 }
-func (t *CPtr) String() string       { return "cptr[" + t.Elem.String() + "]" }
+func (t *CPtr) String() string       { return "cptr[" + str(t.Elem) + "]" }
 func (t *TypeAlias) String() string  { return t.Name } // Nominal: display alias name, not underlying type
 func (t *Struct) String() string     { return t.Name }
 func (t *Enum) String() string       { return t.Name }
 func (t *Class) String() string      { return t.Name }
-func (t *ListIter) String() string   { return "ListIter[" + t.Elem.String() + "]" }
-func (t *MapIter) String() string    { return "MapIter[" + t.Elem.String() + "]" }
-func (t *FilterIter) String() string { return "FilterIter[" + t.Elem.String() + "]" }
+func (t *ListIter) String() string   { return "ListIter[" + str(t.Elem) + "]" }
+func (t *MapIter) String() string    { return "MapIter[" + str(t.Elem) + "]" }
+func (t *FilterIter) String() string { return "FilterIter[" + str(t.Elem) + "]" }
 
 // ----- Constructors -----
 
