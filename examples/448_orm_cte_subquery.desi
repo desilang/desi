@@ -1,4 +1,4 @@
-# EXPECTED: SKIP
+# REQUIRES: database
 # Example 448: ORM Phase 3 — CTEs, subqueries, prefetch_related
 # Demonstrates: @model + CTEs, EXISTS/IN subqueries, prefetch_related
 # EXPECTED_OUTPUT:

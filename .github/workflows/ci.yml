@@ -47,9 +47,44 @@ jobs:
         if: runner.os != 'Windows'
         run: make runtime
 
+      # Start the PostgreSQL and MySQL that ship with the Ubuntu runner image,
+      # so the "# REQUIRES: database" examples actually run somewhere. Done as
+      # a step rather than with `services:`, because services attach to the
+      # whole job and this one also runs on macOS and Windows, where Linux
+      # containers are unavailable.
+      - name: Start databases (linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo systemctl start postgresql || sudo service postgresql start
+          sudo systemctl start mysql      || sudo service mysql start
+          sleep 5
+          # Password auth over TCP for both, matching what the examples connect with.
+          sudo -u postgres psql -c "ALTER USER postgres WITH PASSWORD 'desi_test';"
+          HBA=$(sudo -u postgres psql -tAc 'SHOW hba_file;')
+          echo "host all all 127.0.0.1/32 md5" | sudo tee -a "$HBA" > /dev/null
+          echo "host all all ::1/128 md5"      | sudo tee -a "$HBA" > /dev/null
+          sudo systemctl restart postgresql || sudo service postgresql restart
+          sleep 5
+          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'desi_test';"
+          sudo mysql -pdesi_test -e "CREATE DATABASE IF NOT EXISTS desi_test;"
+          PGPASSWORD=desi_test psql -h 127.0.0.1 -U postgres -d postgres -c "select version();"
+          mysql -h 127.0.0.1 -u root -pdesi_test -e "select version();"
+
+      # The database examples only run where servers are available, which is
+      # the Linux job. Everywhere else they skip, exactly as before.
       - name: Run example tests (unix)
         if: runner.os != 'Windows'
         timeout-minutes: 90
+        env:
+          DESI_DB_TESTS: ${{ runner.os == 'Linux' && '1' || '0' }}
+          PG_HOST: 127.0.0.1
+          PG_USER: postgres
+          PG_PASS: desi_test
+          PG_DB: postgres
+          MYSQL_HOST: 127.0.0.1
+          MYSQL_USER: root
+          MYSQL_PASS: desi_test
+          MYSQL_DB: desi_test
         run: |
           make compiler
           ./test_examples.sh

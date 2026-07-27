@@ -116,8 +116,18 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     
     TOTAL_COUNT=$((TOTAL_COUNT + 1))
     
+    # Tests marked "# REQUIRES: database" need a live PostgreSQL/MySQL, so they
+    # are skipped unless DESI_DB_TESTS=1 says the servers are there. Without an
+    # opt-in they were plain SKIPs, which meant nothing exercised the ORM: 495
+    # green tests once coexisted with a save() that did not exist.
+    if head -n 5 "$f" | grep -q "# REQUIRES: database"; then
+        if [ "$DESI_DB_TESTS" != "1" ]; then
+            echo "[$TOTAL_COUNT] Testing: $f  ⊘ SKIPPED (needs a database; set DESI_DB_TESTS=1)"
+            PASSED_COUNT=$((PASSED_COUNT + 1))
+            continue
+        fi
     # Check if this test should be skipped
-    if head -n 5 "$f" | grep -q -E "(# EXPECTED: SKIP|# SKIPPED)"; then
+    elif head -n 5 "$f" | grep -q -E "(# EXPECTED: SKIP|# SKIPPED)"; then
         echo "[$TOTAL_COUNT] Testing: $f  ⊘ SKIPPED"
         PASSED_COUNT=$((PASSED_COUNT + 1))
         continue

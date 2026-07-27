@@ -1,4 +1,4 @@
-# EXPECTED: SKIP
+# REQUIRES: database
 # Example 464: Phase 4 — HAVING, multi-order, multi-update, pagination, soft-delete
 # Demonstrates all Phase 4 query engine features against PostgreSQL
 # EXPECTED_OUTPUT:

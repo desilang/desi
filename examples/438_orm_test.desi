@@ -1,4 +1,4 @@
-# EXPECTED: SKIP
+# REQUIRES: database
 # Django-like ORM test with clean API
 # EXPECTED_OUTPUT:
 # === Desi ORM Test ===

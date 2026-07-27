@@ -191,10 +191,21 @@ foreach ($testFile in $testFiles) {
     $TotalCount++
     $relativePath = $testFile.FullName.Substring($ProjectRoot.Length + 1)
     
-    # Check if test should be skipped (search first 3 lines for # EXPECTED: SKIP)
-    $first3Lines = Get-Content $testFile.FullName -TotalCount 3 -Encoding UTF8
-    $isSkip = $first3Lines | Where-Object { $_ -match "# EXPECTED: SKIP" }
-    if ($isSkip) {
+    # Check if test should be skipped (search first 5 lines)
+    $first5Lines = Get-Content $testFile.FullName -TotalCount 5 -Encoding UTF8
+    # "# REQUIRES: database" tests need a live PostgreSQL/MySQL and only run
+    # when DESI_DB_TESTS=1 says the servers are available. Note this is
+    # additionally moot on Windows today: compiler/runtime/db/*.c is not built
+    # there, so the db module does not link.
+    $needsDb = $first5Lines | Where-Object { $_ -match "# REQUIRES: database" }
+    if ($needsDb -and $env:DESI_DB_TESTS -ne "1") {
+        Write-Host "[$TotalCount] Testing: $relativePath  [SKIP] (needs a database)" -ForegroundColor Yellow
+        $PassedCount++
+        Write-Host ""
+        continue
+    }
+    $isSkip = $first5Lines | Where-Object { $_ -match "# EXPECTED: SKIP" }
+    if (-not $needsDb -and $isSkip) {
         Write-Host "[$TotalCount] Testing: $relativePath  [SKIP]" -ForegroundColor Yellow
         $PassedCount++
         Write-Host ""

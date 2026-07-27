@@ -1,4 +1,4 @@
-# EXPECTED: SKIP
+# REQUIRES: database
 # Example 449: ORM Phase 4 — Full-text search
 # Demonstrates: @model + FTS index creation, filtered search, ranked results
 # EXPECTED_OUTPUT:
