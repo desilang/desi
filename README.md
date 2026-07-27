@@ -35,14 +35,18 @@ curl -sSL https://desilang.org/install.sh | sh
 Or build from source — see [BUILDING.md](BUILDING.md) for full instructions:
 
 ```sh
-# macOS / Linux
+# macOS / Linux (installs prerequisites automatically)
 git clone https://github.com/desilang/desi
-cd desi && make
+cd desi && ./bootstrap.sh
 
 # Windows (installs prerequisites automatically)
 git clone https://github.com/desilang/desi
 cd desi; .\bootstrap.ps1
 ```
+
+`bootstrap.sh` checks for Go, LLVM/Clang, OpenSSL, and Make, installs
+whatever is missing via Homebrew/apt/dnf/pacman, then builds. If you already
+have the toolchain, `make` on its own is enough.
 
 ## Quick Start
 

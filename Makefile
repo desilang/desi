@@ -57,6 +57,30 @@ DESILSP = $(BIN_DIR)/desilsp
 
 all: directories runtime compiler tools
 
+# Fail early, and usefully, when a prerequisite is missing. Without this the
+# build dies partway through with a raw toolchain error — a missing OpenSSL
+# header surfaces as "compiler/runtime/http/tls_openssl.h:10:10: fatal error:
+# openssl/ssl.h: No such file or directory" some forty files into the compile,
+# which says nothing about what to install. bootstrap.sh already knows how to
+# install all of this; this just points at it.
+.PHONY: deps-check
+deps-check:
+	@missing=""; \
+	command -v $(CC) >/dev/null 2>&1 || missing="$$missing  - a C compiler ($(CC))\n"; \
+	command -v $(GO) >/dev/null 2>&1 || missing="$$missing  - Go\n"; \
+	if [ ! -f /usr/include/openssl/ssl.h ] && \
+	   [ ! -f /usr/local/include/openssl/ssl.h ] && \
+	   ! pkg-config --exists openssl 2>/dev/null && \
+	   [ -z "$$(brew --prefix openssl 2>/dev/null)" ]; then \
+	    missing="$$missing  - OpenSSL development headers (libssl-dev / openssl-devel / brew openssl)\n"; \
+	fi; \
+	if [ -n "$$missing" ]; then \
+	    printf "\nMissing build prerequisites:\n"; \
+	    printf "$$missing"; \
+	    printf "\nRun ./bootstrap.sh to install them, then try again.\n\n"; \
+	    exit 1; \
+	fi
+
 directories: $(BUILD_DIR) $(BIN_DIR)
 
 # Real directory targets so they can be used as order-only prerequisites
@@ -80,7 +104,7 @@ $(DECIMAL_LIB):
 	@echo "==> libmpdec built successfully"
 
 # Runtime Library (includes decimal support)
-runtime: decimal-lib $(LIB_DESI)
+runtime: deps-check decimal-lib $(LIB_DESI)
 
 $(LIB_DESI): $(RUNTIME_OBJS) $(RUNTIME_DB_OBJS) $(BUILD_DIR)/desi_decimal.o
 	@echo "==> Merging runtime + libmpdec into $@"
