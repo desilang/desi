@@ -386,6 +386,15 @@ func rewrite(src []byte) []byte {
 					if w.lineKind == _lineUnknown {
 						w.lineKind = _lineStringOnly
 					}
+				} else if lit, ok := rawStringAt(src, cur, byteIndex(it.Line, it.Col)); ok {
+					// Raw strings have their own opener (`r`, optional `#`s, `"`),
+					// which the generic reconstruction does not recognise — it
+					// only knows `"`, `"""`, and the f-string forms, so it
+					// swallowed the `r` and truncated the literal.
+					w.tok(string(lit))
+					if w.lineKind == _lineUnknown {
+						w.lineKind = _lineStringOnly
+					}
 				} else if !isStringTok && it.Lexeme != "" {
 					// Numeric literal — lexeme carries the exact source form.
 					w.tok(it.Lexeme)
@@ -469,6 +478,47 @@ func rewrite(src []byte) []byte {
 // (backslash escapes are kept verbatim), so re-doubling the braces reproduces
 // exactly what the user wrote — and keeps a literal brace from being re-read
 // as the start of an interpolation.
+// rawStringAt returns the exact source text of the raw string starting at
+// `start` (the `r`). A raw string performs no escape processing and its
+// extent is fully determined by its opener — `r`, an optional run of `#`,
+// then `"` — closed by `"` followed by the same run of `#`. Deriving the end
+// from the source this way avoids relying on the next token's position,
+// which does not reliably mark where the literal ends.
+func rawStringAt(src []byte, tok token.Token, start int) ([]byte, bool) {
+	if tok != token.RAWSTR {
+		return nil, false
+	}
+	i := start
+	if i < 0 || i >= len(src) || (src[i] != 'r' && src[i] != 'R') {
+		return nil, false
+	}
+	i++
+	hashes := 0
+	for i < len(src) && src[i] == '#' {
+		hashes++
+		i++
+	}
+	if i >= len(src) || src[i] != '"' {
+		return nil, false
+	}
+	i++
+	for i < len(src) {
+		if src[i] == '"' {
+			j := i + 1
+			n := 0
+			for n < hashes && j < len(src) && src[j] == '#' {
+				n++
+				j++
+			}
+			if n == hashes {
+				return src[start:j], true
+			}
+		}
+		i++
+	}
+	return nil, false
+}
+
 func escapeFStringPart(lexeme string) string {
 	s := strings.ReplaceAll(lexeme, "{", "{{")
 	return strings.ReplaceAll(s, "}", "}}")
@@ -683,6 +733,49 @@ func isCommentOnlyLine(line []byte) []byte {
 // findEOLCommentSuffix returns the trailing whitespace (if any) + "#…"
 // slice from a single physical line, or nil if none should be preserved.
 // Ignores '#{' and any '#' inside "..." or """...""".
+// rawStringSpanInLine reports the end index of a raw-string literal opening at
+// i, or ok=false if one does not start there. The opener is `r`/`R`, an
+// optional run of `#`, then `"`; it closes on `"` followed by the same run of
+// `#`. A raw string may continue past the end of the line, in which case the
+// remainder of the line is literal text.
+func rawStringSpanInLine(line []byte, i int) (int, bool) {
+	if i >= len(line) || (line[i] != 'r' && line[i] != 'R') {
+		return 0, false
+	}
+	// Not a raw string if this `r` is just the tail of an identifier.
+	if i > 0 {
+		c := line[i-1]
+		if c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') {
+			return 0, false
+		}
+	}
+	j := i + 1
+	hashes := 0
+	for j < len(line) && line[j] == '#' {
+		hashes++
+		j++
+	}
+	if j >= len(line) || line[j] != '"' {
+		return 0, false
+	}
+	j++
+	for j < len(line) {
+		if line[j] == '"' {
+			k := j + 1
+			n := 0
+			for n < hashes && k < len(line) && line[k] == '#' {
+				n++
+				k++
+			}
+			if n == hashes {
+				return k, true
+			}
+		}
+		j++
+	}
+	return len(line), true
+}
+
 func findEOLCommentSuffix(line []byte) []byte {
 	if len(line) == 0 {
 		return nil
@@ -695,6 +788,16 @@ func findEOLCommentSuffix(line []byte) []byte {
 	inStr := false
 	inTriple := false
 	for i < len(line) {
+		// Skip over raw strings before anything else. `#` is the comment
+		// character, so the hashes in `r#"..."#` otherwise read as the start
+		// of a trailing comment and the remainder of the literal gets copied
+		// out as one — appending junk after the string on every format pass.
+		if !inStr && !inTriple {
+			if end, ok := rawStringSpanInLine(line, i); ok {
+				i = end
+				continue
+			}
+		}
 		if line[i] == '#' && !inStr && !inTriple {
 			// skip set literal opener '#{'
 			if i+1 < len(line) && line[i+1] == '{' {

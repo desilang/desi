@@ -1,0 +1,23 @@
+class Counter:
+	pub mut static count: int = 0
+
+def noop() -> none:
+	pass
+
+def main() -> int:
+	let s1 = r"hello\nworld"
+	let winpath = r"C:\Users\desi\Documents"
+	let regex = r"\d{3}-\d{3}-\d{4}"
+	let empty = r""
+	let unicode = r"你好"
+	let hashed = r#"He said "hello""#
+	let hashed2 = r##"Using r#"..."# syntax"##
+	let trailing = r"plain"  # a real trailing comment
+	spawn:
+		print("from spawn")
+	print(s1)
+	print(winpath)
+	print(regex)
+	print(empty)
+	print(unicode)
+	0

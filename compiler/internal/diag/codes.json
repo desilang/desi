@@ -834,5 +834,12 @@
       "title": "unbounded allocation inside loop",
       "help": "Creating new collections inside a loop body may cause excessive allocations. Pre-allocate or move outside the loop."
     }
+  },
+  "format": {
+    "would_change_code": {
+      "id": "DFM0001",
+      "title": "formatting would change the code",
+      "help": "The formatter only rearranges layout, so it verifies that its output still lexes to the same tokens as the input. It did not here, so the file was left untouched rather than written over with something different. This is a formatter bug — please report the file."
+    }
   }
 }
