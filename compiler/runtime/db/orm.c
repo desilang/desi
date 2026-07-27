@@ -780,15 +780,57 @@ char* __orm_field_spec(const char* table_name, int32_t field_index) {
 //   user.save()                    →  save
 // ============================================================
 
-// Instance field cache — stores field values for the "current" instance
+// Instance field cache — stores field values for the "current" instance.
+//
+// This is per-thread. It was process-global, which silently corrupted data
+// under concurrency: two threads running obj.save() interleave their staging
+// here, so one request's field values end up written to the other's row. The
+// HTTP server hands each connection to its own thread, so that is the normal
+// path, not an edge case.
+//
+// Held behind a thread-local pointer rather than making the arrays themselves
+// __thread: the struct is ~516 KB, and reserving that in every thread's TLS
+// block — including threads that never touch the ORM — is wasteful. Allocated
+// on first use instead. crud.c already scopes its QuerySet this way.
 #define MAX_INSTANCE_FIELDS 64
-static char g_instance_table[128];
-static char g_instance_fields[MAX_INSTANCE_FIELDS][64];
-static char g_instance_values[MAX_INSTANCE_FIELDS][4096];
-static char g_instance_original[MAX_INSTANCE_FIELDS][4096]; // snapshot for dirty tracking
-static int  g_instance_dirty[MAX_INSTANCE_FIELDS];           // 1 = field changed
-static int  g_instance_field_count = 0;
-static int  g_instance_pk_value = 0;  // 0 = new (INSERT), >0 = existing (UPDATE)
+
+typedef struct {
+    char table[128];
+    char fields[MAX_INSTANCE_FIELDS][64];
+    char values[MAX_INSTANCE_FIELDS][4096];
+    char original[MAX_INSTANCE_FIELDS][4096]; // snapshot for dirty tracking
+    int  dirty[MAX_INSTANCE_FIELDS];          // 1 = field changed
+    int  field_count;
+    int  pk_value;                            // 0 = new (INSERT), >0 = existing (UPDATE)
+} InstanceState;
+
+static __thread InstanceState* g_instance_tls = NULL;
+
+// Zero-initialized on first use, matching the previous static storage.
+// A failed allocation falls back to a shared instance: losing thread
+// isolation is bad, but crashing on a null dereference is worse, and the
+// caller has no way to report an allocation failure from here.
+static InstanceState* orm_instance_state(void) {
+    if (!g_instance_tls) {
+        g_instance_tls = (InstanceState*)calloc(1, sizeof(InstanceState));
+        if (!g_instance_tls) {
+            static InstanceState fallback;
+            return &fallback;
+        }
+    }
+    return g_instance_tls;
+}
+
+// Keep the original names working; every use site reads and writes the
+// calling thread's own copy. sizeof() still resolves against the real array
+// members, so existing memset/sizeof uses are unaffected.
+#define g_instance_table       (orm_instance_state()->table)
+#define g_instance_fields      (orm_instance_state()->fields)
+#define g_instance_values      (orm_instance_state()->values)
+#define g_instance_original    (orm_instance_state()->original)
+#define g_instance_dirty       (orm_instance_state()->dirty)
+#define g_instance_field_count (orm_instance_state()->field_count)
+#define g_instance_pk_value    (orm_instance_state()->pk_value)
 
 // Extern: access query result values from crud.c
 extern char* __db_get_field_by(int32_t row, const char* col_name);

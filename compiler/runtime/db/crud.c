@@ -2213,8 +2213,8 @@ int32_t __qs_window(const char* func, const char* over_clause, const char* alias
 // ============================================================
 
 // State for cursor
-static char qs_cursor_name[64] = "";
-static int  qs_cursor_open = 0;
+static __thread char qs_cursor_name[64] = "";
+static __thread int  qs_cursor_open = 0;
 
 // Declare a server-side cursor for the current queryset
 // PG: DECLARE cursor_name CURSOR FOR SELECT ...
@@ -2399,8 +2399,8 @@ static struct {
     char name[64];     // CTE alias
     char query[2048];  // CTE query body
 } qs_ctes[QS_MAX_CTES];
-static int qs_cte_count = 0;
-static int qs_cte_recursive = 0;  // 1 if WITH RECURSIVE
+static __thread int qs_cte_count = 0;
+static __thread int qs_cte_recursive = 0;  // 1 if WITH RECURSIVE
 
 // Add a CTE clause
 // Django: MyModel.objects.raw("WITH active AS (...) SELECT ...")
@@ -2564,7 +2564,7 @@ static struct {
     char fk_col[128];        // foreign key column in related table
     char pk_col[128];        // primary key column in current table (usually 'id')
 } qs_prefetches[QS_MAX_PREFETCH];
-static int qs_prefetch_count = 0;
+static __thread int qs_prefetch_count = 0;
 
 // Register a prefetch relationship
 // Django: Entry.objects.prefetch_related('authors')
@@ -3246,11 +3246,37 @@ char* __qs_values_flat(int32_t row, const char* col_name) {
 #define BULK_MAX_ROWS 1000
 #define BULK_MAX_PARAMS (BULK_MAX_COLS * BULK_MAX_ROWS)
 
-static char   bulk_cols[BULK_MAX_COLS][128];
-static int    bulk_col_count = 0;
-static const char* bulk_params[BULK_MAX_PARAMS];
-static int    bulk_param_count = 0;
-static int    bulk_row_count = 0;
+// Bulk-insert staging, per thread. Two threads batching inserts at the same
+// time would otherwise share these buffers and interleave each other's rows.
+// Behind a thread-local pointer rather than __thread directly: bulk_params
+// alone is 32,000 pointers (~256 KB), which is far too much to reserve in
+// every thread's TLS block.
+typedef struct {
+    char        cols[BULK_MAX_COLS][128];
+    int         col_count;
+    const char* params[BULK_MAX_PARAMS];
+    int         param_count;
+    int         row_count;
+} BulkState;
+
+static __thread BulkState* g_bulk_tls = NULL;
+
+static BulkState* bulk_state(void) {
+    if (!g_bulk_tls) {
+        g_bulk_tls = (BulkState*)calloc(1, sizeof(BulkState));
+        if (!g_bulk_tls) {
+            static BulkState fallback;
+            return &fallback;
+        }
+    }
+    return g_bulk_tls;
+}
+
+#define bulk_cols        (bulk_state()->cols)
+#define bulk_col_count   (bulk_state()->col_count)
+#define bulk_params      (bulk_state()->params)
+#define bulk_param_count (bulk_state()->param_count)
+#define bulk_row_count   (bulk_state()->row_count)
 
 int32_t __qs_bulk_begin(int32_t ncols) {
     if (ncols <= 0 || ncols > BULK_MAX_COLS) return -1;
