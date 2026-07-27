@@ -276,6 +276,58 @@ void* __qs_handle_get(void) {
     return (void*)g_qs_current;
 }
 
+// Duplicate a handle, including its accumulated state.
+//
+// Django's chaining does not mutate: User.objects.filter(a) and
+// .filter(a).filter(b) are separate querysets, and refining one must not
+// disturb the other. That requires copying the builder state rather than
+// handing back the same pointer.
+//
+// Everything in QuerySet is inline except four string arrays, so the struct
+// copies wholesale and only those are re-allocated. Ownership then matches
+// what __qs_free expects: each element individually malloc'd.
+void* __qs_handle_clone(void* src_handle) {
+    QuerySet* src = (QuerySet*)src_handle;
+    if (!src) return NULL;
+
+    QuerySet* dst = (QuerySet*)calloc(1, sizeof(QuerySet));
+    if (!dst) return NULL;
+
+    // Inline fields (table, clauses, flags, annotations, CTEs, prefetch, ...)
+    memcpy(dst, src, sizeof(QuerySet));
+
+    // The four dynamic arrays were copied as pointers; give the clone its own.
+    dst->params = NULL;
+    dst->insert_keys = NULL;
+    dst->update_keys = NULL;
+    dst->related = NULL;
+
+    #define QS_CLONE_ARR(field, count_field, cap_field)                        \
+        do {                                                                   \
+            int cap = src->cap_field > 0 ? src->cap_field : 1;                 \
+            dst->field = (char**)calloc(cap, sizeof(char*));                   \
+            if (!dst->field) { __qs_free(dst); return NULL; }                  \
+            dst->cap_field = cap;                                              \
+            dst->count_field = 0;                                              \
+            for (int i = 0; i < src->count_field; i++) {                       \
+                if (src->field[i]) {                                           \
+                    dst->field[i] = strdup(src->field[i]);                     \
+                    if (!dst->field[i]) { __qs_free(dst); return NULL; }       \
+                }                                                              \
+                dst->count_field++;                                            \
+            }                                                                  \
+        } while (0)
+
+    QS_CLONE_ARR(params, param_count, param_cap);
+    QS_CLONE_ARR(insert_keys, insert_count, insert_cap);
+    QS_CLONE_ARR(update_keys, update_count, update_cap);
+    QS_CLONE_ARR(related, related_count, related_cap);
+
+    #undef QS_CLONE_ARR
+
+    return (void*)dst;
+}
+
 // Legacy shim: __qs_reset creates a new handle and installs it.
 // Used by the non-ORM db.objects() path and older code.
 int32_t __qs_reset(const char* table) {

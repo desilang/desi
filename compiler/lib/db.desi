@@ -679,6 +679,11 @@ pub def __qs_handle_free(qs: cptr) -> int
 @extern("C")
 pub def __qs_handle_get() -> cptr
 
+# Duplicate a handle with its accumulated state, so refining one queryset
+# does not disturb another (Django's chaining returns a new queryset).
+@extern("C")
+pub def __qs_handle_clone(qs: cptr) -> cptr
+
 # Legacy shim (used by db.objects() non-ORM path)
 @extern("C")
 pub def __qs_reset(table: str) -> int
