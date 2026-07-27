@@ -155,6 +155,43 @@ def main():
     let p2 = Point.from_coords(10, 20)
 ```
 
+### Static Fields
+
+A field marked `static` belongs to the class rather than to any one
+instance: there is a single copy, shared by every object of that class.
+Access it through the class name, not through `self`.
+
+```desi
+class Counter:
+    pub mut static count: int = 0
+
+    pub def increment(self) -> int:
+        Counter.count = Counter.count + 1
+        return 0
+
+    pub def get_count(self) -> int:
+        return Counter.count
+
+def main() -> int:
+    let c1 = Counter()
+    let c2 = Counter()
+
+    let x1 = c1.increment()
+    let x2 = c1.increment()
+    let x3 = c2.increment()
+
+    # Both objects share one counter, so this prints 3
+    print(f"Count: {c2.get_count()}")
+    0
+```
+
+```
+Count: 3
+```
+
+Use `mut` if the field is reassigned, as above. A `static` field without
+`mut` is a shared constant.
+
 ### Class Methods
 
 Use `@classmethod` for methods that receive the class:
