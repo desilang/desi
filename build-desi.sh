@@ -73,24 +73,44 @@ echo "==> Compiling Desi to LLVM IR..."
 ./bin/desic emit-ir "$INPUT" > build/program.ll
 
 echo "==> Compiling LLVM IR to object file..."
+# clang compiles LLVM IR directly, so llc is only a fallback. It has to be:
+# llc is not installed on GitHub's macOS or ubuntu runners (Apple's toolchain
+# does not ship it, and Ubuntu only provides versioned binaries), which made
+# every program fail with "llc: command not found" — find_tool falls back to
+# the bare name when it cannot locate one. desic's own pipeline already calls
+# clang on the .ll for this reason.
+#
+# llc also defaults to a non-PIC relocation model, and Linux links
+# position-independent executables by default, so an llc-produced object fails
+# with "relocation R_X86_64_32 ... can not be used when making a PIE object".
+# clang gets this right on its own; the flag covers the fallback. macOS
+# requires PIC regardless, so it is correct on both.
+LLC_FLAGS="-relocation-model=pic"
 if [ "$RELEASE" = "1" ]; then
-    # Try clang first for full O2 pipeline optimization, fallback to opt + llc if there's a toolchain mismatch
     if ! $CLANG -w -O2 -c build/program.ll -o build/program.o 2>/dev/null; then
         OPT=$(find_tool opt)
         $OPT -O2 build/program.ll -o build/program_opt.bc
-        $LLC -O2 build/program_opt.bc -filetype=obj -o build/program.o
+        $LLC -O2 $LLC_FLAGS build/program_opt.bc -filetype=obj -o build/program.o
         rm -f build/program_opt.bc
     fi
 else
-    $LLC build/program.ll -filetype=obj -o build/program.o
+    if ! $CLANG -w -c build/program.ll -o build/program.o 2>/dev/null; then
+        $LLC $LLC_FLAGS build/program.ll -filetype=obj -o build/program.o
+    fi
 fi
 
 echo "==> Linking executable..."
 EXTRA_LINK_FLAGS=""
+# -dead_strip is an Apple ld flag. GNU ld rejects it outright
+# ("unable to disambiguate: -dead_strip"), so passing it unconditionally made
+# every single program fail to link on Linux. --gc-sections is the GNU
+# equivalent; desic's own linker invocation already picks between them this way.
+DEAD_STRIP_FLAG="-Wl,--gc-sections"
 if [ "$(uname)" = "Darwin" ]; then
     MACOSX_VERSION=$(sw_vers -productVersion 2>/dev/null | cut -d. -f1-2 || echo "12.0")
     export MACOSX_DEPLOYMENT_TARGET="$MACOSX_VERSION"
     EXTRA_LINK_FLAGS="-mmacosx-version-min=$MACOSX_VERSION"
+    DEAD_STRIP_FLAG="-Wl,-dead_strip"
 fi
 OPENSSL_LINK_FLAGS=""
 if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
@@ -127,7 +147,11 @@ if grep -qE "^import (http|db)" "$INPUT" 2>/dev/null; then
 fi
 # Link against libdesi.a (static runtime) with dead code elimination
 # Note: -lz removed — compression is now bundled via miniz
-$CLANG $OPT_FLAGS build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS $OPENSSL_LINK_FLAGS -o "build/output/$OUTPUT_NAME" -Wl,-dead_strip
+# -lm is required on Linux: the runtime calls round()/pow() from builtins.c, and
+# glibc keeps libm separate. macOS folds libm into libSystem, so its absence
+# went unnoticed there while every Linux link failed with
+# "undefined reference to `round'". Passing it on macOS is harmless.
+$CLANG $OPT_FLAGS build/program.o -Lbuild -ldesi $EXTRA_LINK_FLAGS $OPENSSL_LINK_FLAGS -lm -o "build/output/$OUTPUT_NAME" $DEAD_STRIP_FLAG
 
 echo "==> Cleaning up intermediate files..."
 rm -f build/program.ll build/program.o
