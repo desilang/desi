@@ -2,17 +2,12 @@ name: CI
 
 on:
   push:
-    # TEMPORARY: dev-** is off while the Linux/macOS failures it surfaced
-    # are worked through, so pushes to the release branch are not blocked by
-    # known-red jobs. Restore 'dev-**' here (and in pull_request below) once
-    # those are green — gating only main lets platform divergence sit
-    # undetected until the merge, which is how two Windows-only breakages
-    # reached dev-0.1.0.
-    branches: [main]
+    # Release work happens on dev-* branches, so they have to be gated too:
+    # gating only main is what let a missing <stdint.h> (broke the MSVC build)
+    # and %ld printing i64 as -1 reach dev-0.1.0 unnoticed.
+    branches: [main, 'dev-**']
   pull_request:
-    branches: [main]
-  # Lets the full matrix still be run on demand from the Actions tab while
-  # the automatic dev triggers are disabled.
+    branches: [main, 'dev-**']
   workflow_dispatch:
 
 permissions:

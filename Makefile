@@ -70,7 +70,9 @@ deps-check:
 	command -v $(GO) >/dev/null 2>&1 || missing="$$missing  - Go\n"; \
 	if [ ! -f /usr/include/openssl/ssl.h ] && \
 	   [ ! -f /usr/local/include/openssl/ssl.h ] && \
+	   [ ! -f /opt/homebrew/include/openssl/ssl.h ] && \
 	   ! pkg-config --exists openssl 2>/dev/null && \
+	   [ -z "$$(brew --prefix openssl@3 2>/dev/null)" ] && \
 	   [ -z "$$(brew --prefix openssl 2>/dev/null)" ]; then \
 	    missing="$$missing  - OpenSSL development headers (libssl-dev / openssl-devel / brew openssl)\n"; \
 	fi; \
