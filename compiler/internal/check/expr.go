@@ -96,22 +96,9 @@ func (c *checker) typ(e ast.Expr) types.T {
 		for _, clause := range x.Clauses {
 			// 1. Type-check the iterable expression
 			iterType := c.typ(clause.Iter)
-			if iterType == nil {
-				continue
-			}
 
 			// 2. Extract element type from iterable
-			var elemType types.T
-			switch it := iterType.(type) {
-			case *types.List:
-				elemType = it.Elem
-			case *types.Set:
-				elemType = it.Elem
-			default:
-				// For now, support list and set. Could extend to other iterables.
-				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
-				continue
-			}
+			elemType := c.comprehensionElemType(iterType, clause.Iter)
 
 			// 3. Bind the loop variable into scope
 			if target, ok := clause.Target.(*ast.Ident); ok {
@@ -150,19 +137,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		// Process each clause: check iterable, bind loop variable
 		for _, clause := range x.Clauses {
 			iterType := c.typ(clause.Iter)
-			if iterType == nil {
-				continue
-			}
-			var elemType types.T
-			switch it := iterType.(type) {
-			case *types.List:
-				elemType = it.Elem
-			case *types.Set:
-				elemType = it.Elem
-			default:
-				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
-				continue
-			}
+			elemType := c.comprehensionElemType(iterType, clause.Iter)
 			if target, ok := clause.Target.(*ast.Ident); ok {
 				c.scope.Define(&Symbol{Name: target.Name, Kind: SymVar, Type: elemType})
 				c.info.Types[target] = elemType
@@ -192,19 +167,7 @@ func (c *checker) typ(e ast.Expr) types.T {
 		// Process each clause: check iterable, bind loop variable
 		for _, clause := range x.Clauses {
 			iterType := c.typ(clause.Iter)
-			if iterType == nil {
-				continue
-			}
-			var elemType types.T
-			switch it := iterType.(type) {
-			case *types.List:
-				elemType = it.Elem
-			case *types.Set:
-				elemType = it.Elem
-			default:
-				c.add(diagAt("DTE0004", clause.Iter.SpanOf(), "cannot iterate over "+iterType.String()))
-				continue
-			}
+			elemType := c.comprehensionElemType(iterType, clause.Iter)
 			if target, ok := clause.Target.(*ast.Ident); ok {
 				c.scope.Define(&Symbol{Name: target.Name, Kind: SymVar, Type: elemType})
 				c.info.Types[target] = elemType
@@ -767,6 +730,36 @@ func (c *checker) typ(e ast.Expr) types.T {
 	}
 }
 
+// comprehensionElemType is the type a comprehension's loop variable takes when
+// iterating `iter`, whose checked type is `iterType` (possibly nil).
+//
+// It always returns a type, because the loop variable must be bound either
+// way. Previously an unknown iterable skipped the binding entirely, which left
+// the variable undefined for the rest of the comprehension —
+// `[x for x in range(0, 5)]` bound nothing at all, since `range` is declared
+// with an opaque (nil) return type. That went unnoticed only because an
+// unresolved identifier produced no diagnostic.
+//
+// `int` is the fallback for an unknown iterable, matching what the `for`
+// statement assumes and what the lowerer emits: it recognises `range(...)`
+// syntactically and generates a counted i64 loop rather than materialising a
+// list.
+func (c *checker) comprehensionElemType(iterType types.T, iter ast.Expr) types.T {
+	switch it := iterType.(type) {
+	case *types.List:
+		return it.Elem
+	case *types.Set:
+		return it.Elem
+	case nil:
+		return types.Int
+	default:
+		// A concrete type that is not iterable is a real error, but still bind
+		// the variable so its uses do not cascade into more diagnostics.
+		c.add(diagAt("DTE0004", iter.SpanOf(), "cannot iterate over "+iterType.String()))
+		return types.Int
+	}
+}
+
 // typIdent handles identifier expressions, including DBR0004 (use after move).
 func (c *checker) typIdent(x *ast.Ident) types.T {
 	if sp, ok := c.moved.movedAt(x.Name); ok {
@@ -777,17 +770,29 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 		c.info.Idents[x] = sym
 		return sym.Type
 	}
-	// KNOWN GAP: an unresolved identifier returns nil with no diagnostic, so
-	// a typo'd name survives checking and reaches the backend, which emits a
-	// reference to a value it never defined. The user then sees a raw LLVM
-	// "use of undefined value" dump plus a misleading "make sure LLVM is
-	// installed" hint instead of a name error.
+	// KNOWN GAP: an unresolved identifier returns nil with no diagnostic, so a
+	// typo'd name survives checking and reaches the backend, which emits a
+	// reference to a value it never defined. The user sees a raw LLVM "use of
+	// undefined value" dump and a misleading "make sure LLVM is installed"
+	// hint, after `desic check` reported "ok".
 	//
-	// Reporting here is NOT correct yet: comprehension variables
-	// ([x for x in ...]) and match-arm bindings are bound by machinery that
-	// does not register them in c.scope, so a diagnostic at this point
-	// rejects valid programs (examples/23_range_map_filter.desi). Fixing this
-	// properly means introducing those bindings into scope during checking.
+	// Reporting here is the right place, but it requires every name that is
+	// legitimately in scope to actually be registered, and several are not.
+	// Measured against the example suite, enabling the diagnostic as-is
+	// rejects 35 valid programs. What is still missing:
+	//
+	//   - Enum/type names used as a qualifier: `Option.Some(42)` looks up
+	//     `Option`, which is not defined as a symbol (Option/Result, and
+	//     user-declared enums).
+	//   - `pass`, which reaches this point as an identifier expression rather
+	//     than being handled as a statement.
+	//   - Bindings introduced by `is` patterns, generic type parameters, and
+	//     weak/rc handles.
+	//
+	// Two binding forms that were also missing have since been fixed:
+	// comprehension loop variables (see comprehensionElemType) and bare
+	// identifier patterns in match arms (see check_match.go), so the remaining
+	// list above is the current, measured state.
 	return nil
 }
 

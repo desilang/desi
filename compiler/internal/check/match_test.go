@@ -15,9 +15,12 @@ func TestM4_Match_ArmsSameType_OK(t *testing.T) {
 			{Pattern: &ast.Ident{Name: "B"}, Result: &ast.IntLit{}},
 		},
 	}
-	// Match is an expression, wrap in ExprStmt
+	// Match is an expression, wrap in ExprStmt. The scrutinee has to be
+	// declared: an undefined name is a diagnostic now, so a fixture that
+	// never binds `x` would be asserting that a typo is accepted.
+	letX := &ast.LetStmt{Name: ast.Ident{Name: "x"}, Value: &ast.IntLit{Text: "1"}}
 	stmt := &ast.ExprStmt{Expr: m}
-	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{stmt}}}
+	main := &ast.FuncDecl{Name: ast.Ident{Name: "main"}, Body: &ast.Block{Stmts: []ast.Stmt{letX, stmt}}}
 	mod := &ast.Module{File: "<mem>", Decls: []ast.Decl{main}}
 
 	diags, _ := Check(mod)

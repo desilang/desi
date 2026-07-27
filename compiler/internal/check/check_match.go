@@ -337,14 +337,14 @@ func (c *checker) checkMatchExpr(m *ast.MatchExpr) types.T {
 					// Ident(args) pattern - assume it's a variant, don't type-check
 					skipPatternCheck = true
 				}
-			} else if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" && et != nil {
-				// Bare Ident pattern - only skip if it matches a variant
-				for _, v := range et.Variants {
-					if v.Name == id.Name {
-						skipPatternCheck = true
-						break
-					}
-				}
+			} else if id, ok := arm.Pattern.(*ast.Ident); ok && id.Name != "_" {
+				// A bare identifier in pattern position is never a reference to
+				// an existing variable: it is either a variant name or a
+				// catch-all that *binds* the scrutinee. Type-checking it as an
+				// expression would report `match n: other: ...` as using an
+				// undefined name.
+				_ = id
+				skipPatternCheck = true
 			}
 		}
 		if !skipPatternCheck {
