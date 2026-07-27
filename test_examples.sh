@@ -20,6 +20,18 @@
 set -e
 
 BUILD_DIR="build/output"
+
+# Per-test wall-clock limit, so a hanging program cannot stall the whole run.
+# GNU timeout is `timeout` on Linux and `gtimeout` from coreutils on macOS; if
+# neither is installed the tests run unbounded, exactly as before.
+DESI_TEST_TIMEOUT_SECS="${DESI_TEST_TIMEOUT_SECS:-120}"
+if command -v timeout >/dev/null 2>&1; then
+    DESI_TEST_TIMEOUT="timeout ${DESI_TEST_TIMEOUT_SECS}"
+elif command -v gtimeout >/dev/null 2>&1; then
+    DESI_TEST_TIMEOUT="gtimeout ${DESI_TEST_TIMEOUT_SECS}"
+else
+    DESI_TEST_TIMEOUT=""
+fi
 mkdir -p "$BUILD_DIR"
 
 # Parse arguments - support comma syntax for range
@@ -122,14 +134,29 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
     # Build and run
     COMPILE_SUCCESS=false
     RUNTIME_SUCCESS=false
+    TIMED_OUT=false
     
     COMPILE_LOG="build/output/compile_output.log"
     RUNTIME_LOG="build/output/runtime_output.log"
     
     if ./build-desi.sh "$f" "test_exec" > "$COMPILE_LOG" 2>&1; then
         COMPILE_SUCCESS=true
-        if ./build/output/test_exec > "$RUNTIME_LOG" 2>&1; then
+        # Bound each run. Without this one hanging program stalls the whole
+        # suite indefinitely — 330_recursion_limit does exactly that on Linux,
+        # where an uncaught recursion-depth panic fails to terminate the
+        # process, and the suite simply stops making progress.
+        set +e
+        $DESI_TEST_TIMEOUT ./build/output/test_exec > "$RUNTIME_LOG" 2>&1
+        RUN_RC=$?
+        set -e
+        if [ $RUN_RC -eq 0 ]; then
             RUNTIME_SUCCESS=true
+        elif [ $RUN_RC -eq 124 ]; then
+            # Killed by timeout. This must never satisfy EXPECTED: RUNTIME_ERROR
+            # — a program that hangs has not produced the error the test wants,
+            # and counting it as a pass is how a hang hides as a green tick.
+            TIMED_OUT=true
+            echo "TIMEOUT after ${DESI_TEST_TIMEOUT_SECS}s" >> "$RUNTIME_LOG"
         fi
     fi
     
@@ -145,7 +172,10 @@ for f in $(find examples -name '[0-9]*.desi' | sort -V); do
                 FAILED_TESTS+=("$f (unexpected success)")
             fi
         elif echo "$EXPECTED_FAIL" | grep -q "RUNTIME_ERROR"; then
-            if [[ "$COMPILE_SUCCESS" == true && "$RUNTIME_SUCCESS" == false ]]; then
+            if [[ "$TIMED_OUT" == true ]]; then
+                echo "  ❌ FAILED (timed out; expected a runtime error, not a hang)"
+                FAILED_TESTS+=("$f (timeout)")
+            elif [[ "$COMPILE_SUCCESS" == true && "$RUNTIME_SUCCESS" == false ]]; then
                 echo "  ✓ PASSED (expected runtime error)"
                 PASSED_COUNT=$((PASSED_COUNT + 1))
             else

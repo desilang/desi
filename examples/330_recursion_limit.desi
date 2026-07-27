@@ -1,9 +1,16 @@
 # EXPECTED: RUNTIME_ERROR
 # Test recursion limit detection
 # This test should panic when recursion depth exceeds 1000
+#
+# The recursive call must NOT be in tail position. A tail call is optimized
+# into a jump (see the tail-call path in lower_stmt.go / emit_func.go, which
+# deliberately decrements the depth counter before the call), so it consumes
+# no stack and the depth guard correctly never fires — the program would loop
+# forever instead of panicking. Adding to the result keeps this a real nested
+# call, which is what the recursion limit is there to catch.
 
 def recurse(n: int) -> int:
-    recurse(n + 1)
+    1 + recurse(n + 1)
 
 def main() -> int:
     recurse(0)
