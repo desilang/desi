@@ -202,8 +202,24 @@ func initCmd(argv []string) int {
 		return 2
 	}
 
-	// Create tests/ dir
-	if err := os.MkdirAll(filepath.Join(target, "tests"), 0o755); err != nil {
+	// Create tests/ with a sample test. An empty tests/ meant `desic test`
+	// failed with "no test files found" on a brand new project, so the
+	// documented init → run → test → build path broke at the third step.
+	// A test is any *_test.desi program: exit 0 passes, non-zero fails.
+	testsDir := filepath.Join(target, "tests")
+	if err := os.MkdirAll(testsDir, 0o755); err != nil {
+		term.Eprintln("init:", err)
+		return 2
+	}
+	sampleTest := "# Tests are ordinary programs: exiting 0 passes, non-zero fails.\n" +
+		"# Run them all with `desic test`.\n\n" +
+		"def add(a: int, b: int) -> int:\n" +
+		"  a + b\n\n" +
+		"def main() -> int:\n" +
+		"  assert add(2, 2) == 4\n" +
+		"  print(\"ok\")\n" +
+		"  0\n"
+	if err := os.WriteFile(filepath.Join(testsDir, "main_test.desi"), []byte(sampleTest), 0o644); err != nil {
 		term.Eprintln("init:", err)
 		return 2
 	}
@@ -363,6 +379,12 @@ func buildCmd(argv []string) int {
 	}
 
 	exePath := filepath.Join(outDir, outputName)
+	// Windows will not execute a file without the .exe extension, so a build
+	// that omits it produces an artifact the user cannot run. `desic run`
+	// already does this for its temporary binary; `build` has to as well.
+	if runtime.GOOS == "windows" && filepath.Ext(exePath) == "" {
+		exePath += ".exe"
+	}
 	code := buildFile(file, exePath, optLevel, argv, true)
 	if code != 0 {
 		return code
