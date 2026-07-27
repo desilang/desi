@@ -1,0 +1,49 @@
+# A class method and a module-level function may share a name.
+#
+# Regression guard. info.Funcs is keyed by bare name and a name does not map
+# to a single declaration: overloads put several candidates under one key, and
+# class methods are registered alongside module-level functions so the checker
+# can find their signatures. The lowerer used to take the first candidate,
+# which meant a declaration could be lowered with some *other* declaration's
+# types — silently, as invalid IR rather than a diagnostic.
+#
+# Here `tag` exists as both a method returning a class and a free function
+# taking and returning int. Lowering the free function with the method's
+# signature emitted `add ptr %x, 1`. See candidateFor in
+# compiler/internal/lower/hir_lower.go.
+
+pub class Box:
+	pub mut v: int
+
+	pub def tag(self) -> Box:
+		let b = Box()
+		b.v := self.v + 1
+		return b
+
+	pub def scale(self, factor: int) -> int:
+		return self.v * factor
+
+# Same name as the method above, different signature.
+pub def tag(x: int) -> int:
+	return x + 1
+
+# Same name as the method above, different arity and return type.
+pub def scale(a: int, b: int) -> int:
+	return a * b
+
+def main() -> int:
+	print(tag(41))
+	print(scale(6, 7))
+
+	let box = Box()
+	box.v := 10
+	let tagged = box.tag()
+	print(tagged.v)
+	print(box.scale(3))
+	0
+
+# EXPECTED_OUTPUT:
+# 42
+# 42
+# 11
+# 30

@@ -162,6 +162,37 @@ func extractCallWithArgsFromStmt(stmt ast.Stmt) (string, []ast.Expr) {
 	return "", nil
 }
 
+// candidateFor returns the overload candidate that `fd` itself declared.
+//
+// info.Funcs is keyed by bare name, and a name does not map to a single
+// declaration: overloads put several candidates under one key, and class
+// methods are registered alongside module-level functions (check_type.go adds
+// them so checkFunc can find their signatures). Taking Cands[0] therefore
+// lowers a declaration with some *other* declaration's signature.
+//
+// That produced invalid IR rather than a diagnostic. A module-level
+// `tag(x: int) -> int` sharing its name with a method `Box.tag(self) -> Box`
+// was lowered with the method's types and emitted `add ptr %x, 1`.
+//
+// Candidates without a Decl (builtins, cross-module exports) cannot be matched
+// by identity, so an unmatched lookup keeps the previous first-candidate
+// behaviour.
+func candidateFor(info *check.Info, fd *ast.FuncDecl) *check.FuncCand {
+	if info == nil || fd == nil {
+		return nil
+	}
+	set, ok := info.Funcs[fd.Name.Name]
+	if !ok || len(set.Cands) == 0 {
+		return nil
+	}
+	for _, cand := range set.Cands {
+		if cand != nil && cand.Decl == fd {
+			return cand
+		}
+	}
+	return set.Cands[0]
+}
+
 // LowerFuncFromDecl lowers a function declaration to HIR.
 // Used for user-defined functions — does NOT mangle names.
 func LowerFuncFromDecl(fd *ast.FuncDecl, info *check.Info, src []byte, globals map[string]bool) *hir.Func {
@@ -226,8 +257,8 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 
 	// Populate parameter types into the root scope
 	if info != nil {
-		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
-			funcType := set.Cands[0].Type
+		if cand := candidateFor(info, fd); cand != nil {
+			funcType := cand.Type
 			if funcType != nil {
 				for i, p := range fd.Params {
 					if i < len(funcType.Params) && funcType.Params[i] != nil {
@@ -241,8 +272,8 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 	// Set return type BEFORE lowering body (needed for return type coercion)
 	f := b.Func()
 	if info != nil {
-		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
-			funcType := set.Cands[0].Type
+		if cand := candidateFor(info, fd); cand != nil {
+			funcType := cand.Type
 			if funcType != nil && funcType.Ret != nil {
 				retType := lowerType(funcType.Ret)
 				if retType != "void" {
@@ -277,10 +308,9 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 	// For variadic functions, the last parameter has already been wrapped in list[T] by the type checker
 	// We need to get the types from the type checker's info
 	if info != nil {
-		// Try to get the function type from info.Funcs
-		if set, ok := info.Funcs[fd.Name.Name]; ok && len(set.Cands) > 0 {
-			// Use the first candidate (should be the only one for this function)
-			funcType := set.Cands[0].Type
+		// Get the signature this declaration itself contributed.
+		if cand := candidateFor(info, fd); cand != nil {
+			funcType := cand.Type
 			if funcType != nil {
 				// M15: For generic functions, use erased signatures (all ptr)
 				isGeneric := len(funcType.TypeParams) > 0 || len(fd.TypeParams) > 0
