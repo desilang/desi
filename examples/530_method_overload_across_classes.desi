@@ -1,0 +1,41 @@
+# Same-named methods in different classes are not overloads of each other.
+#
+# Regression guard: overload candidates are keyed by bare name, so a method on
+# one class shared a candidate set with a same-named method on another. The
+# default-parameter consistency rule then compared their signatures and
+# reported any difference in arity as "default parameters must be consistent
+# across overloads" — rejecting a shape as ordinary as two classes whose
+# constructors take different numbers of arguments.
+#
+# Methods are dispatched by receiver, so they never compete; the rule now
+# partitions candidates by owning class before comparing.
+#
+# EXPECTED_OUTPUT:
+# 7
+# 15
+class Counter:
+	pub mut n: int
+
+	pub def __new__(self, n: int):
+		self.n = n
+
+	pub def bump(self, by: int) -> int:
+		return self.n + by
+
+class Box:
+	pub mut w: int
+	pub mut h: int
+
+	pub def __new__(self, w: int, h: int):
+		self.w = w
+		self.h = h
+
+	pub def bump(self, dw: int, dh: int) -> int:
+		return (self.w + dw) * (self.h + dh)
+
+def main() -> int:
+	let c = Counter(5)
+	let b = Box(2, 3)
+	print(str(c.bump(2)))
+	print(str(b.bump(1, 2)))
+	return 0

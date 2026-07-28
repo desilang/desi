@@ -100,7 +100,7 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	}
 
 	// M14: enforce default-parameter consistency across overloads.
-	res.Diags = append(res.Diags, enforceDefaultConsistency(res.Info)...)
+	res.Diags = append(res.Diags, enforceDefaultConsistency(res.Info, methodOwners(mod))...)
 
 	// Pass 2: check bodies.
 	for _, d := range mod.Decls {
@@ -155,14 +155,64 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	return res
 }
 
+// methodOwners maps each method declaration to the class that declares it, so
+// that same-named methods of unrelated classes are not mistaken for overloads
+// of one another. Info.Funcs is keyed by bare name, which puts A.draw and
+// B.draw in a single set.
+func methodOwners(mod *ast.Module) map[*ast.FuncDecl]string {
+	owners := map[*ast.FuncDecl]string{}
+	if mod == nil {
+		return owners
+	}
+	var walk func(c *ast.ClassDecl, prefix string)
+	walk = func(c *ast.ClassDecl, prefix string) {
+		if c == nil {
+			return
+		}
+		name := prefix + c.Name.Name
+		for _, m := range c.Methods {
+			owners[m] = name
+		}
+		for _, n := range c.Nested {
+			walk(n, name+".")
+		}
+	}
+	for _, d := range mod.Decls {
+		if cd, ok := d.(*ast.ClassDecl); ok {
+			walk(cd, "")
+		}
+	}
+	return owners
+}
+
 // enforceDefaultConsistency ensures that all overloads for a given name share
 // the same "which parameters have defaults" mask. It only reports on local
 // declarations (Decl != nil); imported/builtin candidates participate in the
 // comparison but don't get their own spans.
-func enforceDefaultConsistency(info *Info) []diag.Diagnostic {
+//
+// Candidates are partitioned by owner first. Info.Funcs is keyed by bare name,
+// so methods of unrelated classes land in one set, and comparing them rejected
+// programs as ordinary as two classes whose constructors take different
+// numbers of arguments. A method on A is not an overload of a same-named
+// method on B; they are dispatched by receiver and never compete.
+//
+// Within one owner the original rule still holds, differing arity included.
+// That is stricter than it needs to be — a call tells same-name overloads
+// apart by argument count — but relaxing it here would let free functions
+// through to an overload dispatch that does not yet select on arity, turning
+// a compile error into a silently wrong call. Loud beats wrong until that is
+// fixed.
+func enforceDefaultConsistency(info *Info, owners map[*ast.FuncDecl]string) []diag.Diagnostic {
 	var out []diag.Diagnostic
 	if info == nil {
 		return out
+	}
+
+	ownerOf := func(cand *FuncCand) string {
+		if cand == nil || cand.Decl == nil {
+			return ""
+		}
+		return owners[cand.Decl]
 	}
 
 	for name, set := range info.Funcs {
@@ -170,7 +220,7 @@ func enforceDefaultConsistency(info *Info) []diag.Diagnostic {
 			continue
 		}
 
-		var baseline []bool
+		baselines := map[string][]bool{}
 
 		for _, cand := range set.Cands {
 			if cand == nil || cand.Type == nil {
@@ -182,9 +232,10 @@ func enforceDefaultConsistency(info *Info) []diag.Diagnostic {
 				continue
 			}
 
-			if baseline == nil {
-				baseline = make([]bool, len(mask))
-				copy(baseline, mask)
+			owner := ownerOf(cand)
+			baseline, seen := baselines[owner]
+			if !seen {
+				baselines[owner] = append([]bool(nil), mask...)
 				continue
 			}
 

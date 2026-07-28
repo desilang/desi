@@ -89,23 +89,49 @@ def main():
     # Fields initialized to default values (0 for int)
 ```
 
-### Custom Constructor (__new__)
+### Custom Constructor (`__new__`)
+
+`__new__` is Desi's initializer — the role Python gives `__init__`. It runs on
+a freshly created instance, and you call it by calling the class:
 
 ```desi
 class Point:
     pub x: int
     pub y: int
-    
-    pub def __new__(x: int, y: int) -> Point:
-        let p = Point()
-        p.x = x
-        p.y = y
-        return p
+
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
 
 def main():
-    let p = Point.__new__(10, 20)
-    # Or: let p = Point(x=10, y=20) if named params supported
+    let p = Point(10, 20)   # calls __new__
 ```
+
+Two things are specific to `__new__`:
+
+- **`self` is not injected.** Every other instance method gets `self` added for
+  you if you leave it off; `__new__` does not, so write it explicitly.
+- **Immutable fields may be assigned,** with plain `=`. That is the point of an
+  initializer: `pub x: int` above is not `mut`, yet `self.x = x` is allowed
+  here. Anywhere else it would be an error, and mutating a `mut` field outside
+  `__new__` needs `:=`.
+
+Leaving `self` off gives you the other form — a factory that builds and returns
+the instance itself, using named fields:
+
+```desi
+class Vec:
+    pub v: int
+
+    pub def __new__(v: int) -> Vec:
+        return Vec(v=v)
+
+def main():
+    let w = Vec(42)
+```
+
+Either way the call site is `Point(10, 20)` / `Vec(42)`. There is no
+`Point.__new__(...)` call form.
 
 ## Methods
 

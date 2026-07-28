@@ -65,7 +65,20 @@ jobs:
           echo "host all all ::1/128 md5"      | sudo tee -a "$HBA" > /dev/null
           sudo systemctl restart postgresql || sudo service postgresql restart
           sleep 5
-          sudo mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'desi_test';"
+          # The runner image's MySQL root credential is not stable across image
+          # revisions — it was socket auth, and is now a password. Discover it
+          # instead of assuming, so an image bump stops breaking this job.
+          root_opt=""
+          found=0
+          for opt in "" "-proot" "-pdesi_test"; do
+            if sudo mysql $opt -e "SELECT 1" >/dev/null 2>&1; then
+              root_opt="$opt"; found=1; break
+            fi
+          done
+          if [ "$found" != "1" ]; then
+            echo "could not authenticate to MySQL as root"; exit 1
+          fi
+          sudo mysql $root_opt -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'desi_test';"
           sudo mysql -pdesi_test -e "CREATE DATABASE IF NOT EXISTS desi_test;"
           PGPASSWORD=desi_test psql -h 127.0.0.1 -U postgres -d postgres -c "select version();"
           mysql -h 127.0.0.1 -u root -pdesi_test -e "select version();"
@@ -74,13 +87,26 @@ jobs:
       # A second platform of real database coverage is worth the install time:
       # the drivers speak the wire protocols directly, so a byte-order or
       # struct-packing mistake would only ever show up against a live server.
+      #
+      # mysql@8.0 rather than the default formula: 9.x removed
+      # mysql_native_password, and the caching_sha2_password fallback needs a
+      # TLS channel for its first (uncached) handshake, which the runner's
+      # OpenSSL availability does not guarantee.
+      #
+      # continue-on-error, and the test step reads `ready` below: a Homebrew
+      # hiccup should cost the database coverage on this leg, not the whole
+      # build. When it does not come up the suite still runs, just without the
+      # database examples, and the skip is visible in the log.
       - name: Start databases (macos)
+        id: macdb
         if: runner.os == 'macOS'
+        continue-on-error: true
         run: |
-          brew install postgresql@16 mysql
+          set -e
+          brew install postgresql@16 mysql@8.0
+          export PATH="$(brew --prefix postgresql@16)/bin:$(brew --prefix mysql@8.0)/bin:$PATH"
           brew services start postgresql@16
-          brew services start mysql
-          export PATH="$(brew --prefix postgresql@16)/bin:$PATH"
+          brew services start mysql@8.0
           # Wait for both to accept TCP rather than guessing at a sleep.
           for i in $(seq 1 60); do
             pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1 && break || sleep 2
@@ -92,17 +118,19 @@ jobs:
           # not "postgres" — create the role the examples connect as.
           createuser -s postgres || true
           psql -d postgres -c "ALTER USER postgres WITH PASSWORD 'desi_test';"
-          mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'desi_test';"
+          mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED WITH mysql_native_password BY 'desi_test';"
           mysql -u root -pdesi_test -e "CREATE DATABASE IF NOT EXISTS desi_test;"
           PGPASSWORD=desi_test psql -h 127.0.0.1 -U postgres -d postgres -c "select version();"
           mysql -h 127.0.0.1 -u root -pdesi_test -e "select version();"
+          echo "ready=1" >> "$GITHUB_OUTPUT"
 
-      # Both Unix legs now have servers, so the database examples run on each.
+      # Linux always has servers; macOS runs the database examples only when
+      # the step above actually brought them up.
       - name: Run example tests (unix)
         if: runner.os != 'Windows'
         timeout-minutes: 90
         env:
-          DESI_DB_TESTS: '1'
+          DESI_DB_TESTS: ${{ (runner.os == 'Linux' || steps.macdb.outputs.ready == '1') && '1' || '0' }}
           PG_HOST: 127.0.0.1
           PG_USER: postgres
           PG_PASS: desi_test
