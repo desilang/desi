@@ -1,0 +1,26 @@
+# A local may share its name with a local inside a stdlib function.
+#
+# Regression guard for a code-generation bug: the backend gives every local a
+# unique register, so the second function in the module to declare `i` got the
+# register `i_1`. Only the alloca and the lifetime intrinsics used that name
+# though — the stores, loads and drops still emitted `%i`, naming a register
+# that did not exist in that function. Importing db was enough to trigger it,
+# because db.migrate_all counts with an `i` of its own.
+#
+# Needs no database: create_table_sql only builds SQL.
+#
+# EXPECTED_OUTPUT:
+# 5
+# CREATE TABLE IF NOT EXISTS t (
+#   id SERIAL PRIMARY KEY
+# )
+import db
+
+def main() -> int:
+	let i = 5
+	db.model("t")
+	db.auto_field("id")
+	let sql = db.create_table_sql("t")
+	print(str(i))
+	print(sql)
+	return 0

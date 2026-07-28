@@ -24,6 +24,7 @@ func (m *Module) EmitFunc(fn *hir.Func) {
 	m.ssa = make(map[string]hir.Value)
 	m.tempTypes = make(map[string]string)
 	m.varTypes = make(map[string]types.T)
+	m.localRegs = make(map[string]string)
 	m.curRetIsPtr = m.asyncWrappers[fn.Name]
 	m.currentMoves = nil
 	m.curFuncName = fn.Name // Track for call depth instrumentation
@@ -275,6 +276,7 @@ setjmpScan:
 					llvmTy, size = "i32", 4
 				}
 				uniqueN := m.uniqueName(x.Name)
+				m.declareLocal(x.Name, uniqueN)
 				wprintf(&m.funcs, "  %%%s = alloca %s\n", uniqueN, llvmTy)
 				wprintf(&m.funcs, "%s", intrin.LifetimeStart(size, uniqueN))
 				locals = append(locals, localInfo{name: uniqueN, size: size})
@@ -990,13 +992,22 @@ setjmpScan:
 				}
 				valOp := m.ptrOperand(actualVal)
 
-				// If variable is stored via alloca, load the actual heap pointer first
-				if needsLoad {
-					loadTemp := fmt.Sprintf("%%drop_load_%d", m.tempID)
-					m.tempID++
-					// valOp already contains "ptr %varname", extract just the %varname part
-					wprintf(&m.funcs, "  %s = load ptr, %s\n", loadTemp, valOp)
-					valOp = "ptr " + loadTemp
+				// If the variable is stored via alloca, the actual heap pointer
+				// has to be loaded before it can be freed — but only where
+				// something below actually frees it. Emitting the load up front
+				// gave every non-heap local a dead load, reading 8 bytes out of
+				// (for an int) a 4-byte slot.
+				loaded := false
+				ensureLoaded := func() string {
+					if needsLoad && !loaded {
+						loadTemp := fmt.Sprintf("%%drop_load_%d", m.tempID)
+						m.tempID++
+						// valOp already contains "ptr %varname", extract just the %varname part
+						wprintf(&m.funcs, "  %s = load ptr, %s\n", loadTemp, valOp)
+						valOp = "ptr " + loadTemp
+						loaded = true
+					}
+					return valOp
 				}
 
 				if x.Type != nil {
@@ -1005,10 +1016,11 @@ setjmpScan:
 						// Some class-typed values might be primitive results (e.g., operator calls)
 						llvmTy, _ := m.operand(actualVal)
 						if llvmTy == "ptr" {
+							op := ensureLoaded()
 							// Emit __del__ calls for class and all base classes (child → parent order)
-							m.emitDestructorChain(classType, valOp)
+							m.emitDestructorChain(classType, op)
 							// Free the class instance after destructor
-							wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
+							wprintf(&m.funcs, "  call void @free(%s)\n", op)
 							m.ensureDecl("declare void @free(ptr)")
 						}
 					} else if t, ok := x.Type.(types.T); ok {
@@ -1023,7 +1035,7 @@ setjmpScan:
 							if _, isTemp := x.Val.(hir.Temp); isTemp {
 								llvmTy, _ := m.operand(actualVal)
 								if llvmTy == "ptr" {
-									wprintf(&m.funcs, "  call void @free(%s)\n", valOp)
+									wprintf(&m.funcs, "  call void @free(%s)\n", ensureLoaded())
 									m.ensureDecl("declare void @free(ptr)")
 								}
 							}
@@ -1034,7 +1046,7 @@ setjmpScan:
 							llvmTy, _ := m.operand(actualVal)
 							if llvmTy == "ptr" {
 								// valOp is "ptr %name" — emitDropForType wants the bare operand
-								bare := strings.TrimPrefix(valOp, "ptr ")
+								bare := strings.TrimPrefix(ensureLoaded(), "ptr ")
 								m.emitDropForType(bare, t)
 							}
 						}

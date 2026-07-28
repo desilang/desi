@@ -52,6 +52,12 @@ type Module struct {
 	currentMoves       map[string]bool      // moved variables in current function
 	staticFieldGlobals map[string]GlobalDef // name -> definition
 	nameVersions       map[string]int       // track name usage for unique SSA names
+	// HIR local name -> the register actually allocated for it in the function
+	// being emitted. nameVersions is module-wide, so the second function to
+	// declare a given name gets a suffixed register ("i" -> "i_1"); without
+	// this map every later reference would still emit the unsuffixed name and
+	// the IR would name a register that does not exist. Reset per function.
+	localRegs map[string]string
 
 	// Lazy module initialization tracking
 	lazyModules     map[string]bool // module path -> needs lazy init
@@ -87,6 +93,7 @@ func NewModule(name string) *Module {
 		currentMoves:       make(map[string]bool),
 		staticFieldGlobals: make(map[string]GlobalDef),
 		nameVersions:       make(map[string]int),
+		localRegs:          make(map[string]string),
 		lazyModules:        make(map[string]bool),
 		lazyInitEmitted:    make(map[string]bool),
 		tgWrappers:         make(map[string]WrapperInfo),
@@ -190,6 +197,22 @@ func (m *Module) uniqueName(name string) string {
 		return name
 	}
 	return fmt.Sprintf("%s_%d", name, ver)
+}
+
+// declareLocal records that HIR local `name` lives in register `reg`, so every
+// later reference to it emits the register that was actually allocated.
+func (m *Module) declareLocal(name, reg string) {
+	m.localRegs[name] = reg
+}
+
+// localReg maps a HIR local name to its register in the current function,
+// falling back to the name itself for anything not declared here (parameters,
+// globals, temporaries).
+func (m *Module) localReg(name string) string {
+	if reg, ok := m.localRegs[name]; ok {
+		return reg
+	}
+	return name
 }
 
 func (m *Module) nextStrName() string {
@@ -444,7 +467,7 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		}
 		// Check if we have type info for this variable (including function parameters)
 		ty := m.inferType(t.Name)
-		return ty, "%" + t.Name
+		return ty, "%" + m.localReg(t.Name)
 	case hir.Undef:
 		return "undef", "undef"
 	default:
@@ -578,7 +601,7 @@ func (m *Module) ptrOperand(v hir.Value) string {
 		if strings.HasPrefix(t.Name, "@") {
 			return fmt.Sprintf("ptr %s", t.Name)
 		}
-		return fmt.Sprintf("ptr %%%s", t.Name)
+		return fmt.Sprintf("ptr %%%s", m.localReg(t.Name))
 	default:
 		return "ptr null"
 	}
