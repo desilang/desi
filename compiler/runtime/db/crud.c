@@ -21,7 +21,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include "../platform.h"
 #include "dynbuf.h"
+
+#ifdef _MSC_VER
+  /* strtok_r is strtok_s on MSVC (same signature) */
+  #define strtok_r strtok_s
+  #define strncasecmp _strnicmp
+  #define strcasecmp  _stricmp
+#endif
 
 // ---- External: dispatch layer ----
 extern int32_t __db_query_exec(const char* sql);
@@ -249,7 +257,7 @@ void __qs_free(QuerySet* qs) {
 // This keeps all __qs_* function signatures unchanged while
 // making handle lifetime explicit at the IR level.
 // ============================================================
-static __thread QuerySet* g_qs_current = NULL;
+static DESI_THREAD_LOCAL QuerySet* g_qs_current = NULL;
 
 // Create a new handle and return it as an opaque pointer.
 // Does NOT install it as the active handle — call __qs_handle_bind for that.
@@ -1262,9 +1270,9 @@ int32_t __qs_reverse(void) {
 // ============================================================
 
 // Thread-local case builder state
-static __thread DynBuf g_case_buf;
-static __thread int    g_case_started;
-static __thread char   g_case_else[512];
+static DESI_THREAD_LOCAL DynBuf g_case_buf;
+static DESI_THREAD_LOCAL int    g_case_started;
+static DESI_THREAD_LOCAL char   g_case_else[512];
 
 // case_when(condition, result) — add a WHEN clause
 // condition: SQL boolean expression, e.g. "status = 'urgent'"
@@ -1590,7 +1598,13 @@ int32_t __qs_update_multi(void) {
         // SET values appear first, then WHERE values.  PostgreSQL uses $N
         // so the array order is irrelevant there.
         if (g_crud_dialect == DIALECT_MYSQL && qs_update_param_start > 0) {
-            const char* reordered[QS_MAX_PARAMS];
+            // Heap rather than a variable-length array: QS_MAX_PARAMS is the
+            // queryset's runtime param_cap, so this is a VLA — which MSVC
+            // does not implement, and which would put an unbounded
+            // allocation on the stack even where it is supported.
+            const char** reordered =
+                (const char**)malloc(sizeof(char*) * (size_t)qs_param_count);
+            if (!reordered) return -1;
             int ri = 0;
             // SET params first (indices qs_update_param_start .. qs_update_param_start + qs_update_count - 1)
             for (int i = 0; i < qs_update_count; i++) {
@@ -1605,6 +1619,7 @@ int32_t __qs_update_multi(void) {
                 reordered[ri++] = qs_params[i];
             }
             result = __db_execute_params(sql, reordered, ri);
+            free(reordered);
         } else {
             result = __db_execute_params(sql, qs_params, qs_param_count);
         }
@@ -2265,8 +2280,8 @@ int32_t __qs_window(const char* func, const char* over_clause, const char* alias
 // ============================================================
 
 // State for cursor
-static __thread char qs_cursor_name[64] = "";
-static __thread int  qs_cursor_open = 0;
+static DESI_THREAD_LOCAL char qs_cursor_name[64] = "";
+static DESI_THREAD_LOCAL int  qs_cursor_open = 0;
 
 // Declare a server-side cursor for the current queryset
 // PG: DECLARE cursor_name CURSOR FOR SELECT ...
@@ -2451,8 +2466,8 @@ static struct {
     char name[64];     // CTE alias
     char query[2048];  // CTE query body
 } qs_ctes[QS_MAX_CTES];
-static __thread int qs_cte_count = 0;
-static __thread int qs_cte_recursive = 0;  // 1 if WITH RECURSIVE
+static DESI_THREAD_LOCAL int qs_cte_count = 0;
+static DESI_THREAD_LOCAL int qs_cte_recursive = 0;  // 1 if WITH RECURSIVE
 
 // Add a CTE clause
 // Django: MyModel.objects.raw("WITH active AS (...) SELECT ...")
@@ -2616,7 +2631,7 @@ static struct {
     char fk_col[128];        // foreign key column in related table
     char pk_col[128];        // primary key column in current table (usually 'id')
 } qs_prefetches[QS_MAX_PREFETCH];
-static __thread int qs_prefetch_count = 0;
+static DESI_THREAD_LOCAL int qs_prefetch_count = 0;
 
 // Register a prefetch relationship
 // Django: Entry.objects.prefetch_related('authors')
@@ -3311,7 +3326,7 @@ typedef struct {
     int         row_count;
 } BulkState;
 
-static __thread BulkState* g_bulk_tls = NULL;
+static DESI_THREAD_LOCAL BulkState* g_bulk_tls = NULL;
 
 static BulkState* bulk_state(void) {
     if (!g_bulk_tls) {

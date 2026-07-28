@@ -70,13 +70,39 @@ jobs:
           PGPASSWORD=desi_test psql -h 127.0.0.1 -U postgres -d postgres -c "select version();"
           mysql -h 127.0.0.1 -u root -pdesi_test -e "select version();"
 
-      # The database examples only run where servers are available, which is
-      # the Linux job. Everywhere else they skip, exactly as before.
+      # macOS runners have neither server running, so install and start them.
+      # A second platform of real database coverage is worth the install time:
+      # the drivers speak the wire protocols directly, so a byte-order or
+      # struct-packing mistake would only ever show up against a live server.
+      - name: Start databases (macos)
+        if: runner.os == 'macOS'
+        run: |
+          brew install postgresql@16 mysql
+          brew services start postgresql@16
+          brew services start mysql
+          export PATH="$(brew --prefix postgresql@16)/bin:$PATH"
+          # Wait for both to accept TCP rather than guessing at a sleep.
+          for i in $(seq 1 60); do
+            pg_isready -h 127.0.0.1 -p 5432 >/dev/null 2>&1 && break || sleep 2
+          done
+          for i in $(seq 1 60); do
+            mysqladmin -h 127.0.0.1 -u root ping >/dev/null 2>&1 && break || sleep 2
+          done
+          # Homebrew's postgres makes a superuser named after the current user,
+          # not "postgres" — create the role the examples connect as.
+          createuser -s postgres || true
+          psql -d postgres -c "ALTER USER postgres WITH PASSWORD 'desi_test';"
+          mysql -u root -e "ALTER USER 'root'@'localhost' IDENTIFIED BY 'desi_test';"
+          mysql -u root -pdesi_test -e "CREATE DATABASE IF NOT EXISTS desi_test;"
+          PGPASSWORD=desi_test psql -h 127.0.0.1 -U postgres -d postgres -c "select version();"
+          mysql -h 127.0.0.1 -u root -pdesi_test -e "select version();"
+
+      # Both Unix legs now have servers, so the database examples run on each.
       - name: Run example tests (unix)
         if: runner.os != 'Windows'
         timeout-minutes: 90
         env:
-          DESI_DB_TESTS: ${{ runner.os == 'Linux' && '1' || '0' }}
+          DESI_DB_TESTS: '1'
           PG_HOST: 127.0.0.1
           PG_USER: postgres
           PG_PASS: desi_test
@@ -98,14 +124,14 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         timeout-minutes: 60
-        # 437-446 are db/ORM examples — the db runtime is not ported to
-        # Windows yet (see docs/contributing/windows-build.md).
+        # One range, not two: 437-446 used to be skipped because the db runtime
+        # did not build on Windows. It does now, so the ORM examples run here
+        # like everywhere else. The ones needing a live server still gate
+        # themselves on DESI_DB_TESTS, which is unset on this leg.
         # The parallel runner shards across processes; every test is a full
         # compile+link, so this is CPU bound and scales with the runner.
         run: |
-          .\test_examples_parallel.ps1 -Range "0,436"
-          if ($LASTEXITCODE -ne 0) { exit 1 }
-          .\test_examples_parallel.ps1 -Range "447,9999"
+          .\test_examples_parallel.ps1
           if ($LASTEXITCODE -ne 0) { exit 1 }
 
       # The example suite covers the compiler; this covers the other shipped

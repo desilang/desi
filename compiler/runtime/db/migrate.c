@@ -22,9 +22,25 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
-#include <dirent.h>
-#include <sys/stat.h>
+#ifdef _WIN32
+  #ifndef WIN32_LEAN_AND_MEAN
+    #define WIN32_LEAN_AND_MEAN
+  #endif
+  #include <windows.h>
+  #include <direct.h>
+  /* mkdir(2) is _mkdir here, and it takes no mode argument. */
+  #define desi_mkdir(path) _mkdir(path)
+#else
+  #include <dirent.h>
+  #include <sys/stat.h>
+  #define desi_mkdir(path) mkdir((path), 0755)
+#endif
 #include <time.h>
+
+#ifdef _MSC_VER
+  #define strncasecmp _strnicmp
+  #define strcasecmp  _stricmp
+#endif
 
 // ---- External: dispatch layer ----
 extern int32_t __db_query_exec(const char* sql);
@@ -1359,26 +1375,42 @@ static int cmp_strings_256(const void* a, const void* b) {
 
 // Scan directory for NNNN_*.desi files, sorted by name.
 // Returns a StrList — caller must free with strlist_free().
+// Does this entry look like a migration? NNNN_*.desi, 4+ leading digits.
+static int is_migration_filename(const char* name) {
+    int digits = 0;
+    while (name[digits] >= '0' && name[digits] <= '9') digits++;
+    if (digits < 4) return 0;
+    if (name[digits] != '_') return 0;
+    int len = (int)strlen(name);
+    return len >= 5 && strcmp(name + len - 5, ".desi") == 0;
+}
+
 static StrList scan_migrations(const char* dir) {
     StrList files = strlist_new(16);
+
+#ifdef _WIN32
+    // No dirent.h; FindFirstFile takes the wildcard in the path itself.
+    char pattern[1024];
+    snprintf(pattern, sizeof(pattern), "%s\\*", dir);
+
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return files;
+
+    do {
+        if (is_migration_filename(fd.cFileName)) strlist_push(&files, fd.cFileName);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
     DIR* d = opendir(dir);
     if (!d) return files;
 
     struct dirent* entry;
     while ((entry = readdir(d)) != NULL) {
-        const char* name = entry->d_name;
-        // Must match pattern: 4+ digits followed by _...desi
-        int digits = 0;
-        while (name[digits] >= '0' && name[digits] <= '9') digits++;
-        if (digits < 4) continue;
-        if (name[digits] != '_') continue;
-        // Check .desi extension
-        int len = (int)strlen(name);
-        if (len < 5 || strcmp(name + len - 5, ".desi") != 0) continue;
-
-        strlist_push(&files, name);
+        if (is_migration_filename(entry->d_name)) strlist_push(&files, entry->d_name);
     }
     closedir(d);
+#endif
 
     // Sort by filename (numeric prefix ensures correct order)
     if (files.count > 1) {
@@ -1410,7 +1442,7 @@ int32_t __db_makemigrations(const char* dir) {
     ensure_tracking();
 
     // Ensure directory exists
-    mkdir(dir, 0755);
+    desi_mkdir(dir);
 
     // Scan existing migrations once (eliminates double-scan)
     StrList existing_files = scan_migrations(dir);

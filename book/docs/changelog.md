@@ -21,6 +21,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `hash(value)` / `id(value)` — FNV-1a hash and pointer identity
 - Default object representation: classes and structs print as `<TypeName at 0xADDR>` when no `__repr__` is defined
 - Windows build support: `build.ps1` script for full clean build on Windows (runtime + all compiler tools)
+- The database module — ORM, query builder, migrations, connection pool, and the PostgreSQL/MySQL/Redis drivers — now builds and runs on Windows, so `import db` works on all three platforms
 - VS Code extension (`editors/vscode`) with native `.desi` syntax highlighting and LSP integration
 
 ### Fixed

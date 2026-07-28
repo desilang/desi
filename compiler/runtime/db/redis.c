@@ -16,12 +16,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <errno.h>
+#include "db_socket.h"
+#include "db_timeout.h"
 
 // Forward declare list types
 #include "../list.h"
@@ -37,7 +33,7 @@ static int redis_send(const char* data, int len) {
     if (g_redis_fd < 0) return -1;
     int total = 0;
     while (total < len) {
-        int n = write(g_redis_fd, data + total, len - total);
+        int n = db_sock_write(g_redis_fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -49,7 +45,7 @@ static int redis_readline(char* buf, int max) {
     int i = 0;
     while (i < max - 1) {
         char c;
-        int n = read(g_redis_fd, &c, 1);
+        int n = db_sock_read(g_redis_fd, &c, 1);
         if (n <= 0) break;
         buf[i++] = c;
         if (i >= 2 && buf[i-2] == '\r' && buf[i-1] == '\n') {
@@ -65,7 +61,7 @@ static int redis_readline(char* buf, int max) {
 static int redis_readn(char* buf, int n) {
     int total = 0;
     while (total < n) {
-        int r = read(g_redis_fd, buf + total, n - total);
+        int r = db_sock_read(g_redis_fd, buf + total, n - total);
         if (r <= 0) return -1;
         total += r;
     }
@@ -156,7 +152,9 @@ static DesiList* read_array_reply(void) {
 int32_t __redis_connect(const char* host, int32_t port) {
     if (!host) host = "127.0.0.1";
     if (port <= 0) port = 6379;
-    
+
+    db_socket_init();  // no-op except on Windows, where Winsock needs starting
+
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
@@ -169,21 +167,16 @@ int32_t __redis_connect(const char* host, int32_t port) {
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
     }
     
-    g_redis_fd = socket(AF_INET, SOCK_STREAM, 0);
+    g_redis_fd = db_open_connection((struct sockaddr*)&addr, sizeof(addr),
+                                    g_db_connect_timeout_ms);
     if (g_redis_fd < 0) return -1;
-    
-    if (connect(g_redis_fd, (struct sockaddr*)&addr, sizeof(addr)) < 0) {
-        close(g_redis_fd);
-        g_redis_fd = -1;
-        return -1;
-    }
     return 0;
 }
 
 // Close Redis connection
 int32_t __redis_close(void) {
     if (g_redis_fd >= 0) {
-        close(g_redis_fd);
+        db_close_socket(g_redis_fd);
         g_redis_fd = -1;
     }
     return 0;

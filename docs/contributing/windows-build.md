@@ -62,12 +62,31 @@ Windows-specific guards to be aware of:
 - `setenv()` → `_putenv_s()` on Windows
 - `strptime()` is not in MSVC — a minimal stub lives in `time.c`
 - `MSG_DONTWAIT` (POSIX) → `ioctlsocket(FIONBIO)` on Windows
+- MSVC rejects variable-length arrays; size them at runtime with `malloc`
+- `__thread` is GCC/Clang only — use `DESI_THREAD_LOCAL` from `platform.h`,
+  which expands to `__declspec(thread)` under MSVC
+
+## The database runtime
+
+`compiler/runtime/db/*.c` builds on Windows. Two pieces make that work:
+
+- **`db/db_socket.h`** — the slice of the sockets API the PostgreSQL, MySQL
+  and Redis drivers need, per platform. WinSock2 on Windows with shims for
+  the calls that differ: `closesocket` for `close`, `recv`/`send` for
+  `read`/`write` (a `SOCKET` is not a file descriptor), `ioctlsocket(FIONBIO)`
+  for `fcntl(O_NONBLOCK)`, `WSAPoll` for `poll`, and `WSAGetLastError` for
+  `errno`. The drivers include this instead of `<sys/socket.h>` and friends.
+- **`platform.h`** — `pool.c` uses `DesiPlatformMutex`/`DesiPlatformCond`
+  rather than pthreads, including `desi_cond_timedwait_ms()` because Win32
+  takes a relative timeout where pthreads takes an absolute deadline.
+
+Two Windows-only differences worth knowing when touching this code:
+`SO_RCVTIMEO` takes a `DWORD` of milliseconds, not a `struct timeval`; and
+`migrate.c` enumerates migration files with `FindFirstFile` since there is no
+`dirent.h`.
 
 ## Not available on Windows
 
-- **`compiler/runtime/db/*.c`** — raw pthreads in `pool.c`, POSIX sockets in
-  `mysql.c`/`redis.c`/`db_timeout.h`. Examples 437–446 fail to link with
-  `__db_*`/`__orm_*` undefined until someone ports it.
 - **`desic watch`** — hot reload needs Unix signals (`SIGUSR1`) and `.so`
   reloading. `watch_cmd_windows.go` is a stub that prints a message and
   exits 1; the real implementation in `watch_cmd.go` is `//go:build !windows`.

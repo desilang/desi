@@ -14,12 +14,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <errno.h>
+#include "db_socket.h"
 #include "db_timeout.h"
 
 // Optional TLS/SSL support (compile-time detection)
@@ -152,7 +147,7 @@ static int my_send_raw(const unsigned char* data, int len) {
             n = SSL_write(g_my->ssl, data + total, len - total);
         else
 #endif
-            n = (int)write(g_my->fd, data + total, len - total);
+            n = (int)db_sock_write(g_my->fd, data + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -169,7 +164,7 @@ static int my_recv_raw(unsigned char* buf, int len) {
             n = SSL_read(g_my->ssl, buf + total, len - total);
         else
 #endif
-            n = (int)read(g_my->fd, buf + total, len - total);
+            n = (int)db_sock_read(g_my->fd, buf + total, len - total);
         if (n <= 0) return -1;
         total += n;
     }
@@ -393,6 +388,8 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
 
     my_log("connecting to %s:%d db=%s user=%s", host, port, dbname, user);
 
+    db_socket_init();  // no-op except on Windows, where Winsock needs starting
+
     // TCP connect
     struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
@@ -408,17 +405,12 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
     }
 
-    g_my->fd = socket(AF_INET, SOCK_STREAM, 0);
+    g_my->fd = db_open_connection((struct sockaddr*)&addr, sizeof(addr),
+                                  g_db_connect_timeout_ms);
     if (g_my->fd < 0) {
-        snprintf(g_my->error, sizeof(g_my->error), "Socket failed: %s", strerror(errno));
-        return -1;
-    }
-
-    if (db_connect_with_timeout(g_my->fd, (struct sockaddr*)&addr, sizeof(addr),
-                                g_db_connect_timeout_ms) < 0) {
         snprintf(g_my->error, sizeof(g_my->error),
-                 "Connect timed out after %dms: %s", g_db_connect_timeout_ms, strerror(errno));
-        close(g_my->fd); g_my->fd = -1;
+                 "Cannot connect to %s:%d (timeout %dms): %s", host, port,
+                 g_db_connect_timeout_ms, db_socket_error_str());
         return -1;
     }
 
@@ -432,7 +424,7 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
     int glen;
     if (my_read_packet(greeting, &glen) < 0) {
         snprintf(g_my->error, sizeof(g_my->error), "Failed to read greeting");
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -441,7 +433,7 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
         uint16_t errcode = my_read_u16(greeting + 1);
         snprintf(g_my->error, sizeof(g_my->error), "Server error %d: %.*s",
             errcode, glen - 9, (char*)(greeting + 9));
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -543,7 +535,7 @@ int32_t __my_connect(const char* host, int32_t port, const char* dbname,
                 SSL_free(g_my->ssl); g_my->ssl = NULL;
                 SSL_CTX_free(g_my->ssl_ctx); g_my->ssl_ctx = NULL;
                 snprintf(g_my->error, sizeof(g_my->error), "MySQL SSL handshake failed");
-                close(g_my->fd); g_my->fd = -1;
+                db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
             }
         }
@@ -611,7 +603,7 @@ skip_ssl: ;
     // Send handshake response
     if (my_send_packet(response, rpos) < 0) {
         snprintf(g_my->error, sizeof(g_my->error), "Failed to send auth response");
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -620,7 +612,7 @@ skip_ssl: ;
     int arlen;
     if (my_read_packet(auth_result, &arlen) < 0) {
         snprintf(g_my->error, sizeof(g_my->error), "Failed to read auth result");
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
@@ -638,7 +630,7 @@ skip_ssl: ;
             int oklen;
             if (my_read_packet(ok, &oklen) < 0 || ok[0] != 0x00) {
                 snprintf(g_my->error, sizeof(g_my->error), "Auth confirm failed");
-                close(g_my->fd); g_my->fd = -1;
+                db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
             }
             g_my->connected = 1;
@@ -656,7 +648,7 @@ skip_ssl: ;
                 if (my_send_packet(pw_pkt, pwlen + 1) < 0) {
                     free(pw_pkt);
                     snprintf(g_my->error, sizeof(g_my->error), "Failed to send full auth password");
-                    close(g_my->fd); g_my->fd = -1;
+                    db_close_socket(g_my->fd); g_my->fd = -1;
                     return -1;
                 }
                 free(pw_pkt);
@@ -671,7 +663,7 @@ skip_ssl: ;
                     } else {
                         snprintf(g_my->error, sizeof(g_my->error), "caching_sha2 full auth failed");
                     }
-                    close(g_my->fd); g_my->fd = -1;
+                    db_close_socket(g_my->fd); g_my->fd = -1;
                     return -1;
                 }
                 g_my->connected = 1;
@@ -681,18 +673,18 @@ skip_ssl: ;
                 snprintf(g_my->error, sizeof(g_my->error),
                     "caching_sha2_password full auth requires TLS (no SSL available). "
                     "Rebuild Desi with OpenSSL support or use mysql_native_password.");
-                close(g_my->fd); g_my->fd = -1;
+                db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
             }
         }
         // Auth method switch
         if (auth_result[0] == 0xFE) {
             snprintf(g_my->error, sizeof(g_my->error), "Auth method switch not yet supported");
-            close(g_my->fd); g_my->fd = -1;
+            db_close_socket(g_my->fd); g_my->fd = -1;
             return -1;
         }
         snprintf(g_my->error, sizeof(g_my->error), "Unexpected auth response: 0x%02x", auth_result[0]);
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     } else if (auth_result[0] == 0xFE) {
         // Auth switch request  
@@ -711,7 +703,7 @@ skip_ssl: ;
             my_native_auth(password, new_scramble, ns_len, auth_resp);
             if (my_send_packet(auth_resp, 20) < 0) {
                 snprintf(g_my->error, sizeof(g_my->error), "Failed to send switched auth");
-                close(g_my->fd); g_my->fd = -1;
+                db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
             }
             // Read OK/ERR
@@ -719,7 +711,7 @@ skip_ssl: ;
             int oklen;
             if (my_read_packet(ok, &oklen) < 0) {
                 snprintf(g_my->error, sizeof(g_my->error), "Auth switch response failed");
-                close(g_my->fd); g_my->fd = -1;
+                db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
             }
             if (ok[0] == 0x00) {
@@ -729,7 +721,7 @@ skip_ssl: ;
             }
         }
         snprintf(g_my->error, sizeof(g_my->error), "Auth switch to %s failed", new_plugin);
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     } else if (auth_result[0] == 0xFF) {
         // Error packet
@@ -739,12 +731,12 @@ skip_ssl: ;
         int msg_len = arlen - 9;
         if (msg_len < 0) msg_len = 0;
         snprintf(g_my->error, sizeof(g_my->error), "Auth error %d: %.*s", errcode, msg_len, msg);
-        close(g_my->fd); g_my->fd = -1;
+        db_close_socket(g_my->fd); g_my->fd = -1;
         return -1;
     }
 
     snprintf(g_my->error, sizeof(g_my->error), "Unknown auth response: 0x%02x", auth_result[0]);
-    close(g_my->fd); g_my->fd = -1;
+    db_close_socket(g_my->fd); g_my->fd = -1;
     return -1;
 
 auth_ok:
@@ -771,7 +763,7 @@ int32_t __my_close(void) {
         if (g_my->ssl_ctx) { SSL_CTX_free(g_my->ssl_ctx); g_my->ssl_ctx = NULL; }
 #endif
         g_my->use_ssl = 0;
-        close(g_my->fd);
+        db_close_socket(g_my->fd);
         g_my->fd = -1;
     }
     g_my->connected = 0;
@@ -786,7 +778,7 @@ int32_t __my_reconnect(void) {
     if (!g_my) return -1;
     // Close existing dead connection gracefully
     if (g_my->fd >= 0) {
-        close(g_my->fd);
+        db_close_socket(g_my->fd);
         g_my->fd = -1;
     }
     g_my->connected = 0;

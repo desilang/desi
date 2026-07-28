@@ -20,10 +20,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <pthread.h>
-#include <unistd.h>
 #include <time.h>
 #include <errno.h>
+/* Threading via the platform abstraction rather than pthreads directly, so
+   this file builds on Windows too (SRWLOCK + CONDITION_VARIABLE). */
+#include "../platform.h"
+#ifndef _WIN32
+  #include <unistd.h>
+#endif
 
 // ============================================================
 // Pool Configuration
@@ -61,8 +65,8 @@ static int          g_pool_size = 0;
 static PoolDriver   g_pool_driver = POOL_DRIVER_NONE;
 static int          g_pool_initialized = 0;
 static int          g_pool_active_slot = -1;  // currently active slot index
-static pthread_mutex_t g_pool_mutex = PTHREAD_MUTEX_INITIALIZER;
-static pthread_cond_t  g_pool_cond  = PTHREAD_COND_INITIALIZER;
+static DesiPlatformMutex g_pool_mutex = DESI_MUTEX_STATIC_INIT;
+static DesiPlatformCond  g_pool_cond  = DESI_COND_STATIC_INIT;
 
 // ============================================================
 // Driver-specific helpers (forward declarations)
@@ -210,10 +214,12 @@ static int pool_reconnect_slot(int slot) {
     return rc;
 }
 
-// Compute absolute deadline for pthread_cond_timedwait.
-static void pool_deadline(struct timespec *ts) {
-    clock_gettime(CLOCK_REALTIME, ts);
-    ts->tv_sec += POOL_ACQUIRE_TIMEOUT_SEC;
+// Absolute deadline, in the milliseconds base desi_now_ms() uses.
+// The wait is expressed as a relative timeout (that is what Win32 takes), so
+// each spurious wakeup must subtract the time already spent rather than
+// restarting the full timeout.
+static int64_t pool_deadline_ms(void) {
+    return desi_now_ms() + (int64_t)POOL_ACQUIRE_TIMEOUT_SEC * 1000;
 }
 
 // Try to claim a free slot. Returns slot index or -1.
@@ -231,18 +237,18 @@ static int pool_try_claim(void) {
                 __my_set_conn_ptr(g_pool_slots[i].conn);
             }
 
-            pthread_mutex_unlock(&g_pool_mutex);
+            DESI_MUTEX_UNLOCK(g_pool_mutex);
 
             // Health check outside the lock (I/O is slow)
             if (pool_ping_slot() < 0) {
                 if (pool_reconnect_slot(i) < 0) {
                     // Reconnect failed — put slot back and let caller retry
                     fprintf(stderr, "[pool] slot %d reconnect failed, skipping\n", i);
-                    pthread_mutex_lock(&g_pool_mutex);
+                    DESI_MUTEX_LOCK(g_pool_mutex);
                     g_pool_slots[i].state = SLOT_FREE;
                     g_pool_active_slot = -1;
                     // Signal so other waiters can try this slot
-                    pthread_cond_signal(&g_pool_cond);
+                    DESI_COND_SIGNAL(g_pool_cond);
                     return -1;  // caller retries with mutex held
                 }
             }
@@ -259,15 +265,14 @@ int32_t __db_pool_acquire(void) {
         return -1;
     }
 
-    struct timespec deadline;
-    pool_deadline(&deadline);
+    int64_t deadline_ms = pool_deadline_ms();
 
-    pthread_mutex_lock(&g_pool_mutex);
+    DESI_MUTEX_LOCK(g_pool_mutex);
 
     for (;;) {
         // Pool may have been closed while we were waiting
         if (!g_pool_initialized) {
-            pthread_mutex_unlock(&g_pool_mutex);
+            DESI_MUTEX_UNLOCK(g_pool_mutex);
             fprintf(stderr, "[pool] error: pool closed while waiting\n");
             return -1;
         }
@@ -281,9 +286,10 @@ int32_t __db_pool_acquire(void) {
         //   (b) a free slot was found but reconnect failed (slot re-freed)
         // Either way, wait for a signal from release() or close().
 
-        int rc = pthread_cond_timedwait(&g_pool_cond, &g_pool_mutex, &deadline);
-        if (rc == ETIMEDOUT) {
-            pthread_mutex_unlock(&g_pool_mutex);
+        int64_t remaining = deadline_ms - desi_now_ms();
+        if (remaining <= 0 ||
+            !desi_cond_timedwait_ms(&g_pool_cond, &g_pool_mutex, remaining)) {
+            DESI_MUTEX_UNLOCK(g_pool_mutex);
             fprintf(stderr, "[pool] error: acquire timed out after %ds\n",
                     POOL_ACQUIRE_TIMEOUT_SEC);
             return -1;
@@ -299,10 +305,10 @@ int32_t __db_pool_acquire(void) {
 int32_t __db_pool_release(void) {
     if (!g_pool_initialized) return -1;
 
-    pthread_mutex_lock(&g_pool_mutex);
+    DESI_MUTEX_LOCK(g_pool_mutex);
 
     if (g_pool_active_slot < 0 || g_pool_active_slot >= g_pool_size) {
-        pthread_mutex_unlock(&g_pool_mutex);
+        DESI_MUTEX_UNLOCK(g_pool_mutex);
         fprintf(stderr, "[pool] warning: release called with no active slot\n");
         return -1;
     }
@@ -319,8 +325,8 @@ int32_t __db_pool_release(void) {
     g_pool_active_slot = -1;
 
     // Wake one thread waiting in acquire()
-    pthread_cond_signal(&g_pool_cond);
-    pthread_mutex_unlock(&g_pool_mutex);
+    DESI_COND_SIGNAL(g_pool_cond);
+    DESI_MUTEX_UNLOCK(g_pool_mutex);
     return 0;
 }
 
@@ -331,7 +337,7 @@ int32_t __db_pool_release(void) {
 int32_t __db_pool_close(void) {
     if (!g_pool_initialized) return 0;
 
-    pthread_mutex_lock(&g_pool_mutex);
+    DESI_MUTEX_LOCK(g_pool_mutex);
 
     for (int i = 0; i < g_pool_size; i++) {
         if (g_pool_slots[i].conn) {
@@ -364,8 +370,8 @@ int32_t __db_pool_close(void) {
     g_pool_active_slot = -1;
 
     // Wake ALL threads waiting in acquire() so they see pool is closed
-    pthread_cond_broadcast(&g_pool_cond);
-    pthread_mutex_unlock(&g_pool_mutex);
+    DESI_COND_BROADCAST(g_pool_cond);
+    DESI_MUTEX_UNLOCK(g_pool_mutex);
     return 0;
 }
 
@@ -380,12 +386,12 @@ int32_t __db_pool_size(void) {
 int32_t __db_pool_available(void) {
     if (!g_pool_initialized) return 0;
 
-    pthread_mutex_lock(&g_pool_mutex);
+    DESI_MUTEX_LOCK(g_pool_mutex);
     int avail = 0;
     for (int i = 0; i < g_pool_size; i++) {
         if (g_pool_slots[i].state == SLOT_FREE) avail++;
     }
-    pthread_mutex_unlock(&g_pool_mutex);
+    DESI_MUTEX_UNLOCK(g_pool_mutex);
     return avail;
 }
 

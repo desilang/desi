@@ -5,18 +5,18 @@
  * Debug mode: set g_pg_debug=1 for verbose protocol logging.
  */
 
+/* Must precede <stdlib.h> to expose rand_s (used for the SCRAM nonce). */
+#ifdef _WIN32
+  #define _CRT_RAND_S
+#endif
+
+#include "db_socket.h"
 #include "db_timeout.h"
-#include <arpa/inet.h>
-#include <errno.h>
-#include <netdb.h>
-#include <netinet/in.h>
 #include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 // Optional TLS/SSL support (compile-time detection)
 #ifdef __has_include
@@ -287,7 +287,7 @@ static int pg_send_raw(const char *data, int len) {
       n = SSL_write(g_pg->ssl, data + total, len - total);
     else
 #endif
-      n = (int)write(g_pg->fd, data + total, len - total);
+      n = (int)db_sock_write(g_pg->fd, data + total, len - total);
     if (n <= 0)
       return -1;
     total += n;
@@ -306,7 +306,7 @@ static int pg_recv_raw(char *buf, int len) {
       n = SSL_read(g_pg->ssl, buf + total, len - total);
     else
 #endif
-      n = (int)read(g_pg->fd, buf + total, len - total);
+      n = (int)db_sock_read(g_pg->fd, buf + total, len - total);
     if (n <= 0)
       return -1;
     total += n;
@@ -672,6 +672,20 @@ static int pg_scram_auth(const char *user, const char *password) {
   // ---- Step 1: Send SASLInitialResponse ----
   // Generate client nonce (24 random bytes, base64-encoded)
   unsigned char nonce_raw[24];
+#ifdef _WIN32
+  // No /dev/urandom here; rand_s() draws from the OS CSPRNG. Falling through
+  // to the rand() path would make the SCRAM nonce predictable.
+  int have_random = 1;
+  for (int i = 0; i < 24; i += 4) {
+    unsigned int r = 0;
+    if (rand_s(&r) != 0) { have_random = 0; break; }
+    memcpy(nonce_raw + i, &r, 4);
+  }
+  if (!have_random) {
+    for (int i = 0; i < 24; i++)
+      nonce_raw[i] = (unsigned char)(rand() ^ (i * 17));
+  }
+#else
   // Simple nonce — use /dev/urandom if available, else fallback
   FILE *urand = fopen("/dev/urandom", "rb");
   if (urand) {
@@ -682,6 +696,7 @@ static int pg_scram_auth(const char *user, const char *password) {
     for (int i = 0; i < 24; i++)
       nonce_raw[i] = (unsigned char)(rand() ^ (i * 17));
   }
+#endif
   char client_nonce[48];
   pg_b64_encode(nonce_raw, 24, client_nonce);
 
@@ -970,6 +985,8 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
 
   pg_log("connecting to %s:%d db=%s user=%s", host, port, dbname, user);
 
+  db_socket_init();  // no-op except on Windows, where Winsock needs starting
+
   // TCP connect
   struct sockaddr_in addr;
   memset(&addr, 0, sizeof(addr));
@@ -986,20 +1003,12 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
     memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
   }
 
-  g_pg->fd = socket(AF_INET, SOCK_STREAM, 0);
+  g_pg->fd = db_open_connection((struct sockaddr *)&addr, sizeof(addr),
+                                g_db_connect_timeout_ms);
   if (g_pg->fd < 0) {
-    snprintf(g_pg->error, sizeof(g_pg->error), "Socket failed: %s",
-             strerror(errno));
-    return -1;
-  }
-
-  if (db_connect_with_timeout(g_pg->fd, (struct sockaddr *)&addr, sizeof(addr),
-                              g_db_connect_timeout_ms) < 0) {
     snprintf(g_pg->error, sizeof(g_pg->error),
-             "Connect timed out after %dms: %s", g_db_connect_timeout_ms,
-             strerror(errno));
-    close(g_pg->fd);
-    g_pg->fd = -1;
+             "Cannot connect to %s:%d (timeout %dms): %s", host, port,
+             g_db_connect_timeout_ms, db_socket_error_str());
     return -1;
   }
 
@@ -1019,10 +1028,10 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
     pg_write_i32(ssl_req, 8);            // message length
     pg_write_i32(ssl_req + 4, 80877103); // SSL request code
     // Use raw write since SSL isn't active yet
-    int wr = (int)write(g_pg->fd, ssl_req, 8);
+    int wr = (int)db_sock_write(g_pg->fd, ssl_req, 8);
     if (wr == 8) {
       char ssl_resp;
-      int rd = (int)read(g_pg->fd, &ssl_resp, 1);
+      int rd = (int)db_sock_read(g_pg->fd, &ssl_resp, 1);
       if (rd == 1 && ssl_resp == 'S') {
         // Server accepted SSL — perform TLS handshake
         SSL_library_init();
@@ -1042,14 +1051,14 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
             SSL_CTX_free(g_pg->ssl_ctx);
             g_pg->ssl_ctx = NULL;
             // Reconnect for plaintext (server closed the SSL attempt)
-            close(g_pg->fd);
-            g_pg->fd = socket(AF_INET, SOCK_STREAM, 0);
-            if (g_pg->fd < 0 ||
-                db_connect_with_timeout(g_pg->fd, (struct sockaddr *)&addr,
-                                        sizeof(addr),
-                                        g_db_connect_timeout_ms) < 0) {
+            db_close_socket(g_pg->fd);
+            g_pg->fd = db_open_connection((struct sockaddr *)&addr,
+                                          sizeof(addr),
+                                          g_db_connect_timeout_ms);
+            if (g_pg->fd < 0) {
               snprintf(g_pg->error, sizeof(g_pg->error),
-                       "SSL fallback reconnect failed");
+                       "SSL fallback reconnect failed: %s",
+                       db_socket_error_str());
               return -1;
             }
           }
@@ -1086,7 +1095,7 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
 
   if (pg_send_raw(startup, pos) < 0) {
     snprintf(g_pg->error, sizeof(g_pg->error), "Failed to send startup");
-    close(g_pg->fd);
+    db_close_socket(g_pg->fd);
     g_pg->fd = -1;
     return -1;
   }
@@ -1102,7 +1111,7 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
     if (pg_read_msg(&mtype, payload, &plen) < 0) {
       snprintf(g_pg->error, sizeof(g_pg->error),
                "Failed to read auth response");
-      close(g_pg->fd);
+      db_close_socket(g_pg->fd);
       g_pg->fd = -1;
       return -1;
     }
@@ -1149,7 +1158,7 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
           if (!g_pg->error[0])
             snprintf(g_pg->error, sizeof(g_pg->error),
                      "SCRAM-SHA-256 authentication failed");
-          close(g_pg->fd);
+          db_close_socket(g_pg->fd);
           g_pg->fd = -1;
           return -1;
         }
@@ -1158,7 +1167,7 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
       } else {
         snprintf(g_pg->error, sizeof(g_pg->error),
                  "Unsupported auth method: %d", atype);
-        close(g_pg->fd);
+        db_close_socket(g_pg->fd);
         g_pg->fd = -1;
         return -1;
       }
@@ -1175,7 +1184,7 @@ int32_t __pg_connect(const char *host, int32_t port, const char *dbname,
         p += strlen(p) + 1;
       }
       pg_log("auth error: %s", g_pg->error);
-      close(g_pg->fd);
+      db_close_socket(g_pg->fd);
       g_pg->fd = -1;
       return -1;
     } else if (mtype == 'K' || mtype == 'S') {
@@ -1208,7 +1217,7 @@ int32_t __pg_close(void) {
     }
 #endif
     g_pg->use_ssl = 0;
-    close(g_pg->fd);
+    db_close_socket(g_pg->fd);
     g_pg->fd = -1;
   }
   g_pg->connected = 0;
@@ -1226,7 +1235,7 @@ int32_t __pg_reconnect(void) {
     return -1;
   // Close existing dead connection gracefully
   if (g_pg->fd >= 0) {
-    close(g_pg->fd);
+    db_close_socket(g_pg->fd);
     g_pg->fd = -1;
   }
   g_pg->connected = 0;

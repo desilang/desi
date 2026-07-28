@@ -12,6 +12,16 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* Thread-local storage. MSVC has never accepted the GCC/Clang `__thread`
+   spelling, so anything shared across threads must go through this. */
+#ifndef DESI_THREAD_LOCAL
+  #if defined(_MSC_VER)
+    #define DESI_THREAD_LOCAL __declspec(thread)
+  #else
+    #define DESI_THREAD_LOCAL __thread
+  #endif
+#endif
+
 #ifdef _WIN32
     #ifndef WIN32_LEAN_AND_MEAN
         #define WIN32_LEAN_AND_MEAN
@@ -26,6 +36,11 @@
     #define DESI_MUTEX_UNLOCK(m)     ReleaseSRWLockExclusive(&(m))
     #define DESI_MUTEX_TRYLOCK(m)    TryAcquireSRWLockExclusive(&(m))
     
+    /* Static initializers, for file-scope locks that are never explicitly
+       initialized (the connection pool uses these). */
+    #define DESI_MUTEX_STATIC_INIT   SRWLOCK_INIT
+    #define DESI_COND_STATIC_INIT    CONDITION_VARIABLE_INIT
+
     /* Condition Variable */
     typedef CONDITION_VARIABLE DesiPlatformCond;
     #define DESI_COND_INIT(c)        InitializeConditionVariable(&(c))
@@ -51,7 +66,9 @@
     
 #else
     #include <pthread.h>
-    
+    #include <time.h>   /* clock_gettime / struct timespec for the timed wait */
+    #include <errno.h>  /* ETIMEDOUT */
+
     /* Mutex: pthread_mutex_t */
     typedef pthread_mutex_t DesiPlatformMutex;
     #define DESI_MUTEX_INIT(m)       pthread_mutex_init(&(m), NULL)
@@ -60,6 +77,11 @@
     #define DESI_MUTEX_UNLOCK(m)     pthread_mutex_unlock(&(m))
     #define DESI_MUTEX_TRYLOCK(m)    (pthread_mutex_trylock(&(m)) == 0)
     
+    /* Static initializers, for file-scope locks that are never explicitly
+       initialized (the connection pool uses these). */
+    #define DESI_MUTEX_STATIC_INIT   PTHREAD_MUTEX_INITIALIZER
+    #define DESI_COND_STATIC_INIT    PTHREAD_COND_INITIALIZER
+
     /* Condition Variable */
     typedef pthread_cond_t DesiPlatformCond;
     #define DESI_COND_INIT(c)        pthread_cond_init(&(c), NULL)
@@ -82,7 +104,56 @@
     #define DESI_RWLOCK_WRUNLOCK(rw)     pthread_rwlock_unlock(&(rw))
     #define DESI_RWLOCK_TRYRDLOCK(rw)    (pthread_rwlock_tryrdlock(&(rw)) == 0)
     #define DESI_RWLOCK_TRYWRLOCK(rw)    (pthread_rwlock_trywrlock(&(rw)) == 0)
-    
+
 #endif
+
+/*
+ * Timed waiting.
+ *
+ * Expressed as a relative timeout in milliseconds because the two platforms
+ * disagree: Win32's SleepConditionVariableSRW takes a relative timeout while
+ * pthread_cond_timedwait takes an absolute deadline. Deriving the deadline
+ * here keeps every caller portable — and callers that need one can build it
+ * from desi_now_ms().
+ *
+ * Functions rather than macros: the POSIX side needs a local timespec.
+ */
+
+/* Milliseconds since an unspecified epoch. Only differences are meaningful. */
+static inline int64_t desi_now_ms(void) {
+#ifdef _WIN32
+    return (int64_t)GetTickCount64();
+#else
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000 + (int64_t)ts.tv_nsec / 1000000;
+#endif
+}
+
+/* Wait for a signal or timeout. Returns 1 if signalled, 0 if it timed out.
+   Must be called with the mutex held; the mutex is held again on return. */
+static inline int desi_cond_timedwait_ms(DesiPlatformCond* cond,
+                                         DesiPlatformMutex* mutex,
+                                         int64_t timeout_ms) {
+    if (timeout_ms < 0) timeout_ms = 0;
+#ifdef _WIN32
+    if (SleepConditionVariableSRW(cond, mutex, (DWORD)timeout_ms, 0)) {
+        return 1;
+    }
+    /* Anything other than a timeout is still a wakeup as far as the caller is
+       concerned: it re-checks its own predicate either way. */
+    return GetLastError() == ERROR_TIMEOUT ? 0 : 1;
+#else
+    struct timespec deadline;
+    clock_gettime(CLOCK_REALTIME, &deadline);
+    deadline.tv_sec += (time_t)(timeout_ms / 1000);
+    deadline.tv_nsec += (long)(timeout_ms % 1000) * 1000000L;
+    if (deadline.tv_nsec >= 1000000000L) {
+        deadline.tv_sec += 1;
+        deadline.tv_nsec -= 1000000000L;
+    }
+    return pthread_cond_timedwait(cond, mutex, &deadline) == ETIMEDOUT ? 0 : 1;
+#endif
+}
 
 #endif /* DESI_PLATFORM_H */

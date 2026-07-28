@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdarg.h>
+#include "../platform.h"
 #include "dynbuf.h"
 
 // ============================================================
@@ -804,7 +805,7 @@ typedef struct {
     int  pk_value;                            // 0 = new (INSERT), >0 = existing (UPDATE)
 } InstanceState;
 
-static __thread InstanceState* g_instance_tls = NULL;
+static DESI_THREAD_LOCAL InstanceState* g_instance_tls = NULL;
 
 // Zero-initialized on first use, matching the previous static storage.
 // A failed allocation falls back to a shared instance: losing thread
