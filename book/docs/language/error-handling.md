@@ -76,7 +76,7 @@ Desi's `Option` type provides a rich set of helper methods to query, transform, 
     print(y.unwrap_or(0))  # 0
     
     # Lazy default computation (expensive_default is only called if y is Nothing)
-    print(y.unwrap_or_else(fn() -> int: 10 + 20))  # 30
+    print(y.unwrap_or_else(lambda<int>: 10 + 20))  # 30
     
     # Expect with custom panic message
     # y.expect("Value should be present!")  # Panics: "Value should be present!"
@@ -85,10 +85,10 @@ Desi's `Option` type provides a rich set of helper methods to query, transform, 
 === "Transforming (map/and_then)"
     ```desi
     let x = Option.Some(21)
-    let double_opt = x.map(fn(val: int) -> int: val * 2)  # Some(42)
+    let double_opt = x.map(lambda<int> val: int: val * 2)  # Some(42)
     
     # and_then chains functions returning another Option
-    let to_str = fn(val: int) -> Option<str>: Option.Some(f"{val}")
+    let to_str = lambda<Option<str>> val: int: Option.Some(f"{val}")
     let str_opt = x.and_then(to_str)  # Some("21")
     ```
 
@@ -194,7 +194,7 @@ Desi's `Result` type provides a complete suite of methods to query, transform, a
     print(y.unwrap_or(0))  # 0
     
     # Lazy default computation with error parameter
-    print(y.unwrap_or_else(fn(err: str) -> int: 0))  # 0
+    print(y.unwrap_or_else(lambda<int> err: str: 0))  # 0
     
     # Convert Result to Option
     let x_opt = x.ok()  # Some(100)
@@ -204,7 +204,7 @@ Desi's `Result` type provides a complete suite of methods to query, transform, a
 === "Transforming"
     ```desi
     let x: Result<int, str> = Result.Ok(21)
-    let mapped = x.map(fn(val: int) -> int: val * 2)  # Ok(42)
+    let mapped = x.map(lambda<int> val: int: val * 2)  # Ok(42)
     ```
 
 ### Common Use Cases

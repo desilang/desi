@@ -47,8 +47,10 @@ This list matches `keywordToken` in `compiler/internal/lex/scanner.go`.
 | `defer` | Run a statement when the scope exits, in reverse order |
 | `using` | Resource management — scope-bound cleanup |
 
-!!! note "There is no `case`"
-    Match arms are written as `Pattern: body` directly, with no `case` prefix.
+!!! note "Match arms take no `case`"
+    Arms are written as `Pattern: body` directly. `case` is not reserved, and
+    is not used by `match` — it appears only inside a `select:` block, along
+    with `default`, as part of that statement's syntax.
 
 ---
 

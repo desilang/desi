@@ -16,31 +16,40 @@ select:
 
 ## Cases
 
+`case` and `default` are part of `select` syntax and only appear inside a
+`select:` block — they are not keywords elsewhere in the language.
+
 ### Receive with Binding
 ```desi
-case msg = receiver.try_recv():
-    # msg contains the received value
-    process(msg)
+select:
+    case msg = receiver.try_recv():
+        # msg contains the received value
+        process(msg)
 ```
 
 ### Receive without Binding
 ```desi
-case receiver.try_recv():
-    # Just react to availability
-    print("Got something")
+select:
+    case receiver.try_recv():
+        # Just react to availability
+        print("Got something")
 ```
 
 ### Send
 ```desi
-case sender.try_send(value):
-    print("Sent successfully")
+select:
+    case sender.try_send(value):
+        print("Sent successfully")
 ```
 
 ### Default
 ```desi
-default:
-    # Runs if no other case is ready
-    print("Nothing ready")
+select:
+    case receiver.try_recv():
+        print("Got something")
+    default:
+        # Runs if no other case is ready
+        print("Nothing ready")
 ```
 
 ## Example: Timeout Pattern
