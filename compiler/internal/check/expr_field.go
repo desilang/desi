@@ -29,6 +29,30 @@ func (c *checker) typReceiver(x ast.Expr) types.T {
 // - dict methods: get, has_key, pop, clear, keys, values
 // - Class static methods: ClassName.static_method()
 func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
+	// A module's exported constant, read as a value: `signal.SIGINT`.
+	//
+	// Module-qualified *calls* have always resolved, through ModuleExports.Funcs
+	// in qual_calls.go, but nothing read ModuleExports.Globals — the resolver
+	// collected it and no one consumed it. So `pub let` constants exported a
+	// name with no usable type, and passing one anywhere reported "no matching
+	// overload": signal.SIGINT, json.JSON_NULL and every other module constant
+	// were unusable.
+	if id, ok := x.X.(*ast.Ident); ok {
+		if mpath, isImport := c.info.ImportPaths[id.Name]; isImport && mpath != "" && c.info.R != nil {
+			if ex := c.info.R.ModuleExports[mpath]; ex != nil {
+				if gt, exists := ex.Globals[x.Name.Name]; exists && gt != nil {
+					// Count the qualifier as a use, so the unused-import lint
+					// does not fire on a module used only for its constants.
+					if sym := c.scope.Lookup(id.Name); sym != nil {
+						c.info.Idents[id] = sym
+					}
+					c.info.Types[x] = gt
+					return gt
+				}
+			}
+		}
+	}
+
 	// Special case: ClassName.StaticMethod (accessing static method on class type)
 	// x.X might be an Ident referring to a class type
 	if id, ok := x.X.(*ast.Ident); ok {

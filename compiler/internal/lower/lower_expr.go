@@ -1534,6 +1534,30 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return ls.lowerCall(x)
 
 	case *ast.FieldExpr:
+		// A module's exported constant: `signal.SIGINT`.
+		//
+		// The importing module emits the global — the imported module's
+		// __top__ initializes it — so this is a load, not a field access on a
+		// value called `signal`. Without this it fell through to the generic
+		// fallback below and emitted `get.field.SIGINT(i32 %signal)`, naming a
+		// value that does not exist.
+		if id, ok := x.X.(*ast.Ident); ok && ls.info != nil && ls.info.R != nil {
+			if mpath, isImport := ls.info.ImportPaths[id.Name]; isImport && mpath != "" {
+				if ex := ls.info.R.ModuleExports[mpath]; ex != nil {
+					if gt, exists := ex.Globals[x.Name.Name]; exists && gt != nil {
+						dst := ls.b.FreshTemp("modconst")
+						ls.b.Emit(&hir.Load{
+							Type:     lowerType(gt),
+							Src:      hir.Var{Name: "@" + x.Name.Name},
+							Dst:      dst,
+							DesiType: gt,
+						})
+						return dst
+					}
+				}
+			}
+		}
+
 		// Special handling for Option/Result variants accessed as fields (e.g. Option.Nothing)
 		if id, ok := x.X.(*ast.Ident); ok {
 			// Check if base is any enum type (including user-defined enums like JsonValue)

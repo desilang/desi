@@ -1,0 +1,34 @@
+# A module's exported constants are usable values.
+#
+# Regression guard: module-qualified *calls* always resolved, but nothing read
+# the exported globals, so a `pub let` constant exported a name with no usable
+# type. Passing one anywhere reported "no matching overload" — signal.SIGINT,
+# json.JSON_NULL and every other module constant were unreachable. Lowering had
+# the matching gap: it treated `signal.SIGINT` as a field access on a value
+# called `signal` and emitted a reference to something that did not exist.
+#
+# An unannotated constant exported as Any, which is just as unusable, so the
+# type is inferred from the literal when there is no annotation.
+#
+# EXPECTED_OUTPUT:
+# 2
+# 15
+# SIGINT
+# 0
+# 5
+import signal
+import json
+
+def main() -> int:
+	# Annotated: `pub let SIGINT: int = 2`
+	let interrupt = signal.SIGINT
+	print(str(interrupt))
+	print(str(signal.SIGTERM))
+
+	# A module function, which always worked — kept so the two stay together.
+	print(signal.name(signal.SIGINT))
+
+	# Unannotated: `pub let JSON_NULL = 0`, inferred as int
+	print(str(json.JSON_NULL))
+	print(str(json.JSON_OBJECT))
+	return 0

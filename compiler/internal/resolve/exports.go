@@ -648,11 +648,26 @@ func CollectExports(mod *ast.Module) *Exports {
 			if !ok || !ls.Pub {
 				continue
 			}
-			// Resolve type
+			// Resolve type. Falling back to Any made an unannotated constant
+			// useless to importers — `pub let JSON_NULL = 0` exported a name
+			// that could not be passed anywhere — so infer from the literal
+			// when there is no annotation. Constants are overwhelmingly
+			// literals, and anything more involved still exports as Any.
 			var t types.T = types.Any
 			if ls.Type != nil {
 				if tt, ok := types.FromName(ls.Type.Name); ok {
 					t = tt
+				}
+			} else {
+				switch ls.Value.(type) {
+				case *ast.IntLit:
+					t = types.Int
+				case *ast.FloatLit:
+					t = types.Float
+				case *ast.StrLit:
+					t = types.Str
+				case *ast.BoolLit:
+					t = types.Bool
 				}
 			}
 			// Add to exports
