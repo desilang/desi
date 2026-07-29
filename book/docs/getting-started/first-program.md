@@ -104,8 +104,8 @@ let count: int = 42     # Explicit type annotation
 Use `var` for mutable variables:
 
 ```desi
-var counter = 0
-counter = counter + 1   # OK - counter is mutable
+let mut counter = 0
+counter := counter + 1   # OK - counter is mutable
 ```
 
 ### Functions

@@ -28,9 +28,9 @@ x = 20  # ❌ Error: cannot assign to immutable variable
 Use `var` when you need to modify a variable:
 
 ```desi
-var counter = 0
-counter = counter + 1  # ✅ OK
-counter = counter + 1  # ✅ OK
+let mut counter = 0
+counter := counter + 1  # ✅ OK
+counter := counter + 1  # ✅ OK
 print(counter)  # Prints: 2
 ```
 

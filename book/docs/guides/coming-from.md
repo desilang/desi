@@ -26,7 +26,7 @@ If you know Python, you already know most of Desi's syntax. The key differences 
 ```desi
 # Variables are immutable by default
 let x = 10          # immutable (Python: x = 10)
-var y = 20          # mutable   (Python: x = 10, then x = 30)
+let mut y = 20      # mutable   (Python: x = 10, then x = 30)
 
 # Type annotations are available
 let name: str = "Desi"
