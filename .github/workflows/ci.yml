@@ -171,6 +171,33 @@ jobs:
         timeout-minutes: 10
         run: .\tools\smoke.ps1
 
+      # The example suite drives build-desi.sh, not the compiler's own build
+      # command, so `desic build` had no coverage at all — which is how it
+      # shipped unable to link on Linux, where executables are position
+      # independent by default and llc needs telling. This exercises the two
+      # commands a user actually reaches for, at both optimization levels.
+      - name: Smoke-test desic build/run (unix)
+        if: runner.os != 'Windows'
+        timeout-minutes: 10
+        run: |
+          set -e
+          mkdir -p /tmp/desic-smoke && cd /tmp/desic-smoke
+          printf 'def main() -> int:\n\tprint("smoke ok")\n\treturn 0\n' > hello.desi
+          DESIC="$GITHUB_WORKSPACE/bin/desic"
+
+          "$DESIC" build hello.desi -o hello
+          out=$(./build/output/hello)
+          [ "$out" = "smoke ok" ] || { echo "build: got '$out'"; exit 1; }
+
+          "$DESIC" build hello.desi -o hello_r -O2
+          out=$(./build/output/hello_r)
+          [ "$out" = "smoke ok" ] || { echo "build -O2: got '$out'"; exit 1; }
+
+          out=$("$DESIC" run hello.desi)
+          [ "$out" = "smoke ok" ] || { echo "run: got '$out'"; exit 1; }
+
+          echo "desic build/run smoke passed"
+
       - name: Run leak detection (macOS only)
         if: runner.os == 'macOS' && matrix.opt == 'debug'
         timeout-minutes: 5

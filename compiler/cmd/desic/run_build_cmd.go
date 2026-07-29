@@ -459,7 +459,13 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		// (inlining, loop opts) — llc alone only optimizes codegen.
 		irCompileCmd = exec.Command(findLLVMTool("clang"), "-w", "-c", optLevel, irPath, "-o", objPath)
 	} else {
-		llcArgs := []string{"-filetype=obj", "-o", objPath}
+		// Linux links position-independent executables by default, so an
+		// object llc produced without this fails at link with "relocation
+		// R_X86_64_32 ... can not be used when making a PIE object". clang
+		// gets it right on its own, which is why only this llc path needs
+		// the flag; macOS requires PIC regardless, so it is correct on both.
+		// build-desi.sh has carried the same flag for the same reason.
+		llcArgs := []string{"-filetype=obj", "-relocation-model=pic", "-o", objPath}
 		llcArgs = append(llcArgs, irPath)
 		irCompileCmd = exec.Command(findLLVMTool("llc"), llcArgs...)
 	}
@@ -537,10 +543,17 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 func findLTOObjs() []string {
 	dirs := []string{}
 	if exe, err := os.Executable(); err == nil {
-		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "..", "build", "lto"))
+		exeDir := filepath.Dir(exe)
+		dirs = append(dirs,
+			filepath.Join(exeDir, "..", "build", "lto"),
+			filepath.Join(exeDir, "..", "lib", "lto"),
+		)
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		dirs = append(dirs, filepath.Join(cwd, "build", "lto"))
+		dirs = append(dirs,
+			filepath.Join(cwd, "build", "lto"),
+			filepath.Join(cwd, "lib", "lto"),
+		)
 	}
 	for _, dir := range dirs {
 		entries, err := os.ReadDir(dir)
@@ -598,10 +611,19 @@ func findEntryObj() string {
 	}
 	dirs := []string{}
 	if exe, err := os.Executable(); err == nil {
-		dirs = append(dirs, filepath.Join(filepath.Dir(exe), "..", "build"))
+		exeDir := filepath.Dir(exe)
+		// "build" is the developer tree; "lib" is where an installed release
+		// puts it, next to bin/. findRuntimeLib already accepts both.
+		dirs = append(dirs,
+			filepath.Join(exeDir, "..", "build"),
+			filepath.Join(exeDir, "..", "lib"),
+		)
 	}
 	if cwd, err := os.Getwd(); err == nil {
-		dirs = append(dirs, filepath.Join(cwd, "build"))
+		dirs = append(dirs,
+			filepath.Join(cwd, "build"),
+			filepath.Join(cwd, "lib"),
+		)
 	}
 	for _, dir := range dirs {
 		c := filepath.Join(dir, "entry.obj")
