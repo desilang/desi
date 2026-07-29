@@ -69,7 +69,7 @@ let negated: bool = not true
 
 ```desi
 let name: str = "Desi"
-let greeting: str = 'Hello'
+let greeting: str = "Hello, Desi"
 let multiline: str = """
     Multi-line
     string literal

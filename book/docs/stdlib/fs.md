@@ -83,8 +83,10 @@ def main() -> int:
         print(f"  - {line}")
 
     fs.copy("todo.txt", "todo_backup.txt")
-    print(f"Backup exists: {str(fs.exists('todo_backup.txt'))}")
-    print(f"Size: {str(fs.size('todo.txt'))} bytes")
+    let exists = fs.exists("todo_backup.txt")
+    let size = fs.size("todo.txt")
+    print(f"Backup exists: {str(exists)}")
+    print(f"Size: {str(size)} bytes")
 
     fs.remove("todo.txt")
     fs.remove("todo_backup.txt")

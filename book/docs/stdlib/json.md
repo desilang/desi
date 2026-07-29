@@ -8,7 +8,7 @@ The `json` module provides functions for parsing and manipulating JSON data. It 
 import json
 
 # Parse JSON
-let data = json.parse('{"name": "desi", "version": 1}')
+let data = json.parse("{\"name\": \"desi\", \"version\": 1}")
 
 # Access values
 let name = json.object_get(data, "name")
@@ -131,7 +131,7 @@ print(json.get_int(elem))         # 20
 | `object_get(obj, key)` | `Any` | Get value by key |
 
 ```desi
-let json_str = '{"name": "alice", "age": 30}'
+let json_str = "{\"name\": \"alice\", \"age\": 30}"
 let obj = json.parse(json_str)
 
 print(json.object_len(obj))       # 2
@@ -145,7 +145,7 @@ print(json.get_string(name))      # alice
 Access nested objects and arrays by chaining operations:
 
 ```desi
-let json_str = '{"users": [{"name": "alice"}, {"name": "bob"}]}'
+let json_str = "{\"users\": [{\"name\": \"alice\"}, {\"name\": \"bob\"}]}"
 let data = json.parse(json_str)
 
 let users = json.object_get(data, "users")
@@ -199,7 +199,7 @@ print(json.dumps(obj))  # {"name":"desi","version":1}
 Pretty-print JSON with indentation. Like Python's `json.dumps(data, indent=2)`.
 
 ```desi
-let json_str = '{"name": "alice", "scores": [100, 95, 87]}'
+let json_str = "{\"name\": \"alice\", \"scores\": [100, 95, 87]}"
 let data = json.parse(json_str)
 print(json.pretty(data, 2))
 # {
@@ -254,7 +254,7 @@ def main() -> int:
 Deep copy a JSON node. Like Python's `copy.deepcopy()`.
 
 ```desi
-let original = json.parse('{"x": 1}')
+let original = json.parse("{\"x\": 1}")
 let copy = json.clone(original)
 json.set(copy, "y", json.new_number(2.0))
 # original still has only "x"; copy has "x" and "y"
@@ -266,8 +266,8 @@ Merge two JSON objects. Overlay's keys take precedence.
 Like Python's `{**base, **overlay}` or JavaScript's `Object.assign()`.
 
 ```desi
-let defaults = json.parse('{"theme": "dark", "lang": "en"}')
-let user_cfg = json.parse('{"lang": "hi"}')
+let defaults = json.parse("{\"theme\": \"dark\", \"lang\": \"en\"}")
+let user_cfg = json.parse("{\"lang\": \"hi\"}")
 let merged = json.merge(defaults, user_cfg)
 print(json.pretty(merged, 2))
 # {"theme": "dark", "lang": "hi"}
@@ -291,7 +291,7 @@ print(json.equals(a, c))  # false
 Check if a JSON object contains a key. Like Python's `"key" in dict`.
 
 ```desi
-let config = json.parse('{"debug": true}')
+let config = json.parse("{\"debug\": true}")
 if json.has_key(config, "debug"):
     print("Debug mode configured")
 ```
@@ -301,7 +301,7 @@ if json.has_key(config, "debug"):
 Get all values of a JSON object as an array. Like Python's `dict.values()`.
 
 ```desi
-let scores = json.parse('{"math": 95, "science": 87}')
+let scores = json.parse("{\"math\": 95, \"science\": 87}")
 let vals = json.values(scores)
 print(json.array_len(vals))  # 2
 ```

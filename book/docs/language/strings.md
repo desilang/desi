@@ -6,7 +6,7 @@ Desi provides powerful string handling with f-string interpolation.
 
 ```desi
 let name: str = "Desi"
-let greeting: str = 'Hello'
+let greeting: str = "Hello, Desi"
 let multiline: str = """
     Multi-line
     string literal
@@ -53,7 +53,8 @@ print(f"Product: {a * b}")  # Product: 200
 def greet(name: str) -> str:
     return f"Hello, {name}!"
 
-print(f"Message: {greet('Bob')}")
+let who = "Bob"
+print(f"Message: {greet(who)}")
 ```
 
 ### Struct Fields
