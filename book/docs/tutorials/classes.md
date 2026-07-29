@@ -20,7 +20,7 @@ class Person:
         return "Namaste, I am " + self.name
 
 def main():
-    let person = Person(\"Arjun\", 25)
+    let person = Person("Arjun", 25)
     print(person.greet())
 ```
 

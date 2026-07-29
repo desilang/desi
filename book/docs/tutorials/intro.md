@@ -78,28 +78,30 @@ Here's a taste of what Desi code looks like:
 # A simple class with generics
 class Stack<T>:
     pub mut items: list<T>
-    
+
     pub def __new__(self):
         self.items = []
-    
+
     pub def push(self, item: T):
         self.items.append(item)
-    
-    pub def pop(self) -> T:
-        return self.items.pop()
-    
+
+    pub def size(self) -> int:
+        return len(self.items)
+
     pub def is_empty(self) -> bool:
         return len(self.items) == 0
 
-def main():
-    let stack = Stack()  # Type inferred from usage
-    
+def main() -> int:
+    # __new__ takes no argument mentioning T, so state it with turbofish
+    let stack = Stack::<int>()
+
     stack.push(1)
     stack.push(2)
     stack.push(3)
-    
-    while not stack.is_empty():
-        print(stack.pop())
+
+    print(str(stack.size()))
+    print(str(stack.is_empty()))
+    return 0
 ```
 
 ---
