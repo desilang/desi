@@ -784,12 +784,24 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 	//
 	//   - Enum/type names used as a qualifier: `Option.Some(42)` looks up
 	//     `Option`, which is not defined as a symbol (Option/Result, and
-	//     user-declared enums). Note that simply defining them is NOT the
-	//     fix: registering Option/Result as SymType in injectPreludeIntoScope
-	//     was tried and broke 30 examples, because a resolvable type name
-	//     sends the call down checkTypeCall instead of enum construction.
-	//     What is needed is for qualifier position to be recognised as such,
-	//     rather than the base being typed as a value expression.
+	//     user-declared enums).
+	//
+	//     Defining them is NOT the fix, measured twice. Registering
+	//     Option/Result in injectPreludeIntoScope as SymType with a type
+	//     alone broke 30 examples: the name resolves, so the call goes down
+	//     checkTypeCall instead of enum construction. Adding an *ast.EnumDecl
+	//     node as well — matching a declared enum exactly — fixed those and
+	//     still broke 28, this time at runtime, because Option/Result are
+	//     resolved contextually from the annotation at each use site
+	//     (`Option<int>`), and a single prelude symbol has to pick one
+	//     payload type for all of them.
+	//
+	//     So a qualifier must not be typed as a value in the first place.
+	//     Note `Option.Some(42)` already works today with no symbol at all:
+	//     typFieldExpr returns nil for the base and the call path handles
+	//     the construction. The diagnostic therefore needs to know it is
+	//     looking at qualifier position, rather than the qualifier needing
+	//     to resolve.
 	//   - `pass`, which reaches this point as an identifier expression rather
 	//     than being handled as a statement.
 	//   - Bindings introduced by `is` patterns, generic type parameters, and
