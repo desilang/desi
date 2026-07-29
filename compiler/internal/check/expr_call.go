@@ -437,7 +437,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		}
 		// Not a module import - try instance method call
 		// Original instance method handling
-		recvT := c.typ(fe.X)
+		recvT := c.typReceiver(fe.X)
 
 		// Intercept Supervisor method calls early — Supervisor is not a class type
 		// so class dispatch won't handle it
@@ -527,7 +527,7 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 		// Handle instance method calls for built-in collection types (set, dict, list)
 		// ONLY if not handled by trait/custom type logic above
 		// Check the receiver type - only handle our built-in collection types
-		receiverType := c.typ(fe.X)
+		receiverType := c.typReceiver(fe.X)
 		if receiverType != nil {
 			// Only handle built-in collection types, not custom structs/types
 			isBuiltinCollection := false

@@ -509,6 +509,17 @@ func (c *checker) typ(e ast.Expr) types.T {
 			}
 		}
 
+		// Case 3: bare Ident pattern - is Nothing, or a user enum's unit variant
+		// named without its qualifier. This is pattern syntax, not a reference
+		// to a variable, so checking it as an expression would report the
+		// variant name as an undefined name.
+		if id, ok := x.Pattern.(*ast.Ident); ok {
+			if c.enumHasVariant(lhsType, id.Name) {
+				patternHandled = true
+				// Unit variant pattern - no bindings needed
+			}
+		}
+
 		// If not an enum pattern, type-check as regular expression
 		if !patternHandled {
 			c.typ(x.Pattern)
@@ -770,47 +781,38 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 		c.info.Idents[x] = sym
 		return sym.Type
 	}
-	// KNOWN GAP: an unresolved identifier returns nil with no diagnostic, so a
-	// typo'd name survives checking and reaches the backend, which emits a
-	// reference to a value it never defined. The user sees a raw LLVM "use of
-	// undefined value" dump and a misleading "make sure LLVM is installed"
-	// hint, after `desic check` reported "ok".
+	// The name resolves to nothing. Report it here rather than letting it reach
+	// the backend, which would emit a reference to a value it never defined and
+	// leave the user with a raw LLVM "use of undefined value" dump plus a
+	// misleading "make sure LLVM is installed" hint — after `desic check` had
+	// already said "ok".
 	//
-	// Reporting here is the right place, but it requires every name that is
-	// legitimately in scope to actually be registered, and several are not.
-	// Measured 2026-07-28 by enabling the diagnostic and checking every
-	// example: 44 of them report at least one name that is genuinely in
-	// scope. What is still missing:
+	// Reaching this point means the name is genuinely unresolved. Everything
+	// that is legitimately in scope without holding a symbol is kept away from
+	// here rather than being made to resolve, because the two names that most
+	// often arrive unresolved — `Option` and `Result` — must NOT be given
+	// symbols. That was measured twice and failed both times (commits 1c837e8b
+	// and 14162ded): registering them as SymType broke 30 examples by routing
+	// construction through checkTypeCall, and additionally attaching a
+	// synthetic *ast.EnumDecl fixed those but broke 28 at runtime, because both
+	// types are resolved contextually from each use site's annotation and a
+	// single prelude symbol has to commit to one payload type for all of them.
 	//
-	//   - Enum/type names used as a qualifier: `Option.Some(42)` looks up
-	//     `Option`, which is not defined as a symbol (Option/Result, and
-	//     user-declared enums).
+	// So the positions where such a name is not a value are recognised at the
+	// point of use instead:
 	//
-	//     Defining them is NOT the fix, measured twice. Registering
-	//     Option/Result in injectPreludeIntoScope as SymType with a type
-	//     alone broke 30 examples: the name resolves, so the call goes down
-	//     checkTypeCall instead of enum construction. Adding an *ast.EnumDecl
-	//     node as well — matching a declared enum exactly — fixed those and
-	//     still broke 28, this time at runtime, because Option/Result are
-	//     resolved contextually from the annotation at each use site
-	//     (`Option<int>`), and a single prelude symbol has to pick one
-	//     payload type for all of them.
+	//   - qualifier position (`Option.Some(42)`) — see typReceiver in
+	//     expr_field.go, used by typFieldExpr and by the two receiver sites in
+	//     expr_call.go;
+	//   - match-arm patterns, including `_` — see check_match.go;
+	//   - `is` patterns, including an unqualified unit variant like
+	//     `x is Nothing` — see the IsExpr case above;
+	//   - comprehension loop variables — see comprehensionElemType.
 	//
-	//     So a qualifier must not be typed as a value in the first place.
-	//     Note `Option.Some(42)` already works today with no symbol at all:
-	//     typFieldExpr returns nil for the base and the call path handles
-	//     the construction. The diagnostic therefore needs to know it is
-	//     looking at qualifier position, rather than the qualifier needing
-	//     to resolve.
-	//   - `pass`, which reaches this point as an identifier expression rather
-	//     than being handled as a statement.
-	//   - Bindings introduced by `is` patterns, generic type parameters, and
-	//     weak/rc handles.
-	//
-	// Two binding forms that were also missing have since been fixed:
-	// comprehension loop variables (see comprehensionElemType) and bare
-	// identifier patterns in match arms (see check_match.go), so the remaining
-	// list above is the current, measured state.
+	// `pass` used to arrive here too, because it was listed in token.keywords
+	// but missing from keywordToken in lex/scanner.go, so it lexed as an
+	// identifier and ast.PassStmt was unreachable. It is a statement again.
+	c.add(diagAt("DTE0001", x.Span, "undefined name '"+x.Name+"'"))
 	return nil
 }
 
@@ -850,6 +852,26 @@ func (c *checker) createIsBindings(isExpr *ast.IsExpr, args []ast.Expr, payloadT
 		}
 		c.info.IsBindings[isExpr] = bindings
 	}
+}
+
+// enumHasVariant reports whether t is an enum (directly or as the base of a
+// generic instantiation) declaring a variant called name. Built-in Option and
+// Result are ordinary *types.Enum values here, so `is Nothing` on an Option and
+// `is Pending` on a user enum resolve through the same path.
+func (c *checker) enumHasVariant(t types.T, name string) bool {
+	if g, ok := t.(*types.Generic); ok {
+		t = g.Base
+	}
+	e, ok := t.(*types.Enum)
+	if !ok {
+		return false
+	}
+	for i := range e.Variants {
+		if e.Variants[i].Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // getEnumVariantInfo checks if a FieldExpr pattern refers to a valid enum variant

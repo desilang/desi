@@ -1,0 +1,23 @@
+# EXPECTED: COMPILE_ERROR
+#
+# A name that resolves to nothing must be reported by the type checker.
+#
+# Regression guard: typIdent used to return nil for an unresolved identifier
+# without reporting anything, so `desic check` said "ok" and the typo reached
+# the backend. The user's first sight of the problem was a raw LLVM dump —
+# "use of undefined value '%y'" — followed by a hint suggesting LLVM might not
+# be installed. The compiler blamed itself for a typo.
+#
+# The diagnostic could not simply be switched on: several names that are
+# legitimately in scope hold no symbol, and reporting here fired on 44 valid
+# examples. They are kept away from this path at the point of use instead —
+# enum qualifiers (`Option.Some`), match and `is` patterns, and `pass`, which
+# lexed as an identifier because it was missing from the scanner's keyword
+# switch. See the comment on typIdent in compiler/internal/check/expr.go.
+#
+# This file must fail at `desic check` with DTE0001, before the backend runs.
+
+def main() -> int:
+    let x = 1
+    print(str(y))
+    return 0

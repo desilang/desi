@@ -7,6 +7,16 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// isBuiltinEnumName reports whether name is one of the enums the compiler
+// builds in rather than declaring in Desi source. They are resolved
+// contextually from each use site's annotation (`Option<int>`, see the
+// "Option"/"Result" cases in resolveType below), so unlike a user-declared
+// enum they have no symbol in any scope and never will — attempts to give
+// them one are recorded in commits 1c837e8b and 14162ded.
+func isBuiltinEnumName(name string) bool {
+	return name == "Option" || name == "Result"
+}
+
 // c.resolveType resolves an AST TypeName to a types.T, handling parameterized types.
 // Returns nil if the type cannot be resolved.
 // resolveType resolves an AST TypeName to a types.T, handling parameterized types.

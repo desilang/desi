@@ -9,6 +9,21 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// typReceiver types the base of a `base.name` expression as a value, except
+// where the base is a built-in enum in qualifier position. `Option.Some(42)`
+// names no value: Option has no symbol and deliberately never gets one (see
+// isBuiltinEnumName), so asking for its type would report a name the user never
+// wrote as a variable. nil is exactly what evaluating it produced before the
+// undefined-name diagnostic existed — the enum-variant paths in expr_call.go
+// build the construction from the annotation at the use site — so callers see
+// no change in behaviour, only in what gets reported.
+func (c *checker) typReceiver(x ast.Expr) types.T {
+	if id, ok := x.(*ast.Ident); ok && isBuiltinEnumName(id.Name) && c.scope.Lookup(id.Name) == nil {
+		return nil
+	}
+	return c.typ(x)
+}
+
 // typFieldExpr handles obj.field or obj.method.
 // Currently supports:
 // - dict methods: get, has_key, pop, clear, keys, values
@@ -143,7 +158,7 @@ func (c *checker) typFieldExpr(x *ast.FieldExpr) types.T {
 		}
 	}
 
-	t := c.typ(x.X)
+	t := c.typReceiver(x.X)
 	if t == nil {
 		return nil
 	}

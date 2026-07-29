@@ -972,6 +972,8 @@ func keywordToken(lex string) (token.Token, bool) {
 		return token.KW_let, true
 	case "mut":
 		return token.KW_mut, true
+	case "pass":
+		return token.KW_pass, true
 	case "return":
 		return token.KW_return, true
 	case "if":
