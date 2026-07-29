@@ -1,0 +1,23 @@
+# EXPECTED: COMPILE_ERROR
+#
+# `var` is not a Desi keyword — mutability is `let mut`. Writing it anyway
+# must be a diagnostic, and nothing worse.
+#
+# Regression guard: at module scope this hung the compiler. The `pub` case
+# fell out of its switch without consuming the token when what followed was
+# not a declaration, and the loose-statement loop below it stops at `pub`, so
+# nothing consumed it there either. The outer loop spun, appending an empty
+# __top__ declaration every pass, and desic climbed past 2 GB and froze the
+# machine rather than reporting anything.
+#
+# It reached the shipped standard library too: compiler/lib/signal.desi
+# declared its signal numbers with `pub var`, so `import signal` alone was
+# enough to trigger it. No example imported signal, which is why 502 passing
+# tests never noticed.
+#
+# The parser also carries a no-progress guard now, so a future branch that
+# fails to consume a token stops with a diagnostic instead of hanging.
+pub var X: int = 2
+
+def main() -> int:
+	return 0

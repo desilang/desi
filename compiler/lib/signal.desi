@@ -9,7 +9,7 @@
 # --- C runtime bindings ---
 
 @extern("C")
-def __signal_on(signum: int, handler: () -> int) -> int
+def __signal_on(signum: int, handler: Any) -> int
 
 @extern("C")
 def __signal_reset(signum: int) -> int
@@ -50,43 +50,43 @@ def __signal_SIGPIPE() -> int
 # --- Signal constants ---
 
 ## Interrupt signal (Ctrl+C).
-pub var SIGINT: int = 2
+pub let SIGINT: int = 2
 
 ## Termination signal.
-pub var SIGTERM: int = 15
+pub let SIGTERM: int = 15
 
 ## Hangup signal.
-pub var SIGHUP: int = 1
+pub let SIGHUP: int = 1
 
 ## Quit signal.
-pub var SIGQUIT: int = 3
+pub let SIGQUIT: int = 3
 
 ## User-defined signal 1.
-pub var SIGUSR1: int = 30
+pub let SIGUSR1: int = 30
 
 ## User-defined signal 2.
-pub var SIGUSR2: int = 31
+pub let SIGUSR2: int = 31
 
 ## Alarm signal.
-pub var SIGALRM: int = 14
+pub let SIGALRM: int = 14
 
 ## Broken pipe signal.
-pub var SIGPIPE: int = 13
+pub let SIGPIPE: int = 13
 
 # --- Public API ---
 
 ## Register a handler for a signal.
-pub def on(signum: int, handler: () -> int):
+pub def on(signum: int, handler: Any):
 	unsafe:
 		__signal_on(signum, handler)
 
 ## Register a handler for SIGINT (Ctrl+C shortcut).
-pub def on_interrupt(handler: () -> int):
+pub def on_interrupt(handler: Any):
 	unsafe:
 		__signal_on(2, handler)
 
 ## Register a handler for SIGTERM.
-pub def on_terminate(handler: () -> int):
+pub def on_terminate(handler: Any):
 	unsafe:
 		__signal_on(15, handler)
 

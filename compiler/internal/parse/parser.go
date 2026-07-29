@@ -36,6 +36,11 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 	p.next()
 
 	m := &ast.Module{File: filename, Span: spanPos(filename, p.cur)}
+
+	// Position of the token this loop last started on, for the no-progress
+	// guard below.
+	lastLine, lastCol, lastTok := -1, -1, token.Token(-1)
+
 	for p.cur.Tok != token.EOF {
 		if p.tooManyErrors() {
 			break
@@ -44,6 +49,19 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 		if p.cur.Tok == token.EOF {
 			break
 		}
+
+		// Every pass must consume at least one token. A path that returns
+		// here without doing so spins forever, and because the loop appends
+		// to m.Decls it does so while allocating — `pub var X = 1` exhausted
+		// memory this way and could take the machine down with it. Rather
+		// than trust every branch to make progress, notice when one has not
+		// and stop. Nothing should ever trigger this; if it does, that is a
+		// parser bug, and a diagnostic beats a hang.
+		if p.cur.Line == lastLine && p.cur.Col == lastCol && p.cur.Tok == lastTok {
+			p.errUnexpected(spanPos(filename, p.cur), "top level")
+			break
+		}
+		lastLine, lastCol, lastTok = p.cur.Line, p.cur.Col, p.cur.Tok
 
 		switch p.cur.Tok {
 		case token.AT:
@@ -222,7 +240,32 @@ func ParseFile(filename string, src []byte) (*ast.Module, []diag.Diagnostic) {
 				m.Decls = append(m.Decls, top)
 				continue
 			default:
-				// let function parsing diagnose invalid pub usage elsewhere
+				// `pub` followed by something that cannot be published.
+				//
+				// This used to fall out of the switch without consuming the
+				// token, and the loose-statement loop below stops at KW_pub,
+				// so nothing consumed it there either: the outer loop spun
+				// forever, appending an empty __top__ declaration every pass
+				// until the process ran out of memory. `pub var X = 1` — a
+				// natural thing to write, and what the keyword reference used
+				// to suggest — took the compiler and the machine down with it.
+				//
+				// Report it, consume the `pub`, and resynchronise so the rest
+				// of the file is still parsed and the user sees every error at
+				// once.
+				// `pub var X = 1` is common enough to name directly: `var` is
+				// not a Desi keyword, and the statement-level path already
+				// gives this hint (DPE0110). Reaching for it at module scope
+				// deserves the same answer rather than a generic one.
+				if p.peek.Tok == token.IDENT && p.peek.Lexeme == "var" {
+					p.errMissingLetBeforeDecl(spanPos(filename, p.peek))
+				} else {
+					p.errExpected(spanPos(filename, p.cur),
+						"a declaration after 'pub' (def, class, struct, enum, trait, type, let or from)")
+				}
+				p.next()
+				p.syncStmt()
+				continue
 			}
 
 		case token.KW_def, token.KW_async:
