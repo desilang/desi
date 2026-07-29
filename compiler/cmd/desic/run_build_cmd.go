@@ -488,16 +488,27 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 		// Optimized builds go through clang so the full -O pipeline runs
 		// (inlining, loop opts) — llc alone only optimizes codegen.
 		irCompileCmd = exec.Command(findLLVMTool("clang"), "-w", "-c", optLevel, irPath, "-o", objPath)
-	} else {
+	} else if llc := findLLVMTool("llc"); llvmToolFound(llc) {
+		// llc is preferred unoptimized: it skips the compiler driver and is
+		// measurably faster, which matters when every example test shells out.
+		//
 		// Linux links position-independent executables by default, so an
 		// object llc produced without this fails at link with "relocation
 		// R_X86_64_32 ... can not be used when making a PIE object". clang
-		// gets it right on its own, which is why only this llc path needs
-		// the flag; macOS requires PIC regardless, so it is correct on both.
+		// gets it right on its own, which is why only this path needs the
+		// flag; macOS requires PIC regardless, so it is correct on both.
 		// build-desi.sh has carried the same flag for the same reason.
 		llcArgs := []string{"-filetype=obj", "-relocation-model=pic", "-o", objPath}
 		llcArgs = append(llcArgs, irPath)
-		irCompileCmd = exec.Command(findLLVMTool("llc"), llcArgs...)
+		irCompileCmd = exec.Command(llc, llcArgs...)
+	} else {
+		// llc is not always installed — the Homebrew LLVM formula is
+		// keg-only, so GitHub's macOS runners have clang on PATH and no llc
+		// at all, and `desic build` failed there with "executable file not
+		// found in $PATH". clang can do the same job and has to be present
+		// regardless, since linking goes through it. build-desi.sh has used
+		// clang with an llc fallback since Linux bring-up for this reason.
+		irCompileCmd = exec.Command(findLLVMTool("clang"), "-w", "-c", irPath, "-o", objPath)
 	}
 	irCompileCmd.Stderr = os.Stderr
 	if err := irCompileCmd.Run(); err != nil {
@@ -1101,6 +1112,21 @@ func findLLVMTool(name string) string {
 
 	// Fallback: return bare name, let exec fail with a clear error
 	return name
+}
+
+// llvmToolFound reports whether findLLVMTool actually located a tool rather
+// than falling back to the bare name. Used to pick between tools that are
+// interchangeable for a step, so a missing optional one is not fatal.
+func llvmToolFound(p string) bool {
+	if p == "" {
+		return false
+	}
+	if filepath.IsAbs(p) {
+		_, err := os.Stat(p)
+		return err == nil
+	}
+	_, err := exec.LookPath(p)
+	return err == nil
 }
 
 // runBuildAudit performs a build audit by scanning the entry file for stdlib
