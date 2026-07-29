@@ -356,6 +356,248 @@ static void my_caching_sha2_auth(const char* password, const unsigned char* scra
 }
 
 // ============================================================
+// caching_sha2_password full auth
+//
+// When the server has no cached credential for the account it demands full
+// auth. Over TLS the password goes in the clear on the encrypted channel;
+// over plain TCP the official client asks for the server's RSA public key
+// and sends the password encrypted under it, which is what this implements.
+// Without it, MySQL 8.4 and 9.x are unreachable on a cold cache, since they
+// disable and remove mysql_native_password respectively.
+//
+// The modular arithmetic is the platform's: CNG on Windows, OpenSSL where the
+// build found it. Hand-rolling RSA here would be the wrong call.
+// ============================================================
+
+#ifdef _WIN32
+  #include <bcrypt.h>
+  #pragma comment(lib, "bcrypt.lib")
+#endif
+
+// Base64 decode, ignoring newlines. Returns bytes written, or -1.
+static int my_b64_decode(const char* in, unsigned char* out, int out_cap) {
+    static const char* T = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    int val = 0, bits = 0, n = 0;
+    for (const char* p = in; *p; p++) {
+        if (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t') continue;
+        if (*p == '=') break;
+        const char* q = strchr(T, *p);
+        if (!q) return -1;
+        val = (val << 6) | (int)(q - T);
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (n >= out_cap) return -1;
+            out[n++] = (unsigned char)((val >> bits) & 0xFF);
+        }
+    }
+    return n;
+}
+
+// Read one DER length. Advances *p past it.
+static long my_der_len(const unsigned char** p, const unsigned char* end) {
+    if (*p >= end) return -1;
+    unsigned c = *(*p)++;
+    if (c < 0x80) return (long)c;
+    int nbytes = (int)(c & 0x7F);
+    if (nbytes == 0 || nbytes > 4 || *p + nbytes > end) return -1;
+    long len = 0;
+    for (int i = 0; i < nbytes; i++) len = (len << 8) | *(*p)++;
+    return len;
+}
+
+// Expect a tag, return its contents. Advances *p past the value.
+static const unsigned char* my_der_tag(const unsigned char** p, const unsigned char* end,
+                                       unsigned char tag, long* out_len) {
+    if (*p >= end || *(*p)++ != tag) return NULL;
+    long len = my_der_len(p, end);
+    if (len < 0 || *p + len > end) return NULL;
+    const unsigned char* body = *p;
+    *p += len;
+    *out_len = len;
+    return body;
+}
+
+// Pull the RSA modulus and exponent out of a PEM SubjectPublicKeyInfo.
+static int my_rsa_pubkey_parts(const char* pem,
+                               const unsigned char** mod, int* mod_len,
+                               const unsigned char** exp, int* exp_len,
+                               unsigned char* der, int der_cap) {
+    const char* b = strstr(pem, "-----BEGIN");
+    if (!b) return -1;
+    b = strchr(b, '\n');
+    if (!b) return -1;
+    b++;
+    const char* e = strstr(b, "-----END");
+    if (!e) return -1;
+
+    char* body = (char*)malloc((size_t)(e - b) + 1);
+    if (!body) return -1;
+    memcpy(body, b, (size_t)(e - b));
+    body[e - b] = '\0';
+    int dlen = my_b64_decode(body, der, der_cap);
+    free(body);
+    if (dlen <= 0) return -1;
+
+    const unsigned char* p = der;
+    const unsigned char* end = der + dlen;
+    long len;
+
+    // SubjectPublicKeyInfo ::= SEQUENCE { AlgorithmIdentifier, BIT STRING }
+    if (!my_der_tag(&p, end, 0x30, &len)) return -1;
+    end = p;             // outer SEQUENCE consumed; walk its contents
+    p -= len;
+    if (!my_der_tag(&p, end, 0x30, &len)) return -1;   // AlgorithmIdentifier, skipped
+    const unsigned char* bits = my_der_tag(&p, end, 0x03, &len);
+    if (!bits || len < 1) return -1;
+
+    // BIT STRING starts with an unused-bits count, then RSAPublicKey.
+    const unsigned char* q = bits + 1;
+    const unsigned char* qend = bits + len;
+    if (!my_der_tag(&q, qend, 0x30, &len)) return -1;  // RSAPublicKey SEQUENCE
+    qend = q;
+    q -= len;
+
+    const unsigned char* n = my_der_tag(&q, qend, 0x02, &len);   // INTEGER modulus
+    if (!n) return -1;
+    // DER INTEGERs are signed, so a leading zero byte guards the high bit.
+    while (len > 1 && n[0] == 0x00) { n++; len--; }
+    *mod = n; *mod_len = (int)len;
+
+    const unsigned char* x = my_der_tag(&q, qend, 0x02, &len);   // INTEGER exponent
+    if (!x) return -1;
+    while (len > 1 && x[0] == 0x00) { x++; len--; }
+    *exp = x; *exp_len = (int)len;
+    return 0;
+}
+
+// RSA-OAEP(SHA-1) encrypt. Returns ciphertext length, or -1 when the platform
+// offers no RSA (in which case the caller explains what to do instead).
+static int my_rsa_oaep_encrypt(const char* pem,
+                               const unsigned char* in, int in_len,
+                               unsigned char* out, int out_cap) {
+    unsigned char der[1024];
+    const unsigned char *mod, *exp;
+    int mod_len, exp_len;
+    if (my_rsa_pubkey_parts(pem, &mod, &mod_len, &exp, &exp_len, der, (int)sizeof(der)) < 0)
+        return -1;
+
+#if defined(_WIN32)
+    // CNG wants exponent-then-modulus after a BCRYPT_RSAKEY_BLOB header.
+    int blob_len = (int)sizeof(BCRYPT_RSAKEY_BLOB) + exp_len + mod_len;
+    unsigned char* blob = (unsigned char*)calloc(1, (size_t)blob_len);
+    if (!blob) return -1;
+    BCRYPT_RSAKEY_BLOB* hdr = (BCRYPT_RSAKEY_BLOB*)blob;
+    hdr->Magic = BCRYPT_RSAPUBLIC_MAGIC;
+    hdr->BitLength = (ULONG)(mod_len * 8);
+    hdr->cbPublicExp = (ULONG)exp_len;
+    hdr->cbModulus = (ULONG)mod_len;
+    memcpy(blob + sizeof(BCRYPT_RSAKEY_BLOB), exp, (size_t)exp_len);
+    memcpy(blob + sizeof(BCRYPT_RSAKEY_BLOB) + exp_len, mod, (size_t)mod_len);
+
+    BCRYPT_ALG_HANDLE alg = NULL;
+    BCRYPT_KEY_HANDLE key = NULL;
+    int rc = -1;
+    if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_RSA_ALGORITHM, NULL, 0) == 0 &&
+        BCryptImportKeyPair(alg, NULL, BCRYPT_RSAPUBLIC_BLOB, &key,
+                            blob, (ULONG)blob_len, 0) == 0) {
+        BCRYPT_OAEP_PADDING_INFO pad;
+        pad.pszAlgId = BCRYPT_SHA1_ALGORITHM;
+        pad.pbLabel = NULL;
+        pad.cbLabel = 0;
+        ULONG written = 0;
+        if (BCryptEncrypt(key, (PUCHAR)in, (ULONG)in_len, &pad, NULL, 0,
+                          out, (ULONG)out_cap, &written, BCRYPT_PAD_OAEP) == 0) {
+            rc = (int)written;
+        }
+    }
+    if (key) BCryptDestroyKey(key);
+    if (alg) BCryptCloseAlgorithmProvider(alg, 0);
+    free(blob);
+    return rc;
+
+#elif MY_HAS_SSL
+    RSA* rsa = RSA_new();
+    if (!rsa) return -1;
+    BIGNUM* n = BN_bin2bn(mod, mod_len, NULL);
+    BIGNUM* e = BN_bin2bn(exp, exp_len, NULL);
+    if (!n || !e) { RSA_free(rsa); return -1; }
+    RSA_set0_key(rsa, n, e, NULL);   // rsa takes ownership
+    if (out_cap < RSA_size(rsa)) { RSA_free(rsa); return -1; }
+    int rc = RSA_public_encrypt(in_len, in, out, rsa, RSA_PKCS1_OAEP_PADDING);
+    RSA_free(rsa);
+    return rc;
+
+#else
+    (void)in; (void)in_len; (void)out; (void)out_cap;
+    return -1;
+#endif
+}
+
+// Full auth over a plaintext connection: request the server's public key and
+// send the password encrypted under it. Returns 0 on success.
+static int my_full_auth_rsa(const char* password, const unsigned char* scramble,
+                            int scramble_len) {
+    // 0x02 = request public key.
+    unsigned char req = 0x02;
+    if (my_send_packet(&req, 1) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to request public key");
+        return -1;
+    }
+
+    unsigned char pkt[MY_BUF_SIZE];
+    int pktlen;
+    if (my_read_packet(pkt, &pktlen) < 0 || pktlen < 2 || pkt[0] != 0x01) {
+        snprintf(g_my->error, sizeof(g_my->error), "Server refused the public key request");
+        return -1;
+    }
+    // Payload after the 0x01 marker is the PEM key.
+    char pem[MY_BUF_SIZE];
+    int pemlen = pktlen - 1;
+    if (pemlen >= (int)sizeof(pem)) pemlen = (int)sizeof(pem) - 1;
+    memcpy(pem, pkt + 1, (size_t)pemlen);
+    pem[pemlen] = '\0';
+
+    // XOR the NUL-terminated password with the scramble, repeating it.
+    int plen = (int)strlen(password);
+    unsigned char xored[512];
+    if (plen + 1 > (int)sizeof(xored)) {
+        snprintf(g_my->error, sizeof(g_my->error), "Password too long for full auth");
+        return -1;
+    }
+    for (int i = 0; i <= plen; i++)
+        xored[i] = (unsigned char)(password[i] ^ scramble[i % scramble_len]);
+
+    unsigned char cipher[1024];
+    int clen = my_rsa_oaep_encrypt(pem, xored, plen + 1, cipher, (int)sizeof(cipher));
+    if (clen <= 0) {
+        snprintf(g_my->error, sizeof(g_my->error),
+            "caching_sha2_password full auth needs RSA, which this build has no "
+            "provider for. Connect over TLS, or use a mysql_native_password account.");
+        return -1;
+    }
+
+    if (my_send_packet(cipher, clen) < 0) {
+        snprintf(g_my->error, sizeof(g_my->error), "Failed to send encrypted password");
+        return -1;
+    }
+
+    unsigned char ok[MY_BUF_SIZE];
+    int oklen;
+    if (my_read_packet(ok, &oklen) < 0 || ok[0] != 0x00) {
+        if (oklen > 9 && ok[0] == 0xFF) {
+            uint16_t ec = my_read_u16(ok + 1);
+            snprintf(g_my->error, sizeof(g_my->error), "Auth error %d: %.*s",
+                     ec, oklen - 9, (char*)(ok + 9));
+        } else {
+            snprintf(g_my->error, sizeof(g_my->error), "Full auth rejected");
+        }
+        return -1;
+    }
+    return 0;
+}
+
+// ============================================================
 // Result set management
 // ============================================================
 
@@ -760,11 +1002,15 @@ skip_ssl: ;
                 my_log("caching_sha2 full auth over TLS OK");
                 goto auth_ok;
             } else {
-                snprintf(g_my->error, sizeof(g_my->error),
-                    "caching_sha2_password full auth requires TLS (no SSL available). "
-                    "Rebuild Desi with OpenSSL support or use mysql_native_password.");
-                db_close_socket(g_my->fd); g_my->fd = -1;
-                return -1;
+                // No TLS: ask for the server's public key and send the
+                // password encrypted under it, as the official client does.
+                if (my_full_auth_rsa(password, scramble, 20) < 0) {
+                    db_close_socket(g_my->fd); g_my->fd = -1;
+                    return -1;
+                }
+                g_my->connected = 1;
+                my_log("caching_sha2 full auth over RSA OK");
+                goto auth_ok;
             }
         }
         // Auth method switch
@@ -837,12 +1083,13 @@ skip_ssl: ;
                 goto auth_ok;
             }
             if (ok[0] == 0x01 && oklen >= 2 && ok[1] == 0x04) {
-                snprintf(g_my->error, sizeof(g_my->error),
-                    "caching_sha2_password full auth requires TLS. The server has no "
-                    "cached credential for this user yet; connect once over TLS, or "
-                    "use a mysql_native_password account.");
-                db_close_socket(g_my->fd); g_my->fd = -1;
-                return -1;
+                if (my_full_auth_rsa(password, new_scramble, ns_len > 0 ? ns_len : 20) < 0) {
+                    db_close_socket(g_my->fd); g_my->fd = -1;
+                    return -1;
+                }
+                g_my->connected = 1;
+                my_log("auth switch caching_sha2 full auth over RSA OK");
+                goto auth_ok;
             }
         }
         snprintf(g_my->error, sizeof(g_my->error), "Auth switch to %s failed", new_plugin);
