@@ -327,6 +327,16 @@
       "title": "unsupported argument kind",
       "help": "convert the expression to a supported kind (int/float/str/bool)"
     },
+    "generic_infer_failed": {
+      "id": "DTE0113",
+      "title": "cannot infer type parameter",
+      "help": "state it explicitly with turbofish, e.g. Stack::<int>(), or annotate the binding"
+    },
+    "generic_type_args_arity": {
+      "id": "DTE0114",
+      "title": "wrong number of type arguments",
+      "help": "pass one type argument per type parameter, or omit them to let Desi infer"
+    },
     "call_wrong_arity": {
       "id": "DTE0046",
       "title": "wrong number of arguments",

@@ -186,7 +186,7 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 				if t, ok := inferred[tp.Name]; ok {
 					args = append(args, t)
 				} else {
-					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name+"'"))
+					c.add(diagAt("DTE0113", call.Span, "cannot infer type parameter '"+tp.Name+"'"))
 					args = append(args, types.Any) // Fallback
 				}
 			}
@@ -198,6 +198,36 @@ func (c *checker) checkStructInit(call *ast.CallExpr, d *ast.StructDecl) types.T
 	}
 	// Fallback (shouldn't happen if checkStruct ran)
 	return types.Basic(d.Name.Name, types.StructKind)
+}
+
+// explicitTypeArgs resolves the turbofish type arguments on a constructor call,
+// returning nil when there are none. A count that does not match the class's
+// type parameters is reported and discarded, so a mistake surfaces here rather
+// than as a confusing inference failure further on.
+func (c *checker) explicitTypeArgs(call *ast.CallExpr, d *ast.ClassDecl, cls *types.Class) []types.T {
+	if len(call.TypeArgs) == 0 {
+		return nil
+	}
+	if len(d.TypeParams) == 0 {
+		c.add(diagAt("DTE0114", call.Span,
+			fmt.Sprintf("class %s is not generic and takes no type arguments", cls.Name)))
+		return nil
+	}
+	if len(call.TypeArgs) != len(d.TypeParams) {
+		c.add(diagAt("DTE0114", call.Span,
+			fmt.Sprintf("class %s takes %d type argument(s), got %d",
+				cls.Name, len(d.TypeParams), len(call.TypeArgs))))
+		return nil
+	}
+	out := make([]types.T, 0, len(call.TypeArgs))
+	for _, ta := range call.TypeArgs {
+		rt := c.resolveType(ta)
+		if rt == nil {
+			return nil // resolveType already reported what it could not resolve
+		}
+		out = append(out, rt)
+	}
+	return out
 }
 
 func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
@@ -225,6 +255,15 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		c.add(diagAt("DCL0007", call.Span, fmt.Sprintf("cannot instantiate abstract class '%s'", cls.Name)))
 		return types.Any
 	}
+
+	// Explicit type arguments from turbofish: `Stack::<int>()`.
+	//
+	// Inference reads the type parameters off the constructor's arguments, so a
+	// constructor that mentions T nowhere — `def __new__(self)` on a
+	// `Stack<T>` — leaves nothing to infer from, and the class could not be
+	// constructed at all. Stating them explicitly is the answer, and turbofish
+	// already parses here; it was simply never read.
+	explicitArgs := c.explicitTypeArgs(call, d, cls)
 
 	// POLICY: Check for __new__ dunder (Constructors)
 	if len(cls.Constructors) > 0 {
@@ -304,11 +343,17 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 		if len(d.TypeParams) > 0 {
 			// Infer type arguments from the inferred map
 			var args []types.T
-			for _, tp := range d.TypeParams {
+			for i, tp := range d.TypeParams {
+				// Turbofish wins: the programmer said what T is, so there is
+				// nothing left to infer and nothing to disagree about.
+				if i < len(explicitArgs) {
+					args = append(args, explicitArgs[i])
+					continue
+				}
 				if t, ok := inferred[tp.Name.Name]; ok {
 					args = append(args, t)
 				} else {
-					c.add(diagAt("DTE0110", call.Span, "cannot infer type parameter '"+tp.Name.Name+"'"))
+					c.add(diagAt("DTE0113", call.Span, "cannot infer type parameter '"+tp.Name.Name+"'"))
 					args = append(args, types.Any)
 				}
 			}
@@ -330,6 +375,13 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 
 		// For generic classes, infer type arguments from expected type
 		if len(d.TypeParams) > 0 {
+			// Turbofish first — it says what the annotation otherwise would.
+			if len(explicitArgs) > 0 {
+				gen := &types.Generic{Base: cls, Args: explicitArgs}
+				c.validateGenericBounds(cls, explicitArgs, call.Span)
+				c.info.ClassInstantiations[cls.Name] = append(c.info.ClassInstantiations[cls.Name], gen)
+				return gen
+			}
 			// Check if we have an expected type from context (e.g., let x: Box<int> = Box())
 			if c.expected != nil {
 				// Try to match expected type with class
@@ -343,7 +395,7 @@ func (c *checker) checkClassInit(call *ast.CallExpr, d *ast.ClassDecl) types.T {
 				}
 			}
 			// No expected type or mismatch: return Generic with nil args (error case)
-			c.add(diagAt("DTE0110", call.Span, fmt.Sprintf("cannot infer type parameters for %s; explicit type annotation required", cls.Name)))
+			c.add(diagAt("DTE0113", call.Span, fmt.Sprintf("cannot infer type parameters for %s; explicit type annotation required", cls.Name)))
 			return &types.Generic{Base: cls, Args: nil}
 		}
 

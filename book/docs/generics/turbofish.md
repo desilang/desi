@@ -80,3 +80,58 @@ let x = identity(42)  # int inferred from 42
 - You're calling a function with no arguments that would hint at the type
 
 > **Tip:** Let Desi infer types when possible — it's cleaner. Use turbofish only when needed.
+
+---
+
+## Generic Classes
+
+Turbofish works when constructing a generic class too. This matters when the
+constructor's arguments don't mention every type parameter — inference reads
+them off the arguments, so a `__new__` that takes none leaves nothing to infer
+from:
+
+```python
+class Stack<T>:
+    pub mut items: list<T>
+
+    pub def __new__(self):      # no argument mentions T
+        self.items = []
+
+    pub def push(self, item: T):
+        self.items.append(item)
+
+def main() -> int:
+    let s = Stack::<int>()      # T stated explicitly
+    s.push(1)
+    return 0
+```
+
+Without the turbofish, `Stack()` reports `DTE0113 — cannot infer type
+parameter`.
+
+Each instantiation is independent, so one class can be used at several types in
+the same program:
+
+```python
+let ints = Stack::<int>()
+let names = Stack::<str>()
+```
+
+Where the arguments do carry the type, inference is enough and turbofish is
+just noise:
+
+```python
+class Pair<A, B>:
+    pub mut left: A
+    pub mut right: B
+
+    pub def __new__(self, l: A, r: B):
+        self.left = l
+        self.right = r
+
+let p = Pair(7, "x")            # A = int, B = str, inferred
+let q = Pair::<int, str>(7, "x")  # same thing, spelled out
+```
+
+Passing the wrong number of type arguments reports `DTE0114 — wrong number of
+type arguments`.

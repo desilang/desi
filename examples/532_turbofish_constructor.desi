@@ -1,0 +1,54 @@
+# Turbofish states a generic class's type arguments at construction.
+#
+# Regression guard: type arguments were inferred only from the constructor's
+# arguments, and `call.TypeArgs` was never read for a class. A generic class
+# whose __new__ mentions T nowhere therefore could not be constructed at all —
+# `Holder()` had nothing to infer from and `Holder::<int>()` was ignored,
+# leaving the type parameter unresolved. Turbofish already parsed; it just was
+# not consulted.
+#
+# EXPECTED_OUTPUT:
+# 2
+# 1
+# 7x
+# 5
+class Holder<T>:
+	pub mut items: list<T>
+
+	pub def __new__(self):
+		self.items = []
+
+	pub def add(self, item: T):
+		self.items.append(item)
+
+	pub def size(self) -> int:
+		return len(self.items)
+
+class Pair<A, B>:
+	pub mut left: A
+	pub mut right: B
+
+	pub def __new__(self, l: A, r: B):
+		self.left = l
+		self.right = r
+
+def main() -> int:
+	# No constructor argument mentions T: only turbofish can supply it.
+	let h = Holder::<int>()
+	h.add(1)
+	h.add(2)
+	print(str(h.size()))
+
+	# A second instantiation of the same class, at a different type.
+	let hs = Holder::<str>()
+	hs.add("a")
+	print(str(hs.size()))
+
+	# Two type parameters, stated rather than inferred.
+	let p = Pair::<int, str>(7, "x")
+	print(str(p.left) + p.right)
+
+	# Inference still works when the arguments carry the type.
+	let q = Pair(5, "y")
+	print(str(q.left))
+	return 0
