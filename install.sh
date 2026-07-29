@@ -103,19 +103,61 @@ install() {
         tar xzf "$ARCHIVE"
     fi
 
-    # Copy binaries
-    cp "${FILENAME}/desic"   "$BIN_DIR/" 2>/dev/null || true
-    cp "${FILENAME}/desifmt" "$BIN_DIR/" 2>/dev/null || true
-    cp "${FILENAME}/desilsp" "$BIN_DIR/" 2>/dev/null || true
+    # The archive holds bin/ and lib/. Both matter: lib/ carries libdesi,
+    # the C runtime every compiled program links against, and desic finds it
+    # at ../lib relative to its own location — so the two must stay siblings.
+    LIB_DIR="$INSTALL_DIR/lib"
+    mkdir -p "$LIB_DIR"
 
-    # Windows: copy .exe variants
-    cp "${FILENAME}/desic.exe"   "$BIN_DIR/" 2>/dev/null || true
-    cp "${FILENAME}/desifmt.exe" "$BIN_DIR/" 2>/dev/null || true
-    cp "${FILENAME}/desilsp.exe" "$BIN_DIR/" 2>/dev/null || true
+    if [ ! -d "${FILENAME}/bin" ] || [ ! -d "${FILENAME}/lib" ]; then
+        err "Archive layout unexpected: ${FILENAME} has no bin/ and lib/. Report this at https://github.com/desilang/desi/issues"
+    fi
 
+    cp -R "${FILENAME}/bin/." "$BIN_DIR/"
+    cp -R "${FILENAME}/lib/." "$LIB_DIR/"
     chmod +x "$BIN_DIR"/* 2>/dev/null || true
 
     ok "Installed to ${BIN_DIR}"
+}
+
+# ── Prerequisites ──────────────────────────────────────────────────
+# Desi compiles to native code: desic emits LLVM IR and then calls clang to
+# assemble and link it. Without clang the install still succeeds, but the
+# first `desic build` fails — so say so here rather than there.
+check_prereqs() {
+    MISSING=""
+
+    if ! command -v clang >/dev/null 2>&1; then
+        MISSING="clang"
+    fi
+
+    if [ -z "$MISSING" ]; then
+        return
+    fi
+
+    warn "clang was not found on your PATH."
+    printf "  Desi compiles through LLVM, so clang is required to build programs.\n"
+    case "$OS" in
+        darwin)
+            printf "  Install it with:  ${CYAN}xcode-select --install${RESET}\n"
+            printf "  or:               ${CYAN}brew install llvm${RESET}\n"
+            ;;
+        linux)
+            if command -v apt-get >/dev/null 2>&1; then
+                printf "  Install it with:  ${CYAN}sudo apt-get install clang libssl-dev${RESET}\n"
+            elif command -v dnf >/dev/null 2>&1; then
+                printf "  Install it with:  ${CYAN}sudo dnf install clang openssl-devel${RESET}\n"
+            elif command -v pacman >/dev/null 2>&1; then
+                printf "  Install it with:  ${CYAN}sudo pacman -S clang openssl${RESET}\n"
+            else
+                printf "  Install clang and your distribution's OpenSSL development package.\n"
+            fi
+            ;;
+        *)
+            printf "  Install LLVM/clang for your platform.\n"
+            ;;
+    esac
+    printf "\n"
 }
 
 # ── Update PATH ────────────────────────────────────────────────────
@@ -172,7 +214,8 @@ main() {
     update_path
 
     printf "\n${GREEN}${BOLD}  Desi ${VERSION} installed successfully!${RESET}\n\n"
-    printf "  Run ${CYAN}desic --version${RESET} to verify.\n"
+    check_prereqs
+    printf "  Run ${CYAN}desic version${RESET} to verify.\n"
     printf "  Get started: ${CYAN}https://desilang.org/getting-started/${RESET}\n\n"
 }
 

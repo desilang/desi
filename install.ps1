@@ -69,14 +69,22 @@ function Install-Desi {
     Write-Host "▸ Extracting..." -ForegroundColor Cyan
     Expand-Archive -Path $archivePath -DestinationPath $tmpDir -Force
 
-    # Copy binaries
+    # The archive holds bin\ and lib\. Both matter: lib\ carries libdesi.lib
+    # and entry.obj, which every compiled program links against, and desic
+    # looks for them at ..\lib relative to itself — so the two must stay
+    # siblings under the install directory.
     $srcDir = Join-Path $tmpDir $filename
-    foreach ($tool in @("desic.exe", "desifmt.exe", "desilsp.exe")) {
-        $src = Join-Path $srcDir $tool
-        if (Test-Path $src) {
-            Copy-Item $src -Destination (Join-Path $binDir $tool) -Force
-        }
+    $srcBin = Join-Path $srcDir "bin"
+    $srcLib = Join-Path $srcDir "lib"
+    if (-not (Test-Path $srcBin) -or -not (Test-Path $srcLib)) {
+        throw "Archive layout unexpected: $filename has no bin\ and lib\. Please report this at https://github.com/desilang/desi/issues"
     }
+
+    $libDir = Join-Path $installDir "lib"
+    New-Item -ItemType Directory -Path $libDir -Force | Out-Null
+
+    Copy-Item (Join-Path $srcBin "*") -Destination $binDir -Recurse -Force
+    Copy-Item (Join-Path $srcLib "*") -Destination $libDir -Recurse -Force
 
     # Cleanup
     Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
@@ -93,8 +101,22 @@ function Install-Desi {
     Write-Host ""
     Write-Host "  Desi $version installed successfully!" -ForegroundColor Green
     Write-Host ""
+
+    # Desi compiles to native code: desic emits LLVM IR and then calls clang
+    # to assemble and link it. Without clang the install still succeeds, but
+    # the first `desic build` fails — so say so here rather than there.
+    if (-not (Get-Command clang -ErrorAction SilentlyContinue)) {
+        Write-Host "  clang was not found on your PATH." -ForegroundColor Yellow
+        Write-Host "  Desi compiles through LLVM, so clang is required to build programs."
+        Write-Host "  Install it with: " -NoNewline
+        Write-Host "winget install LLVM.LLVM" -ForegroundColor Cyan
+        Write-Host "  You also need the MSVC linker, from Visual Studio Build Tools"
+        Write-Host "  with the 'Desktop development with C++' workload."
+        Write-Host ""
+    }
+
     Write-Host "  Run " -NoNewline
-    Write-Host "desic --version" -ForegroundColor Cyan -NoNewline
+    Write-Host "desic version" -ForegroundColor Cyan -NoNewline
     Write-Host " to verify."
     Write-Host "  Get started: " -NoNewline
     Write-Host "https://desilang.org/getting-started/" -ForegroundColor Cyan

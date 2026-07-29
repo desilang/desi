@@ -3,13 +3,29 @@ name: Release
 on:
   push:
     tags: ['v*']
+  # Lets the whole pipeline be rehearsed without cutting a tag. The release
+  # job is tag-only, so a manual run just produces artifacts to inspect.
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  # Each target is built on its own runner. The compiler is Go and could be
+  # cross-compiled, but libdesi is 80-odd C files and cannot — so a
+  # cross-built package shipped a compiler with no runtime to link against,
+  # and `desic build` failed on the user's first program.
+  build:
+    name: ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest,   target: linux-amd64,   ext: '' }
+          - { os: macos-latest,    target: darwin-arm64,  ext: '' }
+          - { os: macos-13,        target: darwin-amd64,  ext: '' }
+          - { os: windows-latest,  target: windows-amd64, ext: '.exe' }
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
@@ -17,51 +33,122 @@ jobs:
         with:
           go-version: '1.25.x'
 
-      - name: Build release binaries
+      - name: Resolve version
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            echo "VERSION=${GITHUB_REF_NAME}" >> "$GITHUB_ENV"
+          else
+            echo "VERSION=v0.0.0-dev" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build runtime and tools (unix)
+        if: runner.os != 'Windows'
+        run: |
+          make runtime
+          LDFLAGS="-s -w -X github.com/desilang/desi/compiler/internal/version.Version=${VERSION}"
+          for tool in desic desifmt desilsp desirepl; do
+            go build -ldflags="$LDFLAGS" -o "bin/$tool" "./compiler/cmd/$tool"
+          done
+
+      - name: Build runtime and tools (windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          .\build.ps1 -Runtime
+          $ldflags = "-s -w -X github.com/desilang/desi/compiler/internal/version.Version=$env:VERSION"
+          foreach ($tool in 'desic','desifmt','desilsp','desirepl') {
+            go build -ldflags="$ldflags" -o "bin\$tool.exe" ".\compiler\cmd\$tool"
+          }
+
+      # bin/ next to lib/ is the layout desic looks for: findRuntimeLib,
+      # findEntryObj and findLTOObjs all accept ../lib relative to the binary.
+      - name: Assemble package
+        shell: bash
         run: |
           set -e
-          VERSION="${GITHUB_REF_NAME}"
-          LDFLAGS="-s -w -X github.com/desilang/desi/compiler/internal/version.Version=${VERSION}"
+          PKG="desi-${VERSION}-${{ matrix.target }}"
+          mkdir -p "dist/$PKG/bin" "dist/$PKG/lib"
+          for tool in desic desifmt desilsp desirepl; do
+            cp "bin/${tool}${{ matrix.ext }}" "dist/$PKG/bin/"
+          done
+          # libdesi.a on Unix; libdesi.lib plus entry.obj on Windows.
+          cp build/libdesi.* "dist/$PKG/lib/"
+          if [ -f build/entry.obj ]; then cp build/entry.obj "dist/$PKG/lib/"; fi
+          # Cross-module LTO hot set: used by -O2 when present, skipped when not.
+          if [ -d build/lto ]; then
+            mkdir -p "dist/$PKG/lib/lto"
+            cp build/lto/*.obj "dist/$PKG/lib/lto/" 2>/dev/null || true
+          fi
+          cp README.md LICENSE "dist/$PKG/" 2>/dev/null || true
+          ls -R "dist/$PKG"
 
-          # darwin arm64
-          mkdir -p dist/desi-${VERSION}-darwin-arm64
-          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desic   ./compiler/cmd/desic
-          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desifmt ./compiler/cmd/desifmt
-          GOOS=darwin GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-arm64/desilsp ./compiler/cmd/desilsp
-          tar czf dist/desi-${VERSION}-darwin-arm64.tar.gz -C dist desi-${VERSION}-darwin-arm64
+      # The point of the packet: prove the package compiles and runs a program
+      # using only what is inside it, before anyone downloads it.
+      - name: Smoke-test the package
+        shell: bash
+        run: |
+          set -e
+          PKG="$PWD/dist/desi-${VERSION}-${{ matrix.target }}"
+          mkdir -p smoke && cd smoke
+          printf 'def main() -> int:\n\tprint("hello from the package")\n\treturn 0\n' > hello.desi
 
-          # darwin amd64
-          mkdir -p dist/desi-${VERSION}-darwin-amd64
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desic   ./compiler/cmd/desic
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desifmt ./compiler/cmd/desifmt
-          GOOS=darwin GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-darwin-amd64/desilsp ./compiler/cmd/desilsp
-          tar czf dist/desi-${VERSION}-darwin-amd64.tar.gz -C dist desi-${VERSION}-darwin-amd64
+          # `desic build -o NAME` names the artifact; it lands under
+          # build/output/ (see first-program.md).
+          "$PKG/bin/desic${{ matrix.ext }}" build hello.desi -o hello
+          out=$(./build/output/hello${{ matrix.ext }})
+          echo "$out"
+          [ "$out" = "hello from the package" ] || { echo "build/run failed"; exit 1; }
 
-          # linux amd64
-          mkdir -p dist/desi-${VERSION}-linux-amd64
-          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desic   ./compiler/cmd/desic
-          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desifmt ./compiler/cmd/desifmt
-          GOOS=linux GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-amd64/desilsp ./compiler/cmd/desilsp
-          tar czf dist/desi-${VERSION}-linux-amd64.tar.gz -C dist desi-${VERSION}-linux-amd64
+          # `desic run` compiles to a temporary and executes it — the other
+          # path a newcomer takes, and it exercises the runtime the same way.
+          out=$("$PKG/bin/desic${{ matrix.ext }}" run hello.desi)
+          echo "$out"
+          [ "$out" = "hello from the package" ] || { echo "run failed"; exit 1; }
 
-          # linux arm64
-          mkdir -p dist/desi-${VERSION}-linux-arm64
-          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desic   ./compiler/cmd/desic
-          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desifmt ./compiler/cmd/desifmt
-          GOOS=linux GOARCH=arm64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-linux-arm64/desilsp ./compiler/cmd/desilsp
-          tar czf dist/desi-${VERSION}-linux-arm64.tar.gz -C dist desi-${VERSION}-linux-arm64
+          "$PKG/bin/desic${{ matrix.ext }}" version
+          "$PKG/bin/desifmt${{ matrix.ext }}" hello.desi > /dev/null
 
-          # windows amd64
-          mkdir -p dist/desi-${VERSION}-windows-amd64
-          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desic.exe   ./compiler/cmd/desic
-          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desifmt.exe ./compiler/cmd/desifmt
-          GOOS=windows GOARCH=amd64 go build -ldflags="${LDFLAGS}" -o dist/desi-${VERSION}-windows-amd64/desilsp.exe ./compiler/cmd/desilsp
-          zip -rj dist/desi-${VERSION}-windows-amd64.zip dist/desi-${VERSION}-windows-amd64/
+      - name: Archive
+        shell: bash
+        run: |
+          set -e
+          PKG="desi-${VERSION}-${{ matrix.target }}"
+          cd dist
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            7z a "${PKG}.zip" "$PKG" > /dev/null
+          else
+            tar czf "${PKG}.tar.gz" "$PKG"
+          fi
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desi-${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum *.tar.gz *.zip > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             dist/*.tar.gz
             dist/*.zip
+            dist/SHA256SUMS.txt
