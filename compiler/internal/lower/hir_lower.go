@@ -2,6 +2,7 @@ package lower
 
 import (
 	"bytes"
+	"fmt"
 	"reflect"
 	"unicode/utf8"
 
@@ -60,6 +61,56 @@ var desiBuiltins = map[string]bool{
 // for callbacks, lambdas, and hot-reload).
 func mangleDesiName(name string) string {
 	return "__desi$" + name
+}
+
+// overloadSymbol returns the symbol to emit for fd, given the name its
+// definition would otherwise use.
+//
+// Overloads share a name, and a name is one symbol: emitting them all as `f`
+// meant the backend kept the first definition and dropped the rest, while
+// every call site — whichever overload the checker picked — called that one
+// survivor. `f(1.0)` ran the int body.
+//
+// Each overload past the first therefore gets a suffix. The first keeps the
+// plain name so that callbacks, lambdas and hot-reload, which look functions
+// up by their source name, are unaffected for the overwhelmingly common case
+// of a name declared once.
+//
+// Definitions and call sites both resolve through here, so they agree by
+// construction. Ordering is the declaration order held in the candidate set,
+// which is stable across a build.
+func overloadSymbol(base string, fd *ast.FuncDecl, info *check.Info) string {
+	if fd == nil || info == nil || isExternFunction(fd) {
+		return base
+	}
+	set, ok := info.Funcs[fd.Name.Name]
+	if !ok || set == nil || len(set.Cands) <= 1 {
+		return base
+	}
+	idx := 0
+	for _, cand := range set.Cands {
+		if cand == nil || cand.Decl == nil {
+			continue
+		}
+		if cand.Decl == fd {
+			if idx == 0 {
+				return base
+			}
+			return fmt.Sprintf("%s$%d", base, idx)
+		}
+		idx++
+	}
+	return base
+}
+
+// isFromImportName reports whether name came in through `from mod import name`.
+// Those definitions are mangled, so their call sites must be too.
+func isFromImportName(info *check.Info, name string) bool {
+	if info == nil || info.R == nil {
+		return false
+	}
+	_, ok := info.R.FromItems[name]
+	return ok
 }
 
 // isExternFunction checks if a function has @extern decorator
@@ -218,6 +269,7 @@ func lowerFuncFromDeclWithContext(fd *ast.FuncDecl, info *check.Info, src []byte
 		// Module-imported function: always mangle to avoid C symbol collisions
 		funcName = mangleDesiName(funcName)
 	}
+	funcName = overloadSymbol(funcName, fd, info)
 	b := hir.NewFunc(funcName)
 	// Build param names map BEFORE lowering so isParam works during body lowering
 	paramNames := make(map[string]bool, len(fd.Params))
@@ -734,6 +786,14 @@ func (ls *lowerState) calleeName(e ast.Expr, callExpr ...*ast.CallExpr) string {
 						// For pub def wrappers, find the @extern function they call
 						if innerName := extractExternFromWrapper(decl); innerName != "" {
 							return innerName
+						}
+						// Locally declared functions keep their source name —
+						// only module imports are mangled — but still have to
+						// name the overload the checker picked. Every call used
+						// to land on the bare name, i.e. whichever overload the
+						// backend happened to emit first.
+						if chosen.ModuleDecl == nil && !isFromImportName(ls.info, x.Name) {
+							return overloadSymbol(decl.Name.Name, decl, ls.info)
 						}
 						return mangleDesiName(decl.Name.Name)
 					}

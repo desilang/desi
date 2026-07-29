@@ -1551,6 +1551,11 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 					ret = types.FutureOf(ret)
 				}
 				c.info.Types[call] = ret
+				// Record the winner. Only module-qualified calls were recorded
+				// before, so lowering had no way to tell which overload of a
+				// plain call had been picked and fell back to the bare name —
+				// one symbol shared by every overload.
+				c.info.ChosenOverloads[call] = chosen
 				return ret
 			case 0:
 				c.add(diagAt("DTE0101", id.Span, "no matching overload"))

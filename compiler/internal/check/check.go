@@ -190,18 +190,16 @@ func methodOwners(mod *ast.Module) map[*ast.FuncDecl]string {
 // declarations (Decl != nil); imported/builtin candidates participate in the
 // comparison but don't get their own spans.
 //
-// Candidates are partitioned by owner first. Info.Funcs is keyed by bare name,
-// so methods of unrelated classes land in one set, and comparing them rejected
-// programs as ordinary as two classes whose constructors take different
-// numbers of arguments. A method on A is not an overload of a same-named
-// method on B; they are dispatched by receiver and never compete.
+// Candidates are only compared when a call could actually confuse them:
 //
-// Within one owner the original rule still holds, differing arity included.
-// That is stricter than it needs to be — a call tells same-name overloads
-// apart by argument count — but relaxing it here would let free functions
-// through to an overload dispatch that does not yet select on arity, turning
-// a compile error into a silently wrong call. Loud beats wrong until that is
-// fixed.
+//   - Same owner. Info.Funcs is keyed by bare name, so methods of unrelated
+//     classes land in one set. Comparing them rejected programs as ordinary as
+//     two classes whose constructors take different numbers of arguments. A
+//     method on A is not an overload of a same-named method on B; they are
+//     dispatched by receiver and never compete.
+//   - Same arity. Overloads taking different numbers of arguments are told
+//     apart by argument count alone, so their default masks have nothing to
+//     agree about.
 func enforceDefaultConsistency(info *Info, owners map[*ast.FuncDecl]string) []diag.Diagnostic {
 	var out []diag.Diagnostic
 	if info == nil {
@@ -220,7 +218,11 @@ func enforceDefaultConsistency(info *Info, owners map[*ast.FuncDecl]string) []di
 			continue
 		}
 
-		baselines := map[string][]bool{}
+		type group struct {
+			owner string
+			arity int
+		}
+		baselines := map[group][]bool{}
 
 		for _, cand := range set.Cands {
 			if cand == nil || cand.Type == nil {
@@ -232,18 +234,10 @@ func enforceDefaultConsistency(info *Info, owners map[*ast.FuncDecl]string) []di
 				continue
 			}
 
-			owner := ownerOf(cand)
-			baseline, seen := baselines[owner]
+			key := group{owner: ownerOf(cand), arity: len(mask)}
+			baseline, seen := baselines[key]
 			if !seen {
-				baselines[owner] = append([]bool(nil), mask...)
-				continue
-			}
-
-			if len(mask) != len(baseline) {
-				if cand.Decl != nil {
-					out = append(out, diagAt("DDF0005", cand.Decl.Name.Span,
-						"default parameters must be consistent across overloads of "+name))
-				}
+				baselines[key] = append([]bool(nil), mask...)
 				continue
 			}
 

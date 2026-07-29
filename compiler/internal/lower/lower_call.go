@@ -2894,21 +2894,35 @@ skipMethodCall:
 	var args []hir.Value
 
 	// M14: Resolve FuncDecl for default filling and named arg reordering.
+	//
+	// The checker's choice wins where it recorded one. Falling straight to
+	// Cands[0] took the first declaration sharing the name, so an overloaded
+	// call filled its omitted arguments from a different overload's defaults:
+	// f(1.0) against `f(a: float, b: float = 1.0)` passed the int overload's
+	// `b: int = 1`.
 	var decl *ast.FuncDecl
 	if ls.info != nil {
-		if id, ok := x.Callee.(*ast.Ident); ok {
-			if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
-				decl = set.Cands[0].Decl
+		if chosen, ok := ls.info.ChosenOverloads[x]; ok && chosen != nil {
+			decl = chosen.Decl
+			if decl == nil {
+				decl = chosen.ModuleDecl
 			}
-		} else if fe, ok := x.Callee.(*ast.FieldExpr); ok {
-			// Module-qualified: mod.func
-			qualName := ""
-			if base, ok := fe.X.(*ast.Ident); ok {
-				qualName = base.Name + "." + fe.Name.Name
-			}
-			if qualName != "" {
-				if set, ok := ls.info.Funcs[qualName]; ok && len(set.Cands) > 0 {
+		}
+		if decl == nil {
+			if id, ok := x.Callee.(*ast.Ident); ok {
+				if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
 					decl = set.Cands[0].Decl
+				}
+			} else if fe, ok := x.Callee.(*ast.FieldExpr); ok {
+				// Module-qualified: mod.func
+				qualName := ""
+				if base, ok := fe.X.(*ast.Ident); ok {
+					qualName = base.Name + "." + fe.Name.Name
+				}
+				if qualName != "" {
+					if set, ok := ls.info.Funcs[qualName]; ok && len(set.Cands) > 0 {
+						decl = set.Cands[0].Decl
+					}
 				}
 			}
 		}

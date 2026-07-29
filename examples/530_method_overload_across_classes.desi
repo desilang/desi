@@ -8,11 +8,15 @@
 # constructors take different numbers of arguments.
 #
 # Methods are dispatched by receiver, so they never compete; the rule now
-# partitions candidates by owning class before comparing.
+# partitions candidates by owning class before comparing. Differing arity is
+# fine for genuine overloads too — a call tells them apart by argument count.
 #
 # EXPECTED_OUTPUT:
 # 7
 # 15
+# 9
+# 9
+# 6
 class Counter:
 	pub mut n: int
 
@@ -33,9 +37,19 @@ class Box:
 	pub def bump(self, dw: int, dh: int) -> int:
 		return (self.w + dw) * (self.h + dh)
 
+# Free functions overloaded on arity, with a default in the longer one.
+def total(a: int) -> int:
+	return a
+
+def total(a: int, b: int, c: int = 6) -> int:
+	return a + b + c
+
 def main() -> int:
 	let c = Counter(5)
 	let b = Box(2, 3)
 	print(str(c.bump(2)))
 	print(str(b.bump(1, 2)))
+	print(str(total(9)))
+	print(str(total(1, 2)))
+	print(str(total(1, 2, 3)))
 	return 0

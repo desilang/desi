@@ -1,9 +1,21 @@
-
+# Overloads must each be emitted, and each call must reach the one the
+# checker picked.
+#
+# This used to call only f(10), so it passed without proving anything: the
+# float overload was never emitted at all, and a call to it ran the int body.
+#
+# EXPECTED_OUTPUT:
+# 11
+# 2.5
 def f(x: int) -> int:
 	return x + 1
 
 def f(x: float) -> float:
 	return x * 0.5
 
-def main():
+def main() -> int:
 	let a = f(10)
+	let b = f(5.0)
+	print(str(a))
+	print(str(b))
+	return 0
