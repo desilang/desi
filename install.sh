@@ -43,6 +43,18 @@ detect_platform() {
     esac
 
     PLATFORM="${OS}-${ARCH}"
+
+    # Say which platforms have binaries rather than letting the download 404
+    # with a generic failure. Keep this list in step with the release
+    # workflow's build matrix.
+    case "$PLATFORM" in
+        linux-amd64|darwin-amd64|darwin-arm64|windows-amd64) ;;
+        *)
+            err "No prebuilt binaries for ${PLATFORM} yet. Build from source instead:
+    git clone https://github.com/desilang/desi
+    cd desi && ./bootstrap.sh"
+            ;;
+    esac
 }
 
 # ── Resolve Version ────────────────────────────────────────────────
