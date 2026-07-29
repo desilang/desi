@@ -65,3 +65,27 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           mike deploy --push --update-aliases $VERSION stable
           mike set-default --push stable
+
+      # The documented install command is
+      #   curl -sSL https://desilang.org/install.sh | sh
+      # so the script has to exist at the site root. mike publishes each
+      # version into its own directory and leaves only a redirect at the
+      # root, so nothing puts them there by default.
+      #
+      # Copied from the source commit rather than duplicated into book/docs,
+      # so the published installer cannot drift from the committed one.
+      - name: Publish installers at the site root
+        run: |
+          set -e
+          mkdir -p /tmp/installers
+          cp install.sh install.ps1 /tmp/installers/
+          git fetch origin gh-pages
+          git checkout gh-pages
+          cp /tmp/installers/install.sh /tmp/installers/install.ps1 .
+          git add install.sh install.ps1
+          if git diff --cached --quiet; then
+            echo "installers unchanged"
+          else
+            git commit -m "chore(site): publish installers at root"
+            git push origin gh-pages
+          fi
