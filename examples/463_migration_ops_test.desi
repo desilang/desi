@@ -47,9 +47,9 @@ def main() -> int:
 	# Connect to PostgreSQL using env vars
 	let host = env.get("PG_HOST", "127.0.0.1")
 	let user = env.get("PG_USER", "postgres")
-	let pass = env.get("PG_PASS", "")
+	let password = env.get("PG_PASS", "")
 	let dbname = env.get("PG_DB", "postgres")
-	db.connect("postgres", host, 5432, dbname, user, pass)
+	db.connect("postgres", host, 5432, dbname, user, password)
 
 	# Clean slate
 	db.execute("DROP TABLE IF EXISTS op_test_users")

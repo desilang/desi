@@ -43,9 +43,9 @@ def main() -> int:
 	# Connect to MySQL using env vars (no hardcoded creds)
 	let host = env.get("MYSQL_HOST", "127.0.0.1")
 	let user = env.get("MYSQL_USER", "root")
-	let pass = env.get("MYSQL_PASS", "")
+	let password = env.get("MYSQL_PASS", "")
 	let dbname = env.get("MYSQL_DB", "mysql")
-	db.connect("mysql", host, 3306, dbname, user, pass)
+	db.connect("mysql", host, 3306, dbname, user, password)
 
 	# Clean slate
 	db.execute("DROP TABLE IF EXISTS mig_users")
