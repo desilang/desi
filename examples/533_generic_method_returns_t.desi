@@ -1,0 +1,64 @@
+# A method of a generic class may return T.
+#
+# Regression guard: specializing a method patched its signature but reused the
+# body lowered against the unsubstituted class, where a value of type T is a
+# ptr. Anything whose lowering depends on the element type therefore came back
+# as a ptr the signature disagreed with, and `Stack<int>.pop()` emitted
+# `ret i32 %popped_ptr` — rejected by LLVM outright, with the raw verifier
+# error as the user's only clue. Non-generic classes and plain lists were
+# unaffected, so the suite never saw it.
+#
+# EXPECTED_OUTPUT:
+# 3
+# 2
+# 1
+# b
+# a
+# 42
+# hi
+# 2.5
+class Stack<T>:
+	pub mut items: list<T>
+
+	pub def __new__(self):
+		self.items = []
+
+	pub def push(self, item: T):
+		self.items.append(item)
+
+	pub def pop(self) -> T:
+		return self.items.pop()
+
+	pub def is_empty(self) -> bool:
+		return len(self.items) == 0
+
+class Box<T>:
+	pub mut v: T
+
+	pub def __new__(self, v: T):
+		self.v = v
+
+	pub def get(self) -> T:
+		return self.v
+
+def main() -> int:
+	# Returning T out of a list: the case that emitted invalid IR.
+	let si = Stack::<int>()
+	si.push(1)
+	si.push(2)
+	si.push(3)
+	while not si.is_empty():
+		print(str(si.pop()))
+
+	# The same class at a pointer-shaped element type.
+	let ss = Stack::<str>()
+	ss.push("a")
+	ss.push("b")
+	while not ss.is_empty():
+		print(ss.pop())
+
+	# Returning T straight out of a field, across representations.
+	print(str(Box(42).get()))
+	print(Box("hi").get())
+	print(str(Box(2.5).get()))
+	return 0

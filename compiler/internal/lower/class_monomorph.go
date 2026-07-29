@@ -366,8 +366,18 @@ func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *type
 		fieldTypes[f.Name] = substituteType(f.Type, subst)
 	}
 
+	// Types of the temporaries defined so far, so a `ret` can tell whether the
+	// value it is handed already matches the specialized return type.
+	tempTypes := make(map[string]string)
+	// Casts to splice in ahead of a statement, keyed by its index in the block.
+	type pendingCast struct {
+		at   int
+		cast *hir.Cast
+	}
+
 	// Walk all blocks and statements
 	for _, block := range fn.Blocks {
+		var pending []pendingCast
 		for i, stmt := range block.Stmts {
 			switch s := stmt.(type) {
 			case *hir.Load:
@@ -390,6 +400,14 @@ func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *type
 					}
 				}
 				block.Stmts[i] = s
+				if s.Dst.Name != "" {
+					tempTypes[s.Dst.Name] = s.Type
+				}
+
+			case *hir.Cast:
+				if s.Dst.Name != "" {
+					tempTypes[s.Dst.Name] = s.Type
+				}
 
 			case *hir.GetElementPtr:
 				// Recalculate field offset for generic class fields with concrete types
@@ -441,15 +459,44 @@ func substituteHIRFuncBody(fn *hir.Func, subst map[string]types.T, baseCls *type
 				block.Stmts[i] = s
 
 			case *hir.Ret:
-				// Return value type is handled by function return type
-				// The value itself is already lowered correctly in most cases
+				// The body was lowered against the unsubstituted class, where a
+				// value of type T is a ptr, but this specialization returns the
+				// concrete type. Anything whose lowering depends on the element
+				// type therefore comes back as a ptr the signature disagrees
+				// with — `list<T>.pop()` producing `ret i32 %ptr_temp`, which
+				// LLVM rejects outright.
+				//
+				// Lists store scalars as raw ptr-width values rather than boxing
+				// them, so recovering one is the same cast the non-generic path
+				// emits when it knows the element type (see the "pop" case in
+				// list_lower.go).
+				if fn.RetType != "" && fn.RetType != "ptr" {
+					if t, ok := s.Val.(hir.Temp); ok && tempTypes[t.Name] == "ptr" {
+						castDst := hir.Temp{Name: t.Name + "_ret"}
+						pending = append(pending, pendingCast{at: i, cast: &hir.Cast{
+							Dst: castDst, Src: t, Type: fn.RetType,
+						}})
+						s.Val = castDst
+						block.Stmts[i] = s
+					}
+				}
 
 			case *hir.Call:
-				// Check if this is a call to a generic method and substitute return type
-				if s.Type == "ptr" {
-					// Could check if this needs substitution
+				if s.Dst.Name != "" {
+					ty := s.Type
+					if ty == "" {
+						ty = "i32" // hir.Call documents i32 as its default
+					}
+					tempTypes[s.Dst.Name] = ty
 				}
 			}
+		}
+
+		// Splice the casts in, back to front so earlier indices stay valid.
+		for k := len(pending) - 1; k >= 0; k-- {
+			p := pending[k]
+			block.Stmts = append(block.Stmts[:p.at],
+				append([]hir.Stmt{p.cast}, block.Stmts[p.at:]...)...)
 		}
 	}
 }

@@ -85,8 +85,8 @@ class Stack<T>:
     pub def push(self, item: T):
         self.items.append(item)
 
-    pub def size(self) -> int:
-        return len(self.items)
+    pub def pop(self) -> T:
+        return self.items.pop()
 
     pub def is_empty(self) -> bool:
         return len(self.items) == 0
@@ -99,8 +99,8 @@ def main() -> int:
     stack.push(2)
     stack.push(3)
 
-    print(str(stack.size()))
-    print(str(stack.is_empty()))
+    while not stack.is_empty():
+        print(str(stack.pop()))
     return 0
 ```
 
