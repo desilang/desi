@@ -778,12 +778,18 @@ func (c *checker) typIdent(x *ast.Ident) types.T {
 	//
 	// Reporting here is the right place, but it requires every name that is
 	// legitimately in scope to actually be registered, and several are not.
-	// Measured against the example suite, enabling the diagnostic as-is
-	// rejects 35 valid programs. What is still missing:
+	// Measured 2026-07-28 by enabling the diagnostic and checking every
+	// example: 44 of them report at least one name that is genuinely in
+	// scope. What is still missing:
 	//
 	//   - Enum/type names used as a qualifier: `Option.Some(42)` looks up
 	//     `Option`, which is not defined as a symbol (Option/Result, and
-	//     user-declared enums).
+	//     user-declared enums). Note that simply defining them is NOT the
+	//     fix: registering Option/Result as SymType in injectPreludeIntoScope
+	//     was tried and broke 30 examples, because a resolvable type name
+	//     sends the call down checkTypeCall instead of enum construction.
+	//     What is needed is for qualifier position to be recognised as such,
+	//     rather than the base being typed as a value expression.
 	//   - `pass`, which reaches this point as an identifier expression rather
 	//     than being handled as a statement.
 	//   - Bindings introduced by `is` patterns, generic type parameters, and
