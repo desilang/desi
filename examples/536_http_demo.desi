@@ -1,0 +1,25 @@
+# EXPECTED: SKIP
+# The launch demo — a working HTTP server in a dozen lines.
+#
+# Skipped by the suite because it binds a port and serves forever. Run it:
+#   desic run examples/536_http_demo.desi
+# then:
+#   curl http://localhost:8080/
+#   curl http://localhost:8080/hello/world
+#
+# No framework, no package manager, no dependencies — http is in the
+# standard library, and this compiles to a single native binary.
+import http
+from http import Request
+
+def handle(req: Request) -> Any:
+	let path = http.req_path(req)
+	if path == "/":
+		return http.text(200, "Hello from Desi!")
+	return http.json_text(200, "{\"path\": \"" + path + "\"}")
+
+def main() -> int:
+	let srv = http.server(8080)
+	print("listening on http://localhost:8080")
+	http.serve(srv, handle)
+	return 0

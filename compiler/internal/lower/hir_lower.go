@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"sort"
 	"unicode/utf8"
 
 	"github.com/desilang/desi/compiler/internal/ast"
@@ -87,18 +88,63 @@ func overloadSymbol(base string, fd *ast.FuncDecl, info *check.Info) string {
 	if !ok || set == nil || len(set.Cands) <= 1 {
 		return base
 	}
-	idx := 0
+	decls := make([]*ast.FuncDecl, 0, len(set.Cands))
 	for _, cand := range set.Cands {
-		if cand == nil || cand.Decl == nil {
-			continue
+		if cand != nil && cand.Decl != nil {
+			decls = append(decls, cand.Decl)
 		}
-		if cand.Decl == fd {
-			if idx == 0 {
+	}
+	return overloadSymbolFor(base, fd, decls)
+}
+
+// overloadSymbolFor picks fd's symbol out of the set of same-named declarations.
+//
+// The index comes from source position, not from the order of the slice. A
+// definition is lowered with the defining module's own type info, while a call
+// resolves through the importer's view of that module's exports — two lists
+// built independently. Ordering them by where they are written makes both
+// sides agree without having to trust that those lists were assembled the
+// same way, which is not something a symbol name should depend on.
+func overloadSymbolFor(base string, fd *ast.FuncDecl, decls []*ast.FuncDecl) string {
+	if fd == nil || len(decls) <= 1 {
+		return base
+	}
+	sorted := append([]*ast.FuncDecl(nil), decls...)
+	sort.SliceStable(sorted, func(i, j int) bool {
+		if sorted[i].Span.Start.Line != sorted[j].Span.Start.Line {
+			return sorted[i].Span.Start.Line < sorted[j].Span.Start.Line
+		}
+		return sorted[i].Span.Start.Col < sorted[j].Span.Start.Col
+	})
+	for i, d := range sorted {
+		if d == fd || (d.Span.Start.Line == fd.Span.Start.Line && d.Span.Start.Col == fd.Span.Start.Col) {
+			if i == 0 {
 				return base
 			}
-			return fmt.Sprintf("%s$%d", base, idx)
+			return fmt.Sprintf("%s$%d", base, i)
 		}
-		idx++
+	}
+	return base
+}
+
+// moduleOverloadSymbol is the call-site counterpart for a function reached
+// through an import: the importer has the module's declarations in
+// ModuleExports rather than in its own Funcs table.
+func moduleOverloadSymbol(base string, fd *ast.FuncDecl, info *check.Info) string {
+	if fd == nil || info == nil || info.R == nil || isExternFunction(fd) {
+		return base
+	}
+	for _, ex := range info.R.ModuleExports {
+		if ex == nil {
+			continue
+		}
+		if decls, ok := ex.FuncDecls[fd.Name.Name]; ok && len(decls) > 1 {
+			for _, d := range decls {
+				if d == fd || (d.Span.Start.Line == fd.Span.Start.Line && d.Span.Start.Col == fd.Span.Start.Col) {
+					return overloadSymbolFor(base, fd, decls)
+				}
+			}
+		}
 	}
 	return base
 }
@@ -795,7 +841,7 @@ func (ls *lowerState) calleeName(e ast.Expr, callExpr ...*ast.CallExpr) string {
 						if chosen.ModuleDecl == nil && !isFromImportName(ls.info, x.Name) {
 							return overloadSymbol(decl.Name.Name, decl, ls.info)
 						}
-						return mangleDesiName(decl.Name.Name)
+						return moduleOverloadSymbol(mangleDesiName(decl.Name.Name), decl, ls.info)
 					}
 				}
 			}
@@ -859,7 +905,12 @@ func (ls *lowerState) calleeName(e ast.Expr, callExpr ...*ast.CallExpr) string {
 								if innerName := extractExternFromWrapper(decl); innerName != "" {
 									return innerName
 								}
-								return mangleDesiName(decl.Name.Name)
+								// Overloads of a module function are emitted under
+								// suffixed symbols, so the call has to name the one
+								// the checker picked. Without this, http.serve(srv,
+								// handler) called the one-argument serve(srv): the
+								// server ran and silently ignored the handler.
+								return moduleOverloadSymbol(mangleDesiName(decl.Name.Name), decl, ls.info)
 							}
 						}
 					}
