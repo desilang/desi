@@ -270,6 +270,92 @@ static void my_native_auth(const char* password, const unsigned char* scramble, 
 }
 
 // ============================================================
+// SHA-256 (for caching_sha2_password)
+//
+// Self-contained for the same reason the SHA-1 above is: the driver speaks a
+// wire protocol and should not depend on whether the build found OpenSSL.
+// ============================================================
+
+static const uint32_t my_sha256_k[64] = {
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+};
+
+#define MY_ROR(x,n) (((x)>>(n))|((x)<<(32-(n))))
+
+static void my_sha256_block(uint32_t st[8], const unsigned char blk[64]) {
+    uint32_t w[64];
+    for (int i = 0; i < 16; i++)
+        w[i] = ((uint32_t)blk[i*4]<<24)|((uint32_t)blk[i*4+1]<<16)|
+               ((uint32_t)blk[i*4+2]<<8)|blk[i*4+3];
+    for (int i = 16; i < 64; i++) {
+        uint32_t s0 = MY_ROR(w[i-15],7) ^ MY_ROR(w[i-15],18) ^ (w[i-15]>>3);
+        uint32_t s1 = MY_ROR(w[i-2],17) ^ MY_ROR(w[i-2],19)  ^ (w[i-2]>>10);
+        w[i] = w[i-16] + s0 + w[i-7] + s1;
+    }
+    uint32_t a=st[0],b=st[1],c=st[2],d=st[3],e=st[4],f=st[5],g=st[6],h=st[7];
+    for (int i = 0; i < 64; i++) {
+        uint32_t S1 = MY_ROR(e,6) ^ MY_ROR(e,11) ^ MY_ROR(e,25);
+        uint32_t ch = (e & f) ^ ((~e) & g);
+        uint32_t t1 = h + S1 + ch + my_sha256_k[i] + w[i];
+        uint32_t S0 = MY_ROR(a,2) ^ MY_ROR(a,13) ^ MY_ROR(a,22);
+        uint32_t maj = (a & b) ^ (a & c) ^ (b & c);
+        uint32_t t2 = S0 + maj;
+        h=g; g=f; f=e; e=d+t1; d=c; c=b; b=a; a=t1+t2;
+    }
+    st[0]+=a; st[1]+=b; st[2]+=c; st[3]+=d; st[4]+=e; st[5]+=f; st[6]+=g; st[7]+=h;
+}
+
+static void my_sha256(const unsigned char* data, size_t len, unsigned char digest[32]) {
+    uint32_t st[8] = {0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,
+                      0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19};
+    unsigned char buf[64];
+    size_t i;
+    for (i = 0; i + 64 <= len; i += 64) my_sha256_block(st, data + i);
+    size_t rem = len - i;
+    memset(buf, 0, 64);
+    memcpy(buf, data + i, rem);
+    buf[rem] = 0x80;
+    if (rem >= 56) { my_sha256_block(st, buf); memset(buf, 0, 64); }
+    uint64_t bits = (uint64_t)len * 8;
+    for (int j = 0; j < 8; j++) buf[63-j] = (unsigned char)(bits >> (j*8));
+    my_sha256_block(st, buf);
+    for (int j = 0; j < 8; j++) {
+        digest[j*4]   = (st[j]>>24)&0xFF; digest[j*4+1] = (st[j]>>16)&0xFF;
+        digest[j*4+2] = (st[j]>>8)&0xFF;  digest[j*4+3] = st[j]&0xFF;
+    }
+}
+
+// caching_sha2_password, fast path:
+//   SHA256(password) XOR SHA256(SHA256(SHA256(password)) || scramble)
+//
+// Note this is not the same shape as mysql_native_password: the scramble is
+// appended to the double digest rather than prepended. Sending the SHA-1
+// response here — which is what this driver used to do for every plugin —
+// never authenticates, and the server falls through to demanding full auth.
+static void my_caching_sha2_auth(const char* password, const unsigned char* scramble,
+                                 int scramble_len, unsigned char result[32]) {
+    unsigned char d1[32], d2[32], d3[32];
+    unsigned char combined[32 + 64];
+
+    my_sha256((const unsigned char*)password, strlen(password), d1);
+    my_sha256(d1, 32, d2);
+
+    if (scramble_len > 64) scramble_len = 64;
+    memcpy(combined, d2, 32);
+    memcpy(combined + 32, scramble, scramble_len);
+    my_sha256(combined, 32 + scramble_len, d3);
+
+    for (int i = 0; i < 32; i++) result[i] = d1[i] ^ d3[i];
+}
+
+// ============================================================
 // Result set management
 // ============================================================
 
@@ -577,11 +663,15 @@ skip_ssl: ;
     int ulen = strlen(user);
     memcpy(response + rpos, user, ulen + 1); rpos += ulen + 1;
 
-    // Auth response
-    if (password[0] != '\0' &&
-        (strcmp(auth_plugin, "mysql_native_password") == 0 ||
-         strcmp(auth_plugin, "caching_sha2_password") == 0)) {
-        // mysql_native_password: SHA1 auth
+    // Auth response — each plugin has its own scramble, so answer the one the
+    // server actually named.
+    if (password[0] != '\0' && strcmp(auth_plugin, "caching_sha2_password") == 0) {
+        unsigned char auth_resp[32];
+        my_caching_sha2_auth(password, scramble, 20, auth_resp);
+        response[rpos++] = 32; // length-encoded: 32 bytes
+        memcpy(response + rpos, auth_resp, 32); rpos += 32;
+    } else if (password[0] != '\0' &&
+               strcmp(auth_plugin, "mysql_native_password") == 0) {
         unsigned char auth_resp[20];
         my_native_auth(password, scramble, 20, auth_resp);
         response[rpos++] = 20; // length-encoded: 20 bytes
@@ -698,10 +788,22 @@ skip_ssl: ;
         
         my_log("auth switch to: %s", new_plugin);
         
-        if (strcmp(new_plugin, "mysql_native_password") == 0) {
-            unsigned char auth_resp[20];
-            my_native_auth(password, new_scramble, ns_len, auth_resp);
-            if (my_send_packet(auth_resp, 20) < 0) {
+        if (strcmp(new_plugin, "mysql_native_password") == 0 ||
+            strcmp(new_plugin, "caching_sha2_password") == 0) {
+            // Answer with the scramble the switched-to plugin expects. A server
+            // that switches to caching_sha2_password then replies 0x01 0x03
+            // (cached, done) or 0x01 0x04 (full auth required), both handled
+            // by the exchange below.
+            unsigned char auth_resp[32];
+            int resp_len;
+            if (strcmp(new_plugin, "caching_sha2_password") == 0) {
+                my_caching_sha2_auth(password, new_scramble, ns_len, auth_resp);
+                resp_len = 32;
+            } else {
+                my_native_auth(password, new_scramble, ns_len, auth_resp);
+                resp_len = 20;
+            }
+            if (my_send_packet(auth_resp, resp_len) < 0) {
                 snprintf(g_my->error, sizeof(g_my->error), "Failed to send switched auth");
                 db_close_socket(g_my->fd); g_my->fd = -1;
                 return -1;
@@ -718,6 +820,29 @@ skip_ssl: ;
                 g_my->connected = 1;
                 my_log("auth switch OK");
                 goto auth_ok;
+            }
+            // caching_sha2_password answers with its own status byte rather
+            // than an OK packet: 0x03 means the server had the credential
+            // cached and we are done bar the trailing OK.
+            if (ok[0] == 0x01 && oklen >= 2 && ok[1] == 0x03) {
+                unsigned char ok2[MY_BUF_SIZE];
+                int ok2len;
+                if (my_read_packet(ok2, &ok2len) < 0 || ok2[0] != 0x00) {
+                    snprintf(g_my->error, sizeof(g_my->error), "Auth confirm failed");
+                    db_close_socket(g_my->fd); g_my->fd = -1;
+                    return -1;
+                }
+                g_my->connected = 1;
+                my_log("auth switch caching_sha2 fast auth OK");
+                goto auth_ok;
+            }
+            if (ok[0] == 0x01 && oklen >= 2 && ok[1] == 0x04) {
+                snprintf(g_my->error, sizeof(g_my->error),
+                    "caching_sha2_password full auth requires TLS. The server has no "
+                    "cached credential for this user yet; connect once over TLS, or "
+                    "use a mysql_native_password account.");
+                db_close_socket(g_my->fd); g_my->fd = -1;
+                return -1;
             }
         }
         snprintf(g_my->error, sizeof(g_my->error), "Auth switch to %s failed", new_plugin);
