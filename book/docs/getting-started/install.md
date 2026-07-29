@@ -132,7 +132,7 @@ Or build an executable:
 
 ```bash
 desic build hello.desi -o hello
-./build/output/hello
+./hello
 ```
 
 You should see:

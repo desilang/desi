@@ -23,7 +23,20 @@ Thumbs.db
 # keep emitted C out of the repo unless explicitly vendored
 /gen/
 /desic
-/build/
+
+# Build output, at any depth. Not anchored to the root: `desic build` writes
+# to build/output/ relative to wherever it is run, so a build inside
+# examples/ or a scratch project left artifacts the root-anchored rule
+# missed. On Unix those artifacts have no extension, so *.exe did not catch
+# them either.
+build/
+
+# Compiled objects and static libraries, wherever they land.
+*.o
+*.a
+*.lib
+*.so
+*.dylib
 
 # mpdecimal build artifacts (Windows, macOS, Unix)
 compiler/runtime/decimal/mpdecimal-4.0.1/libmpdec/*.obj

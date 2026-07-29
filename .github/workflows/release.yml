@@ -93,10 +93,10 @@ jobs:
           mkdir -p smoke && cd smoke
           printf 'def main() -> int:\n\tprint("hello from the package")\n\treturn 0\n' > hello.desi
 
-          # `desic build -o NAME` names the artifact; it lands under
-          # build/output/ (see first-program.md).
+          # `desic build -o PATH` writes exactly there, like cc and go.
+
           "$PKG/bin/desic${{ matrix.ext }}" build hello.desi -o hello
-          out=$(./build/output/hello${{ matrix.ext }})
+          out=$(./hello${{ matrix.ext }})
           echo "$out"
           [ "$out" = "hello from the package" ] || { echo "build/run failed"; exit 1; }
 

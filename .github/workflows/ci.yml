@@ -186,11 +186,11 @@ jobs:
           DESIC="$GITHUB_WORKSPACE/bin/desic"
 
           "$DESIC" build hello.desi -o hello
-          out=$(./build/output/hello)
+          out=$(./hello)
           [ "$out" = "smoke ok" ] || { echo "build: got '$out'"; exit 1; }
 
           "$DESIC" build hello.desi -o hello_r -O2
-          out=$(./build/output/hello_r)
+          out=$(./hello_r)
           [ "$out" = "smoke ok" ] || { echo "build -O2: got '$out'"; exit 1; }
 
           out=$("$DESIC" run hello.desi)

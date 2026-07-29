@@ -47,7 +47,7 @@ Or build an executable you can distribute:
 
 ```bash
 desic build hello.desi -o hello
-./build/output/hello
+./hello
 ```
 
 🎉 Congratulations! You've just run your first Desi program!

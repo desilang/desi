@@ -53,6 +53,34 @@ Press `Ctrl+C` to stop watching.
 
 ---
 
+### `desic build` - Compile to an Executable
+
+```bash
+desic build hello.desi              # -> build/output/hello
+desic build hello.desi -o hello     # -> ./hello
+desic build hello.desi -o dist/app  # -> dist/app
+desic build hello.desi -o hello -O2 # optimized
+```
+
+`-o` is a path, as it is for `cc`, `go` and `rustc`: the executable is
+written exactly where you name it, and any directories in the path are
+created. Without `-o`, the output goes to `build/output/` named after the
+source file.
+
+On Windows a `.exe` extension is appended when the path has none, since
+Windows will not run a file without it.
+
+Run without a file argument to build the project described by `desi.mod`.
+
+### `desic run` - Compile and Run
+
+```bash
+desic run hello.desi
+desic run hello.desi -- arg1 arg2   # arguments after -- go to the program
+```
+
+Compiles to a temporary location and executes it; nothing is left behind.
+
 ### `desic check` - Type Check
 
 Verify your code without compiling:

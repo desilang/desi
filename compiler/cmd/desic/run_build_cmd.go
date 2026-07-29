@@ -224,6 +224,23 @@ func initCmd(argv []string) int {
 		return 2
 	}
 
+	// A .gitignore, because the very next thing a new project does is build,
+	// and `desic build` writes build/output/. Without this the first commit
+	// carries a compiled binary. Not overwritten if one already exists.
+	gitignore := "# Desi build output\n" +
+		"build/\n\n" +
+		"# Compiled executables\n" +
+		"*.exe\n" +
+		"*.o\n" +
+		"*.obj\n"
+	gip := filepath.Join(target, ".gitignore")
+	if _, err := os.Stat(gip); os.IsNotExist(err) {
+		if err := os.WriteFile(gip, []byte(gitignore), 0o644); err != nil {
+			term.Eprintln("init:", err)
+			return 2
+		}
+	}
+
 	term.Println("initialized desi project at", target)
 	return 0
 }
@@ -345,7 +362,10 @@ func buildCmd(argv []string) int {
 		}
 		file = m.EntryPath()
 		if outputName == "" {
-			outputName = safePkgName(m.Package.Name)
+			// Project mode keeps its documented default of build/output/<pkg>.
+			// Spelled as a path because -o is now one: a bare name here would
+			// put the binary in the project root instead.
+			outputName = filepath.Join("build", "output", safePkgName(m.Package.Name))
 		}
 
 		// --- Build Audit ---
@@ -366,24 +386,34 @@ func buildCmd(argv []string) int {
 		return 2
 	}
 
-	// Default output name from file basename
-	if outputName == "" {
-		outputName = strings.TrimSuffix(filepath.Base(file), ".desi")
+	// -o is a path, the way cc, go and rustc all treat it: `-o hello` writes
+	// ./hello and `-o dist/app` writes dist/app. It used to be a bare name
+	// forced under build/output/, so the file never appeared where it was
+	// asked for and a build/ directory turned up in the user's project.
+	//
+	// Without -o the default is unchanged: build/output/<basename>.
+	var exePath string
+	if outputName != "" {
+		exePath = outputName
+	} else {
+		exePath = filepath.Join("build", "output",
+			strings.TrimSuffix(filepath.Base(file), ".desi"))
 	}
 
-	// Ensure build/output directory exists
-	outDir := filepath.Join("build", "output")
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		term.Eprintln("build:", err)
-		return 2
-	}
-
-	exePath := filepath.Join(outDir, outputName)
 	// Windows will not execute a file without the .exe extension, so a build
 	// that omits it produces an artifact the user cannot run. `desic run`
 	// already does this for its temporary binary; `build` has to as well.
 	if runtime.GOOS == "windows" && filepath.Ext(exePath) == "" {
 		exePath += ".exe"
+	}
+
+	// Create whatever directory the output lands in — build/output by
+	// default, or the one named in -o.
+	if dir := filepath.Dir(exePath); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			term.Eprintln("build:", err)
+			return 2
+		}
 	}
 	code := buildFile(file, exePath, optLevel, argv, true)
 	if code != 0 {
