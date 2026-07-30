@@ -88,6 +88,17 @@ guarding.
   If a fix has a subtlety, or you tried an approach that did not work, write
   that down; it saves the next person from repeating it.
 
+## Documentation is code too
+
+The Desi blocks in `book/docs` are compiled, not eyeballed. `tools/docaudit`
+extracts every one and checks it — see its README. A block that is illustrative
+rather than runnable (a placeholder, an API signature listing) should be tagged
+` ```text ` so it is not presented as something that compiles.
+
+Use that tooling rather than looping over `desic` yourself: it is a native
+binary, Git Bash's `timeout` does not reliably kill one, and a pathological
+input can otherwise take the machine down.
+
 ## Reporting a bug
 
 Include the program, the command you ran, what happened, and what you expected.
