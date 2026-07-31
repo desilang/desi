@@ -12,7 +12,14 @@ pub class TaskGroup:
         # Constructor - creates a new task group
         # Implemented via C runtime: taskgroup_new()
         pass
-    
+
+    pub def run(self, fn: Any) -> none:
+        # Spawn fn as a task in this group
+        # Accepts a function, a method reference, or a lambda; a lambda's
+        # captured values are copied into a context struct by the lowerer
+        # Implemented via C runtime: taskgroup_spawn(tg, fn, ctx)
+        pass
+
     pub def wait(self) -> none:
         # Wait for all tasks in the group to complete
         # Blocks until pending count reaches zero

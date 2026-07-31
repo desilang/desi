@@ -71,6 +71,9 @@ type Module struct {
 type WrapperInfo struct {
 	TargetFn    string // function to call (__lam$N or named function)
 	NumCaptures int    // number of captures to unpack from ctx
+	// CapTypes is each capture's LLVM type as the target declares it. A
+	// boxed primitive needs a second load in the wrapper; "ptr" does not.
+	CapTypes []string
 }
 
 type GlobalDef struct {
@@ -333,13 +336,16 @@ func (m *Module) IR() string {
 }
 
 // RegisterTGWrapper registers a TaskGroup wrapper function to be emitted
-func (m *Module) RegisterTGWrapper(wrapperName, targetFn string, numCaptures int) {
+func (m *Module) RegisterTGWrapper(wrapperName, targetFn string, numCaptures int, capTypes []string) {
 	if m.tgWrappers[wrapperName].TargetFn != "" {
 		return // Already registered
 	}
+	cp := make([]string, len(capTypes))
+	copy(cp, capTypes)
 	m.tgWrappers[wrapperName] = WrapperInfo{
 		TargetFn:    targetFn,
 		NumCaptures: numCaptures,
+		CapTypes:    cp,
 	}
 }
 
@@ -347,27 +353,24 @@ func (m *Module) RegisterTGWrapper(wrapperName, targetFn string, numCaptures int
 // Reads from the module's local registry.
 func (m *Module) emitTGWrappers() {
 	for wrapperName, info := range m.tgWrappers {
-		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures)
+		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures, info.CapTypes)
 	}
 }
 
 // EmitGlobalTGWrappers emits wrappers from the global registry.
 // Called by emit_ir_cmd after all lowering is complete.
-func (m *Module) EmitGlobalTGWrappers(wrappers map[string]struct {
-	TargetFn    string
-	NumCaptures int
-}) {
+func (m *Module) EmitGlobalTGWrappers(wrappers map[string]WrapperInfo) {
 	for wrapperName, info := range wrappers {
 		// Skip if already emitted from local registry
 		if m.tgWrappers[wrapperName].TargetFn != "" {
 			continue
 		}
-		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures)
+		m.emitSingleWrapper(wrapperName, info.TargetFn, info.NumCaptures, info.CapTypes)
 	}
 }
 
 // emitSingleWrapper emits one wrapper function
-func (m *Module) emitSingleWrapper(wrapperName, targetFn string, numCaptures int) {
+func (m *Module) emitSingleWrapper(wrapperName, targetFn string, numCaptures int, capTypes []string) {
 	// Generate wrapper: define void @wrapperName(ptr %__ctx__) { ... }
 	var b bytes.Buffer
 	wprintf(&b, "define void @%s(ptr %%__ctx__) {\n", wrapperName)
@@ -377,12 +380,31 @@ func (m *Module) emitSingleWrapper(wrapperName, targetFn string, numCaptures int
 		// No captures: just call target function ignoring ctx
 		wprintf(&b, "  call void @%s()\n", targetFn)
 	} else {
-		// Unpack captures from ctx and call target
+		// Unpack captures from ctx and call target.
+		//
+		// Each slot is 8 bytes. A primitive was boxed on the way in, so its slot
+		// holds the address of the box and the value needs a second load; a
+		// pointer capture is stored directly and one load is enough. Loading
+		// only once for everything handed the box address to a function
+		// expecting an i32.
+		capTypeAt := func(i int) string {
+			if i < len(capTypes) && capTypes[i] != "" {
+				return capTypes[i]
+			}
+			return "ptr"
+		}
+
 		for i := 0; i < numCaptures; i++ {
+			ty := capTypeAt(i)
 			// Get pointer to capture[i]: getelementptr i8, ptr %__ctx__, i64 (i*8)
 			wprintf(&b, "  %%cap%d_ptr = getelementptr i8, ptr %%__ctx__, i64 %d\n", i, i*8)
-			// Load the value
-			wprintf(&b, "  %%cap%d = load ptr, ptr %%cap%d_ptr\n", i, i)
+			if ty == "ptr" {
+				wprintf(&b, "  %%cap%d = load ptr, ptr %%cap%d_ptr\n", i, i)
+				continue
+			}
+			// Boxed primitive: load the box, then the value inside it.
+			wprintf(&b, "  %%cap%d_box = load ptr, ptr %%cap%d_ptr\n", i, i)
+			wprintf(&b, "  %%cap%d = load %s, ptr %%cap%d_box\n", i, ty, i)
 		}
 		// Call target with captures
 		wprintf(&b, "  call void @%s(", targetFn)
@@ -390,7 +412,7 @@ func (m *Module) emitSingleWrapper(wrapperName, targetFn string, numCaptures int
 			if i > 0 {
 				wprintf(&b, ", ")
 			}
-			wprintf(&b, "ptr %%cap%d", i)
+			wprintf(&b, "%s %%cap%d", capTypeAt(i), i)
 		}
 		wprintf(&b, ")\n")
 	}

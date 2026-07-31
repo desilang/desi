@@ -240,7 +240,7 @@ func init() {
 
 	// Emit TaskGroup wrapper functions from global registry
 	for wrapperName, info := range lower.GetTGWrappers() {
-		lm.RegisterTGWrapper(wrapperName, info.TargetFn, info.NumCaptures)
+		lm.RegisterTGWrapper(wrapperName, info.TargetFn, info.NumCaptures, info.CapTypes)
 	}
 
 	fmt.Print(lm.IR())

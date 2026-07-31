@@ -740,6 +740,9 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 						var ctxVal hir.Value = hir.ConstNull{}
 						var targetFnName string
 						var numCaptures int
+						// LLVM type of each capture, in order, so the wrapper can
+						// tell a boxed primitive from a pointer stored directly.
+						var capTypes []string
 
 						// Check if this is a capture marker: fn.__captures__(args...)
 						if callExpr, ok := x.Args[0].(*ast.CallExpr); ok {
@@ -803,8 +806,11 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 												})
 												ls.b.Emit(&hir.Store{Dst: boxPtr, Val: argVal})
 												ls.b.Emit(&hir.Store{Dst: offset, Val: boxPtr})
+												// Boxed: the wrapper loads through it.
+												capTypes = append(capTypes, lowerType(argType))
 											} else {
 												ls.b.Emit(&hir.Store{Dst: offset, Val: argVal})
+												capTypes = append(capTypes, "ptr")
 											}
 										}
 										ctxVal = ctxPtr
@@ -814,7 +820,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 									// Create wrapper name with prefix to avoid collision
 									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
 									// Emit wrapper function declaration (done once per unique wrapper)
-									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
+									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures, capTypes)
 								}
 							}
 						}
@@ -875,8 +881,11 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 												})
 												ls.b.Emit(&hir.Store{Dst: boxPtr, Val: capVal})
 												ls.b.Emit(&hir.Store{Dst: offset, Val: boxPtr})
+												// Boxed: the wrapper loads through it.
+												capTypes = append(capTypes, lowerType(argType))
 											} else {
 												ls.b.Emit(&hir.Store{Dst: offset, Val: capVal})
+												capTypes = append(capTypes, "ptr")
 											}
 										}
 										ctxVal = ctxPtr
@@ -884,7 +893,7 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 
 									// Generate wrapper
 									wrapperName = fmt.Sprintf("__tgwrap$%s", targetFnName)
-									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures)
+									ls.emitTaskGroupWrapper(wrapperName, targetFnName, numCaptures, capTypes)
 								}
 							} else if fieldExpr, ok := x.Args[0].(*ast.FieldExpr); ok {
 								// Check if this is a bound method: obj.method

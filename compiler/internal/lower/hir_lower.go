@@ -718,7 +718,7 @@ func (ls *lowerState) cur() *scope { return ls.scopes[len(ls.scopes)-1] }
 
 // emitTaskGroupWrapper registers a wrapper function to be emitted.
 // Uses global registry so LLVM backend can emit the wrappers.
-func (ls *lowerState) emitTaskGroupWrapper(wrapperName, targetFnName string, numCaptures int) {
+func (ls *lowerState) emitTaskGroupWrapper(wrapperName, targetFnName string, numCaptures int, capTypes []string) {
 	// Initialize map if needed (for local dedup)
 	if ls.emittedWrappers == nil {
 		ls.emittedWrappers = make(map[string]bool)
@@ -731,7 +731,7 @@ func (ls *lowerState) emitTaskGroupWrapper(wrapperName, targetFnName string, num
 	ls.emittedWrappers[wrapperName] = true
 
 	// Register in global registry for LLVM backend
-	RegisterTGWrapper(wrapperName, targetFnName, numCaptures)
+	RegisterTGWrapper(wrapperName, targetFnName, numCaptures, capTypes)
 }
 
 // ---- lowering ----

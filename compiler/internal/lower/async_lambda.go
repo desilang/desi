@@ -121,6 +121,18 @@ func rewriteStmtForAsyncLambda(s ast.Stmt, mod *ast.Module, synth *[]*ast.FuncDe
 			}
 		}
 		return st
+	case *ast.ForStmt:
+		// A lambda in a for body was left unlifted, so it reached the backend
+		// as a raw LambdaExpr and printed a placeholder into the IR — the
+		// documented `for ...: tg.run(lambda...)` shape died in LLVM with
+		// "expected value token". While and using were walked; for was not.
+		st.Iter = rewriteExprForAsyncLambda(st.Iter, mod, synth, next, info)
+		if st.Body != nil {
+			for i, ss := range st.Body.Stmts {
+				st.Body.Stmts[i] = rewriteStmtForAsyncLambda(ss, mod, synth, next, aliases, info)
+			}
+		}
+		return st
 	default:
 		return st
 	}

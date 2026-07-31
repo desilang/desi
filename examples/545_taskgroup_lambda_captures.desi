@@ -1,0 +1,57 @@
+# tg.run() with a lambda, including captured values, inside a for loop.
+#
+# Two bugs, both in the shape taskgroup.md documents:
+#
+# 1. The lambda-lifting pass walked while and using bodies but not `for`, so a
+#    lambda in a for body was never lifted. It reached the backend as a raw
+#    LambdaExpr and printed "%<expr:*ast.LambdaExpr>" into the IR, which died in
+#    LLVM with "expected value token".
+#
+# 2. Captures reach the task through a context struct, and a primitive is boxed
+#    on the way in. The wrapper loaded every slot as a pointer and passed it
+#    straight through, so a captured int arrived as the *address of its box* —
+#    printing a garbage number. A captured str looked correct only because it
+#    really was a pointer, which is what made this easy to miss.
+#
+# EXPECTED_OUTPUT:
+# a
+# b
+# c
+# 0
+# 10
+# 20
+# no capture
+# captured
+# done
+
+import sync
+
+def main() -> int:
+	# str captures, in a for body
+	let items = ["a", "b", "c"]
+	using tg = sync.TaskGroup():
+		for i in range(len(items)):
+			let item = items[i]
+			tg.run(lambda<none>: print(item))
+		tg.wait()
+
+	# int captures — boxed, so the wrapper has to load through the box
+	using tg2 = sync.TaskGroup():
+		for i in range(3):
+			let n = i * 10
+			tg2.run(lambda<none>: print(str(n)))
+		tg2.wait()
+
+	# no captures at all
+	using tg3 = sync.TaskGroup():
+		tg3.run(lambda<none>: print("no capture"))
+		tg3.wait()
+
+	# a capture from the enclosing scope rather than the loop
+	let msg = "captured"
+	using tg4 = sync.TaskGroup():
+		tg4.run(lambda<none>: print(msg))
+		tg4.wait()
+
+	print("done")
+	return 0
