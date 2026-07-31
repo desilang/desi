@@ -668,6 +668,12 @@ func CollectExports(mod *ast.Module) *Exports {
 					t = types.Str
 				case *ast.BoolLit:
 					t = types.Bool
+				default:
+					// Negation and arithmetic over literals — `-5`, `60 * 60 * 24`.
+					// These were left as Any, so importers printed them as "<?>".
+					if at := ConstArithType(ls.Value); at != nil {
+						t = at
+					}
 				}
 			}
 			// Add to exports

@@ -3,6 +3,8 @@ package lower
 import (
 	"fmt"
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/desilang/desi/compiler/internal/ast"
 	"github.com/desilang/desi/compiler/internal/check"
@@ -110,6 +112,18 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 						// These are heap-allocated pointers, initialized at runtime
 						typ = "ptr"
 						val = "null"
+					case *ast.BinaryExpr:
+						// Arithmetic over literals: `let SECONDS_PER_DAY = 60 * 60 * 24`,
+						// and concatenation: `let BANNER = "desi " + "0.1.0"`.
+						// These have to be folded here, not left to __top__: an
+						// imported module's __top__ only runs when one of its
+						// *functions* is called, so a module that merely reads the
+						// constant saw the "0" placeholder instead of the real value.
+						if fv, ft, ok := foldConstExpr(v); ok {
+							val, typ = fv, ft
+						} else if sv, ok := foldConstStr(v, src); ok {
+							val, typ = sv, "ptr"
+						}
 					}
 				}
 
@@ -144,6 +158,14 @@ func LowerModuleFromSourceWithOptions(mod *ast.Module, info *check.Info, src []b
 			}
 		}
 		fd.Body.Stmts = keptStmts
+	}
+
+	// Globals reached by name through "from X import CONST" are globals too, even
+	// though they were not declared here. Without this they lowered to a bare
+	// %CONST SSA name — an undefined value — because only this module's own
+	// top-level lets were in globalNames.
+	for name := range fromImportedGlobals(info) {
+		globalNames[name] = true
 	}
 
 	for _, d := range mod.Decls {
@@ -612,4 +634,193 @@ func getClassSizeFromTypes(fieldTypes []types.T) int {
 		return 1 // Minimum size
 	}
 	return offset
+}
+
+// constNum is a folded compile-time number. Exactly one of the fields is
+// meaningful, selected by isFloat.
+type constNum struct {
+	i       int64
+	f       float64
+	isFloat bool
+}
+
+func (c constNum) asFloat() float64 {
+	if c.isFloat {
+		return c.f
+	}
+	return float64(c.i)
+}
+
+// foldConstExpr evaluates a numeric expression built only from literals and the
+// arithmetic operators, returning the LLVM initializer text and type. ok is
+// false for anything that is not a compile-time constant, which leaves the
+// caller's placeholder in place.
+//
+// Module-level globals need this because an imported module's __top__ — where
+// the runtime initializer would otherwise run — is only invoked when one of
+// that module's functions is called. A module that just reads the constant
+// never triggers it, so an unfolded initializer read as 0.
+func foldConstExpr(e ast.Expr) (string, string, bool) {
+	c, ok := foldNum(e)
+	if !ok {
+		return "", "", false
+	}
+	if c.isFloat {
+		return formatDouble(c.f), "double", true
+	}
+	return strconv.FormatInt(c.i, 10), "i64", true
+}
+
+func foldNum(e ast.Expr) (constNum, bool) {
+	switch v := e.(type) {
+	case *ast.IntLit:
+		n, err := strconv.ParseInt(strings.ReplaceAll(v.Text, "_", ""), 0, 64)
+		if err != nil {
+			return constNum{}, false
+		}
+		return constNum{i: n}, true
+
+	case *ast.FloatLit:
+		f, err := strconv.ParseFloat(strings.ReplaceAll(v.Text, "_", ""), 64)
+		if err != nil {
+			return constNum{}, false
+		}
+		return constNum{f: f, isFloat: true}, true
+
+	case *ast.UnaryExpr:
+		if v.Op != "-" {
+			return constNum{}, false
+		}
+		c, ok := foldNum(v.X)
+		if !ok {
+			return constNum{}, false
+		}
+		if c.isFloat {
+			return constNum{f: -c.f, isFloat: true}, true
+		}
+		return constNum{i: -c.i}, true
+
+	case *ast.BinaryExpr:
+		lhs, ok := foldNum(v.Lhs)
+		if !ok {
+			return constNum{}, false
+		}
+		rhs, ok := foldNum(v.Rhs)
+		if !ok {
+			return constNum{}, false
+		}
+		return foldBinary(v.Op, lhs, rhs)
+	}
+	return constNum{}, false
+}
+
+func foldBinary(op string, lhs, rhs constNum) (constNum, bool) {
+	// Division and modulo by zero panic at run time; refuse to fold so that
+	// diagnostic is not replaced by a silently wrong constant.
+	if op == "/" || op == "%" {
+		if (rhs.isFloat && rhs.f == 0) || (!rhs.isFloat && rhs.i == 0) {
+			return constNum{}, false
+		}
+	}
+
+	if lhs.isFloat || rhs.isFloat {
+		a, b := lhs.asFloat(), rhs.asFloat()
+		switch op {
+		case "+":
+			return constNum{f: a + b, isFloat: true}, true
+		case "-":
+			return constNum{f: a - b, isFloat: true}, true
+		case "*":
+			return constNum{f: a * b, isFloat: true}, true
+		case "/":
+			return constNum{f: a / b, isFloat: true}, true
+		}
+		return constNum{}, false
+	}
+
+	switch op {
+	case "+":
+		return constNum{i: lhs.i + rhs.i}, true
+	case "-":
+		return constNum{i: lhs.i - rhs.i}, true
+	case "*":
+		return constNum{i: lhs.i * rhs.i}, true
+	case "/":
+		return constNum{i: lhs.i / rhs.i}, true
+	case "%":
+		return constNum{i: lhs.i % rhs.i}, true
+	}
+	return constNum{}, false
+}
+
+// formatDouble renders a float64 as an LLVM double initializer. LLVM rejects an
+// integer-looking token for a floating-point type, so a decimal point is always
+// present.
+func formatDouble(f float64) string {
+	s := strconv.FormatFloat(f, 'f', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
+	}
+	return s
+}
+
+// fromImportedGlobals returns the local names bound by "from X import CONST"
+// statements that name an exported global rather than a func, class or alias.
+//
+// The name is looked up across every module's exports rather than only the one
+// FromItems records for it: two "from consts import …" statements load that
+// module twice, so the *ast.Module in FromItems is not always the pointer
+// LazyModules holds for the same path. Matching by name mirrors how
+// check.injectImports resolves imported classes and type aliases.
+func fromImportedGlobals(info *check.Info) map[string]bool {
+	out := map[string]bool{}
+	if info == nil || info.R == nil {
+		return out
+	}
+	for name := range info.R.FromItems {
+		for _, ex := range info.R.ModuleExports {
+			if ex == nil {
+				continue
+			}
+			if _, isGlobal := ex.Globals[name]; isGlobal {
+				out[name] = true
+				break
+			}
+		}
+	}
+	return out
+}
+
+// foldConstStr concatenates an expression built only from string literals joined
+// by '+', returning the unescaped text. ok is false for anything else.
+//
+// The literal's text comes from the same two places the StrLit case above uses:
+// Value when the parser kept it, otherwise a re-scan of the source span.
+func foldConstStr(e ast.Expr, src []byte) (string, bool) {
+	switch v := e.(type) {
+	case *ast.StrLit:
+		if v.Value != "" {
+			return unescapeString(v.Value), true
+		}
+		if src != nil {
+			if text, ok := scanStringLiteral(src, v.Span.Start.Line, v.Span.Start.Col, v.Long); ok {
+				return unescapeString(text), true
+			}
+		}
+		return "", false
+	case *ast.BinaryExpr:
+		if v.Op != "+" {
+			return "", false
+		}
+		lhs, ok := foldConstStr(v.Lhs, src)
+		if !ok {
+			return "", false
+		}
+		rhs, ok := foldConstStr(v.Rhs, src)
+		if !ok {
+			return "", false
+		}
+		return lhs + rhs, true
+	}
+	return "", false
 }

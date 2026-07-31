@@ -75,10 +75,31 @@ func injectImports(top *Scope, info *resolve.Info) {
 			}
 		}
 
-		if isTypeAlias && aliasType != nil {
+		// Check if it's an exported global constant (e.g. "from config import MAX_RETRIES").
+		// Without this the name fell through to the SymFunc case below and was
+		// bound with no type at all, so reading it gave DTE0004 on a binding and
+		// printed "<?>" inside an f-string.
+		isGlobal := false
+		var globalType types.T
+		if mod != nil && info.ModuleExports != nil {
+			for _, ex := range info.ModuleExports {
+				if ex != nil && ex.Globals != nil {
+					if t, ok := ex.Globals[local]; ok && t != nil {
+						isGlobal = true
+						globalType = t
+						break
+					}
+				}
+			}
+		}
+
+		switch {
+		case isTypeAlias && aliasType != nil:
 			// Register as SymType so resolveType scope lookup finds it
 			top.Define(&Symbol{Name: local, Kind: SymType, Type: aliasType})
-		} else {
+		case isGlobal:
+			top.Define(&Symbol{Name: local, Kind: SymVar, Type: globalType})
+		default:
 			// Register as SymFunc for function imports
 			top.Define(&Symbol{Name: local, Kind: SymFunc})
 		}
@@ -156,6 +177,11 @@ func injectGlobals(top *Scope, mod *ast.Module) []diag.Diagnostic {
 					t = types.Bool
 				case *ast.NoneLit:
 					t = types.None
+				case *ast.BinaryExpr:
+					// Arithmetic over literals: `let SECONDS_PER_DAY = 60 * 60 * 24`.
+					// Inferring only from a bare literal left these as Any, which
+					// showed up as "<?>" once the constant crossed a module boundary.
+					t = resolve.ConstArithType(v)
 				case *ast.UnaryExpr:
 					// Handle negative numbers: -100, -3.14
 					if v.Op == "-" {

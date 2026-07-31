@@ -1,13 +1,19 @@
 # EXPECTED: COMPILE_ERROR
 # Test: Importing non-pub global should fail
+#
+# The import used to name the numbered helper, which cannot parse as a module
+# path at all — an identifier may not start with a digit — so this satisfied its
+# COMPILE_ERROR expectation on a parse error and never reached the visibility
+# check it was written for.
 
-from 230_c_global_visibility_helper import PUB_CONST, PRIVATE_CONST
+from global_visibility_helper import PUB_CONST
+from global_visibility_helper import PRIVATE_CONST
 
 def main() -> int:
-	# PUB_CONST should work
+	# PUB_CONST is exported, so this line is fine.
 	print(f"Pub: {PUB_CONST}")
-	
-	# PRIVATE_CONST should cause compile error
+
+	# PRIVATE_CONST is not exported — the import above is the error.
 	print(f"Private: {PRIVATE_CONST}")
-	
+
 	return 0

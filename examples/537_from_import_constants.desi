@@ -1,0 +1,58 @@
+# `from module import CONSTANT` reaches an exported constant, and a constant
+# whose initializer is arithmetic holds the value it was written with.
+#
+# Regression guard, two separate faults that combined into one silently wrong
+# program. 535_module_constants covers the module-qualified form; this covers
+# the `from` form and the initializer.
+#
+# 1. The `from` import never worked for constants. The resolver validated the
+#    requested name against the exported funcs, classes and type aliases but
+#    not the globals, so `from config import MAX_RETRIES` — which
+#    global-constants.md documents as working — always reported DME0003. Two
+#    more gaps sat behind it: the checker bound the name as an untyped function
+#    symbol, so binding it gave DTE0004 and printing it gave "<?>", and the
+#    lowerer left it as a bare %NAME SSA value that LLVM rejected as undefined.
+#
+# 2. Only a literal initializer produced a value. Anything else — `30 * 1000` —
+#    was left for the module's __top__ to compute at run time, but an imported
+#    module's __top__ only runs when one of its *functions* is called. A module
+#    that merely read the constant saw the "0" placeholder, so TIMEOUT_MS
+#    silently arrived as 0 rather than 30000. Unannotated ones were worse in a
+#    quieter way: they exported as Any and printed as "<?>". Both numeric
+#    arithmetic and '+' over string literals are folded now, so BANNER is a
+#    guard against the string half regressing on its own.
+#
+# The privacy rule is unchanged: a non-pub global is still not importable,
+# which is what 230_c_global_privacy checks.
+#
+# EXPECTED_OUTPUT:
+# MyApp
+# 3
+# 30000
+# 86400
+# 50
+# 3.0
+# desi 0.1.0
+# 86400
+from config_constants_helper import APP_NAME
+from config_constants_helper import MAX_RETRIES, TIMEOUT_MS
+from config_constants_helper import SECONDS_PER_DAY, GRID, RATIO, BANNER
+
+import config_constants_helper
+
+def main() -> int:
+	print(APP_NAME)
+	print(str(MAX_RETRIES))
+
+	# Arithmetic initializers: annotated, unannotated, parenthesised, float.
+	print(str(TIMEOUT_MS))
+	print(str(SECONDS_PER_DAY))
+	print(str(GRID))
+	print(str(RATIO))
+
+	# Concatenation of two string literals.
+	print(BANNER)
+
+	# The module-qualified form must agree with the imported name.
+	print(str(config_constants_helper.SECONDS_PER_DAY))
+	return 0

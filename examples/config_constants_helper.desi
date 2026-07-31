@@ -1,0 +1,15 @@
+# Helper module for 537_from_import_constants.desi.
+#
+# Deliberately mixes annotated and unannotated constants, and initializers that
+# are arithmetic rather than a bare literal.
+
+pub let MAX_RETRIES = 3
+pub let APP_NAME = "MyApp"
+pub let TIMEOUT_MS: int = 30 * 1000
+pub let SECONDS_PER_DAY = 60 * 60 * 24
+pub let GRID = (2 + 3) * 10
+pub let RATIO = 1.5 * 2.0
+pub let BANNER = "desi " + "0.1.0"
+
+# Not exported — importing this must still be an error.
+let INTERNAL_KEY = "abc"

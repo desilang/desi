@@ -1,0 +1,11 @@
+# Helper module for 230_c_global_privacy.desi.
+#
+# Named without a leading digit on purpose: "from 230_c_... import X" cannot
+# parse, because a module path is made of identifiers and an identifier may not
+# start with a digit. The privacy test used to import the numbered helper, so it
+# satisfied its "# EXPECTED: COMPILE_ERROR" on a parse error and never reached
+# the visibility check it was written for.
+
+pub let PUB_CONST = 100
+
+let PRIVATE_CONST = 200

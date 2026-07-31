@@ -477,8 +477,8 @@
     },
     "bad_import": {
       "id": "DME0003",
-      "title": "invalid import path",
-      "help": "Use dotted names like 'foo.bar'; no spaces or invalid characters."
+      "title": "name is not exported by that module",
+      "help": "check the spelling, and mark the declaration 'pub' in the module that defines it"
     },
     "io_read": {
       "id": "DME0004",

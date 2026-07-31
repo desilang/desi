@@ -210,6 +210,10 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 					for name := range ex.TypeAliases {
 						info.FromItems[name] = tmod
 					}
+					// Import all exported globals
+					for name := range ex.Globals {
+						info.FromItems[name] = tmod
+					}
 				}
 				info.Graph.AddEdge(srcModule, actualPath)
 				// Track for lazy initialization
@@ -239,7 +243,10 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 						info.FromItemPaths[local] = it.Name.Name
 					}
 				}
-				// Validate that the requested item exists among exported funcs or classes.
+				// Validate that the requested item exists among the exported funcs,
+				// classes, type aliases or globals. Globals were missing here, so
+				// "from config import MAX_RETRIES" — which global-constants.md
+				// documents as working — always reported DME0003.
 				if ex != nil {
 					// For nested imports like Container.Item, check the first segment
 					var rootName string
@@ -249,7 +256,8 @@ func resolveImportsRecursive(mod *ast.Module, srcModule string, ldr Loader, info
 						rootName = it.Name.Name
 					}
 					if rootName != "" {
-						if len(ex.Funcs[rootName]) == 0 && ex.Classes[rootName] == nil && ex.TypeAliases[rootName] == nil {
+						_, isGlobal := ex.Globals[rootName]
+						if len(ex.Funcs[rootName]) == 0 && ex.Classes[rootName] == nil && ex.TypeAliases[rootName] == nil && !isGlobal {
 							msg := actualPath + " has no exported '" + rootName + "'"
 							*diags = append(*diags, diagAt("DME0003", it.Span, msg))
 						}
