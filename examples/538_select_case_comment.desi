@@ -1,0 +1,37 @@
+# A `select` case body may open with a comment.
+#
+# Regression guard: it could not. A comment-only line emits a newline of its
+# own, and the Indent that opens the body arrives only after it. The case and
+# default paths accepted Indent immediately, so a body starting with a comment
+# was read as empty — and its statements were then parsed as a stray entry in
+# the select block, reported as "expected 'case' or 'default'" (DPE0002).
+#
+# Commenting the first line of a case is ordinary, and the concurrency docs did
+# it in three places, so every one of those examples was uncompilable.
+#
+# EXPECTED_OUTPUT:
+# Got from ch1
+# Select test done!
+
+def main() -> int:
+	let ch1 = channel_new(10)
+	let ch2 = channel_new(10)
+
+	using tx1 = ch1.sender():
+		using rx1 = ch1.receiver():
+			using rx2 = ch2.receiver():
+				tx1.send(111)
+
+				select:
+					case msg = rx1.try_recv():
+						# A comment as the very first line of the body.
+						print("Got from ch1")
+					case rx2.try_recv():
+						# Comments in a non-taken case too.
+						print("Got from ch2")
+					default:
+						# And in the default arm.
+						print("Nothing ready")
+
+	print("Select test done!")
+	return 0

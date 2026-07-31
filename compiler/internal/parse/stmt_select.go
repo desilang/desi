@@ -53,7 +53,11 @@ func (p *Parser) parseSelect() *ast.SelectStmt {
 				p.syncStmt()
 				continue
 			}
-			// Parse default body as block
+			// Parse default body as block. Skip blank and comment-only lines
+			// first: each leaves a newline of its own, and the Indent arrives
+			// only after them, so a body that opens with a comment used to be
+			// dropped and its statements then read as a stray 'case'.
+			p.skipNLs()
 			if p.accept(token.Indent) {
 				defaultBody = p.parseBlockStmts()
 				if p.cur.Tok == token.Dedent {
@@ -90,8 +94,9 @@ func (p *Parser) parseSelect() *ast.SelectStmt {
 				continue
 			}
 
-			// Parse case body
+			// Parse case body — see the note on the default body above.
 			var body []ast.Stmt
+			p.skipNLs()
 			if p.accept(token.Indent) {
 				body = p.parseBlockStmts()
 				if p.cur.Tok == token.Dedent {
