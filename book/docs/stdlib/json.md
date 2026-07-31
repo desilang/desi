@@ -173,12 +173,12 @@ elif json.is_string(val):
 
 ```desi
 let arr = json.parse("[1, 2, 3, 4, 5]")
-let len = json.array_len(arr)
-let i = 0
-while i < len:
+let count = json.array_len(arr)
+let mut i = 0
+while i < count:
     let elem = json.array_get(arr, i)
     print(json.get_int(elem))
-    i = i + 1
+    i := i + 1
 ```
 
 ## Serialization

@@ -128,10 +128,10 @@ For simple checks, `is` is more concise than `match`:
 if opt is Some(val):
     use(val)
 
-# Equivalent match expression
-match opt:
-    Option.Some(val) => use(val)
-    _ => pass
+# Equivalent match expression — arms are `pattern: expression`, not `=>`
+let result = match opt:
+    Option.Some(val): use(val)
+    _: 0
 ```
 
 Use `match` when you need exhaustive pattern matching or multiple cases.

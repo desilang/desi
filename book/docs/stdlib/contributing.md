@@ -66,7 +66,7 @@ int __mymod_add(int a, int b) {
 
 Follow this exact pattern — extern declarations at top, pub def wrappers below:
 
-```python
+```desi
 # mymod module — description
 #
 # Usage:
@@ -144,7 +144,7 @@ Common POSIX/C names that need mangling: `getcwd`, `chdir`, `getpid`, `setenv`, 
 
 Create `examples/<NNN>_<module>_module.desi` with `# EXPECTED_OUTPUT:` comments:
 
-```python
+```desi
 import mymod
 
 def main() -> int:

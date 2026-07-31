@@ -6,7 +6,7 @@ Desi supports **generic functions and types** that work with any type. In most c
 
 Desi uses the **turbofish** syntax to specify generic type arguments explicitly:
 
-```python
+```desi
 # Type inference - Desi figures out the type
 let x = identity(42)        # identity::<int> inferred
 
@@ -19,13 +19,13 @@ let y = identity::<str>("hello")
 You might wonder why we use `::<>` instead of just `<>`. The answer is **clarity**.
 
 In expressions, `<` and `>` are comparison operators:
-```python
+```desi
 if x < 10:    # Less than comparison
     pass
 ```
 
 Using `::` before `<>` makes it unambiguous that we're specifying types, not comparing values:
-```python
+```desi
 identity::<int>(42)   # Clearly a type argument
 x < y > z             # Clearly a comparison chain
 ```
@@ -36,7 +36,7 @@ This design choice prioritizes **readable, unambiguous code** and follows the sa
 
 ### Generic Functions
 
-```python
+```desi
 def identity<T>(x: T) -> T:
     return x
 
@@ -49,7 +49,7 @@ let b = identity::<str>("hello")
 
 ### Generic Structs
 
-```python
+```desi
 struct Box<T>:
     value: T
 
@@ -59,7 +59,7 @@ let box = Box::<int>(value=42)
 
 ### Multiple Type Arguments
 
-```python
+```desi
 struct Pair<A, B>:
     first: A
     second: B
@@ -70,7 +70,7 @@ let pair = Pair::<int, str>(first=10, second="hello")
 ## When to Use Turbofish
 
 **Use type inference** (no turbofish) when Desi can figure out the types:
-```python
+```desi
 let x = identity(42)  # int inferred from 42
 ```
 
@@ -90,7 +90,7 @@ constructor's arguments don't mention every type parameter — inference reads
 them off the arguments, so a `__new__` that takes none leaves nothing to infer
 from:
 
-```python
+```desi
 class Stack<T>:
     pub mut items: list<T>
 
@@ -112,7 +112,7 @@ parameter`.
 Each instantiation is independent, so one class can be used at several types in
 the same program:
 
-```python
+```desi
 let ints = Stack::<int>()
 let names = Stack::<str>()
 ```
@@ -120,7 +120,7 @@ let names = Stack::<str>()
 Where the arguments do carry the type, inference is enough and turbofish is
 just noise:
 
-```python
+```desi
 class Pair<A, B>:
     pub mut left: A
     pub mut right: B

@@ -40,12 +40,17 @@ This list matches `keywordToken` in `compiler/internal/lex/scanner.go`.
 | `for` | For loop |
 | `while` | While loop |
 | `match` | Pattern matching |
-| `break` | Break loop |
-| `continue` | Continue loop |
+| `break` | Leave the innermost loop |
+| `continue` | Skip to the next iteration of the innermost loop |
 | `return` | Return value |
 | `pass` | No-op statement |
 | `defer` | Run a statement when the scope exits, in reverse order |
 | `using` | Resource management — scope-bound cleanup |
+
+!!! note "There is no `loop:`"
+    `break` and `continue` apply to the innermost enclosing `for` or `while`.
+    For an unbounded loop, write `while true:`. Using either outside a loop is
+    `DTE0130`.
 
 !!! note "Match arms take no `case`"
     Arms are written as `Pattern: body` directly. `case` is not reserved, and

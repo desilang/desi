@@ -35,13 +35,15 @@ def safe_divide(a: int, b: int) -> int:
 
 ## Future: Result Types
 
-In future versions, Desi may offer a `checked_div` function:
-```desi
-# Future syntax
-let result = checked_div(10, 0)  # Returns Result[int, DivError]
-match result:
-    case Ok(v): print(v)
-    case Err(e): print(e)
+In future versions, Desi may offer a `checked_div` function. This is a sketch,
+not working code:
+
+```text
+let result = checked_div(10, 0)   # Returns Result<int, DivError>
+let msg = match result:
+    Result.Ok(v): str(v)
+    Result.Err(e): e
+print(msg)
 ```
 
 ## See Also

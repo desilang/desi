@@ -53,11 +53,11 @@ To access the value, you must call `.upgrade()` to check if it's still alive. Th
 ```desi
 let w = weak(r)
 
-match w.upgrade():
-    Some(strong):
-        print("Value is alive: " + str(strong.get()))
-    Nothing:
-        print("Value has been deallocated!")
+let status = match w.upgrade():
+    Option.Some(strong): "Value is alive: " + str(strong.get())
+    Option.Nothing: "Value has been deallocated!"
+
+print(status)
 ```
 
 ## Full Lifecycle Example

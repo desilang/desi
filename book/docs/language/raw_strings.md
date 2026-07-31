@@ -4,7 +4,7 @@ Raw strings are string literals where escape sequences are **not processed**. Th
 
 ## Syntax
 
-```python
+```desi
 # Basic raw string
 let s = r"hello\nworld"  # Contains literal backslash-n, not a newline
 
@@ -18,18 +18,18 @@ let nested = r##"Use r#"..."# for raw"##
 ## Use Cases
 
 ### Regex Patterns
-```python
+```desi
 let phone_pattern = r"\d{3}-\d{3}-\d{4}"
 let email_pattern = r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
 ```
 
 ### File Paths (Windows)
-```python
+```desi
 let path = r"C:\Users\desi\Documents\project"
 ```
 
 ### JSON Templates
-```python
+```desi
 let json = r#"{"name": "value", "count": 42}"#
 ```
 
@@ -49,7 +49,7 @@ In raw strings, **ALL** escape sequences are literal:
 
 Use hash delimiters when you need to include quotes or the `"#` pattern in your string:
 
-```python
+```desi
 # Need to include a quote? Use one hash:
 r#"Say "hi""#
 
@@ -61,7 +61,7 @@ r##"Pattern: "#..."##
 
 ## Edge Cases
 
-```python
+```desi
 # Empty raw string
 let empty = r""
 

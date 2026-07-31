@@ -34,10 +34,10 @@ desic watch -v .      # Verbose mode
 
 ```desi
 if is_reload():
-    match read_state():
-        case Some(json):
-            restore_from_json(json)
-            delete_state()
+    let saved = read_state()
+    if saved is Some(json):
+        restore_from_json(json)
+        delete_state()
 else:
     print("First run")
 ```

@@ -53,15 +53,17 @@ let doubled = numbers.map(lambda<int> x: int: x * 2)
 let evens = numbers.filter(lambda<bool> x: int: x % 2 == 0)
 # evens = [2, 4]
 
-# Chain transformations
-let result = numbers.map(lambda<int> x: int: x * 2)
-                    .filter(lambda<bool> x: int: x > 5)
+# Chain transformations — an expression cannot be split across lines
+let result = numbers.map(lambda<int> x: int: x * 2).filter(lambda<bool> x: int: x > 5)
 # result = [6, 8, 10]
 
 # Pipe syntax also works
-let piped = numbers |> map(lambda<int> x: int: x * 2)
-                   |> filter(lambda<bool> x: int: x > 5)
+let piped = numbers |> map(lambda<int> x: int: x * 2) |> filter(lambda<bool> x: int: x > 5)
 ```
+
+!!! note "One expression, one line"
+    Desi has no line-continuation. A chain or pipeline has to stay on a single
+    line; bind an intermediate result to a name when it gets long.
 
 > **See also**: [Built-in Functions](builtins.md) for functional-style `map()` and `filter()`
 

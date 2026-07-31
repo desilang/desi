@@ -117,17 +117,32 @@ for c in coords:
 
 > **Note**: Iteration only works when all elements have the same type.
 
-## Named Tuples
+## Named Fields
 
-Add field names for clarity:
+Tuple elements are positional — a tuple type cannot name its fields. This does
+**not** parse:
+
+```text
+type Point = (x: int, y: int)
+```
+
+When the fields deserve names, use a class:
 
 ```desi
-type Point = (x: int, y: int)
+class Point:
+    pub x: int
+    pub y: int
 
-let p: Point = (x=10, y=20)
-print(p.x)  # 10
-print(p.y)  # 20
+    pub def __new__(self, x: int, y: int):
+        self.x = x
+        self.y = y
+
+let p = Point(10, 20)
+print(str(p.x))  # 10
+print(str(p.y))  # 20
 ```
+
+See [Known Limitations](../reference/known-limitations.md).
 
 ## Function Returns
 

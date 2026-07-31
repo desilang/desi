@@ -24,8 +24,8 @@ print(resp.body)
 ### POST
 
 ```desi
-# With a string body
-let resp = http.post("https://api.example.com/users", '{"name": "alice"}')
+# With a string body — a raw string keeps the JSON quotes readable
+let resp = http.post("https://api.example.com/users", r#"{"name": "alice"}"#)
 
 # With auto-JSON serialization
 let resp = http.post_json("https://api.example.com/users", {"name": "alice", "age": 30})
@@ -34,8 +34,8 @@ let resp = http.post_json("https://api.example.com/users", {"name": "alice", "ag
 ### PUT / PATCH
 
 ```desi
-let resp = http.put("https://api.example.com/users/1", '{"name": "bob"}')
-let resp = http.patch("https://api.example.com/users/1", '{"name": "bob"}')
+let resp = http.put("https://api.example.com/users/1", r#"{"name": "bob"}"#)
+let resp = http.patch("https://api.example.com/users/1", r#"{"name": "bob"}"#)
 
 # With auto-JSON serialization
 let resp = http.put_json("https://api.example.com/users/1", {"name": "bob"})
@@ -58,7 +58,7 @@ Use `request()` for full control over method, body, and headers:
 let resp = http.request(
     "POST",
     "https://api.example.com/data",
-    '{"key": "value"}',
+    r#"{"key": "value"}"#,
     "Authorization: Bearer my-token\r\nContent-Type: application/json\r\n"
 )
 ```
@@ -184,7 +184,7 @@ Return responses from your handler:
 return http.text(200, "Hello!")
 
 # JSON from a string
-return http.json_text(200, '{"status": "ok"}')
+return http.json_text(200, r#"{"status": "ok"}"#)
 
 # JSON from a dict (auto-serialized)
 return http.json(200, {"name": "alice", "age": 30})

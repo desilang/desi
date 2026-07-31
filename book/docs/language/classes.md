@@ -4,7 +4,7 @@ Classes in Desi provide object-oriented programming with Python-like syntax and 
 
 ## Basic Syntax
 
-```desi
+```text
 class ClassName:
     # Fields
     pub field_name: Type
@@ -49,14 +49,14 @@ class Point:
 
 === "Immutable Field"
     ```desi
-    pub x: int
-    # Can only be set during construction
+    class Point:
+        pub x: int   # Can only be set during construction
     ```
 
 === "Mutable Field"
     ```desi
-    pub mut x: int
-    # Can be modified after construction
+    class Counter:
+        pub mut x: int   # Can be modified after construction
     ```
 
 ### Visibility
@@ -602,10 +602,9 @@ class Person:
     pub age: int
     pub email: str
     
+    # Desi has no line-continuation, so the condition stays on one line.
     pub def __eq__(self, other: Person) -> bool:
-        return self.name == other.name and 
-               self.age == other.age and
-               self.email == other.email
+        return self.name == other.name and self.age == other.age and self.email == other.email
     
     pub def __repr__(self) -> str:
         return f"Person(name={self.name}, age={self.age})"

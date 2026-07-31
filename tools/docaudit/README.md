@@ -49,9 +49,17 @@ Parse errors still need triage into three kinds:
 
 ## Baseline
 
-887 blocks · 164 complete programs · 723 fragments · **74 parse failures
-remaining**, down from 124.
+916 blocks · 172 complete programs · 744 fragments · **0 parse failures**, down
+from 124 → 74 → 0.
 
-The remaining failures need triage into the three kinds above before they are
-treated as a defect count — sampling showed all three are represented, and no
-single construct accounts for more than two of them.
+Keep it at zero. A new parse failure means either the page is wrong or the
+compiler changed under it; both are worth knowing before a release.
+
+### Only ` ```desi ` blocks are checked
+
+Six pages had Desi code fenced as ` ```python `, so 38 blocks were invisible to
+this tool — `match.md` among them, which meant the whole match reference went
+unchecked. They are labelled ` ```desi ` now. If you add a page, fence Desi as
+`desi`, and reserve ` ```text ` for content that is deliberately not
+compilable — schematic placeholders, compiler-internal names containing `$`,
+hypothetical future syntax, and examples whose point is that they fail.

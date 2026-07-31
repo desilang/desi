@@ -17,7 +17,7 @@ if 99 in nums:
 ## With Sets
 
 ```desi
-let colors = {"red", "green", "blue"}
+let colors = #{"red", "green", "blue"}
 
 if "red" in colors:
     print("Red is in the set")
@@ -76,11 +76,15 @@ if 99 in s:
 
 ## Negation
 
-Use `not` to check absence:
+Negate the whole membership test with `not`:
 
 ```desi
 let nums = [1, 2, 3]
 
-if 5 not in nums:
+if not (5 in nums):
     print("5 is not in the list")
 ```
+
+!!! note "There is no `not in` operator"
+    Python's `x not in y` is not Desi syntax. Write `not (x in y)` — the
+    parentheses are required, because `not` binds tighter than `in`.

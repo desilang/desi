@@ -65,12 +65,12 @@ Use `recv()` to receive a value:
 ```desi
 let receiver = ch.receiver()
 
-# recv returns Option[T]: Some(value) or Nothing if closed
-match receiver.recv():
-    Option.Some(value):
-        print("Received: " + str(value))
-    Option.Nothing:
-        print("Channel closed")
+# recv returns Option<T>: Some(value) or Nothing if closed
+let msg = match receiver.recv():
+    Option.Some(value): "Received: " + str(value)
+    Option.Nothing: "Channel closed"
+
+print(msg)
 ```
 
 ### Blocking Behavior
@@ -79,13 +79,11 @@ match receiver.recv():
 - `try_recv()` returns immediately (non-blocking)
 
 ```desi
-# Non-blocking receive
-match receiver.try_recv():
-    Option.Some(value):
-        process(value)
-    Option.Nothing:
-        # Nothing available right now
-        pass
+# Non-blocking receive. Each arm is a single expression, so a branch that needs
+# several statements calls a function.
+let handled = match receiver.try_recv():
+    Option.Some(value): process(value)
+    Option.Nothing: nothing_available()
 ```
 
 ## Closing a Channel
@@ -137,14 +135,15 @@ async def producer(sender: Sender):
         sender.send(i)
     # Sender dropped when function returns
 
-# Consumer task
+# Consumer task.
+# A match arm is a single expression, so the Option is tested with if instead —
+# `break` is a statement and cannot appear in an arm.
 async def consumer(receiver: Receiver):
-    loop:
-        match receiver.recv():
-            Option.Some(value):
-                process(value)
-            Option.Nothing:
-                break  # Channel closed
+    while true:
+        let msg = receiver.recv()
+        if msg.is_nothing():
+            break                # Channel closed
+        process(msg.unwrap())
 ```
 
 ### Work Queue

@@ -63,6 +63,18 @@ from config import MAX_RETRIES  # Works
 from config import INTERNAL_KEY # Error: not public
 ```
 
+Either import form reaches an exported constant:
+
+```desi
+from config import MAX_RETRIES
+print(str(MAX_RETRIES))
+```
+
+```desi
+import config
+print(str(config.MAX_RETRIES))
+```
+
 ## Supported Types
 
 ```desi
@@ -79,6 +91,33 @@ let BOOL_VAL = true
 # Strings
 let STR_VAL = "Hello"
 ```
+
+## Computed Values
+
+An initializer may be arithmetic over numeric literals, or `+` over string
+literals. It is folded at compile time, so the constant is usable from other
+modules like any other:
+
+```desi
+let SECONDS_PER_DAY = 60 * 60 * 24   # 86400
+let TIMEOUT_MS: int = 30 * 1000      # 30000
+let AREA = (2 + 3) * 10              # 50
+let RATIO = 1.5 * 2.0                # 3.0
+let BANNER = "desi " + "0.1.0"       # "desi 0.1.0"
+```
+
+Anything that has to run to produce its value — a function call, a
+constructor — is not a constant expression:
+
+```desi
+let LIMIT = compute_limit()   # Not a constant
+```
+
+!!! warning "Call the function where you use it"
+    A global initialized by a function call is only initialized when the module
+    that declares it runs. Importing such a constant does not run it, and the
+    link fails with an undefined symbol. Put the call in a function and call it
+    from `main`, or write the value out as a literal.
 
 ## Using in F-Strings
 

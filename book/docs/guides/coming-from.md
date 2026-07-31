@@ -91,13 +91,13 @@ if err != nil {
 ```
 
 ```desi
-# Desi: Result<T, E>
+# Desi: Result<T, E>. A match arm is a single expression.
 let content = fs.read("data.txt")
-match content:
-    Ok(data):
-        print(data)
-    Err(e):
-        print(f"Error: {e}")
+let text = match content:
+    Result.Ok(data): data
+    Result.Err(e): f"Error: {e}"
+
+print(text)
 
 # Or use the ? operator (propagates errors)
 let data = fs.read("data.txt")?
@@ -115,9 +115,9 @@ msg := <-ch
 ```
 
 ```desi
-# Desi
-let ch = Channel<str>()
-spawn lambda:
+# Desi — turbofish on the constructor, and spawn takes a block
+let ch = Channel::<str>(1)
+spawn:
     ch.send("hello")
 let msg = ch.recv()
 ```
@@ -133,7 +133,7 @@ Desi shares Rust's safety model but with Python's syntax.
 | Rust | Desi |
 |------|------|
 | `let x = 10;` | `let x = 10` |
-| `let mut x = 10;` | `var x = 10` |
+| `let mut x = 10;` | `let mut x = 10` |
 | `fn greet(name: &str) -> String` | `def greet(name: str) -> str:` |
 | `Option<T>` | `Option<T>` |
 | `Result<T, E>` | `Result<T, E>` |
@@ -167,12 +167,10 @@ match shape {
 ```
 
 ```desi
-# Desi
-match shape:
-    Shape.Circle(r):
-        3.14159 * r * r
-    Shape.Rect(w, h):
-        w * h
+# Desi — arms are expressions, so no block and no trailing commas
+let area = match shape:
+    Shape.Circle(r): 3.14159 * r * r
+    Shape.Rect(w, h): w * h
 ```
 
 ### Generics

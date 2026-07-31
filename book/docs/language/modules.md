@@ -4,7 +4,7 @@ Desi uses a file-based module system similar to Python.
 
 ## Import Syntax
 
-```python
+```desi
 # Import entire module
 import math
 
@@ -29,7 +29,7 @@ from std.math import add
 
 By default, items are **private**. Use `pub` to export:
 
-```python
+```desi
 # Private - only visible in this file
 def helper():
     pass
@@ -48,7 +48,7 @@ class Point:
 
 Use `pub from` to re-export items as part of your module's public API:
 
-```python
+```desi
 # mylib.desi - re-export print for users of mylib
 pub from io import print
 pub from math import add, sub
@@ -79,12 +79,12 @@ from foo import hello   # Creates a cycle
 ```
 
 ### Reserved Namespace (DME0009)
-```python
+```desi
 import std   # ❌ 'std' is reserved for stdlib
 ```
 
 ### Shadowing Stdlib (DME0010)
-```python
+```desi
 # If you have local math.desi AND stdlib has math:
 from math import add   # ❌ Local shadows stdlib
 from std.math import add  # ✓ Use this instead
@@ -102,7 +102,7 @@ from foo import bar   # ❌ Ambiguous, remove one
 
 Imports are **lazy by default** — modules initialize only when first used:
 
-```python
+```desi
 import log
 import math
 

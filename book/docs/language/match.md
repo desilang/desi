@@ -4,7 +4,7 @@ Match expressions let you test a value against multiple patterns and execute cod
 
 ## Quick Start
 
-```python
+```desi
 let day = 2
 let name = match day:
     1: "Monday"
@@ -17,7 +17,7 @@ print(name)  # Tuesday
 
 ## Boolean Matching
 
-```python
+```desi
 let is_admin = true
 let access = match is_admin:
     true: "full access"
@@ -26,7 +26,7 @@ let access = match is_admin:
 
 ## Number Matching
 
-```python
+```desi
 let score = 85
 let grade = match score:
     100: "A+"
@@ -39,7 +39,7 @@ let grade = match score:
 
 The most powerful use of match is with enums:
 
-```python
+```desi
 enum Status:
     Pending: none
     Running: int
@@ -58,7 +58,7 @@ print(msg)  # running job 42
 
 Extract values from enum payloads:
 
-```python
+```desi
 let result: Option[int] = Option.Some(42)
 
 match result:
@@ -76,7 +76,7 @@ let message = match res:
 
 Matches anything - use as a default case:
 
-```python
+```desi
 let x = 99
 let label = match x:
     0: "zero"
@@ -86,7 +86,7 @@ let label = match x:
 
 Ignore bindings you don't need:
 
-```python
+```desi
 match status:
     Running(_): "running (don't care about ID)"
     _: "other"
@@ -96,7 +96,7 @@ match status:
 
 Match works with classes inside Option/Result:
 
-```python
+```desi
 class Point:
     pub mut x: int
     pub mut y: int
@@ -111,7 +111,7 @@ match opt:
 
 Match returns a value, so you can use it anywhere:
 
-```python
+```desi
 # In variable assignment
 let msg = match success:
     true: "It worked!"
@@ -124,7 +124,7 @@ let msg = match success:
 
 Add conditions to patterns with `if`:
 
-```python
+```desi
 let x = 50
 let result = match x:
     n if n > 100: "large"
@@ -142,7 +142,7 @@ match opt:
 
 Match on nested enums:
 
-```python
+```desi
 let nested: Option[Option[int]] = Option.Some(Option.Some(42))
 match nested:
     Some(Some(v)): print(f"value: {v}")
@@ -154,7 +154,7 @@ match nested:
 
 Match on struct fields:
 
-```python
+```desi
 struct Point:
     pub x: int
     pub y: int

@@ -831,7 +831,9 @@
       "id": "DSY0010",
       "title": "type does not satisfy trait bound",
       "help": "The type argument does not implement the required trait. Ensure the type implements the trait or use a compatible type."
-    },
+    }
+  },
+  "orm": {
     "orm_unknown_field": {
       "id": "DORM0001",
       "title": "unknown ORM field",

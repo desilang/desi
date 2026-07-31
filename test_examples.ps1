@@ -194,9 +194,10 @@ foreach ($testFile in $testFiles) {
     # Check if test should be skipped (search first 5 lines)
     $first5Lines = Get-Content $testFile.FullName -TotalCount 5 -Encoding UTF8
     # "# REQUIRES: database" tests need a live PostgreSQL/MySQL and only run
-    # when DESI_DB_TESTS=1 says the servers are available. Note this is
-    # additionally moot on Windows today: compiler/runtime/db/*.c is not built
-    # there, so the db module does not link.
+    # when DESI_DB_TESTS=1 says the servers are available. build.ps1 does build
+    # compiler/runtime/db/*.c, so the db module links on Windows; what it lacks
+    # is TLS, because no OpenSSL include path is passed. Point PG_HOST/MYSQL_HOST
+    # at a server that does not require TLS — see the wsl-db-test-rig notes.
     $needsDb = $first5Lines | Where-Object { $_ -match "# REQUIRES: database" }
     if ($needsDb -and $env:DESI_DB_TESTS -ne "1") {
         Write-Host "[$TotalCount] Testing: $relativePath  [SKIP] (needs a database)" -ForegroundColor Yellow

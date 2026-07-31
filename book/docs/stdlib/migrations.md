@@ -50,7 +50,7 @@ db.makemigrations("migrations")
 
 The system generates portable, operation-based migration files:
 
-```python
+```desi
 # Migration: 0001_initial
 # Generated: 2026-04-22
 # App: myapp
@@ -152,7 +152,7 @@ myproject/
 
 Migration files can declare dependencies on other apps:
 
-```python
+```desi
 # orders/migrations/0001_initial.desi
 # Migration: 0001_initial
 # App: orders

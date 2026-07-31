@@ -51,13 +51,15 @@ class User:
 Pass options as keyword arguments:
 
 ```desi
-pub name: CharField(100, unique=true)           # UNIQUE constraint
-pub bio: TextField(nullable=true)               # allows NULL
-pub age: IntField(default=0)                    # DEFAULT 0
-pub email: CharField(200, db_index=true)        # CREATE INDEX
-pub uid: UUIDField(primary_key=true)            # use as PK instead of auto id
-pub created: DateTimeField(auto_now_add=true)   # DEFAULT NOW() on insert
-pub updated: DateTimeField(auto_now=true)       # auto-update on save
+@model("profiles")
+class Profile:
+    pub name: CharField(100, unique=true)           # UNIQUE constraint
+    pub bio: TextField(nullable=true)               # allows NULL
+    pub age: IntField(default=0)                    # DEFAULT 0
+    pub email: CharField(200, db_index=true)        # CREATE INDEX
+    pub uid: UUIDField(primary_key=true)            # use as PK instead of auto id
+    pub created: DateTimeField(auto_now_add=true)   # DEFAULT NOW() on insert
+    pub updated: DateTimeField(auto_now=true)       # auto-update on save
 ```
 
 ## ForeignKey
@@ -91,7 +93,9 @@ class Post:
 If you don't declare any `AutoField` or `BigAutoField`, Desi auto-inserts:
 
 ```desi
-pub id: AutoField    # added automatically
+@model("posts")
+class Post:
+    pub id: AutoField    # added automatically
 ```
 
 To use a custom PK:

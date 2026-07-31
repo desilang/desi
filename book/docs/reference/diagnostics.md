@@ -3,7 +3,7 @@
 Desi's diagnostics are **single-sourced** from a catalog (`compiler/internal/diag/codes.json`).
 Every error and warning has a unique code for easy lookup.
 
-**142 diagnostic codes** across 14 categories.
+**152 diagnostic codes** across 17 categories.
 
 ---
 
@@ -101,6 +101,11 @@ Every error and warning has a unique code for easy lookup.
 | `DTE0110` | argument is void | arguments must produce a value; remove expressions of kind 'none' |
 | `DTE0111` | unsupported argument kind | convert the expression to a supported kind (int/float/str/bool) |
 | `DTE0112` | wrong number of arguments | check the function's signature and adjust the number of arguments |
+| `DTE0113` | cannot infer type parameter | state it explicitly with turbofish, e.g. Stack::<int>(), or annotate the binding |
+| `DTE0114` | wrong number of type arguments | pass one type argument per type parameter, or omit them to let Desi infer |
+| `DTE0130` | 'break' or 'continue' outside a loop | these only apply to the innermost enclosing 'for' or 'while' body |
+| `DTE0131` | wrong type for an index or key | lists and strings are indexed by int; a dict key must match the declared key type; a tuple index must be an integer literal |
+| `DTE0132` | builtin is only valid as a for-loop iterable | enumerate(), reversed() and zip() are loop syntax, not values — write 'for x in reversed(items):'. Unlike range(), they cannot be bound to a variable or used in a comprehension |
 | `DTE0200` | missing stdlib import | stdlib modules must be imported before use; add 'import <module>' at the top of your file |
 | `DTE1001` | `await` is only valid inside async functions | Mark the function `async`, or remove `await`. |
 | `DTE1002` | cannot await a non-future value | Only values of kind `future<T>` can be awaited. |
@@ -113,7 +118,7 @@ Every error and warning has a unique code for easy lookup.
 |------|-------|------|
 | `DME0001` | import cycle | break the cycle by removing or refactoring one of the imports |
 | `DME0002` | cannot find module | verify the dotted path and ensure the file exists under a search root (project dir or compiler/lib) |
-| `DME0003` | invalid import path | Use dotted names like 'foo.bar'; no spaces or invalid characters. |
+| `DME0003` | name is not exported by that module | check the spelling, and mark the declaration 'pub' in the module that defines it |
 | `DME0004` | failed to read file | Check file permissions and path casing. |
 | `DME0005` | parse failed during resolution | Fix parser errors in the imported file. |
 | `DME0006` | bad entry path | Pass a valid .desi file; avoid directories or missing paths. |
@@ -147,7 +152,6 @@ Every error and warning has a unique code for easy lookup.
 
 | Code | Title | Help |
 |------|-------|------|
-| `DORM0001` | unknown ORM field | The field name does not match any field registered in a db.model() definition. Check for typos in the field name. |
 | `DSY0001` | TaskGroup must be used with 'using' guard | TaskGroup requires RAII for proper cleanup. Use 'using tg = sync.TaskGroup():' to ensure resources are freed. |
 | `DSY0002` | Sender should be used with 'using' guard | Consider using 'using tx = ch.sender():' to ensure the sender is properly dropped. |
 | `DSY0003` | Receiver should be used with 'using' guard | Consider using 'using rx = ch.receiver():' to ensure the receiver is properly dropped. |
@@ -246,4 +250,31 @@ Every error and warning has a unique code for easy lookup.
 | `DW0004` | unreachable code: statement after return |  |
 | `DW0006` | function may fall through without an explicit return |  |
 | `DW0008` | global constant should be UPPER_CASE | follow the naming convention: use UPPER_CASE for global constants (e.g., MY_CONST) |
+
+## Performance Lints
+
+*Patterns with a complexity cost, reported as warnings*
+
+| Code | Title | Help |
+|------|-------|------|
+| `DPR0001` | deeply nested loop (O(n²) or worse) | Consider restructuring with hash maps, sorting, or reducing nesting depth. |
+| `DPR0002` | string concatenation inside loop | String '+' in a loop creates O(n²) allocations. Use a list and join, or a string builder. |
+| `DPR0003` | repeated collection lookup with same key | Cache the result in a local variable instead of looking up the same key multiple times. |
+| `DPR0004` | unbounded allocation inside loop | Creating new collections inside a loop body may cause excessive allocations. Pre-allocate or move outside the loop. |
+
+## ORM Errors
+
+*Model and query definitions*
+
+| Code | Title | Help |
+|------|-------|------|
+| `DORM0001` | unknown ORM field | The field name does not match any field registered in a db.model() definition. Check for typos in the field name. |
+
+## Formatter Errors
+
+*`desifmt` safety check*
+
+| Code | Title | Help |
+|------|-------|------|
+| `DFM0001` | formatting would change the code | The formatter only rearranges layout, so it verifies that its output still lexes to the same tokens as the input. It did not here, so the file was left untouched rather than written over with something different. This is a formatter bug — please report the file. |
 

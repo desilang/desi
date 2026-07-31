@@ -159,7 +159,7 @@ items.map(lambda<none> x: str: print(x))  # Prints each item
 ## Common Errors
 
 !!! failure "Missing return type"
-    ```desi
+    ```text
     # ❌ Error: lambda requires explicit return type
     let f = lambda x: int: x * 2
     ```
@@ -209,7 +209,11 @@ let double: int = lambda<int> x: int: x * 2
 double(21)
 ```
 
-```desi
+The compiler rewrites it to a hidden top-level function. `$` is not valid in a
+Desi identifier — these names exist only inside the compiler, so this is a
+sketch of the result, not code you can write:
+
+```text
 # After desugaring (conceptual)
 def __lam$0(x: int) -> int:
     return x * 2
@@ -229,11 +233,11 @@ __lam$0(21)  # Call resolved
 
 For `lambda<none>`, the body is executed as a statement:
 
-```desi
+```text
 # Source
 lambda<none> x: int: print(x)
 
-# Desugared
+# Desugared (compiler-internal name)
 def __lam$N(x: int) -> none:
     print(x)
     return

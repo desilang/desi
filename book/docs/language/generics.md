@@ -167,7 +167,9 @@ def main():
 
 ```desi
 let some: Option<int> = Option.Some(42)
-let none: Option<str> = Option.Nothing
+
+# `none` is a keyword, so it cannot be a variable name
+let empty: Option<str> = Option.Nothing
 ```
 
 ### Result\<T, E\>
@@ -315,9 +317,12 @@ def first_or_default<T>(items: list<T>, default: T) -> T:
 
 ### Transform Pattern
 
+A function type cannot be written in a signature yet, so a callable parameter is
+typed `Any` — see [Known Limitations](../reference/known-limitations.md):
+
 ```desi
-def map_value<T, U>(opt: Option<T>, f: (T) -> U) -> Option<U>:
-    match opt:
+def map_value<T, U>(opt: Option<T>, f: Any) -> Option<U>:
+    return match opt:
         Option.Some(v): Option.Some(f(v))
         Option.Nothing: Option.Nothing
 ```

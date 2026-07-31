@@ -58,7 +58,7 @@ import fmt
 
 let total = 1234567
 let growth = 0.156
-print(f"Revenue: {fmt.currency(1234567.0, '$')}")
+print(f"Revenue: {fmt.currency(1234567.0, "$")}")
 print(f"Growth: {fmt.percent(growth, 1)}")
 print(f"Orders: {fmt.comma(total)}")
 print(f"Rank: {fmt.ordinal(1)}")

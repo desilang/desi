@@ -21,13 +21,13 @@ Desi has a static type system that combines the simplicity of Python's syntax wi
     let a: i8 = 127              # -128 to 127
     let b: i16 = 32767           # -32,768 to 32,767
     let c: i32 = 2147483647      # -2^31 to 2^31-1
-    let d: i64 = 9223372036...   # -2^63 to 2^63-1
+    let d: i64 = 9223372036854775807   # -2^63 to 2^63-1
     
     # Unsigned
     let e: u8 = 255              # 0 to 255
     let f: u16 = 65535           # 0 to 65,535
     let g: u32 = 4294967295      # 0 to 2^32-1
-    let h: u64 = 1844674407...   # 0 to 2^64-1
+    let h: u64 = 18446744073709551615  # 0 to 2^64-1
     ```
     
 !!! tip "Integer Literals"
@@ -120,11 +120,9 @@ let length: int = len(numbers)
 ### Dictionary
 
 ```desi
-# Type syntax
+# Type syntax — dict[K, V] and dict<K, V> are both accepted
 let ages: dict[str, int] = {"Alice": 30, "Bob": 25}
-
-# Shorthand syntax (sugar)
-let scores: {str: int} = {"Alice": 100, "Bob": 95}
+let scores: dict<str, int> = {"Alice": 100, "Bob": 95}
 
 # Empty dict
 let empty: dict[str, int] = {}
@@ -439,11 +437,14 @@ print(rem)   # 1
 
 ### Type Guards with Match
 
+`match` is an expression, so each arm is a single expression — `return` cannot
+appear inside an arm. Return the match itself:
+
 ```desi
 def process(value: Option<int>) -> int:
-    match value:
-        Option.Some(n): return n * 2
-        Option.Nothing: return 0
+    return match value:
+        Option.Some(n): n * 2
+        Option.Nothing: 0
 ```
 
 ### Collection Initialization

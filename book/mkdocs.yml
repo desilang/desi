@@ -125,6 +125,7 @@ nav:
     - desic CLI: reference/desic-cli.md
     - desic doc: reference/desic-doc.md
     - Diagnostics: reference/diagnostics.md
+    - Known Limitations: reference/known-limitations.md
   - Standard Library:
     - Strings: stdlib/strings.md
     - OS: stdlib/os.md

@@ -292,15 +292,48 @@ let total: int = reduce(add, nums, 0)  # 15
 Generate a sequence of integers:
 
 ```desi
-for i: int in range(5):
-    print(i)  # 0, 1, 2, 3, 4
+for i in range(5):
+    print(str(i))  # 0, 1, 2, 3, 4
 
-for i: int in range(2, 6):
-    print(i)  # 2, 3, 4, 5
+for i in range(2, 6):
+    print(str(i))  # 2, 3, 4, 5
 
-for i: int in range(0, 10, 2):
-    print(i)  # 0, 2, 4, 6, 8
+for i in range(0, 10, 2):
+    print(str(i))  # 0, 2, 4, 6, 8
+
+# A negative step counts down
+for i in range(3, 0, -1):
+    print(str(i))  # 3, 2, 1
 ```
+
+A range is a value, not just loop syntax. It holds only its start, stop and
+step, so it never materialises its elements — `range(1000000000)` costs the
+same as `range(3)`:
+
+```desi
+let r = range(0, 10, 2)
+
+print(str(len(r)))   # 5
+print(str(r[2]))     # 4 — computed, not stored
+
+if 8 in r:           # arithmetic, not a scan
+    print("yes")
+
+let squares = [x * x for x in r]
+```
+
+The type is written `range`, so a function can take one:
+
+```desi
+def total(r: range) -> int:
+    let mut sum = 0
+    for v in r:
+        sum := sum + v
+    return sum
+```
+
+!!! note "The step may not be zero"
+    A zero step would never terminate, so it is treated as `1`.
 
 ### enumerate()
 
@@ -357,7 +390,7 @@ for name: str, score: int in zip(names, scores):
 | `map(f, x)` | Transform elements |
 | `filter(f, x)` | Filter elements |
 | `reduce(f, x, init)` | Combine elements |
-| `range(...)` | Integer sequence |
+| `range(...)` | Lazy int sequence — iterable, indexable, `len()` |
 | `enumerate(x)` | Index-value pairs |
 | `reversed(x)` | Reverse iteration |
 | `zip(a, b)` | Parallel iteration |

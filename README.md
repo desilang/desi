@@ -177,12 +177,18 @@ Everything below ships with the compiler. **No package manager needed.**
 Every release binary is built natively on its own platform and smoke-tested —
 compiled and run — before it is published.
 
+Some things do not work yet, and a few environment problems look exactly like
+Desi bugs. Both are written down in
+**[Known Limitations](https://desilang.org/reference/known-limitations/)** —
+worth a skim before filing an issue.
+
 ## Documentation
 
 - **[Getting Started](https://desilang.org/getting-started/)** — First steps with Desi
 - **[Standard Library Reference](https://desilang.org/stdlib/)** — every module documented
 - **[Language Guide](https://desilang.org/guide/)** — Syntax, types, concurrency, memory
 - **[Why Desi?](KILLER_FEATURES.md)** — Design philosophy and killer features
+- **[Known Limitations](https://desilang.org/reference/known-limitations/)** — what does not work yet, and why
 - **[Changelog](CHANGELOG.md)** — Release history
 
 ## Contributing

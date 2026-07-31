@@ -73,11 +73,11 @@ import sync
 
 let m = sync.Mutex(42)
 
-match m.try_lock():
-    Some(guard):
-        print("Got lock: " + str(guard.value))
-    Nothing:
-        print("Lock is held by another task")
+let status = match m.try_lock():
+    Option.Some(guard): "Got lock: " + str(guard.value)
+    Option.Nothing: "Lock is held by another task"
+
+print(status)
 ```
 
 ## Complete Examples
@@ -167,12 +167,10 @@ let result = expensive_computation(value)
 When you can't afford to wait:
 
 ```desi
-match resource.try_lock():
-    Some(guard):
-        use_resource(guard.value)
-    Nothing:
-        # Do something else or retry later
-        fallback_behavior()
+# Each arm is a single expression, so call a function to do more than one thing.
+let handled = match resource.try_lock():
+    Option.Some(guard): use_resource(guard.value)
+    Option.Nothing: fallback_behavior()
 ```
 
 ### 3. Import the sync Module

@@ -14,8 +14,8 @@ let numbers = [1, 2, 3, 4, 5]
 # Dictionaries - key-value pairs
 let ages = {"Alice": 30, "Bob": 25}
 
-# Sets - unique values
-let unique = {1, 2, 3}
+# Sets - unique values, written with #{}
+let unique = #{1, 2, 3}
 ```
 
 ---

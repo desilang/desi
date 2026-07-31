@@ -229,8 +229,9 @@ Desi's `Result` type provides a complete suite of methods to query, transform, a
 === "Parsing"
     ```desi
     def parse_int(s: str) -> Result<int, str>:
-        # Attempt to parse string as integer
-        ...
+        if len(s) == 0:
+            return Result.Err("empty input")
+        return Result.Ok(int(s))
     ```
 
 ## The ? Operator
@@ -257,11 +258,13 @@ def process(input: Result<int, str>) -> Result<int, str>:
 
 Without `?` operator:
 
+A match arm is an expression, so `return` goes in front of the whole match:
+
 ```desi
 def process(input: Result<int, str>) -> Result<int, str>:
-    match input:
-        Result.Ok(v): return Result.Ok(v * 2)
-        Result.Err(e): return Result.Err(e)
+    return match input:
+        Result.Ok(v): Result.Ok(v * 2)
+        Result.Err(e): Result.Err(e)
 ```
 
 ### Chaining
@@ -319,16 +322,18 @@ def risky_operation() -> Result<int, str>:
 
 For more complex applications:
 
+A variant is `Name: PayloadType` — one payload type, not a named field list:
+
 ```desi
 enum FileError:
-    NotFound: path: str
-    PermissionDenied: path: str
-    IoError: message: str
+    NotFound: str
+    PermissionDenied: str
+    IoError: str
 
 def read_config(path: str) -> Result<str, FileError>:
     if not file_exists(path):
-        return Result.Err(FileError.NotFound(path=path))
-    ...
+        return Result.Err(FileError.NotFound(path))
+    return Result.Ok(read_file(path))
 ```
 
 ## Best Practices
@@ -385,9 +390,12 @@ let result = opt.map(double).map(double)  # Some(84)
 
 For reference, this is equivalent to:
 
+A callable parameter is typed `Any` — function types cannot yet be written in a
+signature, see [Known Limitations](../reference/known-limitations.md):
+
 ```desi
-def map_option<T, U>(opt: Option<T>, f: (T) -> U) -> Option<U>:
-    match opt:
+def map_option<T, U>(opt: Option<T>, f: Any) -> Option<U>:
+    return match opt:
         Option.Some(v): Option.Some(f(v))
         Option.Nothing: Option.Nothing
 ```
@@ -415,10 +423,9 @@ let result2 = opt2.and_then(get_even)  # Nothing (5 is odd)
 
 **Use when** your function already returns an Option/Result:
 ```desi
-# Chaining operations that can fail
-let result = get_user(id)
-    .and_then(get_profile)    # get_profile returns Option
-    .and_then(get_settings)   # get_settings returns Option
+# Chaining operations that can fail. There is no line-continuation, so the
+# chain stays on one line.
+let result = get_user(id).and_then(get_profile).and_then(get_settings)
 ```
 
 ### Built-in or_else() Method

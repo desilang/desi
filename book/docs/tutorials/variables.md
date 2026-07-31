@@ -18,14 +18,14 @@ let pi = 3.14159
 
 Trying to reassign a `let` variable is an error:
 
-```desi
+```text
 let x = 10
 x = 20  # ❌ Error: cannot assign to immutable variable
 ```
 
-### Mutable Variables: `var`
+### Mutable Variables: `let mut`
 
-Use `var` when you need to modify a variable:
+Use `let mut` when you need to modify a variable, and `:=` to reassign it:
 
 ```desi
 let mut counter = 0
@@ -34,8 +34,9 @@ counter := counter + 1  # ✅ OK
 print(counter)  # Prints: 2
 ```
 
-!!! tip "Prefer `let`"
-    Use `let` by default. Only use `var` when mutation is needed.
+!!! tip "Prefer plain `let`"
+    Use `let` by default and add `mut` only when mutation is needed. There is no
+    `var` keyword in Desi.
 
 ---
 

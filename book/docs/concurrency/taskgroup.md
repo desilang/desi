@@ -149,7 +149,7 @@ let items = ["a", "b", "c"]
 using tg = sync.TaskGroup():
     for i in range(len(items)):
         let item = items[i]  # Copy to local
-        tg.run(lambda: print(item))
+        tg.run(lambda<none>: print(item))   # the return type is mandatory
     tg.wait()
 ```
 
@@ -204,12 +204,12 @@ Both import styles work:
 # Module import
 import sync
 using tg = sync.TaskGroup():
-    ...
+    tg.wait()
 
 # Direct import
 from sync import TaskGroup
-using tg = TaskGroup():
-    ...
+using tg2 = TaskGroup():
+    tg2.wait()
 ```
 
 ## See Also

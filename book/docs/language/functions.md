@@ -427,8 +427,9 @@ def create_user(name: str, age: int, email: str) -> User:
 
 ```desi
 def from_string(s: str) -> Option<int>:
-    # Parse string to int, return Option
-    ...
+    if len(s) == 0:
+        return Option.Nothing
+    return Option.Some(int(s))
 ```
 
 ### Higher-Order Functions

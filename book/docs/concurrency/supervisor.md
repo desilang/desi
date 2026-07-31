@@ -186,15 +186,20 @@ Supervisor test complete!
 Both import styles work:
 
 ```desi
+def worker():
+    print("worker")
+
 # Module import
 import sync
 using sup = sync.Supervisor():
-    ...
+    sup.submit(worker)
+    sup.stop()
 
 # Direct import
 from sync import Supervisor
-using sup = Supervisor():
-    ...
+using sup2 = Supervisor():
+    sup2.submit(worker)
+    sup2.stop()
 ```
 
 ## Error Messages
