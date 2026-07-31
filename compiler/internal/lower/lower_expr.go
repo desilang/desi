@@ -597,6 +597,20 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 	case *ast.IndexExpr:
 		lhsType := ls.typeOf(x.X)
 
+		// r[i] on a range: computed, not stored. range_get works in i64, so the
+		// index widens on the way in and the element narrows to a Desi int out.
+		if _, ok := lhsType.(*types.Range); ok {
+			rangeVal := ls.lowerExpr(x.X)
+			idxVal := ls.lowerExpr(x.Idx)
+			idx64 := ls.b.FreshTemp("range_idx64")
+			ls.b.Emit(&hir.Cast{Dst: idx64, Src: idxVal, Type: "i64"})
+			got := ls.b.FreshTemp("range_got")
+			ls.b.Emit(&hir.Call{Dst: got, Fn: "range_get", Args: []hir.Value{rangeVal, idx64}, Type: "i64"})
+			res := ls.b.FreshTemp("range_elem")
+			ls.b.Emit(&hir.Cast{Dst: res, Src: got, Type: "i32"})
+			return res
+		}
+
 		// Handle custom classes with __getitem__ dunder
 		if cls, ok := lhsType.(*types.Class); ok {
 			if _, found := cls.Dunders["__getitem__"]; found {
@@ -2399,6 +2413,15 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 				return ls.lowerTupleMembership(lhs, rhs, tupType)
 			}
 
+			// Handle range membership: x in range. Arithmetic, not a scan.
+			if _, ok := rhsType.(*types.Range); ok {
+				v64 := ls.b.FreshTemp("range_in64")
+				ls.b.Emit(&hir.Cast{Dst: v64, Src: lhs, Type: "i64"})
+				dst := ls.b.FreshTemp("range_in")
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: "range_contains", Args: []hir.Value{rhs, v64}, Type: "i1"})
+				return dst
+			}
+
 			// Handle list membership: x in list
 			if _, ok := rhsType.(*types.List); ok {
 				// Cast element to ptr for list_contains
@@ -3166,60 +3189,39 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	}
 	ls.emitListNew(res, typeTag, toStrFunc)
 
-	// 2. Detect range(start, stop) call for efficient lowering
-	// Check BEFORE lowering the iterable to avoid emitting a range() call
+	// 2. Detect a range iterable — either a literal range(...) call or a bound
+	// range value. Both go through the range runtime, which keeps direction and
+	// step in one place.
+	//
+	// This path used to inline `start` and `stop` and treat the index as the
+	// element, which silently ignored a third argument: [x for x in
+	// range(0, 10, 2)] yielded 0..9 rather than the evens. It also had no case
+	// for a bound range, so `let r = range(10)` followed by [i for i in r] read
+	// a DesiRange through list_len and crashed. A comprehension allocates its
+	// result list either way, so the range allocation here is noise.
 	isRange := false
-	var rangeStart, rangeStop hir.Value
 	var iterVal hir.Value
 
-	if call, ok := clause.Iter.(*ast.CallExpr); ok {
-		if id, ok := call.Callee.(*ast.Ident); ok && id.Name == "range" {
+	if ls.info != nil {
+		if _, ok := ls.typeOf(clause.Iter).(*types.Range); ok {
 			isRange = true
-			if len(call.Args) == 1 {
-				// range(stop): 0 to stop-1
-				rangeStart = hir.ConstInt{Text: "0", Type: "i64"}
-				rangeStop = ls.lowerExpr(call.Args[0])
-				// Cast to i64 if needed
-				stopI64 := ls.b.FreshTemp("stop_i64")
-				ls.b.Emit(&hir.Cast{Dst: stopI64, Src: rangeStop, Type: "i64"})
-				rangeStop = stopI64
-			} else if len(call.Args) >= 2 {
-				// range(start, stop)
-				rangeStart = ls.lowerExpr(call.Args[0])
-				startI64 := ls.b.FreshTemp("start_i64")
-				ls.b.Emit(&hir.Cast{Dst: startI64, Src: rangeStart, Type: "i64"})
-				rangeStart = startI64
-
-				rangeStop = ls.lowerExpr(call.Args[1])
-				stopI64 := ls.b.FreshTemp("stop_i64")
-				ls.b.Emit(&hir.Cast{Dst: stopI64, Src: rangeStop, Type: "i64"})
-				rangeStop = stopI64
-			}
 		}
 	}
-
-	// Only lower the iterable if it's not a range (range is handled inline)
-	if !isRange {
-		iterVal = ls.lowerExpr(clause.Iter)
-	}
+	iterVal = ls.lowerExpr(clause.Iter)
 
 	// 3. Get iteration bounds
 	var lenTemp hir.Value
+	lenTemp = ls.b.FreshTemp("comp_len")
 	if isRange {
-		lenTemp = rangeStop
+		ls.b.Emit(&hir.Call{Dst: lenTemp.(hir.Temp), Fn: "range_len", Args: []hir.Value{iterVal}, Type: "i64"})
 	} else {
-		lenTemp = ls.b.FreshTemp("comp_len")
 		ls.b.Emit(&hir.Call{Dst: lenTemp.(hir.Temp), Fn: "list_len", Args: []hir.Value{iterVal}, Type: "i64"})
 	}
 
-	// 4. Allocate index variable
+	// 4. Allocate index variable. Both paths now count 0..len.
 	idxPtr := ls.b.FreshTemp("comp_idx_ptr")
 	ls.b.Emit(&hir.Alloca{Dst: idxPtr, Type: "i64", Count: 1})
-	if isRange {
-		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: rangeStart})
-	} else {
-		ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
-	}
+	ls.b.Emit(&hir.Store{Dst: idxPtr, Val: hir.ConstInt{Text: "0", Type: "i64"}})
 
 	// 5. Create condition block
 	condBlk := ls.b.NewBlock("comp_cond")
@@ -3252,9 +3254,12 @@ func (ls *lowerState) lowerListComp(c *ast.ListComp) hir.Value {
 	var elemVal hir.Value
 	var loopVarType types.T = types.Int // default
 	if isRange {
-		// For range, the index IS the element value (cast to i32)
+		// The element is computed from the range, so a step and a descending
+		// direction are honoured rather than assumed away.
+		got := ls.b.FreshTemp("range_got")
+		ls.b.Emit(&hir.Call{Dst: got, Fn: "range_get", Args: []hir.Value{iterVal, idxBody}, Type: "i64"})
 		elemI32 := ls.b.FreshTemp("range_elem")
-		ls.b.Emit(&hir.Cast{Dst: elemI32, Src: idxBody, Type: "i32"})
+		ls.b.Emit(&hir.Cast{Dst: elemI32, Src: got, Type: "i32"})
 		elemVal = elemI32
 	} else {
 		// Cast to i32 for list_get

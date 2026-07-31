@@ -337,6 +337,21 @@
       "title": "wrong number of type arguments",
       "help": "pass one type argument per type parameter, or omit them to let Desi infer"
     },
+    "loop_jump_outside_loop": {
+      "id": "DTE0130",
+      "title": "'break' or 'continue' outside a loop",
+      "help": "these only apply to the innermost enclosing 'for' or 'while' body"
+    },
+    "bad_index_type": {
+      "id": "DTE0131",
+      "title": "wrong type for an index or key",
+      "help": "lists and strings are indexed by int; a dict key must match the declared key type; a tuple index must be an integer literal"
+    },
+    "loop_only_builtin": {
+      "id": "DTE0132",
+      "title": "builtin is only valid as a for-loop iterable",
+      "help": "enumerate(), reversed() and zip() are loop syntax, not values — write 'for x in reversed(items):'. Unlike range(), they cannot be bound to a variable or used in a comprehension"
+    },
     "call_wrong_arity": {
       "id": "DTE0046",
       "title": "wrong number of arguments",

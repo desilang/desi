@@ -584,6 +584,84 @@ type lowerState struct {
 	// Task 4: Escape Analysis & Automatic Function-Local Arenas
 	localArena        hir.Value // Function-scoped arena pointer if initialized
 	currentAllocArena hir.Value // The arena to direct allocations to during RHS lowering
+
+	// loops is a stack of the enclosing loops, innermost last, so that 'break'
+	// and 'continue' can name a concrete target block. Every loop form — while
+	// and each of the for desugarings — pushes one entry.
+	loops []loopTargets
+}
+
+// loopTargets are the two blocks a loop-jump statement can branch to, plus the
+// scope depth at the point the loop was entered.
+type loopTargets struct {
+	cont *hir.Block // run the latch, then re-test the condition: 'continue'
+	exit *hir.Block // leave the loop: 'break'
+	// depth is len(scopes) just after the loop pushed its own scope. A break or
+	// continue drops every scope opened at or beyond it, because the drops the
+	// body emits at its tail are never reached from the jump.
+	depth int
+}
+
+// pushLoop records the jump targets for a loop body about to be lowered. Call
+// it after the loop has pushed its own scope, and pair it with popLoop.
+func (ls *lowerState) pushLoop(cont, exit *hir.Block) {
+	ls.loops = append(ls.loops, loopTargets{cont: cont, exit: exit, depth: len(ls.scopes)})
+}
+
+func (ls *lowerState) popLoop() {
+	if len(ls.loops) > 0 {
+		ls.loops = ls.loops[:len(ls.loops)-1]
+	}
+}
+
+// innermostLoop returns the loop a break or continue belongs to.
+func (ls *lowerState) innermostLoop() (loopTargets, bool) {
+	if len(ls.loops) == 0 {
+		return loopTargets{}, false
+	}
+	return ls.loops[len(ls.loops)-1], true
+}
+
+// emitLoopExitDrops drops the scopes a break or continue is jumping out of,
+// innermost first. The scope stack itself is left alone — lowering of the rest
+// of the body continues after this statement, and the enclosing loop form pops
+// its own scope as usual.
+func (ls *lowerState) emitLoopExitDrops() {
+	lt, ok := ls.innermostLoop()
+	if !ok {
+		return
+	}
+	for i := len(ls.scopes) - 1; i >= lt.depth-1 && i >= 0; i-- {
+		ls.emitScopeDrops(ls.scopes[i])
+	}
+}
+
+// closeLoopBody ends a lowered loop body: on the path that falls off the end it
+// drops what the body scope owns and branches to the latch, then pops the loop
+// and its scope and positions the builder in the latch.
+//
+// The drops belong here, on the edge, and not in the latch — even though the
+// latch is the one block every iteration passes through. A break or continue
+// jumps out from the middle of the body, so the latch is not dominated by the
+// body's tail: freeing a temp there that only the fall-through path defines is
+// invalid IR ("instruction does not dominate all uses"). Those jumps drop what
+// is live at the jump themselves, via emitLoopExitDrops, which is also why
+// repeating the drops in the latch would free twice on that path.
+//
+// What the latch does own is the loop's own bookkeeping — for a desugared 'for',
+// the index increment — which is why continue targets it rather than the
+// condition block.
+func (ls *lowerState) closeLoopBody(latch *hir.Block) {
+	if !ls.terminated {
+		ls.emitScopeDrops(ls.cur())
+		ls.b.Emit(&hir.Jump{Target: latch})
+	}
+	ls.popLoop()
+	ls.pop()
+	// A break or continue leaves ls.terminated set; the latch is a fresh block
+	// still reachable from them, so clear it before filling.
+	ls.terminated = false
+	ls.b.SetBlock(latch)
 }
 
 type scope struct {

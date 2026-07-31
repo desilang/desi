@@ -1,0 +1,17 @@
+# EXPECTED: COMPILE_ERROR
+# Test: reversed() outside a for-loop iterable is DTE0132
+#
+# enumerate(), reversed() and zip() are recognised by the for-loop desugaring
+# and have no runtime function behind them. Used anywhere else they used to
+# type-check clean and then fail in the linker with
+# "undefined symbol: reversed" — long after `desic check` had said ok, and
+# reported against a temp .ll file with a "make sure LLVM is installed" hint
+# that had nothing to do with the mistake.
+#
+# range() is the exception: it is a real value. See 542_range_first_class.desi.
+
+def main() -> int:
+	let items = [1, 2, 3]
+	let r = reversed(items)
+	print("unreachable")
+	return 0

@@ -1,9 +1,21 @@
-# EXPECTED: COMPILE_ERROR
-# expect: compile_error
-# reason: Comprehension over int not iterable
+# A range bound to a variable is iterable in a comprehension.
+#
+# This file used to assert the opposite — EXPECTED: COMPILE_ERROR, "Comprehension
+# over int not iterable" — because range() had no return type in the checker.
+# Anything that bound one got a nil type and every use of it failed. range() is
+# a real type now, so this is ordinary code.
 
 def main() -> int:
-	# Need proper iterable, not int
 	let r = range(10)
 	let lst = [i for i in r]
+	print(str(len(lst)))
+
+	# The same range can still be iterated directly and indexed.
+	print(str(len(r)))
+	print(str(r[9]))
 	0
+
+# EXPECTED_OUTPUT:
+# 10
+# 10
+# 9

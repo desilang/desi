@@ -18,13 +18,13 @@ func (c *checker) typIndexExpr(x *ast.IndexExpr) types.T {
 		// Tuple indexing requires constant integer index
 		idx, ok := x.Idx.(*ast.IntLit)
 		if !ok {
-			c.add(diagAt("DTE0006", x.Idx.SpanOf(), "tuple index must be a constant integer"))
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "tuple index must be a constant integer"))
 			return nil
 		}
 
 		i, err := strconv.Atoi(idx.Text)
 		if err != nil {
-			c.add(diagAt("DTE0006", x.Idx.SpanOf(), "invalid integer index"))
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "invalid integer index"))
 			return nil
 		}
 
@@ -42,18 +42,28 @@ func (c *checker) typIndexExpr(x *ast.IndexExpr) types.T {
 		// Index must be int
 		idxType := c.typ(x.Idx)
 		if !types.Equal(idxType, types.Int) {
-			c.add(diagAt("DTE0006", x.Idx.SpanOf(), "list index must be an integer"))
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "list index must be an integer"))
 			return nil
 		}
 		c.info.Types[x] = t.Elem
 		return t.Elem
+
+	case *types.Range:
+		// Range indexing: r[i] -> int, computed as start + i*step
+		idxType := c.typ(x.Idx)
+		if !types.Equal(idxType, types.Int) {
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "range index must be an integer"))
+			return nil
+		}
+		c.info.Types[x] = t.Elem()
+		return t.Elem()
 
 	case *types.Dict:
 		// Dict indexing: d[k] -> V
 		// Key must match KeyType
 		keyType := c.typ(x.Idx)
 		if !types.Assignable(t.Key, keyType) {
-			c.add(diagAt("DTE0006", x.Idx.SpanOf(), "dict key type mismatch"))
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "dict key type mismatch"))
 			return nil
 		}
 		c.info.Types[x] = t.Val
@@ -115,7 +125,7 @@ func (c *checker) typIndexExpr(x *ast.IndexExpr) types.T {
 		// String indexing: s[i] -> str (char)
 		idxType := c.typ(x.Idx)
 		if !types.Equal(idxType, types.Int) {
-			c.add(diagAt("DTE0006", x.Idx.SpanOf(), "string index must be an integer"))
+			c.add(diagAt("DTE0131", x.Idx.SpanOf(), "string index must be an integer"))
 			return nil
 		}
 		c.info.Types[x] = types.Str

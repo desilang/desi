@@ -286,26 +286,26 @@ func addPreludeBuiltins(info *Info) {
 		[]string{"dict", "key", "value"},
 	)
 
-	// --- Task E: range surface (typed params; opaque return for now) ---
-	// range(stop: int) -> _
+	// --- range: lazy int sequence, first-class (types.Range) ---
+	// range(stop: int) -> range
 	addN("range",
 		[]types.T{types.Int},
 		[]ast.ParamMode{ast.ParamMove},
-		nil,
+		types.RangeOf(),
 		[]string{"stop"},
 	)
-	// range(start: int, stop: int) -> _
+	// range(start: int, stop: int) -> range
 	addN("range",
 		[]types.T{types.Int, types.Int},
 		[]ast.ParamMode{ast.ParamMove, ast.ParamMove},
-		nil,
+		types.RangeOf(),
 		[]string{"start", "stop"},
 	)
-	// range(start: int, stop: int, step: int) -> _
+	// range(start: int, stop: int, step: int) -> range
 	addN("range",
 		[]types.T{types.Int, types.Int, types.Int},
 		[]ast.ParamMode{ast.ParamMove, ast.ParamMove, ast.ParamMove},
-		nil,
+		types.RangeOf(),
 		[]string{"start", "stop", "step"},
 	)
 

@@ -545,6 +545,19 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			}
 		}
 
+		// x in range -> bool. Answered arithmetically, so the size of the range
+		// does not matter.
+		if lt != nil && rt != nil {
+			if rangeT, ok := rt.(*types.Range); ok {
+				if types.Assignable(rangeT.Elem(), lt) {
+					c.info.Types[x] = types.Bool
+					return types.Bool
+				}
+				c.add(diagAt("DTE0004", x.Span, "only an int can be a member of a range, got '"+lt.String()+"'"))
+				return nil
+			}
+		}
+
 		// x in set[T] -> bool (element T matches x)
 		if lt != nil && rt != nil {
 			if setT, ok := rt.(*types.Set); ok {

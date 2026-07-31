@@ -15,6 +15,18 @@ func isListType(t types.T) bool {
 }
 
 func (c *checker) typCall(call *ast.CallExpr) types.T {
+	// enumerate/reversed/zip are loop syntax, not values: they are recognised
+	// by the for-loop desugaring and have no runtime function behind them.
+	// Anywhere else they used to reach the linker, which failed with
+	// "undefined symbol: reversed" long after `desic check` had said ok.
+	if id, ok := call.Callee.(*ast.Ident); ok && loopOnlyBuiltins[id.Name] {
+		if !c.loopIterables[call] {
+			c.add(diagAt("DTE0132", call.Span,
+				"'"+id.Name+"()' can only be the iterable of a for loop"))
+			return nil
+		}
+	}
+
 	// --- Case 0: direct call of a lambda: (lambda ...)(args)
 	if l, ok := call.Callee.(*ast.LambdaExpr); ok {
 		_ = c.typ(l)
@@ -1112,6 +1124,8 @@ func (c *checker) typCall(call *ast.CallExpr) types.T {
 				} else if _, ok := argType.(*types.Set); ok {
 					hasLen = true
 				} else if _, ok := argType.(*types.Tuple); ok {
+					hasLen = true
+				} else if _, ok := argType.(*types.Range); ok {
 					hasLen = true
 				} else if cls, ok := argType.(*types.Class); ok {
 					// Check for __len__ method in class or base classes

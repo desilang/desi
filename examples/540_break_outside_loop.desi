@@ -1,0 +1,9 @@
+# EXPECTED: COMPILE_ERROR
+# Test: 'break' outside any loop is rejected (DTE0130)
+#
+# The checker tracks loop depth so that a stray break or continue is a
+# diagnostic rather than a jump with no target block to name.
+
+def main() -> int:
+	break
+	return 0

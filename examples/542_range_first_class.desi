@@ -1,0 +1,62 @@
+# range() is a value: bind it, annotate it, pass it, measure it, index it,
+# and test membership — without materialising the elements.
+#
+# A range holds three integers, so range(1000000000) costs the same as
+# range(3). A `for` over a literal range(...) call is lowered to a plain
+# counted loop and allocates nothing at all; these first-class uses go through
+# the range runtime.
+#
+# EXPECTED_OUTPUT:
+# 5
+# 0
+# 4
+# 10
+# 4
+# 10
+# 7
+# 4
+# 1
+# --
+# yes
+# no
+# no
+# 1000000000
+
+def total(r: range) -> int:
+	let mut sum = 0
+	for v in r:
+		sum := sum + v
+	return sum
+
+def main() -> int:
+	# Bind one, and ask its length.
+	let r = range(5)
+	print(str(len(r)))
+
+	# Index it. Elements are computed, not stored.
+	print(str(r[0]))
+	print(str(r[4]))
+
+	# Pass one to a function that declares the type.
+	print(str(total(range(1, 5))))
+
+	# A descending range, bound.
+	let d = range(10, 0, -3)
+	print(str(len(d)))
+	for v in d:
+		print(str(v))
+	print("--")
+
+	# Membership is arithmetic, not a scan.
+	let evens = range(0, 10, 2)
+	if 4 in evens:
+		print("yes")
+	if not (5 in evens):
+		print("no")
+	if not (10 in evens):
+		print("no")
+
+	# Cheap regardless of size — nothing is materialised.
+	let huge = range(1000000000)
+	print(str(len(huge)))
+	return 0

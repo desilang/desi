@@ -1,0 +1,80 @@
+# `break` and `continue` when the loop body owns heap values.
+#
+# Regression guard, and the companion to 539: that file exercises the control
+# flow but every value in it is an int, so nothing in it ever needed dropping.
+# The ownership half was broken the whole time it passed.
+#
+# The drops used to be emitted into the loop's latch — the one block that both
+# the fall-through path and the jumps pass through, which makes it look like the
+# obvious place for them. It is wrong twice over. A value created *after* the
+# `continue` does not exist on that jump's path, so freeing it in the latch is
+# invalid IR: LLVM rejects the function with "instruction does not dominate all
+# uses". And a value that *is* live at the jump gets dropped by the jump and
+# then again by the latch — a double free.
+#
+# Drops belong on the edges: a `break` or `continue` drops what is live where it
+# stands, and the fall-through path drops at the end of the body. The latch
+# keeps only the loop's own bookkeeping, which for a desugared `for` is the
+# index step — and that is why `continue` targets the latch and not the
+# condition block.
+#
+# EXPECTED_OUTPUT:
+# 6
+# 3
+# 12
+# 1,2,4,5,
+# 18
+
+def main() -> int:
+	# continue past a string built earlier in the same iteration
+	let mut kept = 0
+	for i in range(4):
+		let tag = "n" + str(i)
+		if i == 1:
+			continue
+		kept := kept + len(tag)
+	print(str(kept))
+
+	# break out of a body that owns a list
+	let mut size = 0
+	for i in range(10):
+		let row = [i, i, i]
+		if i == 2:
+			size := len(row)
+			break
+	print(str(size))
+
+	# continue while iterating a list, allocating per iteration
+	let names = ["ann", "bob", "cy", "dee"]
+	let mut total = 0
+	for n in names:
+		let shout = n + "!"
+		if len(n) == 2:
+			continue
+		total := total + len(shout)
+	print(str(total))
+
+	# while + continue, accumulating into a string that outlives the loop
+	let mut w = 0
+	let mut out = ""
+	while w < 5:
+		w := w + 1
+		let piece = str(w) + ","
+		if w == 3:
+			continue
+		out := out + piece
+	print(out)
+
+	# nested, both levels allocating: inner break, outer continue
+	let mut score = 0
+	for i in range(4):
+		let a = "i" + str(i)
+		if i == 0:
+			continue
+		for j in range(4):
+			let b = a + str(j)
+			if j == 2:
+				break
+			score := score + len(b)
+	print(str(score))
+	return 0

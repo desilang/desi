@@ -1272,6 +1272,8 @@ handlePrint:
 					lenFunc = "dict_len"
 				} else if _, ok := unwrappedT.(*types.Set); ok {
 					lenFunc = "set_len"
+				} else if _, ok := unwrappedT.(*types.Range); ok {
+					lenFunc = "range_len"
 				} else if tupT, ok := unwrappedT.(*types.Tuple); ok {
 					// Tuple length is compile-time known - return constant directly
 					return hir.ConstInt{Text: fmt.Sprintf("%d", len(tupT.Elems)), Type: "i32"}
@@ -1296,6 +1298,19 @@ handlePrint:
 						return resTemp
 					}
 				}
+			}
+		}
+	}
+
+	// 1.54. range(...) used as a value.
+	//
+	// A `for` over a literal range(...) never reaches here — that path is an
+	// inline index loop with no allocation. This is for the first-class uses:
+	// binding one, passing one, len(), indexing.
+	if ls.info != nil {
+		if ls.calleeName(x.Callee, x) == "range" && len(x.Args) >= 1 && len(x.Args) <= 3 {
+			if _, isRange := ls.typeOf(x).(*types.Range); isRange {
+				return ls.emitRangeNew(x.Args)
 			}
 		}
 	}

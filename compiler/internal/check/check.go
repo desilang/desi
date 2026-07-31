@@ -72,9 +72,10 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 
 	// 3) Walk module: collect functions first, then check bodies.
 	c := &checker{
-		info:      res.Info,
-		scope:     NewScope(top), // child of top so imported names & prelude are visible
-		macroDefs: make(map[string]*ast.FuncDecl),
+		info:          res.Info,
+		scope:         NewScope(top), // child of top so imported names & prelude are visible
+		macroDefs:     make(map[string]*ast.FuncDecl),
+		loopIterables: make(map[ast.Expr]bool),
 	}
 	// Remember the module (file-level) scope for anti-shadowing checks.
 	c.moduleScope = c.scope
@@ -272,9 +273,21 @@ type checker struct {
 	curFuncName string // Name of current function (for __new__ detection)
 	moved       MoveSet
 	unsafeDepth int
+	loopDepth   int     // >0 while checking a loop body; gates break/continue
 	expected    types.T // Expected type from context (for bidirectional checking)
 	inUsingInit bool    // True when type-checking UsingStmt.Init (for sync RAII checks)
 	macroDefs   map[string]*ast.FuncDecl
+	// loopIterables marks the expressions sitting in a for loop's iterable
+	// position, which is the only place enumerate/reversed/zip may appear.
+	loopIterables map[ast.Expr]bool
+}
+
+// loopOnlyBuiltins are recognised by the for-loop desugaring and have no
+// runtime function behind them, so they cannot be used as values.
+var loopOnlyBuiltins = map[string]bool{
+	"enumerate": true,
+	"reversed":  true,
+	"zip":       true,
 }
 
 func (c *checker) add(diag diag.Diagnostic) { c.diags = append(c.diags, diag) }
@@ -670,7 +683,7 @@ func collectLenNoLengthDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 			}
 			// Allow str, list, dict, set, tuple
 			switch t.(type) {
-			case *types.Tuple, *types.List, *types.Dict, *types.Set:
+			case *types.Tuple, *types.List, *types.Dict, *types.Set, *types.Range:
 				// These types support len()
 				continue
 			}
@@ -743,6 +756,14 @@ func collectMembershipDiags(mod *ast.Module, info *Info) []diag.Diagnostic {
 			if lt != nil && rt != nil && types.Equal(lt, types.Str) && types.Equal(rt, types.Str) {
 				info.Types[be] = types.Bool
 				continue
+			}
+
+			// int in range -> bool
+			if lt != nil && rt != nil {
+				if _, ok := rt.(*types.Range); ok && types.Equal(lt, types.Int) {
+					info.Types[be] = types.Bool
+					continue
+				}
 			}
 
 			// Tuple membership: x in (a, b, c) where tuple is homogeneous

@@ -139,6 +139,74 @@ For simple statements:
 for n in [10, 20, 30]: print(n)
 ```
 
+### break and continue
+
+`break` leaves the loop. `continue` skips the rest of the current iteration and
+starts the next one. Both work in `while` and `for`, and both act on the
+innermost loop containing them.
+
+```desi
+def main() -> int:
+    let items: list[int] = [10, 20, 30, 40]
+
+    # break: stop at the first match
+    let mut found: int = 0
+    for x in items:
+        if x == 30:
+            found := x
+            break
+    print(str(found))  # 30
+
+    # continue: skip one value, keep going
+    let mut total: int = 0
+    for y in items:
+        if y == 20:
+            continue
+        total := total + y
+    print(str(total))  # 80
+    return 0
+```
+
+In nested loops, a jump only affects the loop it is written in. To leave both,
+set a flag in the inner loop and test it in the outer one:
+
+```desi
+def main() -> int:
+    let mut done: bool = false
+    let mut hit: int = 0
+    for a in [1, 2, 3]:
+        for b in [10, 20, 30]:
+            if a * b == 40:
+                hit := a * b
+                done := true
+                break
+        if done:
+            break
+    print(str(hit))  # 40
+    return 0
+```
+
+Both statements run the cleanup for every scope they leave. Anything the loop
+body allocated is released, and a `using` block is closed, before control moves
+on — leaving early never skips a destructor:
+
+```desi
+class Resource:
+    pub def __close__(self) -> none:
+        print("closed")
+        return
+
+def main() -> int:
+    for i in range(3):
+        using r = Resource():
+            if i == 1:
+                break        # prints "closed", then leaves the loop
+        print("kept " + str(i))
+    return 0
+```
+
+Using either outside a loop is a compile error, not a silent no-op.
+
 ## Pattern Matching
 
 The `match` expression provides powerful pattern matching, especially useful with enums.
@@ -162,15 +230,17 @@ def color_name(c: Color) -> str:
 
 Extract values from enum variants:
 
-```desi
-enum Result:
-    Ok: value: int
-    Err: message: str
+A variant is written `Name: PayloadType`, with `none` for no payload:
 
-def handle_result(r: Result) -> str:
-    match r:
-        Result.Ok(v): f"Success: {v}"
-        Result.Err(msg): f"Error: {msg}"
+```desi
+enum Outcome:
+    Ok: int
+    Err: str
+
+def handle_result(r: Outcome) -> str:
+    return match r:
+        Outcome.Ok(v): f"Success: {v}"
+        Outcome.Err(msg): f"Error: {msg}"
 ```
 
 ### Wildcard Pattern
@@ -213,13 +283,18 @@ def process(value: Option<int>) -> int:
 
 ### Result Pattern
 
+Each arm is a single expression. When a branch needs statements, call a function
+from the arm rather than opening a block:
+
 ```desi
+def report(msg: str) -> int:
+    print(f"Error: {msg}")
+    return -1
+
 def handle(result: Result<int, str>) -> int:
-    match result:
+    return match result:
         Result.Ok(value): value
-        Result.Err(msg): 
-            print(f"Error: {msg}")
-            -1
+        Result.Err(msg): report(msg)
 ```
 
 ### Multiple Arms
@@ -298,11 +373,11 @@ let not_result: bool = not a     # false
 ```desi
 # right side not evaluated if left is false
 if false and expensive_check():
-    ...
+    pass
 
 # right side not evaluated if left is true
 if true or expensive_check():
-    ...
+    pass
 ```
 
 ## Comparison Operators

@@ -81,6 +81,9 @@ const (
 	// Generics
 	GenericKind
 	TypeParamKind
+
+	// range(): a lazy int sequence, not a container
+	RangeKind
 )
 
 // ----- Basic types (singletons) -----
@@ -515,6 +518,8 @@ func kindOf(t T) Kind {
 		return GenericKind
 	case *TypeParam:
 		return TypeParamKind
+	case *Range:
+		return RangeKind
 	default:
 		return InvalidKind
 	}
@@ -617,6 +622,9 @@ func Equal(a, b T) bool {
 		return Equal(x.Inner, b.(*Arc).Inner)
 	case *Weak:
 		return Equal(x.Inner, b.(*Weak).Inner)
+	case *Range:
+		// No type parameter: every range is the same type.
+		return true
 	default:
 		return false
 	}
@@ -803,6 +811,10 @@ func FromName(name string) (T, bool) {
 	// Binary data
 	case "bytes":
 		return Bytes, true
+
+	// Lazy int sequence produced by range()
+	case "range":
+		return RangeOf(), true
 
 	// Aliases
 	case "byte":

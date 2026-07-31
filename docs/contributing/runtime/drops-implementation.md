@@ -159,6 +159,21 @@ corruption on macOS); an over-aggressive mark only leaks.
   Alloca lines carry no SSA operands, so the move is dependency-safe.
   You should still prefer by-value runtime calls where practical, but
   the hoist is the backstop that makes the whole class non-fatal.
+- **Loop drops go on the edges, never in the latch.** Every loop owns a
+  latch block — the back edge, and what `continue` targets so a desugared
+  `for` still runs its index step. Because it is the one block all paths
+  share, it looks like the place to put the body's scope drops. It is not.
+  A `break` or `continue` jumps from the middle of the body, so the latch
+  is not dominated by the body's tail: freeing a temp there that only the
+  fall-through path defines is invalid IR, and LLVM rejects the function
+  with *"instruction does not dominate all uses"*. Worse, a value that
+  *is* live at the jump gets freed twice, since the jump drops it too.
+  `closeLoopBody` in `hir_lower.go` is the single place that gets this
+  right — drop `ls.cur()` on the fall-through path, then branch — and
+  `emitLoopExitDrops` handles the jumps, dropping only what is registered
+  at the point the jump stands. Every loop shape must go through it.
+  Guarded by examples 546 and 547; 539 covers the control flow but uses
+  only ints, so it cannot catch this.
 
 ## Phase 4: owned string accumulators (`str_accum.go`)
 

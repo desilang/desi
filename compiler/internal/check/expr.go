@@ -761,6 +761,8 @@ func (c *checker) comprehensionElemType(iterType types.T, iter ast.Expr) types.T
 		return it.Elem
 	case *types.Set:
 		return it.Elem
+	case *types.Range:
+		return it.Elem()
 	case nil:
 		return types.Int
 	default:

@@ -48,6 +48,14 @@ func init() {
 	SetFuncSig("__desi_str_new", "ptr", nil)
 	SetFuncSig("__desi_str_append_free", "ptr", nil)
 
+	// Range runtime overrides. Ranges work in i64 throughout; the lowerer
+	// narrows to i32 when it binds the loop variable.
+	SetFuncSig("range_new", "ptr", []string{"i64", "i64", "i64"})
+	SetFuncSig("range_len", "i64", []string{"ptr"})
+	SetFuncSig("range_get", "i64", []string{"ptr", "i64"})
+	SetFuncSig("range_contains", "i1", []string{"ptr", "i64"})
+	SetFuncSig("range_free", "void", []string{"ptr"})
+
 	// List runtime overrides
 	SetFuncSig("list_new", "ptr", nil)
 	SetFuncSig("list_append", "void", nil)

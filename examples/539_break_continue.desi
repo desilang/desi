@@ -1,0 +1,93 @@
+# `break` and `continue` in while and for loops, including nested ones.
+#
+# Regression guard: neither worked. Both were reserved words — the lexer
+# returned KW_break/KW_continue — but parseStmt had no case for either, so any
+# use was a plain syntax error. keywords.md listed them as working control flow,
+# and the concurrency docs wrote loops around them.
+#
+# The reason it was not a small fix: every `for` desugars to a while whose index
+# increment was emitted at the *end of the body block*, after the user's
+# statements. A `continue` branching to the condition block would have skipped
+# the increment and spun forever. Each loop now owns a latch block holding that
+# index step — the back edge, and the target of `continue` — plus an exit block
+# for `continue`'s counterpart, `break`.
+#
+# Every value here is an int, so nothing in this file is ever dropped. See 546
+# for the ownership half: what a jump has to release on its way out.
+#
+# EXPECTED_OUTPUT:
+# 3
+# 13
+# 30
+# 80
+# 3
+# 6
+# 5
+
+def main() -> int:
+	# while + break
+	let mut i = 0
+	while true:
+		i := i + 1
+		if i == 3:
+			break
+	print(str(i))
+
+	# while + continue — 1 + 3 + 4 + 5, skipping 2
+	let mut j = 0
+	let mut sum = 0
+	while j < 5:
+		j := j + 1
+		if j == 2:
+			continue
+		sum := sum + j
+	print(str(sum))
+
+	# for + break
+	let items = [10, 20, 30, 40]
+	let mut found = 0
+	for x in items:
+		if x == 30:
+			found := x
+			break
+	print(str(found))
+
+	# for + continue — the index still advances, or this would not terminate
+	let mut total = 0
+	for y in items:
+		if y == 20:
+			continue
+		total := total + y
+	print(str(total))
+
+	# Nested: an inner break leaves only the inner loop.
+	let mut count = 0
+	for a in [1, 2, 3]:
+		for b in [1, 2, 3]:
+			if b == 2:
+				break
+			count := count + 1
+	print(str(count))
+
+	# Nested continue.
+	let mut c2 = 0
+	let mut p = 0
+	while p < 3:
+		p := p + 1
+		let mut q = 0
+		while q < 3:
+			q := q + 1
+			if q == 2:
+				continue
+			c2 := c2 + 1
+	print(str(c2))
+
+	# break from inside a nested if, several scopes deep.
+	let mut k = 0
+	while true:
+		k := k + 1
+		if k > 1:
+			if k > 4:
+				break
+	print(str(k))
+	return 0

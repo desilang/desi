@@ -953,8 +953,18 @@ setjmpScan:
 				// Get unique labels
 				condLabel := blockLabels[x.CondBlock]
 				bodyLabel := blockLabels[x.Body]
-				exitLabel := fmt.Sprintf("loop_exit%d", m.mergeID)
-				m.mergeID++
+
+				// The lowerer owns the exit block when the loop can be left by
+				// 'break', so that the jump has a label to name. Without one,
+				// synthesise a label and split the current block as before.
+				exitLabel := ""
+				exitIsOwned := x.Exit != nil
+				if exitIsOwned {
+					exitLabel = blockLabels[x.Exit]
+				} else {
+					exitLabel = fmt.Sprintf("loop_exit%d", m.mergeID)
+					m.mergeID++
+				}
 
 				// Emit unconditional branch to loop header
 				wprintf(&m.funcs, "  br label %%%s\n", condLabel)
@@ -963,11 +973,20 @@ setjmpScan:
 				m.cfLoopConds[condLabel] = x.Cond
 				m.cfBlocks[condLabel] = exitLabel + "|" + bodyLabel
 
-				// Mark body block to branch back to condition
-				m.cfBlocks[bodyLabel] = condLabel
+				// The back-edge leaves from the latch when there is one — that
+				// is where the scope drops and the 'for' index increment live,
+				// and where 'continue' lands. Otherwise the body closes the loop.
+				if x.Latch != nil {
+					m.cfBlocks[blockLabels[x.Latch]] = condLabel
+				} else {
+					m.cfBlocks[bodyLabel] = condLabel
+				}
 
-				// Emit exit label immediately to split the block
-				wprintf(&m.funcs, "%s:\n", exitLabel)
+				if !exitIsOwned {
+					// Emit exit label immediately to split the block
+					wprintf(&m.funcs, "%s:\n", exitLabel)
+				}
+				lifetimesClosed = true
 
 			// ------- Drop (RAII cleanup) -------
 			case *hir.Drop:
@@ -1143,10 +1162,13 @@ setjmpScan:
 
 		// Add terminator for control flow blocks (branches to merge)
 		if mergeLabel, ok := m.cfBlocks[label]; ok {
-			// Check if block already has a terminator (e.g., ret)
+			// Check if block already has a terminator. A 'ret' ends the block, and
+			// so does the jump a break or continue emits — appending the branch to
+			// the merge label after either one leaves two terminators in the block.
 			hasTerminator := false
 			if len(b.Stmts) > 0 {
-				if _, isRet := b.Stmts[len(b.Stmts)-1].(*hir.Ret); isRet {
+				switch b.Stmts[len(b.Stmts)-1].(type) {
+				case *hir.Ret, *hir.Jump:
 					hasTerminator = true
 				}
 			}

@@ -824,6 +824,26 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 	case *ast.PassStmt:
 		// pass is a no-op - nothing to emit
 
+	case *ast.BreakStmt:
+		// Leave the innermost loop. The scopes opened inside the loop body are
+		// dropped first — control never reaches the drops the body emits after
+		// this point. The checker rejects a break outside a loop, so an empty
+		// stack here means a malformed tree; emit nothing rather than crash.
+		if lt, ok := ls.innermostLoop(); ok {
+			ls.emitLoopExitDrops()
+			ls.b.Emit(&hir.Jump{Target: lt.exit})
+			ls.terminated = true
+		}
+
+	case *ast.ContinueStmt:
+		// Jump to the latch, not to the condition block: for a desugared 'for'
+		// the latch holds the index increment, and skipping it would spin.
+		if lt, ok := ls.innermostLoop(); ok {
+			ls.emitLoopExitDrops()
+			ls.b.Emit(&hir.Jump{Target: lt.cont})
+			ls.terminated = true
+		}
+
 	case *ast.AssertStmt:
 		// Lower assert: if !cond { __desi_assert_fail("line N: assertion failed[: message]") }
 		cond := ls.lowerExpr(s.Cond)
@@ -1056,19 +1076,22 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 		cond := ls.lowerExpr(s.Cond)
 		ls.b.SetBlock(oldCur)
 
-		// Create body block
+		// Create body, latch and exit blocks. The latch is where the body's
+		// scope drops go, so 'continue' runs them too; the exit block is what
+		// 'break' jumps to and where the code after the loop continues.
 		bodyBlk := ls.b.NewBlock("while_body")
+		latchBlk := ls.b.NewBlock("while_latch")
+		exitBlk := ls.b.NewBlock("while_exit")
+
 		ls.push()
+		ls.pushLoop(latchBlk, exitBlk)
 		ls.b.SetBlock(bodyBlk)
 		ls.lowerBlock(s.Body)
-		scWhile := ls.pop()
-		if !ls.terminated {
-			ls.emitScopeDrops(scWhile)
-		}
-		ls.b.SetBlock(oldCur)
+		ls.closeLoopBody(latchBlk)
 
-		// Emit While with both condition block and body block
-		ls.b.Emit(&hir.While{Cond: cond, CondBlock: condBlk, Body: bodyBlk})
+		ls.b.SetBlock(oldCur)
+		ls.b.Emit(&hir.While{Cond: cond, CondBlock: condBlk, Body: bodyBlk, Exit: exitBlk, Latch: latchBlk})
+		ls.b.SetBlock(exitBlk)
 
 	case *ast.ForStmt:
 		// Desugar for-loop to while loop with index
@@ -1193,6 +1216,13 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 		}
 
+		// Iterating a range is its own shape — a counted loop over ints rather
+		// than an indexed walk over a container — so it is handled before the
+		// container paths below. It pops the scope pushed above.
+		if ls.tryLowerForRange(s) {
+			return
+		}
+
 		// Handle enumerate() with two targets (index, element)
 		if isEnumerate && len(s.Targets) == 2 {
 			// Get list length
@@ -1217,6 +1247,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// Body block
 			bodyBlk := ls.b.NewBlock("for_body")
+			// Created after the body so they are emitted after it: the latch reads
+			// values the body defines, and LLVM needs those to appear first.
+			forLatch := ls.b.NewBlock("for_latch")
+			forExit := ls.b.NewBlock("for_exit")
+			ls.pushLoop(forLatch, forExit)
 			ls.b.SetBlock(bodyBlk)
 
 			// Load current index for use in loop
@@ -1249,10 +1284,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 
 			// Scope cleanup
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
+			ls.closeLoopBody(forLatch)
 
 			// Increment index
 			incTemp := ls.b.FreshTemp("for_inc")
@@ -1260,7 +1292,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+			ls.b.SetBlock(forExit)
 			return
 		}
 
@@ -1292,6 +1325,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// Body block
 			bodyBlk := ls.b.NewBlock("for_body")
+			// Created after the body so they are emitted after it: the latch reads
+			// values the body defines, and LLVM needs those to appear first.
+			forLatch := ls.b.NewBlock("for_latch")
+			forExit := ls.b.NewBlock("for_exit")
+			ls.pushLoop(forLatch, forExit)
 			ls.b.SetBlock(bodyBlk)
 
 			// Load current index
@@ -1321,10 +1359,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 
 			// Scope cleanup
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
+			ls.closeLoopBody(forLatch)
 
 			// Decrement index: idx = idx - 1
 			decTemp := ls.b.FreshTemp("for_dec")
@@ -1332,7 +1367,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: decTemp})
 
 			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+			ls.b.SetBlock(forExit)
 			return
 		}
 
@@ -1368,6 +1404,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// Body block
 			bodyBlk := ls.b.NewBlock("for_body")
+			// Created after the body so they are emitted after it: the latch reads
+			// values the body defines, and LLVM needs those to appear first.
+			forLatch := ls.b.NewBlock("for_latch")
+			forExit := ls.b.NewBlock("for_exit")
+			ls.pushLoop(forLatch, forExit)
 			ls.b.SetBlock(bodyBlk)
 
 			// Load current index
@@ -1414,10 +1455,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 
 			// Scope cleanup
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
+			ls.closeLoopBody(forLatch)
 
 			// Increment index
 			incTemp := ls.b.FreshTemp("for_inc")
@@ -1425,7 +1463,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+			ls.b.SetBlock(forExit)
 			return
 		}
 
@@ -1477,6 +1516,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// Body block
 			bodyBlk := ls.b.NewBlock("for_body")
+			// Created after the body so they are emitted after it: the latch reads
+			// values the body defines, and LLVM needs those to appear first.
+			forLatch := ls.b.NewBlock("for_latch")
+			forExit := ls.b.NewBlock("for_exit")
+			ls.pushLoop(forLatch, forExit)
 			ls.b.SetBlock(bodyBlk)
 
 			// Load current index
@@ -1599,10 +1643,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 
 			// Scope cleanup
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
+			ls.closeLoopBody(forLatch)
 
 			// Increment index
 			incTemp := ls.b.FreshTemp("for_inc")
@@ -1610,7 +1651,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+			ls.b.SetBlock(forExit)
 
 			// Free keys array after loop (keys_ptr was malloc'd by dict_keys)
 			ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
@@ -1658,6 +1700,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 				// Body block
 				bodyBlk := ls.b.NewBlock("for_body")
+				// Created after the body so they are emitted after it: the latch reads
+				// values the body defines, and LLVM needs those to appear first.
+				forLatch := ls.b.NewBlock("for_latch")
+				forExit := ls.b.NewBlock("for_exit")
+				ls.pushLoop(forLatch, forExit)
 				ls.b.SetBlock(bodyBlk)
 
 				// Load current index
@@ -1690,10 +1737,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 
 				// Scope cleanup
-				scFor := ls.pop()
-				if !ls.terminated {
-					ls.emitScopeDrops(scFor)
-				}
+				ls.closeLoopBody(forLatch)
 
 				// Increment index
 				incTemp := ls.b.FreshTemp("for_inc")
@@ -1701,7 +1745,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 				ls.b.SetBlock(oldCur)
-				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+				ls.b.SetBlock(forExit)
 
 				// Free array after loop (arrPtr was malloc'd by set_to_array)
 				ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{arrPtr}})
@@ -1745,6 +1790,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						// Body block
 						bodyBlk := ls.b.NewBlock("for_body")
+						// Created after the body so they are emitted after it: the latch reads
+						// values the body defines, and LLVM needs those to appear first.
+						forLatch := ls.b.NewBlock("for_latch")
+						forExit := ls.b.NewBlock("for_exit")
+						ls.pushLoop(forLatch, forExit)
 						ls.b.SetBlock(bodyBlk)
 
 						idxBody := ls.b.FreshTemp("for_idx_body")
@@ -1780,10 +1830,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 							ls.lowerBlock(s.Body)
 						}
 
-						scFor := ls.pop()
-						if !ls.terminated {
-							ls.emitScopeDrops(scFor)
-						}
+						ls.closeLoopBody(forLatch)
 
 						// Increment index
 						incTemp := ls.b.FreshTemp("for_inc")
@@ -1791,7 +1838,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 						ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 						ls.b.SetBlock(oldCur)
-						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+						ls.b.SetBlock(forExit)
 						return
 					}
 				}
@@ -1846,6 +1894,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 						// Body block
 						bodyBlk := ls.b.NewBlock("for_iter_body")
+						// Created after the body so they are emitted after it: the latch reads
+						// values the body defines, and LLVM needs those to appear first.
+						forLatch := ls.b.NewBlock("for_latch")
+						forExit := ls.b.NewBlock("for_exit")
+						ls.pushLoop(forLatch, forExit)
 						ls.b.SetBlock(bodyBlk)
 
 						ls.push()
@@ -1868,13 +1921,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 							ls.lowerBlock(s.Body)
 						}
 
-						scFor := ls.pop()
-						if !ls.terminated {
-							ls.emitScopeDrops(scFor)
-						}
+						ls.closeLoopBody(forLatch)
 
 						ls.b.SetBlock(oldCur)
-						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+						ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+						ls.b.SetBlock(forExit)
 						return // Exit to prevent fall-through to list iteration path
 					}
 				}
@@ -1920,6 +1971,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 				// Body block
 				bodyBlk := ls.b.NewBlock("for_body")
+				// Created after the body so they are emitted after it: the latch reads
+				// values the body defines, and LLVM needs those to appear first.
+				forLatch := ls.b.NewBlock("for_latch")
+				forExit := ls.b.NewBlock("for_exit")
+				ls.pushLoop(forLatch, forExit)
 				ls.b.SetBlock(bodyBlk)
 
 				// Load current index
@@ -1947,10 +2003,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				}
 
 				// Scope cleanup
-				scFor := ls.pop()
-				if !ls.terminated {
-					ls.emitScopeDrops(scFor)
-				}
+				ls.closeLoopBody(forLatch)
 
 				// Increment index
 				incTemp := ls.b.FreshTemp("for_inc")
@@ -1958,7 +2011,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 				ls.b.SetBlock(oldCur)
-				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+				ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+				ls.b.SetBlock(forExit)
 
 				// Free keys array after loop
 				ls.b.Emit(&hir.Call{Fn: "free", Args: []hir.Value{keysPtr}})
@@ -2000,6 +2054,11 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 
 			// Create body block
 			bodyBlk := ls.b.NewBlock("for_body")
+			// Created after the body so they are emitted after it: the latch reads
+			// values the body defines, and LLVM needs those to appear first.
+			forLatch := ls.b.NewBlock("for_latch")
+			forExit := ls.b.NewBlock("for_exit")
+			ls.pushLoop(forLatch, forExit)
 			ls.b.SetBlock(bodyBlk)
 
 			idxBody := ls.b.FreshTemp("for_idx_body")
@@ -2028,10 +2087,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.lowerBlock(s.Body)
 			}
 
-			scFor := ls.pop()
-			if !ls.terminated {
-				ls.emitScopeDrops(scFor)
-			}
+			ls.closeLoopBody(forLatch)
 
 			// Increment index
 			incTemp := ls.b.FreshTemp("for_inc")
@@ -2039,7 +2095,8 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.b.Emit(&hir.Store{Dst: idxPtr, Val: incTemp})
 
 			ls.b.SetBlock(oldCur)
-			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk})
+			ls.b.Emit(&hir.While{Cond: condTemp, CondBlock: condBlk, Body: bodyBlk, Exit: forExit, Latch: forLatch})
+			ls.b.SetBlock(forExit)
 		}
 
 	case *ast.UsingStmt:

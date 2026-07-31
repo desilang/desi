@@ -1,0 +1,12 @@
+# EXPECTED: COMPILE_ERROR
+# Test: indexing a list with a non-integer is DTE0131
+#
+# This used to report DTE0006, whose catalogue entry is "cannot assign to
+# immutable variable" with the help "declare the variable with 'mut' if you
+# intend to reassign it". Nothing about the real problem, and the suggested fix
+# does not apply — index and key type errors have their own code now.
+
+def main() -> int:
+	let items = [10, 20, 30]
+	print(str(items["a"]))
+	return 0

@@ -514,11 +514,26 @@ func (c *checker) checkStmt(s ast.Stmt) {
 	case *ast.WhileStmt:
 		_ = c.typ(st.Cond)
 		if st.Body != nil {
+			c.loopDepth++
 			c.checkBlock(st.Body)
+			c.loopDepth--
+		}
+
+	case *ast.BreakStmt:
+		if c.loopDepth == 0 {
+			c.add(diagAt("DTE0130", st.Span, "'break' outside a loop"))
+		}
+
+	case *ast.ContinueStmt:
+		if c.loopDepth == 0 {
+			c.add(diagAt("DTE0130", st.Span, "'continue' outside a loop"))
 		}
 
 	case *ast.ForStmt:
 		// Get the iterable type
+		// The iterable position is the one place enumerate/reversed/zip are
+		// legal; mark it before typing so typCall can tell.
+		c.loopIterables[st.Iter] = true
 		iterType := c.typ(st.Iter)
 
 		// Check if source collection is mutable (needed for mutable loop targets)
@@ -604,6 +619,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					elemType = it.Elem
 				case *types.Set:
 					elemType = it.Elem
+				case *types.Range:
+					elemType = it.Elem()
 				default:
 					elemType = types.Int // Fallback
 				}
@@ -741,6 +758,8 @@ func (c *checker) checkStmt(s ast.Stmt) {
 					elemType = it.Elem
 				case *types.Set:
 					elemType = it.Elem
+				case *types.Range:
+					elemType = it.Elem()
 				case *types.Tuple:
 					// Homogeneous tuple iteration: all elements must be same type
 					if len(it.Elems) == 0 {
@@ -807,7 +826,9 @@ func (c *checker) checkStmt(s ast.Stmt) {
 		}
 
 		if st.Body != nil {
+			c.loopDepth++
 			c.checkBlock(st.Body)
+			c.loopDepth--
 		}
 
 	case *ast.DeferStmt:

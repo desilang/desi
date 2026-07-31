@@ -237,6 +237,15 @@ type While struct {
 	Cond      Value  // Final condition value (temp holding boolean result)
 	CondBlock *Block // Block that evaluates Cond (for re-evaluation in loop header)
 	Body      *Block
+	// Exit is the block control reaches when the condition fails. The lowerer
+	// owns it so that 'break' can name it as a Jump target; the backend falls
+	// back to synthesising a label when it is nil.
+	Exit *Block
+	// Latch closes the iteration: scope drops, and for a desugared 'for' the
+	// index increment. It is the back-edge to CondBlock, and the target of
+	// 'continue' — which is why the increment cannot live at the end of Body.
+	// Nil means Body branches straight back to CondBlock.
+	Latch *Block
 }
 
 func (*While) isStmt() {}

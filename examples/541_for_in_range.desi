@@ -1,0 +1,100 @@
+# `for ... in range(...)` — the three documented forms, plus descending,
+# empty, nested, and indexing a list with the loop variable.
+#
+# Regression guard: none of this worked. range() was declared in the checker
+# with an *opaque* return type ("opaque return for now"), so the loop variable
+# got no type at all. Comprehensions dodged it by special-casing range and never
+# emitting a call; the `for` statement had no such case, so it fell through to
+# the generic container path and emitted a call to a `range` function that does
+# not exist — a link error, `undefined symbol: range`, after `desic check` had
+# already said ok.
+#
+# It survived because every range in the example suite was inside a
+# comprehension. Not one was a `for` statement.
+#
+# EXPECTED_OUTPUT:
+# 0
+# 1
+# 2
+# 3
+# 4
+# --
+# 2
+# 3
+# 4
+# 5
+# --
+# 0
+# 2
+# 4
+# 6
+# 8
+# --
+# 3
+# 2
+# 1
+# --
+# a
+# b
+# c
+# --
+# 9
+# --
+# 3
+# 8
+
+def main() -> int:
+	for i in range(5):
+		print(str(i))
+	print("--")
+
+	for i in range(2, 6):
+		print(str(i))
+	print("--")
+
+	for i in range(0, 10, 2):
+		print(str(i))
+	print("--")
+
+	# A negative step counts down; the loop compares the other way.
+	for i in range(3, 0, -1):
+		print(str(i))
+	print("--")
+
+	# An empty range runs its body zero times.
+	for i in range(0):
+		print("never")
+	for i in range(5, 5):
+		print("never")
+	for i in range(0, 10, -1):
+		print("never")
+
+	# Indexing a list with the loop variable — the shape that first failed.
+	let items = ["a", "b", "c"]
+	for i in range(len(items)):
+		print(items[i])
+	print("--")
+
+	# Nested.
+	let mut n = 0
+	for i in range(3):
+		for j in range(3):
+			n := n + 1
+	print(str(n))
+	print("--")
+
+	# break and continue work here like any other loop.
+	let mut stopped = 0
+	for i in range(100):
+		if i == 3:
+			break
+		stopped := stopped + 1
+	print(str(stopped))
+
+	let mut summed = 0
+	for i in range(5):
+		if i == 2:
+			continue
+		summed := summed + i
+	print(str(summed))
+	return 0

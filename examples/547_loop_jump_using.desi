@@ -1,0 +1,41 @@
+# Leaving a `using` block early still closes what it opened.
+#
+# `break` and `continue` jump out of every scope between the statement and the
+# loop, so each one has to run that scope's cleanup on the way — the RAII
+# closers included. The proof is that `close` prints before control reaches the
+# statement after the loop.
+#
+# EXPECTED_OUTPUT:
+# close
+# done 0
+# close
+# --
+# close
+# tail 0
+# close
+# close
+# tail 2
+
+class Resource:
+	pub def __close__(self) -> none:
+		print("close")
+		return
+
+def main() -> int:
+	# break from inside `using`: the closer runs, then the loop ends.
+	for i in range(4):
+		using r = Resource():
+			if i == 1:
+				break
+		print("done " + str(i))
+
+	print("--")
+
+	# continue from inside `using`: the closer runs, then the next iteration
+	# starts — the tail of the body is what gets skipped, not the cleanup.
+	for i in range(3):
+		using r = Resource():
+			if i == 1:
+				continue
+		print("tail " + str(i))
+	return 0
