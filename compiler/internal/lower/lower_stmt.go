@@ -353,50 +353,10 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				init = ls.lowerExpr(s.Value)
 			}
 
-			// M15: Unbox result from generic functions if needed
-			// If the call is to a generic function and the expected type is primitive, unbox
-			if call, ok := s.Value.(*ast.CallExpr); ok && ls.info != nil {
-				chosen := ls.info.ChosenOverloads[call]
-				isGeneric := false
-				if chosen != nil {
-					if (chosen.Decl != nil && len(chosen.Decl.TypeParams) > 0) ||
-						(chosen.ModuleDecl != nil && len(chosen.ModuleDecl.TypeParams) > 0) {
-						isGeneric = true
-					}
-				}
-				if !isGeneric {
-					// Fallback to name check
-					if id, ok := call.Callee.(*ast.Ident); ok {
-						if set, ok := ls.info.Funcs[id.Name]; ok && len(set.Cands) > 0 {
-							cand := set.Cands[0]
-							if (cand.Decl != nil && len(cand.Decl.TypeParams) > 0) ||
-								(cand.ModuleDecl != nil && len(cand.ModuleDecl.TypeParams) > 0) {
-								isGeneric = true
-							}
-						}
-					}
-				}
-
-				if isGeneric {
-					// Generic function returns ptr, but we might need primitive
-					expectedType := varType
-					if expectedType != nil {
-						if t, ok := expectedType.(types.T); ok {
-							expectedLowered := lowerType(t)
-							if expectedLowered != "ptr" && expectedLowered != "void" {
-								// Need to unbox: load from ptr
-								unboxed := ls.b.FreshTemp("unboxed")
-								ls.b.Emit(&hir.Load{
-									Type: expectedLowered,
-									Src:  init,
-									Dst:  unboxed,
-								})
-								init = unboxed
-							}
-						}
-					}
-				}
-			}
+			// Unboxing a generic function's result used to happen here, which
+			// meant it only happened when the result was bound to a variable.
+			// It belongs with the call itself — see unboxGenericResult — so
+			// that `str(ident(42))` works as well as `let x = ident(42)`.
 		}
 
 		// Post-lowering ownership check: values marked non-owned during

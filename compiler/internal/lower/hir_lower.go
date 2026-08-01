@@ -636,6 +636,64 @@ func (ls *lowerState) emitLoopExitDrops() {
 	}
 }
 
+// callsGenericFunc reports whether a call resolves to a generic function, whose
+// result therefore comes back boxed behind a pointer.
+func (ls *lowerState) callsGenericFunc(call *ast.CallExpr) bool {
+	if ls.info == nil {
+		return false
+	}
+	if chosen := ls.info.ChosenOverloads[call]; chosen != nil {
+		if (chosen.Decl != nil && len(chosen.Decl.TypeParams) > 0) ||
+			(chosen.ModuleDecl != nil && len(chosen.ModuleDecl.TypeParams) > 0) {
+			return true
+		}
+	}
+	// The checker does not record a winner for every call, so fall back to the
+	// declaration the name resolves to.
+	id, ok := call.Callee.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	set, ok := ls.info.Funcs[id.Name]
+	if !ok || len(set.Cands) == 0 {
+		return false
+	}
+	cand := set.Cands[0]
+	return (cand.Decl != nil && len(cand.Decl.TypeParams) > 0) ||
+		(cand.ModuleDecl != nil && len(cand.ModuleDecl.TypeParams) > 0)
+}
+
+// unboxGenericResult loads the value back out of the box a generic function
+// returns, when the type the call was instantiated at is a primitive.
+//
+// A generic function is emitted once for every T, so it hands its result back
+// behind a pointer. Unboxing used to be done by the `let` lowering alone, which
+// meant it only happened when the result was bound to a variable: `let x =
+// ident(42)` was fine, and `str(ident(42))` handed the backend a raw pointer.
+// Nothing downstream could tell what was inside it, so `str` fell through to a
+// synthesized `Unknown_to_str` and the program failed at *link* time — long
+// after `desic check` had said ok.
+//
+// Doing it here, where the call is lowered, covers every position a call can
+// appear in: an argument, a return, an operand, a collection element.
+func (ls *lowerState) unboxGenericResult(call *ast.CallExpr, v hir.Value) hir.Value {
+	if v == nil || ls.info == nil || !ls.callsGenericFunc(call) {
+		return v
+	}
+	t := ls.info.Types[call]
+	if t == nil {
+		return v
+	}
+	lowered := lowerType(t)
+	if lowered == "ptr" || lowered == "void" || lowered == "" {
+		// A pointer-shaped T needs no unboxing: the box holds the value itself.
+		return v
+	}
+	unboxed := ls.b.FreshTemp("unboxed")
+	ls.b.Emit(&hir.Load{Type: lowered, Src: v, Dst: unboxed})
+	return unboxed
+}
+
 // printLock and printUnlock bracket the output calls one print statement emits,
 // so a line cannot be torn by another task printing at the same time. A print
 // lowers to several calls — one per value, plus separators and the terminator —

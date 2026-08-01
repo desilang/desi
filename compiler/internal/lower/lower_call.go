@@ -3109,18 +3109,13 @@ skipMethodCall:
 						argType = lowerType(t)
 					}
 
-					// Check if the argument is itself a call to a generic function
-					// In that case, it already returns ptr at LLVM level and shouldn't be re-boxed
-					if call, ok := x.Args[i].(*ast.CallExpr); ok {
-						if callId, ok := call.Callee.(*ast.Ident); ok {
-							if set, ok := ls.info.Funcs[callId.Name]; ok && len(set.Cands) > 0 {
-								if set.Cands[0].Decl != nil && len(set.Cands[0].Decl.TypeParams) > 0 {
-									// Arg is a call to a generic function, it returns ptr
-									argType = "ptr"
-								}
-							}
-						}
-					}
+					// A generic call used to be left as the raw pointer it returns,
+					// and this treated such an argument as already boxed. The
+					// result is unboxed at the call now — see unboxGenericResult
+					// — so it has the same shape as any other value of its type,
+					// and the type the checker recorded above is the truth. Left
+					// in, the special case skipped boxing an argument that was no
+					// longer a pointer, and `ident(ident(5))` dereferenced an int.
 				}
 
 				// A generic enum constructor boxes everything, a pointer included.

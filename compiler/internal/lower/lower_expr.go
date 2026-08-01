@@ -1545,7 +1545,7 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		return dst
 
 	case *ast.CallExpr:
-		return ls.lowerCall(x)
+		return ls.unboxGenericResult(x, ls.lowerCall(x))
 
 	case *ast.FieldExpr:
 		// A module's exported constant: `signal.SIGINT`.

@@ -1,0 +1,77 @@
+# A generic function's result is usable wherever a value is, not just when it
+# is bound to a variable first.
+#
+# Regression guard, and a link-time failure that `desic check` called ok.
+#
+# A generic function is emitted once for every T, so it hands its result back
+# behind a pointer. Unboxing was done by the `let` lowering alone, which meant
+# it only happened when the result was bound: `let x = ident(42)` worked, and
+# `str(ident(42))` handed the backend a raw pointer. Nothing downstream could
+# tell what was inside, so `str` fell through to a synthesized `Unknown_to_str`
+# and the build died at the linker:
+#
+#     lld-link: error: undefined symbol: Unknown_to_str
+#
+# Unboxing now happens where the call is lowered, so every position below is
+# the same shape as any other value of that type. That also retired a special
+# case in argument boxing which assumed a generic call was still a pointer —
+# left in, it skipped boxing an argument that no longer was one, and the nested
+# call dereferenced an int.
+#
+# EXPECTED_OUTPUT:
+# 42
+# hello
+# 2.5
+# true
+# 5
+# 42
+# 42
+# less
+# 3
+# 2
+# 7
+# v=99 direct=100
+# a
+
+def ident<T>(v: T) -> T:
+	return v
+
+def first<T>(a: T, b: T) -> T:
+	return a
+
+def takes_int(n: int) -> int:
+	return n * 2
+
+def main() -> int:
+	# Used directly as an argument, which is what used to reach the linker.
+	print(str(ident(42)))
+	print(ident("hello"))
+	print(str(ident(2.5)))
+	print(str(ident(true)))
+
+	# A generic call as the argument of another generic call.
+	print(str(ident(ident(5))))
+
+	# As the argument of an ordinary function.
+	print(str(takes_int(ident(21))))
+
+	# In arithmetic and in a comparison.
+	print(str(ident(10) + ident(32)))
+	if ident(3) < ident(9):
+		print("less")
+
+	# As collection elements.
+	let xs = [ident(1), ident(2), ident(3)]
+	print(str(len(xs)))
+	print(str(xs[1]))
+
+	# Two type parameters unified to one T.
+	print(str(first(7, 8)))
+
+	# Interpolated, both bound and inline.
+	let v = ident(99)
+	print(f"v={v} direct={ident(100)}")
+
+	# A pointer-shaped T needs no unboxing — the box holds the value itself.
+	print(first("a", "b"))
+	return 0
