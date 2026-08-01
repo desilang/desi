@@ -1900,12 +1900,23 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 		// Check if this is a property access on a class
 		if cls, ok := baseType.(*types.Class); ok {
 			// Check if it's a property
-			if _, ok := cls.Properties[name]; ok {
+			if prop, ok := cls.Properties[name]; ok {
 				// Property access should be lowered as a method call
 				mangledName := fmt.Sprintf("%s_%s", cls.Name, name)
 				dst := ls.b.FreshTemp("prop")
+				// The getter's own return type has to go on the call. Without it
+				// the backend fell back to i32, so a property declared `-> float`
+				// was called as if it returned an integer and the result was read
+				// out of the wrong register — `c.area` came back as garbage while
+				// the same body called as an ordinary method returned correctly.
+				retType := "i32"
+				if prop != nil && prop.Ret != nil {
+					if lt := lowerType(prop.Ret); lt != "" {
+						retType = lt
+					}
+				}
 				// Properties are getters with just self parameter
-				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: []hir.Value{base}})
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: mangledName, Args: []hir.Value{base}, Type: retType})
 				return dst
 			}
 		}

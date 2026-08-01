@@ -1,10 +1,23 @@
-# String concatenation edge cases  
+# Concatenating a string with each primitive type.
+#
+# Every one of these was built and thrown away before, so the conversions were
+# never checked — a bool that printed as a pointer, or a float that lost its
+# fraction, would have gone unnoticed.
 
 def main() -> int:
-    # Basic string + primitives (each tested separately)
-    let msg1: str = "Age: " + 20
-    let msg2: str = "Price: $" + 9.99  
-    let msg3: str = "Active: " + true
-    let msg4: str = "Hello" + " World"
-    
-    return 0
+	let msg1: str = "Age: " + 20
+	let msg2: str = "Price: $" + 9.99
+	let msg3: str = "Active: " + true
+	let msg4: str = "Hello" + " World"
+
+	print(msg1)
+	print(msg2)
+	print(msg3)
+	print(msg4)
+	return 0
+
+# EXPECTED_OUTPUT:
+# Age: 20
+# Price: $9.99
+# Active: true
+# Hello World

@@ -1,9 +1,22 @@
+# A subclass carries its own field and the one it inherits.
+#
+# Used to construct a Dog and return, so nothing checked that the inherited
+# field was even reachable.
+
 class Animal:
-    pub name: str
+	pub mut name: str
 
 class Dog(Animal):
-    pub breed: str
+	pub mut breed: str
 
 def main() -> int:
-    let d = Dog()
-    return 0
+	let d = Dog()
+	d.name := "Rex"
+	d.breed := "collie"
+	print(d.name)
+	print(d.breed)
+	return 0
+
+# EXPECTED_OUTPUT:
+# Rex
+# collie

@@ -1,13 +1,19 @@
-# Test chained string concatenation
+# Chained concatenation, including chains that mix in primitives.
+#
+# Built and discarded before. A chain is where an intermediate result can be
+# dropped or reused wrongly, which is exactly what went unchecked.
 
 def main() -> int:
-    # Chained string concat
-    let msg1: str = "Part1" + "Part2" + "Part3"
-    
-    # Mixed chaining  
-    let msg2: str = "User: " + "Alice" + ", Age: " + 25
-    
-    # Complex chain
-    let msg3: str = "Price: $" + 9.99 + " (includes " + " tax)"
-    
-    return 0
+	let msg1: str = "Part1" + "Part2" + "Part3"
+	let msg2: str = "User: " + "Alice" + ", Age: " + 25
+	let msg3: str = "Price: $" + 9.99 + " (includes" + " tax)"
+
+	print(msg1)
+	print(msg2)
+	print(msg3)
+	return 0
+
+# EXPECTED_OUTPUT:
+# Part1Part2Part3
+# User: Alice, Age: 25
+# Price: $9.99 (includes tax)

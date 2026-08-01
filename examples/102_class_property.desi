@@ -1,15 +1,27 @@
-# Test @property decorator
+# @property is read without parentheses, and computes from the instance.
+#
+# The old version read both properties into locals and returned. The radius was
+# never set, so the values were computed from uninitialized memory and thrown
+# away — there was nothing to compare them against.
+
 class Circle:
-    pub radius: float
-    @property
-    pub def area(self) -> float:
-        return 3.14159 * self.radius * self.radius
-    @property
-    pub def diameter(self) -> float:
-        return self.radius * 2.0
+	pub mut radius: float
+
+	@property
+	pub def area(self) -> float:
+		return 3.14159 * self.radius * self.radius
+
+	@property
+	pub def diameter(self) -> float:
+		return self.radius * 2.0
 
 def main() -> int:
-    let c = Circle()
-    let a = c.area  # No parentheses!
-    let d = c.diameter
-    return 0
+	let c = Circle()
+	c.radius := 2.0
+	print(str(c.area))
+	print(str(c.diameter))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 12.56636
+# 4.0

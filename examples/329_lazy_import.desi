@@ -14,3 +14,8 @@ def main() -> int:
 # Visual verification required - run manually to see colors.
 # The key test is that lazy init allows the module to be loaded on first use,
 # not at program start. The __ensure_log_init() thunk is called before log.info.
+
+# EXPECTED_OUTPUT:
+# Before log call
+# [34m[INFO][0m Hello from lazy-loaded log module
+# After log call

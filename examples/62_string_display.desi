@@ -1,15 +1,21 @@
-# Test string concat with Display trait
+# Concatenating a string with a struct that implements Display.
+#
+# The result was discarded before, so nothing checked that to_str was the
+# method actually called.
 
 struct Person:
-    name: str
-    age: int
+	name: str
+	age: int
 
 impl Display for Person:
-    def to_str(self) -> str:
-        return "Person"
+	def to_str(self) -> str:
+		return "Person"
 
 def main() -> int:
-    let p: Person = Person(name="Alice", age=30)
-    let greeting: str = "Hello, " + p
-    
-    return 0
+	let p: Person = Person(name="Alice", age=30)
+	let greeting: str = "Hello, " + p
+	print(greeting)
+	return 0
+
+# EXPECTED_OUTPUT:
+# Hello, Person

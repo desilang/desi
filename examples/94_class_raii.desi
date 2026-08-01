@@ -1,13 +1,27 @@
+# `using` runs __close__ even when the block is left by `return`.
+#
+# The old version returned from inside the using block with an empty __close__
+# and no output, so the one thing worth checking — that leaving early still
+# closes — was not checked at all.
+
 class File:
-    pub path: str
-    
-    pub def __close__(self) -> none:
-        # Cleanup logic would go here
-        # In real implementation: close file descriptor
-        return
+	pub path: str
+
+	pub def __close__(self) -> none:
+		print("closed")
+		return
+
+def use_and_return() -> int:
+	using f = File():
+		print("inside")
+		return 7
+	return 0
 
 def main() -> int:
-    using f = File():
-        # Use file
-        return 0
-    return 0
+	print(str(use_and_return()))
+	return 0
+
+# EXPECTED_OUTPUT:
+# inside
+# closed
+# 7

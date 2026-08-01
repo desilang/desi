@@ -1,7 +1,19 @@
+# The simplest class: fields, constructed and read back.
+#
+# Used to construct a Note and return without touching a field.
+
 class Note:
-    pub title: str
-    pub body: str
+	pub mut title: str
+	pub mut body: str
 
 def main() -> int:
-    let n = Note()
-    return 0
+	let n = Note()
+	n.title := "Shopping"
+	n.body := "milk, bread"
+	print(n.title)
+	print(n.body)
+	return 0
+
+# EXPECTED_OUTPUT:
+# Shopping
+# milk, bread

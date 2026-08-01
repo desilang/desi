@@ -20,3 +20,9 @@ def main() -> int:
     
     print("Done")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing dict with class value:
+# retrieved.id:
+# 42
+# Done

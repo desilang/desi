@@ -484,3 +484,20 @@ const char* __desi_default_repr(const void* obj, const char* type_name) {
     snprintf(buf, sizeof(buf), "<%s at 0x%lx>", type_name, (unsigned long)(uintptr_t)obj);
     return strdup(buf);
 }
+
+/* __desi_zero(p: ptr, n: int) → none
+ * Zero a freshly allocated block.
+ *
+ * A class instance is built by allocating storage and then running __new__, and
+ * any field __new__ does not set was left holding whatever the allocator handed
+ * back. `Point()` printed garbage for x and y, and a class whose default
+ * constructor is the generated one had no initialized fields at all.
+ *
+ * Zeroing first makes an unset int 0 and an unset pointer field null, which is
+ * also what the drop paths null-check before freeing — an uninitialized pointer
+ * field was a free() of whatever happened to be in the heap. */
+void __desi_zero(void* p, int32_t n) {
+    if (p && n > 0) {
+        memset(p, 0, (size_t)n);
+    }
+}

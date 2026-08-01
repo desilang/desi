@@ -48,6 +48,11 @@ func init() {
 	SetFuncSig("__desi_str_new", "ptr", nil)
 	SetFuncSig("__desi_str_append_free", "ptr", nil)
 
+	// Zeroes a freshly allocated class instance, so a field the constructor
+	// never assigns reads as 0 or null rather than as whatever the allocator
+	// had lying around.
+	SetFuncSig("__desi_zero", "void", []string{"ptr", "i32"})
+
 	// Print serialization. Declared explicitly because print.c is in the LTO
 	// hot set, where the inferred variadic i32 signature would not match the
 	// void definition the bitcode carries.

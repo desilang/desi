@@ -3,3 +3,6 @@ import math_util
 def main():
     let result = math_util.add(5, 3)
     print(result)
+
+# EXPECTED_OUTPUT:
+# 8

@@ -1,14 +1,24 @@
+# Two instances of the same class keep their own field values.
+#
+# Used to build both and return, so nothing caught the two sharing storage.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
+	pub mut x: int
+	pub mut y: int
 
 def main() -> int:
-    # Use default constructor
-    let p1 = Point()
-    p1.x := 0
-    p1.y := 0
-    
-    let p2 = Point()
-    p2.x := 10
-    p2.y := 20
-    return 0
+	let p1 = Point()
+	p1.x := 0
+	p1.y := 0
+
+	let p2 = Point()
+	p2.x := 10
+	p2.y := 20
+
+	print(str(p1.x) + "," + str(p1.y))
+	print(str(p2.x) + "," + str(p2.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 0,0
+# 10,20

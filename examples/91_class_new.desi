@@ -1,10 +1,19 @@
+# The default zero-argument constructor, and assigning fields afterwards.
+#
+# Used to build the object and return without reading a single field back.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
+	pub mut x: int
+	pub mut y: int
 
 def main() -> int:
-    # Use default zero-arg constructor (always available)
-    let p = Point()
-    p.x := 10
-    p.y := 20
-    return 0
+	let p = Point()
+	p.x := 10
+	p.y := 20
+	print(str(p.x))
+	print(str(p.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 10
+# 20

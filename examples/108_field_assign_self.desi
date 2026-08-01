@@ -1,13 +1,26 @@
+# Assigning to self.field inside a method.
+#
+# `move` used to be `self.x := self.x`, a no-op whose result was never read.
+# It now moves the point, so the assignment has to have taken effect.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
-    
-    pub def move(self, dx: int, dy: int) -> none:
-        self.x := self.x  # Allowed inside methods
-        return
+	pub mut x: int
+	pub mut y: int
+
+	pub def move(self, dx: int, dy: int) -> none:
+		self.x := self.x + dx
+		self.y := self.y + dy
+		return
 
 def main() -> int:
-    let mut p = Point()
-    p.x := 10
-    p.y := 20
-    return 0
+	let mut p = Point()
+	p.x := 10
+	p.y := 20
+	p.move(5, -4)
+	print(str(p.x))
+	print(str(p.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 15
+# 16

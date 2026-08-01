@@ -4,4 +4,6 @@ def main() -> int:
 	print(math.add(2, 3))
 	return 0
 
-# SKIPPED: Import test - requires module dependencies
+
+# EXPECTED_OUTPUT:
+# 5

@@ -1,9 +1,15 @@
+# Assigning a field from outside the class.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
+	pub mut x: int
+	pub mut y: int
 
 def main() -> int:
-    let mut p = Point()
-    p.x := 10
-    p.y := 20
-    return 0
+	let mut p = Point()
+	p.x := 10
+	p.y := 20
+	print(str(p.x + p.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 30

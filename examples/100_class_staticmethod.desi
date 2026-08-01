@@ -1,18 +1,30 @@
-# Test @staticmethod decorator
+# @staticmethod, including one that has to use its arguments.
+#
+# from_coords used to ignore px and py and return a default Point, and nothing
+# read the result, so a static method that dropped its arguments looked fine.
+
 class Point:
-    pub x: int
-    pub y: int
-    
-    @staticmethod
-    pub def origin() -> Point:
-        return Point()
-    
-    @staticmethod
-    pub def from_coords(px: int, py: int) -> Point:
-        let p = Point()
-        return p
+	pub mut x: int
+	pub mut y: int
+
+	@staticmethod
+	pub def origin() -> Point:
+		return Point()
+
+	@staticmethod
+	pub def from_coords(px: int, py: int) -> Point:
+		let p = Point()
+		p.x := px
+		p.y := py
+		return p
 
 def main() -> int:
-    let p1 = Point.origin()     # Static method call
-    let p2 = Point.from_coords(10, 20)
-    return 0
+	let p1 = Point.origin()
+	let p2 = Point.from_coords(10, 20)
+	print(str(p1.x) + "," + str(p1.y))
+	print(str(p2.x) + "," + str(p2.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 0,0
+# 10,20

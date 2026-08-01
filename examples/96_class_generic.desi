@@ -1,9 +1,20 @@
-# Test generic class instantiation
+# One generic class instantiated at two different types.
+#
+# Used to construct both and return. Nothing read a value back, so a payload
+# that came out as the wrong type — or as an address — would have passed.
 
 class Box<T>:
-    pub value: T
+	pub mut value: T
 
 def main() -> int:
-    let b1: Box<int> = Box()
-    let b2: Box<str> = Box()
-    return 0
+	let b1: Box<int> = Box()
+	let b2: Box<str> = Box()
+	b1.value := 42
+	b2.value := "boxed"
+	print(str(b1.value))
+	print(b2.value)
+	return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# boxed

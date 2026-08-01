@@ -1,13 +1,30 @@
-# Test @classmethod decorator
+# @classmethod used as an alternative constructor.
+#
+# The returned Counter was never read, so a zero() that left the field
+# uninitialized would have passed.
+
 class Counter:
-    pub mut count: int
-    
-    @classmethod
-    pub def zero() -> Counter:
-        let c = Counter()
-        c.count := 0
-        return c
+	pub mut count: int
+
+	@classmethod
+	pub def zero() -> Counter:
+		let c = Counter()
+		c.count := 0
+		return c
+
+	@classmethod
+	pub def starting_at(n: int) -> Counter:
+		let c = Counter()
+		c.count := n
+		return c
 
 def main() -> int:
-    let c = Counter.zero()
-    return 0
+	let a = Counter.zero()
+	let b = Counter.starting_at(41)
+	print(str(a.count))
+	print(str(b.count + 1))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 0
+# 42

@@ -2775,6 +2775,19 @@ skipMethodCall:
 				// the current scope (e.g., returned from functions like __copy__)
 				ls.emitAlloc(inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"})
 
+				// Zero it before __new__ runs. Storage came back holding whatever
+				// the allocator had, and a field the constructor does not assign
+				// kept it: `Point()` printed garbage for x and y, and the
+				// generated default constructor assigns nothing at all. __new__
+				// still overwrites whatever it does set, so this only decides
+				// what an unset field reads as — 0, or null for a pointer field,
+				// which is what the drop paths null-check before freeing.
+				ls.b.Emit(&hir.Call{
+					Fn:   "__desi_zero",
+					Args: []hir.Value{inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
+					Type: "void",
+				})
+
 				// 2. Call __new__
 				// Find __new__
 				// It should be in cls.Constructors or Dunders["__new__"]

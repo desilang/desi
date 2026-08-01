@@ -6,4 +6,6 @@ def main() -> int:
   print(sub)
   return 0
 
-# SKIPPED: Complex slice test - needs verification
+
+# EXPECTED_OUTPUT:
+# bcd

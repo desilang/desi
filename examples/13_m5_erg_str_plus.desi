@@ -3,4 +3,7 @@ def main() -> int:
 	print(3.14 + "π")         # also ok -> str
 	return 0
 
-# SKIPPED: Import test - requires module dependencies
+
+# EXPECTED_OUTPUT:
+# answer=42
+# 3.14π

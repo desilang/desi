@@ -1,8 +1,17 @@
-# Test string concatenation
+# String concatenation produces the string it should.
+#
+# This file used to build the value and return, with a comment saying it was
+# "just testing that concat compiles". Concat could have produced garbage and
+# it would still have passed.
 
 def main() -> int:
-    let s1: str = "Hello"
-    let s2: str = " World"
-    let result: str = s1 + s2
-    # For now, just test that concat compiles
-    return 0
+	let s1: str = "Hello"
+	let s2: str = " World"
+	let result: str = s1 + s2
+	print(result)
+	print(str(len(result)))
+	return 0
+
+# EXPECTED_OUTPUT:
+# Hello World
+# 11

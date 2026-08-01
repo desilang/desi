@@ -1,13 +1,25 @@
+# __copy__ produces a separate object, not another handle on the same one.
+#
+# The old version made the copy and returned. "p1 and p2 are now separate
+# objects" was a comment, not a test: mutating one and reading the other is
+# what actually shows it.
+
 class Point:
-    pub x: int
-    pub y: int
-    
-    pub def __copy__(self) -> Point:
-        # Deep copy - create new instance
-        return Point()
+	pub mut x: int
+	pub mut y: int
+
+	pub def __copy__(self) -> Point:
+		return Point()
 
 def main() -> int:
-    let p1: Point = Point()
-    let p2: Point = p1.__copy__()  # Explicit copy creates new instance
-    # p1 and p2 are now separate objects
-    return 0
+	let p1: Point = Point()
+	p1.x := 1
+	let p2: Point = p1.__copy__()
+	p2.x := 99
+	print(str(p1.x))
+	print(str(p2.x))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 1
+# 99
