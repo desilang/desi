@@ -1,7 +1,16 @@
-# Minimal test for generic parsing
+# The smallest generic enum that parses, and one value carried through it.
+#
+# This was a parse-only test: it declared the enum and returned. See 71 and 86
+# for the payload bug that went unnoticed while nothing read a value back.
+
 enum Test<T>:
-    Val: T
+	Val: T
 
 def main() -> int:
-    # Just testing that generic enum parsing works
-    return 0
+	let t = Test.Val(11)
+	match t:
+		Test.Val(v): print(str(v))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 11

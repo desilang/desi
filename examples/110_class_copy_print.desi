@@ -1,27 +1,39 @@
+# __copy__ produces a distinct object, shown through the default repr.
+#
+# The old file printed two addresses and nothing compared them, and it carried
+# "# EXPECTED: SKIP" on its last line — the harness only reads the first five,
+# so it ran anyway, asserting nothing. Addresses cannot be asserted; that the
+# two objects are distinct, and that the copy is independent, can be.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
-    
-    pub def __copy__(self) -> Point:
-        let p = Point()
-        p.x := self.x
-        p.y := self.y
-        return p
+	pub mut x: int
+	pub mut y: int
+
+	pub def __copy__(self) -> Point:
+		let p = Point()
+		p.x := self.x
+		p.y := self.y
+		return p
 
 def main() -> int:
-    let p1 = Point()
-    p1.x := 10
-    p1.y := 20
-    
-    # Note: to_str() is auto-generated, returns "<Point at 0xADDR>"
-    print(p1.to_str())  # Prints: <Point at 0x...>
-    
-    let p2 = p1.__copy__()
-    p2.x := 30
-    
-    print(p2.to_str())  # Prints: <Point at 0x...>
-    
-    return 0
+	let p1 = Point()
+	p1.x := 10
+	p1.y := 20
 
-# Default repr now prints: <Point at 0xADDR>
-# EXPECTED: SKIP
+	let p2 = p1.__copy__()
+	p2.x := 30
+
+	# The repr's shape, not its address.
+	print(p1.to_str()[0:10])
+	print(p2.to_str()[0:10])
+
+	# The copy carried the values over, and then moved independently.
+	print(str(p1.x) + "," + str(p1.y))
+	print(str(p2.x) + "," + str(p2.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# <Point at 
+# <Point at 
+# 10,20
+# 30,20

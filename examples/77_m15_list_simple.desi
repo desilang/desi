@@ -1,3 +1,11 @@
+# Indexing a list literal.
+
 def main() -> int:
-    let nums: list[int] = [10, 20, 30]
-    return 0
+	let nums: list[int] = [10, 20, 30]
+	print(str(nums[0]))
+	print(str(nums[2]))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 10
+# 30

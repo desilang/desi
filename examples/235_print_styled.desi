@@ -8,3 +8,9 @@ def main() -> int:
 
 # NOTE: This test uses ANSI escape codes for colored output.
 # Visual verification required - run manually to see colors.
+
+# EXPECTED_OUTPUT:
+# Normal text
+# [31mRed text[0m
+# [1m[32mBold green[0m
+# Back to normal

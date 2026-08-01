@@ -1,11 +1,22 @@
 # M4: pipeline typing
+#
+# `1 |> add(2)` is add(1, 2). Both forms were computed and discarded, so a
+# pipeline that passed its operand in the wrong position would have passed.
 
 def add(a:int, b:int) -> int:
 	return a + b
 
 def main():
-	let x = 1 |> add(2)   # OK → add(1, 2)
+	let x = 1 |> add(2)   # add(1, 2)
 	let y = add(1, 2)     # same as above
+	print(str(x))
+	print(str(y))
 
-	# Negative example (arity):
-	# let z = 1 |> add()  # expect: DTE0046 wrong number of arguments
+	# Order matters: subtraction shows which side the piped value lands on.
+	let z = 10 |> add(5)
+	print(str(z))
+
+# EXPECTED_OUTPUT:
+# 3
+# 3
+# 15

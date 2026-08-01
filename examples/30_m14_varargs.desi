@@ -1,9 +1,18 @@
-# M14: Variadic functions demo
+# M14: Variadic functions
+#
+# The three calls used to be made and their results dropped. add_all returns
+# its first parameter, so printing the results checks that the fixed parameter
+# still lands correctly however many variadic arguments follow it.
 
 def add_all(x: int, *rest: int) -> int:
 	return x
 
 def main():
-	add_all(5)
-	add_all(1, 2, 3)
-	add_all(10, 20, 30, 40, 50)
+	print(str(add_all(5)))
+	print(str(add_all(1, 2, 3)))
+	print(str(add_all(10, 20, 30, 40, 50)))
+
+# EXPECTED_OUTPUT:
+# 5
+# 1
+# 10

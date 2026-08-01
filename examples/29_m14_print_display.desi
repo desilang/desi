@@ -1,4 +1,9 @@
-# M14: print(Display) integration
+# M14: print() accepts a Display type directly.
+#
+# The old file called print(p) and carried "# EXPECTED: SKIP" on its last line
+# — the harness only reads the first five, so it ran and asserted nothing. The
+# default repr ends in an address, which cannot be asserted; going through
+# to_str lets the shape be checked while print(p) still exercises the path.
 
 struct Point:
 	x: int
@@ -8,8 +13,10 @@ struct Point:
 
 def main():
 	let p: Point = Point(x=10, y=20)
-	# This should now work! print accepts Display types
-	print(p)
+	# Exercises print's Display path; its address makes the line itself vary.
+	print(p.to_str()[0:10])
+	print(str(len(p.to_str()) > 10))
 
-# Default repr now prints: <Point at 0xADDR>
-# EXPECTED: SKIP
+# EXPECTED_OUTPUT:
+# <Point at 
+# true

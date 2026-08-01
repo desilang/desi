@@ -7,13 +7,18 @@ from time import *
 def test_core_functions():
     print("=== Core Time Functions ===")
     let ts = now()
-    print("now():", ts)
+    # The value moves every second; assert its shape instead.
+    print("now() past 2020:", ts > 1.6e9)
     let utc = utc_now()
-    print("utc_now():", utc)
+    print("utc_now() past 2020:", utc > 1.6e9)
+    # monotonic() is non-decreasing; that is the whole contract. On Windows it
+    # comes from GetTickCount64, whose resolution is about 15.6 ms — the same
+    # choice CPython makes — so two calls astride a 10 ms sleep could land in
+    # one tick and a strict "increasing" check flipped between runs.
     let m1 = monotonic()
-    sleep(0.01)
+    sleep(0.05)
     let m2 = monotonic()
-    print("monotonic() increasing:", m2 > m1)
+    print("monotonic() non-decreasing:", m2 >= m1)
     let p1 = perf_counter()
     let p2 = perf_counter()
     print("perf_counter() precision:", p2 >= p1)
@@ -37,9 +42,10 @@ def test_timezone_functions():
 def test_formatting():
     print("=== Formatting & Parsing ===")
     let date_str = strftime("%Y-%m-%d")
-    print("strftime('%Y-%m-%d'):", date_str)
+    # Today, so it changes daily and by the runner timezone: check the shape.
+    print("strftime date len:", len(date_str))
     let time_str = strftime("%H:%M:%S")
-    print("strftime('%H:%M:%S'):", time_str)
+    print("strftime len:", len(time_str))
     let ts = from_parts(2026, 1, 15, 10, 30, 45)
     let formatted = format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
     print("format_timestamp(2026-01-15 10:30:45):", formatted)
@@ -48,7 +54,7 @@ def test_formatting():
     let built = from_parts(2026, 12, 25, 0, 0, 0)
     print("from_parts(2026, 12, 25):", built)
     let readable = ctime(now())
-    print("ctime():", readable)
+    print("ctime len > 20:", len(readable) > 20)
     let original = from_parts(2026, 6, 15, 14, 30, 0)
     let fmt = format_timestamp(original, "%Y-%m-%d %H:%M:%S")
     let reparsed = parse_time(fmt, "%Y-%m-%d %H:%M:%S")
@@ -58,13 +64,13 @@ def test_formatting():
 
 def test_current_components():
     print("=== Current Time Components ===")
-    print("year():", year())
-    print("month():", month())
-    print("day():", day())
-    print("hour():", hour())
-    print("minute():", minute())
-    print("second():", second())
-    print("weekday():", weekday(), "(0=Sun)")
+    print("year() >= 2026:", year() >= 2026)
+    print("month in range:", month() >= 1 and month() <= 12)
+    print("day in range:", day() >= 1 and day() <= 31)
+    print("hour in range:", hour() >= 0 and hour() <= 23)
+    print("minute in range:", minute() >= 0 and minute() <= 59)
+    print("second in range:", second() >= 0 and second() < 60)
+    print("weekday in range:", weekday() >= 0 and weekday() <= 6)
     print("")
 
 def test_timestamp_components():
@@ -137,11 +143,11 @@ def test_sleep_precision():
     let start = monotonic()
     sleep(0.1)
     let elapsed = monotonic() - start
-    print("sleep(0.1):", elapsed, "s")
+    print("sleep(0.1) took >= 0.05s:", elapsed >= 0.05)
     let start2 = monotonic()
     sleep(0.25)
     let elapsed2 = monotonic() - start2
-    print("sleep(0.25):", elapsed2, "s")
+    print("sleep(0.25) took >= 0.15s:", elapsed2 >= 0.15)
     print("")
 
 def test_stopwatch():
@@ -164,7 +170,7 @@ def test_stopwatch():
     let sw3 = Stopwatch()
     sw3.start()
     sleep(0.03)
-    print("Manual sw elapsed:", sw3.elapsed_str())
+    print("Manual sw elapsed non-empty:", len(sw3.elapsed_str()) > 0)
     
     # Test 4: create_duration factory function
     print("Test 4: create_duration factory")
@@ -211,3 +217,102 @@ def main():
 main()
 
 # SKIPPED: Non-deterministic output
+
+# EXPECTED_OUTPUT:
+# ========================================
+#    Desi Time Module - Complete Test
+# ========================================
+# 
+# === Core Time Functions ===
+# now() past 2020: true
+# utc_now() past 2020: true
+# monotonic() non-decreasing: true
+# perf_counter() precision: true
+# 
+# === Timezone Functions ===
+# timezone_offset(): -21600 seconds
+# timezone_name(): Central Daylight Time
+# is_dst(): true
+# to_utc/to_local round-trip: true
+# 
+# === Formatting & Parsing ===
+# strftime date len: 10
+# strftime len: 8
+# format_timestamp(2026-01-15 10:30:45): 2026-01-15 10:30:45
+# parse_time('2026-02-05'): 1.77027e+09
+# from_parts(2026, 12, 25): 1.79818e+09
+# ctime len > 20: true
+# format->parse round-trip: true
+# 
+# === Current Time Components ===
+# year() >= 2026: true
+# month in range: true
+# day in range: true
+# hour in range: true
+# minute in range: true
+# second in range: true
+# weekday in range: true
+# 
+# === Timestamp Component Extraction ===
+# year_of(): 2026
+# month_of(): 7
+# day_of(): 4
+# hour_of(): 12
+# minute_of(): 30
+# second_of(): 45
+# weekday_of(): 6
+# day_of_year(): 185
+# 
+# === Leap Year Tests ===
+# 2024 leap: true
+# 2025 leap: false
+# 2000 leap: true
+# 1900 leap: false
+# 2100 leap: false
+# 
+# === Arithmetic Functions ===
+# add_seconds(30): 30
+# add_minutes(15): 15
+# add_hours(3): 15
+# add_days(7): 12
+# add_days(-1): 4
+# diff(1 hour): 3600.0 seconds
+# 
+# === Humanize Function ===
+# humanize(0): 0 seconds
+# humanize(1): 1 second
+# humanize(60): 1 minute
+# humanize(3600): 1 hour
+# humanize(3665): 1 hour, 1 minute, 5 seconds
+# humanize(86400): 1 day
+# humanize(90061): 1 day, 1 hour, 1 minute, 1 second
+# 
+# === Relative Time Function ===
+# 1 hour ago: 1 hour ago
+# 1 day ago: 1 day ago
+# in 1 hour: in 1 hour
+# in 7 days: in 7 days
+# 
+# === Sleep Precision ===
+# sleep(0.1) took >= 0.05s: true
+# sleep(0.25) took >= 0.15s: true
+# 
+# === Stopwatch & Duration ===
+# Test 1: stopwatch() factory function
+# Stopwatch created successfully
+# Test 2: stopwatch_silent() factory
+# Silent stopwatch created successfully
+# Test 3: Manual Stopwatch construction
+# Manual sw elapsed non-empty: true
+# Test 4: create_duration factory
+# Duration created successfully
+# Test 5: Duration.from_seconds
+# Duration 1h1m1s: 1 hour, 1 minute, 1 second
+# Test 6: Duration.from_minutes
+# Duration 90 minutes: 1 hour, 30 minutes
+# Test 7: Duration.from_hours
+# Duration 2.5 hours: 2 hours, 30 minutes
+# === Stopwatch Tests Complete ===
+# ========================================
+# All time module tests complete!
+# ========================================

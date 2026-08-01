@@ -1,8 +1,20 @@
+# append() grows the list, and len() reports the new size.
+#
+# The old version appended twice and read the length into a local it never
+# used, so an append that silently did nothing would have passed.
+
 def main() -> int:
-    let nums: list[int] = [1, 2, 3]
-    nums.append(4)
-    nums.append(5)
-    
-    let length: int = nums.len()
-    
-    return 0
+	let nums: list[int] = [1, 2, 3]
+	nums.append(4)
+	nums.append(5)
+
+	let length: int = nums.len()
+	print(str(length))
+	print(str(nums[3]))
+	print(str(nums[4]))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 5
+# 4
+# 5

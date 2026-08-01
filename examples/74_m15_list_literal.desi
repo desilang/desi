@@ -1,3 +1,11 @@
+# A list literal keeps its elements and its length.
+
 def main() -> int:
-    let nums: list[int] = [1, 2, 3]
-    return 0
+	let nums: list[int] = [1, 2, 3]
+	print(str(len(nums)))
+	print(str(nums[0]) + "," + str(nums[1]) + "," + str(nums[2]))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 3
+# 1,2,3

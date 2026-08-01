@@ -12,3 +12,8 @@ def main() -> int:
     print(content)
     f2.close()
     0
+
+# EXPECTED_OUTPUT:
+# File contents:
+# Hello from file!
+# Line 2

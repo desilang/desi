@@ -1,22 +1,30 @@
+# __copy__ copies the field values, and the copy is independent.
+#
+# The old version ended with two comments — "p1 should still be (10, 20)" and
+# "p2 should be (30, 20)" — and then returned without checking either.
+
 class Point:
-    pub mut x: int
-    pub mut y: int
-    
-    pub def __copy__(self) -> Point:
-        let p = Point()
-        p.x := self.x
-        p.y := self.y
-        return p
+	pub mut x: int
+	pub mut y: int
+
+	pub def __copy__(self) -> Point:
+		let p = Point()
+		p.x := self.x
+		p.y := self.y
+		return p
 
 def main() -> int:
-    let p1 = Point()
-    p1.x := 10
-    p1.y := 20
-    
-    let p2 = p1.__copy__()  # Explicit copy
-    p2.x := 30  # Modify copy
-    
-    # p1 should still be (10, 20)
-    # p2 should be (30, 20)
-    
-    return 0
+	let p1 = Point()
+	p1.x := 10
+	p1.y := 20
+
+	let p2 = p1.__copy__()
+	p2.x := 30
+
+	print(str(p1.x) + "," + str(p1.y))
+	print(str(p2.x) + "," + str(p2.y))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 10,20
+# 30,20

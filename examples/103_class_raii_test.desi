@@ -1,14 +1,27 @@
+# Nested `using` blocks close in reverse order.
+#
+# Both closers were empty and the file printed nothing, so "r2 closed here /
+# r1 closed here" was a comment rather than a test. The order is the part
+# worth pinning down.
+
 class Resource:
-    pub def __close__(self) -> none:
-        # Explicit self required
-        return
+	pub mut label: str
+
+	pub def __close__(self) -> none:
+		print("close " + self.label)
+		return
 
 def main() -> int:
-    using r1 = Resource():
-        using r2 = Resource():
-            # Nested
-            pass
-        # r2 closed here
-    # r1 closed here
-    
-    return 0
+	using r1 = Resource():
+		r1.label := "outer"
+		using r2 = Resource():
+			r2.label := "inner"
+			print("body")
+	print("after")
+	return 0
+
+# EXPECTED_OUTPUT:
+# body
+# close inner
+# close outer
+# after

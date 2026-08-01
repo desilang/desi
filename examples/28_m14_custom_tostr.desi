@@ -1,4 +1,7 @@
 # M14: Custom to_str via impl Display
+#
+# The result was assigned and dropped, so an impl that never took the place of
+# the generated default would have looked the same.
 
 trait Display:
 	"""Display trait for custom string representation."""
@@ -14,5 +17,7 @@ impl Display for Point:
 
 def main():
 	let p: Point = Point(x=10, y=20)
-	let s: str = p.to_str()
-	let x: int = 42
+	print(p.to_str())
+
+# EXPECTED_OUTPUT:
+# Point(x=?, y=?)

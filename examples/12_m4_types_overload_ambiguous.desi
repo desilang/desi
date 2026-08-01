@@ -1,9 +1,17 @@
+# EXPECTED: COMPILE_ERROR
+# M4: two functions with the same signature are ambiguous at the call.
+#
+# The file used to declare the duplicate and return without ever calling it.
+# Declaring is not the error — the checker allows the pair and reports DTE0102
+# when a call cannot pick between them — so nothing here was being tested.
+# Calling f is what makes it the test it was named for.
 
-def f(x: int) -> int: 
+def f(x: int) -> int:
     return x
 
 def f(x: int) -> int:
     return x  # duplicate signature
 
 def main() -> int:
+    print(str(f(1)))
     0

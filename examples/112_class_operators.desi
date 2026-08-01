@@ -21,17 +21,27 @@ class Vector:
         return "Vector(" + str(self.x) + ", " + str(self.y) + ")"
 
 def main() -> int:
-    let v1 = Vector()
-    v1.x := 1.0
-    v1.y := 2.0
-    
-    let v2 = Vector()
-    v2.x := 3.0
-    v2.y := 4.0
-    
-    # Test operator methods
-    let v3 = v1 + v2
-    let v4 = v1 - v2
-    let equal = v1 == v2
-    
-    return 0
+	let v1 = Vector()
+	v1.x := 1.0
+	v1.y := 2.0
+
+	let v2 = Vector()
+	v2.x := 3.0
+	v2.y := 4.0
+
+	# Every one of these used to be assigned to a local and dropped, so an
+	# operator that dispatched to the wrong dunder, or returned a vector of
+	# uninitialized fields, would have gone unnoticed.
+	let v3 = v1 + v2
+	let v4 = v1 - v2
+	print(v3.__repr__())
+	print(v4.__repr__())
+	print(str(v1 == v2))
+	print(str(v1 == v1))
+	return 0
+
+# EXPECTED_OUTPUT:
+# Vector(4.0, 6.0)
+# Vector(-2.0, -2.0)
+# false
+# true

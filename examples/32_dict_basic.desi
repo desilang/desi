@@ -1,6 +1,21 @@
+# Dict literals, read back.
+#
+# Both dicts used to be built and dropped, so nothing checked that a key
+# reached the value it was written with.
+
 def main():
-    # Basic dict literal
-    let scores: dict[str, int] = {"Alice": 100, "Bob": 85}
-    
-    # Single entry dict
-    let single: dict[str, int] = {"key": 42}
+	let scores: dict[str, int] = {"Alice": 100, "Bob": 85}
+	let single: dict[str, int] = {"key": 42}
+
+	print(str(len(scores)))
+	print(str(scores["Alice"]))
+	print(str(scores["Bob"]))
+	print(str(len(single)))
+	print(str(single["key"]))
+
+# EXPECTED_OUTPUT:
+# 2
+# 100
+# 85
+# 1
+# 42

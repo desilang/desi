@@ -22,3 +22,13 @@ def main() -> int:
     
     print("All tests passed!")
     return 0
+
+# EXPECTED_OUTPUT:
+# Testing closure capture...
+# === Test 1: Named function ===
+# simple worker
+# Test 1 passed!
+# === Test 2: String capture ===
+# Hello!
+# Test 2 passed!
+# All tests passed!

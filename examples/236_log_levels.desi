@@ -32,3 +32,13 @@ def main() -> int:
 #   [WARN] visible warn              (after set_level("WARN"))
 #   [ERROR] visible error
 #   [INFO] Shutdown complete          (after set_level("DEBUG"))
+
+# EXPECTED_OUTPUT:
+# [36m[DEBUG][0m Loading config...
+# [34m[INFO][0m Application started
+# [33m[WARN][0m Disk space low
+# [31m[ERROR][0m Connection failed
+# [1;31m[FATAL][0m Unrecoverable error
+# [33m[WARN][0m visible warn
+# [31m[ERROR][0m visible error
+# [34m[INFO][0m Shutdown complete

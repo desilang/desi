@@ -1,6 +1,20 @@
-# Simple set test
+# A set literal, and add() on it.
+#
+# Used to build the set and add to it without checking either took effect —
+# including that adding a value already present does not grow the set.
 
 def main():
-    let s: set[int] = #{1, 2, 3}
-    s.add(4)
+	let s: set[int] = #{1, 2, 3}
+	s.add(4)
+	print(str(len(s)))
+	s.add(4)
+	print(str(len(s)))
+	if 4 in s:
+		print("has 4")
+	if 9 in s:
+		print("has 9")
 
+# EXPECTED_OUTPUT:
+# 4
+# 4
+# has 4

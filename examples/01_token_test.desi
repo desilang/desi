@@ -1,2 +1,35 @@
-def main()-> int:
-  0
+# The lexer's token kinds, each one actually used.
+#
+# This file was `def main() -> int: 0` — it proved the lexer could get through
+# seven tokens. Every kind below now contributes to a printed result, so a
+# token that scanned wrongly changes the answer instead of going unnoticed.
+
+def main() -> int:
+	let i = 42                  # int literal
+	let f = 2.5                 # float literal
+	let s = "tokens"            # string literal
+	let b = true                # bool literal
+	let xs = [1, 2, 3]          # brackets and commas
+	let d = {"k": 7}            # braces and colon
+	let arith = i + 1 - 2 * 3   # operators
+	let cmp = i > 40 and b      # comparison and keyword operator
+
+	print(str(i))
+	print(str(f))
+	print(s)
+	print(str(b))
+	print(str(len(xs)))
+	print(str(d["k"]))
+	print(str(arith))
+	print(str(cmp))
+	return 0
+
+# EXPECTED_OUTPUT:
+# 42
+# 2.5
+# tokens
+# true
+# 3
+# 7
+# 37
+# true

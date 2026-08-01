@@ -1,4 +1,8 @@
 # M14: Traits and Impls
+#
+# The old version computed p.to_str() into a local and discarded it, with a
+# comment saying it was only there to check that this parses. Whether the impl
+# was the method actually dispatched to went unchecked.
 
 trait Display:
 	"""
@@ -16,6 +20,8 @@ impl Display for Point:
 
 def main():
 	let p: Point = Point(x=10, y=20)
-	# For now, just ensure this parses and checks without error.
-	# We haven't implemented method dispatch via traits yet.
 	let s: str = p.to_str()
+	print(s)
+
+# EXPECTED_OUTPUT:
+# Point

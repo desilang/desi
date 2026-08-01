@@ -1,20 +1,29 @@
 # Test os module - comprehensive edge cases
+#
+# The file used to print the platform name, HOME, USER and the working
+# directory, and ended with a note saying the output was environment-dependent
+# and had to be checked by hand. So it ran on every platform and asserted
+# nothing about any of them.
+#
+# What is portable is the shape: which platform names are possible, that a
+# missing variable comes back empty, that two calls agree. That is what it
+# checks now, so the same expected output holds on Windows, Linux and macOS.
 import os
 
 def main() -> int:
-    # --- Platform ---
+    # --- Platform: the value differs per OS, the set of values does not ---
     let p = os.platform()
-    print(f"platform: {p}")
+    print(f"platform known: {p == "windows" or p == "linux" or p == "macos"}")
 
-    # --- getenv: known variables ---
-    let home = os.getenv("HOME")
-    print(f"HOME: {home}")
-
+    # --- getenv: PATH is set everywhere ---
     let path = os.getenv("PATH")
     print(f"PATH set: {len(path) > 0}")
 
-    let user = os.getenv("USER")
-    print(f"USER: {user}")
+    # HOME and USER are Unix names — unset on Windows — so only their
+    # behaviour is portable, not their contents.
+    let home = os.getenv("HOME")
+    let home2 = os.getenv("HOME")
+    print(f"HOME stable: {home == home2}")
 
     # --- getenv: unknown variable returns empty ---
     let missing1 = os.getenv("DESI_TEST_MISSING_A")
@@ -31,7 +40,6 @@ def main() -> int:
     # --- getcwd ---
     let cwd = os.getcwd()
     print(f"cwd non-empty: {len(cwd) > 0}")
-    print(f"cwd starts with /: {cwd}")
 
     # --- Multiple calls return same values ---
     let p2 = os.platform()
@@ -39,11 +47,16 @@ def main() -> int:
     print(f"platform stable: {p == p2}")
     print(f"cwd stable: {cwd == cwd2}")
 
-    # --- getenv with various key formats ---
-    let shell = os.getenv("SHELL")
-    print(f"SHELL set: {len(shell) > 0}")
-
     0
 
-# NOTE: Some outputs are environment-dependent.
-# Run manually to verify: desic run examples/345_os_edge_cases.desi
+# EXPECTED_OUTPUT:
+# platform known: true
+# PATH set: true
+# HOME stable: true
+# missing1 empty: true
+# missing2 empty: true
+# missing3 empty: true
+# empty key: true
+# cwd non-empty: true
+# platform stable: true
+# cwd stable: true

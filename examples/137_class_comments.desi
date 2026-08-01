@@ -1,20 +1,31 @@
+# Comments in every position a class allows one.
+#
+# The file used to construct the object and return, printing nothing, with a
+# trailing "# SKIPPED: No runtime output" — a marker the harness does not
+# honour. It ran, asserted nothing, and the method carrying the comments was
+# never even called.
+
 class CommentTest:
-    # This is a comment at the top
-    pub mut x: int
+	# This is a comment at the top
+	pub mut x: int
 
-    # Comment between fields
-    pub mut y: int
+	# Comment between fields
+	pub mut y: int
 
-    # Comment before method
-    def foo(self):
-        # Comment inside method (usually works)
-        print("Hello")
+	# Comment before method
+	pub def foo(self):
+		# Comment inside method (usually works)
+		print("Hello")
 
-    # Comment at the end
+	# Comment at the end
 
 def main() -> int:
-    let c = CommentTest()
-    c.x := 10
-    return 0
+	let c = CommentTest()
+	c.x := 10
+	c.foo()
+	print(str(c.x))
+	return 0
 
-# SKIPPED: No runtime output - tests comment parsing
+# EXPECTED_OUTPUT:
+# Hello
+# 10

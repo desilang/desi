@@ -2259,21 +2259,43 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 
 					fnName := cls.Name + "_" + dunder
 					dst := ls.b.FreshTemp("op_call")
+					// The dunder's own return type has to go on the call. Without
+					// it the backend fell back to i32, so a comparison dunder —
+					// which returns bool, an i1 — was called as if it returned an
+					// integer: `a < b` produced a garbage number, and using one in
+					// an `if` emitted `br i32 ...`, which LLVM rejects outright
+					// with "branch condition must have 'i1' type". The identical
+					// body called as an ordinary method was always fine, because
+					// that path passes the declared type through.
+					retType := "i32"
+					if d := cls.Dunders[dunder]; d != nil && d.Ret != nil {
+						if lt := lowerType(d.Ret); lt != "" {
+							retType = lt
+						}
+					}
 					ls.b.Emit(&hir.Call{
 						Dst:  dst,
 						Fn:   fnName,
 						Args: []hir.Value{lhs, rhs},
+						Type: retType,
 					})
 
 					if negate {
-						// Negate the result (i32 bool)
+						// != falling back to !__eq__. Compare against false in the
+						// type the dunder actually returned rather than assuming
+						// i32, which inverted the wrong width and made `a != b`
+						// answer with whatever the upper bits held.
 						negDst := ls.b.FreshTemp("ne_res")
+						var falseVal hir.Value = hir.ConstBool{Value: false}
+						if retType != "i1" {
+							falseVal = hir.ConstInt{Text: "0", Type: retType}
+						}
 						ls.b.Emit(&hir.BinaryOp{
 							Op:   "==",
 							LHS:  dst,
-							RHS:  hir.ConstInt{Text: "0"}, // false as i32
+							RHS:  falseVal,
 							Dst:  negDst,
-							Type: "i32", // bool is i32 in LLVM
+							Type: retType,
 						})
 						return negDst
 					}

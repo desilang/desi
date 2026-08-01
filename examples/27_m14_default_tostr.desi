@@ -1,4 +1,8 @@
-# M14: Default to_str (auto-generated)
+# M14: the auto-generated default to_str.
+#
+# The result used to be assigned to a local and dropped. The default is
+# "<Point at 0xADDR>", so the address cannot be asserted — but its shape can,
+# and that is what tells you the generated method ran at all.
 
 struct Point:
 	x: int
@@ -6,6 +10,11 @@ struct Point:
 
 def main():
 	let p: Point = Point(x=10, y=20)
-	# Should work! Default to_str is auto-generated
 	let s: str = p.to_str()
-	let x: int = 42
+	# "<Point at " — everything up to the address, which varies per run.
+	print(s[0:10])
+	print(str(len(s) > 10))
+
+# EXPECTED_OUTPUT:
+# <Point at 
+# true

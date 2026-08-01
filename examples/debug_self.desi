@@ -1,4 +1,9 @@
-# Debug: Check what type 'self' has
+# `self` inside an impl method refers to the receiver.
+#
+# This started as a scratch file — "Debug: Check what type 'self' has" — that
+# bound `let x = self`, returned a constant, and never called the method. It
+# now reads fields through self, so a receiver that arrived as the wrong thing
+# shows up in the output.
 
 struct Person:
     name: str
@@ -6,10 +11,12 @@ struct Person:
 
 impl Display for Person:
     def to_str(self) -> str:
-        # What type is self?
-        let x = self
-        return "test"
+        return self.name + " (" + str(self.age) + ")"
 
 def main() -> int:
     let p = Person(name="Alice", age=30)
+    print(p.to_str())
     return 0
+
+# EXPECTED_OUTPUT:
+# Alice (30)

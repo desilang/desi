@@ -58,3 +58,30 @@ def main() -> int:
 
 # NOTE: Output contains ANSI color codes, visual verification only.
 # Run manually: desic run examples/343_log_module.desi
+
+# EXPECTED_OUTPUT:
+# [36m[DEBUG][0m verbose detail
+# [34m[INFO][0m server started on port 8080
+# [33m[WARN][0m disk space below 10%
+# [31m[ERROR][0m connection to database refused
+# [1;31m[FATAL][0m out of memory - shutting down
+# [34m[INFO][0m 
+# [31m[ERROR][0m 
+# [36m[DEBUG][0m This is a very long debug message that contains a lot of detail about what is happening in the application right now and should not be truncated
+# [34m[INFO][0m Value: 42, ratio: 3.14, flag: true
+# [33m[WARN][0m Path: /usr/local/bin/desi
+# [31m[ERROR][0m Error code: 0xFF
+# [34m[INFO][0m Starting Desi v1
+# [33m[WARN][0m Max retries: 3
+# [33m[WARN][0m visible - warn at WARN
+# [31m[ERROR][0m visible - error above WARN
+# [1;31m[FATAL][0m visible - fatal above WARN
+# [1;31m[FATAL][0m visible - fatal at FATAL
+# [36m[DEBUG][0m visible - back at debug
+# [34m[INFO][0m === Application Start ===
+# [34m[INFO][0m Database connected
+# [34m[INFO][0m HTTP server listening
+# [33m[WARN][0m Rate limiter disabled
+# [31m[ERROR][0m Failed to load optional plugin
+# [34m[INFO][0m Ready to serve requests
+# [34m[INFO][0m === Application Shutdown ===
