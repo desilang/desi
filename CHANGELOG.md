@@ -7,13 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [0.1.0] - 2026-05-06
+## [0.1.0] - Unreleased
 
 ### Added
 
 **Core Language**
 
-- Variables with `let` (immutable) and `var` (mutable)
+- Variables with `let`, and `let mut` for the ones that change
 - Type inference with optional annotations
 - Functions with `def`, lambdas, closures
 - Classes with inheritance, static/class methods, operator overloading
@@ -216,7 +216,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Version | Release Date | Highlights |
 |---------|--------------|------------|
-| 0.1.0 | 2026-05-06 | Initial release — batteries-included systems language |
+| 0.1.0 | Unreleased | Initial release — batteries-included systems language |
 
 ---
 
