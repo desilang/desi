@@ -222,6 +222,13 @@ type If struct {
 	Cond Value
 	Then *Block
 	Else *Block // optional
+	// ThenTail and ElseTail are the blocks each branch's control actually ends
+	// in, which is not the branch's entry block once the branch contains a loop:
+	// a loop hands its exit block to the lowerer, and everything after the loop
+	// — including nothing at all — belongs to that block. The backend appends
+	// the branch to merge here. Nil means the branch never left its entry block.
+	ThenTail *Block
+	ElseTail *Block
 }
 
 func (*If) isStmt() {}

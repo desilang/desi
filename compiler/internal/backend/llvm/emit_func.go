@@ -917,10 +917,27 @@ setjmpScan:
 				wprintf(&m.funcs, "  br %s %s, label %%%s, label %%%s\n",
 					cty, cval, thenLabel, elseLabel)
 
-				// Mark that then/else blocks need terminator to merge
-				m.cfBlocks[thenLabel] = mergeLabel
+				// Mark that then/else blocks need terminator to merge. The
+				// branch to merge belongs on the block the branch *ends* in, not
+				// the one it starts in — a loop inside the branch moves control
+				// into the loop's exit block, and appending to the entry label
+				// there would both misplace the branch and leave the exit block
+				// with no terminator at all.
+				thenKey := thenLabel
+				if x.ThenTail != nil {
+					if l, ok := blockLabels[x.ThenTail]; ok {
+						thenKey = l
+					}
+				}
+				m.cfBlocks[thenKey] = mergeLabel
 				if x.Else != nil {
-					m.cfBlocks[elseLabel] = mergeLabel
+					elseKey := elseLabel
+					if x.ElseTail != nil {
+						if l, ok := blockLabels[x.ElseTail]; ok {
+							elseKey = l
+						}
+					}
+					m.cfBlocks[elseKey] = mergeLabel
 				}
 
 				// Emit merge label immediately to split the current block

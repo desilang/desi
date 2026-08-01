@@ -1020,8 +1020,13 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.emitScopeDrops(scThen)
 		}
 		thenTerminated := ls.terminated
+		// Where the branch ended, which is not thenBlk once it contained a loop:
+		// the loop hands its exit block over, and the branch to merge belongs
+		// there. See hir.If.
+		thenTail := ls.b.Block()
 		ls.b.SetBlock(oldCur)
 
+		var elseTail *hir.Block
 		var elseBlk *hir.Block
 		elseTerminated := false
 		if len(s.Elifs) > 0 {
@@ -1039,6 +1044,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			}
 			ls.lowerStmt(synth)
 			elseTerminated = ls.terminated
+			elseTail = ls.b.Block()
 			ls.b.SetBlock(oldCur)
 
 			ls.terminated = wasTerminated || (thenTerminated && elseTerminated)
@@ -1055,6 +1061,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 				ls.emitScopeDrops(scElse)
 			}
 			elseTerminated = ls.terminated
+			elseTail = ls.b.Block()
 			ls.b.SetBlock(oldCur)
 
 			// If both branches terminate, the if statement terminates
@@ -1064,7 +1071,7 @@ func (ls *lowerState) lowerStmt(s ast.Stmt) {
 			ls.terminated = wasTerminated
 		}
 
-		ls.b.Emit(&hir.If{Cond: cond, Then: thenBlk, Else: elseBlk})
+		ls.b.Emit(&hir.If{Cond: cond, Then: thenBlk, Else: elseBlk, ThenTail: thenTail, ElseTail: elseTail})
 
 	case *ast.WhileStmt:
 		// Create a condition block that will be re-evaluated each iteration

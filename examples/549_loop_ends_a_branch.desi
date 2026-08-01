@@ -1,0 +1,73 @@
+# A loop may be the last thing in an if or else branch.
+#
+# Regression guard for invalid IR: "expected instruction opcode".
+#
+# A loop hands its exit block to the lowerer so `break` has a label to name,
+# and everything after the loop belongs to that exit block. The backend,
+# though, attached a branch's jump-to-merge to the block the branch *starts*
+# in. When a branch ended with a loop those were no longer the same block, so
+# the jump landed on the entry block and the exit block was emitted empty and
+# unterminated — a label where LLVM wanted an instruction, and the whole
+# function was rejected.
+#
+# It needed a branch whose *last* statement is a loop, which nothing in the
+# suite had; the benchmark binary_tree did, and it is not built by the example
+# harness. hir.If now carries the block each branch actually ends in.
+#
+# EXPECTED_OUTPUT:
+# 10
+# 6
+# 3
+# 10
+# done
+
+def sum_to(n: int) -> int:
+	let mut total = 0
+	if n > 0:
+		# A while loop as the final statement of a then-branch.
+		let mut i = 0
+		while i <= n:
+			total := total + i
+			i := i + 1
+	return total
+
+def count_evens(n: int) -> int:
+	let mut hits = 0
+	if n < 0:
+		hits := -1
+	else:
+		# A for loop as the final statement of an else-branch.
+		for i in range(n):
+			if i % 2 == 0:
+				hits := hits + 1
+	return hits
+
+def first_over(limit: int) -> int:
+	let mut found = 0
+	if limit > 0:
+		# A loop that leaves early, still the last statement of the branch.
+		for i in range(100):
+			if i * i > limit:
+				found := i
+				break
+	return found
+
+def nested(n: int) -> int:
+	let mut acc = 0
+	if n > 0:
+		# Loop closing a branch that is itself inside a loop.
+		for i in range(n):
+			if i > 0:
+				let mut j = 0
+				while j < i:
+					acc := acc + 1
+					j := j + 1
+	return acc
+
+def main() -> int:
+	print(str(sum_to(4)))
+	print(str(count_evens(11)))
+	print(str(first_over(5)))
+	print(str(nested(5)))
+	print("done")
+	return 0
