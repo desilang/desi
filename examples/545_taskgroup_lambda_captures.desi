@@ -13,13 +13,17 @@
 #    printing a garbage number. A captured str looked correct only because it
 #    really was a pointer, which is what made this easy to miss.
 #
+# The tasks in a group run concurrently, so this must not assert an order.
+# An earlier version had each task print its capture and expected them in
+# spawn order; it passed on Windows and macOS and failed on Ubuntu, where the
+# scheduler interleaved them differently. Each group now folds its captures
+# into an atomic instead, and the total is checked once the group has joined.
+# The values are chosen so the total identifies the whole set: a capture that
+# arrived wrong, or twice, or not at all, cannot reach the same sum.
+#
 # EXPECTED_OUTPUT:
-# a
-# b
-# c
-# 0
-# 10
-# 20
+# 6
+# 111
 # no capture
 # captured
 # done
@@ -27,20 +31,30 @@
 import sync
 
 def main() -> int:
-	# str captures, in a for body
-	let items = ["a", "b", "c"]
+	# str captures, in a for body. Distinct lengths, so the sum pins down
+	# which strings arrived without depending on which task finished first.
+	let items = ["a", "bb", "ccc"]
+	let seen = sync.Atomic(0)
 	using tg = sync.TaskGroup():
 		for i in range(len(items)):
 			let item = items[i]
-			tg.run(lambda<none>: print(item))
+			tg.run(lambda<int>: seen.add(len(item)))
 		tg.wait()
+	print(str(seen.load()))
 
-	# int captures — boxed, so the wrapper has to load through the box
+	# int captures — boxed, so the wrapper has to load through the box. Powers
+	# of ten: the address of a box would not sum to 111, and neither would the
+	# same capture arriving twice.
+	let steps = [1, 10, 100]
+	let total = sync.Atomic(0)
 	using tg2 = sync.TaskGroup():
 		for i in range(3):
-			let n = i * 10
-			tg2.run(lambda<none>: print(str(n)))
+			let n = steps[i]
+			tg2.run(lambda<int>: total.add(n))
 		tg2.wait()
+	print(str(total.load()))
+
+	# One task per group below, so printing directly is deterministic.
 
 	# no captures at all
 	using tg3 = sync.TaskGroup():
