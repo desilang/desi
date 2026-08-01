@@ -80,6 +80,45 @@ spawn:
     sender.send(42)  # Send data to another task
 ```
 
+### Printing from Tasks
+
+A `print` is atomic. One call emits one whole line, even when several tasks
+print at the same time, so output is never cut in half:
+
+```desi
+import sync
+
+def main() -> int:
+    using tg = sync.TaskGroup():
+        for i in range(4):
+            tg.run(lambda<none>: print("task", "ran"))
+        tg.wait()
+    return 0
+```
+
+What is **not** guaranteed is the order those lines arrive in — that is the
+scheduler's choice, and it can differ between runs and between platforms. Do
+not write a test that expects one. If you need output in a fixed order, collect
+the results and print them once the group has joined, or send them over a
+channel to a single task that does the printing:
+
+```desi
+import sync
+
+def main() -> int:
+    let total = sync.Atomic(0)
+    using tg = sync.TaskGroup():
+        for i in range(4):
+            tg.run(lambda<int>: total.add(1))
+        tg.wait()
+    print(str(total.load()))   # 4, every time
+    return 0
+```
+
+Arguments are fully evaluated before anything is printed, so a call inside a
+`print` that itself prints produces its own lines first, rather than appearing
+in the middle of yours.
+
 ## Summary
 
 | Concept | Meaning |
@@ -87,5 +126,6 @@ spawn:
 | **Send** | Can be transferred to another task |
 | **Sync** | Can be shared by reference across tasks |
 | **MutexGuard** | NOT Send - lock must stay in original task |
+| **print** | One call is one whole line; line *order* across tasks is not guaranteed |
 
 The compiler checks these constraints automatically. If you try to capture a non-Send type in a `spawn` block, you'll get a compile-time error.

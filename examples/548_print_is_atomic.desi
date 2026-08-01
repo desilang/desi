@@ -1,0 +1,35 @@
+# A print from one task cannot be cut in half by a print from another.
+#
+# Regression guard. One `print(...)` lowers to several output calls — one per
+# value, plus the separators and the end terminator — and each is atomic on its
+# own while the sequence was not. Two tasks printing at once produced lines like
+#
+#     WorkerWorker  12 working working
+#
+# which is not an ordering quirk but torn output. The lowerer now evaluates
+# every argument first and brackets only the output calls with a lock, so one
+# print is one uninterrupted line.
+#
+# Every task prints the same three-value line, so the expected output does not
+# depend on which task finishes first — the thing concurrency does not promise.
+# What it does pin down is that each line arrives whole: a torn line would not
+# match, whatever order the lines came in.
+#
+# EXPECTED_OUTPUT:
+# ready 1 go
+# ready 1 go
+# ready 1 go
+# ready 1 go
+# ready 1 go
+# ready 1 go
+# ready 1 go
+# ready 1 go
+
+import sync
+
+def main() -> int:
+	using tg = sync.TaskGroup():
+		for i in range(8):
+			tg.run(lambda<none>: print("ready", 1, "go"))
+		tg.wait()
+	return 0

@@ -1,27 +1,43 @@
-# Test bound method in TaskGroup
-# Verifies that instance methods can be passed to tg.run()
-# SKIPPED: Concurrent output order is non-deterministic
+# A bound instance method can be handed to tg.run().
+#
+# The header used to say "SKIPPED: Concurrent output order is non-deterministic",
+# but the harness only honours "# EXPECTED: SKIP", so this ran anyway — and with
+# no EXPECTED_OUTPUT it asserted nothing at all. It was the file that exposed
+# print tearing: its workers printed "Worker", self.id, "working" and the two
+# lines cut into each other. See 548 for that guard.
+#
+# The order two tasks print in is still the scheduler's business, so the workers
+# print a line that does not name which one they are. What is checked here is
+# that a bound method reaches the task and runs against its own instance.
+#
+# EXPECTED_OUTPUT:
+# worker working
+# worker working
+# 3
+# All workers done
 
 import sync
 
 class Worker:
 	pub mut id: int
-	
+
 	pub def work(self) -> none:
-		print("Worker", self.id, "working")
+		print("worker working")
 
 def main() -> int:
 	let mut w1 = Worker()
 	let mut w2 = Worker()
 	w1.id := 1
 	w2.id := 2
-	
+
 	using tg = sync.TaskGroup():
 		# Pass bound methods directly to run()
 		tg.run(w1.work)
 		tg.run(w2.work)
 		tg.wait()
-	
+
+	# Read the instances back afterwards: each kept the id its bound method was
+	# built from, and a sum does not depend on who ran first.
+	print(str(w1.id + w2.id))
 	print("All workers done")
 	return 0
-

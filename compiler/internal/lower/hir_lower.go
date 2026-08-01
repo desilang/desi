@@ -636,6 +636,24 @@ func (ls *lowerState) emitLoopExitDrops() {
 	}
 }
 
+// printLock and printUnlock bracket the output calls one print statement emits,
+// so a line cannot be torn by another task printing at the same time. A print
+// lowers to several calls — one per value, plus separators and the terminator —
+// and each is atomic on its own while the sequence is not.
+//
+// Take the lock only once every argument has been evaluated into a temp. An
+// argument is arbitrary user code and may block (`print(ch.recv())`); holding
+// this lock across it would stall every other task's print behind it, turning a
+// cosmetic problem into a deadlock. The runtime lock is recursive anyway,
+// because a to_str dunder reached during emission can print.
+func (ls *lowerState) printLock() {
+	ls.b.Emit(&hir.Call{Dst: ls.b.FreshTemp("printlk"), Fn: "__desi_print_lock", Args: []hir.Value{}})
+}
+
+func (ls *lowerState) printUnlock() {
+	ls.b.Emit(&hir.Call{Dst: ls.b.FreshTemp("printulk"), Fn: "__desi_print_unlock", Args: []hir.Value{}})
+}
+
 // closeLoopBody ends a lowered loop body: on the path that falls off the end it
 // drops what the body scope owns and branches to the latch, then pops the loop
 // and its scope and positions the builder in the latch.

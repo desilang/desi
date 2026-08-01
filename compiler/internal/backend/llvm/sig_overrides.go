@@ -48,6 +48,12 @@ func init() {
 	SetFuncSig("__desi_str_new", "ptr", nil)
 	SetFuncSig("__desi_str_append_free", "ptr", nil)
 
+	// Print serialization. Declared explicitly because print.c is in the LTO
+	// hot set, where the inferred variadic i32 signature would not match the
+	// void definition the bitcode carries.
+	SetFuncSig("__desi_print_lock", "void", []string{})
+	SetFuncSig("__desi_print_unlock", "void", []string{})
+
 	// Range runtime overrides. Ranges work in i64 throughout; the lowerer
 	// narrows to i32 when it binds the loop variable.
 	SetFuncSig("range_new", "ptr", []string{"i64", "i64", "i64"})

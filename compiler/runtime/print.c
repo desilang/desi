@@ -13,6 +13,8 @@
   extern char** __argv;
   // Forward declaration for args module init
   extern void __args_init(int argc, char** argv);
+#else
+  #include <pthread.h>
 #endif
 
 // ============================================================
@@ -32,8 +34,70 @@ static DesiStream __stderr_stream = {NULL, 0};
 DesiStream* __desi_stdout = NULL;
 DesiStream* __desi_stderr = NULL;
 
+// ============================================================
+// Print serialization
+// ============================================================
+//
+// One Desi `print(...)` lowers to several output calls — one per value, plus
+// the separators and the end terminator. Each is individually atomic, but the
+// sequence is not, so two tasks printing at once used to interleave inside a
+// single line:
+//
+//     WorkerWorker  12 working working
+//
+// The lowerer brackets the sequence with the two functions below so that one
+// print is one uninterrupted line. It evaluates every argument *before* taking
+// the lock, which is what keeps an argument that blocks — `print(ch.recv())` —
+// from holding this lock while another task waits on it.
+//
+// The lock is still recursive, because a to_str dunder called during emission
+// can itself print. A plain pthread mutex and an SRWLOCK would both deadlock
+// there, so neither DESI_MUTEX_* nor SRWLOCK is used here.
+#ifdef _WIN32
+static CRITICAL_SECTION __print_cs;
+#else
+static pthread_mutex_t __print_mx;
+#endif
+static int __print_lock_ready = 0;
+
+static void __desi_print_lock_init(void) {
+    if (__print_lock_ready) return;
+#ifdef _WIN32
+    InitializeCriticalSection(&__print_cs);
+#else
+    pthread_mutexattr_t attr;
+    pthread_mutexattr_init(&attr);
+    pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE);
+    pthread_mutex_init(&__print_mx, &attr);
+    pthread_mutexattr_destroy(&attr);
+#endif
+    __print_lock_ready = 1;
+}
+
+void __desi_print_lock(void) {
+    // __desi_runtime_init initializes this before any task exists; the guard
+    // only covers a print reached before that, which is single-threaded.
+    if (!__print_lock_ready) __desi_print_lock_init();
+#ifdef _WIN32
+    EnterCriticalSection(&__print_cs);
+#else
+    pthread_mutex_lock(&__print_mx);
+#endif
+}
+
+void __desi_print_unlock(void) {
+    if (!__print_lock_ready) return;
+#ifdef _WIN32
+    LeaveCriticalSection(&__print_cs);
+#else
+    pthread_mutex_unlock(&__print_mx);
+#endif
+}
+
 // Runtime initialization - called at program start
 void __desi_runtime_init(void) {
+    __desi_print_lock_init();
+
 #ifdef _WIN32
     // Always output UTF-8 — same behavior as Python/Rust on all platforms.
     // This must run for ALL programs (def main + script mode) on Windows.

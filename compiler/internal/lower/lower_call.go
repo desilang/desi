@@ -1171,6 +1171,10 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				prefix := fmt.Sprintf("[%s:%d] %s = ", dbgInfo.File, dbgInfo.Line, dbgInfo.ExprText)
 				prefixVal := hir.ConstStr{Text: prefix}
 
+				// The argument is already evaluated, so the three output calls
+				// can be bracketed directly.
+				ls.printLock()
+
 				// Print the prefix
 				prefixTemp := ls.b.FreshTemp("dbg_prefix")
 				ls.b.Emit(&hir.Call{Dst: prefixTemp, Fn: "print_raw", Args: []hir.Value{prefixVal}})
@@ -1183,6 +1187,8 @@ func (ls *lowerState) lowerCall(x *ast.CallExpr) hir.Value {
 				nlVal := hir.ConstStr{Text: "\n"}
 				nlTemp := ls.b.FreshTemp("dbg_nl")
 				ls.b.Emit(&hir.Call{Dst: nlTemp, Fn: "print_raw", Args: []hir.Value{nlVal}})
+
+				ls.printUnlock()
 
 				// Return the original value
 				return argVal
@@ -2202,14 +2208,13 @@ handlePrint:
 				ls.b.Emit(&hir.Call{Dst: streamHIR.(hir.Temp), Fn: "desifile_get_stream", Args: []hir.Value{fileVal}, Type: "ptr"})
 			}
 
-			// If style is set, emit style start
-			if styleHIR != nil {
-				styleTmp := ls.b.FreshTemp("style_start")
-				ls.b.Emit(&hir.Call{Dst: styleTmp, Fn: "print_style_start_stdout", Args: []hir.Value{styleHIR}})
-			}
-
 			if len(argExprs) == 0 {
 				// print() with no args - just print end (default newline)
+				ls.printLock()
+				if styleHIR != nil {
+					styleTmp := ls.b.FreshTemp("style_start")
+					ls.b.Emit(&hir.Call{Dst: styleTmp, Fn: "print_style_start_stdout", Args: []hir.Value{styleHIR}})
+				}
 				dst := ls.b.FreshTemp("print")
 				if streamHIR != nil {
 					// Use stream-aware print
@@ -2230,51 +2235,23 @@ handlePrint:
 						ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
 					}
 				}
+				ls.printUnlock()
 				return dst
 			}
 
-			// For each argument, convert to string representation and emit print
-			for i, arg := range argExprs {
+			// Pass 1: evaluate every argument, and run any to_str for it, before
+			// a single byte is written. The lock taken afterwards must not span
+			// argument evaluation — an argument is arbitrary user code and may
+			// block (print(ch.recv())), and holding the print lock across that
+			// would stall every other task's print behind it. A to_str dunder
+			// may print on its own account, which is fine out here: it produces
+			// its own lines rather than being spliced into this one.
+			printVals := make([]hir.Value, 0, len(argExprs))
+			for _, arg := range argExprs {
 				argT := ls.info.Types[arg]
 				if argT == nil {
-					// Fall through to regular handling - lower arg directly
-					argVal := ls.lowerExpr(arg)
-					if i < len(argExprs)-1 {
-						dst := ls.b.FreshTemp("print")
-						if streamHIR != nil {
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
-						} else {
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
-						}
-						sepTemp := ls.b.FreshTemp("sep")
-						if streamHIR != nil {
-							ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, sepHIR}})
-						} else {
-							ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
-						}
-					} else {
-						dst := ls.b.FreshTemp("print")
-						if streamHIR != nil {
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
-						} else {
-							ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
-						}
-						endTemp := ls.b.FreshTemp("end")
-						if streamHIR != nil {
-							ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
-						} else {
-							ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
-						}
-						if flushOutput {
-							flushTemp := ls.b.FreshTemp("flush")
-							if streamHIR != nil {
-								ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
-							} else {
-								ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
-							}
-						}
-						return dst
-					}
+					// No type information — print the value however it lowers.
+					printVals = append(printVals, ls.lowerExpr(arg))
 					continue
 				}
 				typeName := argT.String()
@@ -2360,18 +2337,29 @@ handlePrint:
 					}
 					argVal = strTemp
 				}
+				printVals = append(printVals, argVal)
+			}
 
-				// Emit print for this argument
-				// For multiple args, emit print_item then separator
-				// For last arg, emit print_item then end terminator
-				if i < len(argExprs)-1 {
-					// Print value, then separator
-					dst := ls.b.FreshTemp("print")
-					if streamHIR != nil {
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
-					} else {
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
-					}
+			// Pass 2: everything from here is output, and goes out as one
+			// uninterrupted line.
+			ls.printLock()
+
+			// If style is set, emit style start
+			if styleHIR != nil {
+				styleTmp := ls.b.FreshTemp("style_start")
+				ls.b.Emit(&hir.Call{Dst: styleTmp, Fn: "print_style_start_stdout", Args: []hir.Value{styleHIR}})
+			}
+
+			var lastPrint hir.Value
+			for i, v := range printVals {
+				dst := ls.b.FreshTemp("print")
+				if streamHIR != nil {
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, v}})
+				} else {
+					ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{v}})
+				}
+				lastPrint = dst
+				if i < len(printVals)-1 {
 					// Print separator (customizable via sep=)
 					sepTemp := ls.b.FreshTemp("sep")
 					if streamHIR != nil {
@@ -2379,44 +2367,34 @@ handlePrint:
 					} else {
 						ls.b.Emit(&hir.Call{Dst: sepTemp, Fn: "print_raw", Args: []hir.Value{sepHIR}})
 					}
-				} else {
-					// Last arg - print value then end terminator
-					dst := ls.b.FreshTemp("print")
-					if streamHIR != nil {
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "stream_print_str", Args: []hir.Value{streamHIR, argVal}})
-					} else {
-						ls.b.Emit(&hir.Call{Dst: dst, Fn: "print_item", Args: []hir.Value{argVal}})
-					}
-					// Emit style end BEFORE newline to prevent color bleed
-					if styleHIR != nil {
-						styleEndTmp := ls.b.FreshTemp("style_end")
-						ls.b.Emit(&hir.Call{Dst: styleEndTmp, Fn: "print_style_end_stdout", Args: []hir.Value{}})
-					}
-					// Print end terminator (customizable via end=)
-					endTemp := ls.b.FreshTemp("end")
-					if streamHIR != nil {
-						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
-					} else {
-						ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
-					}
-					if flushOutput {
-						flushTemp := ls.b.FreshTemp("flush")
-						if streamHIR != nil {
-							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
-						} else {
-							ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
-						}
-					}
-					return dst
 				}
 			}
-			// Emit style end if style was set
+
+			// Emit style end BEFORE the terminator to prevent color bleed
 			if styleHIR != nil {
 				styleEndTmp := ls.b.FreshTemp("style_end")
 				ls.b.Emit(&hir.Call{Dst: styleEndTmp, Fn: "print_style_end_stdout", Args: []hir.Value{}})
 			}
-			// If we processed all args, return
-			return nil
+
+			// Print end terminator (customizable via end=)
+			endTemp := ls.b.FreshTemp("end")
+			if streamHIR != nil {
+				ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "stream_print_str", Args: []hir.Value{streamHIR, endHIR}})
+			} else {
+				ls.b.Emit(&hir.Call{Dst: endTemp, Fn: "print_raw", Args: []hir.Value{endHIR}})
+			}
+
+			if flushOutput {
+				flushTemp := ls.b.FreshTemp("flush")
+				if streamHIR != nil {
+					ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "stream_flush", Args: []hir.Value{streamHIR}})
+				} else {
+					ls.b.Emit(&hir.Call{Dst: flushTemp, Fn: "fflush_stdout", Args: []hir.Value{}})
+				}
+			}
+
+			ls.printUnlock()
+			return lastPrint
 		}
 	}
 
