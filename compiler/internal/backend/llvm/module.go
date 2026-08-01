@@ -442,6 +442,38 @@ func (m *Module) RegisterFunc(name string) {
 }
 
 // operand infers the (type, value) pair for a generic value.
+// llvmDouble renders a Desi float literal as a token LLVM will accept for a
+// double.
+//
+// LLVM's IR parser only reads a decimal floating-point constant when the
+// mantissa carries a '.', so the literal text cannot be passed through as
+// written. `1e20` is an ordinary way to write a float and the lexer accepts it,
+// but it reached LLVM as an integer token and the whole module was rejected
+// with "integer constant must have integer type" — as did `1E5`, `2e-3` and
+// `3e8`. Only forms that already spell out a decimal point, like `1.5e10`,
+// happened to work.
+//
+// Text that already contains a '.' is passed through untouched, so the IR of
+// every program that compiled before is unchanged.
+func llvmDouble(text string) string {
+	t := strings.ReplaceAll(text, "_", "")
+	if strings.Contains(t, ".") {
+		return t
+	}
+	f, err := strconv.ParseFloat(t, 64)
+	if err != nil {
+		// Not a number the Go runtime recognises; leave it be and let LLVM
+		// report it rather than silently emitting something else.
+		return text
+	}
+	// -1 precision keeps the shortest form that still round-trips.
+	s := strconv.FormatFloat(f, 'e', -1, 64)
+	if i := strings.IndexAny(s, "eE"); i >= 0 && !strings.Contains(s[:i], ".") {
+		s = s[:i] + ".0" + s[i:]
+	}
+	return s
+}
+
 func (m *Module) operand(v hir.Value) (string, string) {
 	switch t := v.(type) {
 	case hir.ConstInt:
@@ -451,7 +483,7 @@ func (m *Module) operand(v hir.Value) (string, string) {
 		}
 		return ty, t.Text
 	case hir.ConstFloat:
-		return "double", t.Text
+		return "double", llvmDouble(t.Text)
 	case hir.ConstBool:
 		return "i1", fmt.Sprintf("%v", t.Value)
 	case hir.ConstStr:

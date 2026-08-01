@@ -1,0 +1,43 @@
+# Every way of writing a float literal compiles.
+#
+# Regression guard. The literal's source text was passed through to LLVM as the
+# operand of a `double`, and LLVM's IR parser only reads a decimal
+# floating-point constant when the mantissa carries a '.'. So `1e20` — an
+# ordinary way to write a float, which the lexer accepted without complaint —
+# reached it as an integer token and the entire module was rejected:
+#
+#     error: integer constant must have integer type
+#
+# `1E5`, `2e-3` and `3e8` failed the same way. Only forms that already spell out
+# a decimal point, like `1.5e10`, happened to work, which is why no example ever
+# caught it: they all wrote the dot.
+#
+# EXPECTED_OUTPUT:
+# 1e+20
+# 15000000000.0
+# 100000.0
+# 0.002
+# 300000000.0
+# 6.022e+23
+# 1e-09
+# 2.5
+
+def main() -> int:
+	let a = 1e20        # no dot, positive exponent
+	let b = 1.5e10      # dot present, the form that always worked
+	let c = 1E5         # capital E
+	let d = 2e-3        # negative exponent
+	let e = 3e8         # the one anybody writing physics reaches for
+	let f = 6.022e23
+	let g = 1e-9
+	let h = 2.5         # plain decimal, no exponent
+
+	print(str(a))
+	print(str(b))
+	print(str(c))
+	print(str(d))
+	print(str(e))
+	print(str(f))
+	print(str(g))
+	print(str(h))
+	return 0
