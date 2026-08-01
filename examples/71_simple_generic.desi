@@ -1,4 +1,20 @@
-# Test generic type instantiation with user-defined generic enum
+# A user-defined generic enum carrying a primitive payload.
+#
+# Regression guard. This printed uninitialized memory, and said so in a
+# trailing "# SKIPPED:" comment — a marker the harness does not recognise, so
+# it ran anyway, and with no EXPECTED_OUTPUT it asserted nothing. The garbage
+# went unnoticed for as long as the file existed.
+#
+# A generic variant's constructor is emitted once for every T, so it cannot
+# take the payload by value — the caller boxes the argument and passes the
+# box's address. The constructor stored that address as the payload, but
+# matching a variant dereferences the payload slot exactly once, so `v` came
+# back as the low half of a stack address. Only a primitive showed it: a str
+# payload looked correct because a str really is a pointer.
+#
+# EXPECTED_OUTPUT:
+# Got value: 42
+# Generic test passed
 
 enum MyOption<T>:
     Some: T
@@ -7,13 +23,10 @@ enum MyOption<T>:
 def main() -> int:
     # Create an instance of MyOption<int>
     let x: MyOption<int> = MyOption.Some(42)
-    
+
     match x:
         MyOption.Some(v): print(f"Got value: {v}")
         MyOption.Empty: print("Empty")
-    
+
     print("Generic test passed")
     return 0
-
-
-# SKIPPED: Non-deterministic output - prints uninitialized memory value

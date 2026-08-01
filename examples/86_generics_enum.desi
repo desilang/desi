@@ -1,4 +1,11 @@
-# Test generic enum with user-defined type (avoiding conflict with built-in Option)
+# A generic enum whose type argument is inferred from the payload.
+#
+# Companion to 71, which pins the same defect down with an explicit annotation.
+# This one leaves T to inference. It carried the same ineffective
+# "# SKIPPED:" comment and the same unchecked garbage.
+#
+# EXPECTED_OUTPUT:
+# Got: 42
 
 enum MyResult<T>:
     Ok: T
@@ -6,12 +13,9 @@ enum MyResult<T>:
 
 def main() -> int:
     let x = MyResult.Ok(42)
-    
+
     match x:
         MyResult.Ok(v): print(f"Got: {v}")
         MyResult.Empty: print("empty")
 
     return 0
-
-
-# SKIPPED: Non-deterministic output - prints uninitialized memory value

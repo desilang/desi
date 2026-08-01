@@ -3027,6 +3027,10 @@ skipMethodCall:
 	// If the callee is a generic function (erased), we need to box primitive arguments to ptr
 	if ls.info != nil {
 		isGeneric := false
+		// A generic enum's constructor takes its payload as a pointer to a box,
+		// and copies a fixed eight bytes out of it. That only works if every
+		// argument is boxed, pointers included — see the boxing loop below.
+		isGenericEnumCtor := false
 
 		// Case 1: Identifier (Function call)
 		if id, ok := x.Callee.(*ast.Ident); ok {
@@ -3057,6 +3061,7 @@ skipMethodCall:
 
 					if enumType != nil && len(enumType.TypeParams) > 0 {
 						isGeneric = true
+						isGenericEnumCtor = true
 					}
 				} else {
 					// Fallback: check types map
@@ -3074,6 +3079,7 @@ skipMethodCall:
 						if enumType != nil {
 							if len(enumType.TypeParams) > 0 {
 								isGeneric = true
+								isGenericEnumCtor = true
 							}
 						}
 					}
@@ -3117,7 +3123,20 @@ skipMethodCall:
 					}
 				}
 
-				if argType != "ptr" && argType != "void" {
+				// A generic enum constructor boxes everything, a pointer included.
+				// Boxing only the primitives left the two cases inconsistent: an
+				// int arrived as a pointer to itself while a str arrived as the
+				// value, and one constructor cannot store both correctly. The box
+				// is eight bytes wide whatever it holds, which is the width the
+				// constructor copies out.
+				if isGenericEnumCtor {
+					if argType != "void" {
+						boxPtr := ls.b.FreshTemp("arg_box_ptr")
+						ls.b.Emit(&hir.Alloca{Type: "i64", Count: 1, Dst: boxPtr})
+						ls.b.Emit(&hir.Store{Dst: boxPtr, Val: arg})
+						args[i] = boxPtr
+					}
+				} else if argType != "ptr" && argType != "void" {
 					// Allocate storage
 					boxPtr := ls.b.FreshTemp("arg_box_ptr")
 					ls.b.Emit(&hir.Alloca{Type: argType, Count: 1, Dst: boxPtr})

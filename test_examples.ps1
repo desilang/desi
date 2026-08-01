@@ -212,6 +212,20 @@ foreach ($testFile in $testFiles) {
         Write-Host ""
         continue
     }
+
+    # "# SKIPPED: ..." is not a directive this harness understands. Files
+    # carrying it ran anyway, and the ones that also lacked an EXPECTED_OUTPUT
+    # asserted nothing at all — which is how two examples printed uninitialized
+    # memory for months, and how a third hid torn concurrent output. Say so, so
+    # a stale claim cannot quietly disable a test again.
+    $bogusSkip = Select-String -Path $testFile.FullName -Pattern "^# SKIPPED:" -Quiet
+    if ($bogusSkip) {
+        $hasOut = Select-String -Path $testFile.FullName -Pattern "# EXPECTED_OUTPUT:" -Quiet
+        $hasExp = Select-String -Path $testFile.FullName -Pattern "# EXPECTED:" -Quiet
+        if (-not $hasOut -and -not $hasExp) {
+            Write-Host "  [WARN] '# SKIPPED:' is not a directive, and this file asserts nothing" -ForegroundColor Yellow
+        }
+    }
     
     Write-Host "[$TotalCount] Testing: $relativePath"
     

@@ -79,6 +79,12 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 			// Allocate payload and store value
 			field := variant.Fields[0]
 			payloadSize := getSize(field.Type)
+			// A type parameter's payload always occupies the boxed eight bytes,
+			// whatever T turns out to be.
+			_, payloadIsTypeParam := field.Type.(*types.TypeParam)
+			if payloadIsTypeParam {
+				payloadSize = 8
+			}
 
 			payloadPtr := hir.Temp{Name: "%payload_ptr"}
 			entry.Stmts = append(entry.Stmts, &hir.Call{
@@ -88,11 +94,35 @@ func LowerEnumConstructors(ed *ast.EnumDecl, info *check.Info) []*hir.Func {
 				Type: "ptr",
 			})
 
-			// Store the value to payload
-			entry.Stmts = append(entry.Stmts, &hir.Store{
-				Dst: payloadPtr,
-				Val: hir.Var{Name: "value"},
-			})
+			if payloadIsTypeParam {
+				// This constructor is emitted once for every T, so it cannot take
+				// the payload by value — it has no width to declare. The caller
+				// boxes the argument and passes the box's address instead, and
+				// what belongs in the payload is what the box *holds*.
+				//
+				// Storing the pointer itself left one indirection too many in the
+				// way: matching a variant dereferences the payload slot exactly
+				// once, so an int payload came back as the low half of a stack
+				// address. A str payload looked correct only because a str really
+				// is a pointer — the same accident that hid the taskgroup capture
+				// bug. Copy the eight bytes the box holds.
+				payloadVal := hir.Temp{Name: "%payload_val"}
+				entry.Stmts = append(entry.Stmts, &hir.Load{
+					Type: "i64",
+					Src:  hir.Var{Name: "value"},
+					Dst:  payloadVal,
+				})
+				entry.Stmts = append(entry.Stmts, &hir.Store{
+					Dst: payloadPtr,
+					Val: payloadVal,
+				})
+			} else {
+				// Store the value to payload
+				entry.Stmts = append(entry.Stmts, &hir.Store{
+					Dst: payloadPtr,
+					Val: hir.Var{Name: "value"},
+				})
+			}
 
 			// Store payload pointer at offset 8 (aligned for 8-byte ptr)
 			payloadPtrSlot := hir.Temp{Name: "%payload_ptr_slot"}
