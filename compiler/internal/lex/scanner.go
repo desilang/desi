@@ -44,8 +44,19 @@ type Scanner struct {
 	fstrStack  []int // stack of target brace levels for f-string interpolation; -1 means "in f-string string part"
 }
 
+// utf8BOM is the byte order mark Windows editors put at the start of a file.
+// Notepad writes one, and so does PowerShell's `Set-Content -Encoding utf8`.
+var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
+
 // NewScanner creates a scanner for the given bytes (no filename context).
+//
+// A leading UTF-8 BOM is dropped. It is not whitespace and not an identifier
+// start, so the scanner used to hand the parser a stray token and the file
+// failed at 1:1 with "unexpected token" — pointing at what looked like a
+// perfectly ordinary first line. Anyone who saved a .desi file from Notepad hit
+// that, with nothing on screen to explain it.
 func NewScanner(src []byte) *Scanner {
+	src = bytes.TrimPrefix(src, utf8BOM)
 	return &Scanner{
 		src:     src,
 		line:    1,
