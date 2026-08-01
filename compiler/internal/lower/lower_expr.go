@@ -168,6 +168,17 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 						res := ls.b.FreshTemp("bool_str")
 						ls.b.Emit(&hir.Call{Dst: res, Fn: "bool_to_cstring", Args: []hir.Value{val}})
 						val = res
+					} else if types.Equal(typ, types.Decimal) {
+						// A decimal fell through to the "<?>" default below, so
+						// interpolating one printed a literal placeholder instead
+						// of the number — wrong output, with nothing to warn on.
+						fmtBuilder.WriteString("%s")
+						res := ls.b.FreshTemp("decimal_str")
+						ls.b.Emit(&hir.Call{Dst: res, Fn: "__decimal_to_str", Args: []hir.Value{val}, Type: "ptr"})
+						// mpd_to_sci mallocs; asprintf copies it into the final
+						// buffer, so freeing at scope end is safe.
+						ls.addTempDrop(res.Name)
+						val = res
 					} else if cls, ok := typ.(*types.Class); ok && cls.Dunders != nil {
 						if _, hasFormat := cls.Dunders["__format__"]; hasFormat {
 							// Call __format__(self, "") -> str with empty spec

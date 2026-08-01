@@ -142,9 +142,13 @@ func (c *checker) typBinary(x *ast.BinaryExpr) types.T {
 			} else {
 				other = lt
 			}
-			// Check if other type is allowed
+			// Check if other type is allowed. decimal belongs with the other
+			// primitives here: "Age: " + 20 and "Active: " + true both work, and
+			// leaving decimal out made it the one number type that could not be
+			// glued onto a string.
 			allowed := types.Equal(other, types.Int) || types.Equal(other, types.Float) ||
-				types.Equal(other, types.Bool) || types.Equal(other, types.Str)
+				types.Equal(other, types.Bool) || types.Equal(other, types.Str) ||
+				types.Equal(other, types.Decimal)
 
 			// Also allow if type implements Display trait
 			if !allowed {

@@ -48,6 +48,16 @@ func init() {
 	SetFuncSig("__desi_str_new", "ptr", nil)
 	SetFuncSig("__desi_str_append_free", "ptr", nil)
 
+	// Decimal conversions. mpd_to_sci mallocs, so __decimal_to_str's result is
+	// an owned string; the rest work in the runtime's own widths.
+	SetFuncSig("__decimal_to_str", "ptr", []string{"ptr"})
+	SetFuncSig("__decimal_to_int", "i64", []string{"ptr"})
+	SetFuncSig("__decimal_to_float", "double", []string{"ptr"})
+	SetFuncSig("__decimal_to_bool", "i1", []string{"ptr"})
+	SetFuncSig("__decimal_new", "ptr", []string{"ptr"})
+	SetFuncSig("__decimal_from_int", "ptr", []string{"i64"})
+	SetFuncSig("__decimal_from_float", "ptr", []string{"double"})
+
 	// Zeroes a freshly allocated class instance, so a field the constructor
 	// never assigns reads as 0 or null rather than as whatever the allocator
 	// had lying around.

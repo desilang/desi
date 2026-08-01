@@ -1,0 +1,71 @@
+# Every conversion into and out of decimal.
+#
+# Regression guard. A decimal used to be a dead end: it could be written as a
+# literal and used in arithmetic, and that was all.
+#
+#   str(d)        no overload — a decimal could not be turned into text
+#   print(d)      printed an empty line, silently
+#   f"{d}"        printed the literal placeholder "<?>"
+#   "x" + d       type mismatch, though "x" + 20 and "x" + true both work
+#   int(d)        no overload
+#   float(d)      no overload
+#   bool(d)       no overload
+#   decimal(x)    undefined name — no way to build one except from a literal
+#
+# The last one mattered most: without it a decimal could not be made from user
+# input or a database column, which is what the type is for. The runtime had
+# __decimal_to_str and __decimal_new all along; nothing was wired to them.
+#
+# EXPECTED_OUTPUT:
+# 19.99
+# 19.99
+# v=19.99
+# total: 25.00
+# 2
+# -2
+# 5
+# 2.5
+# false
+# true
+# 7
+# 0.1
+# 3.25
+# 12345678901234567890.123
+# true
+# 25.00
+
+def main() -> int:
+	let a: decimal = 19.99d
+	let b: decimal = 5.01d
+
+	# Rendering, by all four routes.
+	print(str(a))
+	print(a)
+	print(f"v={a}")
+	print("total: " + str(a + b))
+
+	# Out of decimal. int() truncates toward zero, so a negative rounds up.
+	print(str(int(2.9d)))
+	print(str(int(0d - 2.9d)))
+	print(str(int(5d)))
+	print(str(float(2.5d)))
+	# Truthiness follows int and float: zero is false.
+	print(str(bool(0d)))
+	print(str(bool(2.5d)))
+
+	# Into decimal, from each source type.
+	print(str(decimal(7)))
+	# The shortest form that round-trips, not the binary expansion: this is 0.1
+	# and not 0.1000000000000000055511151231257827.
+	print(str(decimal(0.1)))
+	print(str(decimal("3.25")))
+	# A string carries precision a double cannot hold at all.
+	print(str(decimal("12345678901234567890.123")))
+
+	# str and decimal are inverses.
+	let d: decimal = 7.25d
+	print(str(decimal(str(d)) == d))
+
+	# Exactness survives the round trip through text.
+	print(str(decimal(str(a + b))))
+	return 0

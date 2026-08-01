@@ -1259,6 +1259,64 @@ handlePrint:
 		}
 	}
 
+	// 1.4. Conversions into and out of decimal.
+	//
+	// Intercepted here rather than left to the backend, which picks a builtin's
+	// implementation from the argument's *LLVM* type. A decimal is a pointer,
+	// and the backend has no recorded Desi type for the temp an arithmetic
+	// helper like __decimal_add returns, so str(d) fell through to a
+	// synthesized Unknown_to_str. The checker's type is available here and is
+	// definitive.
+	if ls.info != nil {
+		callee := ls.calleeName(x.Callee, x)
+		if len(x.Args) == 1 {
+			argT := ls.typeOf(x.Args[0])
+			fromDecimal := types.Equal(argT, types.Decimal)
+
+			var fn, retTy, tempName string
+			switch {
+			case callee == "str" && fromDecimal:
+				fn, retTy, tempName = "__decimal_to_str", "ptr", "decimal_str"
+			case callee == "int" && fromDecimal:
+				fn, retTy, tempName = "__decimal_to_int", "i64", "decimal_int"
+			case callee == "bool" && fromDecimal:
+				fn, retTy, tempName = "__decimal_to_bool", "i1", "decimal_bool"
+			case callee == "float" && fromDecimal:
+				fn, retTy, tempName = "__decimal_to_float", "double", "decimal_float"
+			case callee == "decimal" && types.Equal(argT, types.Str):
+				fn, retTy, tempName = "__decimal_new", "ptr", "decimal_val"
+			case callee == "decimal" && types.Equal(argT, types.Int):
+				fn, retTy, tempName = "__decimal_from_int", "ptr", "decimal_val"
+			case callee == "decimal" && types.Equal(argT, types.Float):
+				fn, retTy, tempName = "__decimal_from_float", "ptr", "decimal_val"
+			}
+
+			if fn != "" {
+				argVal := ls.lowerExpr(x.Args[0])
+				dst := ls.b.FreshTemp(tempName)
+				emitArg := argVal
+				if fn == "__decimal_from_int" {
+					// The runtime takes an int64; a Desi int is i32.
+					w := ls.b.FreshTemp("dec_i64")
+					ls.b.Emit(&hir.Cast{Dst: w, Src: argVal, Type: "i64"})
+					emitArg = w
+				}
+				ls.b.Emit(&hir.Call{Dst: dst, Fn: fn, Args: []hir.Value{emitArg}, Type: retTy})
+				if fn == "__decimal_to_str" {
+					// mpd_to_sci mallocs; the caller owns the string.
+					ls.addTempDrop(dst.Name)
+				}
+				if retTy == "i64" {
+					// Narrow back to the i32 a Desi int is.
+					n := ls.b.FreshTemp("dec_i32")
+					ls.b.Emit(&hir.Cast{Dst: n, Src: dst, Type: "i32"})
+					return n
+				}
+				return dst
+			}
+		}
+	}
+
 	// 1.5. len() builtin
 	if ls.info != nil {
 		calleeName := ls.calleeName(x.Callee, x)
@@ -2275,6 +2333,14 @@ handlePrint:
 					}
 				}
 
+				// A decimal is a pointer to an mpd_t, so print_item had nothing
+				// it could do with it and the value came out as an empty line.
+				// Render it the same way str() does.
+				if !shouldCallToStr && types.Equal(argT, types.Decimal) {
+					shouldCallToStr = true
+					toStrFuncName = "__decimal_to_str"
+				}
+
 				// Case 2: Built-in collections (list, dict, set)
 				if !shouldCallToStr {
 					switch t := argT.(type) {
@@ -2332,7 +2398,7 @@ handlePrint:
 					// the printed temp is freed at scope end. User dunders
 					// (__str__/__repr__/to_str) may return literals: not tracked.
 					switch toStrFuncName {
-					case "list_to_str", "dict_to_str", "set_to_str", "__desi_default_repr":
+					case "list_to_str", "dict_to_str", "set_to_str", "__desi_default_repr", "__decimal_to_str":
 						ls.addTempDrop(strTemp.Name)
 					}
 					argVal = strTemp

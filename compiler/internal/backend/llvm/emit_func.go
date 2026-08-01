@@ -344,6 +344,15 @@ setjmpScan:
 							m.ensureDecl("declare ptr @bool_to_str(i32)")
 							leftStr = convTemp
 						}
+					} else if lType != nil && types.Equal(lType, types.Decimal) {
+						// A decimal is a pointer too, so it reached string_concat
+						// as if it were already text and the number came out
+						// empty. Render it first, like every other number.
+						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %s = call ptr @__decimal_to_str(ptr %s)\n", convTemp, lval)
+						m.ensureDecl("declare ptr @__decimal_to_str(ptr)")
+						leftStr = convTemp
 					} else {
 						// It's a ptr. Is it a string?
 						isStr := false
@@ -404,6 +413,13 @@ setjmpScan:
 							m.ensureDecl("declare ptr @bool_to_str(i32)")
 							rightStr = convTemp
 						}
+					} else if rType != nil && types.Equal(rType, types.Decimal) {
+						// See the left-hand side above.
+						convTemp := fmt.Sprintf("%%str_conv_%d", m.tempID)
+						m.tempID++
+						wprintf(&m.funcs, "  %s = call ptr @__decimal_to_str(ptr %s)\n", convTemp, rval)
+						m.ensureDecl("declare ptr @__decimal_to_str(ptr)")
+						rightStr = convTemp
 					} else {
 						// It's a ptr. Is it a string?
 						isStr := false

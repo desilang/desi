@@ -221,6 +221,25 @@ func addPreludeBuiltins(info *Info) {
 	for _, k := range coreKinds {
 		add1("str", k, types.Str, "value", ast.ParamMove)
 	}
+	// decimal conversions, in both directions. Registered one at a time rather
+	// than by adding decimal to coreKinds, because bool(decimal) has no meaning
+	// worth guessing at and would only typecheck and then fail at the linker.
+	//
+	// Without these a decimal was a dead end: it could be built from a literal
+	// and used in arithmetic, but not rendered, not parsed from input, and not
+	// converted to anything else.
+	add1("str", types.Decimal, types.Str, "value", ast.ParamMove)     // str(d)
+	add1("int", types.Decimal, types.Int, "value", ast.ParamMove)     // int(d), truncating
+	add1("float", types.Decimal, types.Float, "value", ast.ParamMove) // float(d)
+	add1("bool", types.Decimal, types.Bool, "value", ast.ParamMove)   // bool(d), zero is false
+
+	// decimal(value: T) -> decimal, from a string, an int, or a float.
+	// The string form is the one that matters: it is how a decimal is built
+	// from user input or a database column without going through a binary
+	// float and losing the exactness the type exists for.
+	for _, k := range []types.T{types.Str, types.Int, types.Float} {
+		add1("decimal", k, types.Decimal, "value", ast.ParamMove)
+	}
 	// int(value: T) -> int
 	for _, k := range coreKinds {
 		add1("int", k, types.Int, "value", ast.ParamMove)

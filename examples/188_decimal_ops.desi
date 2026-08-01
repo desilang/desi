@@ -1,40 +1,41 @@
-# decimal arithmetic, with the results actually checked.
+# decimal arithmetic, with the results actually read back.
 #
 # Every line used to carry its answer in a trailing comment — `# 25.00`,
 # `# 100.1499` — and the file returned 0 without comparing any of them. Exact
 # arithmetic is the whole reason the type exists, so the values are what needs
 # checking, not that the program runs.
 #
-# The comparisons stand in for printing: `str(decimal)` has no overload and
-# print(decimal) emits nothing, so equality against a literal is how a decimal
-# result can be pinned down today.
+# Both the rendered value and an equality against a literal are checked: the
+# first would catch a formatting change, the second a value that is close but
+# not exact. See 552 for the conversions themselves.
 
 def main() -> int:
 	let a: decimal = 19.99d
 	let b: decimal = 5.01d
 
-	# Exact, which is the point — binary floats cannot represent these.
+	# Exact — binary floats cannot represent these.
+	print(str(a + b))
+	print(str(a - b))
+	print(str(a * b))
 	print(str(a + b == 25.00d))
 	print(str(a - b == 14.98d))
 	print(str(a * b == 100.1499d))
 
 	# Division that does not terminate: bracket it instead.
 	let quot: decimal = a / b
-	print(str(quot > 3.99d))
-	print(str(quot < 4.0d))
+	print(str(quot > 3.99d and quot < 4.0d))
 
 	let c: decimal = 100d
 	let d: decimal = 3d
-	let whole_div: decimal = c / d
-	print(str(whole_div > 33d))
-	print(str(whole_div < 34d))
+	print(str(c / d))
 	0
 
 # EXPECTED_OUTPUT:
+# 25.00
+# 14.98
+# 100.1499
 # true
 # true
 # true
 # true
-# true
-# true
-# true
+# 33.33333333333333333333333333
