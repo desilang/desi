@@ -66,13 +66,26 @@ $results = @()
 foreach ($name in $names) {
     Write-Host "==> $name" -ForegroundColor Cyan
 
-    # Build Desi side
-    if ($Release) {
-        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") -Release | Out-Null
-    } else {
-        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") | Out-Null
-    }
+    # Build Desi side.
+    #
+    # The executable is removed first, and its absence afterwards is a hard
+    # failure. build-desi.ps1's output is discarded, so a failed build used to
+    # be invisible: build\output\ still held the binary from the last time this
+    # ran, and the benchmark was timed against a stale executable and reported
+    # as if it had passed. binary_tree was benchmarked for eight days that way,
+    # against a build that predated the compiler change that broke it.
     $desiExe = Join-Path $RepoRoot "build\output\$name.exe"
+    if (Test-Path $desiExe) { Remove-Item $desiExe -Force }
+
+    $buildOut = if ($Release) {
+        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") -Release 2>&1
+    } else {
+        & (Join-Path $RepoRoot "build-desi.ps1") (Join-Path $BenchDir "$name.desi") 2>&1
+    }
+    if (-not (Test-Path $desiExe)) {
+        Write-Host ($buildOut | Out-String) -ForegroundColor Red
+        throw "build-desi.ps1 produced no executable for $name.desi"
+    }
 
     # Build C side at the same opt level as the Desi IR
     $cExe = Join-Path $OutDir "$name`_c.exe"

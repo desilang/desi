@@ -63,12 +63,25 @@ printf "%-14s %10s %10s %10s %10s   %s\n" "Benchmark" "Desi ms" "C ms" "Desi MB"
 for src in "$BENCH_DIR"/*.desi; do
     name=$(basename "$src" .desi)
 
-    if [ "$RELEASE" = "1" ]; then
-        "$REPO_ROOT/build-desi.sh" --release "$src" >/dev/null 2>&1
-    else
-        "$REPO_ROOT/build-desi.sh" "$src" >/dev/null 2>&1
-    fi
+    # Build, and say which benchmark failed and why when it does. The output
+    # used to be discarded, so `set -e` aborted the run with nothing but the
+    # step's exit code — a compiler bug that only this benchmark's shape
+    # triggered showed up in CI as an unexplained "exit code 1". Removing the
+    # executable first also stops a stale one from being timed as if it were
+    # freshly built.
     desi_exe="$REPO_ROOT/build/output/$name"
+    rm -f "$desi_exe"
+
+    if [ "$RELEASE" = "1" ]; then
+        build_log=$("$REPO_ROOT/build-desi.sh" --release "$src" 2>&1) || true
+    else
+        build_log=$("$REPO_ROOT/build-desi.sh" "$src" 2>&1) || true
+    fi
+    if [ ! -x "$desi_exe" ]; then
+        echo "FAILED to build $name.desi:" >&2
+        echo "$build_log" >&2
+        exit 1
+    fi
 
     c_exe="$OUT_DIR/${name}_c"
     clang $C_OPT "$BENCH_DIR/$name.c" -o "$c_exe"
