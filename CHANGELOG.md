@@ -121,9 +121,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   FindFirstFile glob), `re` (bundled minimal-ERE regex shim), hot-reload
   state functions
 - HTTPS client on Windows via Schannel (`http/tls_win.h`) — no OpenSSL
-  needed; HTTP/WebSocket *server* and `signal` remain macOS/Linux-only
-- 479 of 487 examples pass on Windows (remaining 8 need the db/ORM
-  runtime port)
+  needed
+- HTTP/WebSocket *server* on Windows (WinSock2 + platform threads)
+- Database runtime (`compiler/runtime/db/*.c`) builds on Windows, so the
+  ORM links there; the drivers have no TLS on Windows, which
+  [Known Limitations](https://desilang.org/reference/known-limitations/)
+  documents
+- A leading UTF-8 byte order mark is accepted. Notepad and PowerShell's
+  `Set-Content -Encoding utf8` write one, and it used to fail at 1:1 with
+  "unexpected token" on a first line with nothing visibly wrong
+- The full example suite passes on Windows, at both optimization levels
 
 **Release builds and benchmarks**
 
@@ -176,10 +183,77 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Constant-memory loops: millions of list/enum/string-temp allocations
   peak at ~3 MB working set
 
+**Databases and the ORM**
+
+- The database runtime builds and runs on Windows, Linux and macOS, and is
+  exercised in CI against live PostgreSQL and MySQL servers
+- MySQL authentication covers 5.x through 9.x: `mysql_native_password`,
+  `caching_sha2_password` fast auth, and full auth over TLS or via RSA
+  public-key exchange (BCrypt on Windows, OpenSSL elsewhere)
+- `QuerySet` is independent and chainable — a filter on one does not
+  mutate another — and ORM/bulk state is scoped per thread
+- `save()` is implemented, and each connection's handle can be cloned
+
+**Language additions**
+
+- `break` and `continue`, in `for` and `while`, resolving to the innermost
+  enclosing loop, with cleanup running for every scope they leave —
+  destructors included
+- `range` is a real type: it can be bound to a variable, passed, indexed,
+  measured with `len()`, tested with `in`, and iterated in a comprehension.
+  A literal range with a literal step compiles to a counted loop that
+  allocates nothing
+- Turbofish on a generic class constructor: `Stack::<int>()`
+- A module's exported constants are usable across the import boundary,
+  both as `from config import MAX_RETRIES` and `config.MAX_RETRIES`.
+  Constant initializers fold at compile time, so an importer reads the
+  value without running the exporting module
+
+**Diagnostics**
+
+- Unresolved identifiers are reported by the checker instead of reaching
+  the linker as an undefined symbol
+- New codes: `break`/`continue` outside a loop (DTE0130), a wrong index or
+  key type (DTE0131, which had been sharing a code with unrelated errors),
+  `enumerate`/`reversed`/`zip` used as values rather than loop syntax
+  (DTE0132), and turbofish arity and inference failures (DTE0113, DTE0114)
+- The diagnostics reference lists all 152 codes across 17 categories,
+  checked against the catalog
+
 ### Fixed
 
-- All 475 examples pass (0 failures)
+- The full example suite passes at both optimization levels on Windows,
+  Linux and macOS
 - Cross-platform LLVM tool auto-discovery for `llc`/`clang` (macOS Homebrew, Linux versioned, Windows MSYS2/Chocolatey)
+- `print` is atomic: one call emits one whole line even when several tasks
+  print at once. It lowers to several output calls, and they used to
+  interleave mid-line. Arguments are now fully evaluated before any output,
+  so a call inside a `print` that itself prints no longer lands in the
+  middle of the line
+- A generic enum returns the payload it was constructed with. The
+  constructor stored the address of the caller's box rather than what the
+  box held, so `enum G<T>: Some: T` with an int came back as garbage; a
+  `str` payload was unaffected, since a str is already a pointer
+- A branch whose last statement is a loop no longer emits invalid IR. The
+  jump to the merge point was attached to the block the branch started in,
+  which stopped being the block it ended in once a loop moved control into
+  the loop's exit block
+- `desic build` works on Linux (position-independent relocation) and finds
+  an installed runtime next to the binary; it falls back to `clang` when
+  `llc` is absent, which is the case on GitHub's macOS and Ubuntu runners
+- `-o` names an output path, and builds no longer land in the working tree
+- A `select` case body may open with a comment — the concurrency docs did
+  this in three places, and every one of those examples was uncompilable
+- `pub` followed by something that is not a declaration reports an error
+  instead of hanging the compiler
+- Function overloads resolve to the one that was chosen, including for
+  module-qualified calls, and methods of unrelated classes are no longer
+  compared as overloads
+- A specialized generic method returns its own type rather than the
+  unsubstituted one
+- A lambda in a `for` body is lifted like one in a `while` or `using`
+  body, and a task receives its captured values rather than the addresses
+  of their boxes
 - Makefile: Fixed archive merge that lost libmpdec symbols
 - Guard pattern checker prevents guard/arena escapes
 - `using tg = sync.TaskGroup():` destroyed the TaskGroup as an arena —
@@ -209,6 +283,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Tests
 
 - 24 tests for performance advisor, build audit, and API tier classification
+- The example suite runs at both optimization levels on Windows, Linux and
+  macOS in CI, alongside a benchmark job that requires every Desi
+  benchmark to produce the same output as its C counterpart
+- The book's code is compiled, not just written: every ```desi block in
+  `book/docs` is extracted and parsed, and parse failures are held at zero
+- Shipped-tooling smoke tests for `desic`, `desifmt`, `desirepl`,
+  `desilsp` and `desic watch`
 
 ---
 
