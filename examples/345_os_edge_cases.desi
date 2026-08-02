@@ -12,8 +12,11 @@ import os
 
 def main() -> int:
     # --- Platform: the value differs per OS, the set of values does not ---
+    # The names are the ones os.md documents, which is "darwin" for macOS and
+    # not "macos" — writing the friendly name here is what turned this into a
+    # macOS-only CI failure while Windows and Linux stayed green.
     let p = os.platform()
-    print(f"platform known: {p == "windows" or p == "linux" or p == "macos"}")
+    print(f"platform known: {p == "windows" or p == "linux" or p == "darwin"}")
 
     # --- getenv: PATH is set everywhere ---
     let path = os.getenv("PATH")
