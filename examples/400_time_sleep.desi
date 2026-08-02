@@ -137,13 +137,13 @@ def test_relative():
     print("1 hour ago:", relative(hour_ago))
     let day_ago = add_days(ts, -1)
     print("1 day ago:", relative(day_ago))
-    # A minute of slack on each. relative() measures against a fresh now(),
-    # taken a few milliseconds after ts, so an exact +1h landed at 3599.99s and
-    # printed "in 59 minutes" — the future cases sit just under a boundary,
-    # while the past ones above are pushed away from it by the same drift.
-    let hour_later = add_seconds(add_hours(ts, 1), 60.0)
+    # No slack: relative() rounds to the nearest unit, so a timestamp exactly
+    # one hour out still reads "in 1 hour" even though it is measured a few
+    # microseconds later and is really 3599.99 seconds away. Truncation used to
+    # answer "in 59 minutes" here, and "in 6 days" below.
+    let hour_later = add_hours(ts, 1)
     print("in 1 hour:", relative(hour_later))
-    let week_later = add_seconds(add_days(ts, 7), 60.0)
+    let week_later = add_days(ts, 7)
     print("in 7 days:", relative(week_later))
     print("")
 

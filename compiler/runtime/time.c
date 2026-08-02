@@ -401,37 +401,58 @@ char* __time_relative(double ts) {
     int neg = diff < 0;
     if (neg) diff = -diff;
     
-    long long total_secs = (long long)diff;
-    
+    /*
+     * Round to the nearest unit rather than truncating toward zero.
+     *
+     * The difference is measured against a now() read microseconds after the
+     * caller built its timestamp, so an exact "one hour from now" arrives here
+     * as 3599.99 seconds. Truncating gave 3599, and 3599/60 is 59: relative()
+     * answered "in 59 minutes" for a time exactly one hour away, every time.
+     *
+     * The direction of the drift is what made it easy to miss — it pushes a
+     * past timestamp away from the boundary (3600.01, still "1 hour ago") and a
+     * future one under it. The same call was right looking backwards and wrong
+     * looking forwards.
+     *
+     * The bucket is still chosen by magnitude, so anything that was already
+     * right is unchanged; only the value inside the bucket is rounded, and a
+     * value that rounds up into the next bucket is promoted (59.7 minutes is
+     * "1 hour", not "60 minutes").
+     */
     const char* unit;
-    int value;
-    
-    if (total_secs < 60) {
-        value = (int)total_secs;
-        unit = value == 1 ? "second" : "seconds";
-    } else if (total_secs < 3600) {
-        value = total_secs / 60;
-        unit = value == 1 ? "minute" : "minutes";
-    } else if (total_secs < 86400) {
-        value = total_secs / 3600;
-        unit = value == 1 ? "hour" : "hours";
-    } else if (total_secs < 2592000) {  // ~30 days
-        value = total_secs / 86400;
-        unit = value == 1 ? "day" : "days";
-    } else if (total_secs < 31536000) {  // ~365 days
-        value = total_secs / 2592000;
-        unit = value == 1 ? "month" : "months";
+    long long value;
+
+    if (diff < 60.0) {
+        value = llround(diff);
+        if (value >= 60) { value = 1; unit = "minute"; }
+        else             { unit = value == 1 ? "second" : "seconds"; }
+    } else if (diff < 3600.0) {
+        value = llround(diff / 60.0);
+        if (value >= 60) { value = 1; unit = "hour"; }
+        else             { unit = value == 1 ? "minute" : "minutes"; }
+    } else if (diff < 86400.0) {
+        value = llround(diff / 3600.0);
+        if (value >= 24) { value = 1; unit = "day"; }
+        else             { unit = value == 1 ? "hour" : "hours"; }
+    } else if (diff < 2592000.0) {  /* ~30 days */
+        value = llround(diff / 86400.0);
+        if (value >= 30) { value = 1; unit = "month"; }
+        else             { unit = value == 1 ? "day" : "days"; }
+    } else if (diff < 31536000.0) {  /* ~365 days */
+        value = llround(diff / 2592000.0);
+        if (value >= 12) { value = 1; unit = "year"; }
+        else             { unit = value == 1 ? "month" : "months"; }
     } else {
-        value = total_secs / 31536000;
+        value = llround(diff / 31536000.0);
         unit = value == 1 ? "year" : "years";
     }
-    
+
     if (neg) {
-        sprintf(buffer, "%d %s ago", value, unit);
+        snprintf(buffer, sizeof(buffer), "%lld %s ago", value, unit);
     } else {
-        sprintf(buffer, "in %d %s", value, unit);
+        snprintf(buffer, sizeof(buffer), "in %lld %s", value, unit);
     }
-    
+
     return strdup(buffer);
 }
 
