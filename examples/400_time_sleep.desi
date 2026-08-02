@@ -26,12 +26,15 @@ def test_core_functions():
 
 def test_timezone_functions():
     print("=== Timezone Functions ===")
+    # The offset, its name and the DST flag are all properties of the machine
+    # this runs on. Printing them pinned the expectation to one timezone: baked
+    # on a Central Daylight Time box, every UTC CI runner failed. Check what is
+    # true anywhere instead.
     let offset = timezone_offset()
-    print("timezone_offset():", offset, "seconds")
+    print("timezone_offset() in range:", offset >= -43200 and offset <= 50400)
     let tz_name = timezone_name()
-    print("timezone_name():", tz_name)
-    let dst = is_dst()
-    print("is_dst():", dst)
+    print("timezone_name() non-empty:", len(tz_name) > 0)
+    print("is_dst() stable:", is_dst() == is_dst())
     let local = now()
     let utc = to_utc(local)
     let back = to_local(utc)
@@ -49,10 +52,12 @@ def test_formatting():
     let ts = from_parts(2026, 1, 15, 10, 30, 45)
     let formatted = format_timestamp(ts, "%Y-%m-%d %H:%M:%S")
     print("format_timestamp(2026-01-15 10:30:45):", formatted)
+    # Both of these are timezone-dependent instants, so compare the calendar
+    # fields they round-trip to rather than the raw epoch second.
     let parsed = parse_time("2026-02-05", "%Y-%m-%d")
-    print("parse_time('2026-02-05'):", parsed)
+    print("parse_time(2026-02-05) ->", year_of(parsed), month_of(parsed), day_of(parsed))
     let built = from_parts(2026, 12, 25, 0, 0, 0)
-    print("from_parts(2026, 12, 25):", built)
+    print("from_parts(2026,12,25) ->", year_of(built), month_of(built), day_of(built))
     let readable = ctime(now())
     print("ctime len > 20:", len(readable) > 20)
     let original = from_parts(2026, 6, 15, 14, 30, 0)
@@ -132,9 +137,13 @@ def test_relative():
     print("1 hour ago:", relative(hour_ago))
     let day_ago = add_days(ts, -1)
     print("1 day ago:", relative(day_ago))
-    let hour_later = add_hours(ts, 1)
+    # A minute of slack on each. relative() measures against a fresh now(),
+    # taken a few milliseconds after ts, so an exact +1h landed at 3599.99s and
+    # printed "in 59 minutes" — the future cases sit just under a boundary,
+    # while the past ones above are pushed away from it by the same drift.
+    let hour_later = add_seconds(add_hours(ts, 1), 60.0)
     print("in 1 hour:", relative(hour_later))
-    let week_later = add_days(ts, 7)
+    let week_later = add_seconds(add_days(ts, 7), 60.0)
     print("in 7 days:", relative(week_later))
     print("")
 
@@ -230,17 +239,17 @@ main()
 # perf_counter() precision: true
 # 
 # === Timezone Functions ===
-# timezone_offset(): -21600 seconds
-# timezone_name(): Central Daylight Time
-# is_dst(): true
+# timezone_offset() in range: true
+# timezone_name() non-empty: true
+# is_dst() stable: true
 # to_utc/to_local round-trip: true
 # 
 # === Formatting & Parsing ===
 # strftime date len: 10
 # strftime len: 8
 # format_timestamp(2026-01-15 10:30:45): 2026-01-15 10:30:45
-# parse_time('2026-02-05'): 1.77027e+09
-# from_parts(2026, 12, 25): 1.79818e+09
+# parse_time(2026-02-05) -> 2026 2 5
+# from_parts(2026,12,25) -> 2026 12 25
 # ctime len > 20: true
 # format->parse round-trip: true
 # 
