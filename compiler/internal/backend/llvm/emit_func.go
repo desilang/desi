@@ -648,10 +648,11 @@ setjmpScan:
 					retType = fn.RetType
 				}
 
-				// Decrement call depth BEFORE tail call to avoid false recursion limit
-				// (since tail call is effectively a return-then-call, not a nested call)
-				m.ensureDecl("declare void @__desi_call_exit()")
-				wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
+				// No exit hook before the tail call either. It existed so that a
+				// tail call — a return-then-call rather than a nested one — did
+				// not count against the depth limit. The guard reads the stack
+				// pointer now, and a tail call does not grow the stack, so the
+				// case it corrected for cannot arise.
 
 				// Emit tail call
 				if fn.RetType == "" || fn.RetType == "void" {
