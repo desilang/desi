@@ -555,6 +555,162 @@ Implement a compile-time security audit system that scans the full import graph 
 
 ---
 
+## v0.1.x — Move checks from run time to compile time
+
+> **Status:** planned, measured, not started unless noted.
+> **Why one section:** every item here is the same move — something Desi
+> currently checks or arranges *while a program runs*, which the compiler could
+> settle *before* it does. That is simultaneously the performance plan and the
+> memory-safety plan, because a runtime check is a permanent tax and a
+> compile-time proof is free forever.
+
+### Where v0.1.0 leaves off
+
+Benchmarks are whole-process wall times; subtract the `startup` row from both
+sides before reading any of them. Linux, release, 2026-08-02:
+
+| | Desi | C | reading |
+|---|---|---|---|
+| string churn | 11 | 14 | Desi ahead |
+| loop arithmetic, string build | 1 | 1 | tied |
+| quicksort, binary tree | 2–3 | 1–2 | close |
+| dict ops | 8 | 5 | close |
+| recursive calls | 9 | 6 | close (was 23) |
+| **list ops** | **10** | **3** | behind |
+| **allocation churn** | **13** | **1** | behind |
+
+Both laggards are dominated by allocating small objects. Nothing else in the
+table is far off, and the call-overhead gap closed in v0.1.0 by replacing the
+frame counter with a stack headroom check.
+
+---
+
+### A. Escape analysis: stop the false positives
+
+**Problem.** Arena promotion is built and works, but does not fire on the
+commonest shape in real code — accumulate a number in a loop while touching a
+collection. These two loops differ only in the last line:
+
+```desi
+let t = [i, i, i]
+print(str(len(t)))          # promoted to the arena
+```
+```desi
+let t = [i, i, i]
+total := total + len(t)     # falls back to malloc per iteration
+```
+
+`escape.go` marks **every symbol on the right-hand side** as escaping when the
+left-hand side is not itself an arena candidate. `total` is an `int`, so it is
+not a candidate, and `t` is tarred by association — even though `len(t)` hands
+over an integer and the list goes nowhere.
+
+**Fix.** Consult the type. If the assignment target cannot hold a reference —
+`int`, `float`, `bool` — then nothing on the right escapes through it.
+
+**Cost.** 1–2 days. Low risk: the change only ever *removes* false escapes.
+Marking too little is the dangerous direction and is untouched.
+
+**Payoff.** Should fix `alloc_churn` outright, and every loop shaped like it.
+
+---
+
+### B. Per-iteration arena reset
+
+**Problem.** An arena currently lives for the whole function. A loop that
+allocates half a million times would grow it half a million times, so loop-local
+collections cannot simply be promoted and forgotten.
+
+**Fix.** Reset the arena at the end of each iteration, so a loop body's
+allocations cost a bump-pointer increment and one reset. This is "Phase 2:
+Scope-Based Arenas" in [hybrid_memory_management.md](todo/hybrid_memory_management.md),
+which is **not** built despite that document's summary.
+
+**Cost.** 3–5 days, and the one to test hardest. Resetting an arena while
+something still points into it is precisely the bug class the design exists to
+prevent, so the escape analysis must be right *first* — B depends on A.
+
+**Payoff.** With A, brings `alloc_churn` near C.
+
+---
+
+### C. Collection element access (not v0.1.x)
+
+`list_ops` appends a million integers one at a time. The gap is not allocation
+strategy: each `append` is a runtime call that checks capacity and may grow,
+against C's inlined array store. Closing it means inlining `append`'s fast path
+into the caller, or specialising `list[int]` so elements are stored unboxed.
+
+**Cost.** 1–2 weeks, and it changes how collections are represented. Deferred.
+Until then `list_ops` stays behind, and the benchmark README should say so
+rather than imply otherwise.
+
+---
+
+### D. Require field initialisation at compile time
+
+**Problem.** Every class instance is zeroed at construction so that a field the
+constructor never assigns reads as `0` rather than as whatever the allocator had
+lying around. That closes a real hole — it was returning garbage before v0.1.0 —
+but it is the Go answer, not the Rust one, and it costs a `memset` per
+construction forever.
+
+**Fix.** Have the checker reject a program that reads a field no constructor
+assigns and no declaration defaults. Then delete `__desi_zero`.
+
+**Cost.** 2–3 days. **Breaking**: code relying on implicit zeroing stops
+compiling, which is why this belongs early in 0.1.x rather than later.
+
+**Payoff.** Strictly safer *and* strictly faster — the runtime cost disappears
+because the compiler proved it unnecessary. The clearest example in the whole
+list of why this section exists.
+
+---
+
+### E. Narrow "leak rather than crash"
+
+Every boundary listed in [memory-model.md](../memory-model.md) is a place the
+compiler could not decide who owned a value and chose to leak instead of risking
+a free. Each one narrowed returns memory *and* speed. Incremental, no cliff,
+good background work across 0.1.x.
+
+---
+
+### F. Elide the print lock when a program has no tasks
+
+`print` takes a lock so concurrent output cannot interleave mid-line. A program
+that never spawns a task cannot race, and the compiler can see that. Half a day,
+same shape as the guard elision in v0.1.0.
+
+---
+
+### G. Monomorphise generics (not v0.1.x)
+
+A generic function currently boxes its argument on the heap and hands back a
+pointer. Rust generates a specialised copy per type: no allocation, and a whole
+class of bug cannot exist — several were fixed in v0.1.0 that existed *because*
+of the boxing.
+
+**Cost.** 1–2 weeks; a codegen strategy change. Deferred.
+
+---
+
+### Not planned: a borrow checker
+
+The actual Rust mechanism is a months-long language-design project, and it would
+change what Desi feels like to write — the strictness is the trade. Worth
+deciding deliberately, not under release pressure.
+
+### Order
+
+A → D → B, then E and F as they fit. C and G are 0.2.0 material.
+
+Realistic outcome for 0.1.x: `alloc_churn` near C, uninitialised fields
+impossible at compile time instead of papered over at runtime, one runtime cost
+deleted outright, and `list_ops` still behind — documented, not implied away.
+
+---
+
 ## v0.2.0 Vision — Compile-Time Macro Introspection
 
 > **Status:** Design complete, implementation deferred to v0.2.0.

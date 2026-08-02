@@ -1,10 +1,50 @@
-# Hybrid Memory Management (Shipped)
+# Hybrid Memory Management
 
-**Status**: ✅ SHIPPED (v0.1.0)
-**Implemented**: Yes (Phase 1 collection drops, and Phase 2 Escape Analysis & Automatic Function-Local Arenas)
+**Status**: Phase 1 shipped. Phase 2 shipped but under-firing. Phase 3 not started.
 **Related**: Generics implementation, Move semantics, Borrow checker
 
-> **Overview:** Both Phase 1 (collection drops) and Phase 2 (Escape Analysis and Automatic Function-Local Arenas) are fully implemented and verified in the v0.1.0 release. Non-escaping local collections are statically promoted to function-scoped bump arenas, eliminating malloc/free overhead and RC churn. Custom destructors are respected and bypassed from arena promotion to ensure correct resource deallocation.
+> **Overview:** Phase 1 (collection drops) is complete. Phase 2 (escape analysis
+> and function-local arenas) is built and correct — non-escaping local
+> collections are promoted to bump arenas, and types with custom destructors are
+> excluded so cleanup still runs — but it **does not fire on the commonest shape
+> in real code**, so the benefit is much narrower than this document previously
+> claimed.
+
+## Known gap: escape analysis over-approximates (v0.1.x item A)
+
+These two loops differ only in the last line:
+
+```desi
+let t = [i, i, i]
+print(str(len(t)))          # promoted to the arena
+```
+```desi
+let t = [i, i, i]
+total := total + len(t)     # falls back to malloc, every iteration
+```
+
+`escape.go` marks **every symbol referenced on the right-hand side** as escaping
+whenever the assignment target is not itself an arena candidate. Candidates are
+locals of heap type, so an `int` accumulator is not one — and `t` is marked
+escaping by association, though `len(t)` yields an integer and the list itself
+goes nowhere.
+
+The over-approximation is safe: it only ever pushes values onto the heap, never
+frees something still live. But it costs the `alloc_churn` benchmark most of its
+gap against C (13 ms vs 1 ms on Linux), and it defeats the arena for any loop
+that accumulates a number while touching a collection.
+
+**Fix:** consult the type of the assignment target. A target that cannot hold a
+reference — `int`, `float`, `bool` — cannot let anything escape through it.
+
+**Also missing:** arenas are function-scoped, so a loop allocating half a million
+times would grow one half a million times. Per-iteration reset is Phase 2 below
+and is not built. It depends on the escape fix landing first: resetting an arena
+while something still points into it is exactly the failure this design exists to
+prevent.
+
+See [roadmap.md](../roadmap.md#v01x--move-checks-from-run-time-to-compile-time),
+items A and B.
 
 ## Current State
 
@@ -135,13 +175,27 @@ def use_box():
 
 ## Task Breakdown
 
-- [ ] Implement arena allocator in runtime
-- [ ] Modify generic boxing to use `arena.alloc`
-- [ ] Add arena init/free to function lowering
-- [ ] Implement escape analysis to detect arena-safe values
-- [ ] Add RC for escaping values
-- [ ] Test with benchmark suite
-- [ ] Document memory model for users
+Done:
+
+- [x] Arena allocator in the runtime (`compiler/runtime/arena.c`)
+- [x] Arena init/destroy in function lowering (`emitAlloc`, `currentAllocArena`)
+- [x] Escape analysis to detect arena-safe values (`check/escape.go`)
+- [x] Types with custom destructors excluded from promotion
+- [x] Memory model documented for users (`docs/memory-model.md`)
+
+Outstanding — see [roadmap.md](../roadmap.md#v01x--move-checks-from-run-time-to-compile-time):
+
+- [ ] **(A)** Type-aware escape rule, so an `int` assignment target stops
+      marking heap values on the right-hand side as escaping. Fixes the gap
+      described at the top of this file. 1–2 days.
+- [ ] **(B)** Per-iteration arena reset, so a loop body's allocations cost a
+      bump and one reset. Depends on A. 3–5 days.
+- [ ] Re-measure `alloc_churn` against C after A and B; it is the benchmark
+      this whole design exists for, and it is the one that will show whether it
+      worked.
+- [ ] Generic boxing through `arena.alloc` rather than `malloc` — largely moot
+      if generics are monomorphised instead (roadmap item G), which removes the
+      boxing rather than relocating it.
 
 ## References
 
