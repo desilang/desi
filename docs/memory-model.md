@@ -109,6 +109,28 @@ the automatic memory management does not produce use-after-free or
 double-free by construction. It does **not** guarantee the absence of all
 leaks — see the boundaries above.
 
+The same standard applies to the other end of memory. Running out of stack
+is a write past its end — an access violation the program cannot report on,
+because the fault happens while it is happening. Every function that can
+recurse carries a guard that raises a `RuntimeError` while there is still
+stack left to raise it on, so exhaustion is an error a `try` can catch and a
+supervisor can survive, not a crash.
+
+What is measured is the space itself, not a count of frames. A frame count
+is only a proxy for the space it stands for, and it fails in both directions:
+large frames exhaust the stack in fewer calls than the count allows, and a
+raised limit would otherwise authorise recursing past the end of the stack.
+`set_recursion_limit` is therefore a ceiling and never a licence — it is
+clamped to the real end of the stack, so it can lift the limit but never past
+the point where the program would fault.
+
+Also unguarded, deliberately: an infinite *tail* recursion. It compiles to a
+jump and consumes no stack, so nothing runs out — it is an infinite loop, and
+Desi does not claim to detect those.
+
+Implementation and the measurements behind it:
+[contributing/compiler/limits.md](contributing/compiler/limits.md).
+
 ## For contributors
 
 The implementation, invariants, and the gotchas that have caused real

@@ -195,6 +195,38 @@ references, so every unknown is a "no" (`compiler/internal/lower/str_accum.go`).
   block. Short-lived lists — the common case under scope-exit drops —
   cost one malloc/free instead of two.
 
+### Call overhead (why fib_recursive closed)
+
+Every user function carries a guard so that running out of stack raises a
+`RuntimeError` instead of faulting. It used to be an exact frame counter —
+a thread-local incremented on entry and decremented on return — and on a
+benchmark that is nothing but calls, that guard *was* the gap: `fib_recursive`
+spent about 70% of its time in it.
+
+The counter is now a stack headroom check, which is stateless, so there is
+no work to undo on return and the exit hook is gone entirely. Measured on
+`fib(32)` at `-O2`, the guard costs 16.8 ms as a counter and 2.5 ms as a
+headroom check. Three things mattered, in order:
+
+- **Dropping the exit hook.** Most of it. Nothing is changed on entry, so
+  nothing needs undoing.
+- **Emitting the check inline** instead of calling a runtime helper. Worth
+  ~4 ms on Linux, where no bitcode hot set exists to inline it away.
+- **`thread_local(initialexec)`.** ELF's default general-dynamic model
+  resolves a thread-local through a call to `__tls_get_addr`, which puts a
+  call back in the prologue. Another ~4 ms on Linux.
+
+`fib_recursive` went from 23 ms to 9 ms on Linux (C: 6 ms) and reached parity
+on Windows. Nothing else in the table moved, which is what places the
+remaining gaps — `alloc_churn`, `list_ops` — in allocation rather than call
+overhead.
+
+The check is also stricter than what it replaced: it measures the resource
+that actually runs out, so large frames can no longer exhaust the stack
+inside the frame budget, and a raised `set_recursion_limit` can no longer
+authorise recursing past the end of the stack. See
+[docs/contributing/compiler/limits.md](../docs/contributing/compiler/limits.md).
+
 ### How release builds work
 
 `build.ps1` compiles a curated **LTO hot set** of runtime files
