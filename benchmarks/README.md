@@ -39,10 +39,36 @@ reported. The runner warns if the Desi and C outputs differ.
 - Outputs must match exactly; arithmetic stays inside 32-bit range on both
   sides (Desi `int` is i32).
 
+## How to read the table
+
+Every row is a **whole-process wall time**, so every row includes the cost of
+starting a process. The `startup` row measures exactly that and nothing else —
+subtract it from both columns before comparing anything.
+
+It matters more than it sounds. Measured on 2026-08-01:
+
+| | Desi | C |
+|---|---|---|
+| Linux (WSL Ubuntu, -O2) | 1 ms | 1 ms |
+| Windows (x64, -O2 + LTO) | 19.4 ms | 24.1 ms |
+
+Two consequences:
+
+- **Desi's startup is not a cost.** It matches C's on both platforms, so
+  `__desi_runtime_init` is not what any gap is made of.
+- **The Windows figures are mostly process creation.** A ~20 ms floor against
+  totals of 25–50 ms leaves little room for the workload, so small differences
+  there are noise. Prefer Linux when comparing the language; use Windows to
+  catch a regression that is large enough to clear the floor.
+
+Linux resolution is 1 ms (`date +%s%3N`), so treat any row at 1–3 ms as "at or
+near parity" rather than a measured ratio.
+
 ## Benchmarks
 
 | Name | What it measures |
 |---|---|
+| `startup` | The floor: process creation plus runtime init, no work at all |
 | `loop_sum` | Raw arithmetic: 100M-iteration add loop |
 | `fib_recursive` | Function-call overhead: naive fib(32), ~5.5M calls |
 | `string_churn` | Allocation churn: 200k transient strings (str() + concat + free); peak memory must stay flat |

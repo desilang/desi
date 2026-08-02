@@ -1,0 +1,9 @@
+# Startup floor: process creation plus __desi_runtime_init, and nothing else.
+#
+# Every other row in this table is a whole-process wall time, so each one
+# includes this. Without it the small benchmarks read as enormous multiples --
+# on Linux, C finishes alloc_churn in about 1 ms and Desi in 14, which looks
+# like a 14x gap until you know what both paid just to exist. Subtract this row
+# from both columns before comparing anything.
+def main() -> int:
+	return 0
