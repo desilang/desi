@@ -2612,6 +2612,29 @@ func (ls *lowerState) lowerExpr(e ast.Expr) hir.Value {
 			}
 		}
 
+		// Render a decimal operand of a string concat here rather than leaving it
+		// to the backend. The backend can emit the same call, but it runs after
+		// the lowerer has finished deciding what owns what, so the string
+		// mpd_to_sci mallocs was never registered for cleanup — `"x" + d` in a
+		// loop leaked one allocation per iteration. Doing it here puts the temp
+		// under the same ownership tracking as every other string temp.
+		if x.Op == "+" && resultType == "ptr" && ls.info != nil {
+			if t, ok := ls.info.Types[x]; ok && types.Equal(t, types.Str) {
+				if types.Equal(ls.info.Types[x.Lhs], types.Decimal) {
+					conv := ls.b.FreshTemp("decimal_str")
+					ls.b.Emit(&hir.Call{Dst: conv, Fn: "__decimal_to_str", Args: []hir.Value{lhs}, Type: "ptr"})
+					ls.addTempDrop(conv.Name)
+					lhs = conv
+				}
+				if types.Equal(ls.info.Types[x.Rhs], types.Decimal) {
+					conv := ls.b.FreshTemp("decimal_str")
+					ls.b.Emit(&hir.Call{Dst: conv, Fn: "__decimal_to_str", Args: []hir.Value{rhs}, Type: "ptr"})
+					ls.addTempDrop(conv.Name)
+					rhs = conv
+				}
+			}
+		}
+
 		dst := ls.b.FreshTemp("binop")
 		ls.b.Emit(&hir.BinaryOp{
 			Op:   x.Op,
