@@ -158,13 +158,57 @@ setjmpScan:
 			}
 			firstBlock = false
 		} else if firstBlock && !noRecursionGuard && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
-			// Emit call depth tracking for user functions (skip main and __top__)
+			// Stack guard, inline.
+			//
+			// This was one call per user function. As a call it cost ~5 ms on
+			// fib(32) even after the counter became a headroom check, because a
+			// call is a call — and on Linux there is no LTO hot set, so nothing
+			// could inline it away. Emitted here it is a load, two compares and
+			// a branch that is never taken.
+			//
+			// The probe is an alloca, so its address is this frame's position on
+			// the stack. hoistAllocasToEntry moves every alloca to the top of
+			// the entry block, which puts it above this code — exactly where it
+			// needs to be.
+			//
+			// There is no separate "is the floor set up yet" test, because the
+			// runtime encodes that in the value: a thread starts with the floor
+			// at the highest address there is, so its first guarded call
+			// compares below it and takes the cold path, which computes the real
+			// floor. A platform that cannot report its stack bounds gets the
+			// lowest address instead, and the check then never fires. Threads
+			// are created in four runtime files plus anything a library starts,
+			// so computing on demand beats hooking every entry point and missing
+			// one.
+			// initialexec, not the default general-dynamic. On ELF the general
+			// model resolves a thread-local through a call to __tls_get_addr,
+			// which put a call back in the prologue on Linux and cost most of
+			// what inlining had just won. Desi emits executables, never a
+			// dlopened library, so initial-exec is always valid here: the offset
+			// is fixed at load time and the access is a register-relative load.
+			m.ensureDecl("@__desi_stack_floor = external thread_local(initialexec) global ptr")
 			m.ensureDecl("declare void @__desi_call_enter(ptr)")
-			// Create a string constant for the function name (strip internal prefixes)
+
 			displayName := strings.TrimPrefix(fn.Name, "__desi$")
 			fnNameStr, fnNameLen := m.ensureCStringGlobal(displayName, false)
 			fnNameGEP := fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", fnNameLen, fnNameLen, fnNameStr)
+
+			id := m.mergeID
+			m.mergeID++
+			probe := fmt.Sprintf("%%__gprobe%d", id)
+			floor := fmt.Sprintf("%%__gfloor%d", id)
+			isLow := fmt.Sprintf("%%__glow%d", id)
+			slowLbl := fmt.Sprintf("__gslow%d", id)
+			okLbl := fmt.Sprintf("__gok%d", id)
+
+			wprintf(&m.funcs, "  %s = alloca i8\n", probe)
+			wprintf(&m.funcs, "  %s = load ptr, ptr @__desi_stack_floor\n", floor)
+			wprintf(&m.funcs, "  %s = icmp ult ptr %s, %s\n", isLow, probe, floor)
+			wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", isLow, slowLbl, okLbl)
+			wprintf(&m.funcs, "%s:\n", slowLbl)
 			wprintf(&m.funcs, "  call void @__desi_call_enter(ptr %s)\n", fnNameGEP)
+			wprintf(&m.funcs, "  br label %%%s\n", okLbl)
+			wprintf(&m.funcs, "%s:\n", okLbl)
 			firstBlock = false
 		}
 

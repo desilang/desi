@@ -1,0 +1,29 @@
+# EXPECTED: RUNTIME_ERROR
+# Raising the recursion limit cannot raise it past the end of the stack.
+#
+# This is the case a frame counter could not catch, and the reason the guard
+# counts stack headroom instead.
+#
+# set_recursion_limit(10000000) tells the guard to allow ten million frames.
+# A counter would do exactly that: it would still be counting toward ten
+# million when the stack ran out, and the program would fault — an access
+# violation past the guard page, which is precisely the memory-safety failure
+# the guard exists to prevent.
+#
+# The floor is the higher of two bounds: the frame budget asked for, and the
+# real end of the stack less a reserve. So the limit is a ceiling on how deep
+# you may go, never a licence to go deeper than the stack allows, and this
+# raises a RuntimeError rather than faulting.
+#
+# The message says which of the two bounds was hit, because "maximum recursion
+# depth exceeded (10000000)" would be the opposite of what happened here.
+
+def deep(n: int) -> int:
+	let a = "x" + str(n)
+	return deep(n + 1) + len(a)
+
+def main() -> int:
+	set_recursion_limit(10000000)
+	print("limit raised")
+	print(str(deep(0)))
+	return 0
