@@ -37,11 +37,31 @@ that accumulates a number while touching a collection.
 **Fix:** consult the type of the assignment target. A target that cannot hold a
 reference — `int`, `float`, `bool` — cannot let anything escape through it.
 
-**Also missing:** arenas are function-scoped, so a loop allocating half a million
-times would grow one half a million times. Per-iteration reset is Phase 2 below
-and is not built. It depends on the escape fix landing first: resetting an arena
-while something still points into it is exactly the failure this design exists to
-prevent.
+**This fix was written, measured, and reverted.** It works: `alloc_churn`'s
+loop-local list does start emitting `list_new_in` instead of `list_new`. But on
+its own it makes the benchmark *worse* — 30 ms / 55.1 MB, against 13 ms / 1.8 MB
+before and 1 ms / 1.5 MB for C. Output stayed correct; this is a performance
+regression, not a miscompile.
+
+The reason is the second gap below, and it is not incidental. Arenas are
+function-scoped and freed only at function exit, so promoting an allocation that
+happens 500,000 times in a loop turns 500,000 short-lived `malloc`/`free` pairs
+— which a modern allocator serves from a hot free list — into 500,000 arena
+slots all live at once. Growing the arena costs more than the allocator it
+replaced.
+
+**So the escape fix cannot ship without per-iteration reset.** They are one
+change, not two, and the dependency runs both ways: reset needs the escape fix to
+be safe, and the escape fix needs reset to be worth doing.
+
+**Per-iteration reset** is Phase 2 below and is not built. It is also larger than
+Phase 2 describes: a plain reset would free allocations made *before* the loop,
+so it needs mark/rewind; and deciding where a rewind is safe needs
+*iteration-scoped* escape information, which `escape.go` cannot currently express
+— it answers "does this outlive the function?", not "does this outlive the
+iteration?". A value stored into a container declared outside the loop clears the
+first test and fails the second. See roadmap item B for the worked example and
+the revised estimate.
 
 See [roadmap.md](../roadmap.md#v01x--move-checks-from-run-time-to-compile-time),
 items A and B.
@@ -105,6 +125,10 @@ if isGenericContext {
 ```
 
 #### Phase 2: Scope-Based Arenas
+
+**Not built.** This is roadmap item B, and the sketch below understates it —
+see the "Known gap" section above before starting.
+
 ```desi
 def process_items(items: List<T>) -> int:
     for item in items:
@@ -113,6 +137,13 @@ def process_items(items: List<T>) -> int:
         # processed freed at end of iteration
     # Loop completed with constant memory usage!
 ```
+
+Two things this sketch hides. It is not a reset — the function's arena also holds
+allocations made before the loop, so it needs a mark at loop entry and a rewind
+to that mark at the latch. And "freed at end of iteration" is a claim the current
+analysis cannot check: it must be shown that nothing declared outside the loop
+holds a pointer into the rewound region, which is a finer question than the one
+`escape.go` answers today.
 
 #### Phase 3: Manual Control (Advanced)
 ```desi

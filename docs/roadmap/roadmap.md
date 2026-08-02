@@ -608,10 +608,34 @@ over an integer and the list goes nowhere.
 **Fix.** Consult the type. If the assignment target cannot hold a reference —
 `int`, `float`, `bool` — then nothing on the right escapes through it.
 
-**Cost.** 1–2 days. Low risk: the change only ever *removes* false escapes.
-Marking too little is the dangerous direction and is untouched.
+**Cost.** 1–2 days. Low risk *for correctness*: the change only ever removes
+false escapes, and marking too little is the dangerous direction, which is
+untouched.
 
-**Payoff.** Should fix `alloc_churn` outright, and every loop shaped like it.
+**Payoff — measured, and it is negative on its own.** This was implemented and
+benchmarked on the `perf-recursion-guard` branch, then reverted. The analysis
+change works exactly as intended: `alloc_churn`'s loop-local list stops emitting
+`list_new` and starts emitting `list_new_in`, i.e. it promotes to the arena. The
+result (Linux, release):
+
+| | before A | with A | C |
+|---|---|---|---|
+| `alloc_churn` time | 13 ms | **30 ms** | 1 ms |
+| `alloc_churn` peak RSS | 1.8 MB | **55.1 MB** | 1.5 MB |
+| `list_ops` | 10 ms / 9.5 MB | 16 ms / 17.4 MB | 4 ms / 5.3 MB |
+| `dict_ops` | 8 ms / 9.0 MB | 9 ms / 11.8 MB | 6 ms / 5.3 MB |
+
+Output stayed correct everywhere; this is a performance regression, not a
+miscompile. The cause is structural: **the arena is function-scoped and is only
+destroyed when the function returns.** Promoting an allocation that happens
+500,000 times inside a loop therefore replaces 500,000 short-lived `malloc`/
+`free` pairs — which a modern allocator serves out of a hot free list — with
+500,000 live arena slots that are never reclaimed until the function exits. The
+arena grows to hold all of them at once, and growing it costs more than the
+allocator it replaced.
+
+So A is **not independently shippable**. It is a prerequisite for B that makes
+things worse until B lands. Do not merge A on its own.
 
 ---
 
@@ -626,11 +650,50 @@ allocations cost a bump-pointer increment and one reset. This is "Phase 2:
 Scope-Based Arenas" in [hybrid_memory_management.md](todo/hybrid_memory_management.md),
 which is **not** built despite that document's summary.
 
-**Cost.** 3–5 days, and the one to test hardest. Resetting an arena while
-something still points into it is precisely the bug class the design exists to
-prevent, so the escape analysis must be right *first* — B depends on A.
+**Cost — revised upward to 1–2 weeks** after implementing A and looking hard at
+what B actually requires. The original 3–5 day estimate assumed "call
+`__arena_reset` at the loop latch". That is wrong twice over:
 
-**Payoff.** With A, brings `alloc_churn` near C.
+1. **Reset is too blunt; it needs mark/rewind.** A function's arena also holds
+   allocations made *before* the loop. Resetting it at the latch frees those
+   too. What is needed is a mark taken at loop entry and a rewind to that mark
+   at the latch, so only the current iteration's allocations are reclaimed. That
+   is a runtime addition (`__arena_mark` / `__arena_rewind`), not just a call.
+
+2. **Rewinding safely needs *iteration-scoped* escape information, which the
+   current analysis cannot express.** `escape.go` answers one question: does
+   this value outlive the *function*? Rewinding asks a strictly finer one: does
+   it outlive the *iteration*? A value can be arena-safe by the first measure
+   and unsafe by the second:
+
+   ```desi
+   let mut keep = []
+   for i in range(10):
+       let t = [i]
+       keep.append(t)   # t outlives its iteration, but not the function
+   ```
+
+   Neither `keep` nor `t` escapes the function, so today both are arena
+   candidates. Rewinding at the latch would leave `keep` holding ten dangling
+   pointers — silent memory corruption, and precisely the bug class the whole
+   design exists to prevent.
+
+   The fix is to give the analysis loop scope: track which loop body each
+   candidate is declared in, and treat a candidate as iteration-escaping if the
+   deps graph flows it into any symbol declared outside that body. The data is
+   mostly there (`deps` already records the edges); what is missing is the
+   notion of declaration scope, plus emitting the mark/rewind only for loops
+   where *every* body-local candidate clears that test.
+
+**Payoff.** With A, brings `alloc_churn` near C. Without B, A is a regression —
+see the table above.
+
+**Testing bar.** Higher than anything else in this list. A wrong answer here
+does not produce a failing test, it produces a use-after-free that happens to
+work until it doesn't. At minimum: the `keep.append(t)` shape above and its
+variants (store into a field, into a dict, into an outer tuple, return from
+inside the loop, `break` carrying a reference out) must each be shown to *not*
+get a rewind, as compiler tests over emitted IR rather than as behaviour tests.
 
 ---
 
@@ -703,11 +766,22 @@ deciding deliberately, not under release pressure.
 
 ### Order
 
-A → D → B, then E and F as they fit. C and G are 0.2.0 material.
+**D → (A+B together) → E and F as they fit.** C and G are 0.2.0 material.
 
-Realistic outcome for 0.1.x: `alloc_churn` near C, uninitialised fields
-impossible at compile time instead of papered over at runtime, one runtime cost
-deleted outright, and `list_ops` still behind — documented, not implied away.
+This is a change from the original A → D → B. A was implemented first, measured,
+and reverted: it is a regression on its own (see the table under A), so **A and B
+have to land as one piece of work, or neither**. D is now first because it is the
+only item on this list with no dependency on the arena work and no way to half-
+land it.
+
+Treat A+B as a single 1.5–2.5 week project with a real chance of not making
+0.1.x. If it slips, 0.1.x still ships D, E, and F, and `alloc_churn` stays where
+it is — which is a documented gap, not a broken promise, as long as nobody
+writes that Desi allocates like C.
+
+Realistic outcome for 0.1.x: uninitialised fields impossible at compile time
+instead of papered over at runtime, one runtime cost deleted outright, and
+`alloc_churn` / `list_ops` still behind — documented, not implied away.
 
 ---
 
