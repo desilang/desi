@@ -157,7 +157,8 @@ setjmpScan:
 				wprintf(&m.funcs, "  call i32 @__top__()\n")
 			}
 			firstBlock = false
-		} else if firstBlock && !noRecursionGuard && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
+		} else if firstBlock && !noRecursionGuard && !m.guardExempt[fn.Name] &&
+			fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
 			// Stack guard, inline.
 			//
 			// This was one call per user function. As a call it cost ~5 ms on

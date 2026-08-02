@@ -1,0 +1,68 @@
+# A function that calls nothing carries no stack guard.
+#
+# Every Desi function is given a guard so that running out of stack raises a
+# RuntimeError instead of faulting. A function that makes no calls at all does
+# not need one: to be entered a second time while already on the stack,
+# something has to run and call it, and a function that calls nothing runs
+# nothing. That holds however it was reached — including through a function
+# pointer handed to the runtime — which is what makes it decidable without
+# tracking where function references travel.
+#
+# About a third of the functions in this suite qualify: getters, small
+# arithmetic helpers, predicates. Exactly the shape a hot loop calls, and where
+# a per-call check is worth the most.
+#
+# This file is behaviour, not codegen: it checks that the functions still run
+# correctly, both the ones that keep a guard and the ones that lose it. That the
+# guard is actually absent is checked in the compiler's own tests, where the
+# emitted IR can be inspected — see guard_exempt_test.go.
+#
+# EXPECTED_OUTPUT:
+# 7
+# true
+# 120
+# true
+# 80
+
+# Leaf: no calls, so no guard.
+def add(a: int, b: int) -> int:
+	return a + b
+
+# Leaf: a predicate.
+def is_even(n: int) -> bool:
+	return n % 2 == 0
+
+# Recursive, so it keeps its guard.
+def factorial(n: int) -> int:
+	if n <= 1:
+		return 1
+	return n * factorial(n - 1)
+
+# Mutual recursion: neither can be exempt, and neither calls itself directly.
+def is_odd_m(n: int) -> bool:
+	if n == 0:
+		return false
+	return is_even_m(n - 1)
+
+def is_even_m(n: int) -> bool:
+	if n == 0:
+		return true
+	return is_odd_m(n - 1)
+
+# Calls a leaf. Not a leaf itself, so it keeps its guard, but nothing it calls
+# can recurse either.
+def sum_to(n: int) -> int:
+	let mut total = 0
+	let mut i = 1
+	while i <= n:
+		total := add(total, i)
+		i := i + 1
+	return total
+
+def main() -> int:
+	print(str(add(3, 4)))
+	print(str(is_even(10)))
+	print(str(factorial(5)))
+	print(str(is_odd_m(55) == is_even_m(56)))
+	print(str(sum_to(10) + 25))
+	return 0

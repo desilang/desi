@@ -65,6 +65,10 @@ type Module struct {
 
 	// TaskGroup wrapper functions: wrapperName -> WrapperInfo
 	tgWrappers map[string]WrapperInfo
+
+	// Functions that provably cannot recurse and so need no stack guard.
+	// See GuardExemptFunctions.
+	guardExempt map[string]bool
 }
 
 // WrapperInfo tracks info needed to emit a TaskGroup wrapper function
