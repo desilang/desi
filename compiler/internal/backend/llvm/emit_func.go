@@ -157,7 +157,7 @@ setjmpScan:
 				wprintf(&m.funcs, "  call i32 @__top__()\n")
 			}
 			firstBlock = false
-		} else if firstBlock && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
+		} else if firstBlock && !noRecursionGuard && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
 			// Emit call depth tracking for user functions (skip main and __top__)
 			m.ensureDecl("declare void @__desi_call_enter(ptr)")
 			// Create a string constant for the function name (strip internal prefixes)

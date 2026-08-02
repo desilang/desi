@@ -560,7 +560,7 @@ func (m *Module) emitRet(r *hir.Ret) {
 	}
 
 	// Emit call depth decrement for user functions (skip main/__top__)
-	if m.curFuncName != "" && m.curFuncName != "main" && !strings.HasSuffix(m.curFuncName, "__top__") {
+	if !noRecursionGuard && m.curFuncName != "" && m.curFuncName != "main" && !strings.HasSuffix(m.curFuncName, "__top__") {
 		m.ensureDecl("declare void @__desi_call_exit()")
 		wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
 	}
