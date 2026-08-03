@@ -186,7 +186,24 @@ void __arena_rewind(DesiArena* arena) {
     ArenaChunk* marked = arena->marks[top].chunk;
     if (!marked) return;
 
-    marked->offset = arena->marks[top].offset;
+    size_t back_to = arena->marks[top].offset;
+#ifdef DESI_ARENA_POISON
+    /* Build with -DDESI_ARENA_POISON to scribble over everything a rewind
+     * releases. AddressSanitizer cannot help here: the arena is one large
+     * malloc'd buffer, so handing the same bytes out twice is invisible to it.
+     * Poisoning makes a read of released memory produce obvious garbage
+     * instead of the value that happened to still be sitting there, which is
+     * what turns a use-after-free into a failing test rather than a run that
+     * happens to work. */
+    if (marked->offset > back_to) {
+        memset(marked->buffer + back_to, 0xDD, marked->offset - back_to);
+    }
+    for (ArenaChunk* k = marked->next; k; k = k->next) {
+        if (k->offset) memset(k->buffer, 0xDD, k->offset);
+    }
+#endif
+
+    marked->offset = back_to;
     for (ArenaChunk* k = marked->next; k; k = k->next) {
         k->offset = 0;
     }

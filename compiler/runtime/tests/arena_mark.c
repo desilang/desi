@@ -142,6 +142,21 @@ int main(void) {
     __arena_release(b);
     __arena_destroy(b);
 
+#ifdef DESI_ARENA_POISON
+    /* The poison build has to actually poison, or a clean suite run under it
+     * proves nothing. */
+    void* c = __arena_new(0);
+    __arena_mark(c);
+    unsigned char* scratch = (unsigned char*)__arena_alloc(c, 32);
+    memset(scratch, 0x11, 32);
+    __arena_rewind(c);
+    int poisoned = 1;
+    for (int i = 0; i < 32; i++) if (scratch[i] != 0xDD) poisoned = 0;
+    check("a rewind scribbles over the bytes it released", poisoned);
+    __arena_release(c);
+    __arena_destroy(c);
+#endif
+
     printf("\n%s\n", failures ? "FAILURES" : "all arena properties hold");
     return failures ? 1 : 0;
 }

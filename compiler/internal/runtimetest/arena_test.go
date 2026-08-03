@@ -25,22 +25,38 @@ func TestArenaMarkRewind(t *testing.T) {
 	src := filepath.Join(root, "compiler", "runtime", "tests", "arena_mark.c")
 	impl := filepath.Join(root, "compiler", "runtime", "arena.c")
 
-	bin := filepath.Join(t.TempDir(), "arena_mark")
-	if runtime.GOOS == "windows" {
-		bin += ".exe"
-	}
+	dir := t.TempDir()
 
-	build := exec.Command(cc, "-O1", "-Wall", "-o", bin, src, impl)
-	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("compiling the arena test failed: %v\n%s", err, out)
-	}
+	// Built both ways. The poison build is what the example suite is run under
+	// when the arena changes, and it only means anything if the poisoning
+	// itself is working, which the second variant checks.
+	for _, variant := range []struct {
+		name  string
+		flags []string
+	}{
+		{"plain", nil},
+		{"poison", []string{"-DDESI_ARENA_POISON"}},
+	} {
+		t.Run(variant.name, func(t *testing.T) {
+			bin := filepath.Join(dir, "arena_mark_"+variant.name)
+			if runtime.GOOS == "windows" {
+				bin += ".exe"
+			}
 
-	out, err := exec.Command(bin).CombinedOutput()
-	t.Logf("%s", out)
-	if err != nil {
-		t.Fatalf("arena properties do not hold: %v", err)
-	}
-	if _, err := os.Stat(bin); err != nil {
-		t.Fatalf("test binary vanished: %v", err)
+			args := append([]string{"-O1", "-Wall"}, variant.flags...)
+			args = append(args, "-o", bin, src, impl)
+			if out, err := exec.Command(cc, args...).CombinedOutput(); err != nil {
+				t.Fatalf("compiling the arena test failed: %v\n%s", err, out)
+			}
+			if _, err := os.Stat(bin); err != nil {
+				t.Fatalf("test binary was not produced: %v", err)
+			}
+
+			out, err := exec.Command(bin).CombinedOutput()
+			t.Logf("%s", out)
+			if err != nil {
+				t.Fatalf("arena properties do not hold: %v", err)
+			}
+		})
 	}
 }

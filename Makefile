@@ -12,6 +12,14 @@ RUNTIME_DB  = compiler/runtime/db
 DECIMAL_SRC = compiler/runtime/decimal
 DECIMAL_LIB = $(DECIMAL_SRC)/lib/libmpdec.a
 
+# Extra flags for diagnostic builds, e.g.
+#   make runtime EXTRA_CFLAGS=-DDESI_ARENA_POISON
+# which scribbles over every byte the arena hands back, so that reading
+# released arena memory produces obvious garbage instead of whatever happened
+# to still be there. See compiler/runtime/arena.c. Setting CFLAGS directly on
+# the command line would override the flags set below rather than add to them.
+CFLAGS += $(EXTRA_CFLAGS)
+
 # macOS deployment target detection
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)

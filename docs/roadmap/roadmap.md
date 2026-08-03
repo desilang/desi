@@ -585,7 +585,13 @@ frame counter with a stack headroom check.
 
 ---
 
-### A. Escape analysis: stop the false positives
+### A + B. Arena promotion and per-iteration reuse — ✅ SHIPPED
+
+> **Shipped together in `594e7d47`**, which is the only way they work: A alone
+> was measured at 30 ms / 55.1 MB on `alloc_churn` against 13 ms / 1.8 MB
+> before it, and was reverted. The sections below are the original plan; the
+> outcome, including a third condition neither of them anticipated, is recorded
+> under "What actually happened" after item B.
 
 **Problem.** Arena promotion is built and works, but does not fire on the
 commonest shape in real code — accumulate a number in a loop while touching a
@@ -697,6 +703,61 @@ get a rewind, as compiler tests over emitted IR rather than as behaviour tests.
 
 ---
 
+### What actually happened with A + B
+
+Shipped, with a third condition neither item predicted.
+
+**A collection that grows must stay on the heap.** `realloc` releases or extends
+the block it replaces; a bump allocator can only hand out a new one and abandon
+the old. A list appended to a million times doubles about twenty times, and in
+an arena every one of those dead backing arrays is still there at the end. That
+is what took `list_ops` from 9.5 MB to 17.4 MB — A promoting a list it had no
+business promoting. Any method call on a collection, and any assignment through
+an index, now keeps it on the heap.
+
+**B's eligibility rule came out simpler than feared.** It tests the dependency
+edges the escape constraints already build: a loop may rewind only if nothing
+declared inside it flows to anything declared outside. The test is on the edge
+itself rather than on whether an arena pointer travels along it, because
+tracking that across heap containers means following chains, and a missed link
+is a use-after-free rather than a missed optimisation.
+
+**`list_new_in` was also splitting its allocation.** It made two bump calls,
+header then data, where `list_new` had long since packed both into one malloc
+and used the inline-data layout. Putting them back together took `alloc_churn`
+from 17 ms to 14 ms.
+
+**Results** (Linux, release, against the pre-A baseline):
+
+| | before A | shipped | C |
+|---|---|---|---|
+| `alloc_churn` | 13 ms / 1.8 MB | **14 ms / 1.7 MB** | 1 ms / 1.5 MB |
+| `list_ops` | 10 ms / 9.5 MB | **12 ms / 9.5 MB** | 4 ms / 5.3 MB |
+| `dict_ops` | 8 ms / 9.0 MB | **12 ms / 9.0 MB** | 6 ms / 5.3 MB |
+
+**Be honest about this: it is not the win the section predicted.** Memory is
+neutral-to-slightly-better and time is within this machine's noise. The
+prediction was "brings `alloc_churn` near C", and `alloc_churn` is still 14 ms
+against C's 1 ms. glibc's tcache already serves a repeated small alloc/free
+about as fast as a bump allocator can, so there was less on the table than the
+plan assumed.
+
+What the work did buy: the 55 MB cliff is gone, the arena no longer grows
+without bound in a loop, and growing collections no longer land in it at all —
+so the arena is now safe to leave switched on, which it was not before.
+
+**The remaining `alloc_churn` gap is not allocation.** It is the call per
+`list_append` and per `list_get`, which is item C below.
+
+**Testing.** `escape_loop_test.go` covers which loops qualify;
+`arena_rewind_test.go` covers the decision reaching the generated code;
+`compiler/runtime/tests/arena_mark.c` covers the runtime's invariants. The
+example suite was run on both legs with `-DDESI_ARENA_POISON`, which scribbles
+over every byte a rewind releases — AddressSanitizer is blind here, because the
+arena is one large allocation and reusing bytes inside it is invisible to it.
+
+---
+
 ### C. Collection element access (not v0.1.x)
 
 `list_ops` appends a million integers one at a time. The gap is not allocation
@@ -797,7 +858,7 @@ deciding deliberately, not under release pressure.
 
 ### Order
 
-**D (done) → (A+B together) → E and F as they fit.** C and G are 0.2.0 material,
+**D (done) → A+B (done) → E and F as they fit.** C and G are 0.2.0 material,
 and so is D's language half.
 
 This is a change from the original A → D → B. A was implemented first, measured,
@@ -807,14 +868,15 @@ only item with no dependency on the arena work — and it split cleanly in two,
 with the compile-time elision shipping and the breaking language change deferred
 to 0.2.0.
 
-Treat A+B as a single 1.5–2.5 week project with a real chance of not making
-0.1.x. If it slips, 0.1.x still ships D, E, and F, and `alloc_churn` stays where
-it is — which is a documented gap, not a broken promise, as long as nobody
-writes that Desi allocates like C.
+A+B landed, and came in well under the 1.5–2.5 week estimate — most of that
+estimate was for an iteration-scoped analysis that turned out to be expressible
+in the dependency edges already there. What it did not buy is the speed the
+section promised; see "What actually happened" above.
 
-Realistic outcome for 0.1.x: a third of the construction memsets proved
-unnecessary and removed, and `alloc_churn` / `list_ops` still behind —
-documented, not implied away.
+Outcome for 0.1.x so far: a third of the construction memsets proved
+unnecessary and removed, the arena made safe to leave on in loops, and
+`alloc_churn` / `list_ops` still well behind C — documented, not implied away.
+E and F remain.
 
 ---
 

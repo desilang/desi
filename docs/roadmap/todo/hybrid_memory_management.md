@@ -1,70 +1,80 @@
 # Hybrid Memory Management
 
-**Status**: Phase 1 shipped. Phase 2 shipped but under-firing. Phase 3 not started.
+**Status**: Phases 1 and 2 shipped. Phase 3 (manual `arena.scope()`) not started.
 **Related**: Generics implementation, Move semantics, Borrow checker
 
-> **Overview:** Phase 1 (collection drops) is complete. Phase 2 (escape analysis
-> and function-local arenas) is built and correct — non-escaping local
-> collections are promoted to bump arenas, and types with custom destructors are
-> excluded so cleanup still runs — but it **does not fire on the commonest shape
-> in real code**, so the benefit is much narrower than this document previously
-> claimed.
+> **Overview:** Phase 1 (collection drops) is complete. Phase 2 is complete as
+> of `594e7d47`: non-escaping local collections are promoted to bump arenas,
+> types with custom destructors are excluded so cleanup still runs, the escape
+> analysis no longer loses a value because an `int` was assigned nearby, and a
+> loop whose allocations cannot outlive one iteration rewinds the arena at its
+> latch instead of growing it every pass.
+>
+> Read the results before reaching for this design again: it made the arena
+> **safe to leave on**, and it did **not** make allocation fast. `alloc_churn`
+> is 14 ms against C's 1 ms, essentially where it was before any of this. glibc
+> already serves a repeated small alloc/free about as fast as a bump allocator
+> can. The remaining gap is per-element call overhead, not allocation strategy.
+> Full numbers in [roadmap.md](../roadmap.md#what-actually-happened-with-a--b).
 
-## Known gap: escape analysis over-approximates (v0.1.x item A)
+## How arena promotion decides (v0.1.x items A and B, shipped)
 
-These two loops differ only in the last line:
+A local of heap type goes in the arena when all three hold:
+
+1. **It does not escape the function.** Returned, stored in a field or a global,
+   or handed to a user-defined function that might retain it — any of those and
+   it stays on the heap.
+2. **It does not grow.** `realloc` releases or extends the block it replaces; a
+   bump allocator can only hand out a new one and abandon the old, so a list
+   appended to a million times would leave every intermediate backing array in
+   the arena. Any method call on it, and any assignment through an index, keeps
+   it on the heap. This one cost `list_ops` 8 MB before it was added.
+3. **Its type has no custom destructor**, so nothing is skipped at cleanup.
+
+Assigning to an `int` no longer counts as escaping. It used to: `escape.go`
+marked every symbol on the right-hand side as escaping whenever the target was
+not itself a candidate, so
 
 ```desi
 let t = [i, i, i]
-print(str(len(t)))          # promoted to the arena
+total := total + len(t)     # t was marked escaping by association
 ```
+
+fell back to malloc while the same loop ending in `print(str(len(t)))` did not.
+A value of scalar type cannot carry a pointer out of a function, so nothing
+escapes through it.
+
+### Loops rewind rather than grow
+
+A function-scoped arena is wrong for a loop on its own: 500,000 iterations
+allocating a small list each would grow it 500,000 times and release none of it
+until the function returned. Fixing the escape analysis without fixing this was
+measured at 30 ms / 55.1 MB on `alloc_churn` against 13 ms / 1.8 MB before it —
+which is why the two shipped as one change.
+
+So a loop marks the arena on the way in and rewinds to that mark at the end of
+every pass, and the same bytes serve every iteration. `__arena_mark` /
+`__arena_rewind` / `__arena_release` are in `arena.c`; rewind deliberately
+leaves the mark in place, because the latch returns to it repeatedly, and
+release retires it from the loop's exit block so that `break` retires it too.
+
+A loop qualifies only if **nothing declared inside it flows to anything declared
+outside it**, judged on the dependency edges the escape constraints already
+build. The test is on the edge itself rather than on whether an arena pointer
+travels along it: tracking that means following chains through heap containers,
+and a missed link is a use-after-free rather than a missed optimisation.
+
+The shape this exists to refuse:
+
 ```desi
-let t = [i, i, i]
-total := total + len(t)     # falls back to malloc, every iteration
+let mut keep: list[list[int]] = []
+for i in range(10):
+    let t = [i]
+    keep.append(t)   # t outlives its iteration, so this loop never rewinds
 ```
 
-`escape.go` marks **every symbol referenced on the right-hand side** as escaping
-whenever the assignment target is not itself an arena candidate. Candidates are
-locals of heap type, so an `int` accumulator is not one — and `t` is marked
-escaping by association, though `len(t)` yields an integer and the list itself
-goes nowhere.
-
-The over-approximation is safe: it only ever pushes values onto the heap, never
-frees something still live. But it costs the `alloc_churn` benchmark most of its
-gap against C (13 ms vs 1 ms on Linux), and it defeats the arena for any loop
-that accumulates a number while touching a collection.
-
-**Fix:** consult the type of the assignment target. A target that cannot hold a
-reference — `int`, `float`, `bool` — cannot let anything escape through it.
-
-**This fix was written, measured, and reverted.** It works: `alloc_churn`'s
-loop-local list does start emitting `list_new_in` instead of `list_new`. But on
-its own it makes the benchmark *worse* — 30 ms / 55.1 MB, against 13 ms / 1.8 MB
-before and 1 ms / 1.5 MB for C. Output stayed correct; this is a performance
-regression, not a miscompile.
-
-The reason is the second gap below, and it is not incidental. Arenas are
-function-scoped and freed only at function exit, so promoting an allocation that
-happens 500,000 times in a loop turns 500,000 short-lived `malloc`/`free` pairs
-— which a modern allocator serves from a hot free list — into 500,000 arena
-slots all live at once. Growing the arena costs more than the allocator it
-replaced.
-
-**So the escape fix cannot ship without per-iteration reset.** They are one
-change, not two, and the dependency runs both ways: reset needs the escape fix to
-be safe, and the escape fix needs reset to be worth doing.
-
-**Per-iteration reset** is Phase 2 below and is not built. It is also larger than
-Phase 2 describes: a plain reset would free allocations made *before* the loop,
-so it needs mark/rewind; and deciding where a rewind is safe needs
-*iteration-scoped* escape information, which `escape.go` cannot currently express
-— it answers "does this outlive the function?", not "does this outlive the
-iteration?". A value stored into a container declared outside the loop clears the
-first test and fails the second. See roadmap item B for the worked example and
-the revised estimate.
-
-See [roadmap.md](../roadmap.md#v01x--move-checks-from-run-time-to-compile-time),
-items A and B.
+Changing any of this: build with `-DDESI_ARENA_POISON` and run the example
+suite. See [memory-model.md](../../memory-model.md#loops-reuse-their-scratch-memory).
 
 ## Current State
 
@@ -126,8 +136,8 @@ if isGenericContext {
 
 #### Phase 2: Scope-Based Arenas
 
-**Not built.** This is roadmap item B, and the sketch below understates it —
-see the "Known gap" section above before starting.
+**Shipped.** See "How arena promotion decides" above for what was actually
+built; the sketch below understated it in two ways worth keeping on record.
 
 ```desi
 def process_items(items: List<T>) -> int:
@@ -138,12 +148,11 @@ def process_items(items: List<T>) -> int:
     # Loop completed with constant memory usage!
 ```
 
-Two things this sketch hides. It is not a reset — the function's arena also holds
-allocations made before the loop, so it needs a mark at loop entry and a rewind
-to that mark at the latch. And "freed at end of iteration" is a claim the current
-analysis cannot check: it must be shown that nothing declared outside the loop
-holds a pointer into the rewound region, which is a finer question than the one
-`escape.go` answers today.
+It is not a reset — the function's arena also holds allocations made before the
+loop, so it needs a mark at loop entry and a rewind to that mark at the latch.
+And "freed at end of iteration" is a claim that has to be checked, not assumed:
+nothing declared outside the loop may hold a pointer into the rewound region,
+which is a finer question than whether a value escapes the function.
 
 #### Phase 3: Manual Control (Advanced)
 ```desi
@@ -185,7 +194,12 @@ void arena_free() {
 
 ### Benefits
 
-1. **Performance**: Bump allocation is ~10x faster than malloc
+1. **Performance**: bump allocation is a pointer increment — but this was
+   measured after Phase 2 shipped and the ~10x this document used to claim is
+   not there. Against glibc, a repeated small alloc/free is served from the
+   tcache about as fast as a bump allocator can manage; `alloc_churn` came out
+   at 14 ms with arenas against 13 ms without. Arenas buy predictable
+   reclamation, not speed.
 2. **Safety**: No use-after-free, no double-free, no leaks
 3. **Simplicity**: No lifetime annotations, no manual free
 4. **Predictable**: Deterministic memory usage

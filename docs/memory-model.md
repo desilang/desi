@@ -100,6 +100,45 @@ programs — short-lived tools, request handlers, batch jobs — never notice
 them. Long-running services that build many heap-element collections
 should be aware of the first boundary above.
 
+## Loops reuse their scratch memory
+
+A value a function allocates and never lets out of goes in an arena — a
+bump allocator released in one go when the function returns. A loop
+would defeat that on its own: half a million iterations allocating a
+small list each would grow the arena half a million times and release
+none of it until the end.
+
+So a loop whose allocations cannot outlive one of its iterations marks
+the arena on the way in and rewinds to that mark at the end of every
+pass. The same bytes are handed out again next time round, and the loop
+costs one round of growth instead of one per iteration.
+
+The compiler only does this where it can see that nothing from inside
+the loop is still reachable from outside it. A value appended to a list
+declared before the loop, assigned to a variable declared before it, or
+otherwise flowing outward keeps its loop on the ordinary path. The
+decision is one-directional in the safe sense: anything the analysis
+cannot follow keeps the plain arena, which costs memory and never
+correctness.
+
+Two things stay on the heap and out of arenas entirely:
+
+- **Collections that grow.** `realloc` releases or extends the block it
+  replaces; a bump allocator can only hand out a new one and abandon the
+  old, so a list appended to a million times would leave every
+  intermediate backing array behind. Any method call on a collection, or
+  any assignment through an index, keeps it on the heap.
+- **Anything that escapes its function**, as before.
+
+Contributors changing the arena should build the runtime with arena
+poisoning on — `make runtime EXTRA_CFLAGS=-DDESI_ARENA_POISON`, or
+`$env:DESI_CFLAGS_EXTRA = "/DDESI_ARENA_POISON"` before `.\build.ps1` —
+and run the example suite. It scribbles over every byte a rewind
+releases, so reading released arena memory produces obvious garbage
+rather than whatever happened to still be sitting there. AddressSanitizer
+cannot see these bugs: the arena is one large allocation, and reusing
+bytes inside it is invisible to it.
+
 ## The safety guarantee
 
 In safe code (no `unsafe` blocks, no raw FFI), the cleanup machinery
