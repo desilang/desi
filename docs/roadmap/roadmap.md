@@ -831,11 +831,40 @@ good background work across 0.1.x.
 
 ---
 
-### F. Elide the print lock when a program has no tasks
+### F. Elide the print lock when a program has no tasks — ✅ SHIPPED, differently
 
 `print` takes a lock so concurrent output cannot interleave mid-line. A program
-that never spawns a task cannot race, and the compiler can see that. Half a day,
-same shape as the guard elision in v0.1.0.
+with only one thread cannot race, so the lock can go.
+
+**The compile-time version proposed here is unsound.** "This program contains no
+`spawn`" does not mean no threads: `future.c`, `scheduler.c`, `supervisor.c` and
+`websocket.c` all start threads from code a program reaches through `async`,
+`http.serve`, or a supervisor without ever writing `spawn`. Proving those
+unreachable is a whole-program call-graph question, and being wrong tears output
+lines.
+
+**So it is a runtime flag instead**, set before any thread starts and never
+cleared. Measured, per lock/unlock pair:
+
+| | |
+|---|---|
+| mutex pair (what every print paid) | 13.87 ns |
+| flag load (what it pays now) | 1.73 ns |
+| nothing (what compile-time elision would pay) | 1.78 ns |
+
+The flag captures the entire saving — compile-time elision is not measurably
+better than a predictable branch on a hot global, and it is the version that can
+be wrong. It also wins in cases the compile-time test would have given up on: a
+program that does spawn eventually still gets the fast path until it does.
+
+**Payoff in context: small.** A `print` costs about 516 ns, so this is ~2.3% of
+a print and nothing at all for code that does not print in a loop. It moves no
+benchmark. Worth having — it is free and always correct — but it is not
+performance work in the sense the top of this section means.
+
+`runtime_thread_flag_test.go` fails if a runtime source file creates a thread
+without calling `__desi_note_thread_start()` first, so the obligation does not
+quietly rot.
 
 ---
 

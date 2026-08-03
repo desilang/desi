@@ -796,6 +796,10 @@ const WsRoute* ws_find_route(const char* path) {
 
 #include "platform.h"
 
+// Set before any thread starts so print can skip its lock while the
+// program is still single-threaded. See print.c.
+extern void __desi_note_thread_start(void);
+
 typedef void (*ws_message_fn)(int conn_fd, const char* msg);
 typedef void (*ws_binary_fn)(int conn_fd, const char* data, size_t len);
 typedef void (*ws_lifecycle_fn)(int conn_fd);
@@ -862,6 +866,7 @@ void ws_session_loop(int client_fd, const uint8_t* prebuf, size_t prebuf_len, DE
     pthread_t ping_tid = 0;
     int has_ping_thread = 0;
     if (__ws_state.ping_interval_secs > 0) {
+        __desi_note_thread_start();
         if (pthread_create(&ping_tid, NULL, ws_ping_thread, (void*)(intptr_t)client_fd) == 0) {
             has_ping_thread = 1;
         }

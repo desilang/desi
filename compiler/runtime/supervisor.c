@@ -21,6 +21,10 @@
 #include <string.h>
 #include <time.h>
 
+// Set before any thread starts so print can skip its lock while the
+// program is still single-threaded. See print.c.
+extern void __desi_note_thread_start(void);
+
 /* ============================================================
  * Default Configuration
  * ============================================================ */
@@ -133,6 +137,7 @@ static void* child_wrapper(void* arg) {
                     sup->children[i].alive = false;
 
                     DESI_MUTEX_UNLOCK(sup->lock);
+    __desi_note_thread_start();
 #ifdef _WIN32
                     sup->children[i].thread = CreateThread(
                         NULL, 0, (LPTHREAD_START_ROUTINE)child_wrapper,
@@ -159,6 +164,7 @@ static void* child_wrapper(void* arg) {
                 new_ctx->child_index = idx;
                 DESI_MUTEX_UNLOCK(sup->lock);
 
+    __desi_note_thread_start();
 #ifdef _WIN32
                 sup->children[idx].thread = CreateThread(
                     NULL, 0, (LPTHREAD_START_ROUTINE)child_wrapper,
@@ -232,6 +238,7 @@ Supervisor* supervisor_new(int strategy, int num_pool_workers) {
     }
 
     for (int i = 0; i < num_pool_workers; i++) {
+    __desi_note_thread_start();
 #ifdef _WIN32
         sup->pool_threads[i] = CreateThread(
             NULL, 0, (LPTHREAD_START_ROUTINE)pool_worker_loop,
@@ -323,6 +330,7 @@ void supervisor_start_child(Supervisor* sup, supervisor_task_fn fn, void* arg) {
     ctx->sup = sup;
     ctx->child_index = idx;
 
+    __desi_note_thread_start();
 #ifdef _WIN32
     sup->children[idx].thread = CreateThread(
         NULL, 0, (LPTHREAD_START_ROUTINE)child_wrapper,
