@@ -718,15 +718,46 @@ lying around. That closes a real hole — it was returning garbage before v0.1.0
 but it is the Go answer, not the Rust one, and it costs a `memset` per
 construction forever.
 
-**Fix.** Have the checker reject a program that reads a field no constructor
-assigns and no declaration defaults. Then delete `__desi_zero`.
+**Status: the elision half is done. The language change is not, and should not
+be attempted as scoped here.**
 
-**Cost.** 2–3 days. **Breaking**: code relying on implicit zeroing stops
-compiling, which is why this belongs early in 0.1.x rather than later.
+**What shipped.** A definite-assignment pass over `__new__`
+([field_init.go](../../compiler/internal/check/field_init.go)). When every
+constructor on a class writes every field on every path out — early returns,
+returns inside loops, and raises included, since a half-built instance can still
+reach a drop path — lowering skips the zeroing. That removed **96 of 264**
+zeroing call sites across the example suite, about a third, with no language
+change and nothing to migrate. The analysis only ever fails safe: anything it
+cannot follow keeps the memset.
 
-**Payoff.** Strictly safer *and* strictly faster — the runtime cost disappears
-because the compiler proved it unnecessary. The clearest example in the whole
-list of why this section exists.
+**What did not, and why the original plan was wrong.** "Delete `__desi_zero`"
+assumed implicit zeroing was a papering-over. It is not: it is the defined
+behaviour of a class declared with no `__new__`, which is a documented Desi
+shape —
+
+```desi
+class Point:
+	pub mut x: int
+	pub mut y: int
+
+let mut p = Point()   # zero-initialised, then assigned from outside
+p.x := 10
+```
+
+**81 example classes and 9 in `compiler/lib` are written this way.** Rejecting
+them needs somewhere else for the initial value to come from, and `FieldDecl`
+has no default-value slot — so this is not a checker change, it is new surface
+syntax (`x: int = 0`) through the parser, checker, and lowerer, plus migrating
+every one of those classes.
+
+**Revised cost.** The elision: done. The language change: 1–2 weeks including
+field-default syntax and the migration, and it is **0.2.0 material** — a
+breaking change to how classes are written is not something to land days before
+a first release.
+
+**Payoff, realised.** A third of the construction memsets gone, and a new
+compile-time notion of "this constructor is complete" that the field-default
+work can build on later.
 
 ---
 
@@ -766,22 +797,24 @@ deciding deliberately, not under release pressure.
 
 ### Order
 
-**D → (A+B together) → E and F as they fit.** C and G are 0.2.0 material.
+**D (done) → (A+B together) → E and F as they fit.** C and G are 0.2.0 material,
+and so is D's language half.
 
 This is a change from the original A → D → B. A was implemented first, measured,
 and reverted: it is a regression on its own (see the table under A), so **A and B
-have to land as one piece of work, or neither**. D is now first because it is the
-only item on this list with no dependency on the arena work and no way to half-
-land it.
+have to land as one piece of work, or neither**. D went next because it was the
+only item with no dependency on the arena work — and it split cleanly in two,
+with the compile-time elision shipping and the breaking language change deferred
+to 0.2.0.
 
 Treat A+B as a single 1.5–2.5 week project with a real chance of not making
 0.1.x. If it slips, 0.1.x still ships D, E, and F, and `alloc_churn` stays where
 it is — which is a documented gap, not a broken promise, as long as nobody
 writes that Desi allocates like C.
 
-Realistic outcome for 0.1.x: uninitialised fields impossible at compile time
-instead of papered over at runtime, one runtime cost deleted outright, and
-`alloc_churn` / `list_ops` still behind — documented, not implied away.
+Realistic outcome for 0.1.x: a third of the construction memsets proved
+unnecessary and removed, and `alloc_churn` / `list_ops` still behind —
+documented, not implied away.
 
 ---
 
