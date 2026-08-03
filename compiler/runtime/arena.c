@@ -166,7 +166,13 @@ void __arena_mark(DesiArena* arena) {
     arena->depth++;
 }
 
-// Release everything allocated since the matching mark.
+// Release everything allocated since the innermost mark, leaving that mark in
+// place so it can be rewound to again.
+//
+// This is what a loop latch calls. One mark is taken before the loop and the
+// latch returns to it on every pass, so the mark has to survive being used --
+// pairing a push with each iteration instead would leave a stray mark behind
+// every time the loop was left by `break`.
 //
 // Chunks past the mark keep their memory and stay linked, with their offsets
 // zeroed; __arena_alloc walks them before allocating more. A loop therefore
@@ -174,17 +180,27 @@ void __arena_mark(DesiArena* arena) {
 // iteration, which is the whole point.
 void __arena_rewind(DesiArena* arena) {
     if (!arena || arena->depth <= 0) return;
-    arena->depth--;
-    if (arena->depth >= ARENA_MARK_STACK) return; // this level was never recorded
+    int top = arena->depth - 1;
+    if (top >= ARENA_MARK_STACK) return; // this level was never recorded
 
-    ArenaChunk* marked = arena->marks[arena->depth].chunk;
+    ArenaChunk* marked = arena->marks[top].chunk;
     if (!marked) return;
 
-    marked->offset = arena->marks[arena->depth].offset;
+    marked->offset = arena->marks[top].offset;
     for (ArenaChunk* k = marked->next; k; k = k->next) {
         k->offset = 0;
     }
     arena->current = marked;
+}
+
+// Rewind and drop the mark. This is what a loop's exit block calls, so the
+// mark is retired however the loop was left -- running out of iterations or
+// breaking out of the middle. Leaving by `return` skips it, but that path
+// destroys the whole arena on the way out anyway.
+void __arena_release(DesiArena* arena) {
+    if (!arena || arena->depth <= 0) return;
+    __arena_rewind(arena);
+    arena->depth--;
 }
 
 // Destroy the arena and free all memory at once

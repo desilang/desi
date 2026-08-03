@@ -44,20 +44,23 @@ extern void* __arena_alloc(void* arena, size_t size);
 // Create a new empty list inside an arena
 DesiList* list_new_in(void* arena, int type_tag, ElemToStrFunc to_str_fn) {
     if (!arena) return list_new(type_tag, to_str_fn);
-    DesiList* list = (DesiList*)__arena_alloc(arena, sizeof(DesiList));
+    // One block for the header and the initial data array, exactly as list_new
+    // does it. Two bump-allocations are not free -- each is a call, a bounds
+    // test and a possible chunk walk -- and splitting them also gave up the
+    // inline-data layout, which is what list_data_is_inline() recognises and
+    // what keeps a short-lived list down to a single allocation.
+    DesiList* list = (DesiList*)__arena_alloc(
+        arena, sizeof(DesiList) + LIST_INITIAL_CAPACITY * sizeof(void*));
     if (!list) {
         return NULL;
     }
-    
+
     list->capacity = LIST_INITIAL_CAPACITY;
     list->length = 0;
     list->type_tag = type_tag;
     list->to_str_fn = to_str_fn;
     list->arena = arena;
-    list->data = (void**)__arena_alloc(arena, list->capacity * sizeof(void*));
-    if (!list->data) {
-        return NULL;
-    }
+    list->data = (void**)((char*)list + sizeof(DesiList)); // inline
     return list;
 }
 
