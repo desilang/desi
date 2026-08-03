@@ -1,0 +1,97 @@
+# A constructor that assigns every field needs no pre-zeroing.
+#
+# Every instance is zeroed before __new__ runs, so a field the constructor
+# forgets reads back as 0 (or null for a pointer field, which is what the drop
+# paths null-check before freeing). That is a real guarantee, and it is what
+# makes the last class in this file work at all.
+#
+# It is also a memset on every single allocation, and most of the time it is
+# dead work: the constructor immediately overwrites all of it. The checker now
+# proves when that is the case, and lowering drops the memset for those classes.
+# About a third of the allocation sites in this suite qualify.
+#
+# The analysis only ever fails in the safe direction. It has to see every field
+# written on every way out of __new__ — including an early return, a return
+# inside a loop, and a raise, since a half-built instance can still reach a drop
+# path. Anything it cannot follow keeps its zeroing, which costs a memset and
+# nothing else.
+#
+# This file is behaviour, not codegen: it checks the classes still construct
+# correctly, both the ones that keep the zeroing and the ones that lose it. That
+# the memset is actually absent is checked in the compiler's own tests, where
+# the emitted IR can be inspected — see field_init_test.go.
+#
+# EXPECTED_OUTPUT:
+# 3
+# 7
+# 0
+# 200
+# 0
+# 0
+# 30
+
+# Assigns both fields unconditionally: no zeroing emitted.
+class Point:
+	pub mut x: int
+	pub mut y: int
+	pub def __new__(self, a: int, b: int):
+		self.x := a
+		self.y := b
+
+# Both arms of the branch assign, so the field is written either way: no
+# zeroing emitted.
+class Clamped:
+	pub mut v: int
+	pub def __new__(self, a: int):
+		if a > 0:
+			self.v := a
+		else:
+			self.v := 0
+
+# The `if` has no else, and the missing else is a path that assigns nothing.
+# Not proven, so the zeroing stays — and that is what makes `w` read 0 rather
+# than whatever the allocator last left there.
+class MaybeSet:
+	pub mut w: int
+	pub def __new__(self, a: int):
+		if a > 100:
+			self.w := a
+
+# An early return leaves `second` unwritten. Not proven; zeroing stays.
+class EarlyOut:
+	pub mut first: int
+	pub mut second: int
+	pub def __new__(self, a: int):
+		self.first := a
+		if a < 10:
+			return
+		self.second := a
+
+# No __new__ at all. Zero initialisation is this shape's defined behaviour, not
+# an oversight — the fields are assigned from outside afterwards.
+class Bare:
+	pub mut n: int
+
+def main() -> int:
+	let p = Point(3, 7)
+	print(str(p.x))
+	print(str(p.y))
+
+	let c = Clamped(-5)
+	print(str(c.v))
+
+	let m = MaybeSet(200)
+	print(str(m.w))
+
+	# 12 does not clear the threshold, so `w` is never assigned. It reads 0
+	# because the zeroing this class kept says so.
+	let m2 = MaybeSet(12)
+	print(str(m2.w))
+
+	let e = EarlyOut(4)
+	print(str(e.second))
+
+	let mut b = Bare()
+	b.n := 30
+	print(str(b.n))
+	return 0

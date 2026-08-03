@@ -11,6 +11,17 @@ import (
 	"github.com/desilang/desi/compiler/internal/types"
 )
 
+// classFullyInit reports whether the checker proved that every __new__ on this
+// class assigns every field, which makes zeroing the instance beforehand dead
+// work. Unproven classes — and every class in a module compiled without checker
+// info — keep the zeroing.
+func (ls *lowerState) classFullyInit(name string) bool {
+	if ls == nil || ls.info == nil {
+		return false
+	}
+	return ls.info.FullyInitClasses[name]
+}
+
 func (ls *lowerState) lowerVariadicCall(x *ast.CallExpr, ft *types.Func) hir.Value {
 	callee := ls.calleeName(x.Callee, x)
 
@@ -2848,11 +2859,17 @@ skipMethodCall:
 				// still overwrites whatever it does set, so this only decides
 				// what an unset field reads as — 0, or null for a pointer field,
 				// which is what the drop paths null-check before freeing.
-				ls.b.Emit(&hir.Call{
-					Fn:   "__desi_zero",
-					Args: []hir.Value{inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
-					Type: "void",
-				})
+				//
+				// Unless the checker proved every __new__ on this class writes
+				// every field, in which case the memset is dead work: the
+				// constructor overwrites all of it before anything can read it.
+				if !ls.classFullyInit(cls.Name) {
+					ls.b.Emit(&hir.Call{
+						Fn:   "__desi_zero",
+						Args: []hir.Value{inst, hir.ConstInt{Text: fmt.Sprintf("%d", size), Type: "i32"}},
+						Type: "void",
+					})
+				}
 
 				// 2. Call __new__
 				// Find __new__

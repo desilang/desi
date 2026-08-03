@@ -139,6 +139,10 @@ func CheckWithLoader(mod *ast.Module, ldr resolve.Loader) *Result {
 	// ---- Task 4 hook: Escape Analysis for Function-Local Arenas --------------
 	runEscapeAnalysis(mod, res.Info)
 
+	// Constructors that assign every field make the pre-constructor zeroing
+	// redundant; find them so lowering can drop it.
+	runFieldInitAnalysis(mod, res.Info)
+
 	// 4) After we know which identifiers resolved to which symbols,
 	//    compute unused-import warnings and append them.
 	ut.countUsesFromIdents(res.Info.Idents)

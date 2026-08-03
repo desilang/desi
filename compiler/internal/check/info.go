@@ -93,6 +93,12 @@ type Info struct {
 	// Key: local variable AST Ident node, Value: true if safe for arena allocation.
 	NonEscaping map[*ast.Ident]bool
 
+	// FullyInitClasses names classes whose every __new__ provably assigns every
+	// field before returning. Lowering skips the pre-constructor zeroing for
+	// these, because the constructor overwrites all of it. Absence means "not
+	// proven", not "incomplete" — see field_init.go.
+	FullyInitClasses map[string]bool
+
 	// PerfLevel is the configured performance advisor level ("relaxed", "default", "strict").
 	// Set by CLI flags (e.g., desic perf --level=strict) and read by RunPerfAdvisor.
 	// Empty string means "default".
