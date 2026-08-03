@@ -82,8 +82,11 @@ is still in use. These are the current boundaries where that happens:
 
 - **Heap elements inside a collection.** A `list[str]`, `list[MyStruct]`,
   or `dict` with heap values frees its backing array, but the individual
-  strings/structs it holds are not freed. (Numbers and booleans are
-  stored inline, so those collections leak nothing.)
+  strings/structs it holds are not freed. Collections of numbers and
+  booleans leak nothing: those are stored inline, except `float`, whose
+  elements are boxed and are released when the list is dropped —
+  including when the list lives in an arena, where the boxes are not the
+  arena's to reclaim.
 - **String locals that may alias a literal.** A `str` variable bound from
   something other than a tracked temporary could point at a string
   literal (which lives in the program image and must never be freed), so

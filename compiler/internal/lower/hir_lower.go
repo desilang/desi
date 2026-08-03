@@ -713,6 +713,20 @@ func (ls *lowerState) printUnlock() {
 	ls.b.Emit(&hir.Call{Dst: ls.b.FreshTemp("printulk"), Fn: "__desi_print_unlock", Args: []hir.Value{}})
 }
 
+// isListType reports whether a local holds a list, seeing through an alias.
+// Only lists own element boxes the arena does not reclaim; dicts and sets store
+// their values differently and are not covered here.
+func isListType(t types.T) bool {
+	if t == nil {
+		return false
+	}
+	if ta, ok := t.(*types.TypeAlias); ok {
+		t = ta.Target
+	}
+	_, ok := t.(*types.List)
+	return ok
+}
+
 // closeLoopBody ends a lowered loop body: on the path that falls off the end it
 // drops what the body scope owns and branches to the latch, then pops the loop
 // and its scope and positions the builder in the latch.
@@ -1184,7 +1198,19 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 			continue // skip moved-from owner
 		}
 		if sc.arenaOwned[name] {
-			continue // arena-backed values are freed by destroy_arena only
+			// The storage itself is the arena's to reclaim, wholesale. Element
+			// boxes are not: a float element is its own malloc whichever
+			// allocator holds the list, so without this an arena list of floats
+			// leaks a box per element for the life of the process — which the
+			// memory model says cannot happen to a collection of numbers.
+			if isListType(sc.types[name]) {
+				ls.b.Emit(&hir.Call{
+					Fn:   "list_free_elems",
+					Args: []hir.Value{hir.Var{Name: name}},
+					Type: "void",
+				})
+			}
+			continue
 		}
 		if sc.borrowed[name] {
 			continue // borrowed/aliased values are owned elsewhere; don't free

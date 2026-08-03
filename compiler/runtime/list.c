@@ -90,6 +90,23 @@ DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn) {
     return list;
 }
 
+// Release the element boxes a list owns, without touching the list itself.
+//
+// A list in an arena never reaches list_free — its header and data array belong
+// to the arena and are reclaimed wholesale. Its *elements* do not: a float
+// element is a separate malloc whichever allocator holds the list, so an arena
+// list of floats used to leak one box per element, for the lifetime of the
+// process. That contradicted the memory model, which promises collections of
+// numbers leak nothing.
+//
+// Only owned boxes are freed, which today means floats. Strings and objects
+// inside a collection are a separate and still-open boundary, documented in
+// memory-model.md. Safe to call twice: the boxes are nulled as they go.
+void list_free_elems(DesiList* list) {
+    if (!list) return;
+    desi_free_float_elems(list);
+}
+
 // Free the list and its data array (does NOT free individual elements - compiler handles that)
 void list_free(DesiList* list) {
     if (!list || list->arena) return;

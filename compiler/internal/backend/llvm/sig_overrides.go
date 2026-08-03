@@ -85,6 +85,7 @@ func init() {
 	SetFuncSig("list_len", "i64", nil)
 	SetFuncSig("list_slice", "ptr", nil)
 	SetFuncSig("list_free", "void", nil)
+	SetFuncSig("list_free_elems", "void", []string{"ptr"})
 	SetFuncSig("list_copy", "ptr", nil)
 	SetFuncSig("list_extend", "void", nil)
 	SetFuncSig("list_insert", "void", nil)
