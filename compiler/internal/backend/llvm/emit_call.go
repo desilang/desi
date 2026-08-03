@@ -344,6 +344,64 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Reading an element inline, with the runtime kept for the slow path.
+	//
+	// list_get is a call in the middle of every loop that touches a list, and
+	// the optimiser cannot see through it: it null-checks, normalises negative
+	// indices Python-style, bounds-checks, and only then loads. Measured over a
+	// million reads, that call costs about 3x what the load costs.
+	//
+	// Inlining the whole body is worse, not better -- it drags the fprintf on
+	// the failure path into the loop. What works is the shape Rust's Vec uses:
+	// the check is inline and small, and failure branches away to something
+	// cold. Here that "something cold" is the existing runtime function, which
+	// still owns every error message and the negative-index rule, so behaviour
+	// is unchanged and there is one implementation of it.
+	//
+	// This is the one place the compiler assumes DesiList's layout: data at
+	// offset 0, length at 8. list.h fixes both.
+	if c.Fn == "list_get" && len(c.Args) == 2 && c.Dst.Name != "" {
+		m.ensureDecl("declare ptr @list_get(...)")
+		lst := strings.TrimPrefix(m.ptrOperand(c.Args[0]), "ptr ")
+		idxTy, idxVal := m.operand(c.Args[1])
+		if idxTy != "i64" {
+			ext := fmt.Sprintf("%%lgx%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = sext %s %s to i64\n", ext, idxTy, idxVal)
+			idxVal = ext
+		}
+		id := m.tempID
+		m.tempID++
+		p := func(suffix string) string { return fmt.Sprintf("%%lg%d_%s", id, suffix) }
+		l := func(suffix string) string { return fmt.Sprintf("lg%d_%s", id, suffix) }
+
+		wprintf(&m.funcs, "  %s = icmp ne ptr %s, null\n", p("nn"), lst)
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("nn"), l("chk"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("chk"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 8\n", p("lenp"), lst)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("len"), p("lenp"))
+		wprintf(&m.funcs, "  %s = icmp sge i64 %s, 0\n", p("ge"), idxVal)
+		wprintf(&m.funcs, "  %s = icmp slt i64 %s, %s\n", p("lt"), idxVal, p("len"))
+		wprintf(&m.funcs, "  %s = and i1 %s, %s\n", p("ok"), p("ge"), p("lt"))
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("ok"), l("fast"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("fast"))
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("data"), lst)
+		wprintf(&m.funcs, "  %s = getelementptr inbounds ptr, ptr %s, i64 %s\n", p("ep"), p("data"), idxVal)
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("v"), p("ep"))
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("slow"))
+		wprintf(&m.funcs, "  %s = call ptr @list_get(ptr %s, i64 %s)\n", p("s"), lst, idxVal)
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("done"))
+		wprintf(&m.funcs, "  %s = phi ptr [ %s, %%%s ], [ %s, %%%s ]\n",
+			c.Dst.Name, p("v"), l("fast"), p("s"), l("slow"))
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(c.Dst.Name, "%")] = "ptr"
+		return
+	}
+
 	// Release a list's owned element boxes: list_free_elems(list) -> void.
 	// Spelled out here because the generic path types a bare Var from varTypes,
 	// which reports i32 for a list local and produces an argument the verifier
