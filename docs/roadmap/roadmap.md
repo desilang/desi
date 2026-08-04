@@ -819,9 +819,36 @@ before assuming the gap is the same shape.
 
 ---
 
-### C2. Stop boxing floats
+### C2. Stop boxing floats — ✅ SHIPPED
 
-**Not started. The largest single number left on the table.**
+> Shipped in `9b84678c`. It came in far smaller than this entry predicted: the
+> boxing and the unboxing turned out to be two adjacent branches of one
+> conversion switch in `emit_func.go`. The plan below is left as written because
+> the survey of call sites was accurate and is worth keeping for the next
+> representation change.
+>
+> **The old comment in that switch said a float cannot be bitcast to a pointer.**
+> True, and why it reached for `malloc`. But it can be bitcast to an integer of
+> the same width, and integers were already going into slots. That was the whole
+> fix.
+>
+> **It rippled much further than the float benchmark.** `binary_tree` and
+> `quicksort` both reached parity with C without being touched — the boxing was
+> most of what they were measuring — and `matrix_mul` went 3 ms to 2 ms.
+> `alloc_churn` went 8–9 ms to 6 ms. The float probe went from 12.5 MB to
+> 1.9 MB, flat with the equivalent int loop.
+>
+> **It deleted more than it added.** `list_set` no longer frees the old element,
+> `list_copy`'s float branch no longer clones, and `list_free_elems` — added
+> three commits earlier to mop up exactly this leak — went with it, along with
+> the scope-exit call the lowerer emitted for arena lists. `memory-model.md` now
+> says collections of numbers leak nothing, with no qualification.
+>
+> Validated on Linux as well as Windows: 525/525 both legs on each, which
+> matters because Linux uses clang rather than MSVC and has no LTO, so the
+> bitcast path is confirmed independently of the Windows toolchain.
+
+**Original plan follows.**
 
 A list element is a pointer-sized slot. Ints go in directly. A `float` does not:
 each one is a separate `malloc` holding the double, and the slot holds a pointer
@@ -980,7 +1007,8 @@ deciding deliberately, not under release pressure.
 
 ### Order
 
-**D (done) → A+B (done) → F (done) → C (done) → C2 → stack-allocate objects →
+**D (done) → A+B (done) → F (done) → C (done) → C2 (done) → stack-allocate
+collections and objects → dict/set fast paths → OTP audit → data-race design →
 analyses onto the CFG.** G is 0.2.0 material,
 and so is D's language half.
 
