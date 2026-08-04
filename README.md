@@ -1,7 +1,5 @@
 <p align="center">
-  <img src="book/docs/assets/logo.svg" alt="Desi" width="120">
-  <br>
-  <strong>Desi</strong>
+  <img src="book/docs/assets/images/desi_wordmark.png" alt="Desi — દેશી" width="320">
   <br>
   A compiled language with Python's clarity, Rust's safety, and batteries included.
 </p>

@@ -11,7 +11,13 @@ repo_name: desilang/desi
 theme:
   name: material
   custom_dir: overrides
-  
+
+  # The square mark in the header, and the icon in the browser tab. Both are
+  # the bow-and-ε mark rather than the wordmark: the header slot is small and
+  # square, and the wordmark is unreadable at that size.
+  logo: assets/images/desi_square_icon.png
+  favicon: assets/images/favicon.ico
+
   # Features
   features:
     - navigation.tabs
