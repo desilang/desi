@@ -12,8 +12,16 @@
 #   sup.stop()
 #
 # Strategies:
-#   "one_for_one"  - restart only the crashed child (default)
-#   "one_for_all"  - restart all children if one crashes
+#   "one_for_one"  - restart only the crashed child
+#
+# one_for_one is the only strategy a Desi program can select today. The
+# constructor takes an optional pool size and nothing else, so every supervisor
+# is created with it.
+#
+# The runtime also implements "one_for_all" (restart every child when one
+# crashes) and supervisor_new accepts it, but no syntax reaches it yet. It is
+# listed here so the gap is visible rather than surprising; do not describe it
+# as available until the constructor can select it.
 
 pub class Supervisor:
 	pub mut _handle: int  # Opaque handle to C runtime supervisor
