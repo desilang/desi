@@ -93,11 +93,18 @@ jobs:
           mike deploy --push --update-aliases ${{ inputs.version }} ${{ inputs.alias }}
 
       # Dev deployment on push to main
+      #
+      # set-default is what writes the redirect at the root of gh-pages. mike
+      # publishes each version into its own directory and nothing serves "/"
+      # until a default exists, so deploying without it produced a live site
+      # that 404'd on its own front page. The release step below sets the
+      # default to stable and takes over from this one.
       - name: Deploy dev docs
         if: github.event_name == 'push'
         run: |
           cd book
           mike deploy --push dev
+          mike set-default --push dev
 
       # Release deployment
       - name: Deploy release docs
