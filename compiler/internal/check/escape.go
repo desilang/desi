@@ -40,7 +40,23 @@ type escapeVisitor struct {
 	candidates map[*Symbol]*ast.Ident // Maps candidate Symbol -> its declaring Ident node
 	tracked    map[*Symbol]bool       // Alias graph nodes that are not candidates (loop vars, match bindings)
 	escapes    map[*Symbol]bool       // Track if a symbol escapes
+	grows      map[*Symbol]bool       // Collections that may reallocate after construction
 	deps       map[*Symbol][]*Symbol  // Dependency edges: if B escapes, A in deps[B] escapes
+}
+
+// isArena reports whether a candidate actually ends up allocated in the
+// function's arena.
+//
+// Not escaping is necessary but not sufficient. A collection that grows must
+// stay on the heap, because the two allocators reclaim differently: realloc
+// releases or extends the block it replaces, while a bump allocator can only
+// hand out a new one and abandon the old. A list appended to a million times
+// doubles its backing array about twenty times, and in an arena every one of
+// those arrays is still sitting there at the end. Measured on the list_ops
+// benchmark, promoting the list took peak memory from 9.5 MB to 17.4 MB —
+// slower and larger than leaving it alone.
+func (v *escapeVisitor) isArena(sym *Symbol) bool {
+	return !v.escapes[sym] && !v.grows[sym]
 }
 
 func analyzeFuncEscape(fd *ast.FuncDecl, info *Info) {
@@ -49,6 +65,7 @@ func analyzeFuncEscape(fd *ast.FuncDecl, info *Info) {
 		candidates: make(map[*Symbol]*ast.Ident),
 		tracked:    make(map[*Symbol]bool),
 		escapes:    make(map[*Symbol]bool),
+		grows:      make(map[*Symbol]bool),
 		deps:       make(map[*Symbol][]*Symbol),
 	}
 
@@ -104,10 +121,16 @@ func analyzeFuncEscape(fd *ast.FuncDecl, info *Info) {
 
 	// Step 4: Record non-escaping variables in check.Info.NonEscaping
 	for sym, ident := range v.candidates {
-		if !v.escapes[sym] {
+		if v.isArena(sym) {
 			info.NonEscaping[ident] = true
 		}
 	}
+
+	// Step 5: of the loops in this function, find the ones whose arena
+	// allocations are all finished with by the end of each iteration, so the
+	// arena can be rewound at the latch instead of growing until the function
+	// returns. See escape_loop.go.
+	v.findRewindableLoops(fd.Body, info)
 }
 
 func hasDestructor(c *types.Class) bool {
@@ -119,6 +142,35 @@ func hasDestructor(c *types.Class) bool {
 	}
 	if c.Base != nil {
 		return hasDestructor(c.Base)
+	}
+	return false
+}
+
+// cannotHoldReference reports whether a value of this type is incapable of
+// carrying a pointer. Assigning to such a target cannot let anything escape
+// through it, however complex the right-hand side is.
+//
+// Only scalars qualify. Anything with interior structure — a string, a
+// collection, a class, a tuple, an enum payload, a type parameter that could be
+// instantiated as any of those — is excluded, and so is anything the checker
+// could not type.
+func cannotHoldReference(t types.T) bool {
+	if t == nil {
+		return false
+	}
+	if ta, ok := t.(*types.TypeAlias); ok {
+		t = ta.Target
+	}
+	b, ok := t.(interface{ Kind() types.Kind })
+	if !ok {
+		return false
+	}
+	switch b.Kind() {
+	case types.IntKind, types.FloatKind, types.BoolKind, types.CharKind,
+		types.I8Kind, types.I16Kind, types.I32Kind, types.I64Kind, types.I128Kind,
+		types.U8Kind, types.U16Kind, types.U32Kind, types.U64Kind, types.U128Kind,
+		types.F32Kind, types.F64Kind:
+		return true
 	}
 	return false
 }
@@ -190,6 +242,15 @@ func (v *escapeVisitor) buildConstraints(node ast.Node) {
 					if sym := v.info.Idents[id]; sym != nil {
 						if _, isCand := v.candidates[sym]; isCand {
 							declared = append(declared, sym)
+						} else if cannotHoldReference(sym.Type) {
+							// `total := total + len(t)` used to mark t as
+							// escaping: total is not a heap candidate, so
+							// everything on the right was tarred by association.
+							// An int cannot carry a pointer out of the function,
+							// so nothing escapes through this target. It is
+							// neither a candidate to record a dep against nor a
+							// way out.
+							continue
 						} else {
 							lhsIsGlobalOrEscaping = true
 						}
@@ -197,6 +258,14 @@ func (v *escapeVisitor) buildConstraints(node ast.Node) {
 						lhsIsGlobalOrEscaping = true
 					}
 				} else {
+					// Assigning through an index grows a dict and can
+					// reallocate a list, so the container it targets stays on
+					// the heap for the same reason a method call does.
+					if idx, ok := lhsExpr.(*ast.IndexExpr); ok {
+						for _, base := range v.collectRefs(idx.X) {
+							v.grows[base] = true
+						}
+					}
 					lhsIsGlobalOrEscaping = true
 				}
 			}
@@ -335,6 +404,13 @@ func (v *escapeVisitor) analyzeCallEscape(call *ast.CallExpr) {
 			// Receiver is a local candidate. Storing args inside the receiver:
 			// e.g. list.append(item) -> item flows into list (item -> list)
 			for _, recSym := range receiverRefs {
+				// Any method might reallocate the receiver's storage, which
+				// keeps it out of the arena. This does not distinguish the
+				// methods that grow from the ones that only read: naming the
+				// growing ones means a memory regression the day one is missed
+				// or added, and the cost of being wrong this way is only that a
+				// collection stays on the heap, where it already was.
+				v.grows[recSym] = true
 				for _, arg := range call.Args {
 					for _, argSym := range v.collectRefs(arg) {
 						v.deps[recSym] = append(v.deps[recSym], argSym)

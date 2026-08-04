@@ -157,14 +157,59 @@ setjmpScan:
 				wprintf(&m.funcs, "  call i32 @__top__()\n")
 			}
 			firstBlock = false
-		} else if firstBlock && !noRecursionGuard && fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
-			// Emit call depth tracking for user functions (skip main and __top__)
+		} else if firstBlock && !noRecursionGuard && !m.guardExempt[fn.Name] &&
+			fn.Name != "main" && !strings.HasSuffix(fn.Name, "__top__") {
+			// Stack guard, inline.
+			//
+			// This was one call per user function. As a call it cost ~5 ms on
+			// fib(32) even after the counter became a headroom check, because a
+			// call is a call — and on Linux there is no LTO hot set, so nothing
+			// could inline it away. Emitted here it is a load, two compares and
+			// a branch that is never taken.
+			//
+			// The probe is an alloca, so its address is this frame's position on
+			// the stack. hoistAllocasToEntry moves every alloca to the top of
+			// the entry block, which puts it above this code — exactly where it
+			// needs to be.
+			//
+			// There is no separate "is the floor set up yet" test, because the
+			// runtime encodes that in the value: a thread starts with the floor
+			// at the highest address there is, so its first guarded call
+			// compares below it and takes the cold path, which computes the real
+			// floor. A platform that cannot report its stack bounds gets the
+			// lowest address instead, and the check then never fires. Threads
+			// are created in four runtime files plus anything a library starts,
+			// so computing on demand beats hooking every entry point and missing
+			// one.
+			// initialexec, not the default general-dynamic. On ELF the general
+			// model resolves a thread-local through a call to __tls_get_addr,
+			// which put a call back in the prologue on Linux and cost most of
+			// what inlining had just won. Desi emits executables, never a
+			// dlopened library, so initial-exec is always valid here: the offset
+			// is fixed at load time and the access is a register-relative load.
+			m.ensureDecl("@__desi_stack_floor = external thread_local(initialexec) global ptr")
 			m.ensureDecl("declare void @__desi_call_enter(ptr)")
-			// Create a string constant for the function name (strip internal prefixes)
+
 			displayName := strings.TrimPrefix(fn.Name, "__desi$")
 			fnNameStr, fnNameLen := m.ensureCStringGlobal(displayName, false)
 			fnNameGEP := fmt.Sprintf("getelementptr inbounds ([%d x i8], [%d x i8]* %s, i64 0, i64 0)", fnNameLen, fnNameLen, fnNameStr)
+
+			id := m.mergeID
+			m.mergeID++
+			probe := fmt.Sprintf("%%__gprobe%d", id)
+			floor := fmt.Sprintf("%%__gfloor%d", id)
+			isLow := fmt.Sprintf("%%__glow%d", id)
+			slowLbl := fmt.Sprintf("__gslow%d", id)
+			okLbl := fmt.Sprintf("__gok%d", id)
+
+			wprintf(&m.funcs, "  %s = alloca i8\n", probe)
+			wprintf(&m.funcs, "  %s = load ptr, ptr @__desi_stack_floor\n", floor)
+			wprintf(&m.funcs, "  %s = icmp ult ptr %s, %s\n", isLow, probe, floor)
+			wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", isLow, slowLbl, okLbl)
+			wprintf(&m.funcs, "%s:\n", slowLbl)
 			wprintf(&m.funcs, "  call void @__desi_call_enter(ptr %s)\n", fnNameGEP)
+			wprintf(&m.funcs, "  br label %%%s\n", okLbl)
+			wprintf(&m.funcs, "%s:\n", okLbl)
 			firstBlock = false
 		}
 
@@ -648,10 +693,11 @@ setjmpScan:
 					retType = fn.RetType
 				}
 
-				// Decrement call depth BEFORE tail call to avoid false recursion limit
-				// (since tail call is effectively a return-then-call, not a nested call)
-				m.ensureDecl("declare void @__desi_call_exit()")
-				wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
+				// No exit hook before the tail call either. It existed so that a
+				// tail call — a return-then-call rather than a nested one — did
+				// not count against the depth limit. The guard reads the stack
+				// pointer now, and a tail call does not grow the stack, so the
+				// case it corrected for cannot arise.
 
 				// Emit tail call
 				if fn.RetType == "" || fn.RetType == "void" {
@@ -874,23 +920,42 @@ setjmpScan:
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
 				} else if (valTy == "double" || valTy == "float") && x.Type == "ptr" {
-					// Special case: float/double to ptr requires boxing (can't bitcast float to ptr)
-					// Allocate memory for the float value and store it
-					boxSize := "8" // double is 8 bytes
+					// A float goes into a pointer-sized slot by value, the same
+					// way an int does. It used to be boxed -- a malloc per
+					// element, holding the double, with the slot pointing at it
+					// -- which cost an allocation per element, an indirection
+					// per read, and leaked every box in an arena-backed list.
+					// Measured over a million elements, boxed against a real
+					// array: 28.65 ms versus 1.18 ms.
+					//
+					// There is no bitcast from a float to a pointer, which is
+					// what the old comment here said and why it reached for
+					// malloc. But there is one to an integer of the same width,
+					// and integers go into slots already.
+					bits := x.Dst.Name + "_bits"
 					if valTy == "float" {
-						boxSize = "4"
+						wide := x.Dst.Name + "_w"
+						wprintf(&m.funcs, "  %s = bitcast float %s to i32\n", bits, valOp)
+						wprintf(&m.funcs, "  %s = zext i32 %s to i64\n", wide, bits)
+						bits = wide
+					} else {
+						wprintf(&m.funcs, "  %s = bitcast double %s to i64\n", bits, valOp)
 					}
-					boxPtr := x.Dst.Name + "_box"
-					m.ensureDecl("declare ptr @malloc(...)")
-					wprintf(&m.funcs, "  %s = call ptr @malloc(i64 %s)\n", boxPtr, boxSize)
-					wprintf(&m.funcs, "  store %s %s, ptr %s\n", valTy, valOp, boxPtr)
-					// The destination is the box pointer
-					wprintf(&m.funcs, "  %s = bitcast ptr %s to ptr\n", x.Dst.Name, boxPtr)
+					wprintf(&m.funcs, "  %s = inttoptr i64 %s to ptr\n", x.Dst.Name, bits)
 					m.tempTypes[x.Dst.Name] = "ptr"
 					continue // Skip normal emit below
 				} else if valTy == "ptr" && (x.Type == "double" || x.Type == "float") {
-					// Special case: ptr to float/double requires unboxing (load from boxed pointer)
-					wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, valOp)
+					// The reverse: read the bits back out of the slot. No load,
+					// because there is nothing pointed at any more.
+					bits := x.Dst.Name + "_bits"
+					wprintf(&m.funcs, "  %s = ptrtoint ptr %s to i64\n", bits, valOp)
+					if x.Type == "float" {
+						narrow := x.Dst.Name + "_n"
+						wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", narrow, bits)
+						wprintf(&m.funcs, "  %s = bitcast i32 %s to float\n", x.Dst.Name, narrow)
+					} else {
+						wprintf(&m.funcs, "  %s = bitcast i64 %s to double\n", x.Dst.Name, bits)
+					}
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
 				} else if valTy == "ptr" && x.Type == "i1" {

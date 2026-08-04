@@ -194,14 +194,20 @@ func init() {
 
 	// Pre-register all function names to prevent extern declarations for functions we'll define
 	emittedFuncs := make(map[string]bool)
+	var allFuncs []*hir.Func
 	for _, hirMod := range allModules {
 		for _, f := range hirMod.Funcs {
+			allFuncs = append(allFuncs, f)
 			if !emittedFuncs[f.Name] {
 				lm.MarkDefined(f.Name) // Mark as "will be defined" to prevent extern declare
 				emittedFuncs[f.Name] = true
 			}
 		}
 	}
+
+	// Decide which functions can skip the stack guard. Needs every module's
+	// functions, hence here rather than per-module.
+	lm.SetGuardExempt(llvm.GuardExemptFunctions(allFuncs))
 
 	// Emit all functions from all modules, using same duplicate tracking
 	emittedFuncs = make(map[string]bool) // Reset for emit phase

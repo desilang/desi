@@ -16,8 +16,8 @@ import sys
 | `maxsize()` | `int` | Maximum integer value for the platform |
 | `byteorder()` | `str` | `"little"` or `"big"` endian |
 | `sizeof_ptr()` | `int` | Size of a pointer in bytes (4 or 8) |
-| `recursion_limit()` | `int` | Current max recursion depth |
-| `call_depth()` | `int` | Current call stack depth |
+| `recursion_limit()` | `int` | Current recursion limit, in frames |
+| `call_depth()` | `int` | Approximate current call depth |
 
 ## Usage Examples
 

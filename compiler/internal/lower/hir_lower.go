@@ -583,6 +583,7 @@ type lowerState struct {
 
 	// Task 4: Escape Analysis & Automatic Function-Local Arenas
 	localArena        hir.Value // Function-scoped arena pointer if initialized
+	rewindStack       []bool    // per enclosing loop: did it take an arena mark?
 	currentAllocArena hir.Value // The arena to direct allocations to during RHS lowering
 
 	// loops is a stack of the enclosing loops, innermost last, so that 'break'
@@ -738,6 +739,63 @@ func (ls *lowerState) closeLoopBody(latch *hir.Block) {
 	// still reachable from them, so clear it before filling.
 	ls.terminated = false
 	ls.b.SetBlock(latch)
+	// Hand this iteration's arena bytes back, before the latch's own
+	// bookkeeping. The latch is the right place for exactly the reason the drops
+	// are not: every iteration passes through it, by falling off the end of the
+	// body or by 'continue', and neither carries anything out. 'break' goes to
+	// the exit block instead, which releases the mark outright.
+	ls.emitArenaRewind()
+}
+
+// beginRewindableLoop marks the arena before a loop whose body allocations the
+// checker proved are all dead by the end of each iteration. It reports whether
+// it did, so the caller knows to release afterwards.
+func (ls *lowerState) beginRewindableLoop(s ast.Stmt) bool {
+	if ls.localArena == nil || ls.info == nil || !ls.info.RewindableLoops[s] {
+		ls.rewindStack = append(ls.rewindStack, false)
+		return false
+	}
+	ls.b.Emit(&hir.Call{
+		Fn:   "__arena_mark",
+		Args: []hir.Value{ls.localArena},
+		Type: "void",
+	})
+	ls.rewindStack = append(ls.rewindStack, true)
+	return true
+}
+
+// endRewindableLoop retires the mark. It runs on the loop's exit block, so it
+// covers leaving by 'break' as well as running out of iterations. Leaving by
+// 'return' skips it, which is harmless: that path destroys the arena entirely.
+func (ls *lowerState) endRewindableLoop() {
+	n := len(ls.rewindStack)
+	if n == 0 {
+		return
+	}
+	active := ls.rewindStack[n-1]
+	ls.rewindStack = ls.rewindStack[:n-1]
+	if !active || ls.localArena == nil {
+		return
+	}
+	ls.b.Emit(&hir.Call{
+		Fn:   "__arena_release",
+		Args: []hir.Value{ls.localArena},
+		Type: "void",
+	})
+}
+
+// emitArenaRewind returns the arena to the innermost mark, if the loop being
+// closed took one.
+func (ls *lowerState) emitArenaRewind() {
+	n := len(ls.rewindStack)
+	if n == 0 || !ls.rewindStack[n-1] || ls.localArena == nil {
+		return
+	}
+	ls.b.Emit(&hir.Call{
+		Fn:   "__arena_rewind",
+		Args: []hir.Value{ls.localArena},
+		Type: "void",
+	})
 }
 
 type scope struct {
@@ -1126,7 +1184,12 @@ func (ls *lowerState) emitScopeDrops(sc *scope) {
 			continue // skip moved-from owner
 		}
 		if sc.arenaOwned[name] {
-			continue // arena-backed values are freed by destroy_arena only
+			// Arena-backed values are reclaimed wholesale by destroy_arena, or
+			// by the rewind at a loop latch. There is nothing per-element to do:
+			// every element kind a list can hold is either stored in the slot by
+			// value or owned by someone else. Floats were the exception until
+			// they stopped being boxed.
+			continue
 		}
 		if sc.borrowed[name] {
 			continue // borrowed/aliased values are owned elsewhere; don't free

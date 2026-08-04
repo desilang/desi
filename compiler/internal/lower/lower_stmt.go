@@ -72,6 +72,18 @@ func (ls *lowerState) applyImplicitReturn(stmts []ast.Stmt) []ast.Stmt {
 
 // lowerStmt lowers a single statement
 func (ls *lowerState) lowerStmt(s ast.Stmt) {
+	// Bracket a loop the checker cleared for per-iteration arena reuse. This
+	// sits ahead of the switch rather than inside the two loop arms because a
+	// 'for' lowers through half a dozen shapes -- over a range, a list, a dict,
+	// enumerate, reversed, an unrolled tuple -- and they do not share an exit
+	// path. Deferring the release puts it on whichever block the loop finished
+	// on, which is the exit block in every one of those shapes.
+	switch s.(type) {
+	case *ast.WhileStmt, *ast.ForStmt:
+		ls.beginRewindableLoop(s)
+		defer ls.endRewindableLoop()
+	}
+
 	switch s := s.(type) {
 	case *ast.LetStmt:
 		isNonEscaping := false

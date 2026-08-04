@@ -1,0 +1,76 @@
+# A loop reuses its scratch memory instead of growing.
+#
+# Values a function allocates and never lets out of it go in an arena — a bump
+# allocator freed in one go when the function returns. On its own that is wrong
+# for a loop: half a million iterations allocating a small list each would grow
+# the arena half a million times and release none of it until the end.
+#
+# So a loop that only allocates for its own use marks the arena on the way in
+# and rewinds to that mark at the end of every pass. The bytes are handed out
+# again next time round, and the loop costs one round of growth rather than one
+# per iteration. Measured on the alloc_churn benchmark: 500,000 iterations in
+# 1.7 MB, against C's 1.5 MB.
+#
+# The rewind only happens where nothing from inside the loop can still be
+# reachable from outside it. `keeps` below is the case that must not get one:
+# each `t` lives past the iteration that made it, because `keep` holds it. If
+# the compiler got that wrong the list would end up full of pointers into bytes
+# that had been reused, and this file would print something other than 45.
+#
+# Which loops qualify is checked in the compiler's own tests, where the emitted
+# calls can be inspected — see arena_rewind_test.go and escape_loop_test.go.
+# This file checks the programs still compute the right answers.
+#
+# EXPECTED_OUTPUT:
+# 2997000
+# 45
+# 99
+
+# Scratch that never leaves the iteration. This loop rewinds.
+def churn(n: int) -> int:
+	let mut i = 0
+	let mut total = 0
+	while i < n:
+		let t = [i, i * 2, i * 3]
+		total := total + t[0] + t[1] + t[2]
+		i := i + 1
+	return total
+
+# Every iteration's list is kept. This loop must not rewind, and the values
+# have to still be there when the second loop reads them back.
+def keeps(n: int) -> int:
+	let mut keep: list[list[int]] = []
+	let mut i = 0
+	while i < n:
+		let t = [i]
+		keep.append(t)
+		i := i + 1
+
+	let mut sum = 0
+	let mut j = 0
+	while j < len(keep):
+		sum := sum + keep[j][0]
+		j := j + 1
+	return sum
+
+# Nested loops each get their own mark. The inner one rewinding must not
+# disturb `row`, which the outer iteration allocated before the inner loop
+# started.
+def nested(n: int) -> int:
+	let mut total = 0
+	let mut i = 0
+	while i < n:
+		let row = [i]
+		let mut j = 0
+		while j < n:
+			let cell = [j]
+			total := total + row[0] * 10 + cell[0]
+			j := j + 1
+		i := i + 1
+	return total
+
+def main() -> int:
+	print(str(churn(1000)))
+	print(str(keeps(10)))
+	print(str(nested(3)))
+	return 0

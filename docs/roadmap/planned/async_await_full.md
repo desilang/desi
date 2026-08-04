@@ -97,7 +97,7 @@ With process isolation (Elixir-style):
 ## Related Documents
 
 - [Sync Module](../../../docs/features/sync.md) - Current concurrency
-- [Hot Reload Design](../../../docs/roadmap/todo/hot_reload_panic.md) - Process model
+- [Hot Reload Design](../../../docs/roadmap/planned/hot_reload_panic.md) - Process model
 - [Roadmap M8](../../../docs/roadmap/roadmap.md) - Async milestone (current stub)
 
 ## Decision Points (For Future)

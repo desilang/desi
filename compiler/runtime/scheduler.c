@@ -10,6 +10,10 @@
 #include <stdio.h>
 #include <string.h>
 
+// Set before any thread starts so print can skip its lock while the
+// program is still single-threaded. See print.c.
+extern void __desi_note_thread_start(void);
+
 #if defined(__APPLE__)
   #include <sys/sysctl.h>
   #include <unistd.h>
@@ -161,6 +165,7 @@ void scheduler_init(int n_workers) {
         w->running = true;
         workqueue_init(&w->local_queue);
         
+    __desi_note_thread_start();
 #ifdef _WIN32
         w->thread = CreateThread(NULL, 0, worker_thread_fn, w, 0, NULL);
 #else

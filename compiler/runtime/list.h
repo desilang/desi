@@ -18,6 +18,32 @@ typedef struct {
     void* arena;       // Optional arena handle (Task 4)
 } DesiList;
 
+// The compiler reads these fields directly.
+//
+// The backend emits the bounds check and the load for `xs[i]` inline, using
+// these offsets as literals, and calls into this file only when the check
+// fails. That makes the layout an ABI between the runtime and the code
+// generator rather than a private detail: reordering these fields, or changing
+// one's width, silently changes what generated programs load.
+//
+// These assertions fail the build if that happens. The matching constants live
+// in compiler/internal/backend/llvm/list_layout.go, and a test compares the two
+// so a change on either side is caught rather than mis-compiled.
+_Static_assert(offsetof(DesiList, data) == 0,
+    "backend emits a bare load for DesiList.data; it must stay first");
+_Static_assert(offsetof(DesiList, length) == 8,
+    "backend emits getelementptr i8 +8 for DesiList.length");
+_Static_assert(offsetof(DesiList, capacity) == 16,
+    "backend emits getelementptr i8 +16 for DesiList.capacity");
+_Static_assert(offsetof(DesiList, type_tag) == 24,
+    "backend maintains DesiList.type_tag inline on append");
+_Static_assert(sizeof(((DesiList*)0)->type_tag) == 4,
+    "backend loads DesiList.type_tag as i32");
+_Static_assert(sizeof(((DesiList*)0)->length) == 8,
+    "backend loads DesiList.length as i64");
+_Static_assert(sizeof(((DesiList*)0)->capacity) == 8,
+    "backend loads DesiList.capacity as i64");
+
 // === Core Operations ===
 DesiList* list_new(int type_tag, ElemToStrFunc to_str_fn);
 DesiList* list_new_in(void* arena, int type_tag, ElemToStrFunc to_str_fn);

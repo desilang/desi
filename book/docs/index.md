@@ -86,7 +86,7 @@ Ready to try Desi? Start here:
 
 | Feature | Description |
 |---------|-------------|
-| **Variables** | `let` and `var` with type inference |
+| **Variables** | `let` and `let mut` with type inference |
 | **Functions** | `def` with optional type annotations |
 | **Classes** | Full OOP with inheritance, methods, properties |
 | **Generics** | Type parameters for classes and functions |
@@ -106,5 +106,5 @@ Desi is currently in active development. Version **0.1.0** is being prepared for
 ---
 
 <div style="text-align: center; margin-top: 3rem;">
-  <em>"Desi" - meaning "local" or "native" in Hindi, representing code that runs natively on your machine.</em>
+  <em>"Desi" (દેશી) - meaning "local" or "native" in Gujarati, representing code that runs natively on your machine.</em>
 </div>

@@ -213,6 +213,6 @@ wrong qualification would free memory something still references.
   free-on-`list_free` (the float-box model, extended to tag 1) with an
   adopting `list_append_owned` for runtime producers like `split`.
 - Function-scoped arenas + escape analysis
-  (`docs/roadmap/todo/hybrid_memory_management.md`)
+  (`docs/roadmap/planned/hybrid_memory_management.md`)
 - Freeing heap elements stored *inside* collections (today the
   container's pointer array is freed; enum/struct elements it holds leak)

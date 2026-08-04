@@ -419,7 +419,7 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 * **AST nodes**: `TryStmt` (Body, Except, Finally, ExceptVar, ExceptType) and `RaiseStmt` (Value).
 * **Parser**: `parseTry()` / `parseRaise()` with Python-style syntax:
-  * `try:` body, `except [Type] [as var]:` handler, `finally:` block.
+  * `try:` body, `except [Type] [as name]:` handler, `finally:` block.
 * **Type checker**: recursive checking of try/except/finally blocks; except variable bound as `str`.
 * **Lowerer**: `TryStmt` creates except/continuation/finally blocks with scope management.
   * `TryExpr` (`?` operator) is **context-aware** — inside a try block, Err redirects to the except handler instead of early return.
@@ -555,10 +555,486 @@ Implement a compile-time security audit system that scans the full import graph 
 
 ---
 
+## v0.1.x — Move checks from run time to compile time
+
+> **Status:** planned, measured, not started unless noted.
+> **Why one section:** every item here is the same move — something Desi
+> currently checks or arranges *while a program runs*, which the compiler could
+> settle *before* it does. That is simultaneously the performance plan and the
+> memory-safety plan, because a runtime check is a permanent tax and a
+> compile-time proof is free forever.
+
+### Where v0.1.0 leaves off
+
+Benchmarks are whole-process wall times; subtract the `startup` row from both
+sides before reading any of them. Linux, release, 2026-08-02:
+
+| | Desi | C | reading |
+|---|---|---|---|
+| string churn | 11 | 14 | Desi ahead |
+| loop arithmetic, string build | 1 | 1 | tied |
+| quicksort, binary tree | 2–3 | 1–2 | close |
+| dict ops | 8 | 5 | close |
+| recursive calls | 9 | 6 | close (was 23) |
+| **list ops** | **10** | **3** | behind |
+| **allocation churn** | **13** | **1** | behind |
+
+Both laggards are dominated by allocating small objects. Nothing else in the
+table is far off, and the call-overhead gap closed in v0.1.0 by replacing the
+frame counter with a stack headroom check.
+
+---
+
+### A + B. Arena promotion and per-iteration reuse — ✅ SHIPPED
+
+> **Shipped together in `594e7d47`**, which is the only way they work: A alone
+> was measured at 30 ms / 55.1 MB on `alloc_churn` against 13 ms / 1.8 MB
+> before it, and was reverted. The sections below are the original plan; the
+> outcome, including a third condition neither of them anticipated, is recorded
+> under "What actually happened" after item B.
+
+**Problem.** Arena promotion is built and works, but does not fire on the
+commonest shape in real code — accumulate a number in a loop while touching a
+collection. These two loops differ only in the last line:
+
+```desi
+let t = [i, i, i]
+print(str(len(t)))          # promoted to the arena
+```
+```desi
+let t = [i, i, i]
+total := total + len(t)     # falls back to malloc per iteration
+```
+
+`escape.go` marks **every symbol on the right-hand side** as escaping when the
+left-hand side is not itself an arena candidate. `total` is an `int`, so it is
+not a candidate, and `t` is tarred by association — even though `len(t)` hands
+over an integer and the list goes nowhere.
+
+**Fix.** Consult the type. If the assignment target cannot hold a reference —
+`int`, `float`, `bool` — then nothing on the right escapes through it.
+
+**Cost.** 1–2 days. Low risk *for correctness*: the change only ever removes
+false escapes, and marking too little is the dangerous direction, which is
+untouched.
+
+**Payoff — measured, and it is negative on its own.** This was implemented and
+benchmarked on the `perf-recursion-guard` branch, then reverted. The analysis
+change works exactly as intended: `alloc_churn`'s loop-local list stops emitting
+`list_new` and starts emitting `list_new_in`, i.e. it promotes to the arena. The
+result (Linux, release):
+
+| | before A | with A | C |
+|---|---|---|---|
+| `alloc_churn` time | 13 ms | **30 ms** | 1 ms |
+| `alloc_churn` peak RSS | 1.8 MB | **55.1 MB** | 1.5 MB |
+| `list_ops` | 10 ms / 9.5 MB | 16 ms / 17.4 MB | 4 ms / 5.3 MB |
+| `dict_ops` | 8 ms / 9.0 MB | 9 ms / 11.8 MB | 6 ms / 5.3 MB |
+
+Output stayed correct everywhere; this is a performance regression, not a
+miscompile. The cause is structural: **the arena is function-scoped and is only
+destroyed when the function returns.** Promoting an allocation that happens
+500,000 times inside a loop therefore replaces 500,000 short-lived `malloc`/
+`free` pairs — which a modern allocator serves out of a hot free list — with
+500,000 live arena slots that are never reclaimed until the function exits. The
+arena grows to hold all of them at once, and growing it costs more than the
+allocator it replaced.
+
+So A is **not independently shippable**. It is a prerequisite for B that makes
+things worse until B lands. Do not merge A on its own.
+
+---
+
+### B. Per-iteration arena reset
+
+**Problem.** An arena currently lives for the whole function. A loop that
+allocates half a million times would grow it half a million times, so loop-local
+collections cannot simply be promoted and forgotten.
+
+**Fix.** Reset the arena at the end of each iteration, so a loop body's
+allocations cost a bump-pointer increment and one reset. This is "Phase 2:
+Scope-Based Arenas" in [hybrid_memory_management.md](planned/hybrid_memory_management.md),
+which is **not** built despite that document's summary.
+
+**Cost — revised upward to 1–2 weeks** after implementing A and looking hard at
+what B actually requires. The original 3–5 day estimate assumed "call
+`__arena_reset` at the loop latch". That is wrong twice over:
+
+1. **Reset is too blunt; it needs mark/rewind.** A function's arena also holds
+   allocations made *before* the loop. Resetting it at the latch frees those
+   too. What is needed is a mark taken at loop entry and a rewind to that mark
+   at the latch, so only the current iteration's allocations are reclaimed. That
+   is a runtime addition (`__arena_mark` / `__arena_rewind`), not just a call.
+
+2. **Rewinding safely needs *iteration-scoped* escape information, which the
+   current analysis cannot express.** `escape.go` answers one question: does
+   this value outlive the *function*? Rewinding asks a strictly finer one: does
+   it outlive the *iteration*? A value can be arena-safe by the first measure
+   and unsafe by the second:
+
+   ```desi
+   let mut keep = []
+   for i in range(10):
+       let t = [i]
+       keep.append(t)   # t outlives its iteration, but not the function
+   ```
+
+   Neither `keep` nor `t` escapes the function, so today both are arena
+   candidates. Rewinding at the latch would leave `keep` holding ten dangling
+   pointers — silent memory corruption, and precisely the bug class the whole
+   design exists to prevent.
+
+   The fix is to give the analysis loop scope: track which loop body each
+   candidate is declared in, and treat a candidate as iteration-escaping if the
+   deps graph flows it into any symbol declared outside that body. The data is
+   mostly there (`deps` already records the edges); what is missing is the
+   notion of declaration scope, plus emitting the mark/rewind only for loops
+   where *every* body-local candidate clears that test.
+
+**Payoff.** With A, brings `alloc_churn` near C. Without B, A is a regression —
+see the table above.
+
+**Testing bar.** Higher than anything else in this list. A wrong answer here
+does not produce a failing test, it produces a use-after-free that happens to
+work until it doesn't. At minimum: the `keep.append(t)` shape above and its
+variants (store into a field, into a dict, into an outer tuple, return from
+inside the loop, `break` carrying a reference out) must each be shown to *not*
+get a rewind, as compiler tests over emitted IR rather than as behaviour tests.
+
+---
+
+### What actually happened with A + B
+
+Shipped, with a third condition neither item predicted.
+
+**A collection that grows must stay on the heap.** `realloc` releases or extends
+the block it replaces; a bump allocator can only hand out a new one and abandon
+the old. A list appended to a million times doubles about twenty times, and in
+an arena every one of those dead backing arrays is still there at the end. That
+is what took `list_ops` from 9.5 MB to 17.4 MB — A promoting a list it had no
+business promoting. Any method call on a collection, and any assignment through
+an index, now keeps it on the heap.
+
+**B's eligibility rule came out simpler than feared.** It tests the dependency
+edges the escape constraints already build: a loop may rewind only if nothing
+declared inside it flows to anything declared outside. The test is on the edge
+itself rather than on whether an arena pointer travels along it, because
+tracking that across heap containers means following chains, and a missed link
+is a use-after-free rather than a missed optimisation.
+
+**`list_new_in` was also splitting its allocation.** It made two bump calls,
+header then data, where `list_new` had long since packed both into one malloc
+and used the inline-data layout. Putting them back together took `alloc_churn`
+from 17 ms to 14 ms.
+
+**Results** (Linux, release, against the pre-A baseline):
+
+| | before A | shipped | C |
+|---|---|---|---|
+| `alloc_churn` | 13 ms / 1.8 MB | **14 ms / 1.7 MB** | 1 ms / 1.5 MB |
+| `list_ops` | 10 ms / 9.5 MB | **12 ms / 9.5 MB** | 4 ms / 5.3 MB |
+| `dict_ops` | 8 ms / 9.0 MB | **12 ms / 9.0 MB** | 6 ms / 5.3 MB |
+
+**Be honest about this: it is not the win the section predicted.** Memory is
+neutral-to-slightly-better and time is within this machine's noise. The
+prediction was "brings `alloc_churn` near C", and `alloc_churn` is still 14 ms
+against C's 1 ms. glibc's tcache already serves a repeated small alloc/free
+about as fast as a bump allocator can, so there was less on the table than the
+plan assumed.
+
+What the work did buy: the 55 MB cliff is gone, the arena no longer grows
+without bound in a loop, and growing collections no longer land in it at all —
+so the arena is now safe to leave switched on, which it was not before.
+
+**The remaining `alloc_churn` gap is not allocation.** It is the call per
+`list_append` and per `list_get`, which is item C below.
+
+**Testing.** `escape_loop_test.go` covers which loops qualify;
+`arena_rewind_test.go` covers the decision reaching the generated code;
+`compiler/runtime/tests/arena_mark.c` covers the runtime's invariants. The
+example suite was run on both legs with `-DDESI_ARENA_POISON`, which scribbles
+over every byte a rewind releases — AddressSanitizer is blind here, because the
+arena is one large allocation and reusing bytes inside it is invisible to it.
+
+---
+
+### C. Collection element access — ✅ SHIPPED
+
+`list_ops` appends a million integers one at a time. Each `append` and each read
+was a runtime call, against C's inlined array store.
+
+**Measured first, and the measurement redirected the work twice.**
+
+A C decomposition of 1M appends + 1M reads:
+
+| | |
+|---|---|
+| typed `int64[]`, inlined — what C does | 0.76 ms |
+| `void*` slots, inlined | 0.74 ms |
+| `void*` slots, minimal out-of-line calls | 1.73 ms |
+| real `list.c`, out-of-line | 3.27 ms |
+
+**The pointer-slot representation is free for anything pointer-sized** — 0.74
+against 0.76. This section used to propose "specialising `list[int]` so elements
+are stored unboxed" as a route. It is not one: an `int64` and a `void*` are both
+eight bytes in a contiguous array, and Desi already stuffs the int straight into
+the slot. The whole gap was the call.
+
+**But inlining the call naively makes it worse**: 4.22 ms against 3.28. Both
+`list_get` and `list_append` end in `fprintf(stderr, …)` on their failure paths,
+and inlining drags a varargs call into the loop body. Adding `list.c` to the LTO
+hot set — a one-line change, and the obvious first move — would have been a
+regression.
+
+What works is the shape Rust's `Vec` uses: a small hot path, branching away to
+something cold. Same code, same semantics, error paths marked `noinline` and
+`cold`: **1.09 ms against 3.28**.
+
+**Shipped as IR emission rather than LTO.** The backend emits the check and the
+load/store inline and calls the runtime only on failure or growth. That was
+chosen over restructuring `list.c` plus LTO because LTO is not dependable:
+Windows has it but never covered `list.c`, Unix release has none at all, and
+linking bitcode needs an `lld` or gold plugin that is not always installed.
+Emitting in IR behaves identically everywhere.
+
+Results, Linux release, old and new compilers back-to-back:
+
+| | before | after | C |
+|---|---|---|---|
+| `list_ops` | 10–15 ms | **6 ms** | 4–6 ms |
+| `alloc_churn` | 13–16 ms | **8–9 ms** | 2 ms |
+| `matrix_mul` | 4–5 ms | **3 ms** | 1 ms |
+
+`list_ops` is level with C. `alloc_churn`'s remainder is the allocation itself,
+not element access.
+
+**This made `DesiList`'s layout an ABI.** The backend reads `data`, `length`,
+`capacity` and `type_tag` at fixed offsets. `list.h` asserts them,
+`list_layout.go` names them, and `list_layout_test.go` compiles a probe against
+the real header and compares — verified to fire.
+
+**Still to do here:** `dict` and `set` get their elements the same way and would
+take the same treatment. `dict.c` is already in the Windows LTO set, so measure
+before assuming the gap is the same shape.
+
+---
+
+### C2. Stop boxing floats — ✅ SHIPPED
+
+> Shipped in `9b84678c`. It came in far smaller than this entry predicted: the
+> boxing and the unboxing turned out to be two adjacent branches of one
+> conversion switch in `emit_func.go`. The plan below is left as written because
+> the survey of call sites was accurate and is worth keeping for the next
+> representation change.
+>
+> **The old comment in that switch said a float cannot be bitcast to a pointer.**
+> True, and why it reached for `malloc`. But it can be bitcast to an integer of
+> the same width, and integers were already going into slots. That was the whole
+> fix.
+>
+> **It rippled much further than the float benchmark.** `binary_tree` and
+> `quicksort` both reached parity with C without being touched — the boxing was
+> most of what they were measuring — and `matrix_mul` went 3 ms to 2 ms.
+> `alloc_churn` went 8–9 ms to 6 ms. The float probe went from 12.5 MB to
+> 1.9 MB, flat with the equivalent int loop.
+>
+> **It deleted more than it added.** `list_set` no longer frees the old element,
+> `list_copy`'s float branch no longer clones, and `list_free_elems` — added
+> three commits earlier to mop up exactly this leak — went with it, along with
+> the scope-exit call the lowerer emitted for arena lists. `memory-model.md` now
+> says collections of numbers leak nothing, with no qualification.
+>
+> Validated on Linux as well as Windows: 525/525 both legs on each, which
+> matters because Linux uses clang rather than MSVC and has no LTO, so the
+> bitcast path is confirmed independently of the Windows toolchain.
+
+**Original plan follows.**
+
+A list element is a pointer-sized slot. Ints go in directly. A `float` does not:
+each one is a separate `malloc` holding the double, and the slot holds a pointer
+to it. Measured over 1M appends + reads:
+
+| | |
+|---|---|
+| boxed slots, via calls — Desi's `list[float]` | 28.65 ms |
+| real `double[]`, inlined — Rust's `Vec<f64>` | 1.18 ms |
+
+**24x.** It is also the cause of a leak that `list_free_elems` currently mops up
+after: the boxes are `malloc`'d, so an arena list of floats leaks one per
+element until something frees them. Fixing the representation deletes that
+problem rather than managing it.
+
+**The fix.** A `double` is eight bytes and so is a slot on every target Desi
+supports, so the bits go straight in, exactly as ints already do — bitcast on
+the way in, bitcast on the way out. No allocation, no indirection, no leak.
+
+**Where the work is.** Lowering creates the box today (the runtime receives an
+already-boxed pointer — see `list_clone_elem`). So:
+
+1. Lowering: emit a bitcast into the slot instead of a `malloc` and store.
+2. `list.c`: roughly ten `DESI_TAG_FLOAT` special cases — `list_clone_elem`,
+   `list_set`, `list_copy`, `list_extend`, the slice and map/filter builders —
+   become plain slot copies.
+3. Delete `desi_free_float_elems`, `list_free_elems`, and the scope-exit call
+   the lowerer emits for arena lists. The leak class goes with them.
+4. Guard the assumption: `_Static_assert(sizeof(double) <= sizeof(void*))`, next
+   to the layout assertions that already exist.
+5. Check `dict` and `set` for the same pattern before assuming lists are the
+   only place it appears.
+
+Net this **removes** more code than it adds. The risk is breadth, not depth:
+every float path needs re-validating, and the float examples in the suite are
+the ones to watch.
+
+**Payoff.** 24x on float-heavy code, one documented leak boundary closed
+outright, and `memory-model.md` gets simpler rather than more qualified.
+
+---
+
+### D. Require field initialisation at compile time
+
+**Problem.** Every class instance is zeroed at construction so that a field the
+constructor never assigns reads as `0` rather than as whatever the allocator had
+lying around. That closes a real hole — it was returning garbage before v0.1.0 —
+but it is the Go answer, not the Rust one, and it costs a `memset` per
+construction forever.
+
+**Status: the elision half is done. The language change is not, and should not
+be attempted as scoped here.**
+
+**What shipped.** A definite-assignment pass over `__new__`
+([field_init.go](../../compiler/internal/check/field_init.go)). When every
+constructor on a class writes every field on every path out — early returns,
+returns inside loops, and raises included, since a half-built instance can still
+reach a drop path — lowering skips the zeroing. That removed **96 of 264**
+zeroing call sites across the example suite, about a third, with no language
+change and nothing to migrate. The analysis only ever fails safe: anything it
+cannot follow keeps the memset.
+
+**What did not, and why the original plan was wrong.** "Delete `__desi_zero`"
+assumed implicit zeroing was a papering-over. It is not: it is the defined
+behaviour of a class declared with no `__new__`, which is a documented Desi
+shape —
+
+```desi
+class Point:
+	pub mut x: int
+	pub mut y: int
+
+let mut p = Point()   # zero-initialised, then assigned from outside
+p.x := 10
+```
+
+**81 example classes and 9 in `compiler/lib` are written this way.** Rejecting
+them needs somewhere else for the initial value to come from, and `FieldDecl`
+has no default-value slot — so this is not a checker change, it is new surface
+syntax (`x: int = 0`) through the parser, checker, and lowerer, plus migrating
+every one of those classes.
+
+**Revised cost.** The elision: done. The language change: 1–2 weeks including
+field-default syntax and the migration, and it is **0.2.0 material** — a
+breaking change to how classes are written is not something to land days before
+a first release.
+
+**Payoff, realised.** A third of the construction memsets gone, and a new
+compile-time notion of "this constructor is complete" that the field-default
+work can build on later.
+
+---
+
+### E. Narrow "leak rather than crash"
+
+Every boundary listed in [memory-model.md](../memory-model.md) is a place the
+compiler could not decide who owned a value and chose to leak instead of risking
+a free. Each one narrowed returns memory *and* speed. Incremental, no cliff,
+good background work across 0.1.x.
+
+---
+
+### F. Elide the print lock when a program has no tasks — ✅ SHIPPED, differently
+
+`print` takes a lock so concurrent output cannot interleave mid-line. A program
+with only one thread cannot race, so the lock can go.
+
+**The compile-time version proposed here is unsound.** "This program contains no
+`spawn`" does not mean no threads: `future.c`, `scheduler.c`, `supervisor.c` and
+`websocket.c` all start threads from code a program reaches through `async`,
+`http.serve`, or a supervisor without ever writing `spawn`. Proving those
+unreachable is a whole-program call-graph question, and being wrong tears output
+lines.
+
+**So it is a runtime flag instead**, set before any thread starts and never
+cleared. Measured, per lock/unlock pair:
+
+| | |
+|---|---|
+| mutex pair (what every print paid) | 13.87 ns |
+| flag load (what it pays now) | 1.73 ns |
+| nothing (what compile-time elision would pay) | 1.78 ns |
+
+The flag captures the entire saving — compile-time elision is not measurably
+better than a predictable branch on a hot global, and it is the version that can
+be wrong. It also wins in cases the compile-time test would have given up on: a
+program that does spawn eventually still gets the fast path until it does.
+
+**Payoff in context: small.** A `print` costs about 516 ns, so this is ~2.3% of
+a print and nothing at all for code that does not print in a loop. It moves no
+benchmark. Worth having — it is free and always correct — but it is not
+performance work in the sense the top of this section means.
+
+`runtime_thread_flag_test.go` fails if a runtime source file creates a thread
+without calling `__desi_note_thread_start()` first, so the obligation does not
+quietly rot.
+
+---
+
+### G. Monomorphise generics (not v0.1.x)
+
+A generic function currently boxes its argument on the heap and hands back a
+pointer. Rust generates a specialised copy per type: no allocation, and a whole
+class of bug cannot exist — several were fixed in v0.1.0 that existed *because*
+of the boxing.
+
+**Cost.** 1–2 weeks; a codegen strategy change. Deferred.
+
+---
+
+### Not planned: a borrow checker
+
+The actual Rust mechanism is a months-long language-design project, and it would
+change what Desi feels like to write — the strictness is the trade. Worth
+deciding deliberately, not under release pressure.
+
+### Order
+
+**D (done) → A+B (done) → F (done) → C (done) → C2 (done) → stack-allocate
+collections and objects → dict/set fast paths → OTP audit → data-race design →
+analyses onto the CFG.** G is 0.2.0 material,
+and so is D's language half.
+
+This is a change from the original A → D → B. A was implemented first, measured,
+and reverted: it is a regression on its own (see the table under A), so **A and B
+have to land as one piece of work, or neither**. D went next because it was the
+only item with no dependency on the arena work — and it split cleanly in two,
+with the compile-time elision shipping and the breaking language change deferred
+to 0.2.0.
+
+A+B landed, and came in well under the 1.5–2.5 week estimate — most of that
+estimate was for an iteration-scoped analysis that turned out to be expressible
+in the dependency edges already there. What it did not buy is the speed the
+section promised; see "What actually happened" above.
+
+Outcome for 0.1.x so far: a third of the construction memsets proved
+unnecessary and removed, the arena made safe to leave on in loops, and
+`alloc_churn` / `list_ops` still well behind C — documented, not implied away.
+E and F remain.
+
+---
+
 ## v0.2.0 Vision — Compile-Time Macro Introspection
 
 > **Status:** Design complete, implementation deferred to v0.2.0.
-> **Full design:** [compile_time_macros.md](todo/compile_time_macros.md)
+> **Full design:** [compile_time_macros.md](planned/compile_time_macros.md)
 
 The headline feature for v0.2.0: **write macro rules in Desi that execute during compilation with full AST access.**
 
@@ -581,7 +1057,7 @@ The headline feature for v0.2.0: **write macro rules in Desi that execute during
 
 ## Distributed Systems (v0.2.0+ Vision)
 
-> **Status:** Research phase. Full design doc: [distributed_systems.md](todo/distributed_systems.md)
+> **Status:** Research phase. Full design doc: [distributed_systems.md](planned/distributed_systems.md)
 
 Erlang-inspired distributed actor/messaging layer built on Desi's existing concurrency primitives (channels, supervisors). Native-compiled (no VM), so this would be a TCP-based messaging protocol rather than BEAM-style location transparency.
 

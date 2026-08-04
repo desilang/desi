@@ -543,22 +543,31 @@ Desi enforces runtime safety limits to prevent runaway programs:
 
 ### Recursion Depth
 
-Maximum recursion depth is **1000** by default. Exceeding this triggers a panic:
+Recursion is limited to about **1000** frames by default. Going past it raises a
+`RuntimeError` rather than letting the stack run out:
 
 ```desi
 def infinite_recurse(n: int) -> int:
-    infinite_recurse(n + 1)  # Panics after 1000 calls
+    1 + infinite_recurse(n + 1)  # raises after roughly 1000 calls
 
 def main() -> int:
-    infinite_recurse(0)  # Desi panic: maximum recursion depth exceeded (1000)
+    infinite_recurse(0)  # RuntimeError: maximum recursion depth exceeded (1000)
     0
 ```
 
-This protects against stack overflow from:
+Without this, exhausting the stack is a hard fault — an access violation the
+program cannot report on, because it happens while it is happening. The guard
+raises an ordinary error instead, which a `try` can catch and a supervisor can
+survive.
 
-- Unbounded recursion
-- Deeply nested function calls
-- Accidental infinite loops via recursion
+!!! note "The limit is approximate"
+    What is actually measured is stack space, not frames. A limit of 1000 is a
+    budget of roughly a thousand typical frames, so a function with unusually
+    large frames reaches it sooner and a very small one later.
+
+    Measuring the space is the point: frames differ in size, so a count is only
+    a proxy for the thing that runs out. Guarding the space itself is what makes
+    the next section safe.
 
 ### Configuring the Limit
 
@@ -568,13 +577,27 @@ Use `set_recursion_limit(n)` to adjust the limit at runtime:
 def deep_recurse(n: int) -> int:
     if n <= 0:
         return 0
-    return deep_recurse(n - 1)
+    return 1 + deep_recurse(n - 1)
 
 def main() -> int:
-    set_recursion_limit(10000)  # Increase limit
-    print(deep_recurse(5000))   # Works now
+    set_recursion_limit(10000)  # allow deeper recursion
+    print(str(deep_recurse(5000)))
     0
 ```
+
+Raising the limit lets a program recurse deeper. It cannot let it recurse
+deeper than the stack allows — the limit is clamped to the real end of the
+stack, so this still raises rather than faulting:
+
+```desi
+def main() -> int:
+    set_recursion_limit(10000000)  # more frames than any stack holds
+    infinite_recurse(0)            # RuntimeError: out of stack ...
+    0
+```
+
+The message says which of the two was reached, since "maximum recursion depth
+exceeded (10000000)" would be the opposite of what happened there.
 
 ### Tail Call Optimization
 

@@ -167,7 +167,7 @@ Implementation detail:
 * Add/adjust a golden or unit test to assert rendering includes the **code**, **title**, and **help** (and suggestions if applicable).
 * Run `go test ./...`.
 
-**Example** (Parser: missing `let` before var decl — `DPE0110`):
+**Example** (Parser: missing `let` before a variable declaration — `DPE0110`):
 
 * `codes.json` → new entry under `"parser"` (as above).
 * Parser calls:

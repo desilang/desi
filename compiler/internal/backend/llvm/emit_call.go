@@ -344,6 +344,126 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Reading an element inline, with the runtime kept for the slow path.
+	//
+	// list_get is a call in the middle of every loop that touches a list, and
+	// the optimiser cannot see through it: it null-checks, normalises negative
+	// indices Python-style, bounds-checks, and only then loads. Measured over a
+	// million reads, that call costs about 3x what the load costs.
+	//
+	// Inlining the whole body is worse, not better -- it drags the fprintf on
+	// the failure path into the loop. What works is the shape Rust's Vec uses:
+	// the check is inline and small, and failure branches away to something
+	// cold. Here that "something cold" is the existing runtime function, which
+	// still owns every error message and the negative-index rule, so behaviour
+	// is unchanged and there is one implementation of it.
+	//
+	// The offsets come from list_layout.go, which list.h asserts against and a
+	// test cross-checks by compiling the real header.
+	if c.Fn == "list_get" && len(c.Args) == 2 && c.Dst.Name != "" {
+		m.ensureDecl("declare ptr @list_get(...)")
+		lst := strings.TrimPrefix(m.ptrOperand(c.Args[0]), "ptr ")
+		idxTy, idxVal := m.operand(c.Args[1])
+		if idxTy != "i64" {
+			ext := fmt.Sprintf("%%lgx%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = sext %s %s to i64\n", ext, idxTy, idxVal)
+			idxVal = ext
+		}
+		id := m.tempID
+		m.tempID++
+		p := func(suffix string) string { return fmt.Sprintf("%%lg%d_%s", id, suffix) }
+		l := func(suffix string) string { return fmt.Sprintf("lg%d_%s", id, suffix) }
+
+		wprintf(&m.funcs, "  %s = icmp ne ptr %s, null\n", p("nn"), lst)
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("nn"), l("chk"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("chk"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("lenp"), lst, ListLengthOffset)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("len"), p("lenp"))
+		wprintf(&m.funcs, "  %s = icmp sge i64 %s, 0\n", p("ge"), idxVal)
+		wprintf(&m.funcs, "  %s = icmp slt i64 %s, %s\n", p("lt"), idxVal, p("len"))
+		wprintf(&m.funcs, "  %s = and i1 %s, %s\n", p("ok"), p("ge"), p("lt"))
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("ok"), l("fast"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("fast"))
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("data"), lst)
+		wprintf(&m.funcs, "  %s = getelementptr inbounds ptr, ptr %s, i64 %s\n", p("ep"), p("data"), idxVal)
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("v"), p("ep"))
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("slow"))
+		wprintf(&m.funcs, "  %s = call ptr @list_get(ptr %s, i64 %s)\n", p("s"), lst, idxVal)
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("done"))
+		wprintf(&m.funcs, "  %s = phi ptr [ %s, %%%s ], [ %s, %%%s ]\n",
+			c.Dst.Name, p("v"), l("fast"), p("s"), l("slow"))
+		if m.tempTypes == nil {
+			m.tempTypes = make(map[string]string)
+		}
+		m.tempTypes[strings.TrimPrefix(c.Dst.Name, "%")] = "ptr"
+		return
+	}
+
+	// Appending inline while there is room, with the runtime kept for growth.
+	//
+	// Same split as list_get above, and the same reason: the loop body wants to
+	// be a compare and two stores, and everything that is not that -- the null
+	// report, the reallocation, the arena branch inside it -- belongs somewhere
+	// cold. When the list has spare capacity, which is every iteration but the
+	// doubling ones, nothing here calls anything.
+	//
+	// The type tag is maintained rather than delegated, because the runtime
+	// promotes it from 0 the first time a non-int arrives and a list whose tag
+	// never got promoted would print its elements wrongly. It is written
+	// unconditionally through a select instead of behind a branch: the store
+	// hits a cache line already dirtied by the length update, and a
+	// mispredictable branch would cost more than it saves.
+	if c.Fn == "list_append" && len(c.Args) == 3 {
+		m.ensureDecl("declare void @list_append(...)")
+		lst := strings.TrimPrefix(m.ptrOperand(c.Args[0]), "ptr ")
+		item := strings.TrimPrefix(m.ptrOperand(c.Args[1]), "ptr ")
+		tagTy, tagVal := m.operand(c.Args[2])
+		if tagTy != "i32" {
+			tr := fmt.Sprintf("%%latr%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = trunc %s %s to i32\n", tr, tagTy, tagVal)
+			tagVal = tr
+		}
+		id := m.tempID
+		m.tempID++
+		p := func(s string) string { return fmt.Sprintf("%%la%d_%s", id, s) }
+		l := func(s string) string { return fmt.Sprintf("la%d_%s", id, s) }
+
+		wprintf(&m.funcs, "  %s = icmp ne ptr %s, null\n", p("nn"), lst)
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("nn"), l("chk"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("chk"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("lenp"), lst, ListLengthOffset)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("len"), p("lenp"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("capp"), lst, ListCapacityOffset)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("cap"), p("capp"))
+		wprintf(&m.funcs, "  %s = icmp ult i64 %s, %s\n", p("room"), p("len"), p("cap"))
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("room"), l("fast"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("fast"))
+		// tag = (tag == 0 && arg != 0) ? arg : tag
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("tagp"), lst, ListTypeTagOffset)
+		wprintf(&m.funcs, "  %s = load i32, ptr %s\n", p("tag"), p("tagp"))
+		wprintf(&m.funcs, "  %s = icmp eq i32 %s, 0\n", p("tz"), p("tag"))
+		wprintf(&m.funcs, "  %s = icmp ne i32 %s, 0\n", p("an"), tagVal)
+		wprintf(&m.funcs, "  %s = and i1 %s, %s\n", p("upd"), p("tz"), p("an"))
+		wprintf(&m.funcs, "  %s = select i1 %s, i32 %s, i32 %s\n", p("nt"), p("upd"), tagVal, p("tag"))
+		wprintf(&m.funcs, "  store i32 %s, ptr %s\n", p("nt"), p("tagp"))
+		// data[len] = item; len++
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("data"), lst)
+		wprintf(&m.funcs, "  %s = getelementptr inbounds ptr, ptr %s, i64 %s\n", p("ep"), p("data"), p("len"))
+		wprintf(&m.funcs, "  store ptr %s, ptr %s\n", item, p("ep"))
+		wprintf(&m.funcs, "  %s = add i64 %s, 1\n", p("len1"), p("len"))
+		wprintf(&m.funcs, "  store i64 %s, ptr %s\n", p("len1"), p("lenp"))
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("slow"))
+		wprintf(&m.funcs, "  call void @list_append(ptr %s, ptr %s, i32 %s)\n", lst, item, tagVal)
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("done"))
+		return
+	}
+
 	// JSON get type: __json_type(node) -> i32
 	if c.Fn == "__json_type" && len(c.Args) == 1 {
 		m.ensureDecl("declare i32 @__json_type(ptr)")

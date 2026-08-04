@@ -215,12 +215,20 @@ if (-not $SkipRuntime) {
 
     $objectFiles = @()
 
+    # Extra flags for diagnostic builds, e.g.
+    #   $env:DESI_CFLAGS_EXTRA = "/DDESI_ARENA_POISON"
+    # which scribbles over every byte the arena hands back, so that reading
+    # released arena memory produces obvious garbage instead of whatever
+    # happened to still be there. See compiler/runtime/arena.c.
+    $ExtraCFlags = $env:DESI_CFLAGS_EXTRA
+    if ($ExtraCFlags) { Write-Host "  Extra C flags: $ExtraCFlags" -ForegroundColor Yellow }
+
     # Compile each runtime .c file
     foreach ($cFile in $runtimeFiles) {
         $objFile = Join-Path $BuildDir ($cFile.BaseName + ".obj")
         Write-Host "  Compiling $($cFile.Name)..." -ForegroundColor Gray
 
-        $compileCmd = "cl.exe /nologo /c /O2 /std:c17 /experimental:c11atomics /DNDEBUG `"$($cFile.FullName)`" /Fo`"$objFile`""
+        $compileCmd = "cl.exe /nologo /c /O2 /std:c17 /experimental:c11atomics /DNDEBUG $ExtraCFlags `"$($cFile.FullName)`" /Fo`"$objFile`""
         $result = Invoke-VsCommand $compileCmd
         if ($Verbose) { Write-Host $result }
 

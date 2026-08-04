@@ -560,8 +560,8 @@ Actors are ideal when:
 
 ```desi
 actor BankAccount:
-    var balance: decimal = 0.0
-    var transaction_log: list[str] = []
+    let mut balance: decimal = 0.0
+    let mut transaction_log: list[str] = []
     
     pub async def deposit(self, amount: decimal) -> Result[decimal, Error]:
         if amount <= 0:
@@ -624,8 +624,8 @@ struct PageResult:
 
 # Actor for rate limiting
 actor RateLimiter:
-    var requests_this_second: int = 0
-    var last_reset: Timestamp = Timestamp.now()
+    let mut requests_this_second: int = 0
+    let mut last_reset: Timestamp = Timestamp.now()
     
     pub async def acquire(self) -> bool:
         let now = Timestamp.now()

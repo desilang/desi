@@ -65,6 +65,10 @@ type Module struct {
 
 	// TaskGroup wrapper functions: wrapperName -> WrapperInfo
 	tgWrappers map[string]WrapperInfo
+
+	// Functions that provably cannot recurse and so need no stack guard.
+	// See GuardExemptFunctions.
+	guardExempt map[string]bool
 }
 
 // WrapperInfo tracks info needed to emit a TaskGroup wrapper function
@@ -559,11 +563,10 @@ func (m *Module) emitRet(r *hir.Ret) {
 		return
 	}
 
-	// Emit call depth decrement for user functions (skip main/__top__)
-	if !noRecursionGuard && m.curFuncName != "" && m.curFuncName != "main" && !strings.HasSuffix(m.curFuncName, "__top__") {
-		m.ensureDecl("declare void @__desi_call_exit()")
-		wprintf(&m.funcs, "  call void @__desi_call_exit()\n")
-	}
+	// No exit hook. The guard used to keep an exact call-depth counter, so every
+	// return had to decrement it; it now compares the stack pointer against a
+	// floor and changes nothing, so there is nothing to undo here. Deleting this
+	// call is most of what made the guard cheap — see compiler/runtime/limits.c.
 
 	// If there's no explicit value, return a typed zero consistent with the current function header.
 	if r.Val == nil {

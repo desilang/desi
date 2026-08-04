@@ -17,6 +17,10 @@
 #include <stdint.h>
 #include "platform.h"
 
+// Set before any thread starts so print can skip its lock while the
+// program is still single-threaded. See print.c.
+extern void __desi_note_thread_start(void);
+
 /* ---------- Future struct ---------- */
 
 typedef struct {
@@ -184,6 +188,7 @@ void __future_spawn_0(void* future, void* body_fn) {
     ctx->argc = 0;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+    __desi_note_thread_start();
 #ifdef _WIN32
     f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
 #else
@@ -199,6 +204,7 @@ void __future_spawn_1(void* future, void* body_fn, int64_t a0) {
     ctx->args[0] = a0;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+    __desi_note_thread_start();
 #ifdef _WIN32
     f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
 #else
@@ -215,6 +221,7 @@ void __future_spawn_2(void* future, void* body_fn, int64_t a0, int64_t a1) {
     ctx->args[1] = a1;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+    __desi_note_thread_start();
 #ifdef _WIN32
     f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
 #else
@@ -232,6 +239,7 @@ void __future_spawn_3(void* future, void* body_fn, int64_t a0, int64_t a1, int64
     ctx->args[2] = a2;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+    __desi_note_thread_start();
 #ifdef _WIN32
     f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
 #else
@@ -250,6 +258,7 @@ void __future_spawn_4(void* future, void* body_fn, int64_t a0, int64_t a1, int64
     ctx->args[3] = a3;
     DesiFuture* f = (DesiFuture*)future;
     f->thread_started = 1;
+    __desi_note_thread_start();
 #ifdef _WIN32
     f->thread = CreateThread(NULL, 0, __future_thread_entry, ctx, 0, NULL);
 #else

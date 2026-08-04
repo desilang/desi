@@ -1,5 +1,7 @@
 # Float benchmark: 80x80 matrix multiply over list[list[float]].
-# Exercises nested list indexing and boxed float elements (tag 3).
+# Exercises nested list indexing and float elements, which live in the slot by
+# value — they used to be heap boxes, one malloc each, which is most of what
+# this benchmark used to be measuring.
 # Elements come from a rolling 0..9 float seed (no int->float cast in the
 # language yet); C fills in the same order, so the checksum matches exactly.
 def main() -> int:
