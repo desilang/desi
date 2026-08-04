@@ -38,6 +38,6 @@ The generated wrapper:
 
 ## Examples
 
-- [336_safe_extern.desi](../../examples/336_safe_extern.desi) — basic safe extern
-- [339_safe_extern_bad_out.desi](../../examples/339_safe_extern_bad_out.desi) — invalid out param (compile error)
-- [341_safe_extern_out_param.desi](../../examples/341_safe_extern_out_param.desi) — out param with `&value`
+- [336_safe_extern.desi](https://github.com/desilang/desi/blob/main/examples/336_safe_extern.desi) — basic safe extern
+- [339_safe_extern_bad_out.desi](https://github.com/desilang/desi/blob/main/examples/339_safe_extern_bad_out.desi) — invalid out param (compile error)
+- [341_safe_extern_out_param.desi](https://github.com/desilang/desi/blob/main/examples/341_safe_extern_out_param.desi) — out param with `&value`

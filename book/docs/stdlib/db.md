@@ -768,7 +768,7 @@ This means:
 
 You don't need to manage handles manually — the compiler and runtime do it for you.
 
-See [QuerySet Handles](../features/queryset_handles.md) for the full architecture guide.
+See [QuerySet Handles](https://github.com/desilang/desi/blob/main/docs/features/queryset_handles.md) for the full architecture guide.
 
 ## See Also
 

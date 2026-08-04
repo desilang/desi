@@ -139,5 +139,5 @@ desic watch .
 
 ## See Also
 
-- [Getting Started](../getting-started/installation.md)
-- [Language Reference](../language/syntax.md)
+- [Getting Started](../getting-started/install.md)
+- [Language Reference](../language/types.md)

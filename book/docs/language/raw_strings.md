@@ -75,4 +75,4 @@ line2"
 
 ## See Also
 
-- [Examples: 246_raw_strings.desi](/examples/246_raw_strings.desi) - Comprehensive examples
+- [Examples: 246_raw_strings.desi](https://github.com/desilang/desi/blob/main/examples/246_raw_strings.desi) - Comprehensive examples
