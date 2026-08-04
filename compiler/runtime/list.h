@@ -35,6 +35,10 @@ _Static_assert(offsetof(DesiList, length) == 8,
     "backend emits getelementptr i8 +8 for DesiList.length");
 _Static_assert(offsetof(DesiList, capacity) == 16,
     "backend emits getelementptr i8 +16 for DesiList.capacity");
+_Static_assert(offsetof(DesiList, type_tag) == 24,
+    "backend maintains DesiList.type_tag inline on append");
+_Static_assert(sizeof(((DesiList*)0)->type_tag) == 4,
+    "backend loads DesiList.type_tag as i32");
 _Static_assert(sizeof(((DesiList*)0)->length) == 8,
     "backend loads DesiList.length as i64");
 _Static_assert(sizeof(((DesiList*)0)->capacity) == 8,

@@ -43,6 +43,7 @@ int main(void) {
     printf("data=%zu\n",     offsetof(DesiList, data));
     printf("length=%zu\n",   offsetof(DesiList, length));
     printf("capacity=%zu\n", offsetof(DesiList, capacity));
+    printf("type_tag=%zu\n", offsetof(DesiList, type_tag));
     return 0;
 }
 `
@@ -84,6 +85,7 @@ int main(void) {
 		"data":     llvm.ListDataOffset,
 		"length":   llvm.ListLengthOffset,
 		"capacity": llvm.ListCapacityOffset,
+		"type_tag": llvm.ListTypeTagOffset,
 	}
 	for field, expect := range want {
 		actual, present := got[field]

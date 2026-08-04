@@ -24,4 +24,10 @@ const (
 	// ListCapacityOffset is the allocated slot count, compared against length
 	// to decide whether an append can store in place or has to grow.
 	ListCapacityOffset = 16
+
+	// ListTypeTagOffset records what the list holds. An append promotes it from
+	// 0 (int, the default a fresh list starts at) the first time something else
+	// arrives, which is why an inline append has to maintain it rather than
+	// leave it to the runtime.
+	ListTypeTagOffset = 24
 )

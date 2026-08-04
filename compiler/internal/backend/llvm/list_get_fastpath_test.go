@@ -58,6 +58,56 @@ func TestListGetEmitsInlineFastPathAndKeepsSlowCall(t *testing.T) {
 	}
 }
 
+// Appending stores inline while there is room, and calls the runtime to grow.
+//
+// The type tag has to be maintained here rather than left to the runtime: it
+// starts at 0 and gets promoted the first time a non-int arrives, and a list
+// whose tag never got promoted prints its elements wrongly. It is written
+// through a select rather than behind a branch, so the check costs a store on a
+// line the length update already dirtied instead of a mispredict.
+func TestListAppendEmitsInlineStoreAndKeepsGrowCall(t *testing.T) {
+	fn := &hir.Func{
+		Name: "f",
+		Blocks: []*hir.Block{{
+			Name: "entry",
+			Stmts: []hir.Stmt{
+				&hir.Call{
+					Fn: "list_append",
+					Args: []hir.Value{
+						hir.Temp{Name: "%lst"},
+						hir.Temp{Name: "%item"},
+						hir.ConstInt{Text: "0", Type: "i32"},
+					},
+					Type: "void",
+				},
+				&hir.Ret{Val: hir.ConstInt{Text: "0"}},
+			},
+		}},
+	}
+	m := llvm.NewModule("test")
+	m.EmitFunc(fn)
+	ir := m.IR()
+
+	for _, want := range []string{
+		"getelementptr inbounds i8, ptr %lst, i64 8",  // length
+		"getelementptr inbounds i8, ptr %lst, i64 16", // capacity
+		"icmp ult i64",                                // room to store?
+		"getelementptr inbounds i8, ptr %lst, i64 24", // type tag
+		"select i1",                                   // tag maintained branch-free
+		"store ptr %item",                             // the element itself
+		"add i64",                                     // length + 1
+	} {
+		if !strings.Contains(ir, want) {
+			t.Errorf("inline append is missing %q:\n%s", want, ir)
+		}
+	}
+
+	if !strings.Contains(ir, "call void @list_append(") {
+		t.Errorf("the grow path no longer calls the runtime; reallocation and the "+
+			"arena branch would have to be duplicated inline:\n%s", ir)
+	}
+}
+
 // A list_get whose result is unused by name must not take the fast path, since
 // there would be no destination for the phi to define.
 func TestListGetWithoutDestinationFallsBackToACall(t *testing.T) {

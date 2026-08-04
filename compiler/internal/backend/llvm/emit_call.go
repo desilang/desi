@@ -402,6 +402,68 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
+	// Appending inline while there is room, with the runtime kept for growth.
+	//
+	// Same split as list_get above, and the same reason: the loop body wants to
+	// be a compare and two stores, and everything that is not that -- the null
+	// report, the reallocation, the arena branch inside it -- belongs somewhere
+	// cold. When the list has spare capacity, which is every iteration but the
+	// doubling ones, nothing here calls anything.
+	//
+	// The type tag is maintained rather than delegated, because the runtime
+	// promotes it from 0 the first time a non-int arrives and a list whose tag
+	// never got promoted would print its elements wrongly. It is written
+	// unconditionally through a select instead of behind a branch: the store
+	// hits a cache line already dirtied by the length update, and a
+	// mispredictable branch would cost more than it saves.
+	if c.Fn == "list_append" && len(c.Args) == 3 {
+		m.ensureDecl("declare void @list_append(...)")
+		lst := strings.TrimPrefix(m.ptrOperand(c.Args[0]), "ptr ")
+		item := strings.TrimPrefix(m.ptrOperand(c.Args[1]), "ptr ")
+		tagTy, tagVal := m.operand(c.Args[2])
+		if tagTy != "i32" {
+			tr := fmt.Sprintf("%%latr%d", m.tempID)
+			m.tempID++
+			wprintf(&m.funcs, "  %s = trunc %s %s to i32\n", tr, tagTy, tagVal)
+			tagVal = tr
+		}
+		id := m.tempID
+		m.tempID++
+		p := func(s string) string { return fmt.Sprintf("%%la%d_%s", id, s) }
+		l := func(s string) string { return fmt.Sprintf("la%d_%s", id, s) }
+
+		wprintf(&m.funcs, "  %s = icmp ne ptr %s, null\n", p("nn"), lst)
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("nn"), l("chk"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("chk"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("lenp"), lst, ListLengthOffset)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("len"), p("lenp"))
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("capp"), lst, ListCapacityOffset)
+		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("cap"), p("capp"))
+		wprintf(&m.funcs, "  %s = icmp ult i64 %s, %s\n", p("room"), p("len"), p("cap"))
+		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("room"), l("fast"), l("slow"))
+		wprintf(&m.funcs, "%s:\n", l("fast"))
+		// tag = (tag == 0 && arg != 0) ? arg : tag
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("tagp"), lst, ListTypeTagOffset)
+		wprintf(&m.funcs, "  %s = load i32, ptr %s\n", p("tag"), p("tagp"))
+		wprintf(&m.funcs, "  %s = icmp eq i32 %s, 0\n", p("tz"), p("tag"))
+		wprintf(&m.funcs, "  %s = icmp ne i32 %s, 0\n", p("an"), tagVal)
+		wprintf(&m.funcs, "  %s = and i1 %s, %s\n", p("upd"), p("tz"), p("an"))
+		wprintf(&m.funcs, "  %s = select i1 %s, i32 %s, i32 %s\n", p("nt"), p("upd"), tagVal, p("tag"))
+		wprintf(&m.funcs, "  store i32 %s, ptr %s\n", p("nt"), p("tagp"))
+		// data[len] = item; len++
+		wprintf(&m.funcs, "  %s = load ptr, ptr %s\n", p("data"), lst)
+		wprintf(&m.funcs, "  %s = getelementptr inbounds ptr, ptr %s, i64 %s\n", p("ep"), p("data"), p("len"))
+		wprintf(&m.funcs, "  store ptr %s, ptr %s\n", item, p("ep"))
+		wprintf(&m.funcs, "  %s = add i64 %s, 1\n", p("len1"), p("len"))
+		wprintf(&m.funcs, "  store i64 %s, ptr %s\n", p("len1"), p("lenp"))
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("slow"))
+		wprintf(&m.funcs, "  call void @list_append(ptr %s, ptr %s, i32 %s)\n", lst, item, tagVal)
+		wprintf(&m.funcs, "  br label %%%s\n", l("done"))
+		wprintf(&m.funcs, "%s:\n", l("done"))
+		return
+	}
+
 	// Release a list's owned element boxes: list_free_elems(list) -> void.
 	// Spelled out here because the generic path types a bare Var from varTypes,
 	// which reports i32 for a list local and produces an argument the verifier
