@@ -126,7 +126,7 @@ class sql_safety:
                           "f-string in raw SQL — possible injection")
 ```
 
-This is explicitly deferred from v0.1.0 to protect launch stability. See the full design: [compile_time_macros.md](todo/compile_time_macros.md).
+This is explicitly deferred from v0.1.0 to protect launch stability. See the full design: [compile_time_macros.md](planned/compile_time_macros.md).
 
 ### 2. Hybrid Memory Management (The "Holy Grail")
 -   **Escape Analysis**: Compiler automatically decides: "Does this object live forever? → Heap (RC). Does it die here? → Arena."

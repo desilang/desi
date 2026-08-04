@@ -653,7 +653,7 @@ collections cannot simply be promoted and forgotten.
 
 **Fix.** Reset the arena at the end of each iteration, so a loop body's
 allocations cost a bump-pointer increment and one reset. This is "Phase 2:
-Scope-Based Arenas" in [hybrid_memory_management.md](todo/hybrid_memory_management.md),
+Scope-Based Arenas" in [hybrid_memory_management.md](planned/hybrid_memory_management.md),
 which is **not** built despite that document's summary.
 
 **Cost — revised upward to 1–2 weeks** after implementing A and looking hard at
@@ -1034,7 +1034,7 @@ E and F remain.
 ## v0.2.0 Vision — Compile-Time Macro Introspection
 
 > **Status:** Design complete, implementation deferred to v0.2.0.
-> **Full design:** [compile_time_macros.md](todo/compile_time_macros.md)
+> **Full design:** [compile_time_macros.md](planned/compile_time_macros.md)
 
 The headline feature for v0.2.0: **write macro rules in Desi that execute during compilation with full AST access.**
 
@@ -1057,7 +1057,7 @@ The headline feature for v0.2.0: **write macro rules in Desi that execute during
 
 ## Distributed Systems (v0.2.0+ Vision)
 
-> **Status:** Research phase. Full design doc: [distributed_systems.md](todo/distributed_systems.md)
+> **Status:** Research phase. Full design doc: [distributed_systems.md](planned/distributed_systems.md)
 
 Erlang-inspired distributed actor/messaging layer built on Desi's existing concurrency primitives (channels, supervisors). Native-compiled (no VM), so this would be a TCP-based messaging protocol rather than BEAM-style location transparency.
 

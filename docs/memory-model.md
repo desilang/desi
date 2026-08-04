@@ -178,4 +178,4 @@ bugs are documented in
 [contributing/runtime/drops-implementation.md](contributing/runtime/drops-implementation.md).
 The roadmap toward closing the remaining leak boundaries (collection
 element ownership, full string-local ownership, scope arenas) is in
-[roadmap/todo/hybrid_memory_management.md](roadmap/todo/hybrid_memory_management.md).
+[roadmap/planned/hybrid_memory_management.md](roadmap/planned/hybrid_memory_management.md).

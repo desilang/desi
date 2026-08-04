@@ -1,15 +1,14 @@
-# Supervision: what Desi actually has, measured against OTP
-
-**Audited 2026-08-03**, against `compiler/runtime/supervisor.c`,
-`supervisor.h`, and `compiler/lib/sync/supervisor.desi`.
+# Supervision
 
 Desi's supervision is the most distinctive thing in the language — nobody else
 offers OTP-style supervision in a compiled language with no garbage collector.
 Elixir has the supervision but runs on a VM; Rust and Go have no supervision
-trees at all. That makes it worth knowing exactly what is and is not there
-before the first release describes it.
+trees at all.
 
-## Verdict
+This page states exactly what supervision does in **v0.1.0**, and what is
+planned beyond it, so release material describes the real thing.
+
+## Where v0.1.0 stands
 
 **Desi has a supervised worker pool. It does not have a supervision tree.**
 
@@ -73,16 +72,44 @@ the Elixir/OTP goal, the gap is the tree, not the supervisor.
 
 6. **No named registry.** No way to look a supervisor or child up by name.
 
-## What to do about it, and when
+## Planned
 
-**Before v0.1.0:** confirm and fix gap 2 if real — a strategy that exists but
-cannot be selected is a bug, not a missing feature. Everything else can wait.
+**v0.1.x** — selectable strategy (gap 2), and restart types (gap 4). Both are
+small: a constructor argument, and a policy field per child. Restart types also
+fix the current oddity where a child that finishes its work cleanly is
+restarted as though it crashed.
 
-**Not before v0.1.0:** gaps 1 and 4 are the ones that would change what
-supervision *means* in Desi, and they deserve design rather than a rushed
-implementation. Restart types (4) are cheap and mostly a policy field. Nesting
-and escalation (1) is the real project.
+**v0.2.0** — `rest_for_one` (gap 3), links and monitors (gap 5), named
+registry (gap 6). Conventional OTP features with no architectural obstacle.
 
-**Do not** describe this as OTP or as supervision trees in release material
-until gap 1 is closed. "Structured concurrency with supervisors" is honest and
-already what the README says; keep it there.
+**v0.x.0, needs design first** — nesting and escalation (gap 1), the one that
+changes what supervision *means* in Desi.
+
+The obstacle is not effort, it is that **Elixir's model does not port
+directly**. BEAM processes are isolated: each owns its heap and shares nothing,
+so killing one and restarting it is safe by construction. Desi's tasks are OS
+threads over shared memory, and a thread that dies holding a lock, or midway
+through mutating something another task can see, cannot be restarted into a
+consistent world. This is the same reason Go cannot kill a goroutine and Rust
+cannot kill a thread.
+
+Two routes out, and they should be chosen deliberately:
+
+1. **Isolate tasks properly** — a heap each, communication by copying. This is
+   what BEAM does, and it would cost much of the performance work already done.
+2. **Supervise only what is provably isolated** — have the compiler determine
+   which tasks share no mutable state, and give those real supervision.
+
+Route 2 is the same question as data-race safety: *what may safely cross a
+channel* and *what may safely be killed and restarted* have one answer —
+**state that is not shared**. Answering it once buys both, and keeps the
+surface annotation-free, which is why it is worth designing rather than
+building piecemeal. See [../vision/goals.md](../vision/goals.md).
+
+## What release material may say
+
+**"Structured concurrency with supervisors"** — accurate today, and what the
+README says.
+
+**Not** "OTP", and **not** "supervision trees", until nesting and escalation
+land.
