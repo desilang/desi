@@ -358,8 +358,8 @@ func (m *Module) emitCall(c *hir.Call) {
 	// still owns every error message and the negative-index rule, so behaviour
 	// is unchanged and there is one implementation of it.
 	//
-	// This is the one place the compiler assumes DesiList's layout: data at
-	// offset 0, length at 8. list.h fixes both.
+	// The offsets come from list_layout.go, which list.h asserts against and a
+	// test cross-checks by compiling the real header.
 	if c.Fn == "list_get" && len(c.Args) == 2 && c.Dst.Name != "" {
 		m.ensureDecl("declare ptr @list_get(...)")
 		lst := strings.TrimPrefix(m.ptrOperand(c.Args[0]), "ptr ")
@@ -378,7 +378,7 @@ func (m *Module) emitCall(c *hir.Call) {
 		wprintf(&m.funcs, "  %s = icmp ne ptr %s, null\n", p("nn"), lst)
 		wprintf(&m.funcs, "  br i1 %s, label %%%s, label %%%s\n", p("nn"), l("chk"), l("slow"))
 		wprintf(&m.funcs, "%s:\n", l("chk"))
-		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 8\n", p("lenp"), lst)
+		wprintf(&m.funcs, "  %s = getelementptr inbounds i8, ptr %s, i64 %d\n", p("lenp"), lst, ListLengthOffset)
 		wprintf(&m.funcs, "  %s = load i64, ptr %s\n", p("len"), p("lenp"))
 		wprintf(&m.funcs, "  %s = icmp sge i64 %s, 0\n", p("ge"), idxVal)
 		wprintf(&m.funcs, "  %s = icmp slt i64 %s, %s\n", p("lt"), idxVal, p("len"))
