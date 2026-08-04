@@ -758,16 +758,109 @@ arena is one large allocation and reusing bytes inside it is invisible to it.
 
 ---
 
-### C. Collection element access (not v0.1.x)
+### C. Collection element access — ✅ SHIPPED
 
-`list_ops` appends a million integers one at a time. The gap is not allocation
-strategy: each `append` is a runtime call that checks capacity and may grow,
-against C's inlined array store. Closing it means inlining `append`'s fast path
-into the caller, or specialising `list[int]` so elements are stored unboxed.
+`list_ops` appends a million integers one at a time. Each `append` and each read
+was a runtime call, against C's inlined array store.
 
-**Cost.** 1–2 weeks, and it changes how collections are represented. Deferred.
-Until then `list_ops` stays behind, and the benchmark README should say so
-rather than imply otherwise.
+**Measured first, and the measurement redirected the work twice.**
+
+A C decomposition of 1M appends + 1M reads:
+
+| | |
+|---|---|
+| typed `int64[]`, inlined — what C does | 0.76 ms |
+| `void*` slots, inlined | 0.74 ms |
+| `void*` slots, minimal out-of-line calls | 1.73 ms |
+| real `list.c`, out-of-line | 3.27 ms |
+
+**The pointer-slot representation is free for anything pointer-sized** — 0.74
+against 0.76. This section used to propose "specialising `list[int]` so elements
+are stored unboxed" as a route. It is not one: an `int64` and a `void*` are both
+eight bytes in a contiguous array, and Desi already stuffs the int straight into
+the slot. The whole gap was the call.
+
+**But inlining the call naively makes it worse**: 4.22 ms against 3.28. Both
+`list_get` and `list_append` end in `fprintf(stderr, …)` on their failure paths,
+and inlining drags a varargs call into the loop body. Adding `list.c` to the LTO
+hot set — a one-line change, and the obvious first move — would have been a
+regression.
+
+What works is the shape Rust's `Vec` uses: a small hot path, branching away to
+something cold. Same code, same semantics, error paths marked `noinline` and
+`cold`: **1.09 ms against 3.28**.
+
+**Shipped as IR emission rather than LTO.** The backend emits the check and the
+load/store inline and calls the runtime only on failure or growth. That was
+chosen over restructuring `list.c` plus LTO because LTO is not dependable:
+Windows has it but never covered `list.c`, Unix release has none at all, and
+linking bitcode needs an `lld` or gold plugin that is not always installed.
+Emitting in IR behaves identically everywhere.
+
+Results, Linux release, old and new compilers back-to-back:
+
+| | before | after | C |
+|---|---|---|---|
+| `list_ops` | 10–15 ms | **6 ms** | 4–6 ms |
+| `alloc_churn` | 13–16 ms | **8–9 ms** | 2 ms |
+| `matrix_mul` | 4–5 ms | **3 ms** | 1 ms |
+
+`list_ops` is level with C. `alloc_churn`'s remainder is the allocation itself,
+not element access.
+
+**This made `DesiList`'s layout an ABI.** The backend reads `data`, `length`,
+`capacity` and `type_tag` at fixed offsets. `list.h` asserts them,
+`list_layout.go` names them, and `list_layout_test.go` compiles a probe against
+the real header and compares — verified to fire.
+
+**Still to do here:** `dict` and `set` get their elements the same way and would
+take the same treatment. `dict.c` is already in the Windows LTO set, so measure
+before assuming the gap is the same shape.
+
+---
+
+### C2. Stop boxing floats
+
+**Not started. The largest single number left on the table.**
+
+A list element is a pointer-sized slot. Ints go in directly. A `float` does not:
+each one is a separate `malloc` holding the double, and the slot holds a pointer
+to it. Measured over 1M appends + reads:
+
+| | |
+|---|---|
+| boxed slots, via calls — Desi's `list[float]` | 28.65 ms |
+| real `double[]`, inlined — Rust's `Vec<f64>` | 1.18 ms |
+
+**24x.** It is also the cause of a leak that `list_free_elems` currently mops up
+after: the boxes are `malloc`'d, so an arena list of floats leaks one per
+element until something frees them. Fixing the representation deletes that
+problem rather than managing it.
+
+**The fix.** A `double` is eight bytes and so is a slot on every target Desi
+supports, so the bits go straight in, exactly as ints already do — bitcast on
+the way in, bitcast on the way out. No allocation, no indirection, no leak.
+
+**Where the work is.** Lowering creates the box today (the runtime receives an
+already-boxed pointer — see `list_clone_elem`). So:
+
+1. Lowering: emit a bitcast into the slot instead of a `malloc` and store.
+2. `list.c`: roughly ten `DESI_TAG_FLOAT` special cases — `list_clone_elem`,
+   `list_set`, `list_copy`, `list_extend`, the slice and map/filter builders —
+   become plain slot copies.
+3. Delete `desi_free_float_elems`, `list_free_elems`, and the scope-exit call
+   the lowerer emits for arena lists. The leak class goes with them.
+4. Guard the assumption: `_Static_assert(sizeof(double) <= sizeof(void*))`, next
+   to the layout assertions that already exist.
+5. Check `dict` and `set` for the same pattern before assuming lists are the
+   only place it appears.
+
+Net this **removes** more code than it adds. The risk is breadth, not depth:
+every float path needs re-validating, and the float examples in the suite are
+the ones to watch.
+
+**Payoff.** 24x on float-heavy code, one documented leak boundary closed
+outright, and `memory-model.md` gets simpler rather than more qualified.
 
 ---
 
@@ -887,7 +980,8 @@ deciding deliberately, not under release pressure.
 
 ### Order
 
-**D (done) → A+B (done) → E and F as they fit.** C and G are 0.2.0 material,
+**D (done) → A+B (done) → F (done) → C (done) → C2 → stack-allocate objects →
+analyses onto the CFG.** G is 0.2.0 material,
 and so is D's language half.
 
 This is a change from the original A → D → B. A was implemented first, measured,
