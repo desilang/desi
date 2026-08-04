@@ -76,7 +76,7 @@ near parity" rather than a measured ratio.
 | `alloc_churn` | 500k short-lived lists, freed per iteration by scope-exit drops |
 | `list_ops` | Collections: 1M appends with growth, 1M indexed reads, scope-exit free |
 | `dict_ops` | Hash map: 100k int-keyed inserts + 100k lookups vs open addressing |
-| `matrix_mul` | Float math: 80x80 matrix multiply over list[list[float]] (boxed elements) vs flat C arrays |
+| `matrix_mul` | Float math: 80x80 matrix multiply over list[list[float]] vs flat C arrays |
 | `quicksort` | Sorting & In-place partitioning: 10k deterministic integers sorted with iterative QuickSort |
 | `binary_tree` | Object/Class allocation & Tree traversal: 10k BST node insertion & in-order traversal |
 
