@@ -464,16 +464,6 @@ func (m *Module) emitCall(c *hir.Call) {
 		return
 	}
 
-	// Release a list's owned element boxes: list_free_elems(list) -> void.
-	// Spelled out here because the generic path types a bare Var from varTypes,
-	// which reports i32 for a list local and produces an argument the verifier
-	// rejects. ptrOperand loads it as the pointer it is.
-	if c.Fn == "list_free_elems" && len(c.Args) == 1 {
-		m.ensureDecl("declare void @list_free_elems(ptr)")
-		wprintf(&m.funcs, "  call void @list_free_elems(%s)\n", m.ptrOperand(c.Args[0]))
-		return
-	}
-
 	// JSON get type: __json_type(node) -> i32
 	if c.Fn == "__json_type" && len(c.Args) == 1 {
 		m.ensureDecl("declare i32 @__json_type(ptr)")

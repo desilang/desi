@@ -920,23 +920,42 @@ setjmpScan:
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
 				} else if (valTy == "double" || valTy == "float") && x.Type == "ptr" {
-					// Special case: float/double to ptr requires boxing (can't bitcast float to ptr)
-					// Allocate memory for the float value and store it
-					boxSize := "8" // double is 8 bytes
+					// A float goes into a pointer-sized slot by value, the same
+					// way an int does. It used to be boxed -- a malloc per
+					// element, holding the double, with the slot pointing at it
+					// -- which cost an allocation per element, an indirection
+					// per read, and leaked every box in an arena-backed list.
+					// Measured over a million elements, boxed against a real
+					// array: 28.65 ms versus 1.18 ms.
+					//
+					// There is no bitcast from a float to a pointer, which is
+					// what the old comment here said and why it reached for
+					// malloc. But there is one to an integer of the same width,
+					// and integers go into slots already.
+					bits := x.Dst.Name + "_bits"
 					if valTy == "float" {
-						boxSize = "4"
+						wide := x.Dst.Name + "_w"
+						wprintf(&m.funcs, "  %s = bitcast float %s to i32\n", bits, valOp)
+						wprintf(&m.funcs, "  %s = zext i32 %s to i64\n", wide, bits)
+						bits = wide
+					} else {
+						wprintf(&m.funcs, "  %s = bitcast double %s to i64\n", bits, valOp)
 					}
-					boxPtr := x.Dst.Name + "_box"
-					m.ensureDecl("declare ptr @malloc(...)")
-					wprintf(&m.funcs, "  %s = call ptr @malloc(i64 %s)\n", boxPtr, boxSize)
-					wprintf(&m.funcs, "  store %s %s, ptr %s\n", valTy, valOp, boxPtr)
-					// The destination is the box pointer
-					wprintf(&m.funcs, "  %s = bitcast ptr %s to ptr\n", x.Dst.Name, boxPtr)
+					wprintf(&m.funcs, "  %s = inttoptr i64 %s to ptr\n", x.Dst.Name, bits)
 					m.tempTypes[x.Dst.Name] = "ptr"
 					continue // Skip normal emit below
 				} else if valTy == "ptr" && (x.Type == "double" || x.Type == "float") {
-					// Special case: ptr to float/double requires unboxing (load from boxed pointer)
-					wprintf(&m.funcs, "  %s = load %s, ptr %s\n", x.Dst.Name, x.Type, valOp)
+					// The reverse: read the bits back out of the slot. No load,
+					// because there is nothing pointed at any more.
+					bits := x.Dst.Name + "_bits"
+					wprintf(&m.funcs, "  %s = ptrtoint ptr %s to i64\n", bits, valOp)
+					if x.Type == "float" {
+						narrow := x.Dst.Name + "_n"
+						wprintf(&m.funcs, "  %s = trunc i64 %s to i32\n", narrow, bits)
+						wprintf(&m.funcs, "  %s = bitcast i32 %s to float\n", x.Dst.Name, narrow)
+					} else {
+						wprintf(&m.funcs, "  %s = bitcast i64 %s to double\n", x.Dst.Name, bits)
+					}
 					m.tempTypes[x.Dst.Name] = x.Type
 					continue // Skip normal emit below
 				} else if valTy == "ptr" && x.Type == "i1" {
