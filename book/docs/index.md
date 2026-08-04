@@ -3,7 +3,7 @@
 <div style="text-align: center; margin: 2rem 0;">
   <img src="assets/images/desi_wordmark.png" alt="Desi — દેશી" style="max-width: 360px; width: 100%; height: auto;">
   <h2 style="color: #FF6B35;">A Modern, Python-Inspired Systems Language</h2>
-  <p><strong>Version 0.1.0</strong> (Pre-release)</p>
+  <p><strong>Version 0.1.0</strong></p>
 </div>
 
 ---
@@ -99,10 +99,17 @@ Ready to try Desi? Start here:
 
 ## Status
 
-Desi is currently in active development. Version **0.1.0** is being prepared for initial release.
+Version **0.1.0** is the first release. Desi is under active development.
 
-!!! warning "Pre-release"
-    This documentation is for the upcoming v0.1.0 release. Some features may change.
+!!! note "0.x means the language can still change"
+    Desi follows semantic versioning, and a leading zero is a promise in its
+    own right: **the surface language may change between 0.x releases.** Code
+    written today may need small edits to compile against 0.2.0.
+
+    What will not change under you is the memory model. No use-after-free and
+    no double-free in safe code, and where the compiler cannot prove ownership
+    it leaks rather than guesses — see [the memory model](https://github.com/desilang/desi/blob/main/docs/memory-model.md) for
+    exactly what that does and does not cover.
 
 ---
 
