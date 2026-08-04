@@ -1,8 +1,17 @@
 name: Docs
 
 on:
+  # The book is validated on every branch that could reach a release, and
+  # deployed only from main. Before this split, `mkdocs build` first ran as
+  # part of `mike deploy --push` — so a broken internal link or a page missing
+  # from the nav was discovered by publishing it to the live site.
   push:
-    branches: [main]
+    branches: [main, 'dev-**']
+    paths:
+      - 'book/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [main, 'dev-**']
     paths:
       - 'book/**'
       - '.github/workflows/docs.yml'
@@ -22,7 +31,40 @@ permissions:
   contents: write
 
 jobs:
+  # Build without deploying, and fail on any warning. --strict is the whole
+  # point: mkdocs treats a dangling link, an unresolved reference, or a file
+  # absent from the nav as a warning and builds anyway, which on a docs site is
+  # indistinguishable from being broken.
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          pip install mkdocs-material mike
+          pip install -e book/
+
+      - name: Build the book (strict)
+        working-directory: book
+        run: mkdocs build --strict
+
   deploy:
+    # Never publish a book that did not build cleanly.
+    needs: build
+    # Publishing stays exactly where it was: main, a release, or an explicit
+    # manual run. The push trigger above now also fires for dev-** branches so
+    # they get validated, and the "Deploy dev docs" step below keys off
+    # `github.event_name == 'push'` — without this guard, adding dev-** to the
+    # trigger would have started publishing the live site from release branches.
+    if: >-
+      github.event_name == 'release' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
