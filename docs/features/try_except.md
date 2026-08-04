@@ -7,7 +7,7 @@ Desi provides Python-style error handling via `try`/`except`/`finally`/`raise`. 
 | Statement | Purpose | Description |
 |-----------|---------|-------------|
 | `try:` | Guard dangerous code | Wraps a block that may raise exceptions or use `?` |
-| `except [Type] [as var]:` | Handle errors | Catches exceptions by type or as a catch-all |
+| `except [Type] [as name]:` | Handle errors | Catches exceptions by type or as a catch-all |
 | `finally:` | Cleanup | Always runs, whether or not an error occurred |
 | `raise` | Signal an error | Raises a catchable exception |
 

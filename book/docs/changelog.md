@@ -37,7 +37,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Core Language**
 
-- Variables with `let` (immutable) and `var` (mutable)
+- Variables with `let`, and `let mut` where the binding may be reassigned
 - Type inference with optional annotations
 - Functions with `def`, lambdas, closures
 - Classes with inheritance, static/class methods, operator overloading

@@ -419,7 +419,7 @@ Deliver Python-like ergonomics without dynamic typing: default parameters, a lig
 
 * **AST nodes**: `TryStmt` (Body, Except, Finally, ExceptVar, ExceptType) and `RaiseStmt` (Value).
 * **Parser**: `parseTry()` / `parseRaise()` with Python-style syntax:
-  * `try:` body, `except [Type] [as var]:` handler, `finally:` block.
+  * `try:` body, `except [Type] [as name]:` handler, `finally:` block.
 * **Type checker**: recursive checking of try/except/finally blocks; except variable bound as `str`.
 * **Lowerer**: `TryStmt` creates except/continuation/finally blocks with scope management.
   * `TryExpr` (`?` operator) is **context-aware** — inside a try block, Err redirects to the except handler instead of early return.

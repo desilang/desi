@@ -12,7 +12,7 @@ Desi is a programming language designed for developers who:
 - Need native performance
 - Want memory safety without garbage collection
 
-The name "Desi" (देसी) means "local" or "native" in Hindi - representing code that compiles to native machine code.
+The name "Desi" (દેશી) means "local" or "native" in Gujarati - representing code that compiles to native machine code.
 
 ---
 
