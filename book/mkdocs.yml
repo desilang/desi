@@ -129,6 +129,7 @@ nav:
     - Operators: reference/operators.md
     - Keywords: reference/keywords.md
     - desic CLI: reference/desic-cli.md
+    - desi.mod Manifest: reference/desi-mod.md
     - desic doc: reference/desic-doc.md
     - Diagnostics: reference/diagnostics.md
     - Known Limitations: reference/known-limitations.md

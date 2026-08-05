@@ -156,7 +156,8 @@ print(f"Hello {name}, count is {count}")
 
 ## Creating a Project
 
-For larger programs, use `desic init` to create a project with a `desi.mod` manifest:
+For larger programs, use `desic init` to create a project with a
+[`desi.mod` manifest](../reference/desi-mod.md):
 
 ```bash
 desic init myapp
