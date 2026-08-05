@@ -2471,6 +2471,17 @@
       <ul class="md-nav__list">
         
           <li class="md-nav__item">
+  <a href="#no-prebuilt-binary-for-macos-on-intel" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No prebuilt binary for macOS on Intel
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#no-prebuilt-binary-for-linux-arm64" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -4826,6 +4837,15 @@ rather than inferred from the source. Where there is a workaround it is given.</
 is a bug report we want.</p>
 <hr />
 <h2 id="platform-and-distribution">Platform and distribution<a class="headerlink" href="#platform-and-distribution" title="Permanent link">&para;</a></h2>
+<h3 id="no-prebuilt-binary-for-macos-on-intel">No prebuilt binary for macOS on Intel<a class="headerlink" href="#no-prebuilt-binary-for-macos-on-intel" title="Permanent link">&para;</a></h3>
+<p>The prebuilt macOS binary is arm64 only — it runs on Apple Silicon and not on an
+Intel Mac. Desi builds from source there, so <code>make</code> works; there is just no
+package to download.</p>
+<p>The release matrix used to build this on <code>macos-13</code>, the last Intel macOS runner
+image, which GitHub has retired. The intended fix is a universal binary produced
+from the arm64 image, which can target both architectures — that changes the
+macOS build path and was not something to ship untested during the 0.1.0
+release, so it is scheduled for 0.1.1.</p>
 <h3 id="no-prebuilt-binary-for-linux-arm64">No prebuilt binary for Linux arm64<a class="headerlink" href="#no-prebuilt-binary-for-linux-arm64" title="Permanent link">&para;</a></h3>
 <p>Desi builds from source on Linux arm64, but there is no prebuilt binary and no CI
 coverage, because the release matrix has no runner for it. macOS arm64 is fully
