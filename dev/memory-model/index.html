@@ -12,31 +12,31 @@
         <meta name="author" content="Desi Team">
       
       
-        <link rel="canonical" href="https://desilang.org/dev/stdlib/color/">
+        <link rel="canonical" href="https://desilang.org/dev/memory-model/">
       
       
-        <link rel="prev" href="../validate/">
+        <link rel="prev" href="../language/mutability/">
       
       
-        <link rel="next" href="../compress/">
+        <link rel="next" href="../language/control-flow/">
       
       
         
       
       
-      <link rel="icon" href="../../assets/images/favicon.ico">
+      <link rel="icon" href="../assets/images/favicon.ico">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.7.7">
     
     
       
-        <title>Color - The Desi Book</title>
+        <title>Memory Model - The Desi Book</title>
       
     
     
-      <link rel="stylesheet" href="../../assets/stylesheets/main.ec1eaa64.min.css">
+      <link rel="stylesheet" href="../assets/stylesheets/main.ec1eaa64.min.css">
       
         
-        <link rel="stylesheet" href="../../assets/stylesheets/palette.ab4e12ef.min.css">
+        <link rel="stylesheet" href="../assets/stylesheets/palette.ab4e12ef.min.css">
       
       
 
@@ -55,9 +55,9 @@
       
     
     
-      <link rel="stylesheet" href="../../stylesheets/saffron.css">
+      <link rel="stylesheet" href="../stylesheets/saffron.css">
     
-    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -82,7 +82,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#color-module" class="md-skip">
+        <a href="#desi-memory-model" class="md-skip">
           Skip to content
         </a>
       
@@ -100,9 +100,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href="../.." title="The Desi Book" class="md-header__button md-logo" aria-label="The Desi Book" data-md-component="logo">
+    <a href=".." title="The Desi Book" class="md-header__button md-logo" aria-label="The Desi Book" data-md-component="logo">
       
-  <img src="../../assets/images/desi_square_icon.png" alt="logo">
+  <img src="../assets/images/desi_square_icon.png" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -119,7 +119,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Color
+              Memory Model
             
           </span>
         </div>
@@ -232,7 +232,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../.." class="md-tabs__link">
+      <a href=".." class="md-tabs__link">
         
   
   
@@ -253,7 +253,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../getting-started/install/" class="md-tabs__link">
+        <a href="../getting-started/install/" class="md-tabs__link">
           
   
   
@@ -273,7 +273,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../guides/coming-from/" class="md-tabs__link">
+        <a href="../guides/coming-from/" class="md-tabs__link">
           
   
   
@@ -293,7 +293,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../tutorials/intro/" class="md-tabs__link">
+        <a href="../tutorials/intro/" class="md-tabs__link">
           
   
   
@@ -309,11 +309,13 @@
   
   
   
+    
+  
   
     
     
-      <li class="md-tabs__item">
-        <a href="../../language/types/" class="md-tabs__link">
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../language/types/" class="md-tabs__link">
           
   
   
@@ -333,7 +335,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../generics/trait-bounds/" class="md-tabs__link">
+        <a href="../generics/trait-bounds/" class="md-tabs__link">
           
   
   
@@ -353,7 +355,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../reference/builtins/" class="md-tabs__link">
+        <a href="../reference/builtins/" class="md-tabs__link">
           
   
   
@@ -369,13 +371,11 @@
   
   
   
-    
-  
   
     
     
-      <li class="md-tabs__item md-tabs__item--active">
-        <a href="../strings/" class="md-tabs__link">
+      <li class="md-tabs__item">
+        <a href="../stdlib/strings/" class="md-tabs__link">
           
   
   
@@ -395,7 +395,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../../concurrency/thread-safety/" class="md-tabs__link">
+        <a href="../concurrency/thread-safety/" class="md-tabs__link">
           
   
   
@@ -413,7 +413,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../examples/" class="md-tabs__link">
+      <a href="../examples/" class="md-tabs__link">
         
   
   
@@ -432,7 +432,7 @@
   
   
     <li class="md-tabs__item">
-      <a href="../../changelog/" class="md-tabs__link">
+      <a href="../changelog/" class="md-tabs__link">
         
   
   
@@ -469,9 +469,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href="../.." title="The Desi Book" class="md-nav__button md-logo" aria-label="The Desi Book" data-md-component="logo">
+    <a href=".." title="The Desi Book" class="md-nav__button md-logo" aria-label="The Desi Book" data-md-component="logo">
       
-  <img src="../../assets/images/desi_square_icon.png" alt="logo">
+  <img src="../assets/images/desi_square_icon.png" alt="logo">
 
     </a>
     The Desi Book
@@ -498,7 +498,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../.." class="md-nav__link">
+      <a href=".." class="md-nav__link">
         
   
   
@@ -579,7 +579,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/install/" class="md-nav__link">
+      <a href="../getting-started/install/" class="md-nav__link">
         
   
   
@@ -607,7 +607,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/first-program/" class="md-nav__link">
+      <a href="../getting-started/first-program/" class="md-nav__link">
         
   
   
@@ -635,7 +635,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/repl/" class="md-nav__link">
+      <a href="../getting-started/repl/" class="md-nav__link">
         
   
   
@@ -663,7 +663,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../getting-started/ide-setup/" class="md-nav__link">
+      <a href="../getting-started/ide-setup/" class="md-nav__link">
         
   
   
@@ -752,7 +752,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/coming-from/" class="md-nav__link">
+      <a href="../guides/coming-from/" class="md-nav__link">
         
   
   
@@ -780,7 +780,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../guides/windows-networking/" class="md-nav__link">
+      <a href="../guides/windows-networking/" class="md-nav__link">
         
   
   
@@ -869,7 +869,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/intro/" class="md-nav__link">
+      <a href="../tutorials/intro/" class="md-nav__link">
         
   
   
@@ -897,7 +897,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/variables/" class="md-nav__link">
+      <a href="../tutorials/variables/" class="md-nav__link">
         
   
   
@@ -925,7 +925,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/functions/" class="md-nav__link">
+      <a href="../tutorials/functions/" class="md-nav__link">
         
   
   
@@ -953,7 +953,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/collections/" class="md-nav__link">
+      <a href="../tutorials/collections/" class="md-nav__link">
         
   
   
@@ -981,7 +981,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/classes/" class="md-nav__link">
+      <a href="../tutorials/classes/" class="md-nav__link">
         
   
   
@@ -1009,7 +1009,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../tutorials/generics/" class="md-nav__link">
+      <a href="../tutorials/generics/" class="md-nav__link">
         
   
   
@@ -1041,28 +1041,31 @@
       
   
   
+    
   
   
+  
     
     
     
     
+      
+        
+        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
         
           
-        
-        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_5" >
-        
-          
-          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="">
             
   
   
@@ -1080,7 +1083,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_5">
             <span class="md-nav__icon md-icon"></span>
             
@@ -1098,7 +1101,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/types/" class="md-nav__link">
+      <a href="../language/types/" class="md-nav__link">
         
   
   
@@ -1126,7 +1129,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/mutability/" class="md-nav__link">
+      <a href="../language/mutability/" class="md-nav__link">
         
   
   
@@ -1151,10 +1154,37 @@
                 
   
   
+    
   
   
-    <li class="md-nav__item">
-      <a href="../../memory-model/" class="md-nav__link">
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Memory Model
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
         
   
   
@@ -1170,6 +1200,125 @@
   
 
       </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#the-core-rule" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The core rule
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-gets-freed-at-scope-exit" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What gets freed at scope exit
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#move-semantics-ownership-transfers-never-duplicates" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Move semantics: ownership transfers, never duplicates
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#borrowing-reading-without-owning" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Borrowing: reading without owning
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#string-accumulators" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        String accumulators
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#what-leaks-by-design" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What leaks, by design
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#loops-reuse-their-scratch-memory" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Loops reuse their scratch memory
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#the-safety-guarantee" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        The safety guarantee
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#for-contributors" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        For contributors
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
     </li>
   
 
@@ -1182,7 +1331,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/control-flow/" class="md-nav__link">
+      <a href="../language/control-flow/" class="md-nav__link">
         
   
   
@@ -1210,7 +1359,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/match/" class="md-nav__link">
+      <a href="../language/match/" class="md-nav__link">
         
   
   
@@ -1238,7 +1387,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/functions/" class="md-nav__link">
+      <a href="../language/functions/" class="md-nav__link">
         
   
   
@@ -1266,7 +1415,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/lambdas/" class="md-nav__link">
+      <a href="../language/lambdas/" class="md-nav__link">
         
   
   
@@ -1294,7 +1443,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/classes/" class="md-nav__link">
+      <a href="../language/classes/" class="md-nav__link">
         
   
   
@@ -1322,7 +1471,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/enums/" class="md-nav__link">
+      <a href="../language/enums/" class="md-nav__link">
         
   
   
@@ -1350,7 +1499,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/generics/" class="md-nav__link">
+      <a href="../language/generics/" class="md-nav__link">
         
   
   
@@ -1378,7 +1527,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/modules/" class="md-nav__link">
+      <a href="../language/modules/" class="md-nav__link">
         
   
   
@@ -1406,7 +1555,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/collections/" class="md-nav__link">
+      <a href="../language/collections/" class="md-nav__link">
         
   
   
@@ -1434,7 +1583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/strings/" class="md-nav__link">
+      <a href="../language/strings/" class="md-nav__link">
         
   
   
@@ -1462,7 +1611,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/tuples/" class="md-nav__link">
+      <a href="../language/tuples/" class="md-nav__link">
         
   
   
@@ -1490,7 +1639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/slicing/" class="md-nav__link">
+      <a href="../language/slicing/" class="md-nav__link">
         
   
   
@@ -1518,7 +1667,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/iterators/" class="md-nav__link">
+      <a href="../language/iterators/" class="md-nav__link">
         
   
   
@@ -1546,7 +1695,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/iteration/" class="md-nav__link">
+      <a href="../language/iteration/" class="md-nav__link">
         
   
   
@@ -1574,7 +1723,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/error-handling/" class="md-nav__link">
+      <a href="../language/error-handling/" class="md-nav__link">
         
   
   
@@ -1602,7 +1751,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/macros/" class="md-nav__link">
+      <a href="../language/macros/" class="md-nav__link">
         
   
   
@@ -1630,7 +1779,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/rc/" class="md-nav__link">
+      <a href="../language/rc/" class="md-nav__link">
         
   
   
@@ -1658,7 +1807,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/pipeline/" class="md-nav__link">
+      <a href="../language/pipeline/" class="md-nav__link">
         
   
   
@@ -1686,7 +1835,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/membership/" class="md-nav__link">
+      <a href="../language/membership/" class="md-nav__link">
         
   
   
@@ -1714,7 +1863,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/is-operator/" class="md-nav__link">
+      <a href="../language/is-operator/" class="md-nav__link">
         
   
   
@@ -1742,7 +1891,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/division/" class="md-nav__link">
+      <a href="../language/division/" class="md-nav__link">
         
   
   
@@ -1770,7 +1919,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/dunder-methods/" class="md-nav__link">
+      <a href="../language/dunder-methods/" class="md-nav__link">
         
   
   
@@ -1798,7 +1947,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/builtins/" class="md-nav__link">
+      <a href="../language/builtins/" class="md-nav__link">
         
   
   
@@ -1826,7 +1975,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/raw_strings/" class="md-nav__link">
+      <a href="../language/raw_strings/" class="md-nav__link">
         
   
   
@@ -1854,7 +2003,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/global-constants/" class="md-nav__link">
+      <a href="../language/global-constants/" class="md-nav__link">
         
   
   
@@ -1882,7 +2031,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/arena/" class="md-nav__link">
+      <a href="../language/arena/" class="md-nav__link">
         
   
   
@@ -1910,7 +2059,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/ptr/" class="md-nav__link">
+      <a href="../language/ptr/" class="md-nav__link">
         
   
   
@@ -1938,7 +2087,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/json/" class="md-nav__link">
+      <a href="../language/json/" class="md-nav__link">
         
   
   
@@ -1966,7 +2115,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/safe-ffi/" class="md-nav__link">
+      <a href="../language/safe-ffi/" class="md-nav__link">
         
   
   
@@ -1994,7 +2143,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../language/assert/" class="md-nav__link">
+      <a href="../language/assert/" class="md-nav__link">
         
   
   
@@ -2083,7 +2232,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../generics/trait-bounds/" class="md-nav__link">
+      <a href="../generics/trait-bounds/" class="md-nav__link">
         
   
   
@@ -2111,7 +2260,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../generics/turbofish/" class="md-nav__link">
+      <a href="../generics/turbofish/" class="md-nav__link">
         
   
   
@@ -2200,7 +2349,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/builtins/" class="md-nav__link">
+      <a href="../reference/builtins/" class="md-nav__link">
         
   
   
@@ -2228,7 +2377,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/operators/" class="md-nav__link">
+      <a href="../reference/operators/" class="md-nav__link">
         
   
   
@@ -2256,7 +2405,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/keywords/" class="md-nav__link">
+      <a href="../reference/keywords/" class="md-nav__link">
         
   
   
@@ -2284,7 +2433,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/desic-cli/" class="md-nav__link">
+      <a href="../reference/desic-cli/" class="md-nav__link">
         
   
   
@@ -2312,7 +2461,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/desi-mod/" class="md-nav__link">
+      <a href="../reference/desi-mod/" class="md-nav__link">
         
   
   
@@ -2340,7 +2489,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/desic-doc/" class="md-nav__link">
+      <a href="../reference/desic-doc/" class="md-nav__link">
         
   
   
@@ -2368,7 +2517,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/diagnostics/" class="md-nav__link">
+      <a href="../reference/diagnostics/" class="md-nav__link">
         
   
   
@@ -2396,7 +2545,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../reference/known-limitations/" class="md-nav__link">
+      <a href="../reference/known-limitations/" class="md-nav__link">
         
   
   
@@ -2428,31 +2577,28 @@
       
   
   
-    
   
   
-  
     
     
     
     
-      
-        
-        
       
       
         
       
     
     
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--nested">
       
         
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
         
           
-          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="">
+        
+        <input class="md-nav__toggle md-toggle md-toggle--indeterminate" type="checkbox" id="__nav_8" >
+        
+          
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
             
   
   
@@ -2470,7 +2616,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="false">
           <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
@@ -2488,7 +2634,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../strings/" class="md-nav__link">
+      <a href="../stdlib/strings/" class="md-nav__link">
         
   
   
@@ -2516,7 +2662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../os/" class="md-nav__link">
+      <a href="../stdlib/os/" class="md-nav__link">
         
   
   
@@ -2544,7 +2690,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../io/" class="md-nav__link">
+      <a href="../stdlib/io/" class="md-nav__link">
         
   
   
@@ -2572,7 +2718,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../path/" class="md-nav__link">
+      <a href="../stdlib/path/" class="md-nav__link">
         
   
   
@@ -2600,7 +2746,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../fs/" class="md-nav__link">
+      <a href="../stdlib/fs/" class="md-nav__link">
         
   
   
@@ -2628,7 +2774,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sys/" class="md-nav__link">
+      <a href="../stdlib/sys/" class="md-nav__link">
         
   
   
@@ -2656,7 +2802,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../math/" class="md-nav__link">
+      <a href="../stdlib/math/" class="md-nav__link">
         
   
   
@@ -2684,7 +2830,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../random/" class="md-nav__link">
+      <a href="../stdlib/random/" class="md-nav__link">
         
   
   
@@ -2712,7 +2858,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../time/" class="md-nav__link">
+      <a href="../stdlib/time/" class="md-nav__link">
         
   
   
@@ -2740,7 +2886,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../datetime/" class="md-nav__link">
+      <a href="../stdlib/datetime/" class="md-nav__link">
         
   
   
@@ -2768,7 +2914,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../json/" class="md-nav__link">
+      <a href="../stdlib/json/" class="md-nav__link">
         
   
   
@@ -2796,7 +2942,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../marshal/" class="md-nav__link">
+      <a href="../stdlib/marshal/" class="md-nav__link">
         
   
   
@@ -2824,7 +2970,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../toml/" class="md-nav__link">
+      <a href="../stdlib/toml/" class="md-nav__link">
         
   
   
@@ -2852,7 +2998,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../csv/" class="md-nav__link">
+      <a href="../stdlib/csv/" class="md-nav__link">
         
   
   
@@ -2880,7 +3026,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../http/" class="md-nav__link">
+      <a href="../stdlib/http/" class="md-nav__link">
         
   
   
@@ -2908,7 +3054,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../http_server/" class="md-nav__link">
+      <a href="../stdlib/http_server/" class="md-nav__link">
         
   
   
@@ -2936,7 +3082,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../websocket/" class="md-nav__link">
+      <a href="../stdlib/websocket/" class="md-nav__link">
         
   
   
@@ -2964,7 +3110,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../net/" class="md-nav__link">
+      <a href="../stdlib/net/" class="md-nav__link">
         
   
   
@@ -2992,7 +3138,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../log/" class="md-nav__link">
+      <a href="../stdlib/log/" class="md-nav__link">
         
   
   
@@ -3020,7 +3166,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../fmt/" class="md-nav__link">
+      <a href="../stdlib/fmt/" class="md-nav__link">
         
   
   
@@ -3048,7 +3194,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../re/" class="md-nav__link">
+      <a href="../stdlib/re/" class="md-nav__link">
         
   
   
@@ -3076,7 +3222,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../template/" class="md-nav__link">
+      <a href="../stdlib/template/" class="md-nav__link">
         
   
   
@@ -3104,7 +3250,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../crypto/" class="md-nav__link">
+      <a href="../stdlib/crypto/" class="md-nav__link">
         
   
   
@@ -3132,7 +3278,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../hash/" class="md-nav__link">
+      <a href="../stdlib/hash/" class="md-nav__link">
         
   
   
@@ -3160,7 +3306,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../base64/" class="md-nav__link">
+      <a href="../stdlib/base64/" class="md-nav__link">
         
   
   
@@ -3188,7 +3334,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../encoding/" class="md-nav__link">
+      <a href="../stdlib/encoding/" class="md-nav__link">
         
   
   
@@ -3216,7 +3362,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../uuid/" class="md-nav__link">
+      <a href="../stdlib/uuid/" class="md-nav__link">
         
   
   
@@ -3244,7 +3390,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../validate/" class="md-nav__link">
+      <a href="../stdlib/validate/" class="md-nav__link">
         
   
   
@@ -3269,37 +3415,10 @@
                 
   
   
-    
   
   
-  
-    <li class="md-nav__item md-nav__item--active">
-      
-      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
-      
-      
-        
-      
-      
-        <label class="md-nav__link md-nav__link--active" for="__toc">
-          
-  
-  
-  <span class="md-ellipsis">
-    
-  
-    Color
-  
-
-    
-  </span>
-  
-  
-
-          <span class="md-nav__icon md-icon"></span>
-        </label>
-      
-      <a href="./" class="md-nav__link md-nav__link--active">
+    <li class="md-nav__item">
+      <a href="../stdlib/color/" class="md-nav__link">
         
   
   
@@ -3315,120 +3434,6 @@
   
 
       </a>
-      
-        
-
-<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
-  
-  
-  
-    
-  
-  
-    <label class="md-nav__title" for="__toc">
-      <span class="md-nav__icon md-icon"></span>
-      Table of contents
-    </label>
-    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
-      
-        <li class="md-nav__item">
-  <a href="#import" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Import
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#api-reference" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        API Reference
-      
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="API Reference">
-      <ul class="md-nav__list">
-        
-          <li class="md-nav__item">
-  <a href="#foreground-colors" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Foreground Colors
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#text-styles" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Text Styles
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#backgrounds" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Backgrounds
-      
-    </span>
-  </a>
-  
-</li>
-        
-          <li class="md-nav__item">
-  <a href="#advanced" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Advanced
-      
-    </span>
-  </a>
-  
-</li>
-        
-      </ul>
-    </nav>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#usage-example" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        Usage Example
-      
-    </span>
-  </a>
-  
-</li>
-      
-        <li class="md-nav__item">
-  <a href="#see-also" class="md-nav__link">
-    <span class="md-ellipsis">
-      
-        See Also
-      
-    </span>
-  </a>
-  
-</li>
-      
-    </ul>
-  
-</nav>
-      
     </li>
   
 
@@ -3441,7 +3446,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../compress/" class="md-nav__link">
+      <a href="../stdlib/compress/" class="md-nav__link">
         
   
   
@@ -3469,7 +3474,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../args/" class="md-nav__link">
+      <a href="../stdlib/args/" class="md-nav__link">
         
   
   
@@ -3497,7 +3502,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../env/" class="md-nav__link">
+      <a href="../stdlib/env/" class="md-nav__link">
         
   
   
@@ -3525,7 +3530,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sync/" class="md-nav__link">
+      <a href="../stdlib/sync/" class="md-nav__link">
         
   
   
@@ -3553,7 +3558,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../database/" class="md-nav__link">
+      <a href="../stdlib/database/" class="md-nav__link">
         
   
   
@@ -3581,7 +3586,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../db/" class="md-nav__link">
+      <a href="../stdlib/db/" class="md-nav__link">
         
   
   
@@ -3609,7 +3614,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../models/" class="md-nav__link">
+      <a href="../stdlib/models/" class="md-nav__link">
         
   
   
@@ -3637,7 +3642,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../postgres/" class="md-nav__link">
+      <a href="../stdlib/postgres/" class="md-nav__link">
         
   
   
@@ -3665,7 +3670,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mysql/" class="md-nav__link">
+      <a href="../stdlib/mysql/" class="md-nav__link">
         
   
   
@@ -3693,7 +3698,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../sqlite3/" class="md-nav__link">
+      <a href="../stdlib/sqlite3/" class="md-nav__link">
         
   
   
@@ -3721,7 +3726,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../redis/" class="md-nav__link">
+      <a href="../stdlib/redis/" class="md-nav__link">
         
   
   
@@ -3749,7 +3754,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../migrations/" class="md-nav__link">
+      <a href="../stdlib/migrations/" class="md-nav__link">
         
   
   
@@ -3777,7 +3782,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../url/" class="md-nav__link">
+      <a href="../stdlib/url/" class="md-nav__link">
         
   
   
@@ -3805,7 +3810,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../process/" class="md-nav__link">
+      <a href="../stdlib/process/" class="md-nav__link">
         
   
   
@@ -3833,7 +3838,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../collections/" class="md-nav__link">
+      <a href="../stdlib/collections/" class="md-nav__link">
         
   
   
@@ -3861,7 +3866,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../testing/" class="md-nav__link">
+      <a href="../stdlib/testing/" class="md-nav__link">
         
   
   
@@ -3889,7 +3894,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../dotenv/" class="md-nav__link">
+      <a href="../stdlib/dotenv/" class="md-nav__link">
         
   
   
@@ -3917,7 +3922,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cache/" class="md-nav__link">
+      <a href="../stdlib/cache/" class="md-nav__link">
         
   
   
@@ -3945,7 +3950,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../mime/" class="md-nav__link">
+      <a href="../stdlib/mime/" class="md-nav__link">
         
   
   
@@ -3973,7 +3978,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../ini/" class="md-nav__link">
+      <a href="../stdlib/ini/" class="md-nav__link">
         
   
   
@@ -4001,7 +4006,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../jwt/" class="md-nav__link">
+      <a href="../stdlib/jwt/" class="md-nav__link">
         
   
   
@@ -4029,7 +4034,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../shell/" class="md-nav__link">
+      <a href="../stdlib/shell/" class="md-nav__link">
         
   
   
@@ -4057,7 +4062,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../diff/" class="md-nav__link">
+      <a href="../stdlib/diff/" class="md-nav__link">
         
   
   
@@ -4085,7 +4090,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../yaml/" class="md-nav__link">
+      <a href="../stdlib/yaml/" class="md-nav__link">
         
   
   
@@ -4113,7 +4118,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../cli/" class="md-nav__link">
+      <a href="../stdlib/cli/" class="md-nav__link">
         
   
   
@@ -4141,7 +4146,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../table/" class="md-nav__link">
+      <a href="../stdlib/table/" class="md-nav__link">
         
   
   
@@ -4169,7 +4174,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../signal/" class="md-nav__link">
+      <a href="../stdlib/signal/" class="md-nav__link">
         
   
   
@@ -4197,7 +4202,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../contributing/" class="md-nav__link">
+      <a href="../stdlib/contributing/" class="md-nav__link">
         
   
   
@@ -4286,7 +4291,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/thread-safety/" class="md-nav__link">
+      <a href="../concurrency/thread-safety/" class="md-nav__link">
         
   
   
@@ -4314,7 +4319,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/async/" class="md-nav__link">
+      <a href="../concurrency/async/" class="md-nav__link">
         
   
   
@@ -4342,7 +4347,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/mutex/" class="md-nav__link">
+      <a href="../concurrency/mutex/" class="md-nav__link">
         
   
   
@@ -4370,7 +4375,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/rwlock/" class="md-nav__link">
+      <a href="../concurrency/rwlock/" class="md-nav__link">
         
   
   
@@ -4398,7 +4403,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/channels/" class="md-nav__link">
+      <a href="../concurrency/channels/" class="md-nav__link">
         
   
   
@@ -4426,7 +4431,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/channel/" class="md-nav__link">
+      <a href="../concurrency/channel/" class="md-nav__link">
         
   
   
@@ -4454,7 +4459,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/taskgroup/" class="md-nav__link">
+      <a href="../concurrency/taskgroup/" class="md-nav__link">
         
   
   
@@ -4482,7 +4487,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/supervisor/" class="md-nav__link">
+      <a href="../concurrency/supervisor/" class="md-nav__link">
         
   
   
@@ -4510,7 +4515,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/select/" class="md-nav__link">
+      <a href="../concurrency/select/" class="md-nav__link">
         
   
   
@@ -4538,7 +4543,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/atomic/" class="md-nav__link">
+      <a href="../concurrency/atomic/" class="md-nav__link">
         
   
   
@@ -4566,7 +4571,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/semaphore/" class="md-nav__link">
+      <a href="../concurrency/semaphore/" class="md-nav__link">
         
   
   
@@ -4594,7 +4599,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../concurrency/raii-safety/" class="md-nav__link">
+      <a href="../concurrency/raii-safety/" class="md-nav__link">
         
   
   
@@ -4629,7 +4634,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../examples/" class="md-nav__link">
+      <a href="../examples/" class="md-nav__link">
         
   
   
@@ -4656,7 +4661,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../../changelog/" class="md-nav__link">
+      <a href="../changelog/" class="md-nav__link">
         
   
   
@@ -4696,159 +4701,178 @@
   
 
 
-<h1 id="color-module">Color Module<a class="headerlink" href="#color-module" title="Permanent link">&para;</a></h1>
-<p>The <code>color</code> module provides terminal text styling with ANSI escape codes. Includes foreground colors, backgrounds, text styles, and 24-bit true color. <strong>No other language ships this built-in.</strong></p>
-<h2 id="import">Import<a class="headerlink" href="#import" title="Permanent link">&para;</a></h2>
-<div class="language-desi highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">import</span> <span class="n">color</span>
+<h1 id="desi-memory-model">Desi Memory Model<a class="headerlink" href="#desi-memory-model" title="Permanent link">&para;</a></h1>
+<p>Desi has no garbage collector and no manual <code>free</code>. The compiler inserts
+deterministic cleanup at the point where a value's owner goes out of
+scope. This page states exactly what is freed, when, and what is not —
+so you can reason about memory precisely.</p>
+<h2 id="the-core-rule">The core rule<a class="headerlink" href="#the-core-rule" title="Permanent link">&para;</a></h2>
+<p>Every heap value has one <strong>owner</strong>: the variable (or temporary) that
+holds it. When the owner's scope ends, the compiler frees the value.
+There are no pauses, no background collector, and no reference-counting
+overhead except where you explicitly ask for it (<code>rc</code>/<code>arc</code>).</p>
+<div class="language-desi highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="k">def</span> <span class="n">process</span><span class="p">():</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>    <span class="k">let</span> <span class="n">items</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>     <span class="c1"># `items` owns the list</span>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a>    <span class="k">let</span> <span class="n">table</span> <span class="o">=</span> <span class="p">{</span><span class="s">&quot;a&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">}</span>      <span class="c1"># `table` owns the dict</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>    <span class="c1"># ... use them ...</span>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a>    <span class="c1"># scope ends here: `table` freed, then `items` freed (reverse order)</span>
 </span></code></pre></div>
-<h2 id="api-reference">API Reference<a class="headerlink" href="#api-reference" title="Permanent link">&para;</a></h2>
-<h3 id="foreground-colors">Foreground Colors<a class="headerlink" href="#foreground-colors" title="Permanent link">&para;</a></h3>
+<h2 id="what-gets-freed-at-scope-exit">What gets freed at scope exit<a class="headerlink" href="#what-gets-freed-at-scope-exit" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>Function</th>
-<th>Example Output</th>
+<th>Value</th>
+<th>Cleanup</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>red(s)</code></td>
-<td>Red text</td>
+<td><code>list</code>, <code>set</code>, <code>dict</code></td>
+<td>the container and its backing storage</td>
 </tr>
 <tr>
-<td><code>green(s)</code></td>
-<td>Green text</td>
+<td><code>struct</code>, <code>enum</code></td>
+<td>the value, plus any heap fields it owns, recursively</td>
 </tr>
 <tr>
-<td><code>yellow(s)</code></td>
-<td>Yellow text</td>
+<td>class instance</td>
+<td>its <code>__del__</code> method (and each base class's), then the instance</td>
 </tr>
 <tr>
-<td><code>blue(s)</code></td>
-<td>Blue text</td>
+<td><code>rc[T]</code> / <code>arc[T]</code></td>
+<td>reference count decremented; freed when the last owner drops</td>
 </tr>
 <tr>
-<td><code>magenta(s)</code></td>
-<td>Magenta text</td>
+<td><code>weak[T]</code></td>
+<td>the weak reference is released; it never keeps the value alive</td>
 </tr>
 <tr>
-<td><code>cyan(s)</code></td>
-<td>Cyan text</td>
-</tr>
-<tr>
-<td><code>white(s)</code></td>
-<td>White text</td>
-</tr>
-<tr>
-<td><code>gray(s)</code></td>
-<td>Gray text</td>
+<td>string <strong>temporaries</strong></td>
+<td>results of <code>+</code>, f-strings, <code>str(x)</code>, <code>.replace()</code>, <code>.join()</code>, etc. are freed at the end of the statement's scope if nothing takes ownership</td>
 </tr>
 </tbody>
 </table>
-<h3 id="text-styles">Text Styles<a class="headerlink" href="#text-styles" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Effect</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>bold(s)</code></td>
-<td><strong>Bold</strong></td>
-</tr>
-<tr>
-<td><code>dim(s)</code></td>
-<td>Dimmed</td>
-</tr>
-<tr>
-<td><code>italic(s)</code></td>
-<td><em>Italic</em></td>
-</tr>
-<tr>
-<td><code>underline(s)</code></td>
-<td>Underlined</td>
-</tr>
-<tr>
-<td><code>strike(s)</code></td>
-<td>~~Strikethrough~~</td>
-</tr>
-</tbody>
-</table>
-<h3 id="backgrounds">Backgrounds<a class="headerlink" href="#backgrounds" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Effect</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>bg_red(s)</code></td>
-<td>Red background</td>
-</tr>
-<tr>
-<td><code>bg_green(s)</code></td>
-<td>Green background</td>
-</tr>
-<tr>
-<td><code>bg_yellow(s)</code></td>
-<td>Yellow background</td>
-</tr>
-<tr>
-<td><code>bg_blue(s)</code></td>
-<td>Blue background</td>
-</tr>
-</tbody>
-</table>
-<h3 id="advanced">Advanced<a class="headerlink" href="#advanced" title="Permanent link">&para;</a></h3>
-<table>
-<thead>
-<tr>
-<th>Function</th>
-<th>Returns</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>rgb(s, r, g, b)</code></td>
-<td><code>str</code></td>
-<td>24-bit true color foreground</td>
-</tr>
-<tr>
-<td><code>bg_rgb(s, r, g, b)</code></td>
-<td><code>str</code></td>
-<td>24-bit true color background</td>
-</tr>
-<tr>
-<td><code>strip(s)</code></td>
-<td><code>str</code></td>
-<td>Remove all ANSI codes</td>
-</tr>
-</tbody>
-</table>
-<h2 id="usage-example">Usage Example<a class="headerlink" href="#usage-example" title="Permanent link">&para;</a></h2>
-<div class="language-desi highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">import</span> <span class="n">color</span>
-</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a>
-</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="k">def</span> <span class="n">main</span><span class="p">()</span> <span class="o">-&gt;</span> <span class="kt">int</span><span class="p">:</span>
-</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">print</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">red</span><span class="p">(</span><span class="s">&quot;Error: file not found&quot;</span><span class="p">))</span>
-</span><span id="__span-1-5"><a id="__codelineno-1-5" name="__codelineno-1-5" href="#__codelineno-1-5"></a>    <span class="n">print</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">bold</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">green</span><span class="p">(</span><span class="s">&quot;✓ All tests passed&quot;</span><span class="p">)))</span>
-</span><span id="__span-1-6"><a id="__codelineno-1-6" name="__codelineno-1-6" href="#__codelineno-1-6"></a>    <span class="n">print</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">yellow</span><span class="p">(</span><span class="s">&quot;⚠ Warning: deprecated API&quot;</span><span class="p">))</span>
-</span><span id="__span-1-7"><a id="__codelineno-1-7" name="__codelineno-1-7" href="#__codelineno-1-7"></a>
-</span><span id="__span-1-8"><a id="__codelineno-1-8" name="__codelineno-1-8" href="#__codelineno-1-8"></a>    <span class="c1"># Combine styles</span>
-</span><span id="__span-1-9"><a id="__codelineno-1-9" name="__codelineno-1-9" href="#__codelineno-1-9"></a>    <span class="n">print</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">bold</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">underline</span><span class="p">(</span><span class="s">&quot;Important&quot;</span><span class="p">)))</span>
-</span><span id="__span-1-10"><a id="__codelineno-1-10" name="__codelineno-1-10" href="#__codelineno-1-10"></a>
-</span><span id="__span-1-11"><a id="__codelineno-1-11" name="__codelineno-1-11" href="#__codelineno-1-11"></a>    <span class="c1"># True color (RGB)</span>
-</span><span id="__span-1-12"><a id="__codelineno-1-12" name="__codelineno-1-12" href="#__codelineno-1-12"></a>    <span class="n">print</span><span class="p">(</span><span class="n">color</span><span class="p">.</span><span class="n">rgb</span><span class="p">(</span><span class="s">&quot;Custom color!&quot;</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">128</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
-</span><span id="__span-1-13"><a id="__codelineno-1-13" name="__codelineno-1-13" href="#__codelineno-1-13"></a>    <span class="mi">0</span>
+<h2 id="move-semantics-ownership-transfers-never-duplicates">Move semantics: ownership transfers, never duplicates<a class="headerlink" href="#move-semantics-ownership-transfers-never-duplicates" title="Permanent link">&para;</a></h2>
+<p>Binding, returning, passing to a function, storing into a collection, or
+constructing a struct/class <strong>moves</strong> ownership. The compiler tracks the
+move and does not free the source — so a value is freed exactly once.</p>
+<div class="language-desi highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="k">let</span> <span class="n">a</span> <span class="o">=</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="k">let</span> <span class="n">b</span> <span class="o">=</span> <span class="n">a</span>           <span class="c1"># ownership moves to `b`; `a` is not freed again</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a><span class="n">xs</span><span class="p">.</span><span class="n">append</span><span class="p">(</span><span class="n">a</span><span class="p">)</span>        <span class="c1"># ownership moves into the list</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a><span class="k">return</span> <span class="n">a</span>            <span class="c1"># ownership moves to the caller</span>
 </span></code></pre></div>
-<h2 id="see-also">See Also<a class="headerlink" href="#see-also" title="Permanent link">&para;</a></h2>
+<h2 id="borrowing-reading-without-owning">Borrowing: reading without owning<a class="headerlink" href="#borrowing-reading-without-owning" title="Permanent link">&para;</a></h2>
+<p>Some expressions produce a <strong>borrow</strong> — a view into a value someone else
+owns. Borrows are never freed independently; the owner's cleanup handles
+them.</p>
+<div class="language-desi highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a><span class="k">let</span> <span class="n">x</span> <span class="o">=</span> <span class="n">xs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>        <span class="c1"># borrows an element out of `xs`</span>
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a><span class="k">let</span> <span class="n">n</span> <span class="o">=</span> <span class="n">obj</span><span class="p">.</span><span class="n">field</span>    <span class="c1"># borrows a field of `obj`</span>
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a><span class="k">let</span> <span class="n">v</span> <span class="o">=</span> <span class="n">res</span><span class="err">?</span>         <span class="c1"># borrows the payload out of a Result/Option</span>
+</span></code></pre></div>
+<h2 id="string-accumulators">String accumulators<a class="headerlink" href="#string-accumulators" title="Permanent link">&para;</a></h2>
+<p>A mutable string built up in a loop is recognized and given owned,
+in-place semantics so it neither leaks intermediates nor copies the whole
+string each step:</p>
+<div class="language-desi highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a><span class="k">let</span> <span class="k">mut</span> <span class="n">s</span> <span class="o">=</span> <span class="s">&quot;&quot;</span>
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a><span class="k">for</span> <span class="n">word</span> <span class="k">in</span> <span class="n">words</span><span class="p">:</span>
+</span><span id="__span-3-3"><a id="__codelineno-3-3" name="__codelineno-3-3" href="#__codelineno-3-3"></a>    <span class="n">s</span> <span class="o">:=</span> <span class="n">s</span> <span class="o">+</span> <span class="n">word</span>    <span class="c1"># appends in place (realloc), frees the previous buffer</span>
+</span></code></pre></div>
+<p>This applies only when the compiler can prove <code>s</code> is used solely in
+borrowing positions (concatenation, comparison, <code>len</code>, <code>print</code>, f-strings,
+<code>return</code>). If it can't prove that — for example you pass <code>s</code> to another
+function, store it in a collection, or alias it with <code>let t = s</code> — the
+optimization is skipped and the default rules apply.</p>
+<h2 id="what-leaks-by-design">What leaks, by design<a class="headerlink" href="#what-leaks-by-design" title="Permanent link">&para;</a></h2>
+<p>Desi's cleanup is <strong>conservative</strong>: when the compiler cannot prove it is
+safe to free something, it leaks it rather than risk freeing memory that
+is still in use. These are the current boundaries where that happens:</p>
 <ul>
-<li><a href="../log/">Log Module</a> — Logging with levels</li>
+<li><strong>Heap elements inside a collection.</strong> A <code>list[str]</code>, <code>list[MyStruct]</code>,
+  or <code>dict</code> with heap values frees its backing array, but the individual
+  strings/structs it holds are not freed. Collections of numbers and
+  booleans leak nothing at all: <code>int</code>, <code>bool</code> and <code>float</code> are each stored
+  in the slot by value, with no separate allocation to lose track of.</li>
+<li><strong>String locals that may alias a literal.</strong> A <code>str</code> variable bound from
+  something other than a tracked temporary could point at a string
+  literal (which lives in the program image and must never be freed), so
+  it is left alone.</li>
+<li><strong>Values with cross-function ownership.</strong> Anything passed to a
+  user-defined function is assumed possibly-retained by that function and
+  is not freed by the caller.</li>
+<li><strong>Temporaries inside <code>match</code> arms and comprehensions.</strong> These lower into
+  conditional blocks; a temporary created there is leaked rather than
+  freed at a point where the free would be unsafe.</li>
 </ul>
+<p>Leaks are bounded to the process lifetime and never corrupt memory. Most
+programs — short-lived tools, request handlers, batch jobs — never notice
+them. Long-running services that build many heap-element collections
+should be aware of the first boundary above.</p>
+<h2 id="loops-reuse-their-scratch-memory">Loops reuse their scratch memory<a class="headerlink" href="#loops-reuse-their-scratch-memory" title="Permanent link">&para;</a></h2>
+<p>A value a function allocates and never lets out of goes in an arena — a
+bump allocator released in one go when the function returns. A loop
+would defeat that on its own: half a million iterations allocating a
+small list each would grow the arena half a million times and release
+none of it until the end.</p>
+<p>So a loop whose allocations cannot outlive one of its iterations marks
+the arena on the way in and rewinds to that mark at the end of every
+pass. The same bytes are handed out again next time round, and the loop
+costs one round of growth instead of one per iteration.</p>
+<p>The compiler only does this where it can see that nothing from inside
+the loop is still reachable from outside it. A value appended to a list
+declared before the loop, assigned to a variable declared before it, or
+otherwise flowing outward keeps its loop on the ordinary path. The
+decision is one-directional in the safe sense: anything the analysis
+cannot follow keeps the plain arena, which costs memory and never
+correctness.</p>
+<p>Two things stay on the heap and out of arenas entirely:</p>
+<ul>
+<li><strong>Collections that grow.</strong> <code>realloc</code> releases or extends the block it
+  replaces; a bump allocator can only hand out a new one and abandon the
+  old, so a list appended to a million times would leave every
+  intermediate backing array behind. Any method call on a collection, or
+  any assignment through an index, keeps it on the heap.</li>
+<li><strong>Anything that escapes its function</strong>, as before.</li>
+</ul>
+<p>Contributors changing the arena should build the runtime with arena
+poisoning on — <code>make runtime EXTRA_CFLAGS=-DDESI_ARENA_POISON</code>, or
+<code>$env:DESI_CFLAGS_EXTRA = "/DDESI_ARENA_POISON"</code> before <code>.\build.ps1</code> —
+and run the example suite. It scribbles over every byte a rewind
+releases, so reading released arena memory produces obvious garbage
+rather than whatever happened to still be sitting there. AddressSanitizer
+cannot see these bugs: the arena is one large allocation, and reusing
+bytes inside it is invisible to it.</p>
+<h2 id="the-safety-guarantee">The safety guarantee<a class="headerlink" href="#the-safety-guarantee" title="Permanent link">&para;</a></h2>
+<p>In safe code (no <code>unsafe</code> blocks, no raw FFI), the cleanup machinery
+never emits a free for a pointer that could still be reachable. Unclear
+ownership always resolves to "leak", never to "free and hope". This means
+the automatic memory management does not produce use-after-free or
+double-free by construction. It does <strong>not</strong> guarantee the absence of all
+leaks — see the boundaries above.</p>
+<p>The same standard applies to the other end of memory. Running out of stack
+is a write past its end — an access violation the program cannot report on,
+because the fault happens while it is happening. Every function that can
+recurse carries a guard that raises a <code>RuntimeError</code> while there is still
+stack left to raise it on, so exhaustion is an error a <code>try</code> can catch and a
+supervisor can survive, not a crash.</p>
+<p>What is measured is the space itself, not a count of frames. A frame count
+is only a proxy for the space it stands for, and it fails in both directions:
+large frames exhaust the stack in fewer calls than the count allows, and a
+raised limit would otherwise authorise recursing past the end of the stack.
+<code>set_recursion_limit</code> is therefore a ceiling and never a licence — it is
+clamped to the real end of the stack, so it can lift the limit but never past
+the point where the program would fault.</p>
+<p>Also unguarded, deliberately: an infinite <em>tail</em> recursion. It compiles to a
+jump and consumes no stack, so nothing runs out — it is an infinite loop, and
+Desi does not claim to detect those.</p>
+<p>Implementation and the measurements behind it:
+<a href="https://github.com/desilang/desi/blob/main/docs/contributing/compiler/limits.md">contributing/compiler/limits.md</a>.</p>
+<h2 id="for-contributors">For contributors<a class="headerlink" href="#for-contributors" title="Permanent link">&para;</a></h2>
+<p>The implementation, invariants, and the gotchas that have caused real
+bugs are documented in
+<a href="https://github.com/desilang/desi/blob/main/docs/contributing/runtime/drops-implementation.md">contributing/runtime/drops-implementation.md</a>.
+The roadmap toward closing the remaining leak boundaries (collection
+element ownership, full string-local ownership, scope arenas) is in
+<a href="https://github.com/desilang/desi/blob/main/docs/roadmap/planned/hybrid_memory_management.md">roadmap/planned/hybrid_memory_management.md</a>.</p>
 
 
 
@@ -4917,12 +4941,12 @@
     
       
       
-      <script id="__config" type="application/json">{"annotate": null, "base": "../..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.tabs", "navigation.sections", "navigation.expand", "navigation.top", "toc.integrate", "search.suggest", "search.highlight", "content.code.copy", "content.code.annotate"], "search": "../assets/javascripts/workers/search.2c215733.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "stable", "provider": "mike"}}</script>
     
     
-      <script src="../../assets/javascripts/bundle.d7400e89.min.js"></script>
+      <script src="../assets/javascripts/bundle.d7400e89.min.js"></script>
       
-        <script src="../../javascripts/external-links.js"></script>
+        <script src="../javascripts/external-links.js"></script>
       
     
   </body>
