@@ -86,11 +86,18 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       # Manual deployment (workflow_dispatch)
+      #
+      # set-default matters here for the same reason it does on the dev path:
+      # mike writes each version into its own directory and the redirect at the
+      # root only exists once a default is chosen. Deploying without it leaves
+      # the site pointing wherever it pointed before, which looks like the run
+      # did nothing at all.
       - name: Deploy manual version
         if: github.event_name == 'workflow_dispatch'
         run: |
           cd book
           mike deploy --push --update-aliases ${{ inputs.version }} ${{ inputs.alias }}
+          mike set-default --push ${{ inputs.alias }}
 
       # Dev deployment on push to main
       #
