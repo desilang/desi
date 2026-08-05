@@ -23,8 +23,15 @@ jobs:
         include:
           - { os: ubuntu-latest,   target: linux-amd64,   ext: '' }
           - { os: macos-latest,    target: darwin-arm64,  ext: '' }
-          - { os: macos-13,        target: darwin-amd64,  ext: '' }
           - { os: windows-latest,  target: windows-amd64, ext: '.exe' }
+          # darwin-amd64 is not built. It ran on macos-13, the last Intel macOS
+          # image, which GitHub has retired -- the job does not fail, it queues
+          # forever waiting for a label no runner carries.
+          #
+          # The fix is a universal binary from the arm64 image, which can target
+          # both architectures, rather than a separate Intel job. That touches
+          # the macOS build path and is not something to ship untested during a
+          # release, so it is deliberately left for 0.1.1.
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4

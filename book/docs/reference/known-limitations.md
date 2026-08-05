@@ -11,6 +11,18 @@ is a bug report we want.
 
 ## Platform and distribution
 
+### No prebuilt binary for macOS on Intel
+
+The prebuilt macOS binary is arm64 only — it runs on Apple Silicon and not on an
+Intel Mac. Desi builds from source there, so `make` works; there is just no
+package to download.
+
+The release matrix used to build this on `macos-13`, the last Intel macOS runner
+image, which GitHub has retired. The intended fix is a universal binary produced
+from the arm64 image, which can target both architectures — that changes the
+macOS build path and was not something to ship untested during the 0.1.0
+release, so it is scheduled for 0.1.1.
+
 ### No prebuilt binary for Linux arm64
 
 Desi builds from source on Linux arm64, but there is no prebuilt binary and no CI

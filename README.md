@@ -167,9 +167,10 @@ Everything below ships with the compiler. **No package manager needed.**
 
 | Platform | Status |
 |----------|--------|
-| macOS (arm64, x86_64) | ✅ Release binaries, full test suite in CI |
+| macOS (arm64) | ✅ Release binaries, full test suite in CI |
 | Linux (x86_64) | ✅ Release binaries, full test suite in CI |
 | Windows (x86_64) | ✅ Release binaries, full test suite in CI |
+| macOS (x86_64) | ⚠️ Builds from source; no prebuilt binary — GitHub retired the Intel runner, universal binary planned for 0.1.1 |
 | Linux (arm64) | ⚠️ Builds from source; no prebuilt binary or CI coverage yet |
 
 Every release binary is built natively on its own platform and smoke-tested —
