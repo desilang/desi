@@ -2834,6 +2834,34 @@
   
   
     <li class="md-nav__item">
+      <a href="../../reference/desi-mod/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    desi.mod Manifest
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../reference/desic-doc/" class="md-nav__link">
         
   
@@ -5275,14 +5303,14 @@ Access it through the class name, not through <code>self</code>.</p>
 </span><span id="__span-15-4"><a id="__codelineno-15-4" name="__codelineno-15-4" href="#__codelineno-15-4"></a>
 </span><span id="__span-15-5"><a id="__codelineno-15-5" name="__codelineno-15-5" href="#__codelineno-15-5"></a>    <span class="k">pub</span> <span class="k">def</span> <span class="n">__add__</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nc">Vector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nc">Vector</span><span class="p">:</span>
 </span><span id="__span-15-6"><a id="__codelineno-15-6" name="__codelineno-15-6" href="#__codelineno-15-6"></a>        <span class="k">let</span> <span class="n">v</span> <span class="o">=</span> <span class="nc">Vector</span><span class="p">()</span>
-</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>        <span class="n">v</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="k">self</span><span class="p">.</span><span class="n">x</span> <span class="o">+</span> <span class="n">other</span><span class="p">.</span><span class="n">x</span>
-</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>        <span class="n">v</span><span class="p">.</span><span class="n">y</span> <span class="o">=</span> <span class="k">self</span><span class="p">.</span><span class="n">y</span> <span class="o">+</span> <span class="n">other</span><span class="p">.</span><span class="n">y</span>
+</span><span id="__span-15-7"><a id="__codelineno-15-7" name="__codelineno-15-7" href="#__codelineno-15-7"></a>        <span class="n">v</span><span class="p">.</span><span class="n">x</span> <span class="o">:=</span> <span class="k">self</span><span class="p">.</span><span class="n">x</span> <span class="o">+</span> <span class="n">other</span><span class="p">.</span><span class="n">x</span>
+</span><span id="__span-15-8"><a id="__codelineno-15-8" name="__codelineno-15-8" href="#__codelineno-15-8"></a>        <span class="n">v</span><span class="p">.</span><span class="n">y</span> <span class="o">:=</span> <span class="k">self</span><span class="p">.</span><span class="n">y</span> <span class="o">+</span> <span class="n">other</span><span class="p">.</span><span class="n">y</span>
 </span><span id="__span-15-9"><a id="__codelineno-15-9" name="__codelineno-15-9" href="#__codelineno-15-9"></a>        <span class="k">return</span> <span class="n">v</span>
 </span><span id="__span-15-10"><a id="__codelineno-15-10" name="__codelineno-15-10" href="#__codelineno-15-10"></a>
 </span><span id="__span-15-11"><a id="__codelineno-15-11" name="__codelineno-15-11" href="#__codelineno-15-11"></a>    <span class="k">pub</span> <span class="k">def</span> <span class="n">__sub__</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nc">Vector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nc">Vector</span><span class="p">:</span>
 </span><span id="__span-15-12"><a id="__codelineno-15-12" name="__codelineno-15-12" href="#__codelineno-15-12"></a>        <span class="k">let</span> <span class="n">v</span> <span class="o">=</span> <span class="nc">Vector</span><span class="p">()</span>
-</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>        <span class="n">v</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="k">self</span><span class="p">.</span><span class="n">x</span> <span class="o">-</span> <span class="n">other</span><span class="p">.</span><span class="n">x</span>
-</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>        <span class="n">v</span><span class="p">.</span><span class="n">y</span> <span class="o">=</span> <span class="k">self</span><span class="p">.</span><span class="n">y</span> <span class="o">-</span> <span class="n">other</span><span class="p">.</span><span class="n">y</span>
+</span><span id="__span-15-13"><a id="__codelineno-15-13" name="__codelineno-15-13" href="#__codelineno-15-13"></a>        <span class="n">v</span><span class="p">.</span><span class="n">x</span> <span class="o">:=</span> <span class="k">self</span><span class="p">.</span><span class="n">x</span> <span class="o">-</span> <span class="n">other</span><span class="p">.</span><span class="n">x</span>
+</span><span id="__span-15-14"><a id="__codelineno-15-14" name="__codelineno-15-14" href="#__codelineno-15-14"></a>        <span class="n">v</span><span class="p">.</span><span class="n">y</span> <span class="o">:=</span> <span class="k">self</span><span class="p">.</span><span class="n">y</span> <span class="o">-</span> <span class="n">other</span><span class="p">.</span><span class="n">y</span>
 </span><span id="__span-15-15"><a id="__codelineno-15-15" name="__codelineno-15-15" href="#__codelineno-15-15"></a>        <span class="k">return</span> <span class="n">v</span>
 </span><span id="__span-15-16"><a id="__codelineno-15-16" name="__codelineno-15-16" href="#__codelineno-15-16"></a>
 </span><span id="__span-15-17"><a id="__codelineno-15-17" name="__codelineno-15-17" href="#__codelineno-15-17"></a>    <span class="k">pub</span> <span class="k">def</span> <span class="n">__eq__</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="n">other</span><span class="p">:</span> <span class="nc">Vector</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kt">bool</span><span class="p">:</span>
@@ -5290,12 +5318,12 @@ Access it through the class name, not through <code>self</code>.</p>
 </span><span id="__span-15-19"><a id="__codelineno-15-19" name="__codelineno-15-19" href="#__codelineno-15-19"></a>
 </span><span id="__span-15-20"><a id="__codelineno-15-20" name="__codelineno-15-20" href="#__codelineno-15-20"></a><span class="k">def</span> <span class="n">main</span><span class="p">():</span>
 </span><span id="__span-15-21"><a id="__codelineno-15-21" name="__codelineno-15-21" href="#__codelineno-15-21"></a>    <span class="k">let</span> <span class="n">v1</span> <span class="o">=</span> <span class="nc">Vector</span><span class="p">()</span>
-</span><span id="__span-15-22"><a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a>    <span class="n">v1</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="mf">1.0</span>
-</span><span id="__span-15-23"><a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a>    <span class="n">v1</span><span class="p">.</span><span class="n">y</span> <span class="o">=</span> <span class="mf">2.0</span>
+</span><span id="__span-15-22"><a id="__codelineno-15-22" name="__codelineno-15-22" href="#__codelineno-15-22"></a>    <span class="n">v1</span><span class="p">.</span><span class="n">x</span> <span class="o">:=</span> <span class="mf">1.0</span>
+</span><span id="__span-15-23"><a id="__codelineno-15-23" name="__codelineno-15-23" href="#__codelineno-15-23"></a>    <span class="n">v1</span><span class="p">.</span><span class="n">y</span> <span class="o">:=</span> <span class="mf">2.0</span>
 </span><span id="__span-15-24"><a id="__codelineno-15-24" name="__codelineno-15-24" href="#__codelineno-15-24"></a>
 </span><span id="__span-15-25"><a id="__codelineno-15-25" name="__codelineno-15-25" href="#__codelineno-15-25"></a>    <span class="k">let</span> <span class="n">v2</span> <span class="o">=</span> <span class="nc">Vector</span><span class="p">()</span>
-</span><span id="__span-15-26"><a id="__codelineno-15-26" name="__codelineno-15-26" href="#__codelineno-15-26"></a>    <span class="n">v2</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="mf">3.0</span>
-</span><span id="__span-15-27"><a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a>    <span class="n">v2</span><span class="p">.</span><span class="n">y</span> <span class="o">=</span> <span class="mf">4.0</span>
+</span><span id="__span-15-26"><a id="__codelineno-15-26" name="__codelineno-15-26" href="#__codelineno-15-26"></a>    <span class="n">v2</span><span class="p">.</span><span class="n">x</span> <span class="o">:=</span> <span class="mf">3.0</span>
+</span><span id="__span-15-27"><a id="__codelineno-15-27" name="__codelineno-15-27" href="#__codelineno-15-27"></a>    <span class="n">v2</span><span class="p">.</span><span class="n">y</span> <span class="o">:=</span> <span class="mf">4.0</span>
 </span><span id="__span-15-28"><a id="__codelineno-15-28" name="__codelineno-15-28" href="#__codelineno-15-28"></a>
 </span><span id="__span-15-29"><a id="__codelineno-15-29" name="__codelineno-15-29" href="#__codelineno-15-29"></a>    <span class="k">let</span> <span class="n">v3</span> <span class="o">=</span> <span class="n">v1</span> <span class="o">+</span> <span class="n">v2</span>  <span class="c1"># Calls __add__</span>
 </span><span id="__span-15-30"><a id="__codelineno-15-30" name="__codelineno-15-30" href="#__codelineno-15-30"></a>    <span class="k">let</span> <span class="n">v4</span> <span class="o">=</span> <span class="n">v1</span> <span class="o">-</span> <span class="n">v2</span>  <span class="c1"># Calls __sub__</span>
@@ -5567,11 +5595,11 @@ Access it through the class name, not through <code>self</code>.</p>
 </span><span id="__span-28-3"><a id="__codelineno-28-3" name="__codelineno-28-3" href="#__codelineno-28-3"></a>    <span class="k">pub</span> <span class="k">mut</span> <span class="n">val</span><span class="p">:</span> <span class="kt">int</span>
 </span><span id="__span-28-4"><a id="__codelineno-28-4" name="__codelineno-28-4" href="#__codelineno-28-4"></a>
 </span><span id="__span-28-5"><a id="__codelineno-28-5" name="__codelineno-28-5" href="#__codelineno-28-5"></a>    <span class="k">pub</span> <span class="k">def</span> <span class="n">set_next</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="n">n</span><span class="p">:</span> <span class="nc">Node</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nc">Node</span><span class="p">:</span>
-</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>        <span class="k">self</span><span class="p">.</span><span class="n">next</span> <span class="o">=</span> <span class="n">n</span>
+</span><span id="__span-28-6"><a id="__codelineno-28-6" name="__codelineno-28-6" href="#__codelineno-28-6"></a>        <span class="k">self</span><span class="p">.</span><span class="n">next</span> <span class="o">:=</span> <span class="n">n</span>
 </span><span id="__span-28-7"><a id="__codelineno-28-7" name="__codelineno-28-7" href="#__codelineno-28-7"></a>        <span class="k">return</span> <span class="k">self</span>
 </span><span id="__span-28-8"><a id="__codelineno-28-8" name="__codelineno-28-8" href="#__codelineno-28-8"></a>
 </span><span id="__span-28-9"><a id="__codelineno-28-9" name="__codelineno-28-9" href="#__codelineno-28-9"></a>    <span class="k">pub</span> <span class="k">def</span> <span class="n">set_val</span><span class="p">(</span><span class="k">self</span><span class="p">,</span> <span class="n">v</span><span class="p">:</span> <span class="kt">int</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nc">Node</span><span class="p">:</span>
-</span><span id="__span-28-10"><a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a>        <span class="k">self</span><span class="p">.</span><span class="n">val</span> <span class="o">=</span> <span class="n">v</span>
+</span><span id="__span-28-10"><a id="__codelineno-28-10" name="__codelineno-28-10" href="#__codelineno-28-10"></a>        <span class="k">self</span><span class="p">.</span><span class="n">val</span> <span class="o">:=</span> <span class="n">v</span>
 </span><span id="__span-28-11"><a id="__codelineno-28-11" name="__codelineno-28-11" href="#__codelineno-28-11"></a>        <span class="k">return</span> <span class="k">self</span>
 </span><span id="__span-28-12"><a id="__codelineno-28-12" name="__codelineno-28-12" href="#__codelineno-28-12"></a>
 </span><span id="__span-28-13"><a id="__codelineno-28-13" name="__codelineno-28-13" href="#__codelineno-28-13"></a><span class="k">def</span> <span class="n">main</span><span class="p">():</span>
