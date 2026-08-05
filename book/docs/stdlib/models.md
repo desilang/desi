@@ -228,6 +228,8 @@ Generates: `PRIMARY KEY (order_id,product_id)` — the auto `id` field is omitte
 ## Generating SQL
 
 ```desi
+import db
+
 def main() -> int:
     let sql = db.create_table_sql("users")
     print(sql)

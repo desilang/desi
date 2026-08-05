@@ -69,17 +69,17 @@ class Box<T>:
         return self.val
     
     pub def set(self, v: T):
-        self.val = v
+        self.val := v
 
 def main():
     # Box<int>
     let b_int: Box<int> = Box()
-    b_int.val = 42
+    b_int.val := 42
     print(b_int.get())  # 42
     
     # Box<str>
     let b_str: Box<str> = Box()
-    b_str.val = "hello"
+    b_str.val := "hello"
     print(b_str.get())  # hello
 ```
 
@@ -97,13 +97,13 @@ class Pair<A, B>:
         return self.second
     
     pub def set_both(self, a: A, b: B):
-        self.first = a
-        self.second = b
+        self.first := a
+        self.second := b
 
 def main():
     let pair: Pair<int, str> = Pair()
-    pair.first = 42
-    pair.second = "answer"
+    pair.first := 42
+    pair.second := "answer"
     print(pair.get_first())   # 42
     print(pair.get_second())  # "answer"
 ```

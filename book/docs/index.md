@@ -37,7 +37,7 @@ class Counter:
         self.count = start
     
     pub def increment(self):
-        self.count = self.count + 1
+        self.count := self.count + 1
     
     pub def get(self) -> int:
         return self.count

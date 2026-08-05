@@ -264,14 +264,14 @@ class Vector:
     
     pub def __add__(self, other: Vector) -> Vector:
         let v = Vector()
-        v.x = self.x + other.x
-        v.y = self.y + other.y
+        v.x := self.x + other.x
+        v.y := self.y + other.y
         return v
     
     pub def __sub__(self, other: Vector) -> Vector:
         let v = Vector()
-        v.x = self.x - other.x
-        v.y = self.y - other.y
+        v.x := self.x - other.x
+        v.y := self.y - other.y
         return v
     
     pub def __eq__(self, other: Vector) -> bool:
@@ -279,12 +279,12 @@ class Vector:
 
 def main():
     let v1 = Vector()
-    v1.x = 1.0
-    v1.y = 2.0
+    v1.x := 1.0
+    v1.y := 2.0
     
     let v2 = Vector()
-    v2.x = 3.0
-    v2.y = 4.0
+    v2.x := 3.0
+    v2.y := 4.0
     
     let v3 = v1 + v2  # Calls __add__
     let v4 = v1 - v2  # Calls __sub__
@@ -560,11 +560,11 @@ class Node:
     pub mut val: int
     
     pub def set_next(self, n: Node) -> Node:
-        self.next = n
+        self.next := n
         return self
         
     pub def set_val(self, v: int) -> Node:
-        self.val = v
+        self.val := v
         return self
 
 def main():
