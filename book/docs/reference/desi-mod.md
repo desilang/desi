@@ -87,23 +87,47 @@ sets the default rather than the only option.
 
 ## `[ffi]`
 
-!!! warning "Reserved — not wired up in 0.1.0"
-    `desic init` writes this section and the manifest parser reads it, but
-    **nothing currently consumes it.** Adding entries to `libs` or `search`
-    has no effect on how your program is linked in 0.1.0.
+Links C libraries into your program. Empty unless you need it.
 
-    Link C libraries by passing linker flags to the build directly until this
-    is connected. The keys are documented here so the section in your
-    generated manifest is not a mystery, not because setting them does
-    anything yet.
-
-| Key | Intended meaning |
+| Key | Meaning |
 |---|---|
-| `libs` | Libraries to link against. |
-| `search` | Extra directories to search for them. |
+| `libs` | Libraries to link against, named without the `lib` prefix or file extension. |
+| `search` | Extra directories to look for them in, relative to the project root or absolute. |
 
-Calling C from Desi does work — that is a language feature and is unaffected
-by this. See [Safe FFI](../language/safe-ffi.md).
+```toml
+[ffi]
+libs   = ["greet", "m"]
+search = ["vendor"]
+```
+
+That links `greet` from `vendor/`, and the system math library. Declare the
+functions with `@extern` and call them:
+
+```desi
+@extern("C", safe=true, c_name="greet_answer")
+pub def answer() -> i32
+
+def main() -> int:
+	let v = answer()
+	print(str(v))
+	return 0
+```
+
+!!! note "The file your library has to be called"
+    A name in `libs` is resolved by the platform's own convention, because
+    `clang` is the linker on every target:
+
+    - **Linux, macOS** — `greet` finds `libgreet.a` or `libgreet.so`
+    - **Windows** — `greet` finds `greet.lib`
+
+    A library built with Unix naming will not be found by a Windows build and
+    the error names the file it wanted: `could not open 'greet.lib'`.
+
+Search paths are emitted before library names, so a `search` entry applies to
+every library in `libs`.
+
+See [Safe FFI](../language/safe-ffi.md) for the language side — `@extern`,
+`safe=true`, and what the compiler will and will not check for you.
 
 ## Editing it by hand
 

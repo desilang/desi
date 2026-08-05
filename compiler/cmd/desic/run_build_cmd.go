@@ -551,6 +551,12 @@ func buildFile(file, exePath, optLevel string, argv []string, verbose bool) int 
 			clangArgs = append(clangArgs, "-L"+filepath.Dir(runtimeLib), "-ldesi")
 		}
 	}
+	// Libraries the project's [ffi] section asks for. These go after the
+	// program's own objects and before the runtime's own -l flags below, which
+	// is the order a static linker needs: an object must appear before the
+	// library that satisfies its symbols.
+	clangArgs = append(clangArgs, ffiLinkArgs()...)
+
 	// Suppress noisy linker warnings (macOS version mismatch etc.)
 	clangArgs = append(clangArgs, "-w")
 	// Dead code elimination
@@ -879,6 +885,42 @@ func runSingleTest(testFile string, verbose bool) int {
 }
 
 // --------------------- helpers ---------------------
+
+// ffiLinkArgs turns a project's [ffi] section into linker flags: `search`
+// entries become -L, `libs` entries become -l.
+//
+// Deliberately tolerant of a missing manifest, unlike loadManifestOrFail.
+// `desic build hello.desi` on a loose file has no project around it and must
+// still link; there is simply nothing to add in that case.
+//
+// Names are passed through as written, so `libs = ["m"]` becomes -lm. That is
+// the platform convention on every target Desi builds for: clang is the linker
+// everywhere, including Windows, where it resolves -lfoo to foo.lib.
+func ffiLinkArgs() []string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return nil
+	}
+	_, mp, ok := project.FindRoot(cwd)
+	if !ok {
+		return nil
+	}
+	m, _ := project.Load(mp)
+
+	var args []string
+	// Search paths first: a -L only affects the -l flags that follow it.
+	for _, dir := range m.FFI.Search {
+		if dir != "" {
+			args = append(args, "-L"+dir)
+		}
+	}
+	for _, lib := range m.FFI.Libs {
+		if lib != "" {
+			args = append(args, "-l"+lib)
+		}
+	}
+	return args
+}
 
 func loadManifestOrFail(verb string) (project.Manifest, string, bool) {
 	cwd, _ := os.Getwd()
