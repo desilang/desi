@@ -91,6 +91,7 @@ nav:
   - Language Guide:
     - Types: language/types.md
     - Mutability: language/mutability.md
+    - Memory Model: memory-model.md
     - Control Flow: language/control-flow.md
     - Match: language/match.md
     - Functions: language/functions.md

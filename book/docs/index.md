@@ -108,7 +108,7 @@ Version **0.1.0** is the first release. Desi is under active development.
 
     What will not change under you is the memory model. No use-after-free and
     no double-free in safe code, and where the compiler cannot prove ownership
-    it leaks rather than guesses — see [the memory model](https://github.com/desilang/desi/blob/main/docs/memory-model.md) for
+    it leaks rather than guesses — see [the memory model](memory-model.md) for
     exactly what that does and does not cover.
 
 ---
